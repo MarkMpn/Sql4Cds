@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.ServiceModel;
 
 namespace MarkMpn.Sql4Cds
 {
@@ -973,7 +974,15 @@ namespace MarkMpn.Sql4Cds
                     };
                     fetch.Items = new object[] { entity };
 
-                    table = new EntityTable(org, entity) { Alias = namedTable.Alias?.Value };
+                    try
+                    {
+                        table = new EntityTable(org, entity) { Alias = namedTable.Alias?.Value };
+                    }
+                    catch (FaultException ex)
+                    {
+                        throw new NotSupportedQueryFragmentException(ex.Message, tableReference);
+                    }
+
                     tables.Add(table);
 
                     foreach (var hint in namedTable.TableHints)
@@ -1058,7 +1067,14 @@ namespace MarkMpn.Sql4Cds
 
                 lhs.AddItem(link);
 
-                tables.Add(new EntityTable(org, link));
+                try
+                {
+                    tables.Add(new EntityTable(org, link));
+                }
+                catch (FaultException ex)
+                {
+                    throw new NotSupportedQueryFragmentException(ex.Message, table2);
+                }
             }
             else
             {
