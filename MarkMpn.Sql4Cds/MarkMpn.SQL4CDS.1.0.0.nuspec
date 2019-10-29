@@ -1,0 +1,25 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd">
+  <metadata>
+    <id>MarkMpn.SQL4CDS</id>
+    <version>1.0.0</version>
+    <title>SQL 4 CDS</title>
+    <authors>Mark Carrington</authors>
+    <owners></owners>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <projectUrl>https://markcarrington.dev/sql-4-cds/</projectUrl>
+    <iconUrl>http://markcarrington.dev/sql4cds-icon/</iconUrl>
+    <description>Convert SQL queries to FetchXml and execute them against CDS</description>
+    <summary>Convert SQL queries to FetchXml and execute them against CDS</summary>
+    <releaseNotes>First release!</releaseNotes>
+    <copyright>Copyright © 2019 Mark Carrington</copyright>
+    <language>en-GB</language>
+    <tags>XrmToolBox SQL CDS</tags>
+    <dependencies>
+      <dependency id="XrmToolBox" version="1.2018.1.20" />
+    </dependencies>
+  </metadata>
+  <files>
+    <file src="bin\Debug\MarkMpn.Sql4Cds.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds.dll" />
+  </files>
+</package>
