@@ -14,12 +14,34 @@ namespace MarkMpn.Sql4Cds
     {
         class EntityTable
         {
+            public EntityTable(IOrganizationService org, FetchEntityType entity)
+            {
+                EntityName = entity.name;
+                Entity = entity;
+                Metadata = GetMetadata(org);
+            }
+
+            public EntityTable(IOrganizationService org, FetchLinkEntityType link)
+            {
+                EntityName = link.name;
+                Alias = link.alias;
+                LinkEntity = link;
+                Metadata = GetMetadata(org);
+            }
+
+            private EntityMetadata GetMetadata(IOrganizationService org)
+            {
+                var resp = (RetrieveEntityResponse)org.Execute(new RetrieveEntityRequest { LogicalName = EntityName, EntityFilters = EntityFilters.Attributes });
+                return resp.EntityMetadata;
+            }
+
             public string EntityName { get; set; }
             public string Alias { get; set; }
             public FetchEntityType Entity { get; set; }
             public FetchLinkEntityType LinkEntity { get; set; }
             public IDictionary<int, string> Aggregates { get; } = new Dictionary<int, string>();
             public IDictionary<int, string> Aliases { get; } = new Dictionary<int, string>();
+            public EntityMetadata Metadata { get; }
 
             internal void AddItem(object item)
             {
@@ -182,7 +204,7 @@ namespace MarkMpn.Sql4Cds
             var fetch = new FetchXml.FetchType();
             fetch.distinct = true;
             fetch.distinctSpecified = true;
-            var tables = HandleFromClause(delete.DeleteSpecification.FromClause, fetch);
+            var tables = HandleFromClause(org, delete.DeleteSpecification.FromClause, fetch);
             HandleTopClause(delete.DeleteSpecification.TopRowFilter, fetch, tables);
             HandleWhereClause(delete.DeleteSpecification.WhereClause, fetch, tables);
             
@@ -235,7 +257,7 @@ namespace MarkMpn.Sql4Cds
             var fetch = new FetchXml.FetchType();
             fetch.distinct = true;
             fetch.distinctSpecified = true;
-            var tables = HandleFromClause(update.UpdateSpecification.FromClause, fetch);
+            var tables = HandleFromClause(org, update.UpdateSpecification.FromClause, fetch);
             HandleTopClause(update.UpdateSpecification.TopRowFilter, fetch, tables);
             HandleWhereClause(update.UpdateSpecification.WhereClause, fetch, tables);
 
@@ -369,7 +391,7 @@ namespace MarkMpn.Sql4Cds
                 throw new NotSupportedQueryFragmentException("Unhandled SELECT HAVING clause", querySpec.HavingClause);
 
             var fetch = new FetchXml.FetchType();
-            var tables = HandleFromClause(querySpec.FromClause, fetch);
+            var tables = HandleFromClause(org, querySpec.FromClause, fetch);
             HandleSelectClause(org, querySpec, fetch, tables, out var columns);
             HandleTopClause(querySpec.TopRowFilter, fetch, tables);
             HandleOffsetClause(querySpec, fetch, tables);
@@ -514,7 +536,7 @@ namespace MarkMpn.Sql4Cds
                     }
                 }
 
-                var orderTable = GetColumnTableAlias(col, tables);
+                var orderTable = GetColumnTableAlias(col, tables, out _);
 
                 if (orderTable != null)
                     throw new NotSupportedQueryFragmentException("Unsupported ORDER BY on linked table", sort.Expression);
@@ -691,7 +713,7 @@ namespace MarkMpn.Sql4Cds
                 
                 criteria.Items = AddItem(criteria.Items, new condition
                 {
-                    entityname = GetColumnTableAlias(field, tables),
+                    entityname = GetColumnTableAlias(field, tables, out _),
                     attribute = GetColumnAttribute(field),
                     @operator = op,
                     value = value?.ToString()
@@ -754,7 +776,7 @@ namespace MarkMpn.Sql4Cds
 
                 criteria.Items = AddItem(criteria.Items, new condition
                 {
-                    entityname = GetColumnTableAlias(field, tables),
+                    entityname = GetColumnTableAlias(field, tables, out _),
                     attribute = GetColumnAttribute(field),
                     @operator = like.NotDefined ? @operator.notlike : @operator.like,
                     value = value.Value
@@ -851,10 +873,11 @@ namespace MarkMpn.Sql4Cds
                             attrName = col.MultiPartIdentifier.Identifiers.Last().Value;
 
                         EntityTable table;
-                        if (col.ColumnType == ColumnType.Wildcard || col.MultiPartIdentifier.Identifiers.Count == 1)
+
+                        if (col.ColumnType == ColumnType.Wildcard)
                             table = tables[0];
                         else
-                            table = FindTable(col.MultiPartIdentifier.Identifiers[0].Value, tables, col);
+                            GetColumnTableAlias(col, tables, out table);
 
                         var attr = new FetchAttributeType { name = attrName };
                         table.AddItem(attr);
@@ -924,19 +947,19 @@ namespace MarkMpn.Sql4Cds
             return attr;
         }
 
-        private List<EntityTable> HandleFromClause(FromClause from, FetchXml.FetchType fetch)
+        private List<EntityTable> HandleFromClause(IOrganizationService org, FromClause from, FetchXml.FetchType fetch)
         {
             if (from.TableReferences.Count != 1)
                 throw new NotSupportedQueryFragmentException("Unhandled SELECT FROM clause - only single table or qualified joins are supported", from);
 
             var tables = new List<EntityTable>();
 
-            HandleFromClause(from.TableReferences[0], fetch, tables);
+            HandleFromClause(org, from.TableReferences[0], fetch, tables);
 
             return tables;
         }
 
-        private void HandleFromClause(TableReference tableReference, FetchXml.FetchType fetch, List<EntityTable> tables)
+        private void HandleFromClause(IOrganizationService org, TableReference tableReference, FetchXml.FetchType fetch, List<EntityTable> tables)
         {
             if (tableReference is NamedTableReference namedTable)
             {
@@ -950,12 +973,7 @@ namespace MarkMpn.Sql4Cds
                     };
                     fetch.Items = new object[] { entity };
 
-                    table = new EntityTable
-                    {
-                        EntityName = entity.name,
-                        Alias = namedTable.Alias?.Value,
-                        Entity = entity
-                    };
+                    table = new EntityTable(org, entity) { Alias = namedTable.Alias?.Value };
                     tables.Add(table);
 
                     foreach (var hint in namedTable.TableHints)
@@ -981,7 +999,7 @@ namespace MarkMpn.Sql4Cds
                 if (!(join.SecondTableReference is NamedTableReference table2))
                     throw new NotSupportedQueryFragmentException("Unsupported join table", join.SecondTableReference);
 
-                HandleFromClause(join.FirstTableReference, fetch, tables);
+                HandleFromClause(org, join.FirstTableReference, fetch, tables);
 
                 if (col1.MultiPartIdentifier.Identifiers.Count != 2)
                     throw new NotSupportedQueryFragmentException("2-part identifiers required for join conditions", col1);
@@ -1040,12 +1058,7 @@ namespace MarkMpn.Sql4Cds
 
                 lhs.AddItem(link);
 
-                tables.Add(new EntityTable
-                {
-                    EntityName = link.name,
-                    Alias = link.alias,
-                    LinkEntity = link
-                });
+                tables.Add(new EntityTable(org, link));
             }
             else
             {
@@ -1091,7 +1104,7 @@ namespace MarkMpn.Sql4Cds
             throw new NotSupportedQueryFragmentException("Ambiguous identifier " + name, fragment);
         }
 
-        private string GetColumnTableAlias(ColumnReferenceExpression col, List<EntityTable> tables)
+        private string GetColumnTableAlias(ColumnReferenceExpression col, List<EntityTable> tables, out EntityTable table)
         {
             if (col.MultiPartIdentifier.Identifiers.Count > 2)
                 throw new NotSupportedQueryFragmentException("Unsupported column reference", col);
@@ -1100,17 +1113,36 @@ namespace MarkMpn.Sql4Cds
             {
                 var alias = col.MultiPartIdentifier.Identifiers[0].Value;
 
-                if (alias == (tables[0].Alias ?? tables[0].EntityName))
+                if (alias.Equals(tables[0].Alias ?? tables[0].EntityName, StringComparison.OrdinalIgnoreCase))
+                {
+                    table = tables[0];
                     return null;
+                }
+
+                table = tables.SingleOrDefault(t => t.Alias != null && t.Alias.Equals(alias, StringComparison.OrdinalIgnoreCase));
+                if (table == null)
+                    table = tables.SingleOrDefault(t => t.Alias == null && t.EntityName.Equals(alias, StringComparison.OrdinalIgnoreCase));
 
                 return alias;
             }
 
-            // TODO: If no table is explicitly specified, check in the metadata for each available table
-            // TODO: Throw error if attribute cannot be found
-            // TODO: Throw error if attribute is ambiguous
+            // If no table is explicitly specified, check in the metadata for each available table
+            var possibleEntities = tables
+                .Where(t => t.Metadata.Attributes.Any(attr => attr.LogicalName.Equals(col.MultiPartIdentifier.Identifiers[0].Value, StringComparison.OrdinalIgnoreCase)))
+                .ToArray();
 
-            return null;
+            if (possibleEntities.Length == 0)
+                throw new NotSupportedQueryFragmentException("Unknown attribute", col);
+
+            if (possibleEntities.Length > 1)
+                throw new NotSupportedQueryFragmentException("Ambiguous attribute", col);
+
+            table = possibleEntities[0];
+
+            if (possibleEntities[0] == tables[0])
+                return null;
+
+            return possibleEntities[0].Alias ?? possibleEntities[0].EntityName;
         }
 
         private string GetColumnAttribute(ColumnReferenceExpression col)
