@@ -1064,7 +1064,7 @@ namespace MarkMpn.Sql4Cds
                     from = linkToAttribute.MultiPartIdentifier.Identifiers.Last().Value,
                     to = linkFromAttribute.MultiPartIdentifier.Identifiers.Last().Value,
                     linktype = joinOperator,
-                    alias = table2.Alias?.Value
+                    alias = table2.Alias?.Value ?? table2.SchemaObject.BaseIdentifier.Value
                 };
 
                 lhs.AddItem(link);
