@@ -548,7 +548,7 @@ namespace MarkMpn.Sql4Cds
                     descending = sort.SortOrder == SortOrder.Descending
                 };
 
-                // For aggregate queries, ordering must be done on aliases ont attributes
+                // For aggregate queries, ordering must be done on aliases not attributes
                 if (fetch.aggregate)
                 {
                     var attr = tables[0].Entity.Items
@@ -790,13 +790,16 @@ namespace MarkMpn.Sql4Cds
                 if (field == null)
                     throw new NotSupportedQueryFragmentException("Unsupported comparison", @in.Expression);
 
+                if (@in.Subquery != null)
+                    throw new NotSupportedQueryFragmentException("Unsupported subquery, rewrite query as join", @in.Subquery);
+
                 var condition = new condition
                 {
                     entityname = field.MultiPartIdentifier.Identifiers.Count == 2 ? field.MultiPartIdentifier.Identifiers[0].Value : null,
                     attribute = field.MultiPartIdentifier.Identifiers.Last().Value,
                     @operator = @in.NotDefined ? @operator.notin : @operator.@in
                 };
-
+                
                 condition.Items = @in.Values
                     .Select(v =>
                     {
@@ -1010,12 +1013,6 @@ namespace MarkMpn.Sql4Cds
 
                 HandleFromClause(org, join.FirstTableReference, fetch, tables);
 
-                if (col1.MultiPartIdentifier.Identifiers.Count != 2)
-                    throw new NotSupportedQueryFragmentException("2-part identifiers required for join conditions", col1);
-
-                if (col2.MultiPartIdentifier.Identifiers.Count != 2)
-                    throw new NotSupportedQueryFragmentException("2-part identifiers required for join conditions", col1);
-                
                 string joinOperator;
 
                 switch (join.QualifiedJoinType)
@@ -1033,24 +1030,29 @@ namespace MarkMpn.Sql4Cds
                 }
 
                 EntityTable lhs;
-                string linkFromAttribute;
-                string linkToAttribute;
+                ColumnReferenceExpression linkFromAttribute;
+                ColumnReferenceExpression linkToAttribute;
 
-                if (col2.MultiPartIdentifier.Identifiers[0].Value.Equals(table2.Alias?.Value ?? table2.SchemaObject.BaseIdentifier.Value, StringComparison.OrdinalIgnoreCase))
+                GetColumnTableAlias(col1, tables, out lhs);
+
+                if (lhs != null)
                 {
-                    lhs = FindTable(col1.MultiPartIdentifier.Identifiers[0].Value, tables, col1);
-                    linkFromAttribute = col1.MultiPartIdentifier.Identifiers[1].Value;
-                    linkToAttribute = col2.MultiPartIdentifier.Identifiers[1].Value;
-                }
-                else if (col1.MultiPartIdentifier.Identifiers[0].Value.Equals(table2.Alias?.Value ?? table2.SchemaObject.BaseIdentifier.Value, StringComparison.OrdinalIgnoreCase))
-                {
-                    lhs = FindTable(col2.MultiPartIdentifier.Identifiers[0].Value, tables, col2);
-                    linkFromAttribute = col2.MultiPartIdentifier.Identifiers[1].Value;
-                    linkToAttribute = col1.MultiPartIdentifier.Identifiers[1].Value;
+                    linkFromAttribute = col1;
+                    linkToAttribute = col2;
                 }
                 else
                 {
-                    throw new NotSupportedQueryFragmentException("Join condition does not reference joined table", join.SearchCondition);
+                    GetColumnTableAlias(col2, tables, out lhs);
+
+                    if (lhs != null)
+                    {
+                        linkFromAttribute = col2;
+                        linkToAttribute = col1;
+                    }
+                    else
+                    {
+                        throw new NotSupportedQueryFragmentException("Join condition does not reference previous table", join.SearchCondition);
+                    }
                 }
 
                 if (lhs == null)
@@ -1059,22 +1061,31 @@ namespace MarkMpn.Sql4Cds
                 var link = new FetchLinkEntityType
                 {
                     name = table2.SchemaObject.BaseIdentifier.Value,
-                    from = linkToAttribute,
-                    to = linkFromAttribute,
+                    from = linkToAttribute.MultiPartIdentifier.Identifiers.Last().Value,
+                    to = linkFromAttribute.MultiPartIdentifier.Identifiers.Last().Value,
                     linktype = joinOperator,
                     alias = table2.Alias?.Value
                 };
 
                 lhs.AddItem(link);
 
+                EntityTable linkTable;
+
                 try
                 {
-                    tables.Add(new EntityTable(org, link));
+                    linkTable = new EntityTable(org, link);
+                    tables.Add(linkTable);
                 }
                 catch (FaultException ex)
                 {
                     throw new NotSupportedQueryFragmentException(ex.Message, table2);
                 }
+
+                // Check last join condition was correct
+                GetColumnTableAlias(linkToAttribute, tables, out var rhs);
+
+                if (rhs != linkTable)
+                    throw new NotSupportedQueryFragmentException("Join condition does not reference joined table", join.SearchCondition);
             }
             else
             {
