@@ -1002,27 +1002,45 @@ namespace MarkMpn.Sql4Cds
                 if (join.JoinHint != JoinHint.None)
                     throw new NotSupportedQueryFragmentException("Unsupported join hint", join);
 
+                if (!(join.SecondTableReference is NamedTableReference table2))
+                    throw new NotSupportedQueryFragmentException("Unsupported join table", join.SecondTableReference);
+
+                var link = new FetchLinkEntityType
+                {
+                    name = table2.SchemaObject.BaseIdentifier.Value,
+                    alias = table2.Alias?.Value ?? table2.SchemaObject.BaseIdentifier.Value
+                };
+
+                EntityTable linkTable;
+
+                try
+                {
+                    linkTable = new EntityTable(org, link);
+                    tables.Add(linkTable);
+                }
+                catch (FaultException ex)
+                {
+                    throw new NotSupportedQueryFragmentException(ex.Message, table2);
+                }
+
+                // TODO: Extend support for more complex join criteria
+                // Allow additional filter criteria in the join condition to be applied to the link-entity filter
                 if (!(join.SearchCondition is BooleanComparisonExpression equals) ||
                     equals.ComparisonType != BooleanComparisonType.Equals ||
                     !(equals.FirstExpression is ColumnReferenceExpression col1) ||
                     !(equals.SecondExpression is ColumnReferenceExpression col2))
                     throw new NotSupportedQueryFragmentException("Unsupported join condition", join.SearchCondition);
 
-                if (!(join.SecondTableReference is NamedTableReference table2))
-                    throw new NotSupportedQueryFragmentException("Unsupported join table", join.SecondTableReference);
-
                 HandleFromClause(org, join.FirstTableReference, fetch, tables);
-
-                string joinOperator;
 
                 switch (join.QualifiedJoinType)
                 {
                     case QualifiedJoinType.Inner:
-                        joinOperator = "inner";
+                        link.linktype = "inner";
                         break;
 
                     case QualifiedJoinType.LeftOuter:
-                        joinOperator = "outer";
+                        link.linktype = "outer";
                         break;
 
                     default:
@@ -1058,34 +1076,16 @@ namespace MarkMpn.Sql4Cds
                 if (lhs == null)
                     throw new NotSupportedQueryFragmentException("Join condition does not reference previous table", join.SearchCondition);
 
-                var link = new FetchLinkEntityType
-                {
-                    name = table2.SchemaObject.BaseIdentifier.Value,
-                    from = linkToAttribute.MultiPartIdentifier.Identifiers.Last().Value,
-                    to = linkFromAttribute.MultiPartIdentifier.Identifiers.Last().Value,
-                    linktype = joinOperator,
-                    alias = table2.Alias?.Value ?? table2.SchemaObject.BaseIdentifier.Value
-                };
-
-                lhs.AddItem(link);
-
-                EntityTable linkTable;
-
-                try
-                {
-                    linkTable = new EntityTable(org, link);
-                    tables.Add(linkTable);
-                }
-                catch (FaultException ex)
-                {
-                    throw new NotSupportedQueryFragmentException(ex.Message, table2);
-                }
-
                 // Check last join condition was correct
                 GetColumnTableAlias(linkToAttribute, tables, out var rhs);
 
                 if (rhs != linkTable)
                     throw new NotSupportedQueryFragmentException("Join condition does not reference joined table", join.SearchCondition);
+
+                link.from = linkToAttribute.MultiPartIdentifier.Identifiers.Last().Value;
+                link.to = linkFromAttribute.MultiPartIdentifier.Identifiers.Last().Value;
+
+                lhs.AddItem(link);
             }
             else
             {
