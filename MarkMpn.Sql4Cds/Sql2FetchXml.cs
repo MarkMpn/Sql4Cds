@@ -15,25 +15,19 @@ namespace MarkMpn.Sql4Cds
     {
         class EntityTable
         {
-            public EntityTable(IOrganizationService org, FetchEntityType entity)
+            public EntityTable(AttributeMetadataCache cache, FetchEntityType entity)
             {
                 EntityName = entity.name;
                 Entity = entity;
-                Metadata = GetMetadata(org);
+                Metadata = cache[EntityName];
             }
 
-            public EntityTable(IOrganizationService org, FetchLinkEntityType link)
+            public EntityTable(AttributeMetadataCache cache, FetchLinkEntityType link)
             {
                 EntityName = link.name;
                 Alias = link.alias;
                 LinkEntity = link;
-                Metadata = GetMetadata(org);
-            }
-
-            private EntityMetadata GetMetadata(IOrganizationService org)
-            {
-                var resp = (RetrieveEntityResponse)org.Execute(new RetrieveEntityRequest { LogicalName = EntityName, EntityFilters = EntityFilters.Attributes });
-                return resp.EntityMetadata;
+                Metadata = cache[EntityName];
             }
 
             public string EntityName { get; set; }
@@ -53,7 +47,7 @@ namespace MarkMpn.Sql4Cds
             }
         }
 
-        public Query[] Convert(string sql, IOrganizationService org)
+        public Query[] Convert(string sql, AttributeMetadataCache metadata)
         {
             var queries = new List<Query>();
 
@@ -70,13 +64,13 @@ namespace MarkMpn.Sql4Cds
                 foreach (var statement in batch.Statements)
                 {
                     if (statement is SelectStatement select)
-                        queries.Add(ConvertSelectStatement(select, org));
+                        queries.Add(ConvertSelectStatement(select, metadata));
                     else if (statement is UpdateStatement update)
-                        queries.Add(ConvertUpdateStatement(update, org));
+                        queries.Add(ConvertUpdateStatement(update, metadata));
                     else if (statement is DeleteStatement delete)
-                        queries.Add(ConvertDeleteStatement(delete, org));
+                        queries.Add(ConvertDeleteStatement(delete, metadata));
                     else if (statement is InsertStatement insert)
-                        queries.Add(ConvertInsertStatement(insert, org));
+                        queries.Add(ConvertInsertStatement(insert, metadata));
                     else
                         throw new NotSupportedQueryFragmentException("Unsupported statement", statement);
                 }
@@ -85,7 +79,7 @@ namespace MarkMpn.Sql4Cds
             return queries.ToArray();
         }
 
-        private Query ConvertInsertStatement(InsertStatement insert, IOrganizationService org)
+        private Query ConvertInsertStatement(InsertStatement insert, AttributeMetadataCache metadata)
         {
             if (insert.OptimizerHints.Count == 0)
                 throw new NotSupportedQueryFragmentException("Unhandled INSERT optimizer hints", insert);
@@ -106,21 +100,21 @@ namespace MarkMpn.Sql4Cds
                 throw new NotSupportedQueryFragmentException("Unhandled INSERT target", insert.InsertSpecification.Target);
 
             if (insert.InsertSpecification.InsertSource is ValuesInsertSource values)
-                return ConvertInsertValuesStatement(target.SchemaObject.BaseIdentifier.Value, insert.InsertSpecification.Columns, values, org);
+                return ConvertInsertValuesStatement(target.SchemaObject.BaseIdentifier.Value, insert.InsertSpecification.Columns, values, metadata);
             else if (insert.InsertSpecification.InsertSource is SelectInsertSource select)
-                return ConvertInsertSelectStatement(target.SchemaObject.BaseIdentifier.Value, insert.InsertSpecification.Columns, select, org);
+                return ConvertInsertSelectStatement(target.SchemaObject.BaseIdentifier.Value, insert.InsertSpecification.Columns, select, metadata);
             else
                 throw new NotSupportedQueryFragmentException("Unhandled INSERT source", insert.InsertSpecification.InsertSource);
         }
 
-        private Query ConvertInsertSelectStatement(string target, IList<ColumnReferenceExpression> columns, SelectInsertSource select, IOrganizationService org)
+        private Query ConvertInsertSelectStatement(string target, IList<ColumnReferenceExpression> columns, SelectInsertSource select, AttributeMetadataCache metadata)
         {
             var qry = new SelectStatement
             {
                 QueryExpression = select.Select
             };
 
-            var selectQuery = ConvertSelectStatement(qry, org);
+            var selectQuery = ConvertSelectStatement(qry, metadata);
 
             if (columns.Count != selectQuery.ColumnSet.Length)
                 throw new NotSupportedQueryFragmentException("Number of columns generated by SELECT does not match number of columns in INSERT", select);
@@ -141,10 +135,10 @@ namespace MarkMpn.Sql4Cds
             return query;
         }
 
-        private Query ConvertInsertValuesStatement(string target, IList<ColumnReferenceExpression> columns, ValuesInsertSource values, IOrganizationService org)
+        private Query ConvertInsertValuesStatement(string target, IList<ColumnReferenceExpression> columns, ValuesInsertSource values, AttributeMetadataCache metadata)
         {
             var rowValues = new List<IDictionary<string, object>>();
-            var metadata = GetEntityMetadata(org, target);
+            var meta = metadata[target];
 
             foreach (var row in values.RowValues)
             {
@@ -161,7 +155,7 @@ namespace MarkMpn.Sql4Cds
                     stringValues[columns[i].MultiPartIdentifier.Identifiers.Last().Value] = literal.Value;
                 }
 
-                var rowValue = ConvertAttributeValueTypes(metadata, stringValues);
+                var rowValue = ConvertAttributeValueTypes(meta, stringValues);
                 rowValues.Add(rowValue);
             }
 
@@ -174,7 +168,7 @@ namespace MarkMpn.Sql4Cds
             return query;
         }
 
-        private Query ConvertDeleteStatement(DeleteStatement delete, IOrganizationService org)
+        private Query ConvertDeleteStatement(DeleteStatement delete, AttributeMetadataCache metadata)
         {
             if (delete.OptimizerHints.Count != 0)
                 throw new NotSupportedQueryFragmentException("Unhandled DELETE optimizer hints", delete);
@@ -205,14 +199,14 @@ namespace MarkMpn.Sql4Cds
             var fetch = new FetchXml.FetchType();
             fetch.distinct = true;
             fetch.distinctSpecified = true;
-            var tables = HandleFromClause(org, delete.DeleteSpecification.FromClause, fetch);
+            var tables = HandleFromClause(metadata, delete.DeleteSpecification.FromClause, fetch);
             HandleTopClause(delete.DeleteSpecification.TopRowFilter, fetch, tables);
             HandleWhereClause(delete.DeleteSpecification.WhereClause, fetch, tables);
             
             var table = FindTable(target, tables);
-            var metadata = GetEntityMetadata(org, table.EntityName);
-            table.AddItem(new FetchAttributeType { name = metadata.PrimaryIdAttribute });
-            var cols = new[] { metadata.PrimaryIdAttribute };
+            var meta = metadata[table.EntityName];
+            table.AddItem(new FetchAttributeType { name = meta.PrimaryIdAttribute });
+            var cols = new[] { meta.PrimaryIdAttribute };
             if (table.Entity == null)
                 cols[0] = (table.Alias ?? table.EntityName) + "." + cols[0];
 
@@ -227,7 +221,7 @@ namespace MarkMpn.Sql4Cds
             return query;
         }
 
-        private UpdateQuery ConvertUpdateStatement(UpdateStatement update, IOrganizationService org)
+        private UpdateQuery ConvertUpdateStatement(UpdateStatement update, AttributeMetadataCache metadata)
         {
             if (update.OptimizerHints.Count != 0)
                 throw new NotSupportedQueryFragmentException("Unhandled UPDATE optimizer hints", update);
@@ -258,16 +252,16 @@ namespace MarkMpn.Sql4Cds
             var fetch = new FetchXml.FetchType();
             fetch.distinct = true;
             fetch.distinctSpecified = true;
-            var tables = HandleFromClause(org, update.UpdateSpecification.FromClause, fetch);
+            var tables = HandleFromClause(metadata, update.UpdateSpecification.FromClause, fetch);
             HandleTopClause(update.UpdateSpecification.TopRowFilter, fetch, tables);
             HandleWhereClause(update.UpdateSpecification.WhereClause, fetch, tables);
 
             var updates = HandleSetClause(update.UpdateSpecification.SetClauses);
 
             var table = FindTable(target, tables);
-            var metadata = GetEntityMetadata(org, table.EntityName);
-            table.AddItem(new FetchAttributeType { name = metadata.PrimaryIdAttribute });
-            var cols = new[] { metadata.PrimaryIdAttribute };
+            var meta = metadata[table.EntityName];
+            table.AddItem(new FetchAttributeType { name = meta.PrimaryIdAttribute });
+            var cols = new[] { meta.PrimaryIdAttribute };
             if (table.Entity == null)
                 cols[0] = (table.Alias ?? table.EntityName) + "." + cols[0];
 
@@ -276,7 +270,7 @@ namespace MarkMpn.Sql4Cds
                 FetchXml = fetch,
                 EntityName = table.EntityName,
                 IdColumn = cols[0],
-                Updates = ConvertAttributeValueTypes(metadata, updates),
+                Updates = ConvertAttributeValueTypes(meta, updates),
                 AllPages = fetch.page == null && fetch.top == null
             };
 
@@ -365,7 +359,7 @@ namespace MarkMpn.Sql4Cds
                 .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
         }
 
-        private SelectQuery ConvertSelectStatement(SelectStatement select, IOrganizationService org)
+        private SelectQuery ConvertSelectStatement(SelectStatement select, AttributeMetadataCache metadata)
         {
             if (!(select.QueryExpression is QuerySpecification querySpec))
                 throw new NotSupportedQueryFragmentException("Unhandled SELECT query expression", select.QueryExpression);
@@ -390,10 +384,10 @@ namespace MarkMpn.Sql4Cds
 
             if (querySpec.HavingClause != null)
                 throw new NotSupportedQueryFragmentException("Unhandled SELECT HAVING clause", querySpec.HavingClause);
-
+            
             var fetch = new FetchXml.FetchType();
-            var tables = HandleFromClause(org, querySpec.FromClause, fetch);
-            HandleSelectClause(org, querySpec, fetch, tables, out var columns);
+            var tables = HandleFromClause(metadata, querySpec.FromClause, fetch);
+            HandleSelectClause(metadata, querySpec, fetch, tables, out var columns);
             HandleTopClause(querySpec.TopRowFilter, fetch, tables);
             HandleOffsetClause(querySpec, fetch, tables);
             HandleWhereClause(querySpec.WhereClause, fetch, tables);
@@ -407,13 +401,6 @@ namespace MarkMpn.Sql4Cds
                 ColumnSet = columns,
                 AllPages = fetch.page == null && fetch.count == null
             };
-        }
-
-        private EntityMetadata GetEntityMetadata(IOrganizationService org, string logicalName)
-        {
-            var resp = (RetrieveEntityResponse)org.Execute(new RetrieveEntityRequest { LogicalName = logicalName, EntityFilters = EntityFilters.Entity | EntityFilters.Attributes });
-
-            return resp.EntityMetadata;
         }
 
         private void HandleGroupByClause(QuerySpecification querySpec, FetchXml.FetchType fetch, List<EntityTable> tables)
@@ -841,7 +828,7 @@ namespace MarkMpn.Sql4Cds
             }
         }
 
-        private void HandleSelectClause(IOrganizationService org, QuerySpecification select, FetchXml.FetchType fetch, List<EntityTable> tables, out string[] columns)
+        private void HandleSelectClause(AttributeMetadataCache metadata, QuerySpecification select, FetchXml.FetchType fetch, List<EntityTable> tables, out string[] columns)
         {
             var cols = new List<string>();
 
@@ -859,7 +846,7 @@ namespace MarkMpn.Sql4Cds
 
                     foreach (var starTable in starTables)
                     {
-                        var meta = GetEntityMetadata(org, starTable.EntityName);
+                        var meta = metadata[starTable.EntityName];
 
                         foreach (var attr in meta.Attributes.Where(a => a.IsValidForRead == true))
                         {
@@ -894,7 +881,7 @@ namespace MarkMpn.Sql4Cds
                     {
                         string attrName;
                         if (col.ColumnType == ColumnType.Wildcard)
-                            attrName = GetEntityMetadata(org, tables[0].EntityName).PrimaryIdAttribute;
+                            attrName = metadata[tables[0].EntityName].PrimaryIdAttribute;
                         else
                             attrName = col.MultiPartIdentifier.Identifiers.Last().Value;
 
@@ -973,19 +960,19 @@ namespace MarkMpn.Sql4Cds
             return attr;
         }
 
-        private List<EntityTable> HandleFromClause(IOrganizationService org, FromClause from, FetchXml.FetchType fetch)
+        private List<EntityTable> HandleFromClause(AttributeMetadataCache metadata, FromClause from, FetchXml.FetchType fetch)
         {
             if (from.TableReferences.Count != 1)
                 throw new NotSupportedQueryFragmentException("Unhandled SELECT FROM clause - only single table or qualified joins are supported", from);
 
             var tables = new List<EntityTable>();
 
-            HandleFromClause(org, from.TableReferences[0], fetch, tables);
+            HandleFromClause(metadata, from.TableReferences[0], fetch, tables);
 
             return tables;
         }
 
-        private void HandleFromClause(IOrganizationService org, TableReference tableReference, FetchXml.FetchType fetch, List<EntityTable> tables)
+        private void HandleFromClause(AttributeMetadataCache metadata, TableReference tableReference, FetchXml.FetchType fetch, List<EntityTable> tables)
         {
             if (tableReference is NamedTableReference namedTable)
             {
@@ -1001,7 +988,7 @@ namespace MarkMpn.Sql4Cds
 
                     try
                     {
-                        table = new EntityTable(org, entity) { Alias = namedTable.Alias?.Value };
+                        table = new EntityTable(metadata, entity) { Alias = namedTable.Alias?.Value };
                     }
                     catch (FaultException ex)
                     {
@@ -1037,7 +1024,7 @@ namespace MarkMpn.Sql4Cds
 
                 try
                 {
-                    linkTable = new EntityTable(org, link);
+                    linkTable = new EntityTable(metadata, link);
                     tables.Add(linkTable);
                 }
                 catch (FaultException ex)
@@ -1060,7 +1047,7 @@ namespace MarkMpn.Sql4Cds
                 if (filter.type != (filterType)2)
                     linkTable.AddItem(filter);
 
-                HandleFromClause(org, join.FirstTableReference, fetch, tables);
+                HandleFromClause(metadata, join.FirstTableReference, fetch, tables);
 
                 switch (join.QualifiedJoinType)
                 {

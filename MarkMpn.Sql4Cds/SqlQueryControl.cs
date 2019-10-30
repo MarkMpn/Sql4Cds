@@ -20,10 +20,11 @@ namespace MarkMpn.Sql4Cds
 {
     public partial class SqlQueryControl : UserControl
     {
-        public SqlQueryControl(IOrganizationService org, Action<WorkAsyncInfo> workAsync, Action<Action> executeMethod, Action<MessageBusEventArgs> outgoingMessageHandler)
+        public SqlQueryControl(IOrganizationService org, AttributeMetadataCache metadata, Action<WorkAsyncInfo> workAsync, Action<Action> executeMethod, Action<MessageBusEventArgs> outgoingMessageHandler)
         {
             InitializeComponent();
             Service = org;
+            Metadata = metadata;
             WorkAsync = workAsync;
             ExecuteMethod = executeMethod;
             OutgoingMessageHandler = outgoingMessageHandler;
@@ -33,6 +34,7 @@ namespace MarkMpn.Sql4Cds
         }
 
         public IOrganizationService Service { get; }
+        public AttributeMetadataCache Metadata { get; }
         public Action<WorkAsyncInfo> WorkAsync { get; }
         public Action<Action> ExecuteMethod { get; }
         public Action<MessageBusEventArgs> OutgoingMessageHandler { get; }
@@ -205,7 +207,7 @@ namespace MarkMpn.Sql4Cds
                 Message = "Executing...",
                 Work = (worker, args) =>
                 {
-                    var queries = new Sql2FetchXml().Convert(sql, Service);
+                    var queries = new Sql2FetchXml().Convert(sql, Metadata);
 
                     if (execute)
                     {

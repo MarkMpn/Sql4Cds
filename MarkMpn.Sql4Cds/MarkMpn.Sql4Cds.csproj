@@ -167,6 +167,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="AttributeMetadataCache.cs" />
     <Compile Include="FetchXml.cs">
       <DependentUpon>FetchXml.xsd</DependentUpon>
     </Compile>

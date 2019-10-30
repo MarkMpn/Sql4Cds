@@ -14,14 +14,18 @@ using XrmToolBox.Extensibility.Interfaces;
 using System.Xml;
 using System.IO;
 using System.Xml.Serialization;
+using System.Collections.Generic;
 
 namespace MarkMpn.Sql4Cds
 {
     public partial class PluginControl : MultipleConnectionsPluginControlBase, IMessageBusHost
     {
+        private IDictionary<ConnectionDetail, AttributeMetadataCache> _metadata;
+
         public PluginControl()
         {
             InitializeComponent();
+            _metadata = new Dictionary<ConnectionDetail, AttributeMetadataCache>();
         }
 
         protected override void OnConnectionUpdated(ConnectionUpdatedEventArgs e)
@@ -45,6 +49,7 @@ namespace MarkMpn.Sql4Cds
 
         private void AddConnection(ConnectionDetail con)
         {
+            _metadata[con] = new AttributeMetadataCache(con.ServiceClient);
             var conNode = treeView.Nodes.Add(con.ConnectionName);
             conNode.Tag = con;
             SetIcon(conNode, "Environment");
@@ -61,19 +66,19 @@ namespace MarkMpn.Sql4Cds
             node.SelectedImageKey = imageKey;
         }
 
-        private IOrganizationService GetService(TreeNode node)
+        private ConnectionDetail GetService(TreeNode node)
         {
             while (node.Parent != null)
                 node = node.Parent;
 
             var con = (ConnectionDetail)node.Tag;
 
-            return con.ServiceClient;
+            return con;
         }
 
         private TreeNode[] LoadEntities(TreeNode parent)
         {
-            var metadata = (RetrieveAllEntitiesResponse) GetService(parent).Execute(new RetrieveAllEntitiesRequest
+            var metadata = (RetrieveAllEntitiesResponse) GetService(parent).ServiceClient.Execute(new RetrieveAllEntitiesRequest
             {
                 EntityFilters = EntityFilters.Entity
             });
@@ -100,13 +105,9 @@ namespace MarkMpn.Sql4Cds
         {
             var logicalName = parent.Parent.Text;
 
-            var metadata = (RetrieveEntityResponse)GetService(parent).Execute(new RetrieveEntityRequest
-            {
-                LogicalName = logicalName,
-                EntityFilters = EntityFilters.Attributes
-            });
+            var metadata = _metadata[GetService(parent)][logicalName];
 
-            return metadata.EntityMetadata.Attributes
+            return metadata.Attributes
                 .OrderBy(a => a.LogicalName)
                 .Select(a =>
                 {
@@ -122,7 +123,7 @@ namespace MarkMpn.Sql4Cds
         {
             var logicalName = parent.Parent.Text;
 
-            var metadata = (RetrieveEntityResponse)GetService(parent).Execute(new RetrieveEntityRequest
+            var metadata = (RetrieveEntityResponse)GetService(parent).ServiceClient.Execute(new RetrieveEntityRequest
             {
                 LogicalName = logicalName,
                 EntityFilters = EntityFilters.Relationships
@@ -307,7 +308,7 @@ namespace MarkMpn.Sql4Cds
 
         private void CreateQuery(ConnectionDetail con, string sql)
         { 
-            var query = new SqlQueryControl(con.ServiceClient, WorkAsync, ExecuteMethod, SendOutgoingMessage);
+            var query = new SqlQueryControl(con.ServiceClient, _metadata[con], WorkAsync, ExecuteMethod, SendOutgoingMessage);
             query.InsertText(sql);
             var tabPage = new TabPage(con.ConnectionName);
             tabPage.Controls.Add(query);
@@ -338,13 +339,13 @@ INNER JOIN {oneToMany.ReferencedEntity}
             }
             else if (e.Node.Tag is ManyToManyRelationshipMetadata manyToMany)
             {
-                var org = GetService(e.Node);
-                var entity1 = (RetrieveEntityResponse)org.Execute(new RetrieveEntityRequest
+                var con = GetService(e.Node);
+                var entity1 = (RetrieveEntityResponse)con.ServiceClient.Execute(new RetrieveEntityRequest
                 {
                     LogicalName = manyToMany.Entity1LogicalName,
                     EntityFilters = EntityFilters.Entity
                 });
-                var entity2 = (RetrieveEntityResponse)org.Execute(new RetrieveEntityRequest
+                var entity2 = (RetrieveEntityResponse)con.ServiceClient.Execute(new RetrieveEntityRequest
                 {
                     LogicalName = manyToMany.Entity2LogicalName,
                     EntityFilters = EntityFilters.Entity
