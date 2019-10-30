@@ -593,19 +593,41 @@ namespace MarkMpn.Sql4Cds
             };
 
             tables[0].AddItem(filter);
-            HandleFilter(where.SearchCondition, filter, tables);
+
+            ColumnReferenceExpression col1 = null;
+            ColumnReferenceExpression col2 = null;
+            HandleFilter(where.SearchCondition, filter, tables, false, ref col1, ref col2);
+
+            if (col1 != null || col2 != null)
+                throw new NotSupportedQueryFragmentException("Unsupported comparison", col1);
 
             if (filter.type == (filterType)2)
                 filter.type = filterType.and;
         }
 
-        private void HandleFilter(BooleanExpression searchCondition, filter criteria, List<EntityTable> tables)
+        private void HandleFilter(BooleanExpression searchCondition, filter criteria, List<EntityTable> tables, bool inOr, ref ColumnReferenceExpression col1, ref ColumnReferenceExpression col2)
         {
             if (searchCondition is BooleanComparisonExpression comparison)
             {
                 var field = comparison.FirstExpression as ColumnReferenceExpression;
                 var literal = comparison.SecondExpression as Literal;
                 var func = comparison.SecondExpression as FunctionCall;
+                var field2 = comparison.SecondExpression as ColumnReferenceExpression;
+
+                if (field != null && field2 != null)
+                {
+                    if (col1 == null && col2 == null)
+                    {
+                        if (inOr)
+                            throw new NotSupportedQueryFragmentException("Cannot combine join criteria with OR", comparison);
+
+                        col1 = field;
+                        col2 = field2;
+                        return;
+                    }
+
+                    throw new NotSupportedQueryFragmentException("Unsupported comparison", comparison);
+                }
 
                 if (field == null && literal == null && func == null)
                 {
@@ -735,8 +757,8 @@ namespace MarkMpn.Sql4Cds
                     criteria.type = op;
                 }
 
-                HandleFilter(binary.FirstExpression, criteria, tables);
-                HandleFilter(binary.SecondExpression, criteria, tables);
+                HandleFilter(binary.FirstExpression, criteria, tables, inOr || op == filterType.or, ref col1, ref col2);
+                HandleFilter(binary.SecondExpression, criteria, tables, inOr || op == filterType.or, ref col1, ref col2);
             }
             else if (searchCondition is BooleanParenthesisExpression paren)
             {
@@ -744,7 +766,7 @@ namespace MarkMpn.Sql4Cds
                 criteria.Items = AddItem(criteria.Items, subFilter);
                 criteria = subFilter;
 
-                HandleFilter(paren.Expression, criteria, tables);
+                HandleFilter(paren.Expression, criteria, tables, inOr, ref col1, ref col2);
 
                 if (subFilter.type == (filterType)2)
                     subFilter.type = filterType.and;
@@ -1022,14 +1044,21 @@ namespace MarkMpn.Sql4Cds
                 {
                     throw new NotSupportedQueryFragmentException(ex.Message, table2);
                 }
+                
+                var filter = new filter
+                {
+                    type = (filterType)2
+                };
+                
+                ColumnReferenceExpression col1 = null;
+                ColumnReferenceExpression col2 = null;
+                HandleFilter(join.SearchCondition, filter, tables, false, ref col1, ref col2);
 
-                // TODO: Extend support for more complex join criteria
-                // Allow additional filter criteria in the join condition to be applied to the link-entity filter
-                if (!(join.SearchCondition is BooleanComparisonExpression equals) ||
-                    equals.ComparisonType != BooleanComparisonType.Equals ||
-                    !(equals.FirstExpression is ColumnReferenceExpression col1) ||
-                    !(equals.SecondExpression is ColumnReferenceExpression col2))
-                    throw new NotSupportedQueryFragmentException("Unsupported join condition", join.SearchCondition);
+                if (col1 == null || col2 == null)
+                    throw new NotSupportedQueryFragmentException("Missing join condition", join.SearchCondition);
+
+                if (filter.type != (filterType)2)
+                    linkTable.AddItem(filter);
 
                 HandleFromClause(org, join.FirstTableReference, fetch, tables);
 
