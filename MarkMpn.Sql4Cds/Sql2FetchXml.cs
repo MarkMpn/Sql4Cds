@@ -583,7 +583,7 @@ namespace MarkMpn.Sql4Cds
 
             ColumnReferenceExpression col1 = null;
             ColumnReferenceExpression col2 = null;
-            HandleFilter(where.SearchCondition, filter, tables, false, ref col1, ref col2);
+            HandleFilter(where.SearchCondition, filter, tables, tables[0], false, ref col1, ref col2);
 
             if (col1 != null || col2 != null)
                 throw new NotSupportedQueryFragmentException("Unsupported comparison", col1);
@@ -592,7 +592,7 @@ namespace MarkMpn.Sql4Cds
                 filter.type = filterType.and;
         }
 
-        private void HandleFilter(BooleanExpression searchCondition, filter criteria, List<EntityTable> tables, bool inOr, ref ColumnReferenceExpression col1, ref ColumnReferenceExpression col2)
+        private void HandleFilter(BooleanExpression searchCondition, filter criteria, List<EntityTable> tables, EntityTable targetTable, bool inOr, ref ColumnReferenceExpression col1, ref ColumnReferenceExpression col2)
         {
             if (searchCondition is BooleanComparisonExpression comparison)
             {
@@ -720,10 +720,15 @@ namespace MarkMpn.Sql4Cds
                 {
                     throw new NotSupportedQueryFragmentException("Unsupported function use. Only <field> = <func>(<param>) usage is supported", comparison);
                 }
+
+                var entityName = GetColumnTableAlias(field, tables, out var entityTable);
+
+                if (entityTable == targetTable)
+                    entityName = null;
                 
                 criteria.Items = AddItem(criteria.Items, new condition
                 {
-                    entityname = GetColumnTableAlias(field, tables, out _),
+                    entityname = entityName,
                     attribute = GetColumnAttribute(field),
                     @operator = op,
                     value = value?.ToString()
@@ -744,8 +749,8 @@ namespace MarkMpn.Sql4Cds
                     criteria.type = op;
                 }
 
-                HandleFilter(binary.FirstExpression, criteria, tables, inOr || op == filterType.or, ref col1, ref col2);
-                HandleFilter(binary.SecondExpression, criteria, tables, inOr || op == filterType.or, ref col1, ref col2);
+                HandleFilter(binary.FirstExpression, criteria, tables, targetTable, inOr || op == filterType.or, ref col1, ref col2);
+                HandleFilter(binary.SecondExpression, criteria, tables, targetTable, inOr || op == filterType.or, ref col1, ref col2);
             }
             else if (searchCondition is BooleanParenthesisExpression paren)
             {
@@ -753,7 +758,7 @@ namespace MarkMpn.Sql4Cds
                 criteria.Items = AddItem(criteria.Items, subFilter);
                 criteria = subFilter;
 
-                HandleFilter(paren.Expression, criteria, tables, inOr, ref col1, ref col2);
+                HandleFilter(paren.Expression, criteria, tables, targetTable, inOr, ref col1, ref col2);
 
                 if (subFilter.type == (filterType)2)
                     subFilter.type = filterType.and;
@@ -1014,6 +1019,8 @@ namespace MarkMpn.Sql4Cds
                 if (!(join.SecondTableReference is NamedTableReference table2))
                     throw new NotSupportedQueryFragmentException("Unsupported join table", join.SecondTableReference);
 
+                HandleFromClause(metadata, join.FirstTableReference, fetch, tables);
+
                 var link = new FetchLinkEntityType
                 {
                     name = table2.SchemaObject.BaseIdentifier.Value,
@@ -1039,15 +1046,13 @@ namespace MarkMpn.Sql4Cds
                 
                 ColumnReferenceExpression col1 = null;
                 ColumnReferenceExpression col2 = null;
-                HandleFilter(join.SearchCondition, filter, tables, false, ref col1, ref col2);
+                HandleFilter(join.SearchCondition, filter, tables, linkTable, false, ref col1, ref col2);
 
                 if (col1 == null || col2 == null)
                     throw new NotSupportedQueryFragmentException("Missing join condition", join.SearchCondition);
 
                 if (filter.type != (filterType)2)
                     linkTable.AddItem(filter);
-
-                HandleFromClause(metadata, join.FirstTableReference, fetch, tables);
 
                 switch (join.QualifiedJoinType)
                 {
