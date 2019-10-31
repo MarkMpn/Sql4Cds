@@ -395,9 +395,6 @@ INNER JOIN {manyToMany.Entity2LogicalName}
         {
             if (message.SourcePlugin == "FetchXML Builder" && message.TargetArgument is string xml)
             {
-                var fetch = DeserializeFetchXml(xml);
-                var sql = FetchXml2Sql.Convert(fetch);
-
                 if (treeView.SelectedNode == null)
                     return;
 
@@ -405,7 +402,13 @@ INNER JOIN {manyToMany.Entity2LogicalName}
                 while (node.Parent != null)
                     node = node.Parent;
 
-                CreateQuery((ConnectionDetail)node.Tag, sql);
+                var con = (ConnectionDetail)node.Tag;
+                var metadata = _metadata[con];
+
+                var fetch = DeserializeFetchXml(xml);
+                var sql = FetchXml2Sql.Convert(metadata, fetch);
+
+                CreateQuery(con, sql);
             }
         }
 

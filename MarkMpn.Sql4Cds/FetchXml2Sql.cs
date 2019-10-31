@@ -1,13 +1,14 @@
 ﻿using MarkMpn.Sql4Cds.FetchXml;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace MarkMpn.Sql4Cds
 {
     static class FetchXml2Sql
     {
-        public static string Convert(FetchXml.FetchType fetch)
+        public static string Convert(AttributeMetadataCache metadata, FetchXml.FetchType fetch)
         {
             var select = new SelectStatement();
             var query = new QuerySpecification();
@@ -24,6 +25,8 @@ namespace MarkMpn.Sql4Cds
             AddSelectElements(query, entity.Items, entity?.name);
 
             // From
+            var aliasToLogicalName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
             if (entity != null)
             {
                 query.FromClause = new FromClause
@@ -43,7 +46,7 @@ namespace MarkMpn.Sql4Cds
                     }
                 };
 
-                query.FromClause.TableReferences[0] = BuildJoins(query.FromClause.TableReferences[0], (NamedTableReference)query.FromClause.TableReferences[0], entity.Items, query);
+                query.FromClause.TableReferences[0] = BuildJoins(metadata, query.FromClause.TableReferences[0], (NamedTableReference)query.FromClause.TableReferences[0], entity.Items, query, aliasToLogicalName);
             }
 
             // Offset
@@ -60,7 +63,7 @@ namespace MarkMpn.Sql4Cds
             }
 
             // Where
-            var filter = GetFilter(entity.Items, entity.name);
+            var filter = GetFilter(metadata, entity.Items, entity.name, aliasToLogicalName);
             if (filter != null)
             {
                 query.WhereClause = new WhereClause
@@ -185,10 +188,13 @@ namespace MarkMpn.Sql4Cds
             }
         }
 
-        private static TableReference BuildJoins(TableReference dataSource, NamedTableReference parentTable, object[] items, QuerySpecification query)
+        private static TableReference BuildJoins(AttributeMetadataCache metadata, TableReference dataSource, NamedTableReference parentTable, object[] items, QuerySpecification query, IDictionary<string, string> aliasToLogicalName)
         {
             foreach (var link in items.OfType<FetchLinkEntityType>())
             {
+                if (!String.IsNullOrEmpty(link.alias))
+                    aliasToLogicalName[link.alias] = link.name;
+
                 var join = new QualifiedJoin
                 {
                     FirstTableReference = dataSource,
@@ -235,13 +241,13 @@ namespace MarkMpn.Sql4Cds
                     }
                 };
 
-                dataSource = BuildJoins(join, (NamedTableReference)join.SecondTableReference, link.Items, query);
+                dataSource = BuildJoins(metadata, join, (NamedTableReference)join.SecondTableReference, link.Items, query, aliasToLogicalName);
 
                 // Select
                 AddSelectElements(query, link.Items, link.alias ?? link.name);
 
                 // Filter
-                var filter = GetFilter(link.Items, link.alias ?? link.name);
+                var filter = GetFilter(metadata, link.Items, link.alias ?? link.name, aliasToLogicalName);
                 if (filter != null)
                 {
                     var finalFilter = new BooleanBinaryExpression
@@ -258,24 +264,24 @@ namespace MarkMpn.Sql4Cds
             return dataSource;
         }
 
-        private static BooleanExpression GetFilter(object[] items, string prefix)
+        private static BooleanExpression GetFilter(AttributeMetadataCache metadata, object[] items, string prefix, IDictionary<string, string> aliasToLogicalName)
         {
             var filter = items.OfType<filter>().SingleOrDefault();
 
             if (filter == null)
                 return null;
 
-            return GetFilter(filter, prefix);
+            return GetFilter(metadata, filter, prefix, aliasToLogicalName);
         }
 
-        private static BooleanExpression GetFilter(filter filter, string prefix)
+        private static BooleanExpression GetFilter(AttributeMetadataCache metadata, filter filter, string prefix, IDictionary<string, string> aliasToLogicalName)
         {
             BooleanExpression expression = null;
             var type = filter.type == filterType.and ? BooleanBinaryExpressionType.And : BooleanBinaryExpressionType.Or;
 
             foreach (var condition in filter.Items.OfType<condition>())
             {
-                var newExpression = GetFilter(condition, prefix);
+                var newExpression = GetFilter(metadata, condition, prefix, aliasToLogicalName);
 
                 if (expression == null)
                     expression = newExpression;
@@ -290,7 +296,7 @@ namespace MarkMpn.Sql4Cds
 
             foreach (var subFilter in filter.Items.OfType<filter>())
             {
-                var newExpression = GetFilter(subFilter, prefix);
+                var newExpression = GetFilter(metadata, subFilter, prefix, aliasToLogicalName);
 
                 if (expression == null)
                     expression = newExpression;
@@ -306,7 +312,7 @@ namespace MarkMpn.Sql4Cds
             return expression;
         }
 
-        private static BooleanExpression GetFilter(condition condition, string prefix)
+        private static BooleanExpression GetFilter(AttributeMetadataCache metadata, condition condition, string prefix, IDictionary<string,string> aliasToLogicalName)
         {
             var field = new ColumnReferenceExpression
             {
@@ -321,7 +327,35 @@ namespace MarkMpn.Sql4Cds
             };
 
             BooleanComparisonType type;
-            ScalarExpression value = new StringLiteral { Value = condition.value };
+            ScalarExpression value;
+
+            if (!aliasToLogicalName.TryGetValue(condition.entityname ?? prefix, out var logicalName))
+                logicalName = condition.entityname ?? prefix;
+
+            var meta = metadata[logicalName];
+            var attr = meta.Attributes.SingleOrDefault(a => a.LogicalName == condition.attribute);
+
+            if (attr == null)
+                value = new StringLiteral { Value = condition.value };
+            else if (attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.BigInt ||
+                attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.Integer ||
+                attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.Picklist ||
+                attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.State ||
+                attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.Status)
+                value = new IntegerLiteral { Value = condition.value };
+            else if (attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.Boolean)
+                value = new BinaryLiteral { Value = condition.value };
+            else if (attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.Decimal ||
+                attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.Double)
+                value = new NumericLiteral { Value = condition.value };
+            else if (attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.Money)
+                value = new MoneyLiteral { Value = condition.value };
+            else if (attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.Lookup ||
+                attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.Owner ||
+                attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.Customer)
+                value = new IdentifierLiteral { Value = condition.value };
+            else
+                value = new StringLiteral { Value = condition.value };
 
             switch (condition.@operator)
             {
