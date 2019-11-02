@@ -393,21 +393,36 @@ INNER JOIN {manyToMany.Entity2LogicalName}
 
         public void OnIncomingMessage(MessageBusEventArgs message)
         {
-            if (message.SourcePlugin == "FetchXML Builder" && message.TargetArgument is string xml)
+            var param = message.TargetArgument as IDictionary<string, object>;
+
+            if (param == null)
             {
-                if (treeView.SelectedNode == null)
-                    return;
+                var xml = message.TargetArgument as string;
+                param = new Dictionary<string, object>();
+                param["FetchXml"] = xml;
+                param["ConvertOnly"] = false;
+            }
 
-                var node = treeView.SelectedNode;
-                while (node.Parent != null)
-                    node = node.Parent;
+            if (treeView.SelectedNode == null)
+                return;
 
-                var con = (ConnectionDetail)node.Tag;
-                var metadata = _metadata[con];
+            var node = treeView.SelectedNode;
+            while (node.Parent != null)
+                node = node.Parent;
 
-                var fetch = DeserializeFetchXml(xml);
-                var sql = FetchXml2Sql.Convert(metadata, fetch);
+            var con = (ConnectionDetail)node.Tag;
+            var metadata = _metadata[con];
 
+            var fetch = DeserializeFetchXml((string)param["FetchXml"]);
+            var sql = FetchXml2Sql.Convert(metadata, fetch);
+
+            if ((bool)param["ConvertOnly"])
+            {
+                param["Sql"] = sql;
+                OnOutgoingMessage(this, new MessageBusEventArgs(message.SourcePlugin) { TargetArgument = null });
+            }
+            else
+            {
                 CreateQuery(con, sql);
             }
         }
