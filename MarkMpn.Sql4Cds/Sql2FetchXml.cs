@@ -391,7 +391,7 @@ namespace MarkMpn.Sql4Cds
             HandleTopClause(querySpec.TopRowFilter, fetch, tables);
             HandleOffsetClause(querySpec, fetch, tables);
             HandleWhereClause(querySpec.WhereClause, fetch, tables);
-            HandleGroupByClause(querySpec, fetch, tables);
+            HandleGroupByClause(querySpec, fetch, tables, columns);
             HandleOrderByClause(querySpec, fetch, tables, columns);
             HandleDistinctClause(querySpec, fetch, tables);
             
@@ -403,7 +403,7 @@ namespace MarkMpn.Sql4Cds
             };
         }
 
-        private void HandleGroupByClause(QuerySpecification querySpec, FetchXml.FetchType fetch, List<EntityTable> tables)
+        private void HandleGroupByClause(QuerySpecification querySpec, FetchXml.FetchType fetch, List<EntityTable> tables, string[] columns)
         {
             if (querySpec.GroupByClause == null)
                 return;
@@ -442,7 +442,15 @@ namespace MarkMpn.Sql4Cds
                 }
 
                 if (attr.alias == null)
+                {
                     attr.alias = attr.name;
+
+                    for (var i = 0; i < columns.Length; i++)
+                    {
+                        if (columns[i].Equals($"{table.Alias ?? table.EntityName}.{attr.name}", StringComparison.OrdinalIgnoreCase))
+                            columns[i] = attr.name;
+                    }
+                }
 
                 attr.groupby = FetchBoolType.@true;
                 attr.groupbySpecified = true;
@@ -926,7 +934,10 @@ namespace MarkMpn.Sql4Cds
 
                         attr.alias = alias;
 
-                        cols.Add((table.LinkEntity == null ? "" : ((table.Alias ?? table.EntityName) + ".")) + (attr.alias ?? attr.name));
+                        if (alias == null)
+                            cols.Add((table.LinkEntity == null ? "" : ((table.Alias ?? table.EntityName) + ".")) + attr.name);
+                        else
+                            cols.Add(alias);
                     }
                     else
                     {
