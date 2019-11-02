@@ -1180,6 +1180,14 @@ namespace MarkMpn.Sql4Cds
                 .ToArray();
 
             if (possibleEntities.Length == 0)
+            {
+                // If we couldn't find a match in the metadata, we might have an alias we can use instead
+                possibleEntities = tables
+                    .Where(t => (t.Entity?.Items ?? t.LinkEntity?.Items).OfType<FetchAttributeType>().Any(attr => attr.alias?.Equals(col.MultiPartIdentifier.Identifiers[0].Value, StringComparison.OrdinalIgnoreCase) == true))
+                    .ToArray();
+            }
+
+            if (possibleEntities.Length == 0)
                 throw new NotSupportedQueryFragmentException("Unknown attribute", col);
 
             if (possibleEntities.Length > 1)
