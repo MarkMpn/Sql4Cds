@@ -314,8 +314,15 @@ namespace MarkMpn.Sql4Cds
         private ToolStrip CreateFXBToolbar(Scintilla xmlEditor)
         {
             var toolbar = new ToolStrip();
+            toolbar.ImageScalingSize = new Size(24, 24);
             var btn = new ToolStripButton();
-            btn.Text = "Edit in FetchXmlBuilder";
+            btn.Text = "Edit in";
+            btn.Image = Properties.Resources.FXB;
+            btn.ImageAlign = ContentAlignment.MiddleRight;
+            btn.TextAlign = ContentAlignment.MiddleLeft;
+            btn.TextImageRelation = TextImageRelation.TextBeforeImage;
+
+            btn.ToolTipText = "Edit in FetchXML Builder";
             btn.Click += (sender, e) =>
             {
                 OutgoingMessageHandler(new MessageBusEventArgs("FetchXML Builder")
