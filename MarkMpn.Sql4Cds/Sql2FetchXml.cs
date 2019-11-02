@@ -425,12 +425,7 @@ namespace MarkMpn.Sql4Cds
                 if (!(exprGroup.Expression is ColumnReferenceExpression col))
                     throw new NotSupportedQueryFragmentException("Unhandled GROUP BY clause", exprGroup.Expression);
 
-                EntityTable table;
-
-                if (col.MultiPartIdentifier.Identifiers.Count == 1)
-                    table = tables[0];
-                else
-                    table = FindTable(col.MultiPartIdentifier.Identifiers[0].Value, tables, col);
+                GetColumnTableAlias(col, tables, out var table);
 
                 if (table == null)
                     throw new NotSupportedQueryFragmentException("Unknown table", col);
