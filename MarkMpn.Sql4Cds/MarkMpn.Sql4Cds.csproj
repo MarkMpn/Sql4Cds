@@ -172,6 +172,12 @@
       <DependentUpon>FetchXml.xsd</DependentUpon>
     </Compile>
     <Compile Include="FetchXml2Sql.cs" />
+    <Compile Include="ObjectExplorer.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="ObjectExplorer.Designer.cs">
+      <DependentUpon>ObjectExplorer.cs</DependentUpon>
+    </Compile>
     <Compile Include="Plugin.cs" />
     <Compile Include="PluginControl.cs">
       <SubType>UserControl</SubType>
@@ -197,7 +203,7 @@
     </Compile>
     <Compile Include="Sql2FetchXml.cs" />
     <Compile Include="SqlQueryControl.cs">
-      <SubType>UserControl</SubType>
+      <SubType>Form</SubType>
     </Compile>
     <Compile Include="SqlQueryControl.Designer.cs">
       <DependentUpon>SqlQueryControl.cs</DependentUpon>
@@ -212,6 +218,9 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="ObjectExplorer.resx">
+      <DependentUpon>ObjectExplorer.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="PluginControl.resx">
       <DependentUpon>PluginControl.cs</DependentUpon>
     </EmbeddedResource>

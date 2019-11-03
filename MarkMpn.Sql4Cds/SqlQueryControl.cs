@@ -15,18 +15,21 @@ using System.Text.RegularExpressions;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using System.IO;
+using McTools.Xrm.Connection;
 
 namespace MarkMpn.Sql4Cds
 {
-    public partial class SqlQueryControl : UserControl
+    public partial class SqlQueryControl : WeifenLuo.WinFormsUI.Docking.DockContent
     {
         private readonly Scintilla _editor;
         private readonly string _sourcePlugin;
+        private static int _queryCounter;
 
-        public SqlQueryControl(IOrganizationService org, AttributeMetadataCache metadata, Action<WorkAsyncInfo> workAsync, Action<string> setWorkingMessage, Action<Action> executeMethod, Action<MessageBusEventArgs> outgoingMessageHandler, string sourcePlugin)
+        public SqlQueryControl(ConnectionDetail con, AttributeMetadataCache metadata, Action<WorkAsyncInfo> workAsync, Action<string> setWorkingMessage, Action<Action> executeMethod, Action<MessageBusEventArgs> outgoingMessageHandler, string sourcePlugin)
         {
             InitializeComponent();
-            Service = org;
+            Text = $"Query {++_queryCounter} ({con.ConnectionName})";
+            Service = con.ServiceClient;
             Metadata = metadata;
             WorkAsync = workAsync;
             SetWorkingMessage = setWorkingMessage;

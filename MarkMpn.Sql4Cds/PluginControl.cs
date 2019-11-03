@@ -20,19 +20,22 @@ namespace MarkMpn.Sql4Cds
 {
     public partial class PluginControl : MultipleConnectionsPluginControlBase, IMessageBusHost
     {
-        private IDictionary<ConnectionDetail, AttributeMetadataCache> _metadata;
+        private readonly IDictionary<ConnectionDetail, AttributeMetadataCache> _metadata;
+        private ObjectExplorer _objectExplorer;
 
         public PluginControl()
         {
             InitializeComponent();
             _metadata = new Dictionary<ConnectionDetail, AttributeMetadataCache>();
+            _objectExplorer = new ObjectExplorer(_metadata, WorkAsync);
+            _objectExplorer.Show(dockPanel, WeifenLuo.WinFormsUI.Docking.DockState.DockLeft);
         }
 
         protected override void OnConnectionUpdated(ConnectionUpdatedEventArgs e)
         {
             AddConnection(e.ConnectionDetail);
 
-            if (tabControl.TabPages.Count == 0)
+            if (dockPanel.ActiveDocument == null)
                 tsbNewQuery_Click(this, EventArgs.Empty);
             
             base.OnConnectionUpdated(e);
@@ -50,166 +53,7 @@ namespace MarkMpn.Sql4Cds
         private void AddConnection(ConnectionDetail con)
         {
             _metadata[con] = new AttributeMetadataCache(con.ServiceClient);
-            var conNode = treeView.Nodes.Add(con.ConnectionName);
-            conNode.Tag = con;
-            SetIcon(conNode, "Environment");
-            var entitiesNode = conNode.Nodes.Add("Entities");
-            SetIcon(entitiesNode, "Folder");
-            AddVirtualChildNodes(entitiesNode, LoadEntities);
-            treeView.SelectedNode = conNode;
-        }
-
-        private void SetIcon(TreeNode node, string imageKey)
-        {
-            node.ImageKey = imageKey;
-            node.StateImageKey = imageKey;
-            node.SelectedImageKey = imageKey;
-        }
-
-        private ConnectionDetail GetService(TreeNode node)
-        {
-            while (node.Parent != null)
-                node = node.Parent;
-
-            var con = (ConnectionDetail)node.Tag;
-
-            return con;
-        }
-
-        private TreeNode[] LoadEntities(TreeNode parent)
-        {
-            var metadata = (RetrieveAllEntitiesResponse) GetService(parent).ServiceClient.Execute(new RetrieveAllEntitiesRequest
-            {
-                EntityFilters = EntityFilters.Entity
-            });
-
-            return metadata.EntityMetadata
-                .OrderBy(e => e.LogicalName)
-                .Select(e =>
-                {
-                    var node = new TreeNode(e.LogicalName);
-                    node.Tag = e;
-                    SetIcon(node, "Entity");
-                    var attrsNode = node.Nodes.Add("Attributes");
-                    SetIcon(attrsNode, "Folder");
-                    AddVirtualChildNodes(attrsNode, LoadAttributes);
-                    var relsNode = node.Nodes.Add("Relationships");
-                    SetIcon(relsNode, "Folder");
-                    AddVirtualChildNodes(relsNode, LoadRelationships);
-                    return node;
-                })
-                .ToArray();
-        }
-
-        private TreeNode[] LoadAttributes(TreeNode parent)
-        {
-            var logicalName = parent.Parent.Text;
-
-            var metadata = _metadata[GetService(parent)][logicalName];
-
-            return metadata.Attributes
-                .OrderBy(a => a.LogicalName)
-                .Select(a =>
-                {
-                    var node = new TreeNode(a.LogicalName);
-                    node.Tag = a;
-                    SetIcon(node, GetIconType(a));
-                    return node;
-                })
-                .ToArray();
-        }
-
-        private TreeNode[] LoadRelationships(TreeNode parent)
-        {
-            var logicalName = parent.Parent.Text;
-
-            var metadata = (RetrieveEntityResponse)GetService(parent).ServiceClient.Execute(new RetrieveEntityRequest
-            {
-                LogicalName = logicalName,
-                EntityFilters = EntityFilters.Relationships
-            });
-
-            return metadata.EntityMetadata.OneToManyRelationships.Select(r =>
-                {
-                    var node = new TreeNode(r.SchemaName);
-                    node.Tag = r;
-                    SetIcon(node, "OneToMany");
-                    return node;
-                })
-                .Union(metadata.EntityMetadata.ManyToOneRelationships.Select(r =>
-                {
-                    var node = new TreeNode(r.SchemaName);
-                    node.Tag = r;
-                    SetIcon(node, "ManyToOne");
-                    return node;
-                }))
-                .Union(metadata.EntityMetadata.ManyToManyRelationships.Select(r =>
-                {
-                    var node = new TreeNode(r.SchemaName);
-                    node.Tag = r;
-                    SetIcon(node, "ManyToMany");
-                    return node;
-                }))
-                .OrderBy(node => node.Text)
-                .ToArray();
-        }
-
-        private string GetIconType(AttributeMetadata a)
-        {
-            switch (a.AttributeType.Value)
-            {
-                case AttributeTypeCode.BigInt:
-                case AttributeTypeCode.Integer:
-                    return "Integer";
-
-                case AttributeTypeCode.Boolean:
-                case AttributeTypeCode.Picklist:
-                case AttributeTypeCode.State:
-                case AttributeTypeCode.Status:
-                    return "OptionSet";
-
-                case AttributeTypeCode.Customer:
-                case AttributeTypeCode.Owner:
-                case AttributeTypeCode.PartyList:
-                    return "Owner";
-
-                case AttributeTypeCode.DateTime:
-                    return "DateTime";
-
-                case AttributeTypeCode.Decimal:
-                    return "Decimal";
-
-                case AttributeTypeCode.Double:
-                    return "Double";
-
-                case AttributeTypeCode.Lookup:
-                    return "Lookup";
-
-                case AttributeTypeCode.Memo:
-                    return "Multiline";
-
-                case AttributeTypeCode.Money:
-                    return "Currency";
-
-                case AttributeTypeCode.String:
-                case AttributeTypeCode.Virtual:
-                    return "Text";
-
-                case AttributeTypeCode.Uniqueidentifier:
-                    return "UniqueIdentifier";
-
-                default:
-                    return null;
-            }
-        }
-
-        private void AddVirtualChildNodes(TreeNode node, Func<TreeNode,TreeNode[]> loader)
-        {
-            var child = node.Nodes.Add("Loading...");
-            child.ForeColor = SystemColors.HotTrack;
-            SetIcon(child, "Loading");
-            node.Collapse();
-            child.Tag = loader;
+            _objectExplorer.AddConnection(con);
         }
 
         private void MyPluginControl_Load(object sender, EventArgs e)
@@ -228,65 +72,20 @@ namespace MarkMpn.Sql4Cds
 
         private void tsbExecute_Click(object sender, EventArgs e)
         {
-            if (tabControl.TabPages.Count == 0)
+            if (dockPanel.ActiveDocument == null)
                 return;
 
-            var query = (SqlQueryControl)tabControl.SelectedTab.Controls[0];
+            var query = (SqlQueryControl)dockPanel.ActiveDocument;
             query.Execute(true);
         }
 
         private void tsbPreviewFetchXml_Click(object sender, EventArgs e)
         {
-            if (tabControl.TabPages.Count == 0)
+            if (dockPanel.ActiveDocument == null)
                 return;
 
-            var query = (SqlQueryControl)tabControl.SelectedTab.Controls[0];
+            var query = (SqlQueryControl)dockPanel.ActiveDocument;
             query.Execute(false);
-        }
-
-        class LoaderParam
-        {
-            public Func<TreeNode,TreeNode[]> Loader;
-            public TreeNode Parent;
-        }
-
-        private void treeView_BeforeExpand(object sender, TreeViewCancelEventArgs e)
-        {
-            if (e.Action.HasFlag(TreeViewAction.Expand) && e.Node.Nodes.Count == 1 && e.Node.Nodes[0].Tag is Func<TreeNode,TreeNode[]> loader)
-            {
-                LoadChildNodes(new LoaderParam { Loader = loader, Parent = e.Node });
-            }
-        }
-
-        private void LoadChildNodes(LoaderParam loader)
-        {
-            WorkAsync(new WorkAsyncInfo
-            {
-                Message = "Loading...",
-                Work = (worker, args) =>
-                {
-                    args.Result = loader.Loader(loader.Parent);
-                },
-                PostWorkCallBack = (args) =>
-                {
-                    if (args.Error != null)
-                    {
-                        MessageBox.Show(args.Error.ToString(), "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    }
-                    var result = args.Result as TreeNode[];
-                    if (result != null)
-                    {
-                        loader.Parent.TreeView.BeginUpdate();
-
-                        foreach (var child in result)
-                            loader.Parent.Nodes.Add(child);
-
-                        loader.Parent.Nodes.RemoveAt(0);
-
-                        loader.Parent.TreeView.EndUpdate();
-                    }
-                }
-            });
         }
 
         private void tsbConnect_Click(object sender, EventArgs e)
@@ -296,82 +95,27 @@ namespace MarkMpn.Sql4Cds
 
         private void tsbNewQuery_Click(object sender, EventArgs e)
         {
-            if (treeView.SelectedNode == null)
+            if (_objectExplorer.SelectedConnection == null)
                 return;
-
-            var node = treeView.SelectedNode;
-            while (node.Parent != null)
-                node = node.Parent;
             
-            CreateQuery((ConnectionDetail)node.Tag, "", null);
+            CreateQuery(_objectExplorer.SelectedConnection, "", null);
         }
 
         private void CreateQuery(ConnectionDetail con, string sql, string sourcePlugin)
         { 
-            var query = new SqlQueryControl(con.ServiceClient, _metadata[con], WorkAsync, msg => SetWorkingMessage(msg), ExecuteMethod, SendOutgoingMessage, sourcePlugin);
+            var query = new SqlQueryControl(con, _metadata[con], WorkAsync, msg => SetWorkingMessage(msg), ExecuteMethod, SendOutgoingMessage, sourcePlugin);
             query.InsertText(sql);
-            var tabPage = new TabPage(con.ConnectionName);
-            tabPage.Controls.Add(query);
-            query.Dock = DockStyle.Fill;
-            tabControl.TabPages.Add(tabPage);
-            tabControl.SelectedTab = tabPage;
+
+            query.Show(dockPanel, WeifenLuo.WinFormsUI.Docking.DockState.Document);
             query.SetFocus();
-        }
-
-        private void treeView_NodeMouseDoubleClick(object sender, TreeNodeMouseClickEventArgs e)
-        {
-            if (!(e.Node.Tag is EntityMetadata || e.Node.Tag is AttributeMetadata || e.Node.Tag is RelationshipMetadataBase))
-                return;
-
-            if (tabControl.TabPages.Count == 0)
-                return;
-
-            var query = (SqlQueryControl)tabControl.SelectedTab.Controls[0];
-
-            if (e.Node.Tag is OneToManyRelationshipMetadata oneToMany)
-            {
-                var join = $@"
-{oneToMany.ReferencingEntity}
-INNER JOIN {oneToMany.ReferencedEntity}
-    ON {oneToMany.ReferencingEntity}.{oneToMany.ReferencingAttribute} = {oneToMany.ReferencedEntity}.{oneToMany.ReferencedAttribute}";
-
-                query.InsertText(join);
-            }
-            else if (e.Node.Tag is ManyToManyRelationshipMetadata manyToMany)
-            {
-                var con = GetService(e.Node);
-                var entity1 = (RetrieveEntityResponse)con.ServiceClient.Execute(new RetrieveEntityRequest
-                {
-                    LogicalName = manyToMany.Entity1LogicalName,
-                    EntityFilters = EntityFilters.Entity
-                });
-                var entity2 = (RetrieveEntityResponse)con.ServiceClient.Execute(new RetrieveEntityRequest
-                {
-                    LogicalName = manyToMany.Entity2LogicalName,
-                    EntityFilters = EntityFilters.Entity
-                });
-
-                var join = $@"
-{manyToMany.Entity1LogicalName}
-INNER JOIN {manyToMany.IntersectEntityName}
-    ON {manyToMany.Entity1LogicalName}.{entity1.EntityMetadata.PrimaryIdAttribute} = {manyToMany.IntersectEntityName}.{manyToMany.Entity1IntersectAttribute}
-INNER JOIN {manyToMany.Entity2LogicalName}
-    ON {manyToMany.Entity2LogicalName}.{entity2.EntityMetadata.PrimaryIdAttribute} = {manyToMany.IntersectEntityName}.{manyToMany.Entity2IntersectAttribute}";
-
-                query.InsertText(join);
-            }
-            else
-            {
-                query.InsertText(e.Node.Text);
-            }
         }
 
         private void tsbFormat_Click(object sender, EventArgs e)
         {
-            if (tabControl.TabPages.Count == 0)
+            if (dockPanel.ActiveDocument == null)
                 return;
 
-            var query = (SqlQueryControl)tabControl.SelectedTab.Controls[0];
+            var query = (SqlQueryControl)dockPanel.ActiveDocument;
             query.Format();
         }
 
@@ -403,14 +147,10 @@ INNER JOIN {manyToMany.Entity2LogicalName}
                 param["ConvertOnly"] = false;
             }
 
-            if (treeView.SelectedNode == null)
+            if (_objectExplorer.SelectedConnection == null)
                 return;
 
-            var node = treeView.SelectedNode;
-            while (node.Parent != null)
-                node = node.Parent;
-
-            var con = (ConnectionDetail)node.Tag;
+            var con = _objectExplorer.SelectedConnection;
             var metadata = _metadata[con];
 
             var fetch = DeserializeFetchXml((string)param["FetchXml"]);
