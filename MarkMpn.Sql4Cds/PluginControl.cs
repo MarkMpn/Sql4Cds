@@ -163,7 +163,7 @@ namespace MarkMpn.Sql4Cds
             }
             else
             {
-                CreateQuery(con, sql, message.SourcePlugin == "FetchXML Builder" ? null : message.SourcePlugin);
+                CreateQuery(con, "-- Imported from " + message.SourcePlugin + "\r\n\r\n" + sql, message.SourcePlugin == "FetchXML Builder" ? null : message.SourcePlugin);
             }
         }
 
