@@ -15,12 +15,14 @@ using System.Xml;
 using System.IO;
 using System.Xml.Serialization;
 using System.Collections.Generic;
+using Microsoft.ApplicationInsights;
 
 namespace MarkMpn.Sql4Cds
 {
     public partial class PluginControl : MultipleConnectionsPluginControlBase, IMessageBusHost
     {
         private readonly IDictionary<ConnectionDetail, AttributeMetadataCache> _metadata;
+        private readonly TelemetryClient _ai;
         private ObjectExplorer _objectExplorer;
 
         public PluginControl()
@@ -29,6 +31,7 @@ namespace MarkMpn.Sql4Cds
             _metadata = new Dictionary<ConnectionDetail, AttributeMetadataCache>();
             _objectExplorer = new ObjectExplorer(_metadata, WorkAsync);
             _objectExplorer.Show(dockPanel, WeifenLuo.WinFormsUI.Docking.DockState.DockLeft);
+            _ai = new TelemetryClient(new Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration("79761278-a908-4575-afbf-2f4d82560da6"));
         }
 
         protected override void OnConnectionUpdated(ConnectionUpdatedEventArgs e)
@@ -56,7 +59,7 @@ namespace MarkMpn.Sql4Cds
             _objectExplorer.AddConnection(con);
         }
 
-        private void MyPluginControl_Load(object sender, EventArgs e)
+        private void PluginControl_Load(object sender, EventArgs e)
         {
             // Loads or creates the settings for the plugin
             if (!SettingsManager.Instance.TryLoad(GetType(), out Settings settings))
@@ -103,7 +106,7 @@ namespace MarkMpn.Sql4Cds
 
         private void CreateQuery(ConnectionDetail con, string sql, string sourcePlugin)
         { 
-            var query = new SqlQueryControl(con, _metadata[con], WorkAsync, msg => SetWorkingMessage(msg), ExecuteMethod, SendOutgoingMessage, sourcePlugin);
+            var query = new SqlQueryControl(con, _metadata[con], _ai, WorkAsync, msg => SetWorkingMessage(msg), ExecuteMethod, SendOutgoingMessage, sourcePlugin);
             query.InsertText(sql);
 
             query.Show(dockPanel, WeifenLuo.WinFormsUI.Docking.DockState.Document);
@@ -137,6 +140,8 @@ namespace MarkMpn.Sql4Cds
 
         public void OnIncomingMessage(MessageBusEventArgs message)
         {
+            _ai.TrackEvent("Incoming message", new Dictionary<string, string> { ["SourcePlugin"] = message.SourcePlugin });
+
             var param = message.TargetArgument as IDictionary<string, object>;
 
             if (param == null)
@@ -179,6 +184,7 @@ namespace MarkMpn.Sql4Cds
 
         public void SendOutgoingMessage(MessageBusEventArgs args)
         {
+            _ai.TrackEvent("Outgoing message", new Dictionary<string, string> { ["TargetPlugin"] = args.TargetPlugin });
             OnOutgoingMessage(this, args);
         }
     }

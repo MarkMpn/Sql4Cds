@@ -16,16 +16,18 @@ using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using System.IO;
 using McTools.Xrm.Connection;
+using Microsoft.ApplicationInsights;
 
 namespace MarkMpn.Sql4Cds
 {
     public partial class SqlQueryControl : WeifenLuo.WinFormsUI.Docking.DockContent
     {
+        private readonly TelemetryClient _ai;
         private readonly Scintilla _editor;
         private readonly string _sourcePlugin;
         private static int _queryCounter;
 
-        public SqlQueryControl(ConnectionDetail con, AttributeMetadataCache metadata, Action<WorkAsyncInfo> workAsync, Action<string> setWorkingMessage, Action<Action> executeMethod, Action<MessageBusEventArgs> outgoingMessageHandler, string sourcePlugin)
+        public SqlQueryControl(ConnectionDetail con, AttributeMetadataCache metadata, TelemetryClient ai, Action<WorkAsyncInfo> workAsync, Action<string> setWorkingMessage, Action<Action> executeMethod, Action<MessageBusEventArgs> outgoingMessageHandler, string sourcePlugin)
         {
             InitializeComponent();
             Text = $"Query {++_queryCounter} ({con.ConnectionName})";
@@ -37,6 +39,7 @@ namespace MarkMpn.Sql4Cds
             OutgoingMessageHandler = outgoingMessageHandler;
             _editor = CreateSqlEditor();
             _sourcePlugin = sourcePlugin;
+            _ai = ai;
 
             splitContainer.Panel1.Controls.Add(_editor);
         }
@@ -61,6 +64,8 @@ namespace MarkMpn.Sql4Cds
 
         public void Format()
         {
+            _ai.TrackEvent("Format SQL");
+
             var dom = new TSql150Parser(true);
             var fragment = dom.Parse(new StringReader(_editor.Text), out var errors);
 
@@ -220,7 +225,10 @@ namespace MarkMpn.Sql4Cds
                     if (execute)
                     {
                         foreach (var query in queries)
+                        {
+                            _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name });
                             query.Execute(Service, Metadata, () => worker.CancellationPending, msg => worker.ReportProgress(-1, msg));
+                        }
                     }
 
                     args.Result = queries;
@@ -232,6 +240,9 @@ namespace MarkMpn.Sql4Cds
                 PostWorkCallBack = (args) =>
                 {
                     splitContainer.Panel2.Controls.Clear();
+
+                    if (args.Error != null)
+                        _ai.TrackException(args.Error, new Dictionary<string, string> { ["Sql"] = sql });
 
                     if (args.Error is NotSupportedQueryFragmentException err)
                         _editor.IndicatorFillRange(offset + err.Fragment.StartOffset, err.Fragment.FragmentLength);
