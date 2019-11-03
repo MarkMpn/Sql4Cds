@@ -20,7 +20,10 @@ namespace MarkMpn.Sql4Cds
 {
     public partial class SqlQueryControl : UserControl
     {
-        public SqlQueryControl(IOrganizationService org, AttributeMetadataCache metadata, Action<WorkAsyncInfo> workAsync, Action<Action> executeMethod, Action<MessageBusEventArgs> outgoingMessageHandler)
+        private readonly Scintilla _editor;
+        private readonly string _sourcePlugin;
+
+        public SqlQueryControl(IOrganizationService org, AttributeMetadataCache metadata, Action<WorkAsyncInfo> workAsync, Action<Action> executeMethod, Action<MessageBusEventArgs> outgoingMessageHandler, string sourcePlugin)
         {
             InitializeComponent();
             Service = org;
@@ -29,6 +32,7 @@ namespace MarkMpn.Sql4Cds
             ExecuteMethod = executeMethod;
             OutgoingMessageHandler = outgoingMessageHandler;
             _editor = CreateSqlEditor();
+            _sourcePlugin = sourcePlugin;
 
             splitContainer.Panel1.Controls.Add(_editor);
         }
@@ -61,8 +65,6 @@ namespace MarkMpn.Sql4Cds
             new Sql150ScriptGenerator().GenerateScript(fragment, out var sql);
             _editor.Text = sql;
         }
-
-        private readonly Scintilla _editor;
 
         private Scintilla CreateEditor()
         {
@@ -315,14 +317,16 @@ namespace MarkMpn.Sql4Cds
         {
             var toolbar = new ToolStrip();
             toolbar.ImageScalingSize = new Size(24, 24);
-            var btn = new ToolStripButton();
-            btn.Text = "Edit in";
-            btn.Image = Properties.Resources.FXB;
-            btn.ImageAlign = ContentAlignment.MiddleRight;
-            btn.TextAlign = ContentAlignment.MiddleLeft;
-            btn.TextImageRelation = TextImageRelation.TextBeforeImage;
+            var btn = new ToolStripButton
+            {
+                Text = "Edit in",
+                Image = Properties.Resources.FXB,
+                ImageAlign = ContentAlignment.MiddleRight,
+                TextAlign = ContentAlignment.MiddleLeft,
+                TextImageRelation = TextImageRelation.TextBeforeImage,
+                ToolTipText = "Edit in FetchXML Builder"
+            };
 
-            btn.ToolTipText = "Edit in FetchXML Builder";
             btn.Click += (sender, e) =>
             {
                 OutgoingMessageHandler(new MessageBusEventArgs("FetchXML Builder")
@@ -331,6 +335,23 @@ namespace MarkMpn.Sql4Cds
                 });
             };
             toolbar.Items.Add(btn);
+
+            if (_sourcePlugin != null)
+            {
+                var srcBtn = new ToolStripButton
+                {
+                    Text = "Return to " + _sourcePlugin
+                };
+                srcBtn.Click += (sender, e) =>
+                {
+                    OutgoingMessageHandler(new MessageBusEventArgs(_sourcePlugin)
+                    {
+                        TargetArgument = xmlEditor.Text
+                    });
+                };
+                toolbar.Items.Add(srcBtn);
+            }
+
             return toolbar;
         }
 

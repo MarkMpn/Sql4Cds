@@ -303,12 +303,12 @@ namespace MarkMpn.Sql4Cds
             while (node.Parent != null)
                 node = node.Parent;
             
-            CreateQuery((ConnectionDetail)node.Tag, "");
+            CreateQuery((ConnectionDetail)node.Tag, "", null);
         }
 
-        private void CreateQuery(ConnectionDetail con, string sql)
+        private void CreateQuery(ConnectionDetail con, string sql, string sourcePlugin)
         { 
-            var query = new SqlQueryControl(con.ServiceClient, _metadata[con], WorkAsync, ExecuteMethod, SendOutgoingMessage);
+            var query = new SqlQueryControl(con.ServiceClient, _metadata[con], WorkAsync, ExecuteMethod, SendOutgoingMessage, sourcePlugin);
             query.InsertText(sql);
             var tabPage = new TabPage(con.ConnectionName);
             tabPage.Controls.Add(query);
@@ -423,7 +423,7 @@ INNER JOIN {manyToMany.Entity2LogicalName}
             }
             else
             {
-                CreateQuery(con, sql);
+                CreateQuery(con, sql, message.SourcePlugin == "FetchXML Builder" ? null : message.SourcePlugin);
             }
         }
 
