@@ -308,7 +308,7 @@ namespace MarkMpn.Sql4Cds
 
         private void CreateQuery(ConnectionDetail con, string sql, string sourcePlugin)
         { 
-            var query = new SqlQueryControl(con.ServiceClient, _metadata[con], WorkAsync, ExecuteMethod, SendOutgoingMessage, sourcePlugin);
+            var query = new SqlQueryControl(con.ServiceClient, _metadata[con], WorkAsync, msg => SetWorkingMessage(msg), ExecuteMethod, SendOutgoingMessage, sourcePlugin);
             query.InsertText(sql);
             var tabPage = new TabPage(con.ConnectionName);
             tabPage.Controls.Add(query);

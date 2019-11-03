@@ -23,12 +23,13 @@ namespace MarkMpn.Sql4Cds
         private readonly Scintilla _editor;
         private readonly string _sourcePlugin;
 
-        public SqlQueryControl(IOrganizationService org, AttributeMetadataCache metadata, Action<WorkAsyncInfo> workAsync, Action<Action> executeMethod, Action<MessageBusEventArgs> outgoingMessageHandler, string sourcePlugin)
+        public SqlQueryControl(IOrganizationService org, AttributeMetadataCache metadata, Action<WorkAsyncInfo> workAsync, Action<string> setWorkingMessage, Action<Action> executeMethod, Action<MessageBusEventArgs> outgoingMessageHandler, string sourcePlugin)
         {
             InitializeComponent();
             Service = org;
             Metadata = metadata;
             WorkAsync = workAsync;
+            SetWorkingMessage = setWorkingMessage;
             ExecuteMethod = executeMethod;
             OutgoingMessageHandler = outgoingMessageHandler;
             _editor = CreateSqlEditor();
@@ -40,6 +41,7 @@ namespace MarkMpn.Sql4Cds
         public IOrganizationService Service { get; }
         public AttributeMetadataCache Metadata { get; }
         public Action<WorkAsyncInfo> WorkAsync { get; }
+        public Action<string> SetWorkingMessage { get; }
         public Action<Action> ExecuteMethod { get; }
         public Action<MessageBusEventArgs> OutgoingMessageHandler { get; }
 
@@ -207,6 +209,7 @@ namespace MarkMpn.Sql4Cds
             WorkAsync(new WorkAsyncInfo
             {
                 Message = "Executing...",
+                IsCancelable = execute,
                 Work = (worker, args) =>
                 {
                     var queries = new Sql2FetchXml().Convert(sql, Metadata);
@@ -214,10 +217,14 @@ namespace MarkMpn.Sql4Cds
                     if (execute)
                     {
                         foreach (var query in queries)
-                            query.Execute(Service, msg => worker.ReportProgress(-1, msg));
+                            query.Execute(Service, Metadata, () => worker.CancellationPending, msg => worker.ReportProgress(-1, msg));
                     }
 
                     args.Result = queries;
+                },
+                ProgressChanged = e =>
+                {
+                    SetWorkingMessage(e.UserState.ToString());
                 },
                 PostWorkCallBack = (args) =>
                 {

@@ -14,7 +14,7 @@ namespace MarkMpn.Sql4Cds
 {
     abstract class Query
     {
-        public abstract void Execute(IOrganizationService org, Action<string> progress);
+        public abstract void Execute(IOrganizationService org, AttributeMetadataCache metadata, Func<bool> cancelled, Action<string> progress);
 
         public object Result { get; protected set; }
     }
@@ -25,14 +25,21 @@ namespace MarkMpn.Sql4Cds
 
         public bool AllPages { get; set; }
 
-        protected EntityCollection RetrieveAll(IOrganizationService org, Action<string> progress)
+        protected EntityCollection RetrieveAll(IOrganizationService org, AttributeMetadataCache metadata, Func<bool> cancelled, Action<string> progress)
         {
+            if (cancelled())
+                return null;
+
+            var name = FetchXml.Items.OfType<FetchEntityType>().Single().name;
+            var meta = metadata[name];
+            progress($"Retrieving {meta.DisplayCollectionName.UserLocalizedLabel.Label}...");
+
             var res = org.RetrieveMultiple(new FetchExpression(Serialize(FetchXml)));
             var entities = res.Entities;
 
-            while (AllPages && res.MoreRecords && (Settings.Instance.SelectLimit == 0 || entities.Count < Settings.Instance.SelectLimit))
+            while (!cancelled() && AllPages && res.MoreRecords && (Settings.Instance.SelectLimit == 0 || entities.Count < Settings.Instance.SelectLimit))
             {
-                progress($"Retrieved {entities.Count:N0} records");
+                progress($"Retrieved {entities.Count:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label}...");
 
                 if (FetchXml.page == null)
                     FetchXml.page = "2";
@@ -72,9 +79,9 @@ namespace MarkMpn.Sql4Cds
 
     class SelectQuery : FetchXmlQuery
     {
-        public override void Execute(IOrganizationService org, Action<string> progress)
+        public override void Execute(IOrganizationService org, AttributeMetadataCache metadata, Func<bool> cancelled, Action<string> progress)
         {
-            Result = RetrieveAll(org, progress);
+            Result = RetrieveAll(org, metadata, cancelled, progress);
         }
 
         public string[] ColumnSet { get; set; }
@@ -88,17 +95,25 @@ namespace MarkMpn.Sql4Cds
 
         public IDictionary<string,object> Updates { get; set; }
 
-        public override void Execute(IOrganizationService org, Action<string> progress)
+        public override void Execute(IOrganizationService org, AttributeMetadataCache metadata, Func<bool> cancelled, Action<string> progress)
         {
+            if (cancelled())
+                return;
+
             if (Settings.Instance.BlockUpdateWithoutWhere && !FetchXml.Items.OfType<FetchEntityType>().Single().Items.OfType<filter>().Any())
                 throw new InvalidOperationException("UPDATE without WHERE is blocked by your settings");
 
             var count = 0;
-            var entities = RetrieveAll(org, progress).Entities;
+            var entities = RetrieveAll(org, metadata, cancelled, progress).Entities;
+
+            if (entities == null)
+                return;
+
+            var meta = metadata[EntityName];
 
             if (entities.Count > Settings.Instance.UpdateWarnThreshold)
             {
-                var result = MessageBox.Show($"Update will affect {entities.Count:N0} {EntityName} records. Do you want to proceed?", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+                var result = MessageBox.Show($"Update will affect {entities.Count:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label}. Do you want to proceed?", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
 
                 if (result == DialogResult.No)
                     throw new OperationCanceledException("UPDATE cancelled by user");
@@ -108,6 +123,9 @@ namespace MarkMpn.Sql4Cds
 
             foreach (var entity in entities)
             {
+                if (cancelled())
+                    break;
+
                 var id = entity[IdColumn];
                 if (id is AliasedValue alias)
                     id = alias.Value;
@@ -135,7 +153,7 @@ namespace MarkMpn.Sql4Cds
 
                 if (multiple.Requests.Count == 1000)
                 {
-                    progress($"Updating records {count + 1:N0} - {count + multiple.Requests.Count:N0}...");
+                    progress($"Updating {meta.DisplayCollectionName.UserLocalizedLabel.Label} {count + 1:N0} - {count + multiple.Requests.Count:N0}...");
                     org.Execute(multiple);
                     count += multiple.Requests.Count;
 
@@ -143,14 +161,14 @@ namespace MarkMpn.Sql4Cds
                 }
             }
 
-            if (multiple != null)
+            if (!cancelled() && multiple != null)
             {
-                progress($"Updating records {count + 1:N0} - {count + multiple.Requests.Count:N0}...");
+                progress($"Updating {meta.DisplayCollectionName.UserLocalizedLabel.Label} {count + 1:N0} - {count + multiple.Requests.Count:N0}...");
                 org.Execute(multiple);
                 count += multiple.Requests.Count;
             }
 
-            Result = $"{count} records updated";
+            Result = $"{count:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label} updated";
         }
     }
 
@@ -160,10 +178,15 @@ namespace MarkMpn.Sql4Cds
 
         public string IdColumn { get; set; }
 
-        public override void Execute(IOrganizationService org, Action<string> progress)
+        public override void Execute(IOrganizationService org, AttributeMetadataCache metadata, Func<bool> cancelled, Action<string> progress)
         {
+            if (cancelled())
+                return;
+
             if (Settings.Instance.BlockDeleteWithoutWhere && !FetchXml.Items.OfType<FetchEntityType>().Single().Items.OfType<filter>().Any())
                 throw new InvalidOperationException("DELETE without WHERE is blocked by your settings");
+
+            var meta = metadata[EntityName];
 
             if (Settings.Instance.UseBulkDelete)
             {
@@ -171,7 +194,7 @@ namespace MarkMpn.Sql4Cds
 
                 var bulkDelete = new BulkDeleteRequest
                 {
-                    JobName = "SQL 4 CDS Bulk Delete Job",
+                    JobName = $"SQL 4 CDS {meta.DisplayCollectionName.UserLocalizedLabel.Label} Bulk Delete Job",
                     QuerySet = new[] { query },
                     StartDateTime = DateTime.Now,
                     RunNow = true,
@@ -188,26 +211,29 @@ namespace MarkMpn.Sql4Cds
             }
 
             var count = 0;
-            var entities = RetrieveAll(org, progress).Entities;
+            var entities = RetrieveAll(org, metadata, cancelled, progress).Entities;
 
-            if (entities.Count > Settings.Instance.UpdateWarnThreshold)
+            if (entities == null)
+                return;
+
+            if (entities.Count > Settings.Instance.DeleteWarnThreshold)
             {
-                var result = MessageBox.Show($"Update will affect {entities.Count:N0} {EntityName} records. Do you want to proceed?", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+                var result = MessageBox.Show($"Delete will affect {entities.Count:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label}. Do you want to proceed?", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
 
                 if (result == DialogResult.No)
-                    throw new OperationCanceledException("UPDATE cancelled by user");
+                    throw new OperationCanceledException("DELETE cancelled by user");
             }
 
             ExecuteMultipleRequest multiple = null;
 
             foreach (var entity in entities)
             {
+                if (cancelled())
+                    break;
+
                 var id = entity[IdColumn];
                 if (id is AliasedValue alias)
                     id = alias.Value;
-
-                org.Delete(EntityName, (Guid)id);
-
 
                 if (multiple == null)
                 {
@@ -226,7 +252,7 @@ namespace MarkMpn.Sql4Cds
 
                 if (multiple.Requests.Count == 1000)
                 {
-                    progress($"Deleting records {count + 1:N0} - {count + multiple.Requests.Count:N0}...");
+                    progress($"Deleting {meta.DisplayCollectionName.UserLocalizedLabel.Label} {count + 1:N0} - {count + multiple.Requests.Count:N0}...");
                     org.Execute(multiple);
                     count += multiple.Requests.Count;
 
@@ -234,14 +260,14 @@ namespace MarkMpn.Sql4Cds
                 }
             }
 
-            if (multiple != null)
+            if (!cancelled() && multiple != null)
             {
-                progress($"Deleting records {count + 1:N0} - {count + multiple.Requests.Count:N0}...");
+                progress($"Deleting {meta.DisplayCollectionName.UserLocalizedLabel.Label} {count + 1:N0} - {count + multiple.Requests.Count:N0}...");
                 org.Execute(multiple);
                 count += multiple.Requests.Count;
             }
 
-            Result = $"{count} records deleted";
+            Result = $"{count} {meta.DisplayCollectionName.UserLocalizedLabel.Label} deleted";
         }
     }
 
@@ -250,9 +276,11 @@ namespace MarkMpn.Sql4Cds
         public string LogicalName { get; set; }
         public IDictionary<string, object>[] Values { get; set; }
 
-        public override void Execute(IOrganizationService org, Action<string> progress)
+        public override void Execute(IOrganizationService org, AttributeMetadataCache metadata, Func<bool> cancelled, Action<string> progress)
         {
-            for (var i = 0; i < Values.Length; i++)
+            var meta = metadata[LogicalName];
+
+            for (var i = 0; i < Values.Length && !cancelled(); i++)
             {
                 var entity = new Entity(LogicalName);
 
@@ -261,10 +289,10 @@ namespace MarkMpn.Sql4Cds
 
                 org.Create(entity);
 
-                progress($"Inserted {i:N0} of {Values.Length:N0} ({(float)i / Values.Length:P0})");
+                progress($"Inserted {i:N0} of {Values.Length:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label} ({(float)i / Values.Length:P0})");
             }
 
-            Result = $"{Values.Length} records inserted";
+            Result = $"{Values.Length} {meta.DisplayCollectionName.UserLocalizedLabel.Label} inserted";
         }
     }
 
@@ -273,13 +301,21 @@ namespace MarkMpn.Sql4Cds
         public string LogicalName { get; set; }
         public IDictionary<string, string> Mappings { get; set; }
 
-        public override void Execute(IOrganizationService org, Action<string> progress)
+        public override void Execute(IOrganizationService org, AttributeMetadataCache metadata, Func<bool> cancelled, Action<string> progress)
         {
             var count = 0;
-            var entities = RetrieveAll(org, progress).Entities;
-            
+            var entities = RetrieveAll(org, metadata, cancelled, progress).Entities;
+
+            if (entities == null)
+                return;
+
+            var meta = metadata[LogicalName];
+
             foreach (var entity in entities)
             {
+                if (cancelled())
+                    break;
+
                 var newEntity = new Entity(LogicalName);
 
                 foreach (var attr in Mappings)
@@ -288,10 +324,10 @@ namespace MarkMpn.Sql4Cds
                 org.Create(entity);
 
                 count++;
-                progress($"Inserted {count:N0} of {entities.Count:N0} ({(float)count / entities.Count:P0})");
+                progress($"Inserted {count:N0} of {entities.Count:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label} ({(float)count / entities.Count:P0})");
             }
 
-            Result = $"{count} records inserted";
+            Result = $"{count} {meta.DisplayCollectionName.UserLocalizedLabel.Label} inserted";
         }
     }
 }
