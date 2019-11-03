@@ -854,12 +854,12 @@ namespace MarkMpn.Sql4Cds
 
                     foreach (var starTable in starTables)
                     {
+                        starTable.AddItem(new allattributes());
+
                         var meta = metadata[starTable.EntityName];
 
                         foreach (var attr in meta.Attributes.Where(a => a.IsValidForRead == true))
                         {
-                            starTable.AddItem(new FetchAttributeType { name = attr.LogicalName });
-
                             if (starTable.LinkEntity == null)
                                 cols.Add(attr.LogicalName);
                             else
