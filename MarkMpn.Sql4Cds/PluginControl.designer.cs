@@ -33,6 +33,9 @@
             this.tsbConnect = new System.Windows.Forms.ToolStripButton();
             this.toolStripSeparator = new System.Windows.Forms.ToolStripSeparator();
             this.tsbNewQuery = new System.Windows.Forms.ToolStripButton();
+            this.tsbOpen = new System.Windows.Forms.ToolStripButton();
+            this.tsbSave = new System.Windows.Forms.ToolStripButton();
+            this.toolStripSeparator2 = new System.Windows.Forms.ToolStripSeparator();
             this.tsbExecute = new System.Windows.Forms.ToolStripButton();
             this.tsbPreviewFetchXml = new System.Windows.Forms.ToolStripButton();
             this.tssSeparator1 = new System.Windows.Forms.ToolStripSeparator();
@@ -42,9 +45,6 @@
             this.tsbClose = new System.Windows.Forms.ToolStripButton();
             this.tslAboutLink = new System.Windows.Forms.ToolStripLabel();
             this.dockPanel = new WeifenLuo.WinFormsUI.Docking.DockPanel();
-            this.toolStripSeparator2 = new System.Windows.Forms.ToolStripSeparator();
-            this.tsbOpen = new System.Windows.Forms.ToolStripButton();
-            this.tsbSave = new System.Windows.Forms.ToolStripButton();
             this.toolStripMenu.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -97,6 +97,34 @@
             this.tsbNewQuery.Text = "New Query";
             this.tsbNewQuery.ToolTipText = "Create New Query Tab";
             this.tsbNewQuery.Click += new System.EventHandler(this.tsbNewQuery_Click);
+            // 
+            // tsbOpen
+            // 
+            this.tsbOpen.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Image;
+            this.tsbOpen.Image = ((System.Drawing.Image)(resources.GetObject("tsbOpen.Image")));
+            this.tsbOpen.ImageTransparentColor = System.Drawing.Color.Magenta;
+            this.tsbOpen.Name = "tsbOpen";
+            this.tsbOpen.Size = new System.Drawing.Size(28, 28);
+            this.tsbOpen.Text = "Open";
+            this.tsbOpen.ToolTipText = "Open File";
+            this.tsbOpen.Click += new System.EventHandler(this.tsbOpen_Click);
+            // 
+            // tsbSave
+            // 
+            this.tsbSave.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Image;
+            this.tsbSave.Enabled = false;
+            this.tsbSave.Image = ((System.Drawing.Image)(resources.GetObject("tsbSave.Image")));
+            this.tsbSave.ImageTransparentColor = System.Drawing.Color.Magenta;
+            this.tsbSave.Name = "tsbSave";
+            this.tsbSave.Size = new System.Drawing.Size(28, 28);
+            this.tsbSave.Text = "Save";
+            this.tsbSave.ToolTipText = "Save File";
+            this.tsbSave.Click += new System.EventHandler(this.tsbSave_Click);
+            // 
+            // toolStripSeparator2
+            // 
+            this.toolStripSeparator2.Name = "toolStripSeparator2";
+            this.toolStripSeparator2.Size = new System.Drawing.Size(6, 31);
             // 
             // tsbExecute
             // 
@@ -174,31 +202,7 @@
             this.dockPanel.Name = "dockPanel";
             this.dockPanel.Size = new System.Drawing.Size(861, 472);
             this.dockPanel.TabIndex = 5;
-            // 
-            // toolStripSeparator2
-            // 
-            this.toolStripSeparator2.Name = "toolStripSeparator2";
-            this.toolStripSeparator2.Size = new System.Drawing.Size(6, 31);
-            // 
-            // tsbOpen
-            // 
-            this.tsbOpen.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Image;
-            this.tsbOpen.Image = ((System.Drawing.Image)(resources.GetObject("tsbOpen.Image")));
-            this.tsbOpen.ImageTransparentColor = System.Drawing.Color.Magenta;
-            this.tsbOpen.Name = "tsbOpen";
-            this.tsbOpen.Size = new System.Drawing.Size(28, 28);
-            this.tsbOpen.Text = "Open";
-            this.tsbOpen.ToolTipText = "Open File";
-            // 
-            // tsbSave
-            // 
-            this.tsbSave.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Image;
-            this.tsbSave.Enabled = false;
-            this.tsbSave.Image = ((System.Drawing.Image)(resources.GetObject("tsbSave.Image")));
-            this.tsbSave.ImageTransparentColor = System.Drawing.Color.Magenta;
-            this.tsbSave.Name = "tsbSave";
-            this.tsbSave.Size = new System.Drawing.Size(28, 28);
-            this.tsbSave.Text = "toolStripButton2";
+            this.dockPanel.ActiveDocumentChanged += new System.EventHandler(this.dockPanel_ActiveDocumentChanged);
             // 
             // PluginControl
             // 

@@ -22,15 +22,20 @@ namespace MarkMpn.Sql4Cds
 {
     public partial class SqlQueryControl : WeifenLuo.WinFormsUI.Docking.DockContent
     {
+        private readonly ConnectionDetail _con;
         private readonly TelemetryClient _ai;
         private readonly Scintilla _editor;
         private readonly string _sourcePlugin;
+        private string _displayName;
+        private string _filename;
+        private bool _modified;
         private static int _queryCounter;
 
         public SqlQueryControl(ConnectionDetail con, AttributeMetadataCache metadata, TelemetryClient ai, Action<WorkAsyncInfo> workAsync, Action<string> setWorkingMessage, Action<Action> executeMethod, Action<MessageBusEventArgs> outgoingMessageHandler, string sourcePlugin)
         {
             InitializeComponent();
-            Text = $"Query {++_queryCounter} ({con.ConnectionName})";
+            _displayName = $"Query {++_queryCounter}";
+            _modified = true;
             Service = con.ServiceClient;
             Metadata = metadata;
             WorkAsync = workAsync;
@@ -40,6 +45,8 @@ namespace MarkMpn.Sql4Cds
             _editor = CreateSqlEditor();
             _sourcePlugin = sourcePlugin;
             _ai = ai;
+            _con = con;
+            SyncTitle();
 
             splitContainer.Panel1.Controls.Add(_editor);
         }
@@ -50,10 +57,49 @@ namespace MarkMpn.Sql4Cds
         public Action<string> SetWorkingMessage { get; }
         public Action<Action> ExecuteMethod { get; }
         public Action<MessageBusEventArgs> OutgoingMessageHandler { get; }
+        public string Filename
+        {
+            get { return _filename; }
+            set
+            {
+                _filename = value;
+                _displayName = Path.GetFileName(value);
+                _modified = false;
+                SyncTitle();
+            }
+        }
+
+        private void SyncTitle()
+        {
+            if (_modified)
+                Text = $"{_displayName} * ({_con.ConnectionName})";
+            else
+                Text = $"{_displayName} ({_con.ConnectionName})";
+        }
 
         public void SetFocus()
         {
             _editor.Focus();
+        }
+
+        public void Save()
+        {
+            if (Filename == null)
+            {
+                using (var save = new SaveFileDialog())
+                {
+                    save.Filter = "SQL Scripts (*.sql)|*.sql";
+
+                    if (save.ShowDialog() != DialogResult.OK)
+                        return;
+
+                    Filename = save.FileName;
+                }
+            }
+
+            File.WriteAllText(Filename, _editor.Text);
+            _modified = false;
+            SyncTitle();
         }
 
         public void InsertText(string text)
@@ -177,6 +223,16 @@ namespace MarkMpn.Sql4Cds
 
             // Get ready for fill
             scintilla.IndicatorCurrent = 8;
+
+            // Handle changes
+            scintilla.TextChanged += (s, e) =>
+            {
+                if (!_modified)
+                {
+                    _modified = true;
+                    SyncTitle();
+                }
+            };
 
             return scintilla;
         }

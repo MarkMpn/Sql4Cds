@@ -105,13 +105,15 @@ namespace MarkMpn.Sql4Cds
             CreateQuery(_objectExplorer.SelectedConnection, "", null);
         }
 
-        private void CreateQuery(ConnectionDetail con, string sql, string sourcePlugin)
+        private SqlQueryControl CreateQuery(ConnectionDetail con, string sql, string sourcePlugin)
         { 
             var query = new SqlQueryControl(con, _metadata[con], _ai, WorkAsync, msg => SetWorkingMessage(msg), ExecuteMethod, SendOutgoingMessage, sourcePlugin);
             query.InsertText(sql);
 
             query.Show(dockPanel, WeifenLuo.WinFormsUI.Docking.DockState.Document);
             query.SetFocus();
+
+            return query;
         }
 
         private void tsbFormat_Click(object sender, EventArgs e)
@@ -187,6 +189,50 @@ namespace MarkMpn.Sql4Cds
         {
             _ai.TrackEvent("Outgoing message", new Dictionary<string, string> { ["TargetPlugin"] = args.TargetPlugin });
             OnOutgoingMessage(this, args);
+        }
+
+        private void tsbOpen_Click(object sender, EventArgs e)
+        {
+            if (_objectExplorer.SelectedConnection == null)
+                return;
+
+            using (var open = new OpenFileDialog())
+            {
+                open.Filter = "SQL Scripts (*.sql)|*.sql";
+
+                if (open.ShowDialog() != DialogResult.OK)
+                    return;
+
+                var query = CreateQuery(_objectExplorer.SelectedConnection, File.ReadAllText(open.FileName), null);
+                query.Filename = open.FileName;
+            }
+        }
+
+        private void tsbSave_Click(object sender, EventArgs e)
+        {
+            if (dockPanel.ActiveDocument == null)
+                return;
+
+            ((SqlQueryControl)dockPanel.ActiveDocument).Save();
+        }
+
+        private void dockPanel_ActiveDocumentChanged(object sender, EventArgs e)
+        {
+            tsbSave.Enabled = dockPanel.ActiveDocument != null;
+        }
+
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            if (keyData == (Keys.Control | Keys.S))
+                tsbSave.PerformClick();
+            else if (keyData == (Keys.Control | Keys.O))
+                tsbOpen.PerformClick();
+            else if (keyData == (Keys.Control | Keys.N))
+                tsbNewQuery.PerformClick();
+            else
+                return base.ProcessCmdKey(ref msg, keyData);
+
+            return true;
         }
     }
 }
