@@ -31,6 +31,7 @@ namespace MarkMpn.Sql4Cds
             _metadata = new Dictionary<ConnectionDetail, AttributeMetadataCache>();
             _objectExplorer = new ObjectExplorer(_metadata, WorkAsync);
             _objectExplorer.Show(dockPanel, WeifenLuo.WinFormsUI.Docking.DockState.DockLeft);
+            _objectExplorer.CloseButtonVisible = false;
             _ai = new TelemetryClient(new Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration("79761278-a908-4575-afbf-2f4d82560da6"));
         }
 
