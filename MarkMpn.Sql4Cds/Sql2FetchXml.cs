@@ -384,7 +384,10 @@ namespace MarkMpn.Sql4Cds
 
             if (querySpec.HavingClause != null)
                 throw new NotSupportedQueryFragmentException("Unhandled SELECT HAVING clause", querySpec.HavingClause);
-            
+
+            if (querySpec.FromClause == null)
+                throw new NotSupportedQueryFragmentException("No source entity specified", querySpec);
+
             var fetch = new FetchXml.FetchType();
             var tables = HandleFromClause(metadata, querySpec.FromClause, fetch);
             HandleSelectClause(metadata, querySpec, fetch, tables, out var columns);
