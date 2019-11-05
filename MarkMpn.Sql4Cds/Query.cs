@@ -81,6 +81,29 @@ namespace MarkMpn.Sql4Cds
     {
         public override void Execute(IOrganizationService org, AttributeMetadataCache metadata, Func<bool> cancelled, Action<string> progress)
         {
+            // Special case - SELECT count(*) with no filter
+            if (FetchXml.aggregate)
+            {
+                var entity = FetchXml.Items.OfType<FetchEntityType>().Single();
+                var attributes = entity.Items.OfType<FetchAttributeType>().ToArray();
+                var filters = entity.Items.OfType<filter>().Count();
+                var links = entity.Items.OfType<FetchLinkEntityType>().Count();
+
+                if (attributes.Length == 1 && attributes[0].aggregate == AggregateType.countcolumn && attributes[0].name == metadata[entity.name].PrimaryIdAttribute &&
+                    filters == 0 && links == 0)
+                {
+                    var count = ((RetrieveTotalRecordCountResponse)org.Execute(new RetrieveTotalRecordCountRequest { EntityNames = new[] { entity.name } })).EntityRecordCountCollection[entity.name];
+
+                    var resultEntity = new Entity(entity.name)
+                    {
+                        [attributes[0].alias] = new AliasedValue(entity.name, attributes[0].name, count)
+                    };
+
+                    Result = new EntityCollection { EntityName = entity.name, Entities = { resultEntity } };
+                    return;
+                }
+            }
+
             Result = RetrieveAll(org, metadata, cancelled, progress);
         }
 
