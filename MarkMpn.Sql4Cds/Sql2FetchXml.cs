@@ -882,6 +882,9 @@ namespace MarkMpn.Sql4Cds
                         if (func.Parameters.Count != 1)
                             throw new NotSupportedQueryFragmentException("Unhandled function", func);
 
+                        if (func.UniqueRowFilter == UniqueRowFilter.Distinct)
+                            throw new NotSupportedQueryFragmentException("Unhandled DISTINCT aggregate", func);
+
                         if (!(func.Parameters[0] is ColumnReferenceExpression colParam))
                             throw new NotSupportedQueryFragmentException("Unhandled function parameter", func.Parameters[0]);
 
