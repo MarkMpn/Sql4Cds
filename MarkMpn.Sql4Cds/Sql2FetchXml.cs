@@ -1077,40 +1077,32 @@ namespace MarkMpn.Sql4Cds
                         throw new NotSupportedQueryFragmentException("Unsupported join type", join);
                 }
 
-                EntityTable lhs;
                 ColumnReferenceExpression linkFromAttribute;
                 ColumnReferenceExpression linkToAttribute;
 
-                GetColumnTableAlias(col1, tables, out lhs);
+                GetColumnTableAlias(col1, tables, out var lhs);
+                GetColumnTableAlias(col2, tables, out var rhs);
 
-                if (lhs != null)
+                if (lhs == null || rhs == null)
+                    throw new NotSupportedQueryFragmentException("Join condition does not reference previous table", join.SearchCondition);
+
+                if (rhs == linkTable)
                 {
                     linkFromAttribute = col1;
                     linkToAttribute = col2;
                 }
+                else if (lhs == linkTable)
+                {
+                    linkFromAttribute = col2;
+                    linkToAttribute = col1;
+
+                    lhs = rhs;
+                    rhs = linkTable;
+                }
                 else
                 {
-                    GetColumnTableAlias(col2, tables, out lhs);
-
-                    if (lhs != null)
-                    {
-                        linkFromAttribute = col2;
-                        linkToAttribute = col1;
-                    }
-                    else
-                    {
-                        throw new NotSupportedQueryFragmentException("Join condition does not reference previous table", join.SearchCondition);
-                    }
-                }
-
-                if (lhs == null)
-                    throw new NotSupportedQueryFragmentException("Join condition does not reference previous table", join.SearchCondition);
-
-                // Check last join condition was correct
-                GetColumnTableAlias(linkToAttribute, tables, out var rhs);
-
-                if (rhs != linkTable)
                     throw new NotSupportedQueryFragmentException("Join condition does not reference joined table", join.SearchCondition);
+                }
 
                 link.from = linkToAttribute.MultiPartIdentifier.Identifiers.Last().Value;
                 link.to = linkFromAttribute.MultiPartIdentifier.Identifiers.Last().Value;
