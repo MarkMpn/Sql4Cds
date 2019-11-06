@@ -882,9 +882,6 @@ namespace MarkMpn.Sql4Cds
                         if (func.Parameters.Count != 1)
                             throw new NotSupportedQueryFragmentException("Unhandled function", func);
 
-                        if (func.UniqueRowFilter == UniqueRowFilter.Distinct)
-                            throw new NotSupportedQueryFragmentException("Unhandled DISTINCT aggregate", func);
-
                         if (!(func.Parameters[0] is ColumnReferenceExpression colParam))
                             throw new NotSupportedQueryFragmentException("Unhandled function parameter", func.Parameters[0]);
 
@@ -916,7 +913,7 @@ namespace MarkMpn.Sql4Cds
                             switch (func.FunctionName.Value)
                             {
                                 case "count":
-                                    attr.aggregate = AggregateType.countcolumn;
+                                    attr.aggregate = col.ColumnType == ColumnType.Wildcard ? AggregateType.count : AggregateType.countcolumn;
                                     break;
 
                                 case "avg":
@@ -934,8 +931,23 @@ namespace MarkMpn.Sql4Cds
                             fetch.aggregate = true;
                             fetch.aggregateSpecified = true;
 
+                            if (func.UniqueRowFilter == UniqueRowFilter.Distinct)
+                            {
+                                attr.distinct = FetchBoolType.@true;
+                                attr.distinctSpecified = true;
+                            }
+
                             if (alias == null)
-                                alias = attrName.Replace(".", "_") + "_" + attr.aggregate.ToString();
+                            {
+                                alias = $"{attrName.Replace(".", "_")}_{attr.aggregate}";
+                                var counter = 1;
+
+                                while (cols.Contains(alias))
+                                {
+                                    counter++;
+                                    alias = $"{attrName.Replace(".", "_")}_{attr.aggregate}_{counter}";
+                                }
+                            }
                         }
 
                         attr.alias = alias;
