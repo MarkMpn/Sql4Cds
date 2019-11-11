@@ -364,8 +364,8 @@ namespace MarkMpn.Sql4Cds
                                     tab.TabPages.Add("Results");
                                     tab.TabPages.Add("FetchXml");
                                     tab.TabPages[0].Controls.Add(display);
-                                    tab.TabPages[1].Controls.Add(toolbar);
                                     tab.TabPages[1].Controls.Add(xmlDisplay);
+                                    tab.TabPages[1].Controls.Add(toolbar);
 
                                     display.Dock = DockStyle.Fill;
                                     xmlDisplay.Dock = DockStyle.Fill;
