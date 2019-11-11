@@ -123,7 +123,7 @@ namespace MarkMpn.Sql4Cds
             var entity = FetchXml.Items.OfType<FetchEntityType>().Single();
             var attributes = entity.Items.OfType<FetchAttributeType>().ToArray();
 
-            if (attributes.Length != 1 || attributes[0].aggregate != AggregateType.countcolumn)
+            if (attributes.Length != 1 || attributes[0].aggregate != AggregateType.count)
                 return false;
 
             var filters = entity.Items.OfType<filter>().Count();
@@ -157,31 +157,31 @@ namespace MarkMpn.Sql4Cds
             RemoveAggregate(entity.Items, aggregates);
 
             // Remove groupby flags
-            var groupByAttributes = new List<string>();
+            var groupByAttributes = new List<FetchAttributeType>();
             RemoveGroupBy(entity.Items, groupByAttributes);
 
             // Ensure sort order follows groupby attributes
             var sorts = entity.Items.OfType<FetchOrderType>().ToArray();
-            var unsortedGroupByAttributes = new List<string>(groupByAttributes);
+            var unsortedGroupByAttributes = new HashSet<string>(groupByAttributes.Select(attr => attr.name));
             var sortRequired = false;
 
             for (var i = 0; i < sorts.Length && unsortedGroupByAttributes.Count > 0; i++)
             {
-                if (unsortedGroupByAttributes.Remove(sorts[i].alias))
+                var attr = groupByAttributes.SingleOrDefault(a => a.alias.Equals(sorts[i].alias, StringComparison.OrdinalIgnoreCase));
+
+                if (attr != null && unsortedGroupByAttributes.Remove(attr.name))
+                {
+                    // Sort by attributes instead of aliases
+                    sorts[i].alias = null;
+                    sorts[i].attribute = attr.name;
                     continue;
+                }
 
                 // Remove this unnecessary sort
                 entity.Items = entity.Items.Except(new[] { sorts[i] }).ToArray();
 
                 // Indicate that we need to re-sort the results later
                 sortRequired = true;
-            }
-
-            // Sort by attributes instead of aliases
-            foreach (var sort in sorts)
-            {
-                sort.attribute = sort.alias;
-                sort.alias = null;
             }
 
             entity.Items = entity.Items.Concat(unsortedGroupByAttributes.Select(a => new FetchOrderType { attribute = a })).ToArray();
@@ -196,7 +196,7 @@ namespace MarkMpn.Sql4Cds
 
             // Retrieve records and track aggregates per group
             var result = RetrieveSequence(org, metadata, cancelled, progress)
-                .AggregateGroupBy(groupByAttributes, aggregates, cancelled);
+                .AggregateGroupBy(groupByAttributes.Select(a => a.alias).ToList(), aggregates, cancelled);
 
             // Manually re-apply original orders
             if (sortRequired)
@@ -257,11 +257,18 @@ namespace MarkMpn.Sql4Cds
                 RemoveAggregate(link.Items, aggregates);
         }
 
-        private void RemoveGroupBy(object[] items, List<string> groupByAttributes)
+        private void RemoveGroupBy(object[] items, List<FetchAttributeType> groupByAttributes)
         {
             foreach (var attr in items.OfType<FetchAttributeType>().Where(a => a.groupbySpecified && a.groupby == FetchBoolType.@true))
             {
-                groupByAttributes.Add(attr.alias);
+                groupByAttributes.Add(new FetchAttributeType
+                {
+                    groupby = FetchBoolType.@true,
+                    groupbySpecified = true,
+                    name = attr.name,
+                    alias = attr.alias
+                });
+
                 attr.groupby = FetchBoolType.@false;
                 attr.groupbySpecified = false;
             }
