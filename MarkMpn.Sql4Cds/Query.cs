@@ -30,16 +30,31 @@ namespace MarkMpn.Sql4Cds
             if (cancelled())
                 return null;
 
+            var res = new EntityCollection(RetrieveSequence(org, metadata, cancelled, progress).ToList());
+            res.EntityName = FetchXml.Items.OfType<FetchEntityType>().Single().name;
+
+            return res;
+        }
+
+        protected IEnumerable<Entity> RetrieveSequence(IOrganizationService org, AttributeMetadataCache metadata, Func<bool> cancelled, Action<string> progress)
+        {
+            if (cancelled())
+                yield break;
+
             var name = FetchXml.Items.OfType<FetchEntityType>().Single().name;
             var meta = metadata[name];
             progress($"Retrieving {meta.DisplayCollectionName.UserLocalizedLabel.Label}...");
 
             var res = org.RetrieveMultiple(new FetchExpression(Serialize(FetchXml)));
-            var entities = res.Entities;
 
-            while (!cancelled() && AllPages && res.MoreRecords && (Settings.Instance.SelectLimit == 0 || entities.Count < Settings.Instance.SelectLimit))
+            foreach (var entity in res.Entities)
+                yield return entity;
+
+            var count = res.Entities.Count;
+
+            while (!cancelled() && AllPages && res.MoreRecords && (Settings.Instance.SelectLimit == 0 || count < Settings.Instance.SelectLimit))
             {
-                progress($"Retrieved {entities.Count:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label}...");
+                progress($"Retrieved {count:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label}...");
 
                 if (FetchXml.page == null)
                     FetchXml.page = "2";
@@ -49,11 +64,13 @@ namespace MarkMpn.Sql4Cds
                 FetchXml.pagingcookie = res.PagingCookie;
 
                 var nextPage = org.RetrieveMultiple(new FetchExpression(Serialize(FetchXml)));
-                entities.AddRange(nextPage.Entities);
+
+                foreach (var entity in nextPage.Entities)
+                    yield return entity;
+
+                count += nextPage.Entities.Count;
                 res = nextPage;
             }
-
-            return res;
         }
 
         public static string Serialize(FetchXml.FetchType fetch)
@@ -81,30 +98,176 @@ namespace MarkMpn.Sql4Cds
     {
         public override void Execute(IOrganizationService org, AttributeMetadataCache metadata, Func<bool> cancelled, Action<string> progress)
         {
-            // Special case - SELECT count(*) with no filter
-            if (FetchXml.aggregate)
+            if (RetrieveTotalRecordCount(org, metadata))
+                return;
+
+            try
             {
-                var entity = FetchXml.Items.OfType<FetchEntityType>().Single();
-                var attributes = entity.Items.OfType<FetchAttributeType>().ToArray();
-                var filters = entity.Items.OfType<filter>().Count();
-                var links = entity.Items.OfType<FetchLinkEntityType>().Count();
+                Result = RetrieveAll(org, metadata, cancelled, progress);
+            }
+            catch (Exception ex)
+            {
+                if (!ex.Message.Contains("AggregateQueryRecordLimit"))
+                    throw;
 
-                if (attributes.Length == 1 && attributes[0].aggregate == AggregateType.countcolumn && attributes[0].name == metadata[entity.name].PrimaryIdAttribute &&
-                    filters == 0 && links == 0)
-                {
-                    var count = ((RetrieveTotalRecordCountResponse)org.Execute(new RetrieveTotalRecordCountRequest { EntityNames = new[] { entity.name } })).EntityRecordCountCollection[entity.name];
+                RetrieveManualAggregate(org, metadata, cancelled, progress);
+            }
+        }
 
-                    var resultEntity = new Entity(entity.name)
-                    {
-                        [attributes[0].alias] = new AliasedValue(entity.name, attributes[0].name, count)
-                    };
+        private bool RetrieveTotalRecordCount(IOrganizationService org, AttributeMetadataCache metadata)
+        {
+            // Special case - SELECT count(primaryid) with no filter
+            if (!FetchXml.aggregate)
+                return false;
+            
+            var entity = FetchXml.Items.OfType<FetchEntityType>().Single();
+            var attributes = entity.Items.OfType<FetchAttributeType>().ToArray();
 
-                    Result = new EntityCollection { EntityName = entity.name, Entities = { resultEntity } };
-                    return;
-                }
+            if (attributes.Length != 1 || attributes[0].aggregate != AggregateType.countcolumn)
+                return false;
+
+            var filters = entity.Items.OfType<filter>().Count();
+            var links = entity.Items.OfType<FetchLinkEntityType>().Count();
+
+            if (filters != 0 || links != 0)
+                return false;
+
+            if (attributes[0].name != metadata[entity.name].PrimaryIdAttribute)
+                return false;
+
+            var count = ((RetrieveTotalRecordCountResponse)org.Execute(new RetrieveTotalRecordCountRequest { EntityNames = new[] { entity.name } })).EntityRecordCountCollection[entity.name];
+
+            var resultEntity = new Entity(entity.name)
+            {
+                [attributes[0].alias] = new AliasedValue(entity.name, attributes[0].name, count)
+            };
+
+            Result = new EntityCollection { EntityName = entity.name, Entities = { resultEntity } };
+            return true;
+        }
+
+        private void RetrieveManualAggregate(IOrganizationService org, AttributeMetadataCache metadata, Func<bool> cancelled, Action<string> progress)
+        {
+            // Remove aggregate flags
+            FetchXml.aggregate = false;
+            FetchXml.aggregateSpecified = false;
+
+            var entity = FetchXml.Items.OfType<FetchEntityType>().Single();
+            var aggregates = new Dictionary<string, Aggregate>();
+            RemoveAggregate(entity.Items, aggregates);
+
+            // Remove groupby flags
+            var groupByAttributes = new List<string>();
+            RemoveGroupBy(entity.Items, groupByAttributes);
+
+            // Ensure sort order follows groupby attributes
+            var sorts = entity.Items.OfType<FetchOrderType>().ToArray();
+            var unsortedGroupByAttributes = new List<string>(groupByAttributes);
+            var sortRequired = false;
+
+            for (var i = 0; i < sorts.Length && unsortedGroupByAttributes.Count > 0; i++)
+            {
+                if (unsortedGroupByAttributes.Remove(sorts[i].alias))
+                    continue;
+
+                // Remove this unnecessary sort
+                entity.Items = entity.Items.Except(new[] { sorts[i] }).ToArray();
+
+                // Indicate that we need to re-sort the results later
+                sortRequired = true;
             }
 
-            Result = RetrieveAll(org, metadata, cancelled, progress);
+            // Sort by attributes instead of aliases
+            foreach (var sort in sorts)
+            {
+                sort.attribute = sort.alias;
+                sort.alias = null;
+            }
+
+            entity.Items = entity.Items.Concat(unsortedGroupByAttributes.Select(a => new FetchOrderType { attribute = a })).ToArray();
+
+            var top = String.IsNullOrEmpty(FetchXml.top) ? (int?)null : Int32.Parse(FetchXml.top);
+            var count = String.IsNullOrEmpty(FetchXml.count) ? (int?)null : Int32.Parse(FetchXml.count);
+            var page = String.IsNullOrEmpty(FetchXml.page) ? (int?)null : Int32.Parse(FetchXml.page);
+
+            FetchXml.top = null;
+            FetchXml.count = null;
+            FetchXml.page = null;
+
+            // Retrieve records and track aggregates per group
+            var result = RetrieveSequence(org, metadata, cancelled, progress)
+                .AggregateGroupBy(groupByAttributes, aggregates, cancelled);
+
+            // Manually re-apply original orders
+            if (sortRequired)
+                result = result.OrderBy(sorts);
+            
+            // Apply top/page
+            if (top != null)
+                result = result.Take(top.Value);
+            else if (page != null && count != null)
+                result = result.Skip((page.Value - 1) * count.Value).Take(count.Value);
+
+            Result = new EntityCollection(result.ToList())
+            {
+                EntityName = entity.name
+            };
+        }
+
+        private void RemoveAggregate(object[] items, IDictionary<string,Aggregate> aggregates)
+        {
+            foreach (var attr in items.OfType<FetchAttributeType>().Where(a => a.aggregateSpecified))
+            {
+                Aggregate aggregate = null;
+
+                switch (attr.aggregate)
+                {
+                    case AggregateType.avg:
+                        aggregate = new Average();
+                        break;
+
+                    case AggregateType.count:
+                        aggregate = new Count();
+                        break;
+
+                    case AggregateType.countcolumn:
+                        aggregate = attr.distinctSpecified && attr.distinct == FetchBoolType.@true ? (Aggregate) new CountColumnDistinct() : new CountColumn();
+                        break;
+
+                    case AggregateType.max:
+                        aggregate = new Max();
+                        break;
+
+                    case AggregateType.min:
+                        aggregate = new Min();
+                        break;
+
+                    case AggregateType.sum:
+                        aggregate = new Sum();
+                        break;
+                }
+
+                aggregates[attr.alias] = aggregate;
+
+                attr.aggregateSpecified = false;
+                attr.distinctSpecified = false;
+            }
+
+            foreach (var link in items.OfType<FetchLinkEntityType>())
+                RemoveAggregate(link.Items, aggregates);
+        }
+
+        private void RemoveGroupBy(object[] items, List<string> groupByAttributes)
+        {
+            foreach (var attr in items.OfType<FetchAttributeType>().Where(a => a.groupbySpecified && a.groupby == FetchBoolType.@true))
+            {
+                groupByAttributes.Add(attr.alias);
+                attr.groupby = FetchBoolType.@false;
+                attr.groupbySpecified = false;
+            }
+
+            foreach (var link in items.OfType<FetchLinkEntityType>())
+                RemoveGroupBy(link.Items, groupByAttributes);
         }
 
         public string[] ColumnSet { get; set; }
