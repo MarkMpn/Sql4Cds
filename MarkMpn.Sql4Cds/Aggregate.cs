@@ -234,16 +234,16 @@ namespace MarkMpn.Sql4Cds
                 if (sorted == null)
                 {
                     if (sort.descending)
-                        sorted = list.OrderByDescending(e => GetValue(e, sort.attribute));
+                        sorted = list.OrderByDescending(e => GetValue(e, sort.alias ?? sort.attribute));
                     else
-                        sorted = list.OrderBy(e => GetValue(e, sort.alias));
+                        sorted = list.OrderBy(e => GetValue(e, sort.alias ?? sort.attribute));
                 }
                 else
                 {
                     if (sort.descending)
-                        sorted = sorted.ThenByDescending(e => GetValue(e, sort.attribute));
+                        sorted = sorted.ThenByDescending(e => GetValue(e, sort.alias ?? sort.attribute));
                     else
-                        sorted = sorted.ThenBy(e => GetValue(e, sort.alias));
+                        sorted = sorted.ThenBy(e => GetValue(e, sort.alias ?? sort.attribute));
                 }
             }
 

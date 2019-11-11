@@ -41,9 +41,26 @@ namespace MarkMpn.Sql4Cds
             if (cancelled())
                 yield break;
 
-            var name = FetchXml.Items.OfType<FetchEntityType>().Single().name;
+            var mainEntity = FetchXml.Items.OfType<FetchEntityType>().Single();
+            var name = mainEntity.name;
             var meta = metadata[name];
             progress($"Retrieving {meta.DisplayCollectionName.UserLocalizedLabel.Label}...");
+
+            if (AllPages && (!FetchXml.aggregateSpecified || !FetchXml.aggregate))
+            {
+                // Paging has a bug if the orderby attribute is included but has a different alias. In this case,
+                // add the attribute again without an alias
+                var sorts = mainEntity.Items.OfType<FetchOrderType>().ToArray();
+                var attributes = mainEntity.Items.OfType<FetchAttributeType>().ToArray();
+
+                foreach (var sort in sorts)
+                {
+                    if (attributes.Any(a => a.name.Equals(sort.attribute, StringComparison.OrdinalIgnoreCase) && (String.IsNullOrEmpty(a.alias) || a.alias.Equals(sort.attribute, StringComparison.OrdinalIgnoreCase))))
+                        continue;
+
+                    mainEntity.Items = mainEntity.Items.Concat(new object[] { new FetchAttributeType { name = sort.attribute } }).ToArray();
+                }
+            }
 
             var res = org.RetrieveMultiple(new FetchExpression(Serialize(FetchXml)));
 
@@ -51,6 +68,9 @@ namespace MarkMpn.Sql4Cds
                 yield return entity;
 
             var count = res.Entities.Count;
+
+            if (AllPages && FetchXml.aggregateSpecified && FetchXml.aggregate && count == 5000 && FetchXml.top != "5000" && !res.MoreRecords)
+                throw new ApplicationException("AggregateQueryRecordLimit");
 
             while (!cancelled() && AllPages && res.MoreRecords && (Settings.Instance.SelectLimit == 0 || count < Settings.Instance.SelectLimit))
             {
