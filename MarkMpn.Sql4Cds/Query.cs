@@ -165,7 +165,7 @@ namespace MarkMpn.Sql4Cds
             var unsortedGroupByAttributes = new HashSet<string>(groupByAttributes.Select(attr => attr.name));
             var sortRequired = false;
 
-            for (var i = 0; i < sorts.Length && unsortedGroupByAttributes.Count > 0; i++)
+            for (var i = 0; i < sorts.Length; i++)
             {
                 var attr = groupByAttributes.SingleOrDefault(a => a.alias.Equals(sorts[i].alias, StringComparison.OrdinalIgnoreCase));
 
