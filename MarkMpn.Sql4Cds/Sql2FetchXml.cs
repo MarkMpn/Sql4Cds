@@ -1145,7 +1145,7 @@ namespace MarkMpn.Sql4Cds
                 return aliasedTable;
             }
 
-            var table = tables.SingleOrDefault(t => t.Alias.Equals(namedTable.SchemaObject.BaseIdentifier.Value, StringComparison.OrdinalIgnoreCase));
+            var table = tables.SingleOrDefault(t => t.Alias != null && t.Alias.Equals(namedTable.SchemaObject.BaseIdentifier.Value, StringComparison.OrdinalIgnoreCase));
 
             if (table == null)
                 table = tables.SingleOrDefault(t => t.Alias == null && t.EntityName.Equals(namedTable.SchemaObject.BaseIdentifier.Value, StringComparison.OrdinalIgnoreCase));
