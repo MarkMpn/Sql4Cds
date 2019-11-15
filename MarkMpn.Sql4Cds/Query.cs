@@ -155,6 +155,12 @@ namespace MarkMpn.Sql4Cds
             if (attributes[0].name != metadata[entity.name].PrimaryIdAttribute)
                 return false;
 
+            // RetrieveTotalRecordCountRequest is only supported in v9+
+            var version = (RetrieveVersionResponse)org.Execute(new RetrieveVersionRequest());
+
+            if (!Version.TryParse(version.Version, out var serverVersion) || serverVersion.Major < 9)
+                return false;
+
             var count = ((RetrieveTotalRecordCountResponse)org.Execute(new RetrieveTotalRecordCountRequest { EntityNames = new[] { entity.name } })).EntityRecordCountCollection[entity.name];
 
             var resultEntity = new Entity(entity.name)
