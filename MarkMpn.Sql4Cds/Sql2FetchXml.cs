@@ -842,10 +842,7 @@ namespace MarkMpn.Sql4Cds
         private void HandleSelectClause(AttributeMetadataCache metadata, QuerySpecification select, FetchXml.FetchType fetch, List<EntityTable> tables, out string[] columns)
         {
             var cols = new List<string>();
-
-            var hasStar = false;
-            var hasField = false;
-
+            
             foreach (var field in select.SelectElements)
             {
                 if (field is SelectStarExpression star)
@@ -869,8 +866,6 @@ namespace MarkMpn.Sql4Cds
                                 cols.Add((starTable.Alias ?? starTable.EntityName) + "." + attr.LogicalName);
                         }
                     }
-
-                    hasStar = true;
                 }
                 else if (field is SelectScalarExpression scalar)
                 {
@@ -961,18 +956,13 @@ namespace MarkMpn.Sql4Cds
                     {
                         throw new NotSupportedQueryFragmentException("Unhandled SELECT clause", scalar.Expression);
                     }
-
-                    hasField = true;
                 }
                 else
                 {
                     throw new NotSupportedQueryFragmentException("Unhandled SELECT clause", field);
                 }
             }
-
-            if (hasField && hasStar)
-                throw new NotSupportedQueryFragmentException("Cannot combine * and field names in SELECT clause", select.SelectElements[0]);
-
+            
             columns = cols.ToArray();
         }
 
