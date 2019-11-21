@@ -538,9 +538,19 @@ namespace MarkMpn.Sql4Cds
                 var newEntity = new Entity(LogicalName);
 
                 foreach (var attr in Mappings)
-                    newEntity[attr.Value] = entity[attr.Key];
+                {
+                    object value = null;
 
-                org.Create(entity);
+                    if (entity.Contains(attr.Key))
+                        value = entity[attr.Key];
+
+                    if (value is Guid g)
+                        value = new EntityReference(entity.LogicalName, g);
+
+                    newEntity[attr.Value] = value;
+                }
+
+                org.Create(newEntity);
 
                 count++;
                 progress($"Inserted {count:N0} of {entities.Count:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label} ({(float)count / entities.Count:P0})");
