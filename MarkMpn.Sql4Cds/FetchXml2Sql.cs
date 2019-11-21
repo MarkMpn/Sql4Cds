@@ -166,6 +166,10 @@ namespace MarkMpn.Sql4Cds
                             col
                         }
                     };
+
+                    if (attr.distinctSpecified && attr.distinct == FetchBoolType.@true)
+                        func.UniqueRowFilter = UniqueRowFilter.Distinct;
+
                     element.Expression = func;
                 }
                 else
