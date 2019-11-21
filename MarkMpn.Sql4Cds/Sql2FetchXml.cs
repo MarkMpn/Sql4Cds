@@ -81,7 +81,7 @@ namespace MarkMpn.Sql4Cds
 
         private Query ConvertInsertStatement(InsertStatement insert, AttributeMetadataCache metadata)
         {
-            if (insert.OptimizerHints.Count == 0)
+            if (insert.OptimizerHints.Count != 0)
                 throw new NotSupportedQueryFragmentException("Unhandled INSERT optimizer hints", insert);
 
             if (insert.WithCtesAndXmlNamespaces != null)
