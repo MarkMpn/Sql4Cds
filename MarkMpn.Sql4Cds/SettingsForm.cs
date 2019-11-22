@@ -23,6 +23,7 @@ namespace MarkMpn.Sql4Cds
             blockUpdateWithoutWhereCheckbox.Checked = settings.BlockUpdateWithoutWhere;
             deleteWarnThresholdUpDown.Value = settings.DeleteWarnThreshold;
             blockDeleteWithoutWhereCheckbox.Checked = settings.BlockDeleteWithoutWhere;
+            batchSizeUpDown.Value = settings.BatchSize;
             bulkDeleteCheckbox.Checked = settings.UseBulkDelete;
 
             _settings = settings;
@@ -39,6 +40,7 @@ namespace MarkMpn.Sql4Cds
                 _settings.BlockUpdateWithoutWhere = blockUpdateWithoutWhereCheckbox.Checked;
                 _settings.DeleteWarnThreshold = (int) deleteWarnThresholdUpDown.Value;
                 _settings.BlockDeleteWithoutWhere = blockDeleteWithoutWhereCheckbox.Checked;
+                _settings.BatchSize = (int) batchSizeUpDown.Value;
                 _settings.UseBulkDelete = bulkDeleteCheckbox.Checked;
             }
         }

@@ -47,12 +47,16 @@
             this.blockUpdateWithoutWhereCheckbox = new System.Windows.Forms.CheckBox();
             this.blockDeleteWithoutWhereCheckbox = new System.Windows.Forms.CheckBox();
             this.bulkDeleteCheckbox = new System.Windows.Forms.CheckBox();
+            this.label8 = new System.Windows.Forms.Label();
+            this.batchSizeUpDown = new System.Windows.Forms.NumericUpDown();
+            this.label9 = new System.Windows.Forms.Label();
             this.topPanel.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox)).BeginInit();
             this.panel2.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.selectLimitUpDown)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.updateWarnThresholdUpDown)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.deleteWarnThresholdUpDown)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.batchSizeUpDown)).BeginInit();
             this.SuspendLayout();
             // 
             // topPanel
@@ -96,7 +100,7 @@
             this.panel2.Controls.Add(this.cancelButton);
             this.panel2.Controls.Add(this.okButton);
             this.panel2.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.panel2.Location = new System.Drawing.Point(0, 213);
+            this.panel2.Location = new System.Drawing.Point(0, 238);
             this.panel2.Margin = new System.Windows.Forms.Padding(2);
             this.panel2.Name = "panel2";
             this.panel2.Size = new System.Drawing.Size(400, 45);
@@ -235,12 +239,52 @@
             // bulkDeleteCheckbox
             // 
             this.bulkDeleteCheckbox.AutoSize = true;
-            this.bulkDeleteCheckbox.Location = new System.Drawing.Point(14, 188);
+            this.bulkDeleteCheckbox.Location = new System.Drawing.Point(14, 216);
             this.bulkDeleteCheckbox.Name = "bulkDeleteCheckbox";
             this.bulkDeleteCheckbox.Size = new System.Drawing.Size(152, 17);
             this.bulkDeleteCheckbox.TabIndex = 12;
             this.bulkDeleteCheckbox.Text = "Use bulk delete operations";
             this.bulkDeleteCheckbox.UseVisualStyleBackColor = true;
+            // 
+            // label8
+            // 
+            this.label8.AutoSize = true;
+            this.label8.Location = new System.Drawing.Point(322, 190);
+            this.label8.Name = "label8";
+            this.label8.Size = new System.Drawing.Size(42, 13);
+            this.label8.TabIndex = 15;
+            this.label8.Text = "records";
+            // 
+            // batchSizeUpDown
+            // 
+            this.batchSizeUpDown.Location = new System.Drawing.Point(214, 188);
+            this.batchSizeUpDown.Maximum = new decimal(new int[] {
+            1000,
+            0,
+            0,
+            0});
+            this.batchSizeUpDown.Minimum = new decimal(new int[] {
+            1,
+            0,
+            0,
+            0});
+            this.batchSizeUpDown.Name = "batchSizeUpDown";
+            this.batchSizeUpDown.Size = new System.Drawing.Size(102, 20);
+            this.batchSizeUpDown.TabIndex = 14;
+            this.batchSizeUpDown.Value = new decimal(new int[] {
+            1,
+            0,
+            0,
+            0});
+            // 
+            // label9
+            // 
+            this.label9.AutoSize = true;
+            this.label9.Location = new System.Drawing.Point(11, 190);
+            this.label9.Name = "label9";
+            this.label9.Size = new System.Drawing.Size(197, 13);
+            this.label9.TabIndex = 13;
+            this.label9.Text = "Update and delete records in batches of";
             // 
             // SettingsForm
             // 
@@ -248,7 +292,10 @@
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.CancelButton = this.cancelButton;
-            this.ClientSize = new System.Drawing.Size(400, 258);
+            this.ClientSize = new System.Drawing.Size(400, 283);
+            this.Controls.Add(this.label8);
+            this.Controls.Add(this.batchSizeUpDown);
+            this.Controls.Add(this.label9);
             this.Controls.Add(this.bulkDeleteCheckbox);
             this.Controls.Add(this.blockDeleteWithoutWhereCheckbox);
             this.Controls.Add(this.blockUpdateWithoutWhereCheckbox);
@@ -279,6 +326,7 @@
             ((System.ComponentModel.ISupportInitialize)(this.selectLimitUpDown)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.updateWarnThresholdUpDown)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.deleteWarnThresholdUpDown)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.batchSizeUpDown)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -304,5 +352,8 @@
         private System.Windows.Forms.CheckBox blockUpdateWithoutWhereCheckbox;
         private System.Windows.Forms.CheckBox blockDeleteWithoutWhereCheckbox;
         private System.Windows.Forms.CheckBox bulkDeleteCheckbox;
+        private System.Windows.Forms.Label label8;
+        private System.Windows.Forms.NumericUpDown batchSizeUpDown;
+        private System.Windows.Forms.Label label9;
     }
 }

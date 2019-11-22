@@ -355,34 +355,43 @@ namespace MarkMpn.Sql4Cds
                 foreach (var attr in Updates)
                     update[attr.Key] = attr.Value;
 
-                if (multiple == null)
+                if (Settings.Instance.BatchSize == 1)
                 {
-                    multiple = new ExecuteMultipleRequest()
-                    {
-                        Requests = new OrganizationRequestCollection(),
-                        Settings = new ExecuteMultipleSettings
-                        {
-                            ContinueOnError = false,
-                            ReturnResponses = false
-                        }
-                    };
+                    progress($"Updating {meta.DisplayName.UserLocalizedLabel.Label} {count + 1:N0} of {entities.Count:N0}...");
+                    org.Update(update);
+                    count++;
                 }
-
-                multiple.Requests.Add(new UpdateRequest { Target = update });
-
-                if (multiple.Requests.Count == 1000)
+                else
                 {
-                    progress($"Updating {meta.DisplayCollectionName.UserLocalizedLabel.Label} {count + 1:N0} - {count + multiple.Requests.Count:N0}...");
-                    org.Execute(multiple);
-                    count += multiple.Requests.Count;
+                    if (multiple == null)
+                    {
+                        multiple = new ExecuteMultipleRequest
+                        {
+                            Requests = new OrganizationRequestCollection(),
+                            Settings = new ExecuteMultipleSettings
+                            {
+                                ContinueOnError = false,
+                                ReturnResponses = false
+                            }
+                        };
+                    }
 
-                    multiple = null;
+                    multiple.Requests.Add(new UpdateRequest { Target = update });
+
+                    if (multiple.Requests.Count == Settings.Instance.BatchSize)
+                    {
+                        progress($"Updating {meta.DisplayCollectionName.UserLocalizedLabel.Label} {count + 1:N0} - {count + multiple.Requests.Count:N0} of {entities.Count:N0}...");
+                        org.Execute(multiple);
+                        count += multiple.Requests.Count;
+
+                        multiple = null;
+                    }
                 }
             }
 
             if (!cancelled() && multiple != null)
             {
-                progress($"Updating {meta.DisplayCollectionName.UserLocalizedLabel.Label} {count + 1:N0} - {count + multiple.Requests.Count:N0}...");
+                progress($"Updating {meta.DisplayCollectionName.UserLocalizedLabel.Label} {count + 1:N0} - {count + multiple.Requests.Count:N0} of {entities.Count:N0}...");
                 org.Execute(multiple);
                 count += multiple.Requests.Count;
             }
@@ -454,28 +463,37 @@ namespace MarkMpn.Sql4Cds
                 if (id is AliasedValue alias)
                     id = alias.Value;
 
-                if (multiple == null)
+                if (Settings.Instance.BatchSize == 1)
                 {
-                    multiple = new ExecuteMultipleRequest()
-                    {
-                        Requests = new OrganizationRequestCollection(),
-                        Settings = new ExecuteMultipleSettings
-                        {
-                            ContinueOnError = false,
-                            ReturnResponses = false
-                        }
-                    };
+                    progress($"Deleting {meta.DisplayName.UserLocalizedLabel.Label} {count + 1:N0} of {entities.Count:N0}...");
+                    org.Delete(EntityName, (Guid)id);
+                    count++;
                 }
-
-                multiple.Requests.Add(new DeleteRequest { Target = new EntityReference(EntityName, (Guid)id) });
-
-                if (multiple.Requests.Count == 1000)
+                else
                 {
-                    progress($"Deleting {meta.DisplayCollectionName.UserLocalizedLabel.Label} {count + 1:N0} - {count + multiple.Requests.Count:N0}...");
-                    org.Execute(multiple);
-                    count += multiple.Requests.Count;
+                    if (multiple == null)
+                    {
+                        multiple = new ExecuteMultipleRequest
+                        {
+                            Requests = new OrganizationRequestCollection(),
+                            Settings = new ExecuteMultipleSettings
+                            {
+                                ContinueOnError = false,
+                                ReturnResponses = false
+                            }
+                        };
+                    }
 
-                    multiple = null;
+                    multiple.Requests.Add(new DeleteRequest { Target = new EntityReference(EntityName, (Guid)id) });
+
+                    if (multiple.Requests.Count == Settings.Instance.BatchSize)
+                    {
+                        progress($"Deleting {meta.DisplayCollectionName.UserLocalizedLabel.Label} {count + 1:N0} - {count + multiple.Requests.Count:N0} of {entities.Count:N0}...");
+                        org.Execute(multiple);
+                        count += multiple.Requests.Count;
+
+                        multiple = null;
+                    }
                 }
             }
 

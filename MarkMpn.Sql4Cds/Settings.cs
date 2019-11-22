@@ -27,5 +27,7 @@ namespace MarkMpn.Sql4Cds
         public bool BlockDeleteWithoutWhere { get; set; } = true;
 
         public bool UseBulkDelete { get; set; }
+
+        public int BatchSize { get; set; } = 100;
     }
 }
