@@ -285,6 +285,9 @@ namespace MarkMpn.Sql4Cds
 
         private object ConvertAttributeValueType(EntityMetadata metadata, string attrName, string value)
         {
+            if (value == null)
+                return null;
+
             var attr = metadata.Attributes.SingleOrDefault(a => a.LogicalName == attrName);
 
             if (attr == null)
@@ -354,7 +357,10 @@ namespace MarkMpn.Sql4Cds
                     if (!(assign.NewValue is Literal literal))
                         throw new NotSupportedQueryFragmentException("Unsupported UPDATE SET clause", assign);
 
-                    return new { Key = assign.Column.MultiPartIdentifier.Identifiers[0].Value, Value = literal.Value };
+                    if (literal is NullLiteral)
+                        return new { Key = assign.Column.MultiPartIdentifier.Identifiers[0].Value, Value = (string)null };
+                    else
+                        return new { Key = assign.Column.MultiPartIdentifier.Identifiers[0].Value, Value = literal.Value };
                 })
                 .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
         }
