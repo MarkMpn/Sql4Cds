@@ -838,6 +838,8 @@ namespace MarkMpn.Sql4Cds
                         };
                     })
                     .ToArray();
+
+                criteria.Items = AddItem(criteria.Items, condition);
             }
             else
             {
