@@ -69,5 +69,74 @@ namespace MarkMpn.Sql4Cds.Properties {
                 return ((System.Drawing.Bitmap)(obj));
             }
         }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to ADD
+        ///ALL
+        ///ALTER
+        ///AND
+        ///ANY
+        ///AS
+        ///ASC
+        ///AUTHORIZATION
+        ///BACKUP
+        ///BEGIN
+        ///BETWEEN
+        ///BREAK
+        ///BROWSE
+        ///BULK
+        ///BY
+        ///CASCADE
+        ///CASE
+        ///CHECK
+        ///CHECKPOINT
+        ///CLOSE
+        ///CLUSTERED
+        ///COALESCE
+        ///COLLATE
+        ///COLUMN
+        ///COMMIT
+        ///COMPUTE
+        ///CONSTRAINT
+        ///CONTAINS
+        ///CONTAINSTABLE
+        ///CONTINUE
+        ///CONVERT
+        ///CREATE
+        ///CROSS
+        ///CURRENT
+        ///CURRENT_DATE
+        ///CURRENT_TIME
+        ///CURRENT_TIMESTAMP
+        ///CURRENT_USER
+        ///CURSOR
+        ///DATABASE
+        ///DBCC
+        ///DEALLOCATE
+        ///DECLARE
+        ///DEFAULT
+        ///DELETE
+        ///DENY
+        ///DESC
+        ///DISK
+        ///DISTINCT
+        ///DISTRIBUTED
+        ///DOUBLE
+        ///DROP
+        ///DUMP
+        ///ELSE
+        ///END
+        ///ERRLVL
+        ///ESCAPE
+        ///EXCEPT
+        ///EXEC
+        ///EXECUTE
+        ///EX [rest of string was truncated]&quot;;.
+        /// </summary>
+        internal static string MSSQLReservedWords {
+            get {
+                return ResourceManager.GetString("MSSQLReservedWords", resourceCulture);
+            }
+        }
     }
 }

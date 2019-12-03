@@ -3,6 +3,7 @@ using Microsoft.SqlServer.TransactSql.ScriptDom;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 
 namespace MarkMpn.Sql4Cds
 {
@@ -120,6 +121,8 @@ namespace MarkMpn.Sql4Cds
                 select.Accept(new SimplifyMultiPartIdentifierVisitor(entity.name));
             }
 
+            select.Accept(new QuoteIdentifiersVisitor());
+
             new Sql150ScriptGenerator().GenerateScript(select, out var sql);
 
             return sql;
@@ -127,6 +130,9 @@ namespace MarkMpn.Sql4Cds
 
         private static void AddSelectElements(QuerySpecification query, object[] items, string prefix)
         {
+            if (items == null)
+                return;
+
             foreach (var all in items.OfType<allattributes>())
             {
                 query.SelectElements.Add(new SelectStarExpression
@@ -194,6 +200,9 @@ namespace MarkMpn.Sql4Cds
 
         private static TableReference BuildJoins(AttributeMetadataCache metadata, TableReference dataSource, NamedTableReference parentTable, object[] items, QuerySpecification query, IDictionary<string, string> aliasToLogicalName)
         {
+            if (items == null)
+                return dataSource;
+
             foreach (var link in items.OfType<FetchLinkEntityType>())
             {
                 if (!String.IsNullOrEmpty(link.alias))
@@ -216,7 +225,7 @@ namespace MarkMpn.Sql4Cds
                         },
                         Alias = String.IsNullOrEmpty(link.alias) ? null : new Identifier { Value = link.alias }
                     },
-                    QualifiedJoinType = link.linktype == "inner" ? QualifiedJoinType.Inner : QualifiedJoinType.LeftOuter,
+                    QualifiedJoinType = link.linktype == "outer" ? QualifiedJoinType.LeftOuter : QualifiedJoinType.Inner,
                     SearchCondition = new BooleanComparisonExpression
                     {
                         FirstExpression = new ColumnReferenceExpression
@@ -270,6 +279,9 @@ namespace MarkMpn.Sql4Cds
 
         private static BooleanExpression GetFilter(AttributeMetadataCache metadata, object[] items, string prefix, IDictionary<string, string> aliasToLogicalName)
         {
+            if (items == null)
+                return null;
+
             var filter = items.OfType<filter>().SingleOrDefault();
 
             if (filter == null)
@@ -518,6 +530,26 @@ namespace MarkMpn.Sql4Cds
                     node.Identifiers.RemoveAt(0);
 
                 base.ExplicitVisit(node);
+            }
+        }
+
+        private class QuoteIdentifiersVisitor : TSqlFragmentVisitor
+        {
+            private static readonly Regex LegalIdentifier = new Regex(@"^[\p{L}_@#][\p{L}\p{Nd}@$#_]*$", RegexOptions.Compiled);
+            private static readonly string[] ReservedWords = Properties.Resources.MSSQLReservedWords.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+
+            public override void ExplicitVisit(Identifier node)
+            {
+                node.QuoteType = RequiresQuote(node.Value) ? QuoteType.SquareBracket : QuoteType.NotQuoted;
+                base.ExplicitVisit(node);
+            }
+
+            private static bool RequiresQuote(string identifier)
+            {
+                // Ref. https://msdn.microsoft.com/en-us/library/ms175874.aspx
+                var permittedUnquoted = LegalIdentifier.IsMatch(identifier) && Array.BinarySearch(ReservedWords, identifier, StringComparer.OrdinalIgnoreCase) < 0;
+
+                return !permittedUnquoted;
             }
         }
     }
