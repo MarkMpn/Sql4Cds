@@ -1197,7 +1197,7 @@ namespace MarkMpn.Sql4Cds
             {
                 // If we couldn't find a match in the metadata, we might have an alias we can use instead
                 possibleEntities = tables
-                    .Where(t => (t.Entity?.Items ?? t.LinkEntity?.Items).OfType<FetchAttributeType>().Any(attr => attr.alias?.Equals(col.MultiPartIdentifier.Identifiers[0].Value, StringComparison.OrdinalIgnoreCase) == true))
+                    .Where(t => (t.Entity?.Items ?? t.LinkEntity?.Items)?.OfType<FetchAttributeType>()?.Any(attr => attr.alias?.Equals(col.MultiPartIdentifier.Identifiers[0].Value, StringComparison.OrdinalIgnoreCase) == true) == true)
                     .ToArray();
             }
 
