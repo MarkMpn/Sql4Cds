@@ -537,6 +537,11 @@ namespace MarkMpn.Sql4Cds
                 }
 
                 GetColumnTableAlias(col, tables, out var orderTable);
+
+                // Can't control sequence of orders between link-entities. Orders are always applied in depth-first-search order, so
+                // check there is no order already applied on a later entity.
+                if (LaterEntityHasOrder(tables, orderTable))
+                    throw new NotSupportedQueryFragmentException("Order already applied to later link-entity", sort.Expression);
                 
                 var order = new FetchOrderType
                 {
@@ -573,6 +578,35 @@ namespace MarkMpn.Sql4Cds
                 
                 orderTable.AddItem(order);
             }
+        }
+
+        private bool LaterEntityHasOrder(List<EntityTable> tables, EntityTable orderTable)
+        {
+            var passedOrderTable = false;
+            return LaterEntityHasOrder(tables, tables[0], orderTable, ref passedOrderTable);
+        }
+
+        private bool LaterEntityHasOrder(List<EntityTable> tables, EntityTable entityTable, EntityTable orderTable, ref bool passedOrderTable)
+        {
+            var items = (entityTable.Entity?.Items ?? entityTable.LinkEntity?.Items);
+
+            if (items == null)
+                return false;
+
+            if (passedOrderTable && items.OfType<FetchOrderType>().Any())
+                return true;
+
+            if (entityTable == orderTable)
+                passedOrderTable = true;
+
+            foreach (var link in items.OfType<FetchLinkEntityType>())
+            {
+                var linkTable = tables.Single(t => t.LinkEntity == link);
+                if (LaterEntityHasOrder(tables, linkTable, orderTable, ref passedOrderTable))
+                    return true;
+            }
+
+            return false;
         }
 
         private void HandleWhereClause(WhereClause where, FetchXml.FetchType fetch, List<EntityTable> tables)
