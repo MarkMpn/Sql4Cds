@@ -536,11 +536,8 @@ namespace MarkMpn.Sql4Cds
                     }
                 }
 
-                var orderTable = GetColumnTableAlias(col, tables, out _);
-
-                if (orderTable != null)
-                    throw new NotSupportedQueryFragmentException("Unsupported ORDER BY on linked table", sort.Expression);
-
+                GetColumnTableAlias(col, tables, out var orderTable);
+                
                 var order = new FetchOrderType
                 {
                     attribute = GetColumnAttribute(col),
@@ -574,7 +571,7 @@ namespace MarkMpn.Sql4Cds
                     order.attribute = null;
                 }
                 
-                tables[0].AddItem(order);
+                orderTable.AddItem(order);
             }
         }
 
@@ -782,9 +779,13 @@ namespace MarkMpn.Sql4Cds
                 if (field == null)
                     throw new NotSupportedQueryFragmentException("Unsupported comparison", isNull.Expression);
 
+                var entityName = GetColumnTableAlias(field, tables, out var entityTable);
+                if (entityTable == targetTable)
+                    entityName = null;
+
                 criteria.Items = AddItem(criteria.Items, new condition
                 {
-                    entityname = field.MultiPartIdentifier.Identifiers.Count == 2 ? field.MultiPartIdentifier.Identifiers[0].Value : null,
+                    entityname = entityName,
                     attribute = field.MultiPartIdentifier.Identifiers.Last().Value,
                     @operator = isNull.IsNot ? @operator.notnull : @operator.@null
                 });
@@ -801,9 +802,13 @@ namespace MarkMpn.Sql4Cds
                 if (value == null)
                     throw new NotSupportedQueryFragmentException("Unsupported comparison", like.SecondExpression);
 
+                var entityName = GetColumnTableAlias(field, tables, out var entityTable);
+                if (entityTable == targetTable)
+                    entityName = null;
+
                 criteria.Items = AddItem(criteria.Items, new condition
                 {
-                    entityname = GetColumnTableAlias(field, tables, out _),
+                    entityname = entityName,
                     attribute = GetColumnAttribute(field),
                     @operator = like.NotDefined ? @operator.notlike : @operator.like,
                     value = value.Value
@@ -819,9 +824,13 @@ namespace MarkMpn.Sql4Cds
                 if (@in.Subquery != null)
                     throw new NotSupportedQueryFragmentException("Unsupported subquery, rewrite query as join", @in.Subquery);
 
+                var entityName = GetColumnTableAlias(field, tables, out var entityTable);
+                if (entityTable == targetTable)
+                    entityName = null;
+
                 var condition = new condition
                 {
-                    entityname = field.MultiPartIdentifier.Identifiers.Count == 2 ? field.MultiPartIdentifier.Identifiers[0].Value : null,
+                    entityname = entityName,
                     attribute = field.MultiPartIdentifier.Identifiers.Last().Value,
                     @operator = @in.NotDefined ? @operator.notin : @operator.@in
                 };
@@ -1184,6 +1193,9 @@ namespace MarkMpn.Sql4Cds
                 table = tables.SingleOrDefault(t => t.Alias != null && t.Alias.Equals(alias, StringComparison.OrdinalIgnoreCase));
                 if (table == null)
                     table = tables.SingleOrDefault(t => t.Alias == null && t.EntityName.Equals(alias, StringComparison.OrdinalIgnoreCase));
+
+                if (table == null)
+                    throw new NotSupportedQueryFragmentException("Unknown table " + col.MultiPartIdentifier.Identifiers[0].Value, col);
 
                 return alias;
             }
