@@ -130,7 +130,8 @@ namespace MarkMpn.Sql4Cds
                 if (!ex.Message.Contains("AggregateQueryRecordLimit"))
                     throw;
 
-                RetrieveManualAggregate(org, metadata, cancelled, progress);
+                if (!RetrieveManualAggregate(org, metadata, cancelled, progress))
+                    throw new ApplicationException("Unable to apply custom aggregation for large datasets when using DATEPART", ex);
             }
         }
 
@@ -172,7 +173,7 @@ namespace MarkMpn.Sql4Cds
             return true;
         }
 
-        private void RetrieveManualAggregate(IOrganizationService org, AttributeMetadataCache metadata, Func<bool> cancelled, Action<string> progress)
+        private bool RetrieveManualAggregate(IOrganizationService org, AttributeMetadataCache metadata, Func<bool> cancelled, Action<string> progress)
         {
             // Remove aggregate flags
             FetchXml.aggregate = false;
@@ -185,6 +186,10 @@ namespace MarkMpn.Sql4Cds
             // Remove groupby flags
             var groupByAttributes = new List<FetchAttributeType>();
             RemoveGroupBy(entity.Items, groupByAttributes);
+
+            // Can't handle manual grouping by date parts without much more work
+            if (groupByAttributes.Any(a => a.dategroupingSpecified))
+                return false;
 
             // Ensure sort order follows groupby attributes
             var sorts = entity.Items.OfType<FetchOrderType>().ToArray();
@@ -238,6 +243,8 @@ namespace MarkMpn.Sql4Cds
             {
                 EntityName = entity.name
             };
+
+            return true;
         }
 
         private void RemoveAggregate(object[] items, IDictionary<string,Aggregate> aggregates)
@@ -292,7 +299,8 @@ namespace MarkMpn.Sql4Cds
                     groupby = FetchBoolType.@true,
                     groupbySpecified = true,
                     name = attr.name,
-                    alias = attr.alias
+                    alias = attr.alias,
+                    dategroupingSpecified = attr.dategroupingSpecified
                 });
 
                 attr.groupby = FetchBoolType.@false;
