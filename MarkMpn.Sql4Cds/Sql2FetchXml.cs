@@ -431,7 +431,19 @@ namespace MarkMpn.Sql4Cds
                 if (!(group is ExpressionGroupingSpecification exprGroup))
                     throw new NotSupportedQueryFragmentException("Unhandled GROUP BY clause", group);
 
-                if (!(exprGroup.Expression is ColumnReferenceExpression col))
+                var expr = exprGroup.Expression;
+                DateGroupingType? dateGrouping = null;
+
+                if (expr is FunctionCall func)
+                {
+                    if (!ParseDatePart(func, out var g, out var dateCol))
+                        throw new NotSupportedQueryFragmentException("Unhandled GROUP BY clause", expr);
+
+                    dateGrouping = g;
+                    expr = dateCol;
+                }
+
+                if (!(expr is ColumnReferenceExpression col))
                     throw new NotSupportedQueryFragmentException("Unhandled GROUP BY clause", exprGroup.Expression);
 
                 GetColumnTableAlias(col, tables, out var table);
@@ -441,12 +453,19 @@ namespace MarkMpn.Sql4Cds
 
                 var attr = (table.Entity?.Items ?? table.LinkEntity.Items)
                     .OfType<FetchAttributeType>()
-                    .Where(a => a.name == col.MultiPartIdentifier.Identifiers.Last().Value)
+                    .Where(a => a.name == col.MultiPartIdentifier.Identifiers.Last().Value && (a.dategroupingSpecified == false && dateGrouping == null || (a.dategroupingSpecified && dateGrouping != null && a.dategrouping == dateGrouping.Value)))
                     .SingleOrDefault();
 
                 if (attr == null)
                 {
                     attr = new FetchAttributeType { name = col.MultiPartIdentifier.Identifiers.Last().Value };
+
+                    if (dateGrouping != null)
+                    {
+                        attr.dategrouping = dateGrouping.Value;
+                        attr.dategroupingSpecified = true;
+                    }
+
                     table.AddItem(attr);
                 }
 
@@ -464,6 +483,66 @@ namespace MarkMpn.Sql4Cds
                 attr.groupby = FetchBoolType.@true;
                 attr.groupbySpecified = true;
             }
+        }
+
+        private bool ParseDatePart(FunctionCall func, out DateGroupingType dateGrouping, out ColumnReferenceExpression col)
+        {
+            dateGrouping = DateGroupingType.day;
+            col = null;
+
+            if (!func.FunctionName.Value.Equals("DATEPART", StringComparison.OrdinalIgnoreCase) || func.Parameters.Count != 2 || !(func.Parameters[0] is ColumnReferenceExpression datePartParam))
+                return false;
+
+            col = func.Parameters[1] as ColumnReferenceExpression;
+
+            if (col == null)
+                return false;
+
+            switch (datePartParam.MultiPartIdentifier[0].Value.ToLower())
+            {
+                case "year":
+                case "yy":
+                case "yyyy":
+                    dateGrouping = DateGroupingType.year;
+                    break;
+
+                case "quarter":
+                case "qq":
+                case "q":
+                    dateGrouping = DateGroupingType.quarter;
+                    break;
+
+                case "month":
+                case "mm":
+                case "m":
+                    dateGrouping = DateGroupingType.month;
+                    break;
+
+                case "week":
+                case "wk":
+                case "ww":
+                    dateGrouping = DateGroupingType.week;
+                    break;
+
+                case "day":
+                case "dd":
+                case "d":
+                    dateGrouping = DateGroupingType.day;
+                    break;
+
+                case "fiscalperiod":
+                    dateGrouping = DateGroupingType.fiscalperiod;
+                    break;
+
+                case "fiscalyear":
+                    dateGrouping = DateGroupingType.fiscalyear;
+                    break;
+
+                default:
+                    throw new NotSupportedQueryFragmentException("Unsupported DATEPART", datePartParam);
+            }
+
+            return true;
         }
 
         private void HandleDistinctClause(QuerySpecification querySpec, FetchXml.FetchType fetch, List<EntityTable> tables)
@@ -552,22 +631,19 @@ namespace MarkMpn.Sql4Cds
                 // For aggregate queries, ordering must be done on aliases not attributes
                 if (fetch.aggregate)
                 {
-                    var attr = tables[0].Entity.Items
+                    var attr = (orderTable.Entity?.Items ?? orderTable.LinkEntity?.Items)
                         .OfType<FetchAttributeType>()
                         .SingleOrDefault(a => a.alias == order.attribute);
 
                     if (attr == null)
                     {
-                        attr = tables[0].Entity.Items
+                        attr = (orderTable.Entity?.Items ?? orderTable.LinkEntity?.Items)
                             .OfType<FetchAttributeType>()
                             .SingleOrDefault(a => a.alias == null && a.name == order.attribute);
                     }
 
                     if (attr == null)
-                    {
-                        attr = new FetchAttributeType { name = order.attribute };
-                        tables[0].AddItem(attr);
-                    }
+                        throw new NotSupportedQueryFragmentException("Column is invalid in the ORDER BY clause because it is not contained in either an aggregate function or the GROUP BY clause", sort.Expression);
 
                     if (attr.alias == null)
                         attr.alias = order.attribute;
@@ -925,6 +1001,15 @@ namespace MarkMpn.Sql4Cds
 
                     if (func != null)
                     {
+                        if (ParseDatePart(func, out var dateGrouping, out var dateCol))
+                        {   
+                            func = new FunctionCall
+                            {
+                                FunctionName = new Identifier { Value = dateGrouping.ToString() },
+                                Parameters = { dateCol }
+                            };
+                        }
+
                         if (func.Parameters.Count != 1)
                             throw new NotSupportedQueryFragmentException("Unhandled function", func);
 
@@ -960,6 +1045,7 @@ namespace MarkMpn.Sql4Cds
                             {
                                 case "count":
                                     attr.aggregate = col.ColumnType == ColumnType.Wildcard ? AggregateType.count : AggregateType.countcolumn;
+                                    attr.aggregateSpecified = true;
                                     break;
 
                                 case "avg":
@@ -967,13 +1053,24 @@ namespace MarkMpn.Sql4Cds
                                 case "max":
                                 case "sum":
                                     attr.aggregate = (AggregateType) Enum.Parse(typeof(AggregateType), func.FunctionName.Value);
+                                    attr.aggregateSpecified = true;
+                                    break;
+
+                                case "day":
+                                case "week":
+                                case "month":
+                                case "quarter":
+                                case "year":
+                                case "fiscalperiod":
+                                case "fiscalyear":
+                                    attr.dategrouping = (DateGroupingType) Enum.Parse(typeof(DateGroupingType), func.FunctionName.Value);
+                                    attr.dategroupingSpecified = true;
                                     break;
 
                                 default:
                                     throw new NotSupportedQueryFragmentException("Unhandled function", func);
                             }
 
-                            attr.aggregateSpecified = true;
                             fetch.aggregate = true;
                             fetch.aggregateSpecified = true;
 
@@ -985,13 +1082,15 @@ namespace MarkMpn.Sql4Cds
 
                             if (alias == null)
                             {
-                                alias = $"{attrName.Replace(".", "_")}_{attr.aggregate}";
+                                var aliasSuffix = attr.aggregateSpecified ? attr.aggregate.ToString() : attr.dategrouping.ToString();
+
+                                alias = $"{attrName.Replace(".", "_")}_{aliasSuffix}";
                                 var counter = 1;
 
                                 while (cols.Contains(alias))
                                 {
                                     counter++;
-                                    alias = $"{attrName.Replace(".", "_")}_{attr.aggregate}_{counter}";
+                                    alias = $"{attrName.Replace(".", "_")}_{aliasSuffix}_{counter}";
                                 }
                             }
                         }

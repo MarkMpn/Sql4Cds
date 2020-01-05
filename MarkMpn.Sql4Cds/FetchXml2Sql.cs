@@ -178,6 +178,32 @@ namespace MarkMpn.Sql4Cds
 
                     element.Expression = func;
                 }
+                else if (attr.dategroupingSpecified)
+                {
+                    var func = new FunctionCall
+                    {
+                        FunctionName = new Identifier { Value = "DATEPART" },
+                        Parameters =
+                        {
+                            new ColumnReferenceExpression
+                            {
+                                MultiPartIdentifier = new MultiPartIdentifier
+                                {
+                                    Identifiers =
+                                    {
+                                        new Identifier
+                                        {
+                                            Value = attr.dategrouping.ToString()
+                                        }
+                                    }
+                                }
+                            },
+                            col
+                        }
+                    };
+
+                    element.Expression = func;
+                }
                 else
                 {
                     element.Expression = col;
@@ -193,7 +219,37 @@ namespace MarkMpn.Sql4Cds
                     if (query.GroupByClause == null)
                         query.GroupByClause = new GroupByClause();
 
-                    query.GroupByClause.GroupingSpecifications.Add(new ExpressionGroupingSpecification { Expression = col });
+                    if (attr.dategroupingSpecified)
+                    {
+                        query.GroupByClause.GroupingSpecifications.Add(new ExpressionGroupingSpecification
+                        {
+                            Expression = new FunctionCall
+                            {
+                                FunctionName = new Identifier { Value = "DATEPART" },
+                                Parameters =
+                                {
+                                    new ColumnReferenceExpression
+                                    {
+                                        MultiPartIdentifier = new MultiPartIdentifier
+                                        {
+                                            Identifiers =
+                                            {
+                                                new Identifier
+                                                {
+                                                    Value = attr.dategrouping.ToString()
+                                                }
+                                            }
+                                        }
+                                    },
+                                    col
+                                }
+                            }
+                        });
+                    }
+                    else
+                    {
+                        query.GroupByClause.GroupingSpecifications.Add(new ExpressionGroupingSpecification { Expression = col });
+                    }
                 }
             }
         }
