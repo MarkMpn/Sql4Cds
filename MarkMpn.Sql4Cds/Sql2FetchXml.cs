@@ -807,7 +807,7 @@ namespace MarkMpn.Sql4Cds
                 }
                 else if (op == @operator.eq)
                 {
-                    op = (@operator) Enum.Parse(typeof(@operator), func.FunctionName.Value);
+                    op = (@operator) Enum.Parse(typeof(@operator), func.FunctionName.Value.ToLower());
 
                     if (func.CallTarget != null)
                         throw new NotSupportedQueryFragmentException("Unsupported function call target", func);
@@ -1041,7 +1041,7 @@ namespace MarkMpn.Sql4Cds
 
                         if (func != null)
                         {
-                            switch (func.FunctionName.Value)
+                            switch (func.FunctionName.Value.ToLower())
                             {
                                 case "count":
                                     attr.aggregate = col.ColumnType == ColumnType.Wildcard ? AggregateType.count : AggregateType.countcolumn;
@@ -1052,7 +1052,7 @@ namespace MarkMpn.Sql4Cds
                                 case "min":
                                 case "max":
                                 case "sum":
-                                    attr.aggregate = (AggregateType) Enum.Parse(typeof(AggregateType), func.FunctionName.Value);
+                                    attr.aggregate = (AggregateType) Enum.Parse(typeof(AggregateType), func.FunctionName.Value.ToLower());
                                     attr.aggregateSpecified = true;
                                     break;
 
@@ -1063,7 +1063,7 @@ namespace MarkMpn.Sql4Cds
                                 case "year":
                                 case "fiscalperiod":
                                 case "fiscalyear":
-                                    attr.dategrouping = (DateGroupingType) Enum.Parse(typeof(DateGroupingType), func.FunctionName.Value);
+                                    attr.dategrouping = (DateGroupingType) Enum.Parse(typeof(DateGroupingType), func.FunctionName.Value.ToLower());
                                     attr.dategroupingSpecified = true;
                                     break;
 
