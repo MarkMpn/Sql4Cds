@@ -389,7 +389,10 @@ namespace MarkMpn.Sql4Cds
                     if (multiple.Requests.Count == Settings.Instance.BatchSize)
                     {
                         progress($"Updating {meta.DisplayCollectionName.UserLocalizedLabel.Label} {count + 1:N0} - {count + multiple.Requests.Count:N0} of {entities.Count:N0}...");
-                        org.Execute(multiple);
+                        var resp = (ExecuteMultipleResponse) org.Execute(multiple);
+                        if (resp.IsFaulted)
+                            throw new ApplicationException($"Error updating {meta.DisplayCollectionName.UserLocalizedLabel.Label}");
+
                         count += multiple.Requests.Count;
 
                         multiple = null;
@@ -400,7 +403,10 @@ namespace MarkMpn.Sql4Cds
             if (!cancelled() && multiple != null)
             {
                 progress($"Updating {meta.DisplayCollectionName.UserLocalizedLabel.Label} {count + 1:N0} - {count + multiple.Requests.Count:N0} of {entities.Count:N0}...");
-                org.Execute(multiple);
+                var resp = (ExecuteMultipleResponse)org.Execute(multiple);
+                if (resp.IsFaulted)
+                    throw new ApplicationException($"Error updating {meta.DisplayCollectionName.UserLocalizedLabel.Label}");
+
                 count += multiple.Requests.Count;
             }
 
@@ -497,7 +503,10 @@ namespace MarkMpn.Sql4Cds
                     if (multiple.Requests.Count == Settings.Instance.BatchSize)
                     {
                         progress($"Deleting {meta.DisplayCollectionName.UserLocalizedLabel.Label} {count + 1:N0} - {count + multiple.Requests.Count:N0} of {entities.Count:N0}...");
-                        org.Execute(multiple);
+                        var resp = (ExecuteMultipleResponse)org.Execute(multiple);
+                        if (resp.IsFaulted)
+                            throw new ApplicationException($"Error deleting {meta.DisplayCollectionName.UserLocalizedLabel.Label}");
+
                         count += multiple.Requests.Count;
 
                         multiple = null;
@@ -508,7 +517,10 @@ namespace MarkMpn.Sql4Cds
             if (!cancelled() && multiple != null)
             {
                 progress($"Deleting {meta.DisplayCollectionName.UserLocalizedLabel.Label} {count + 1:N0} - {count + multiple.Requests.Count:N0}...");
-                org.Execute(multiple);
+                var resp = (ExecuteMultipleResponse)org.Execute(multiple);
+                if (resp.IsFaulted)
+                    throw new ApplicationException($"Error deleting {meta.DisplayCollectionName.UserLocalizedLabel.Label}");
+
                 count += multiple.Requests.Count;
             }
 
