@@ -333,7 +333,16 @@ namespace MarkMpn.Sql4Cds
                                 }
 
                                 grid.DataSource = queryResults;
-                                display = grid;
+                                grid.Dock = DockStyle.Fill;
+
+                                var panel = new Panel();
+                                panel.Controls.Add(grid);
+
+                                var statusBar = new StatusBar();
+                                statusBar.Text = $"{queryResults.Entities.Count} record(s) returned";
+                                statusBar.SizingGrip = false;
+                                panel.Controls.Add(statusBar);
+                                display = panel;
                             }
                             else if (query.Result is string msg)
                             {
