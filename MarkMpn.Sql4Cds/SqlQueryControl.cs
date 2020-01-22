@@ -329,7 +329,28 @@ namespace MarkMpn.Sql4Cds
                                 if (query is SelectQuery select)
                                 {
                                     foreach (var col in select.ColumnSet)
-                                        grid.Columns.Add(col, col);
+                                    {
+                                        var colName = col;
+
+                                        if (grid.Columns.Contains(col))
+                                        {
+                                            var suffix = 1;
+                                            while (grid.Columns.Contains($"{col}_{suffix}"))
+                                                suffix++;
+
+                                            var newCol = $"{col}_{suffix}";
+
+                                            foreach (var entity in queryResults.Entities)
+                                            {
+                                                if (entity.Contains(col))
+                                                    entity[newCol] = entity[col];
+                                            }
+
+                                            colName = newCol;
+                                        }
+
+                                        grid.Columns.Add(colName, colName);
+                                    }
                                 }
 
                                 grid.DataSource = queryResults;
