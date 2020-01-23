@@ -33,5 +33,7 @@ namespace MarkMpn.Sql4Cds
         public bool ShowEntityReferenceNames { get; set; }
 
         public bool ShowLocalTimes { get; set; }
+
+        public bool QuotedIdentifiers { get; set; } = true;
     }
 }

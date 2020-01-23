@@ -18,6 +18,7 @@ namespace MarkMpn.Sql4Cds
         {
             InitializeComponent();
 
+            quotedIdentifiersCheckbox.Checked = settings.QuotedIdentifiers;
             selectLimitUpDown.Value = settings.SelectLimit;
             updateWarnThresholdUpDown.Value = settings.UpdateWarnThreshold;
             blockUpdateWithoutWhereCheckbox.Checked = settings.BlockUpdateWithoutWhere;
@@ -26,6 +27,7 @@ namespace MarkMpn.Sql4Cds
             batchSizeUpDown.Value = settings.BatchSize;
             bulkDeleteCheckbox.Checked = settings.UseBulkDelete;
             friendlyNamesComboBox.SelectedIndex = settings.ShowEntityReferenceNames ? 1 : 0;
+            localTimesComboBox.SelectedIndex = settings.ShowLocalTimes ? 1 : 0;
 
             _settings = settings;
         }
@@ -36,6 +38,7 @@ namespace MarkMpn.Sql4Cds
 
             if (!e.Cancel && DialogResult == DialogResult.OK)
             {
+                _settings.QuotedIdentifiers = quotedIdentifiersCheckbox.Checked;
                 _settings.SelectLimit = (int) selectLimitUpDown.Value;
                 _settings.UpdateWarnThreshold = (int) updateWarnThresholdUpDown.Value;
                 _settings.BlockUpdateWithoutWhere = blockUpdateWithoutWhereCheckbox.Checked;
@@ -44,6 +47,7 @@ namespace MarkMpn.Sql4Cds
                 _settings.BatchSize = (int) batchSizeUpDown.Value;
                 _settings.UseBulkDelete = bulkDeleteCheckbox.Checked;
                 _settings.ShowEntityReferenceNames = friendlyNamesComboBox.SelectedIndex == 1;
+                _settings.ShowLocalTimes = localTimesComboBox.SelectedIndex == 1;
             }
         }
     }

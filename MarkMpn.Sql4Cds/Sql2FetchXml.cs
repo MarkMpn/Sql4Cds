@@ -51,7 +51,7 @@ namespace MarkMpn.Sql4Cds
         {
             var queries = new List<Query>();
 
-            var dom = new TSql150Parser(true);
+            var dom = new TSql150Parser(Settings.Instance.QuotedIdentifiers);
             var fragment = dom.Parse(new StringReader(sql), out var errors);
 
             if (errors.Count > 0)
@@ -702,16 +702,13 @@ namespace MarkMpn.Sql4Cds
 
             ColumnReferenceExpression col1 = null;
             ColumnReferenceExpression col2 = null;
-            HandleFilter(where.SearchCondition, filter, tables, tables[0], false, ref col1, ref col2);
-
-            if (col1 != null || col2 != null)
-                throw new NotSupportedQueryFragmentException("Unsupported comparison", col1);
+            HandleFilter(where.SearchCondition, filter, tables, tables[0], true, false, ref col1, ref col2);
 
             if (filter.type == (filterType)2)
                 filter.type = filterType.and;
         }
 
-        private void HandleFilter(BooleanExpression searchCondition, filter criteria, List<EntityTable> tables, EntityTable targetTable, bool inOr, ref ColumnReferenceExpression col1, ref ColumnReferenceExpression col2)
+        private void HandleFilter(BooleanExpression searchCondition, filter criteria, List<EntityTable> tables, EntityTable targetTable, bool where, bool inOr, ref ColumnReferenceExpression col1, ref ColumnReferenceExpression col2)
         {
             if (searchCondition is BooleanComparisonExpression comparison)
             {
@@ -722,6 +719,18 @@ namespace MarkMpn.Sql4Cds
 
                 if (field != null && field2 != null)
                 {
+                    if (where)
+                    {
+                        if ((field.MultiPartIdentifier.Identifiers.Count == 1 && field.MultiPartIdentifier.Identifiers[0].QuoteType == QuoteType.DoubleQuote ^
+                            field2.MultiPartIdentifier.Identifiers.Count == 1 && field2.MultiPartIdentifier.Identifiers[0].QuoteType == QuoteType.DoubleQuote) &&
+                            Settings.Instance.QuotedIdentifiers)
+                        {
+                            throw new NotSupportedQueryFragmentException("Unsupported comparison of two fields. Did you mean to use single quotes for a string literal?", comparison);
+                        }
+
+                        throw new NotSupportedQueryFragmentException("Unsupported comparison", comparison);
+                    }
+
                     if (col1 == null && col2 == null)
                     {
                         if (inOr)
@@ -868,8 +877,8 @@ namespace MarkMpn.Sql4Cds
                     criteria.type = op;
                 }
 
-                HandleFilter(binary.FirstExpression, criteria, tables, targetTable, inOr || op == filterType.or, ref col1, ref col2);
-                HandleFilter(binary.SecondExpression, criteria, tables, targetTable, inOr || op == filterType.or, ref col1, ref col2);
+                HandleFilter(binary.FirstExpression, criteria, tables, targetTable, where, inOr || op == filterType.or, ref col1, ref col2);
+                HandleFilter(binary.SecondExpression, criteria, tables, targetTable, where, inOr || op == filterType.or, ref col1, ref col2);
             }
             else if (searchCondition is BooleanParenthesisExpression paren)
             {
@@ -877,7 +886,7 @@ namespace MarkMpn.Sql4Cds
                 criteria.Items = AddItem(criteria.Items, subFilter);
                 criteria = subFilter;
 
-                HandleFilter(paren.Expression, criteria, tables, targetTable, inOr, ref col1, ref col2);
+                HandleFilter(paren.Expression, criteria, tables, targetTable, where, inOr, ref col1, ref col2);
 
                 if (subFilter.type == (filterType)2)
                     subFilter.type = filterType.and;
@@ -1210,7 +1219,7 @@ namespace MarkMpn.Sql4Cds
                 
                 ColumnReferenceExpression col1 = null;
                 ColumnReferenceExpression col2 = null;
-                HandleFilter(join.SearchCondition, filter, tables, linkTable, false, ref col1, ref col2);
+                HandleFilter(join.SearchCondition, filter, tables, linkTable, false, false, ref col1, ref col2);
 
                 if (col1 == null || col2 == null)
                     throw new NotSupportedQueryFragmentException("Missing join condition", join.SearchCondition);
