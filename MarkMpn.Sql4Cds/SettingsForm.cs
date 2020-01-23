@@ -12,7 +12,7 @@ namespace MarkMpn.Sql4Cds
 {
     public partial class SettingsForm : Form
     {
-        private Settings _settings;
+        private readonly Settings _settings;
 
         public SettingsForm(Settings settings)
         {
@@ -25,6 +25,7 @@ namespace MarkMpn.Sql4Cds
             blockDeleteWithoutWhereCheckbox.Checked = settings.BlockDeleteWithoutWhere;
             batchSizeUpDown.Value = settings.BatchSize;
             bulkDeleteCheckbox.Checked = settings.UseBulkDelete;
+            friendlyNamesComboBox.SelectedIndex = settings.ShowEntityReferenceNames ? 1 : 0;
 
             _settings = settings;
         }
@@ -42,6 +43,7 @@ namespace MarkMpn.Sql4Cds
                 _settings.BlockDeleteWithoutWhere = blockDeleteWithoutWhereCheckbox.Checked;
                 _settings.BatchSize = (int) batchSizeUpDown.Value;
                 _settings.UseBulkDelete = bulkDeleteCheckbox.Checked;
+                _settings.ShowEntityReferenceNames = friendlyNamesComboBox.SelectedIndex == 1;
             }
         }
     }

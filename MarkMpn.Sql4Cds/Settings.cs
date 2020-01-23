@@ -29,5 +29,9 @@ namespace MarkMpn.Sql4Cds
         public bool UseBulkDelete { get; set; }
 
         public int BatchSize { get; set; } = 100;
+
+        public bool ShowEntityReferenceNames { get; set; }
+
+        public bool ShowLocalTimes { get; set; }
     }
 }

@@ -10,13 +10,13 @@ using System.Windows.Forms;
 using Microsoft.Xrm.Sdk;
 using ScintillaNET;
 using XrmToolBox.Extensibility;
-using Cinteros.Xrm.CRMWinForm;
 using System.Text.RegularExpressions;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using System.IO;
 using McTools.Xrm.Connection;
 using Microsoft.ApplicationInsights;
+using xrmtb.XrmToolBox.Controls;
 
 namespace MarkMpn.Sql4Cds
 {
@@ -326,6 +326,28 @@ namespace MarkMpn.Sql4Cds
                             {
                                 var grid = new CRMGridView();
 
+                                grid.AllowUserToAddRows = false;
+                                grid.AllowUserToDeleteRows = false;
+                                grid.AllowUserToOrderColumns = true;
+                                grid.AllowUserToResizeRows = false;
+                                grid.AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.WhiteSmoke };
+                                grid.BackgroundColor = SystemColors.Window;
+                                grid.BorderStyle = BorderStyle.None;
+                                grid.CellBorderStyle = DataGridViewCellBorderStyle.None;
+                                grid.ClipboardCopyMode = DataGridViewClipboardCopyMode.EnableWithoutHeaderText;
+                                grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+                                grid.Dock = DockStyle.Fill;
+                                grid.EnableHeadersVisualStyles = false;
+                                grid.EntityReferenceClickable = true;
+                                grid.OrganizationService = Service;
+                                grid.ReadOnly = true;
+                                grid.RowHeadersWidth = 24;
+                                grid.ShowEditingIcon = false;
+                                grid.ShowFriendlyNames = Settings.Instance.ShowEntityReferenceNames;
+                                grid.ShowIdColumn = false;
+                                grid.ShowIndexColumn = false;
+                                grid.ShowLocalTimes = Settings.Instance.ShowLocalTimes;
+
                                 if (query is SelectQuery select)
                                 {
                                     foreach (var col in select.ColumnSet)
@@ -353,8 +375,10 @@ namespace MarkMpn.Sql4Cds
                                     }
                                 }
 
-                                grid.DataSource = queryResults;
-                                grid.Dock = DockStyle.Fill;
+                                grid.HandleCreated += (s, e) =>
+                                {
+                                    grid.DataSource = queryResults;
+                                };
 
                                 var panel = new Panel();
                                 panel.Controls.Add(grid);
