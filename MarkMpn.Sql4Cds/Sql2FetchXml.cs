@@ -45,6 +45,24 @@ namespace MarkMpn.Sql4Cds
                 else
                     Entity.Items = Sql2FetchXml.AddItem(Entity.Items, item);
             }
+
+            internal void RemoveItems(Func<object,bool> predicate)
+            {
+                if (LinkEntity?.Items != null)
+                    LinkEntity.Items = LinkEntity.Items.Where(i => !predicate(i)).ToArray();
+                else if (Entity?.Items != null)
+                    Entity.Items = Entity.Items.Where(i => !predicate(i)).ToArray();
+            }
+
+            internal bool Contains(Func<object, bool> predicate)
+            {
+                if (LinkEntity?.Items != null)
+                    return LinkEntity.Items.Any(predicate);
+                else if (Entity?.Items != null)
+                    return Entity.Items.Where(predicate).Any();
+
+                return false;
+            }
         }
 
         public Query[] Convert(string sql, AttributeMetadataCache metadata)
@@ -990,6 +1008,12 @@ namespace MarkMpn.Sql4Cds
 
                     foreach (var starTable in starTables)
                     {
+                        // If we're adding all attributes we can remove individual attributes
+                        if (starTable.Contains(i => i is FetchAttributeType attr && attr.alias != null))
+                            throw new NotSupportedQueryFragmentException("Cannot add aliased column and wildcard columns from same table", star);
+
+                        starTable.RemoveItems(i => i is FetchAttributeType);
+
                         starTable.AddItem(new allattributes());
 
                         var meta = metadata[starTable.EntityName];
@@ -1044,7 +1068,6 @@ namespace MarkMpn.Sql4Cds
                             GetColumnTableAlias(col, tables, out table);
 
                         var attr = new FetchAttributeType { name = attrName };
-                        table.AddItem(attr);
 
                         var alias = scalar.ColumnName?.Identifier?.Value;
 
@@ -1105,6 +1128,16 @@ namespace MarkMpn.Sql4Cds
                         }
 
                         attr.alias = alias;
+
+                        if (table.Contains(i => i is allattributes))
+                        {
+                            if (alias == null)
+                                continue;
+
+                            throw new NotSupportedQueryFragmentException("Cannot add aliased column and wildcard columns from same table", scalar.Expression);
+                        }
+
+                        table.AddItem(attr);
 
                         if (alias == null)
                             cols.Add((table.LinkEntity == null ? "" : ((table.Alias ?? table.EntityName) + ".")) + attr.name);
