@@ -994,7 +994,7 @@ namespace MarkMpn.Sql4Cds
 
                         var meta = metadata[starTable.EntityName];
 
-                        foreach (var attr in meta.Attributes.Where(a => a.IsValidForRead == true))
+                        foreach (var attr in meta.Attributes.Where(a => a.IsValidForRead == true).OrderBy(a => a.LogicalName))
                         {
                             if (starTable.LinkEntity == null)
                                 cols.Add(attr.LogicalName);
