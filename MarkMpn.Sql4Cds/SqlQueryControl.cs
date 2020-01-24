@@ -380,6 +380,21 @@ namespace MarkMpn.Sql4Cds
                                     grid.DataSource = queryResults;
                                 };
 
+                                grid.RowPostPaint += (s, e) =>
+                                {
+                                    var rowIdx = (e.RowIndex + 1).ToString();
+
+                                    var centerFormat = new System.Drawing.StringFormat()
+                                    {
+                                        // right alignment might actually make more sense for numbers
+                                        Alignment = StringAlignment.Center,
+                                        LineAlignment = StringAlignment.Center
+                                    };
+
+                                    var headerBounds = new Rectangle(e.RowBounds.Left, e.RowBounds.Top, grid.RowHeadersWidth, e.RowBounds.Height);
+                                    e.Graphics.DrawString(rowIdx, this.Font, SystemBrushes.ControlText, headerBounds, centerFormat);
+                                };
+
                                 var panel = new Panel();
                                 panel.Controls.Add(grid);
 
