@@ -669,7 +669,17 @@ namespace MarkMpn.Sql4Cds
                     order.alias = attr.alias;
                     order.attribute = null;
                 }
-                
+
+                // Paging has a bug if the orderby attribute is included but has a different alias. In this case,
+                // add the attribute again without an alias
+                if (!fetch.aggregateSpecified || !fetch.aggregate)
+                {
+                    var containsAliasedAttr = orderTable.Contains(i => i is FetchAttributeType a && a.name.Equals(order.attribute) && a.alias != null && a.alias != a.name);
+
+                    if (containsAliasedAttr)
+                        orderTable.AddItem(new FetchAttributeType { name = order.attribute });
+                }
+
                 orderTable.AddItem(order);
             }
         }

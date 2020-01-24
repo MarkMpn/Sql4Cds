@@ -46,13 +46,6 @@ namespace MarkMpn.Sql4Cds
             var meta = metadata[name];
             progress($"Retrieving {meta.DisplayCollectionName.UserLocalizedLabel.Label}...");
 
-            if (AllPages && (!FetchXml.aggregateSpecified || !FetchXml.aggregate))
-            {
-                // Paging has a bug if the orderby attribute is included but has a different alias. In this case,
-                // add the attribute again without an alias
-                HandleOrderByAlias(mainEntity);
-            }
-
             var res = org.RetrieveMultiple(new FetchExpression(Serialize(FetchXml)));
 
             foreach (var entity in res.Entities)
@@ -82,54 +75,6 @@ namespace MarkMpn.Sql4Cds
                 count += nextPage.Entities.Count;
                 res = nextPage;
             }
-        }
-
-        private void HandleOrderByAlias(FetchEntityType mainEntity)
-        {
-            if (mainEntity.Items == null)
-                return;
-
-            var sorts = mainEntity.Items.OfType<FetchOrderType>().ToArray();
-            var attributes = mainEntity.Items.OfType<FetchAttributeType>().ToArray();
-            var allAttributes = mainEntity.Items.OfType<allattributes>().Any();
-
-            if (!allAttributes)
-            {
-                foreach (var sort in sorts)
-                {
-                    if (attributes.Any(a => a.name.Equals(sort.attribute, StringComparison.OrdinalIgnoreCase) && (String.IsNullOrEmpty(a.alias) || a.alias.Equals(sort.attribute, StringComparison.OrdinalIgnoreCase))))
-                        continue;
-
-                    mainEntity.Items = mainEntity.Items.Concat(new object[] { new FetchAttributeType { name = sort.attribute } }).ToArray();
-                }
-            }
-
-            foreach (var linkEntity in mainEntity.Items.OfType<FetchLinkEntityType>())
-                HandleOrderByAlias(linkEntity);
-        }
-
-        private void HandleOrderByAlias(FetchLinkEntityType mainEntity)
-        {
-            if (mainEntity.Items == null)
-                return;
-
-            var sorts = mainEntity.Items.OfType<FetchOrderType>().ToArray();
-            var attributes = mainEntity.Items.OfType<FetchAttributeType>().ToArray();
-            var allAttributes = mainEntity.Items.OfType<allattributes>().Any();
-
-            if (!allAttributes)
-            {
-                foreach (var sort in sorts)
-                {
-                    if (attributes.Any(a => a.name.Equals(sort.attribute, StringComparison.OrdinalIgnoreCase) && (String.IsNullOrEmpty(a.alias) || a.alias.Equals(sort.attribute, StringComparison.OrdinalIgnoreCase))))
-                        continue;
-
-                    mainEntity.Items = mainEntity.Items.Concat(new object[] { new FetchAttributeType { name = sort.attribute } }).ToArray();
-                }
-            }
-
-            foreach (var linkEntity in mainEntity.Items.OfType<FetchLinkEntityType>())
-                HandleOrderByAlias(linkEntity);
         }
 
         public static string Serialize(FetchXml.FetchType fetch)
