@@ -403,7 +403,7 @@ namespace MarkMpn.Sql4Cds
                                 panel.Controls.Add(grid);
 
                                 var statusBar = new StatusBar();
-                                statusBar.Text = $"{queryResults.Entities.Count} record(s) returned";
+                                statusBar.Text = $"{queryResults.Entities.Count:N0} record(s) returned";
                                 statusBar.SizingGrip = false;
                                 panel.Controls.Add(statusBar);
                                 display = panel;
