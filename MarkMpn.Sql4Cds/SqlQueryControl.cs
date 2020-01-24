@@ -386,12 +386,13 @@ namespace MarkMpn.Sql4Cds
 
                                     var centerFormat = new System.Drawing.StringFormat()
                                     {
-                                        // right alignment might actually make more sense for numbers
-                                        Alignment = StringAlignment.Center,
-                                        LineAlignment = StringAlignment.Center
+                                        Alignment = StringAlignment.Far,
+                                        LineAlignment = StringAlignment.Center,
+                                        FormatFlags = StringFormatFlags.NoWrap | StringFormatFlags.NoClip,
+                                        Trimming = StringTrimming.EllipsisCharacter
                                     };
 
-                                    var headerBounds = new Rectangle(e.RowBounds.Left, e.RowBounds.Top, grid.RowHeadersWidth, e.RowBounds.Height);
+                                    var headerBounds = new Rectangle(e.RowBounds.Left, e.RowBounds.Top, grid.RowHeadersWidth - 2, e.RowBounds.Height);
                                     e.Graphics.DrawString(rowIdx, this.Font, SystemBrushes.ControlText, headerBounds, centerFormat);
                                 };
 
@@ -431,7 +432,7 @@ namespace MarkMpn.Sql4Cds
                                 {
                                     var tab = new TabControl();
                                     tab.TabPages.Add("Results");
-                                    tab.TabPages.Add("FetchXml");
+                                    tab.TabPages.Add("FetchXML");
                                     tab.TabPages[0].Controls.Add(display);
                                     tab.TabPages[1].Controls.Add(xmlDisplay);
                                     tab.TabPages[1].Controls.Add(toolbar);
