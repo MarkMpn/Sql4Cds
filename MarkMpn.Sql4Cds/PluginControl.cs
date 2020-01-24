@@ -107,13 +107,37 @@ namespace MarkMpn.Sql4Cds
 
         private SqlQueryControl CreateQuery(ConnectionDetail con, string sql, string sourcePlugin)
         { 
-            var query = new SqlQueryControl(con, _metadata[con], _ai, WorkAsync, msg => SetWorkingMessage(msg), ExecuteMethod, SendOutgoingMessage, sourcePlugin);
+            var query = new SqlQueryControl(con, _metadata[con], _ai, WorkAsyncWithCancel, msg => SetWorkingMessage(msg), ExecuteMethod, SendOutgoingMessage, sourcePlugin);
             query.InsertText(sql);
 
             query.Show(dockPanel, WeifenLuo.WinFormsUI.Docking.DockState.Document);
             query.SetFocus();
 
             return query;
+        }
+
+        private void WorkAsyncWithCancel(WorkAsyncInfo info)
+        {
+            WorkAsync(new WorkAsyncInfo
+            {
+                AsyncArgument = info.AsyncArgument,
+                Host = info.Host,
+                IsCancelable = info.IsCancelable,
+                Message = info.Message,
+                MessageHeight = info.MessageHeight,
+                MessageWidth = info.MessageWidth,
+                PostWorkCallBack = (args) =>
+                {
+                    tsbStop.Enabled = false;
+                    info.PostWorkCallBack(args);
+                },
+                ProgressChanged = info.ProgressChanged,
+                Work = (worker, args) =>
+                {
+                    tsbStop.Enabled = true;
+                    info.Work(worker, args);
+                }
+            });
         }
 
         private void tsbFormat_Click(object sender, EventArgs e)
@@ -233,6 +257,11 @@ namespace MarkMpn.Sql4Cds
                 return base.ProcessCmdKey(ref msg, keyData);
 
             return true;
+        }
+
+        private void tsbStop_Click(object sender, EventArgs e)
+        {
+            CancelWorker();
         }
     }
 }

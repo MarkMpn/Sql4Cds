@@ -297,6 +297,9 @@ namespace MarkMpn.Sql4Cds
                 {
                     splitContainer.Panel2.Controls.Clear();
 
+                    if (args.Cancelled)
+                        return;
+
                     if (args.Error != null)
                         _ai.TrackException(args.Error, new Dictionary<string, string> { ["Sql"] = sql });
 
