@@ -176,30 +176,7 @@ namespace MarkMpn.Sql4Cds
                 return false;
 
             // Ensure sort order follows groupby attributes
-            var sorts = entity.Items.OfType<FetchOrderType>().ToArray();
-            var unsortedGroupByAttributes = new HashSet<string>(groupByAttributes.Select(attr => attr.name));
-            var sortRequired = false;
-
-            for (var i = 0; i < sorts.Length; i++)
-            {
-                var attr = groupByAttributes.SingleOrDefault(a => a.alias.Equals(sorts[i].alias, StringComparison.OrdinalIgnoreCase));
-
-                if (attr != null && unsortedGroupByAttributes.Remove(attr.name))
-                {
-                    // Sort by attributes instead of aliases
-                    sorts[i].alias = null;
-                    sorts[i].attribute = attr.name;
-                    continue;
-                }
-
-                // Remove this unnecessary sort
-                entity.Items = entity.Items.Except(new[] { sorts[i] }).ToArray();
-
-                // Indicate that we need to re-sort the results later
-                sortRequired = true;
-            }
-
-            entity.Items = entity.Items.Concat(unsortedGroupByAttributes.Select(a => new FetchOrderType { attribute = a })).ToArray();
+            var sorts = SortByGroups(entity, groupByAttributes);
 
             var top = String.IsNullOrEmpty(FetchXml.top) ? (int?)null : Int32.Parse(FetchXml.top);
             var count = String.IsNullOrEmpty(FetchXml.count) ? (int?)null : Int32.Parse(FetchXml.count);
@@ -214,7 +191,7 @@ namespace MarkMpn.Sql4Cds
                 .AggregateGroupBy(groupByAttributes.Select(a => a.alias).ToList(), aggregates, cancelled);
 
             // Manually re-apply original orders
-            if (sortRequired)
+            if (sorts != null)
                 result = result.OrderBy(sorts);
             
             // Apply top/page
@@ -293,6 +270,60 @@ namespace MarkMpn.Sql4Cds
 
             foreach (var link in items.OfType<FetchLinkEntityType>())
                 RemoveGroupBy(link.Items, groupByAttributes);
+        }
+
+        private FetchOrderType[] SortByGroups(FetchEntityType entity, List<FetchAttributeType> groupByAttributes)
+        {
+            var unsortedGroupByAttributes = new HashSet<string>(groupByAttributes.Select(attr => attr.alias));
+            var requiredSorts = new List<FetchOrderType>();
+
+            entity.Items = SortByGroups(entity.Items, groupByAttributes, unsortedGroupByAttributes, requiredSorts);
+
+            return requiredSorts.ToArray();
+        }
+
+        private object[] SortByGroups(object[] items, List<FetchAttributeType> groupByAttributes, HashSet<string> unsortedGroupByAttributes, List<FetchOrderType> requiredSorts)
+        {
+            if (items == null)
+                return null;
+
+            var sorts = items.OfType<FetchOrderType>().ToArray();
+            
+            for (var i = 0; i < sorts.Length; i++)
+            {
+                var attr = groupByAttributes.SingleOrDefault(a => a.alias.Equals(sorts[i].alias, StringComparison.OrdinalIgnoreCase));
+
+                if (attr != null && unsortedGroupByAttributes.Remove(attr.alias))
+                {
+                    // Sort by attributes instead of aliases
+                    sorts[i].alias = null;
+                    sorts[i].attribute = attr.name;
+
+                    // Ensure the attribute is included without an alias
+                    if (!String.IsNullOrEmpty(attr.alias) && attr.alias != attr.name)
+                        items = items.Concat(new object[] { new FetchAttributeType { name = attr.name } }).ToArray();
+
+                    continue;
+                }
+
+                // Remove this unnecessary sort
+                items = items.Except(new[] { sorts[i] }).ToArray();
+
+                // Indicate that we need to re-sort the results later
+                requiredSorts.Add(sorts[i]);
+            }
+
+            items = items.Concat(unsortedGroupByAttributes
+                    .Where(a => items.OfType<FetchAttributeType>().Any(attr => attr.alias == a))
+                    .Select(a => new FetchOrderType { attribute = a })
+                ).ToArray();
+
+            var links = items.OfType<FetchLinkEntityType>();
+
+            foreach (var link in links)
+                link.Items = SortByGroups(link.Items, groupByAttributes, unsortedGroupByAttributes, requiredSorts);
+
+            return items;
         }
 
         public string[] ColumnSet { get; set; }
