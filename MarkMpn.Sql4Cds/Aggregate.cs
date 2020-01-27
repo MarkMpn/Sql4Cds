@@ -53,6 +53,11 @@ namespace MarkMpn.Sql4Cds
             else
                 Value = (int)Value + 1;
         }
+
+        public override void Reset()
+        {
+            Value = 0;
+        }
     }
 
     class CountColumn : Aggregate
@@ -66,6 +71,11 @@ namespace MarkMpn.Sql4Cds
                 Value = 1;
             else
                 Value = (int)Value + 1;
+        }
+
+        public override void Reset()
+        {
+            Value = 0;
         }
     }
 
@@ -91,7 +101,7 @@ namespace MarkMpn.Sql4Cds
         {
             _values.Clear();
             _stringValues.Clear();
-            base.Reset();
+            Value = 0;
         }
     }
 
