@@ -192,12 +192,6 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Aggregate.cs" />
-    <Compile Include="AttributeMetadataCache.cs" />
-    <Compile Include="FetchXml.cs">
-      <DependentUpon>FetchXml.xsd</DependentUpon>
-    </Compile>
-    <Compile Include="FetchXml2Sql.cs" />
     <Compile Include="ObjectExplorer.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -216,10 +210,8 @@
       <DesignTime>True</DesignTime>
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
-    <Compile Include="QueryParseException.cs" />
-    <Compile Include="NotSupportedQueryFragmentException.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Query.cs" />
+    <Compile Include="QueryExecutionOptions.cs" />
     <Compile Include="Settings.cs" />
     <Compile Include="SettingsForm.cs">
       <SubType>Form</SubType>
@@ -227,7 +219,6 @@
     <Compile Include="SettingsForm.Designer.cs">
       <DependentUpon>SettingsForm.cs</DependentUpon>
     </Compile>
-    <Compile Include="Sql2FetchXml.cs" />
     <Compile Include="SqlQueryControl.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -237,9 +228,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="app.config" />
-    <None Include="FetchXml.xsd">
-      <SubType>Designer</SubType>
-    </None>
     <None Include="ILMerge.props" />
     <None Include="packages.config">
       <SubType>Designer</SubType>
@@ -265,7 +253,12 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="ILMergeOrder.txt" />
-    <None Include="Resources\MSSQLReservedWords.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.csproj">
+      <Project>{583628f7-a027-451b-b3a1-e85ffb241dfb}</Project>
+      <Name>MarkMpn.Sql4Cds.Engine</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>

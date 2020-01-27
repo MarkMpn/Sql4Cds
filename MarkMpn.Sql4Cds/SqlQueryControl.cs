@@ -17,6 +17,7 @@ using System.IO;
 using McTools.Xrm.Connection;
 using Microsoft.ApplicationInsights;
 using xrmtb.XrmToolBox.Controls;
+using MarkMpn.Sql4Cds.Engine;
 
 namespace MarkMpn.Sql4Cds
 {
@@ -31,7 +32,7 @@ namespace MarkMpn.Sql4Cds
         private bool _modified;
         private static int _queryCounter;
 
-        public SqlQueryControl(ConnectionDetail con, AttributeMetadataCache metadata, TelemetryClient ai, Action<WorkAsyncInfo> workAsync, Action<string> setWorkingMessage, Action<Action> executeMethod, Action<MessageBusEventArgs> outgoingMessageHandler, string sourcePlugin)
+        public SqlQueryControl(ConnectionDetail con, IAttributeMetadataCache metadata, TelemetryClient ai, Action<WorkAsyncInfo> workAsync, Action<string> setWorkingMessage, Action<Action> executeMethod, Action<MessageBusEventArgs> outgoingMessageHandler, string sourcePlugin)
         {
             InitializeComponent();
             _displayName = $"Query {++_queryCounter}";
@@ -52,7 +53,7 @@ namespace MarkMpn.Sql4Cds
         }
 
         public IOrganizationService Service { get; }
-        public AttributeMetadataCache Metadata { get; }
+        public IAttributeMetadataCache Metadata { get; }
         public Action<WorkAsyncInfo> WorkAsync { get; }
         public Action<string> SetWorkingMessage { get; }
         public Action<Action> ExecuteMethod { get; }
@@ -276,14 +277,16 @@ namespace MarkMpn.Sql4Cds
                 IsCancelable = execute,
                 Work = (worker, args) =>
                 {
-                    var queries = new Sql2FetchXml().Convert(sql, Metadata);
+                    var queries = new Sql2FetchXml(Metadata, Settings.Instance.QuotedIdentifiers).Convert(sql);
 
                     if (execute)
                     {
+                        var options = new QueryExecutionOptions(worker);
+
                         foreach (var query in queries)
                         {
                             _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name });
-                            query.Execute(Service, Metadata, () => worker.CancellationPending, msg => worker.ReportProgress(-1, msg));
+                            query.Execute(Service, Metadata, options);
                         }
                     }
 

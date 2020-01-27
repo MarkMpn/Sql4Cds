@@ -1,4 +1,4 @@
-﻿using MarkMpn.Sql4Cds.FetchXml;
+﻿using MarkMpn.Sql4Cds.Engine.FetchXml;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
@@ -7,44 +7,43 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Windows.Forms;
 using System.Xml.Serialization;
 
-namespace MarkMpn.Sql4Cds
+namespace MarkMpn.Sql4Cds.Engine
 {
-    abstract class Query
+    public abstract class Query
     {
-        public abstract void Execute(IOrganizationService org, AttributeMetadataCache metadata, Func<bool> cancelled, Action<string> progress);
+        public abstract void Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options);
 
         public object Result { get; protected set; }
     }
 
-    abstract class FetchXmlQuery : Query
+    public abstract class FetchXmlQuery : Query
     {
         public FetchXml.FetchType FetchXml { get; set; }
 
         public bool AllPages { get; set; }
 
-        protected EntityCollection RetrieveAll(IOrganizationService org, AttributeMetadataCache metadata, Func<bool> cancelled, Action<string> progress)
+        protected EntityCollection RetrieveAll(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
-            if (cancelled())
+            if (options.Cancelled)
                 return null;
 
-            var res = new EntityCollection(RetrieveSequence(org, metadata, cancelled, progress).ToList());
+            var res = new EntityCollection(RetrieveSequence(org, metadata, options).ToList());
             res.EntityName = FetchXml.Items.OfType<FetchEntityType>().Single().name;
 
             return res;
         }
 
-        protected IEnumerable<Entity> RetrieveSequence(IOrganizationService org, AttributeMetadataCache metadata, Func<bool> cancelled, Action<string> progress)
+        protected IEnumerable<Entity> RetrieveSequence(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
-            if (cancelled())
+            if (options.Cancelled)
                 yield break;
 
             var mainEntity = FetchXml.Items.OfType<FetchEntityType>().Single();
             var name = mainEntity.name;
             var meta = metadata[name];
-            progress($"Retrieving {meta.DisplayCollectionName.UserLocalizedLabel.Label}...");
+            options.Progress($"Retrieving {meta.DisplayCollectionName.UserLocalizedLabel.Label}...");
 
             var res = org.RetrieveMultiple(new FetchExpression(Serialize(FetchXml)));
 
@@ -56,9 +55,9 @@ namespace MarkMpn.Sql4Cds
             if (AllPages && FetchXml.aggregateSpecified && FetchXml.aggregate && count == 5000 && FetchXml.top != "5000" && !res.MoreRecords)
                 throw new ApplicationException("AggregateQueryRecordLimit");
 
-            while (!cancelled() && AllPages && res.MoreRecords && (Settings.Instance.SelectLimit == 0 || count < Settings.Instance.SelectLimit))
+            while (!options.Cancelled && AllPages && res.MoreRecords && options.ContinueRetrieve(count))
             {
-                progress($"Retrieved {count:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label}...");
+                options.Progress($"Retrieved {count:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label}...");
 
                 if (FetchXml.page == null)
                     FetchXml.page = "2";
@@ -98,28 +97,28 @@ namespace MarkMpn.Sql4Cds
         }
     }
 
-    class SelectQuery : FetchXmlQuery
+    public class SelectQuery : FetchXmlQuery
     {
-        public override void Execute(IOrganizationService org, AttributeMetadataCache metadata, Func<bool> cancelled, Action<string> progress)
+        public override void Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
             if (RetrieveTotalRecordCount(org, metadata))
                 return;
 
             try
             {
-                Result = RetrieveAll(org, metadata, cancelled, progress);
+                Result = RetrieveAll(org, metadata, options);
             }
             catch (Exception ex)
             {
                 if (!ex.Message.Contains("AggregateQueryRecordLimit"))
                     throw;
 
-                if (!RetrieveManualAggregate(org, metadata, cancelled, progress))
+                if (!RetrieveManualAggregate(org, metadata, options))
                     throw new ApplicationException("Unable to apply custom aggregation for large datasets when using DATEPART", ex);
             }
         }
 
-        private bool RetrieveTotalRecordCount(IOrganizationService org, AttributeMetadataCache metadata)
+        private bool RetrieveTotalRecordCount(IOrganizationService org, IAttributeMetadataCache metadata)
         {
             // Special case - SELECT count(primaryid) with no filter
             if (!FetchXml.aggregate)
@@ -157,7 +156,7 @@ namespace MarkMpn.Sql4Cds
             return true;
         }
 
-        private bool RetrieveManualAggregate(IOrganizationService org, AttributeMetadataCache metadata, Func<bool> cancelled, Action<string> progress)
+        private bool RetrieveManualAggregate(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
             // Remove aggregate flags
             FetchXml.aggregate = false;
@@ -187,8 +186,8 @@ namespace MarkMpn.Sql4Cds
             FetchXml.page = null;
 
             // Retrieve records and track aggregates per group
-            var result = RetrieveSequence(org, metadata, cancelled, progress)
-                .AggregateGroupBy(groupByAttributes.Select(a => a.alias).ToList(), aggregates, cancelled);
+            var result = RetrieveSequence(org, metadata, options)
+                .AggregateGroupBy(groupByAttributes.Select(a => a.alias).ToList(), aggregates, options);
 
             // Manually re-apply original orders
             if (sorts != null)
@@ -329,7 +328,7 @@ namespace MarkMpn.Sql4Cds
         public string[] ColumnSet { get; set; }
     }
 
-    class UpdateQuery : FetchXmlQuery
+    public class UpdateQuery : FetchXmlQuery
     {
         public string EntityName { get; set; }
 
@@ -337,35 +336,30 @@ namespace MarkMpn.Sql4Cds
 
         public IDictionary<string,object> Updates { get; set; }
 
-        public override void Execute(IOrganizationService org, AttributeMetadataCache metadata, Func<bool> cancelled, Action<string> progress)
+        public override void Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
-            if (cancelled())
+            if (options.Cancelled)
                 return;
 
-            if (Settings.Instance.BlockUpdateWithoutWhere && !FetchXml.Items.OfType<FetchEntityType>().Single().Items.OfType<filter>().Any())
+            if (options.BlockUpdateWithoutWhere && !FetchXml.Items.OfType<FetchEntityType>().Single().Items.OfType<filter>().Any())
                 throw new InvalidOperationException("UPDATE without WHERE is blocked by your settings");
 
             var count = 0;
-            var entities = RetrieveAll(org, metadata, cancelled, progress).Entities;
+            var entities = RetrieveAll(org, metadata, options).Entities;
 
             if (entities == null)
                 return;
 
             var meta = metadata[EntityName];
 
-            if (entities.Count > Settings.Instance.UpdateWarnThreshold)
-            {
-                var result = MessageBox.Show($"Update will affect {entities.Count:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label}. Do you want to proceed?", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
-
-                if (result == DialogResult.No)
-                    throw new OperationCanceledException("UPDATE cancelled by user");
-            }
+            if (!options.ConfirmUpdate(entities.Count, meta))
+                throw new OperationCanceledException("UPDATE cancelled by user");
 
             ExecuteMultipleRequest multiple = null;
 
             foreach (var entity in entities)
             {
-                if (cancelled())
+                if (options.Cancelled)
                     break;
 
                 var id = entity[IdColumn];
@@ -378,9 +372,9 @@ namespace MarkMpn.Sql4Cds
                 foreach (var attr in Updates)
                     update[attr.Key] = attr.Value;
 
-                if (Settings.Instance.BatchSize == 1)
+                if (options.BatchSize == 1)
                 {
-                    progress($"Updating {meta.DisplayName.UserLocalizedLabel.Label} {count + 1:N0} of {entities.Count:N0}...");
+                    options.Progress($"Updating {meta.DisplayName.UserLocalizedLabel.Label} {count + 1:N0} of {entities.Count:N0}...");
                     org.Update(update);
                     count++;
                 }
@@ -401,9 +395,9 @@ namespace MarkMpn.Sql4Cds
 
                     multiple.Requests.Add(new UpdateRequest { Target = update });
 
-                    if (multiple.Requests.Count == Settings.Instance.BatchSize)
+                    if (multiple.Requests.Count == options.BatchSize)
                     {
-                        progress($"Updating {meta.DisplayCollectionName.UserLocalizedLabel.Label} {count + 1:N0} - {count + multiple.Requests.Count:N0} of {entities.Count:N0}...");
+                        options.Progress($"Updating {meta.DisplayCollectionName.UserLocalizedLabel.Label} {count + 1:N0} - {count + multiple.Requests.Count:N0} of {entities.Count:N0}...");
                         var resp = (ExecuteMultipleResponse) org.Execute(multiple);
                         if (resp.IsFaulted)
                             throw new ApplicationException($"Error updating {meta.DisplayCollectionName.UserLocalizedLabel.Label}");
@@ -415,9 +409,9 @@ namespace MarkMpn.Sql4Cds
                 }
             }
 
-            if (!cancelled() && multiple != null)
+            if (!options.Cancelled && multiple != null)
             {
-                progress($"Updating {meta.DisplayCollectionName.UserLocalizedLabel.Label} {count + 1:N0} - {count + multiple.Requests.Count:N0} of {entities.Count:N0}...");
+                options.Progress($"Updating {meta.DisplayCollectionName.UserLocalizedLabel.Label} {count + 1:N0} - {count + multiple.Requests.Count:N0} of {entities.Count:N0}...");
                 var resp = (ExecuteMultipleResponse)org.Execute(multiple);
                 if (resp.IsFaulted)
                     throw new ApplicationException($"Error updating {meta.DisplayCollectionName.UserLocalizedLabel.Label}");
@@ -429,23 +423,23 @@ namespace MarkMpn.Sql4Cds
         }
     }
 
-    class DeleteQuery : FetchXmlQuery
+    public class DeleteQuery : FetchXmlQuery
     {
         public string EntityName { get; set; }
 
         public string IdColumn { get; set; }
 
-        public override void Execute(IOrganizationService org, AttributeMetadataCache metadata, Func<bool> cancelled, Action<string> progress)
+        public override void Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
-            if (cancelled())
+            if (options.Cancelled)
                 return;
 
-            if (Settings.Instance.BlockDeleteWithoutWhere && !FetchXml.Items.OfType<FetchEntityType>().Single().Items.OfType<filter>().Any())
+            if (options.BlockDeleteWithoutWhere && !FetchXml.Items.OfType<FetchEntityType>().Single().Items.OfType<filter>().Any())
                 throw new InvalidOperationException("DELETE without WHERE is blocked by your settings");
 
             var meta = metadata[EntityName];
 
-            if (Settings.Instance.UseBulkDelete)
+            if (options.UseBulkDelete)
             {
                 var query = ((FetchXmlToQueryExpressionResponse)org.Execute(new FetchXmlToQueryExpressionRequest { FetchXml = Serialize(FetchXml) })).Query;
 
@@ -468,33 +462,28 @@ namespace MarkMpn.Sql4Cds
             }
 
             var count = 0;
-            var entities = RetrieveAll(org, metadata, cancelled, progress).Entities;
+            var entities = RetrieveAll(org, metadata, options).Entities;
 
             if (entities == null)
                 return;
 
-            if (entities.Count > Settings.Instance.DeleteWarnThreshold)
-            {
-                var result = MessageBox.Show($"Delete will affect {entities.Count:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label}. Do you want to proceed?", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
-
-                if (result == DialogResult.No)
-                    throw new OperationCanceledException("DELETE cancelled by user");
-            }
+            if (!options.ConfirmDelete(entities.Count, meta))
+                throw new OperationCanceledException("DELETE cancelled by user");
 
             ExecuteMultipleRequest multiple = null;
 
             foreach (var entity in entities)
             {
-                if (cancelled())
+                if (options.Cancelled)
                     break;
 
                 var id = entity[IdColumn];
                 if (id is AliasedValue alias)
                     id = alias.Value;
 
-                if (Settings.Instance.BatchSize == 1)
+                if (options.BatchSize == 1)
                 {
-                    progress($"Deleting {meta.DisplayName.UserLocalizedLabel.Label} {count + 1:N0} of {entities.Count:N0}...");
+                    options.Progress($"Deleting {meta.DisplayName.UserLocalizedLabel.Label} {count + 1:N0} of {entities.Count:N0}...");
                     org.Delete(EntityName, (Guid)id);
                     count++;
                 }
@@ -515,9 +504,9 @@ namespace MarkMpn.Sql4Cds
 
                     multiple.Requests.Add(new DeleteRequest { Target = new EntityReference(EntityName, (Guid)id) });
 
-                    if (multiple.Requests.Count == Settings.Instance.BatchSize)
+                    if (multiple.Requests.Count == options.BatchSize)
                     {
-                        progress($"Deleting {meta.DisplayCollectionName.UserLocalizedLabel.Label} {count + 1:N0} - {count + multiple.Requests.Count:N0} of {entities.Count:N0}...");
+                        options.Progress($"Deleting {meta.DisplayCollectionName.UserLocalizedLabel.Label} {count + 1:N0} - {count + multiple.Requests.Count:N0} of {entities.Count:N0}...");
                         var resp = (ExecuteMultipleResponse)org.Execute(multiple);
                         if (resp.IsFaulted)
                             throw new ApplicationException($"Error deleting {meta.DisplayCollectionName.UserLocalizedLabel.Label}");
@@ -529,9 +518,9 @@ namespace MarkMpn.Sql4Cds
                 }
             }
 
-            if (!cancelled() && multiple != null)
+            if (!options.Cancelled && multiple != null)
             {
-                progress($"Deleting {meta.DisplayCollectionName.UserLocalizedLabel.Label} {count + 1:N0} - {count + multiple.Requests.Count:N0}...");
+                options.Progress($"Deleting {meta.DisplayCollectionName.UserLocalizedLabel.Label} {count + 1:N0} - {count + multiple.Requests.Count:N0}...");
                 var resp = (ExecuteMultipleResponse)org.Execute(multiple);
                 if (resp.IsFaulted)
                     throw new ApplicationException($"Error deleting {meta.DisplayCollectionName.UserLocalizedLabel.Label}");
@@ -543,16 +532,16 @@ namespace MarkMpn.Sql4Cds
         }
     }
 
-    class InsertValues : Query
+    public class InsertValues : Query
     {
         public string LogicalName { get; set; }
         public IDictionary<string, object>[] Values { get; set; }
 
-        public override void Execute(IOrganizationService org, AttributeMetadataCache metadata, Func<bool> cancelled, Action<string> progress)
+        public override void Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
             var meta = metadata[LogicalName];
 
-            for (var i = 0; i < Values.Length && !cancelled(); i++)
+            for (var i = 0; i < Values.Length && !options.Cancelled; i++)
             {
                 var entity = new Entity(LogicalName);
 
@@ -561,22 +550,22 @@ namespace MarkMpn.Sql4Cds
 
                 org.Create(entity);
 
-                progress($"Inserted {i:N0} of {Values.Length:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label} ({(float)i / Values.Length:P0})");
+                options.Progress($"Inserted {i:N0} of {Values.Length:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label} ({(float)i / Values.Length:P0})");
             }
 
             Result = $"{Values.Length} {meta.DisplayCollectionName.UserLocalizedLabel.Label} inserted";
         }
     }
 
-    class InsertSelect : FetchXmlQuery
+    public class InsertSelect : FetchXmlQuery
     {
         public string LogicalName { get; set; }
         public IDictionary<string, string> Mappings { get; set; }
 
-        public override void Execute(IOrganizationService org, AttributeMetadataCache metadata, Func<bool> cancelled, Action<string> progress)
+        public override void Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
             var count = 0;
-            var entities = RetrieveAll(org, metadata, cancelled, progress).Entities;
+            var entities = RetrieveAll(org, metadata, options).Entities;
 
             if (entities == null)
                 return;
@@ -585,7 +574,7 @@ namespace MarkMpn.Sql4Cds
 
             foreach (var entity in entities)
             {
-                if (cancelled())
+                if (options.Cancelled)
                     break;
 
                 var newEntity = new Entity(LogicalName);
@@ -606,7 +595,7 @@ namespace MarkMpn.Sql4Cds
                 org.Create(newEntity);
 
                 count++;
-                progress($"Inserted {count:N0} of {entities.Count:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label} ({(float)count / entities.Count:P0})");
+                options.Progress($"Inserted {count:N0} of {entities.Count:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label} ({(float)count / entities.Count:P0})");
             }
 
             Result = $"{count} {meta.DisplayCollectionName.UserLocalizedLabel.Label} inserted";

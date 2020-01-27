@@ -16,19 +16,20 @@ using System.IO;
 using System.Xml.Serialization;
 using System.Collections.Generic;
 using Microsoft.ApplicationInsights;
+using MarkMpn.Sql4Cds.Engine;
 
 namespace MarkMpn.Sql4Cds
 {
     public partial class PluginControl : MultipleConnectionsPluginControlBase, IMessageBusHost
     {
-        private readonly IDictionary<ConnectionDetail, AttributeMetadataCache> _metadata;
+        private readonly IDictionary<ConnectionDetail, IAttributeMetadataCache> _metadata;
         private readonly TelemetryClient _ai;
         private ObjectExplorer _objectExplorer;
 
         public PluginControl()
         {
             InitializeComponent();
-            _metadata = new Dictionary<ConnectionDetail, AttributeMetadataCache>();
+            _metadata = new Dictionary<ConnectionDetail, IAttributeMetadataCache>();
             _objectExplorer = new ObjectExplorer(_metadata, WorkAsync);
             _objectExplorer.Show(dockPanel, WeifenLuo.WinFormsUI.Docking.DockState.DockLeft);
             _objectExplorer.CloseButtonVisible = false;
@@ -199,13 +200,13 @@ namespace MarkMpn.Sql4Cds
             }
         }
 
-        private FetchXml.FetchType DeserializeFetchXml(string xml)
+        private Engine.FetchXml.FetchType DeserializeFetchXml(string xml)
         {
-            var serializer = new XmlSerializer(typeof(FetchXml.FetchType));
+            var serializer = new XmlSerializer(typeof(Engine.FetchXml.FetchType));
 
             using (var reader = new StringReader(xml))
             {
-                return (FetchXml.FetchType) serializer.Deserialize(reader);
+                return (Engine.FetchXml.FetchType) serializer.Deserialize(reader);
             }
         }
 

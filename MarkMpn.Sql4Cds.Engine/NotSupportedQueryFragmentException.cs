@@ -2,7 +2,7 @@
 using System;
 using System.Linq;
 
-namespace MarkMpn.Sql4Cds
+namespace MarkMpn.Sql4Cds.Engine
 {
     public class NotSupportedQueryFragmentException : NotSupportedException
     {

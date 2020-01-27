@@ -1,15 +1,15 @@
-﻿using MarkMpn.Sql4Cds.FetchXml;
+﻿using MarkMpn.Sql4Cds.Engine.FetchXml;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 
-namespace MarkMpn.Sql4Cds
+namespace MarkMpn.Sql4Cds.Engine
 {
-    static class FetchXml2Sql
+    public static class FetchXml2Sql
     {
-        public static string Convert(AttributeMetadataCache metadata, FetchXml.FetchType fetch)
+        public static string Convert(IAttributeMetadataCache metadata, FetchXml.FetchType fetch)
         {
             var select = new SelectStatement();
             var query = new QuerySpecification();
@@ -254,7 +254,7 @@ namespace MarkMpn.Sql4Cds
             }
         }
 
-        private static TableReference BuildJoins(AttributeMetadataCache metadata, TableReference dataSource, NamedTableReference parentTable, object[] items, QuerySpecification query, IDictionary<string, string> aliasToLogicalName)
+        private static TableReference BuildJoins(IAttributeMetadataCache metadata, TableReference dataSource, NamedTableReference parentTable, object[] items, QuerySpecification query, IDictionary<string, string> aliasToLogicalName)
         {
             if (items == null)
                 return dataSource;
@@ -333,7 +333,7 @@ namespace MarkMpn.Sql4Cds
             return dataSource;
         }
 
-        private static BooleanExpression GetFilter(AttributeMetadataCache metadata, object[] items, string prefix, IDictionary<string, string> aliasToLogicalName)
+        private static BooleanExpression GetFilter(IAttributeMetadataCache metadata, object[] items, string prefix, IDictionary<string, string> aliasToLogicalName)
         {
             if (items == null)
                 return null;
@@ -346,7 +346,7 @@ namespace MarkMpn.Sql4Cds
             return GetFilter(metadata, filter, prefix, aliasToLogicalName);
         }
 
-        private static BooleanExpression GetFilter(AttributeMetadataCache metadata, filter filter, string prefix, IDictionary<string, string> aliasToLogicalName)
+        private static BooleanExpression GetFilter(IAttributeMetadataCache metadata, filter filter, string prefix, IDictionary<string, string> aliasToLogicalName)
         {
             BooleanExpression expression = null;
             var type = filter.type == filterType.and ? BooleanBinaryExpressionType.And : BooleanBinaryExpressionType.Or;
@@ -384,7 +384,7 @@ namespace MarkMpn.Sql4Cds
             return expression;
         }
 
-        private static BooleanExpression GetFilter(AttributeMetadataCache metadata, condition condition, string prefix, IDictionary<string,string> aliasToLogicalName)
+        private static BooleanExpression GetFilter(IAttributeMetadataCache metadata, condition condition, string prefix, IDictionary<string,string> aliasToLogicalName)
         {
             var field = new ColumnReferenceExpression
             {

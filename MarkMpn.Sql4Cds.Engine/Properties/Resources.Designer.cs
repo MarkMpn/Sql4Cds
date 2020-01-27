@@ -8,7 +8,7 @@
 // </auto-generated>
 //------------------------------------------------------------------------------
 
-namespace MarkMpn.Sql4Cds.Properties {
+namespace MarkMpn.Sql4Cds.Engine.Properties {
     using System;
     
     
@@ -39,7 +39,7 @@ namespace MarkMpn.Sql4Cds.Properties {
         internal static global::System.Resources.ResourceManager ResourceManager {
             get {
                 if (object.ReferenceEquals(resourceMan, null)) {
-                    global::System.Resources.ResourceManager temp = new global::System.Resources.ResourceManager("MarkMpn.Sql4Cds.Properties.Resources", typeof(Resources).Assembly);
+                    global::System.Resources.ResourceManager temp = new global::System.Resources.ResourceManager("MarkMpn.Sql4Cds.Engine.Properties.Resources", typeof(Resources).Assembly);
                     resourceMan = temp;
                 }
                 return resourceMan;
@@ -61,12 +61,71 @@ namespace MarkMpn.Sql4Cds.Properties {
         }
         
         /// <summary>
-        ///   Looks up a localized resource of type System.Drawing.Bitmap.
+        ///   Looks up a localized string similar to ADD
+        ///ALL
+        ///ALTER
+        ///AND
+        ///ANY
+        ///AS
+        ///ASC
+        ///AUTHORIZATION
+        ///BACKUP
+        ///BEGIN
+        ///BETWEEN
+        ///BREAK
+        ///BROWSE
+        ///BULK
+        ///BY
+        ///CASCADE
+        ///CASE
+        ///CHECK
+        ///CHECKPOINT
+        ///CLOSE
+        ///CLUSTERED
+        ///COALESCE
+        ///COLLATE
+        ///COLUMN
+        ///COMMIT
+        ///COMPUTE
+        ///CONSTRAINT
+        ///CONTAINS
+        ///CONTAINSTABLE
+        ///CONTINUE
+        ///CONVERT
+        ///CREATE
+        ///CROSS
+        ///CURRENT
+        ///CURRENT_DATE
+        ///CURRENT_TIME
+        ///CURRENT_TIMESTAMP
+        ///CURRENT_USER
+        ///CURSOR
+        ///DATABASE
+        ///DBCC
+        ///DEALLOCATE
+        ///DECLARE
+        ///DEFAULT
+        ///DELETE
+        ///DENY
+        ///DESC
+        ///DISK
+        ///DISTINCT
+        ///DISTRIBUTED
+        ///DOUBLE
+        ///DROP
+        ///DUMP
+        ///ELSE
+        ///END
+        ///ERRLVL
+        ///ESCAPE
+        ///EXCEPT
+        ///EXEC
+        ///EXECUTE
+        ///EX [rest of string was truncated]&quot;;.
         /// </summary>
-        internal static System.Drawing.Bitmap FXB {
+        internal static string MSSQLReservedWords {
             get {
-                object obj = ResourceManager.GetObject("FXB", resourceCulture);
-                return ((System.Drawing.Bitmap)(obj));
+                return ResourceManager.GetString("MSSQLReservedWords", resourceCulture);
             }
         }
     }

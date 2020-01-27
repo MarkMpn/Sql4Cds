@@ -7,9 +7,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace MarkMpn.Sql4Cds
+namespace MarkMpn.Sql4Cds.Engine
 {
-    public class AttributeMetadataCache
+    public class AttributeMetadataCache : IAttributeMetadataCache
     {
         private readonly IOrganizationService _org;
         private readonly IDictionary<string, EntityMetadata> _metadata;

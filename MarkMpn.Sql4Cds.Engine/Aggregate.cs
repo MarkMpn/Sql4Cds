@@ -1,12 +1,10 @@
-﻿using MarkMpn.Sql4Cds.FetchXml;
+﻿using MarkMpn.Sql4Cds.Engine.FetchXml;
 using Microsoft.Xrm.Sdk;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
-namespace MarkMpn.Sql4Cds
+namespace MarkMpn.Sql4Cds.Engine
 {
     abstract class Aggregate
     {
@@ -172,7 +170,7 @@ namespace MarkMpn.Sql4Cds
             return x.Equals(y);
         }
 
-        public static IEnumerable<Entity> AggregateGroupBy(this IEnumerable<Entity> list, IList<string> groupByAttributes, IDictionary<string,Aggregate> aggregates, Func<bool> cancelled)
+        public static IEnumerable<Entity> AggregateGroupBy(this IEnumerable<Entity> list, IList<string> groupByAttributes, IDictionary<string,Aggregate> aggregates, IQueryExecutionOptions options)
         {
             var groupByValues = new object[groupByAttributes.Count];
             var first = true;
@@ -180,11 +178,14 @@ namespace MarkMpn.Sql4Cds
 
             foreach (var entity in list)
             {
-                if (cancelled())
+                if (options.Cancelled)
                     throw new OperationCanceledException();
 
                 if (first)
                 {
+                    foreach (var aggregate in aggregates)
+                        aggregate.Value.Reset();
+
                     entityName = entity.LogicalName;
 
                     for (var i = 0; i < groupByAttributes.Count; i++)
@@ -201,10 +202,10 @@ namespace MarkMpn.Sql4Cds
                             var group = new Entity(entityName);
 
                             for (var j = 0; j < groupByAttributes.Count; j++)
-                                group[groupByAttributes[j]] = groupByValues[j]; // TODO: Create as AliasedValue?
+                                group[groupByAttributes[j]] = groupByValues[j];
 
                             foreach (var aggregate in aggregates)
-                                group[aggregate.Key] = aggregate.Value.Value; // TODO: Create as AliasedValue?
+                                group[aggregate.Key] = aggregate.Value.Value;
 
                             yield return group;
 
@@ -227,10 +228,10 @@ namespace MarkMpn.Sql4Cds
             var finalGroup = new Entity(entityName);
 
             for (var j = 0; j < groupByAttributes.Count; j++)
-                finalGroup[groupByAttributes[j]] = groupByValues[j]; // TODO: Create as AliasedValue?
+                finalGroup[groupByAttributes[j]] = groupByValues[j];
 
             foreach (var aggregate in aggregates)
-                finalGroup[aggregate.Key] = aggregate.Value.Value; // TODO: Create as AliasedValue?
+                finalGroup[aggregate.Key] = aggregate.Value.Value;
 
             yield return finalGroup;
         }
