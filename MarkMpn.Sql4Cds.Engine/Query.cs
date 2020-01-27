@@ -11,19 +11,47 @@ using System.Xml.Serialization;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
+    /// <summary>
+    /// A CDS query that can be executed
+    /// </summary>
     public abstract class Query
     {
+        /// <summary>
+        /// Executes the query
+        /// </summary>
+        /// <param name="org">The <see cref="IOrganizationService"/> to execute the query against</param>
+        /// <param name="metadata">The metadata cache to use when executing the query</param>
+        /// <param name="options">The options to apply to the query execution</param>
         public abstract void Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options);
 
+        /// <summary>
+        /// The results of the query
+        /// </summary>
         public object Result { get; protected set; }
     }
 
+    /// <summary>
+    /// A CDS query that is based on FetchXML
+    /// </summary>
     public abstract class FetchXmlQuery : Query
     {
+        /// <summary>
+        /// The FetchXML query
+        /// </summary>
         public FetchXml.FetchType FetchXml { get; set; }
 
+        /// <summary>
+        /// Indicates if the query will page across all the available data
+        /// </summary>
         public bool AllPages { get; set; }
 
+        /// <summary>
+        /// Retrieves all the data matched by the <see cref="FetchXml"/>
+        /// </summary>
+        /// <param name="org">The <see cref="IOrganizationService"/> to execute the query against</param>
+        /// <param name="metadata">The metadata cache to use when executing the query</param>
+        /// <param name="options">The options to apply to the query execution</param>
+        /// <returns>The records matched by the query</returns>
         protected EntityCollection RetrieveAll(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
             if (options.Cancelled)
@@ -35,6 +63,13 @@ namespace MarkMpn.Sql4Cds.Engine
             return res;
         }
 
+        /// <summary>
+        /// Retrieves all the data matched by the <see cref="FetchXml"/>
+        /// </summary>
+        /// <param name="org">The <see cref="IOrganizationService"/> to execute the query against</param>
+        /// <param name="metadata">The metadata cache to use when executing the query</param>
+        /// <param name="options">The options to apply to the query execution</param>
+        /// <returns>The records matched by the query</returns>
         protected IEnumerable<Entity> RetrieveSequence(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
             if (options.Cancelled)
@@ -45,6 +80,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var meta = metadata[name];
             options.Progress($"Retrieving {meta.DisplayCollectionName.UserLocalizedLabel.Label}...");
 
+            // Get the first page of results
             var res = org.RetrieveMultiple(new FetchExpression(Serialize(FetchXml)));
 
             foreach (var entity in res.Entities)
@@ -52,10 +88,13 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var count = res.Entities.Count;
 
+            // Aggregate queries return up to 5000 records and don't provide a method to move on to the next page
+            // Throw an exception to indicate the error to the caller
             if (AllPages && FetchXml.aggregateSpecified && FetchXml.aggregate && count == 5000 && FetchXml.top != "5000" && !res.MoreRecords)
                 throw new ApplicationException("AggregateQueryRecordLimit");
 
-            while (!options.Cancelled && AllPages && res.MoreRecords && options.ContinueRetrieve(count))
+            // Move on to subsequent pages
+            while (AllPages && res.MoreRecords && !options.Cancelled && options.ContinueRetrieve(count))
             {
                 options.Progress($"Retrieved {count:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label}...");
 
@@ -76,6 +115,11 @@ namespace MarkMpn.Sql4Cds.Engine
             }
         }
 
+        /// <summary>
+        /// Convert the FetchXML query object to a string
+        /// </summary>
+        /// <param name="fetch">The FetchXML query object to convert</param>
+        /// <returns>The string representation of the query</returns>
         public static string Serialize(FetchXml.FetchType fetch)
         {
             var serializer = new XmlSerializer(typeof(FetchXml.FetchType));
@@ -87,7 +131,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 Indent = true
             }))
             {
-
+                // Add in a separate namespace to remove the xsi and xsd namespaces added by default
                 var xsn = new XmlSerializerNamespaces();
                 xsn.Add("generator", "MarkMpn.SQL4CDS");
 
@@ -97,19 +141,27 @@ namespace MarkMpn.Sql4Cds.Engine
         }
     }
 
+    /// <summary>
+    /// A SELECT query to return data using FetchXML
+    /// </summary>
     public class SelectQuery : FetchXmlQuery
     {
+        /// <inheritdoc/>
         public override void Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
+            // Shortcut getting the total number of records in an entity where possible
             if (RetrieveTotalRecordCount(org, metadata))
                 return;
 
             try
             {
+                // Start off trying to execute the original FetchXML
                 Result = RetrieveAll(org, metadata, options);
             }
             catch (Exception ex)
             {
+                // Attempt to handle aggregate queries that go over the standard FetchXML limit by rewriting them to retrieve the
+                // individual records and apply the aggregation in-memory
                 if (!ex.Message.Contains("AggregateQueryRecordLimit"))
                     throw;
 
@@ -118,6 +170,12 @@ namespace MarkMpn.Sql4Cds.Engine
             }
         }
 
+        /// <summary>
+        /// Get the total number of records in an entity
+        /// </summary>
+        /// <param name="org">The <see cref="IOrganizationService"/> to execute the query against</param>
+        /// <param name="metadata">The metadata cache to use when executing the query</param>
+        /// <returns><c>true</c> if this method has retrieved the requested details, or <c>false</c> otherwise</returns>
         private bool RetrieveTotalRecordCount(IOrganizationService org, IAttributeMetadataCache metadata)
         {
             // Special case - SELECT count(primaryid) with no filter
@@ -156,6 +214,13 @@ namespace MarkMpn.Sql4Cds.Engine
             return true;
         }
 
+        /// <summary>
+        /// Rewrites an aggregate query to retrieve the individual records and calculate the aggregates in-memory
+        /// </summary>
+        /// <param name="org">The <see cref="IOrganizationService"/> to execute the query against</param>
+        /// <param name="metadata">The metadata cache to use when executing the query</param>
+        /// <param name="options">The options to apply to the query execution</param>
+        /// <returns><c>true</c> if this method has retrieved the requested details, or <c>false</c> otherwise</returns>
         private bool RetrieveManualAggregate(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
             // Remove aggregate flags
@@ -170,7 +235,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var groupByAttributes = new List<FetchAttributeType>();
             RemoveGroupBy(entity.Items, groupByAttributes);
 
-            // Can't handle manual grouping by date parts without much more work
+            // Can't handle manual grouping by date parts as we can't get CDS to sort the data appropriately
             if (groupByAttributes.Any(a => a.dategroupingSpecified))
                 return false;
 
@@ -207,8 +272,17 @@ namespace MarkMpn.Sql4Cds.Engine
             return true;
         }
 
+        /// <summary>
+        /// Find any aggregates specified in the FetchXML, unset the <see cref="FetchAttributeType.aggregate"/> attribute and
+        /// add the corresponding calculation to the <paramref name="aggregates"/> list to be calculated in-memory
+        /// </summary>
+        /// <param name="items">The FetchXML items in an &lt;entity&gt; or &lt;link-entity&gt;</param>
+        /// <param name="aggregates">A mapping from output attribute alias to the aggregate calculation to use to generate it</param>
         private void RemoveAggregate(object[] items, IDictionary<string,Aggregate> aggregates)
         {
+            if (items == null)
+                return;
+
             foreach (var attr in items.OfType<FetchAttributeType>().Where(a => a.aggregateSpecified))
             {
                 Aggregate aggregate = null;
@@ -250,8 +324,17 @@ namespace MarkMpn.Sql4Cds.Engine
                 RemoveAggregate(link.Items, aggregates);
         }
 
+        /// <summary>
+        /// Find any groupings applied in the FetchXML, unset the <see cref="FetchAttributeType.groupby"/> attribute and add the details
+        /// of the grouping to apply to the <paramref name="groupByAttributes"/> list
+        /// </summary>
+        /// <param name="items">The FetchXML items in an &lt;entity&gt; or &lt;link-entity&gt;</param>
+        /// <param name="groupByAttributes">The grouping attributes to apply to the output</param>
         private void RemoveGroupBy(object[] items, List<FetchAttributeType> groupByAttributes)
         {
+            if (items == null)
+                return;
+
             foreach (var attr in items.OfType<FetchAttributeType>().Where(a => a.groupbySpecified && a.groupby == FetchBoolType.@true))
             {
                 groupByAttributes.Add(new FetchAttributeType
@@ -271,8 +354,17 @@ namespace MarkMpn.Sql4Cds.Engine
                 RemoveGroupBy(link.Items, groupByAttributes);
         }
 
+        /// <summary>
+        /// Ensures the results retrieved from CDS will be sorted by the attributes we want to group by, so all records
+        /// in a group are retrieved sequentially
+        /// </summary>
+        /// <param name="entity">The root &lt;entity&gt; in the query</param>
+        /// <param name="groupByAttributes">The attributes that the query should group by</param>
+        /// <returns></returns>
         private FetchOrderType[] SortByGroups(FetchEntityType entity, List<FetchAttributeType> groupByAttributes)
         {
+            // Keep track of which grouping attributes haven't currently got a sort order applied and which
+            // sorts will need to be applied at the end of the query
             var unsortedGroupByAttributes = new HashSet<string>(groupByAttributes.Select(attr => attr.alias));
             var requiredSorts = new List<FetchOrderType>();
 
@@ -281,11 +373,20 @@ namespace MarkMpn.Sql4Cds.Engine
             return requiredSorts.ToArray();
         }
 
+        /// <summary>
+        /// Checks the groupings applied to an &lt;entity&gt; or &lt;link-entity&gt; to ensure the results are correctly sorted
+        /// </summary>
+        /// <param name="items">The FetchXML items in the &lt;entity&gt; or &lt;link-entity&gt;</param>
+        /// <param name="groupByAttributes">The attributes that the query is grouped by</param>
+        /// <param name="unsortedGroupByAttributes">The grouping attributes that haven't had a sort identified for them yet</param>
+        /// <param name="requiredSorts">The sorts that need to be applied to the final results</param>
+        /// <returns>The FetchXML items to use in place of the supplied <paramref name="items"/></returns>
         private object[] SortByGroups(object[] items, List<FetchAttributeType> groupByAttributes, HashSet<string> unsortedGroupByAttributes, List<FetchOrderType> requiredSorts)
         {
             if (items == null)
                 return null;
 
+            // Check through each of the sorts in the current items to see which are needed and which can be removed
             var sorts = items.OfType<FetchOrderType>().ToArray();
             
             for (var i = 0; i < sorts.Length; i++)
@@ -302,6 +403,9 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (!String.IsNullOrEmpty(attr.alias) && attr.alias != attr.name)
                         items = items.Concat(new object[] { new FetchAttributeType { name = attr.name } }).ToArray();
 
+                    // Re-apply the sort at the end as well to ensure the ordering remains consistent
+                    requiredSorts.Add(sorts[i]);
+
                     continue;
                 }
 
@@ -312,11 +416,13 @@ namespace MarkMpn.Sql4Cds.Engine
                 requiredSorts.Add(sorts[i]);
             }
 
+            // Add any more sorts required for grouping attributes in this entity that don't already have a sort
             items = items.Concat(unsortedGroupByAttributes
                     .Where(a => items.OfType<FetchAttributeType>().Any(attr => attr.alias == a))
                     .Select(a => new FetchOrderType { attribute = a })
                 ).ToArray();
 
+            // Recurse through any link-entities
             var links = items.OfType<FetchLinkEntityType>();
 
             foreach (var link in links)
@@ -325,25 +431,43 @@ namespace MarkMpn.Sql4Cds.Engine
             return items;
         }
 
+        /// <summary>
+        /// The columns that should be included in the query results
+        /// </summary>
         public string[] ColumnSet { get; set; }
     }
 
+    /// <summary>
+    /// An UPDATE query to identify records via FetchXML and change them
+    /// </summary>
     public class UpdateQuery : FetchXmlQuery
     {
+        /// <summary>
+        /// The logical name of the entity to update
+        /// </summary>
         public string EntityName { get; set; }
 
+        /// <summary>
+        /// The primary key attribute in the entity to update
+        /// </summary>
         public string IdColumn { get; set; }
 
+        /// <summary>
+        /// A mapping of attribute names to values to apply updates to
+        /// </summary>
         public IDictionary<string,object> Updates { get; set; }
 
+        /// <inheritdoc/>
         public override void Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
             if (options.Cancelled)
                 return;
 
+            // Check if the update is allowed
             if (options.BlockUpdateWithoutWhere && !FetchXml.Items.OfType<FetchEntityType>().Single().Items.OfType<filter>().Any())
                 throw new InvalidOperationException("UPDATE without WHERE is blocked by your settings");
 
+            // Get the records to update
             var count = 0;
             var entities = RetrieveAll(org, metadata, options).Entities;
 
@@ -352,9 +476,11 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var meta = metadata[EntityName];
 
+            // Check again that the update is allowed
             if (!options.ConfirmUpdate(entities.Count, meta))
                 throw new OperationCanceledException("UPDATE cancelled by user");
 
+            // Apply the update in batches
             ExecuteMultipleRequest multiple = null;
 
             foreach (var entity in entities)
@@ -423,14 +549,25 @@ namespace MarkMpn.Sql4Cds.Engine
         }
     }
 
+    /// <summary>
+    /// A DELETE query to identify records via FetchXML and delete them
+    /// </summary>
     public class DeleteQuery : FetchXmlQuery
     {
+        /// <summary>
+        /// The logical name of the entity to delete
+        /// </summary>
         public string EntityName { get; set; }
 
+        /// <summary>
+        /// The primary key column of the entity to delete
+        /// </summary>
         public string IdColumn { get; set; }
 
+        /// <inheritdoc/>
         public override void Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
+            // Check if the query is allowed
             if (options.Cancelled)
                 return;
 
@@ -439,6 +576,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var meta = metadata[EntityName];
 
+            // If we are using a bulk delete job, start the job
             if (options.UseBulkDelete)
             {
                 var query = ((FetchXmlToQueryExpressionResponse)org.Execute(new FetchXmlToQueryExpressionRequest { FetchXml = Serialize(FetchXml) })).Query;
@@ -461,17 +599,20 @@ namespace MarkMpn.Sql4Cds.Engine
                 return;
             }
 
+            // Otherwise, get the records to delete
             var count = 0;
             var entities = RetrieveAll(org, metadata, options).Entities;
 
             if (entities == null)
                 return;
 
+            // Check again if the query is allowed
             if (!options.ConfirmDelete(entities.Count, meta))
                 throw new OperationCanceledException("DELETE cancelled by user");
 
             ExecuteMultipleRequest multiple = null;
 
+            // Delete hte records in batches
             foreach (var entity in entities)
             {
                 if (options.Cancelled)
@@ -532,15 +673,27 @@ namespace MarkMpn.Sql4Cds.Engine
         }
     }
 
+    /// <summary>
+    /// An INSERT query to add fixed values
+    /// </summary>
     public class InsertValues : Query
     {
+        /// <summary>
+        /// The logical name of the entity to add
+        /// </summary>
         public string LogicalName { get; set; }
+
+        /// <summary>
+        /// A list of records to insert
+        /// </summary>
         public IDictionary<string, object>[] Values { get; set; }
 
+        /// <inheritdoc/>
         public override void Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
             var meta = metadata[LogicalName];
 
+            // Add each record in turn
             for (var i = 0; i < Values.Length && !options.Cancelled; i++)
             {
                 var entity = new Entity(LogicalName);
@@ -557,13 +710,25 @@ namespace MarkMpn.Sql4Cds.Engine
         }
     }
 
+    /// <summary>
+    /// An INSERT query to add records based on the results of a FetchXML query
+    /// </summary>
     public class InsertSelect : FetchXmlQuery
     {
+        /// <summary>
+        /// The logical name of the entity to insert
+        /// </summary>
         public string LogicalName { get; set; }
+
+        /// <summary>
+        /// The mappings of columns from the FetchXML results to the attributes of the entity to insert
+        /// </summary>
         public IDictionary<string, string> Mappings { get; set; }
 
+        /// <inheritdoc/>
         public override void Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
+            // Get all the records to insert
             var count = 0;
             var entities = RetrieveAll(org, metadata, options).Entities;
 
@@ -572,6 +737,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var meta = metadata[LogicalName];
 
+            // Insert each record in turn
             foreach (var entity in entities)
             {
                 if (options.Cancelled)

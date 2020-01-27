@@ -1,19 +1,22 @@
 ﻿using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
-using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
+    /// <summary>
+    /// A default implementation of <see cref="IAttributeMetadataCache"/>
+    /// </summary>
     public class AttributeMetadataCache : IAttributeMetadataCache
     {
         private readonly IOrganizationService _org;
         private readonly IDictionary<string, EntityMetadata> _metadata;
 
+        /// <summary>
+        /// Creates a new <see cref="AttributeMetadataCache"/>
+        /// </summary>
+        /// <param name="org">The <see cref="IOrganizationService"/> to retrieve the metadata from</param>
         public AttributeMetadataCache(IOrganizationService org)
         {
             _org = org;

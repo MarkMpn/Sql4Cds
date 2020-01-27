@@ -2,13 +2,42 @@
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
+using System.Xml.Serialization;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
+    /// <summary>
+    /// Converts FetchXML to SQL
+    /// </summary>
     public static class FetchXml2Sql
     {
+        /// <summary>
+        /// Converts a FetchXML query to SQL
+        /// </summary>
+        /// <param name="metadata">The metadata cache to use for the conversion</param>
+        /// <param name="fetch">The FetchXML string to convert</param>
+        /// <returns>The converted SQL query</returns>
+        public static string Convert(IAttributeMetadataCache metadata, string fetch)
+        {
+            using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(fetch)))
+            {
+                var serializer = new XmlSerializer(typeof(FetchXml.FetchType));
+                var parsed = (FetchXml.FetchType)serializer.Deserialize(stream);
+
+                return Convert(metadata, parsed);
+            }
+        }
+
+        /// <summary>
+        /// Converts a FetchXML query to SQL
+        /// </summary>
+        /// <param name="metadata">The metadata cache to use for the conversion</param>
+        /// <param name="fetch">The query object to convert</param>
+        /// <returns>The converted SQL query</returns>
         public static string Convert(IAttributeMetadataCache metadata, FetchXml.FetchType fetch)
         {
             var select = new SelectStatement();
@@ -21,11 +50,11 @@ namespace MarkMpn.Sql4Cds.Engine
             if (fetch.distinct)
                 query.UniqueRowFilter = UniqueRowFilter.Distinct;
 
+            // SELECT (columns from first table)
             var entity = fetch.Items.OfType<FetchEntityType>().SingleOrDefault();
-
             AddSelectElements(query, entity.Items, entity?.name);
 
-            // From
+            // FROM
             var aliasToLogicalName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
             if (entity != null)
@@ -47,10 +76,14 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
                 };
 
-                query.FromClause.TableReferences[0] = BuildJoins(metadata, query.FromClause.TableReferences[0], (NamedTableReference)query.FromClause.TableReferences[0], entity.Items, query, aliasToLogicalName);
+                if (fetch.nolock)
+                    ((NamedTableReference)query.FromClause.TableReferences[0]).TableHints.Add(new TableHint { HintKind = TableHintKind.NoLock });
+
+                // Recurse into link-entities to build joins
+                query.FromClause.TableReferences[0] = BuildJoins(metadata, query.FromClause.TableReferences[0], (NamedTableReference)query.FromClause.TableReferences[0], entity.Items, query, aliasToLogicalName, fetch.nolock);
             }
 
-            // Offset
+            // OFFSET
             if (!String.IsNullOrEmpty(fetch.page) && fetch.page != "1")
             {
                 var page = Int32.Parse(fetch.page);
@@ -63,7 +96,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 };
             }
 
-            // Where
+            // WHERE
             var filter = GetFilter(metadata, entity.Items, entity.name, aliasToLogicalName);
             if (filter != null)
             {
@@ -73,54 +106,14 @@ namespace MarkMpn.Sql4Cds.Engine
                 };
             }
 
-            // Order By
-            foreach (var sort in entity.Items.OfType<FetchOrderType>())
-            {
-                if (query.OrderByClause == null)
-                    query.OrderByClause = new OrderByClause();
+            // ORDER BY
+            AddOrderBy(entity.name, entity.Items, query);
 
-                if (!String.IsNullOrEmpty(sort.alias))
-                {
-                    query.OrderByClause.OrderByElements.Add(new ExpressionWithSortOrder
-                    {
-                        Expression = new ColumnReferenceExpression
-                        {
-                            MultiPartIdentifier = new MultiPartIdentifier
-                            {
-                                Identifiers =
-                                {
-                                    new Identifier{Value = sort.alias}
-                                }
-                            }
-                        },
-                        SortOrder = sort.descending ? SortOrder.Descending : SortOrder.Ascending
-                    });
-                }
-                else
-                {
-                    query.OrderByClause.OrderByElements.Add(new ExpressionWithSortOrder
-                    {
-                        Expression = new ColumnReferenceExpression
-                        {
-                            MultiPartIdentifier = new MultiPartIdentifier
-                            {
-                                Identifiers =
-                            {
-                                new Identifier{Value = entity.name},
-                                new Identifier{Value = sort.attribute}
-                            }
-                            }
-                        },
-                        SortOrder = sort.descending ? SortOrder.Descending : SortOrder.Ascending
-                    });
-                }
-            }
-
+            // For single-table queries, don't bother qualifying the column names to make the query easier to read
             if (query.FromClause.TableReferences[0] is NamedTableReference)
-            {
                 select.Accept(new SimplifyMultiPartIdentifierVisitor(entity.name));
-            }
 
+            // Check whether each identifier needs to be quoted so we have minimal quoting to make the query easier to read
             select.Accept(new QuoteIdentifiersVisitor());
 
             new Sql150ScriptGenerator().GenerateScript(select, out var sql);
@@ -128,11 +121,18 @@ namespace MarkMpn.Sql4Cds.Engine
             return sql;
         }
 
+        /// <summary>
+        /// Adds attributes to the SELECT clause
+        /// </summary>
+        /// <param name="query">The SQL query to append to the SELECT clause of</param>
+        /// <param name="items">The FetchXML items to process</param>
+        /// <param name="prefix">The name or alias of the table being processed</param>
         private static void AddSelectElements(QuerySpecification query, object[] items, string prefix)
         {
             if (items == null)
                 return;
 
+            // Handle <all-attributes /> as SELECT table.*
             foreach (var all in items.OfType<allattributes>())
             {
                 query.SelectElements.Add(new SelectStarExpression
@@ -147,9 +147,14 @@ namespace MarkMpn.Sql4Cds.Engine
                 });
             }
 
+            // Handle attributes with each combination of aliases, aggregates, distincts, groupings
+            // <attribute name="attr" alias="a" aggregate="count" distinct="true" />
+            // <attribute name="attr" alias="a" groupby="true" dategrouping="month" />
             foreach (var attr in items.OfType<FetchAttributeType>())
             {
                 var element = new SelectScalarExpression();
+
+                // Core column reference
                 var col = new ColumnReferenceExpression
                 {
                     MultiPartIdentifier = new MultiPartIdentifier
@@ -162,6 +167,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
                 };
 
+                // Apply aggregates or date grouping as function calls
                 if (attr.aggregateSpecified)
                 {
                     var func = new FunctionCall
@@ -209,11 +215,13 @@ namespace MarkMpn.Sql4Cds.Engine
                     element.Expression = col;
                 }
 
+                // Apply alias
                 if (!String.IsNullOrEmpty(attr.alias) && (attr.aggregateSpecified || attr.alias != attr.name))
                     element.ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = attr.alias } };
 
                 query.SelectElements.Add(element);
 
+                // Apply grouping
                 if (attr.groupbySpecified && attr.groupby == FetchBoolType.@true)
                 {
                     if (query.GroupByClause == null)
@@ -254,33 +262,53 @@ namespace MarkMpn.Sql4Cds.Engine
             }
         }
 
-        private static TableReference BuildJoins(IAttributeMetadataCache metadata, TableReference dataSource, NamedTableReference parentTable, object[] items, QuerySpecification query, IDictionary<string, string> aliasToLogicalName)
+        /// <summary>
+        /// Recurse through link-entities to add joins to FROM clause and update SELECT clause
+        /// </summary>
+        /// <param name="metadata">The metadata cache to use for the conversion</param>
+        /// <param name="dataSource">The current data source of the SQL query</param>
+        /// <param name="parentTable">The details of the table that this new table is being linked to</param>
+        /// <param name="items">The FetchXML items in this entity</param>
+        /// <param name="query">The current state of the SQL query being built</param>
+        /// <param name="aliasToLogicalName">A mapping of table aliases to the logical name</param>
+        /// <param name="nolock">Indicates if the NOLOCK table hint should be applied</param>
+        /// <returns>The data source including any required joins</returns>
+        private static TableReference BuildJoins(IAttributeMetadataCache metadata, TableReference dataSource, NamedTableReference parentTable, object[] items, QuerySpecification query, IDictionary<string, string> aliasToLogicalName, bool nolock)
         {
             if (items == null)
                 return dataSource;
 
+            // Find any <link-entity> elements to process
             foreach (var link in items.OfType<FetchLinkEntityType>())
             {
+                // Store the alias of this link
                 if (!String.IsNullOrEmpty(link.alias))
                     aliasToLogicalName[link.alias] = link.name;
 
+                // Create the new table reference
+                var table = new NamedTableReference
+                {
+                    SchemaObject = new SchemaObjectName
+                    {
+                        Identifiers =
+                        {
+                            new Identifier
+                            {
+                                Value = link.name
+                            }
+                        }
+                    },
+                    Alias = String.IsNullOrEmpty(link.alias) ? null : new Identifier { Value = link.alias }
+                };
+
+                if (nolock)
+                    table.TableHints.Add(new TableHint { HintKind = TableHintKind.NoLock });
+
+                // Add the join from the current data source to the new table
                 var join = new QualifiedJoin
                 {
                     FirstTableReference = dataSource,
-                    SecondTableReference = new NamedTableReference
-                    {
-                        SchemaObject = new SchemaObjectName
-                        {
-                            Identifiers =
-                            {
-                                new Identifier
-                                {
-                                    Value = link.name
-                                }
-                            }
-                        },
-                        Alias = String.IsNullOrEmpty(link.alias) ? null : new Identifier { Value = link.alias }
-                    },
+                    SecondTableReference = table,
                     QualifiedJoinType = link.linktype == "outer" ? QualifiedJoinType.LeftOuter : QualifiedJoinType.Inner,
                     SearchCondition = new BooleanComparisonExpression
                     {
@@ -310,12 +338,10 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
                 };
 
-                dataSource = BuildJoins(metadata, join, (NamedTableReference)join.SecondTableReference, link.Items, query, aliasToLogicalName);
-
-                // Select
+                // Update the SELECT clause
                 AddSelectElements(query, link.Items, link.alias ?? link.name);
 
-                // Filter
+                // Handle any filters within the <link-entity> as additional join criteria
                 var filter = GetFilter(metadata, link.Items, link.alias ?? link.name, aliasToLogicalName);
                 if (filter != null)
                 {
@@ -328,11 +354,22 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     join.SearchCondition = finalFilter;
                 }
+
+                // Recurse into any other links
+                dataSource = BuildJoins(metadata, join, (NamedTableReference)join.SecondTableReference, link.Items, query, aliasToLogicalName, nolock);
             }
 
             return dataSource;
         }
 
+        /// <summary>
+        /// Converts a FetchXML &lt;filter&gt; to a SQL condition
+        /// </summary>
+        /// <param name="metadata">The metadata cache to use for the conversion</param>
+        /// <param name="items">The items in the &lt;entity&gt; or &lt;link-entity&gt; to process the &lt;filter&gt; from</param>
+        /// <param name="prefix">The alias or name of the table that the &lt;filter&gt; applies to</param>
+        /// <param name="aliasToLogicalName">The mapping of table alias to logical name</param>
+        /// <returns>The SQL condition equivalent of the &lt;filter&gt; found in the <paramref name="items"/>, or <c>null</c> if no filter was found</returns>
         private static BooleanExpression GetFilter(IAttributeMetadataCache metadata, object[] items, string prefix, IDictionary<string, string> aliasToLogicalName)
         {
             if (items == null)
@@ -346,14 +383,23 @@ namespace MarkMpn.Sql4Cds.Engine
             return GetFilter(metadata, filter, prefix, aliasToLogicalName);
         }
 
+        /// <summary>
+        /// Converts a FetchXML &lt;filter&gt; to a SQL condition
+        /// </summary>
+        /// <param name="metadata">The metadata cache to use for the conversion</param>
+        /// <param name="filter">The FetchXML filter to convert</param>
+        /// <param name="prefix">The alias or name of the table that the <paramref name="filter"/> applies to</param>
+        /// <param name="aliasToLogicalName">The mapping of table alias to logical name</param>
+        /// <returns>The SQL condition equivalent of the <paramref name="filter"/></returns>
         private static BooleanExpression GetFilter(IAttributeMetadataCache metadata, filter filter, string prefix, IDictionary<string, string> aliasToLogicalName)
         {
             BooleanExpression expression = null;
             var type = filter.type == filterType.and ? BooleanBinaryExpressionType.And : BooleanBinaryExpressionType.Or;
 
+            // Convert each <condition> within the filter
             foreach (var condition in filter.Items.OfType<condition>())
             {
-                var newExpression = GetFilter(metadata, condition, prefix, aliasToLogicalName);
+                var newExpression = GetCondition(metadata, condition, prefix, aliasToLogicalName);
 
                 if (expression == null)
                     expression = newExpression;
@@ -366,6 +412,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     };
             }
 
+            // Recurse into sub-<filter>s
             foreach (var subFilter in filter.Items.OfType<filter>())
             {
                 var newExpression = GetFilter(metadata, subFilter, prefix, aliasToLogicalName);
@@ -384,8 +431,17 @@ namespace MarkMpn.Sql4Cds.Engine
             return expression;
         }
 
-        private static BooleanExpression GetFilter(IAttributeMetadataCache metadata, condition condition, string prefix, IDictionary<string,string> aliasToLogicalName)
+        /// <summary>
+        /// Converts a FetchXML &lt;condition&gt; to a SQL condition
+        /// </summary>
+        /// <param name="metadata">The metadata cache to use for the conversion</param>
+        /// <param name="condition">The FetchXML condition to convert</param>
+        /// <param name="prefix">The alias or name of the table that the <paramref name="condition"/> applies to</param>
+        /// <param name="aliasToLogicalName">The mapping of table alias to logical name</param>
+        /// <returns>The SQL condition equivalent of the <paramref name="condition"/></returns>
+        private static BooleanExpression GetCondition(IAttributeMetadataCache metadata, condition condition, string prefix, IDictionary<string,string> aliasToLogicalName)
         {
+            // Start with the field reference
             var field = new ColumnReferenceExpression
             {
                 MultiPartIdentifier = new MultiPartIdentifier
@@ -398,6 +454,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
             };
 
+            // Get the metadata for the attribute
             BooleanComparisonType type;
             ScalarExpression value;
 
@@ -407,6 +464,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var meta = metadata[logicalName];
             var attr = meta.Attributes.SingleOrDefault(a => a.LogicalName == condition.attribute);
 
+            // Get the literal value to compare to
             if (attr == null)
                 value = new StringLiteral { Value = condition.value };
             else if (attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.BigInt ||
@@ -429,6 +487,7 @@ namespace MarkMpn.Sql4Cds.Engine
             else
                 value = new StringLiteral { Value = condition.value };
 
+            // Apply the appropriate conversion for the type of operator
             switch (condition.@operator)
             {
                 case @operator.above:
@@ -495,6 +554,12 @@ namespace MarkMpn.Sql4Cds.Engine
                 case @operator.tomorrow:
                 case @operator.under:
                 case @operator.yesterday:
+                    
+                    // These FetchXML operators don't have a direct SQL equivalent, so convert to the format
+                    // field = function(arg)
+                    // so <condition attribute="createdon" operator="lastxdays" value="2" /> will be converted to
+                    // createdon = lastxdays(2)
+
                     type = BooleanComparisonType.Equals;
                     value = new FunctionCall { FunctionName = new Identifier { Value = condition.@operator.ToString() } };
 
@@ -569,6 +634,65 @@ namespace MarkMpn.Sql4Cds.Engine
             };
 
             return expression;
+        }
+
+        /// <summary>
+        /// Converts a FetchXML &lt;order&gt; element to the SQL equivalent
+        /// </summary>
+        /// <param name="name">The name or alias of the &lt;entity&gt; or &lt;link-entity&gt; that the sorts are from</param>
+        /// <param name="items">The items within the &lt;entity&gt; or &lt;link-entity&gt; to take the sorts from</param>
+        /// <param name="query">The SQL query to apply the sorts to</param>
+        private static void AddOrderBy(string name, object[] items, QuerySpecification query)
+        {
+            if (items == null)
+                return;
+
+            // Find any sorts within the entity
+            foreach (var sort in items.OfType<FetchOrderType>())
+            {
+                if (query.OrderByClause == null)
+                    query.OrderByClause = new OrderByClause();
+
+                if (!String.IsNullOrEmpty(sort.alias))
+                {
+                    query.OrderByClause.OrderByElements.Add(new ExpressionWithSortOrder
+                    {
+                        Expression = new ColumnReferenceExpression
+                        {
+                            MultiPartIdentifier = new MultiPartIdentifier
+                            {
+                                Identifiers =
+                                {
+                                    new Identifier{Value = sort.alias}
+                                }
+                            }
+                        },
+                        SortOrder = sort.descending ? SortOrder.Descending : SortOrder.Ascending
+                    });
+                }
+                else
+                {
+                    query.OrderByClause.OrderByElements.Add(new ExpressionWithSortOrder
+                    {
+                        Expression = new ColumnReferenceExpression
+                        {
+                            MultiPartIdentifier = new MultiPartIdentifier
+                            {
+                                Identifiers =
+                            {
+                                new Identifier{Value = name},
+                                new Identifier{Value = sort.attribute}
+                            }
+                            }
+                        },
+                        SortOrder = sort.descending ? SortOrder.Descending : SortOrder.Ascending
+                    });
+                }
+            }
+
+            // Recurse into link entities
+            foreach (var link in items.OfType<FetchLinkEntityType>())
+                AddOrderBy(link.alias ?? link.name, link.Items, query);
         }
 
         private class SimplifyMultiPartIdentifierVisitor : TSqlFragmentVisitor
