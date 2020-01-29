@@ -18,6 +18,7 @@ using McTools.Xrm.Connection;
 using Microsoft.ApplicationInsights;
 using xrmtb.XrmToolBox.Controls;
 using MarkMpn.Sql4Cds.Engine;
+using System.Diagnostics;
 
 namespace MarkMpn.Sql4Cds
 {
@@ -353,6 +354,9 @@ namespace MarkMpn.Sql4Cds
                                 grid.ShowIdColumn = false;
                                 grid.ShowIndexColumn = false;
                                 grid.ShowLocalTimes = Settings.Instance.ShowLocalTimes;
+                                grid.ContextMenuStrip = gridContextMenuStrip;
+                                grid.RecordClick += Grid_RecordClick;
+                                grid.CellMouseUp += Grid_CellMouseUp;
 
                                 if (query is SelectQuery select)
                                 {
@@ -466,6 +470,35 @@ namespace MarkMpn.Sql4Cds
             });
         }
 
+        private void Grid_CellMouseUp(object sender, DataGridViewCellMouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Right)
+            {
+                if (e.ColumnIndex < 0 || e.RowIndex < 0)
+                    return;
+
+                var grid = (CRMGridView)sender;
+                var cell = grid[e.ColumnIndex, e.RowIndex];
+
+                if (!cell.Selected)
+                {
+                    grid.CurrentCell = cell;
+                    grid.ContextMenuStrip.Show(grid, grid.PointToClient(Cursor.Position));
+                }
+            }
+        }
+
+        private void Grid_RecordClick(object sender, CRMRecordEventArgs e)
+        {
+            // Store the details of what's been clicked
+            // Show context menu with Open & Create SELECT options enabled
+            if (e.Entity.Contains(e.Attribute) && e.Entity[e.Attribute] is EntityReference)
+            {
+                var grid = (Control)sender;
+                gridContextMenuStrip.Show(grid, grid.PointToClient(Cursor.Position));
+            }
+        }
+
         private ToolStrip CreateFXBToolbar(Scintilla xmlEditor)
         {
             var toolbar = new ToolStrip();
@@ -513,6 +546,65 @@ namespace MarkMpn.Sql4Cds
             control.Height = splitContainer.Panel2.Height;
             control.Dock = multi ? DockStyle.Top : DockStyle.Fill;
             splitContainer.Panel2.Controls.Add(control);
+        }
+
+        private void gridContextMenuStrip_Opening(object sender, CancelEventArgs e)
+        {
+            var grid = (CRMGridView) gridContextMenuStrip.SourceControl;
+            var entity = grid.SelectedCells.Count == 1 ? grid.SelectedCellRecords.Entities[0] : null;
+            var isEntityReference = false;
+
+            if (entity != null)
+            {
+                var attr = grid.SelectedCells[0].OwningColumn.DataPropertyName;
+
+                if (entity.Contains(attr) && entity[attr] is EntityReference)
+                    isEntityReference = true;
+            }
+
+            openRecordToolStripMenuItem.Enabled = isEntityReference;
+            createSELECTQueryToolStripMenuItem.Enabled = isEntityReference;
+        }
+
+        private void copyToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var grid = (CRMGridView)gridContextMenuStrip.SourceControl;
+            Clipboard.SetDataObject(grid.GetClipboardContent());
+        }
+
+        private void copyWithHeadersToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var grid = (CRMGridView)gridContextMenuStrip.SourceControl;
+            grid.ClipboardCopyMode = DataGridViewClipboardCopyMode.EnableAlwaysIncludeHeaderText;
+            Clipboard.SetDataObject(grid.GetClipboardContent());
+            grid.ClipboardCopyMode = DataGridViewClipboardCopyMode.EnableWithoutHeaderText;
+        }
+
+        private void openRecordToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var grid = (CRMGridView)gridContextMenuStrip.SourceControl;
+            var entity = grid.SelectedCells.Count == 1 ? grid.SelectedCellRecords.Entities[0] : null;
+            var attr = grid.SelectedCells[0].OwningColumn.DataPropertyName;
+            var entityReference = entity.GetAttributeValue<EntityReference>(attr);
+
+            // Open record
+            var url = new Uri(new Uri(_con.WebApplicationUrl), $"main.aspx?etn={entityReference.LogicalName}&id={entityReference.Id}&pagetype=entityrecord");
+            Process.Start(url.ToString());
+        }
+
+        private void createSELECTQueryToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var grid = (CRMGridView)gridContextMenuStrip.SourceControl;
+            var entity = grid.SelectedCells.Count == 1 ? grid.SelectedCellRecords.Entities[0] : null;
+            var attr = grid.SelectedCells[0].OwningColumn.DataPropertyName;
+            var entityReference = entity.GetAttributeValue<EntityReference>(attr);
+
+            // Create SELECT query
+            var metadata = Metadata[entityReference.LogicalName];
+            _editor.AppendText("\r\n\r\n");
+            var end = _editor.TextLength;
+            _editor.AppendText($"SELECT * FROM {entityReference.LogicalName} WHERE {metadata.PrimaryIdAttribute} = '{entityReference.Id}'");
+            _editor.SetSelection(_editor.TextLength, end);
         }
     }
 }
