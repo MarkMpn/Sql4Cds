@@ -323,7 +323,7 @@ namespace MarkMpn.Sql4Cds
 
                     var queries = (Query[])args.Result;
 
-                    foreach (var query in queries)
+                    foreach (var query in queries.Reverse())
                     {
                         if (execute)
                         {
@@ -342,7 +342,7 @@ namespace MarkMpn.Sql4Cds
                                 grid.BorderStyle = BorderStyle.None;
                                 grid.CellBorderStyle = DataGridViewCellBorderStyle.None;
                                 grid.ClipboardCopyMode = DataGridViewClipboardCopyMode.EnableWithoutHeaderText;
-                                grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+                                grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
                                 grid.Dock = DockStyle.Fill;
                                 grid.EnableHeadersVisualStyles = false;
                                 grid.EntityReferenceClickable = true;
@@ -461,9 +461,12 @@ namespace MarkMpn.Sql4Cds
                             var xmlDisplay = CreateXmlEditor();
                             xmlDisplay.Text = FetchXmlQuery.Serialize(fxq.FetchXml);
                             xmlDisplay.ReadOnly = true;
+                            xmlDisplay.Dock = DockStyle.Fill;
                             var toolbar = CreateFXBToolbar(xmlDisplay);
-                            AddResult(xmlDisplay, queries.Length > 1);
-                            AddResult(toolbar, true);
+                            var container = new Panel();
+                            container.Controls.Add(xmlDisplay);
+                            container.Controls.Add(toolbar);
+                            AddResult(container, queries.Length > 1);
                         }
                     }
                 }
@@ -543,7 +546,7 @@ namespace MarkMpn.Sql4Cds
 
         private void AddResult(Control control, bool multi)
         {
-            control.Height = splitContainer.Panel2.Height;
+            control.Height = splitContainer.Panel2.Height * 2 / 3;
             control.Dock = multi ? DockStyle.Top : DockStyle.Fill;
             splitContainer.Panel2.Controls.Add(control);
         }
