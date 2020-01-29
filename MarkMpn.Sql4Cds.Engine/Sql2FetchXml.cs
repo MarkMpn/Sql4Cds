@@ -994,6 +994,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 var literal = comparison.SecondExpression as Literal;
                 var func = comparison.SecondExpression as FunctionCall;
                 var field2 = comparison.SecondExpression as ColumnReferenceExpression;
+                var type = comparison.ComparisonType;
 
                 if (field != null && field2 != null)
                 {
@@ -1033,6 +1034,26 @@ namespace MarkMpn.Sql4Cds.Engine
                     field = comparison.SecondExpression as ColumnReferenceExpression;
                     literal = comparison.FirstExpression as Literal;
                     func = comparison.FirstExpression as FunctionCall;
+
+                    // Switch the operator depending on the order of the column and value, so `column > 3` uses gt but `3 > column` uses le
+                    switch (type)
+                    {
+                        case BooleanComparisonType.GreaterThan:
+                            type = BooleanComparisonType.LessThan;
+                            break;
+
+                        case BooleanComparisonType.GreaterThanOrEqualTo:
+                            type = BooleanComparisonType.LessThanOrEqualTo;
+                            break;
+
+                        case BooleanComparisonType.LessThan:
+                            type = BooleanComparisonType.GreaterThan;
+                            break;
+
+                        case BooleanComparisonType.LessThanOrEqualTo:
+                            type = BooleanComparisonType.GreaterThanOrEqualTo;
+                            break;
+                    }
                 }
 
                 // If we still couldn't find the column name and value, this isn't a pattern we can support in FetchXML
@@ -1040,10 +1061,9 @@ namespace MarkMpn.Sql4Cds.Engine
                     throw new NotSupportedQueryFragmentException("Unsupported comparison", comparison);
 
                 // Select the correct FetchXML operator
-                // TODO: Switch the operator depending on the order of the column and value, so `column > 3` uses gt but `3 > column` uses le
                 @operator op;
 
-                switch (comparison.ComparisonType)
+                switch (type)
                 {
                     case BooleanComparisonType.Equals:
                         op = @operator.eq;
