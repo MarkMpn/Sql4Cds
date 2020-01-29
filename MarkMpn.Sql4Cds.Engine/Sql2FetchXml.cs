@@ -1483,26 +1483,43 @@ namespace MarkMpn.Sql4Cds.Engine
             columns = cols.ToArray();
         }
 
+        /// <summary>
+        /// Converts the FROM clause of a query to FetchXML
+        /// </summary>
+        /// <param name="from">The FROM clause to convert</param>
+        /// <param name="fetch">The FetchXML query to add the &lt;entity&gt; and &lt;link-entity&gt; elements to</param>
+        /// <returns>A list of <see cref="EntityTable"/> instances providing easier access to the &lt;entity&gt; and &lt;link-entity&gt; elements</returns>
         private List<EntityTable> HandleFromClause(FromClause from, FetchXml.FetchType fetch)
         {
+            // Check the clause includes only a single table or joins, we can't support
+            // `SELECT * FROM table1, table2` syntax in FetchXML
             if (from.TableReferences.Count != 1)
                 throw new NotSupportedQueryFragmentException("Unhandled SELECT FROM clause - only single table or qualified joins are supported", from);
 
             var tables = new List<EntityTable>();
 
+            // Convert the table and recurse through the joins
             HandleFromClause(from.TableReferences[0], fetch, tables);
 
             return tables;
         }
 
+        /// <summary>
+        /// Converts a table or join within a FROM clause to FetchXML
+        /// </summary>
+        /// <param name="tableReference">The table or join to convert</param>
+        /// <param name="fetch">The FetchXML wuery to add the &lt;entity&gt; and &lt;link-entity&gt; elements to</param>
+        /// <param name="tables">The details of the tables added to the query so far</param>
         private void HandleFromClause(TableReference tableReference, FetchXml.FetchType fetch, List<EntityTable> tables)
         {
             if (tableReference is NamedTableReference namedTable)
             {
+                // Handle a single table. First check we don't already have it in our list of tables
                 var table = FindTable(namedTable, tables);
 
                 if (table == null && fetch.Items == null)
                 {
+                    // This is the first table in our query, so add it to the root of the FetchXML
                     var entity = new FetchEntityType
                     {
                         name = namedTable.SchemaObject.BaseIdentifier.Value
@@ -1520,6 +1537,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     tables.Add(table);
 
+                    // Apply the NOLOCK table hint. This isn't quite equivalent as it's applied at the table level in T-SQL but at
+                    // the query level in FetchXML. Return an error if there's any other hints that FetchXML doesn't support
                     foreach (var hint in namedTable.TableHints)
                     {
                         if (hint.HintKind == TableHintKind.NoLock)
@@ -1531,14 +1550,18 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             else if (tableReference is QualifiedJoin join)
             {
+                // Handle a join. First check there aren't any join hints as FetchXML can't support them
                 if (join.JoinHint != JoinHint.None)
                     throw new NotSupportedQueryFragmentException("Unsupported join hint", join);
 
+                // Also can't join onto subqueries etc., only tables
                 if (!(join.SecondTableReference is NamedTableReference table2))
                     throw new NotSupportedQueryFragmentException("Unsupported join table", join.SecondTableReference);
 
+                // Recurse into the first table in the join
                 HandleFromClause(join.FirstTableReference, fetch, tables);
 
+                // Add a link-entity for the second table in the join
                 var link = new FetchLinkEntityType
                 {
                     name = table2.SchemaObject.BaseIdentifier.Value,
@@ -1557,6 +1580,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     throw new NotSupportedQueryFragmentException(ex.Message, table2);
                 }
                 
+                // Parse the join condition to use as the filter on the link-entity
                 var filter = new filter
                 {
                     type = (filterType)2
@@ -1566,12 +1590,15 @@ namespace MarkMpn.Sql4Cds.Engine
                 ColumnReferenceExpression col2 = null;
                 HandleFilter(join.SearchCondition, filter, tables, linkTable, false, false, ref col1, ref col2);
 
+                // We need a join condition comparing a column in the link entity to one in another table
                 if (col1 == null || col2 == null)
                     throw new NotSupportedQueryFragmentException("Missing join condition", join.SearchCondition);
 
+                // If there were any other criteria in the join, add them as the filter
                 if (filter.type != (filterType)2)
                     linkTable.AddItem(filter);
 
+                // Check the join type is supported
                 switch (join.QualifiedJoinType)
                 {
                     case QualifiedJoinType.Inner:
@@ -1586,6 +1613,8 @@ namespace MarkMpn.Sql4Cds.Engine
                         throw new NotSupportedQueryFragmentException("Unsupported join type", join);
                 }
 
+                // Check what other entity is referenced in the join criteria. Exactly one of the columns being compared must be from the
+                // new join table and the other must be from another table that is already part of the query
                 ColumnReferenceExpression linkFromAttribute;
                 ColumnReferenceExpression linkToAttribute;
 
@@ -1595,6 +1624,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (lhs == null || rhs == null)
                     throw new NotSupportedQueryFragmentException("Join condition does not reference previous table", join.SearchCondition);
 
+                // Normalize the join so we know which attribute is the "from" and which is the "to"
                 if (rhs == linkTable)
                 {
                     linkFromAttribute = col1;
@@ -1620,14 +1650,23 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             else
             {
+                // No other table references are supported, e.g. CTE, subquery
                 throw new NotSupportedQueryFragmentException("Unhandled SELECT FROM clause", tableReference);
             }
         }
 
+        /// <summary>
+        /// Find a table within the query data source
+        /// </summary>
+        /// <param name="namedTable">The table reference to find</param>
+        /// <param name="tables">The tables involved in the query</param>
+        /// <returns>The table in the <paramref name="tables"/> list that matches the <paramref name="namedTable"/> reference, or <c>null</c> if the table cannot be found</returns>
         private EntityTable FindTable(NamedTableReference namedTable, List<EntityTable> tables)
         {
             if (namedTable.Alias != null)
             {
+                // Search by alias first if we have one. Find the existing table with the same alias, and if we can find one check that
+                // it has the expected entity name
                 var aliasedTable = tables.SingleOrDefault(t => t.Alias.Equals(namedTable.Alias.Value, StringComparison.OrdinalIgnoreCase));
 
                 if (aliasedTable == null)
@@ -1639,14 +1678,19 @@ namespace MarkMpn.Sql4Cds.Engine
                 return aliasedTable;
             }
 
-            var table = tables.SingleOrDefault(t => t.Alias != null && t.Alias.Equals(namedTable.SchemaObject.BaseIdentifier.Value, StringComparison.OrdinalIgnoreCase));
-
-            if (table == null)
-                table = tables.SingleOrDefault(t => t.Alias == null && t.EntityName.Equals(namedTable.SchemaObject.BaseIdentifier.Value, StringComparison.OrdinalIgnoreCase));
+            // If we don't have an alias, search by name. Match against the table alias where specified, then the table name
+            var table = tables.SingleOrDefault(t => (t.Alias ?? t.EntityName).Equals(namedTable.SchemaObject.BaseIdentifier.Value, StringComparison.OrdinalIgnoreCase));
 
             return table;
         }
 
+        /// <summary>
+        /// Finds a table within the query data source
+        /// </summary>
+        /// <param name="name">The name or alias of the table to find</param>
+        /// <param name="tables">The tables involved in the query</param>
+        /// <param name="fragment">The SQL fragment that the table reference comes from</param>
+        /// <returns>The matching table, or <c>null</c> if the table cannot be found</returns>
         private EntityTable FindTable(string name, List<EntityTable> tables, TSqlFragment fragment)
         {
             var matches = tables
@@ -1662,6 +1706,13 @@ namespace MarkMpn.Sql4Cds.Engine
             throw new NotSupportedQueryFragmentException("Ambiguous identifier " + name, fragment);
         }
 
+        /// <summary>
+        /// Gets the alias or name of the entity that is referenced by a column
+        /// </summary>
+        /// <param name="col">The column reference to find the source table for</param>
+        /// <param name="tables">The tables involved in the query</param>
+        /// <param name="table">The full details of the table that the column comes from</param>
+        /// <returns>The alias or name of the matching <paramref name="table"/></returns>
         private string GetColumnTableAlias(ColumnReferenceExpression col, List<EntityTable> tables, out EntityTable table)
         {
             if (col.MultiPartIdentifier.Identifiers.Count > 2)
