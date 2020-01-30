@@ -137,13 +137,15 @@ namespace MarkMpn.Sql4Cds
             return scintilla;
         }
 
-        private Scintilla CreateErrorEditor()
+        private Scintilla CreateTextEditor(bool error)
         {
             var scintilla = CreateEditor();
 
             scintilla.Lexer = Lexer.Null;
             
-            scintilla.Styles[Style.Default].ForeColor = Color.Red;
+            if (error)
+                scintilla.Styles[Style.Default].ForeColor = Color.Red;
+            
             scintilla.StyleClearAll();
 
             return scintilla;
@@ -314,7 +316,7 @@ namespace MarkMpn.Sql4Cds
 
                     if (args.Error != null)
                     {
-                        var error = CreateErrorEditor();
+                        var error = CreateTextEditor(true);
                         error.Text = args.Error.Message;
                         error.ReadOnly = true;
                         AddResult(error, false);
@@ -417,8 +419,15 @@ namespace MarkMpn.Sql4Cds
                             }
                             else if (query.Result is string msg)
                             {
-                                var msgDisplay = CreateErrorEditor();
+                                var msgDisplay = CreateTextEditor(false);
                                 msgDisplay.Text = msg;
+                                msgDisplay.ReadOnly = true;
+                                display = msgDisplay;
+                            }
+                            else if (query.Result is Exception ex)
+                            {
+                                var msgDisplay = CreateTextEditor(true);
+                                msgDisplay.Text = ex.Message;
                                 msgDisplay.ReadOnly = true;
                                 display = msgDisplay;
                             }

@@ -14,6 +14,10 @@ namespace MarkMpn.Sql4Cds.Engine
     /// <summary>
     /// A CDS query that can be executed
     /// </summary>
+    /// <remarks>
+    /// Further details for specific query types can be found from one of the derived types, but all query types can be executed
+    /// using the same <see cref="Execute(IOrganizationService, IAttributeMetadataCache, IQueryExecutionOptions)"/> method.
+    /// </remarks>
     public abstract class Query
     {
         /// <summary>
@@ -22,12 +26,38 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="org">The <see cref="IOrganizationService"/> to execute the query against</param>
         /// <param name="metadata">The metadata cache to use when executing the query</param>
         /// <param name="options">The options to apply to the query execution</param>
-        public abstract void Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options);
+        /// <remarks>
+        /// After calling this method, the results can be retrieved from the <see cref="Result"/> property.
+        /// </remarks>
+        public void Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        {
+            try
+            {
+                Result = ExecuteInternal(org, metadata, options);
+            }
+            catch (Exception ex)
+            {
+                Result = ex;
+            }
+        }
 
         /// <summary>
-        /// The results of the query
+        /// Performs the actual query execution. Any exception thrown here will be captured in the <see cref="Result"/> property.
         /// </summary>
-        public object Result { get; protected set; }
+        /// <param name="org">The <see cref="IOrganizationService"/> to execute the query against</param>
+        /// <param name="metadata">The metadata cache to use when executing the query</param>
+        /// <param name="options">The options to apply to the query execution</param>
+        protected abstract object ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options);
+
+        /// <summary>
+        /// The results of the query after <see cref="Execute(IOrganizationService, IAttributeMetadataCache, IQueryExecutionOptions)"/>
+        /// has been called.
+        /// </summary>
+        /// <remarks>
+        /// Depending on the type of query, this property can return a <see cref="EntityCollection"/> (for a <see cref="SelectQuery"/>),
+        /// an exception if the query failed, or a <see cref="String"/> value containing a human-readable description of the query status.
+        /// </remarks>
+        public object Result { get; private set; }
     }
 
     /// <summary>
@@ -38,7 +68,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// The FetchXML query
         /// </summary>
-        public FetchXml.FetchType FetchXml { get; set; }
+        public FetchType FetchXml { get; set; }
 
         /// <summary>
         /// Indicates if the query will page across all the available data
@@ -147,16 +177,16 @@ namespace MarkMpn.Sql4Cds.Engine
     public class SelectQuery : FetchXmlQuery
     {
         /// <inheritdoc/>
-        public override void Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        protected override object ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
             // Shortcut getting the total number of records in an entity where possible
-            if (RetrieveTotalRecordCount(org, metadata))
-                return;
+            if (RetrieveTotalRecordCount(org, metadata, out var result))
+                return result;
 
             try
             {
                 // Start off trying to execute the original FetchXML
-                Result = RetrieveAll(org, metadata, options);
+                return RetrieveAll(org, metadata, options);
             }
             catch (Exception ex)
             {
@@ -165,8 +195,10 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (!ex.Message.Contains("AggregateQueryRecordLimit"))
                     throw;
 
-                if (!RetrieveManualAggregate(org, metadata, options))
+                if (!RetrieveManualAggregate(org, metadata, options, out result))
                     throw new ApplicationException("Unable to apply custom aggregation for large datasets when using DATEPART", ex);
+
+                return result;
             }
         }
 
@@ -176,8 +208,10 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="org">The <see cref="IOrganizationService"/> to execute the query against</param>
         /// <param name="metadata">The metadata cache to use when executing the query</param>
         /// <returns><c>true</c> if this method has retrieved the requested details, or <c>false</c> otherwise</returns>
-        private bool RetrieveTotalRecordCount(IOrganizationService org, IAttributeMetadataCache metadata)
+        private bool RetrieveTotalRecordCount(IOrganizationService org, IAttributeMetadataCache metadata, out EntityCollection result)
         {
+            result = null;
+
             // Special case - SELECT count(primaryid) with no filter
             if (!FetchXml.aggregate)
                 return false;
@@ -210,7 +244,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 [attributes[0].alias] = new AliasedValue(entity.name, attributes[0].name, count)
             };
 
-            Result = new EntityCollection { EntityName = entity.name, Entities = { resultEntity } };
+            result = new EntityCollection { EntityName = entity.name, Entities = { resultEntity } };
             return true;
         }
 
@@ -221,8 +255,10 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="metadata">The metadata cache to use when executing the query</param>
         /// <param name="options">The options to apply to the query execution</param>
         /// <returns><c>true</c> if this method has retrieved the requested details, or <c>false</c> otherwise</returns>
-        private bool RetrieveManualAggregate(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        private bool RetrieveManualAggregate(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, out EntityCollection results)
         {
+            results = null;
+
             // Remove aggregate flags
             FetchXml.aggregate = false;
             FetchXml.aggregateSpecified = false;
@@ -264,7 +300,7 @@ namespace MarkMpn.Sql4Cds.Engine
             else if (page != null && count != null)
                 result = result.Skip((page.Value - 1) * count.Value).Take(count.Value);
 
-            Result = new EntityCollection(result.ToList())
+            results = new EntityCollection(result.ToList())
             {
                 EntityName = entity.name
             };
@@ -458,10 +494,10 @@ namespace MarkMpn.Sql4Cds.Engine
         public IDictionary<string,object> Updates { get; set; }
 
         /// <inheritdoc/>
-        public override void Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        protected override object ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
             if (options.Cancelled)
-                return;
+                return null;
 
             // Check if the update is allowed
             if (options.BlockUpdateWithoutWhere && !FetchXml.Items.OfType<FetchEntityType>().Single().Items.OfType<filter>().Any())
@@ -472,7 +508,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var entities = RetrieveAll(org, metadata, options).Entities;
 
             if (entities == null)
-                return;
+                return null;
 
             var meta = metadata[EntityName];
 
@@ -545,7 +581,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 count += multiple.Requests.Count;
             }
 
-            Result = $"{count:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label} updated";
+            return $"{count:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label} updated";
         }
     }
 
@@ -565,11 +601,11 @@ namespace MarkMpn.Sql4Cds.Engine
         public string IdColumn { get; set; }
 
         /// <inheritdoc/>
-        public override void Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        protected override object ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
             // Check if the query is allowed
             if (options.Cancelled)
-                return;
+                return null;
 
             if (options.BlockDeleteWithoutWhere && !FetchXml.Items.OfType<FetchEntityType>().Single().Items.OfType<filter>().Any())
                 throw new InvalidOperationException("DELETE without WHERE is blocked by your settings");
@@ -595,8 +631,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 org.Execute(bulkDelete);
 
-                Result = "Bulk delete job started";
-                return;
+                return "Bulk delete job started";
             }
 
             // Otherwise, get the records to delete
@@ -604,7 +639,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var entities = RetrieveAll(org, metadata, options).Entities;
 
             if (entities == null)
-                return;
+                return null;
 
             // Check again if the query is allowed
             if (!options.ConfirmDelete(entities.Count, meta))
@@ -669,7 +704,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 count += multiple.Requests.Count;
             }
 
-            Result = $"{count} {meta.DisplayCollectionName.UserLocalizedLabel.Label} deleted";
+            return $"{count:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label} deleted";
         }
     }
 
@@ -689,7 +724,7 @@ namespace MarkMpn.Sql4Cds.Engine
         public IDictionary<string, object>[] Values { get; set; }
 
         /// <inheritdoc/>
-        public override void Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        protected override object ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
             var meta = metadata[LogicalName];
 
@@ -706,7 +741,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 options.Progress($"Inserted {i:N0} of {Values.Length:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label} ({(float)i / Values.Length:P0})");
             }
 
-            Result = $"{Values.Length} {meta.DisplayCollectionName.UserLocalizedLabel.Label} inserted";
+            return $"{Values.Length:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label} inserted";
         }
     }
 
@@ -726,14 +761,14 @@ namespace MarkMpn.Sql4Cds.Engine
         public IDictionary<string, string> Mappings { get; set; }
 
         /// <inheritdoc/>
-        public override void Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        protected override object ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
             // Get all the records to insert
             var count = 0;
             var entities = RetrieveAll(org, metadata, options).Entities;
 
             if (entities == null)
-                return;
+                return null;
 
             var meta = metadata[LogicalName];
 
@@ -764,7 +799,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 options.Progress($"Inserted {count:N0} of {entities.Count:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label} ({(float)count / entities.Count:P0})");
             }
 
-            Result = $"{count} {meta.DisplayCollectionName.UserLocalizedLabel.Label} inserted";
+            return $"{count:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label} inserted";
         }
     }
 }

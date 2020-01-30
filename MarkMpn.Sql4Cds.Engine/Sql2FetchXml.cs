@@ -136,6 +136,12 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="sql">The SQL batch to parse</param>
         /// <returns>An array of queries that can be run against CDS, converted from the supplied <paramref name="sql"/></returns>
+        /// <remarks>
+        /// If an error is encountered when parsing the SQL, a <see cref="QueryParseException"/> is thrown.
+        /// 
+        /// If the SQL can be parsed correctly but contains elements that aren't supported in the conversion to FetchXML,
+        /// a <see cref="NotSupportedQueryFragmentException"/> is thrown.
+        /// </remarks>
         public Query[] Convert(string sql)
         {
             var queries = new List<Query>();
