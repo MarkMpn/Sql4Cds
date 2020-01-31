@@ -108,6 +108,17 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 return false;
             }
+
+            /// <summary>
+            /// Sorts the elements within the entity or link-entity to put them in an order people expect based on standard online samples
+            /// </summary>
+            internal void Sort()
+            {
+                if (LinkEntity?.Items != null)
+                    LinkEntity.Items.StableSort(new FetchXmlElementComparer());
+                else if (Entity?.Items != null)
+                    Entity.Items.StableSort(new FetchXmlElementComparer());
+            }
         }
 
         /// <summary>
@@ -343,6 +354,10 @@ namespace MarkMpn.Sql4Cds.Engine
             if (table.Entity == null)
                 cols[0] = (table.Alias ?? table.EntityName) + "." + cols[0];
 
+            // Sort the elements in the query so they're in the order users expect based on online samples
+            foreach (var t in tables)
+                t.Sort();
+
             // Return the final query
             var query = new DeleteQuery
             {
@@ -409,7 +424,11 @@ namespace MarkMpn.Sql4Cds.Engine
             var cols = new[] { meta.PrimaryIdAttribute };
             if (table.Entity == null)
                 cols[0] = (table.Alias ?? table.EntityName) + "." + cols[0];
-            
+
+            // Sort the elements in the query so they're in the order users expect based on online samples
+            foreach (var t in tables)
+                t.Sort();
+
             // Return the final query
             var query = new UpdateQuery
             {
@@ -579,6 +598,10 @@ namespace MarkMpn.Sql4Cds.Engine
             HandleGroupByClause(querySpec, fetch, tables, columns);
             HandleOrderByClause(querySpec, fetch, tables, columns);
             HandleDistinctClause(querySpec, fetch);
+
+            // Sort the elements in the query so they're in the order users expect based on online samples
+            foreach (var table in tables)
+                table.Sort();
             
             // Return the final query
             return new SelectQuery
@@ -833,7 +856,7 @@ namespace MarkMpn.Sql4Cds.Engine
             foreach (var sort in querySpec.OrderByClause.OrderByElements)
             {
                 // Each sort should be either a column or a number representing the index (1 based) of the column in the output dataset
-                // to order by
+                // to order by. For aggregate queries it could also be an aggregate function
                 if (!(sort.Expression is ColumnReferenceExpression col))
                 {
                     if (sort.Expression is IntegerLiteral colIndex)
@@ -843,6 +866,16 @@ namespace MarkMpn.Sql4Cds.Engine
 
                         foreach (var part in colName.Split('.'))
                             col.MultiPartIdentifier.Identifiers.Add(new Identifier { Value = part });
+                    }
+                    else if (fetch.aggregateSpecified && fetch.aggregate && sort.Expression is FunctionCall)
+                    {
+                        // Check if we already have this aggregate as an attribute. If not, add it.
+                        var alias = "";
+                        AddAttribute(fetch, tables, new List<string>(columns), sort.Expression, out var table, out var attr, ref alias);
+
+                        // Finally, sort by the alias of the aggregate attribute
+                        col = new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier() };
+                        col.MultiPartIdentifier.Identifiers.Add(new Identifier { Value = alias });
                     }
                     else
                     {
@@ -1350,7 +1383,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         // by name for a more readable result
                         var meta = Metadata[starTable.EntityName];
 
-                        foreach (var attr in meta.Attributes.Where(a => a.IsValidForRead == true).OrderBy(a => a.LogicalName))
+                        foreach (var attr in meta.Attributes.Where(a => a.IsValidForRead != false).OrderBy(a => a.LogicalName))
                         {
                             if (starTable.LinkEntity == null)
                                 cols.Add(attr.LogicalName);
@@ -1363,135 +1396,10 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     // Handle SELECT field, SELECT aggregate(field) and SELECT DATEPART(part, field)
                     var expr = scalar.Expression;
-                    var func = expr as FunctionCall;
-
-                    if (func != null)
-                    {
-                        if (TryParseDatePart(func, out var dateGrouping, out var dateCol))
-                        {   
-                            // Rewrite DATEPART(part, field) as part(field) for simpler code later
-                            func = new FunctionCall
-                            {
-                                FunctionName = new Identifier { Value = dateGrouping.ToString() },
-                                Parameters = { dateCol }
-                            };
-                        }
-
-                        // All function calls (aggregates) must be based on a single column
-                        if (func.Parameters.Count != 1)
-                            throw new NotSupportedQueryFragmentException("Unhandled function", func);
-
-                        if (!(func.Parameters[0] is ColumnReferenceExpression colParam))
-                            throw new NotSupportedQueryFragmentException("Unhandled function parameter", func.Parameters[0]);
-
-                        expr = colParam;
-                    }
-
-                    if (!(expr is ColumnReferenceExpression col))
-                        throw new NotSupportedQueryFragmentException("Unhandled SELECT clause", scalar.Expression);
-
-                    // We now have a column, either on it's own or taken from the function parameter
-                    // Find the appropriate table and add the attribute to the table. For count(*), the "column"
-                    // is a wildcard type column - use the primary key column of the main entity instead
-                    string attrName;
-                    if (col.ColumnType == ColumnType.Wildcard)
-                        attrName = Metadata[tables[0].EntityName].PrimaryIdAttribute;
-                    else
-                        attrName = col.MultiPartIdentifier.Identifiers.Last().Value;
-
-                    EntityTable table;
-
-                    if (col.ColumnType == ColumnType.Wildcard)
-                        table = tables[0];
-                    else
-                        GetColumnTableAlias(col, tables, out table);
-
-                    var attr = new FetchAttributeType { name = attrName };
 
                     // Get the requested alias for the column, if any.
                     var alias = scalar.ColumnName?.Identifier?.Value;
-
-                    // If the column is being used within an aggregate or date grouping function, apply that now
-                    if (func != null)
-                    {
-                        switch (func.FunctionName.Value.ToLower())
-                        {
-                            case "count":
-                                // Select the appropriate aggregate depending on whether we're doing count(*) or count(field)
-                                attr.aggregate = col.ColumnType == ColumnType.Wildcard ? AggregateType.count : AggregateType.countcolumn;
-                                attr.aggregateSpecified = true;
-                                break;
-
-                            case "avg":
-                            case "min":
-                            case "max":
-                            case "sum":
-                                // All other aggregates can be applied directly
-                                attr.aggregate = (AggregateType) Enum.Parse(typeof(AggregateType), func.FunctionName.Value.ToLower());
-                                attr.aggregateSpecified = true;
-                                break;
-
-                            case "day":
-                            case "week":
-                            case "month":
-                            case "quarter":
-                            case "year":
-                            case "fiscalperiod":
-                            case "fiscalyear":
-                                // Date groupings that have actually come from a rewritten DATEPART function
-                                attr.dategrouping = (DateGroupingType) Enum.Parse(typeof(DateGroupingType), func.FunctionName.Value.ToLower());
-                                attr.dategroupingSpecified = true;
-                                break;
-
-                            default:
-                                // No other function calls are supported
-                                throw new NotSupportedQueryFragmentException("Unhandled function", func);
-                        }
-
-                        // If we have either an aggregate or date grouping function, indicate that this is an aggregate query
-                        fetch.aggregate = true;
-                        fetch.aggregateSpecified = true;
-
-                        if (func.UniqueRowFilter == UniqueRowFilter.Distinct)
-                        {
-                            // Handle `count(distinct col)` expressions
-                            attr.distinct = FetchBoolType.@true;
-                            attr.distinctSpecified = true;
-                        }
-
-                        if (alias == null)
-                        {
-                            // All aggregate and date grouping attributes must have an aggregate. If none is specified, auto-generate one
-                            var aliasSuffix = attr.aggregateSpecified ? attr.aggregate.ToString() : attr.dategrouping.ToString();
-
-                            alias = $"{attrName.Replace(".", "_")}_{aliasSuffix}";
-                            var counter = 1;
-
-                            while (cols.Contains(alias))
-                            {
-                                counter++;
-                                alias = $"{attrName.Replace(".", "_")}_{aliasSuffix}_{counter}";
-                            }
-                        }
-                    }
-
-                    attr.alias = alias;
-
-                    var addAttribute = true;
-
-                    if (table.Contains(i => i is allattributes))
-                    {
-                        // If we've already got an <all-attributes> element in this entity, either discard this <attribute> as it will be included
-                        // in the results anyway or generate an error if it has an alias as we can't combine <all-attributes> and an individual
-                        // <attribute>
-                        if (alias == null)
-                            addAttribute = false;
-                        else
-                            throw new NotSupportedQueryFragmentException("Cannot add aliased column and wildcard columns from same table", scalar.Expression);
-                    }
-
-                    if (addAttribute)
-                        table.AddItem(attr);
+                    AddAttribute(fetch, tables, cols, expr, out var table, out var attr, ref alias);
 
                     // Even if the attribute wasn't added to the entity because there's already an <all-attributes>, add it to the column list again
                     if (alias == null)
@@ -1507,6 +1415,156 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             
             columns = cols.ToArray();
+        }
+
+        private void AddAttribute(FetchXml.FetchType fetch, List<EntityTable> tables, List<string> cols, ScalarExpression expr, out EntityTable table, out FetchAttributeType attr, ref string alias)
+        {
+            var originalExpr = expr;
+            var func = expr as FunctionCall;
+
+            if (func != null)
+            {
+                if (TryParseDatePart(func, out var dateGrouping, out var dateCol))
+                {
+                    // Rewrite DATEPART(part, field) as part(field) for simpler code later
+                    func = new FunctionCall
+                    {
+                        FunctionName = new Identifier { Value = dateGrouping.ToString() },
+                        Parameters = { dateCol }
+                    };
+                }
+
+                // All function calls (aggregates) must be based on a single column
+                if (func.Parameters.Count != 1)
+                    throw new NotSupportedQueryFragmentException("Unhandled function", func);
+
+                if (!(func.Parameters[0] is ColumnReferenceExpression colParam))
+                    throw new NotSupportedQueryFragmentException("Unhandled function parameter", func.Parameters[0]);
+
+                expr = colParam;
+            }
+
+            if (!(expr is ColumnReferenceExpression col))
+                throw new NotSupportedQueryFragmentException("Unhandled SELECT clause", originalExpr);
+
+            // We now have a column, either on it's own or taken from the function parameter
+            // Find the appropriate table and add the attribute to the table. For count(*), the "column"
+            // is a wildcard type column - use the primary key column of the main entity instead
+            string attrName;
+            if (col.ColumnType == ColumnType.Wildcard)
+                attrName = Metadata[tables[0].EntityName].PrimaryIdAttribute;
+            else
+                attrName = col.MultiPartIdentifier.Identifiers.Last().Value;
+
+            if (col.ColumnType == ColumnType.Wildcard)
+                table = tables[0];
+            else
+                GetColumnTableAlias(col, tables, out table);
+
+            var matchAnyAlias = alias == "";
+            attr = new FetchAttributeType { name = attrName };
+
+            // If the column is being used within an aggregate or date grouping function, apply that now
+            if (func != null)
+            {
+                switch (func.FunctionName.Value.ToLower())
+                {
+                    case "count":
+                        // Select the appropriate aggregate depending on whether we're doing count(*) or count(field)
+                        attr.aggregate = col.ColumnType == ColumnType.Wildcard ? AggregateType.count : AggregateType.countcolumn;
+                        attr.aggregateSpecified = true;
+                        break;
+
+                    case "avg":
+                    case "min":
+                    case "max":
+                    case "sum":
+                        // All other aggregates can be applied directly
+                        attr.aggregate = (AggregateType)Enum.Parse(typeof(AggregateType), func.FunctionName.Value.ToLower());
+                        attr.aggregateSpecified = true;
+                        break;
+
+                    case "day":
+                    case "week":
+                    case "month":
+                    case "quarter":
+                    case "year":
+                    case "fiscalperiod":
+                    case "fiscalyear":
+                        // Date groupings that have actually come from a rewritten DATEPART function
+                        attr.dategrouping = (DateGroupingType)Enum.Parse(typeof(DateGroupingType), func.FunctionName.Value.ToLower());
+                        attr.dategroupingSpecified = true;
+                        break;
+
+                    default:
+                        // No other function calls are supported
+                        throw new NotSupportedQueryFragmentException("Unhandled function", func);
+                }
+
+                // If we have either an aggregate or date grouping function, indicate that this is an aggregate query
+                fetch.aggregate = true;
+                fetch.aggregateSpecified = true;
+
+                if (func.UniqueRowFilter == UniqueRowFilter.Distinct)
+                {
+                    // Handle `count(distinct col)` expressions
+                    attr.distinct = FetchBoolType.@true;
+                    attr.distinctSpecified = true;
+                }
+
+                if (String.IsNullOrEmpty(alias))
+                {
+                    // All aggregate and date grouping attributes must have an aggregate. If none is specified, auto-generate one
+                    var aliasSuffix = attr.aggregateSpecified ? attr.aggregate.ToString() : attr.dategrouping.ToString();
+
+                    alias = $"{attrName.Replace(".", "_")}_{aliasSuffix}";
+                    var counter = 1;
+
+                    while (cols.Contains(alias))
+                    {
+                        counter++;
+                        alias = $"{attrName.Replace(".", "_")}_{aliasSuffix}_{counter}";
+                    }
+                }
+            }
+
+            attr.alias = alias;
+
+            var addAttribute = true;
+
+            if (table.Contains(i => i is allattributes))
+            {
+                // If we've already got an <all-attributes> element in this entity, either discard this <attribute> as it will be included
+                // in the results anyway or generate an error if it has an alias as we can't combine <all-attributes> and an individual
+                // <attribute>
+                if (alias == null)
+                    addAttribute = false;
+                else
+                    throw new NotSupportedQueryFragmentException("Cannot add aliased column and wildcard columns from same table", originalExpr);
+            }
+
+            // Don't add the attribute if we've already got it
+            var newAttr = attr;
+            var existingAttr = (table.Entity?.Items ?? table.LinkEntity?.Items ?? Array.Empty<object>()).OfType<FetchAttributeType>()
+                .FirstOrDefault(existing =>
+                    existing.name == newAttr.name &&
+                    existing.aggregate == newAttr.aggregate &&
+                    existing.aggregateSpecified == newAttr.aggregateSpecified &&
+                    (existing.alias == newAttr.alias || matchAnyAlias) &&
+                    existing.dategrouping == newAttr.dategrouping &&
+                    existing.dategroupingSpecified == newAttr.dategroupingSpecified &&
+                    existing.distinct == newAttr.distinct);
+
+            if (existingAttr != null)
+            {
+                addAttribute = false;
+
+                if (matchAnyAlias)
+                    alias = existingAttr.alias;
+            }
+
+            if (addAttribute)
+                table.AddItem(attr);
         }
 
         /// <summary>
@@ -1622,7 +1680,14 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 // If there were any other criteria in the join, add them as the filter
                 if (filter.type != (filterType)2)
+                {
+                    // Because part of the filter has been separated out as the main join criteria, we can be left with an unnecessary nesting
+                    // of filters. Strip this out now to simplify the final FetchXML
+                    while (filter.Items != null && filter.Items.Length == 1 && filter.Items[0] is filter)
+                        filter = (filter)filter.Items[0];
+
                     linkTable.AddItem(filter);
+                }
 
                 // Check the join type is supported
                 switch (join.QualifiedJoinType)

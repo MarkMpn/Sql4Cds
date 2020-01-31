@@ -64,6 +64,7 @@
       <DependentUpon>FetchXml.xsd</DependentUpon>
     </Compile>
     <Compile Include="FetchXml2Sql.cs" />
+    <Compile Include="FetchXmlElementComparer.cs" />
     <Compile Include="IAttributeMetadataCache.cs" />
     <Compile Include="IQueryExecutionOptions.cs" />
     <Compile Include="NotSupportedQueryFragmentException.cs" />
