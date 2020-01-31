@@ -20,7 +20,7 @@ using MarkMpn.Sql4Cds.Engine;
 
 namespace MarkMpn.Sql4Cds
 {
-    public partial class PluginControl : MultipleConnectionsPluginControlBase, IMessageBusHost
+    public partial class PluginControl : MultipleConnectionsPluginControlBase, IMessageBusHost, IGitHubPlugin, IHelpPlugin
     {
         private readonly IDictionary<ConnectionDetail, IAttributeMetadataCache> _metadata;
         private readonly TelemetryClient _ai;
@@ -264,5 +264,11 @@ namespace MarkMpn.Sql4Cds
         {
             CancelWorker();
         }
+
+        string IGitHubPlugin.UserName => "MarkMpn";
+
+        string IGitHubPlugin.RepositoryName => "Sql4Cds";
+
+        string IHelpPlugin.HelpUrl => "https://markcarrington.dev/sql-4-cds/";
     }
 }
