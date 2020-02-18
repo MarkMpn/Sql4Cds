@@ -608,16 +608,63 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             ");
         }
 
+        [TestMethod]
+        public void UpdateFieldToValue()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "UPDATE contact SET firstname = 'Mark'";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, @"
+                <fetch distinct='true'>
+                    <entity name='contact'>
+                        <attribute name='contactid' />
+                    </entity>
+                </fetch>
+            ");
+        }
+
+        [TestMethod]
+        public void UpdateFieldToField()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "UPDATE contact SET firstname = lastname";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, @"
+                <fetch distinct='true'>
+                    <entity name='contact'>
+                        <attribute name='contactid' />
+                        <attribute name='lastname' />
+                    </entity>
+                </fetch>
+            ");
+        }
+
         private void AssertFetchXml(Query[] queries, string fetchXml)
         {
             Assert.AreEqual(1, queries.Length);
-            Assert.IsInstanceOfType(queries[0], typeof(SelectQuery));
+            Assert.IsInstanceOfType(queries[0], typeof(FetchXmlQuery));
 
             var serializer = new XmlSerializer(typeof(FetchXml.FetchType));
             using (var reader = new StringReader(fetchXml))
             {
                 var fetch = (FetchXml.FetchType)serializer.Deserialize(reader);
-                PropertyEqualityAssert.Equals(fetch, ((SelectQuery)queries[0]).FetchXml);
+                PropertyEqualityAssert.Equals(fetch, ((FetchXmlQuery)queries[0]).FetchXml);
             }
         }
     }
