@@ -1,16 +1,28 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Xml.Serialization;
 using FakeXrmEasy;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
 
 namespace MarkMpn.Sql4Cds.Engine.Tests
 {
     [TestClass]
-    public class Sql2FetchXmlTests
+    public class Sql2FetchXmlTests : IQueryExecutionOptions
     {
+        bool IQueryExecutionOptions.Cancelled => false;
+
+        bool IQueryExecutionOptions.BlockUpdateWithoutWhere => false;
+
+        bool IQueryExecutionOptions.BlockDeleteWithoutWhere => false;
+
+        bool IQueryExecutionOptions.UseBulkDelete => false;
+
+        int IQueryExecutionOptions.BatchSize => 1;
+
         [TestMethod]
         public void SimpleSelect()
         {
@@ -632,6 +644,102 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void WhereComparingTwoFields()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT contactid FROM contact WHERE firstname = lastname";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='contactid' />
+                        <attribute name='firstname' />
+                        <attribute name='lastname' />
+                    </entity>
+                </fetch>
+            ");
+
+            var guid1 = Guid.NewGuid();
+            var guid2 = Guid.NewGuid();
+            context.Data["contact"] = new Dictionary<Guid, Entity>
+            {
+                [guid1] = new Entity("contact", guid1)
+                {
+                    ["contactid"] = guid1,
+                    ["firstname"] = "Mark",
+                    ["lastname"] = "Carrington"
+                },
+                [guid2] = new Entity("contact", guid2)
+                {
+                    ["contactid"] = guid2,
+                    ["firstname"] = "Mark",
+                    ["lastname"] = "Mark"
+                }
+            };
+
+            queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+
+            Assert.AreEqual(1, ((EntityCollection)queries[0].Result).Entities.Count);
+            Assert.AreEqual(guid2, ((EntityCollection)queries[0].Result).Entities[0].Id);
+        }
+
+        [TestMethod]
+        public void WhereComparingExpression()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT contactid FROM contact WHERE lastname = firstname + 'rington'";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='contactid' />
+                        <attribute name='lastname' />
+                        <attribute name='firstname' />
+                    </entity>
+                </fetch>
+            ");
+
+            var guid1 = Guid.NewGuid();
+            var guid2 = Guid.NewGuid();
+            context.Data["contact"] = new Dictionary<Guid, Entity>
+            {
+                [guid1] = new Entity("contact", guid1)
+                {
+                    ["contactid"] = guid1,
+                    ["firstname"] = "Car",
+                    ["lastname"] = "Carrington"
+                },
+                [guid2] = new Entity("contact", guid2)
+                {
+                    ["contactid"] = guid2,
+                    ["firstname"] = "Mark",
+                    ["lastname"] = "Mark"
+                }
+            };
+
+            queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+
+            Assert.AreEqual(1, ((EntityCollection)queries[0].Result).Entities.Count);
+            Assert.AreEqual(guid1, ((EntityCollection)queries[0].Result).Entities[0].Id);
+        }
+
+        [TestMethod]
         public void UpdateFieldToField()
         {
             var context = new XrmFakedContext();
@@ -648,11 +756,63 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             AssertFetchXml(queries, @"
                 <fetch distinct='true'>
                     <entity name='contact'>
-                        <attribute name='contactid' />
                         <attribute name='lastname' />
+                        <attribute name='contactid' />
                     </entity>
                 </fetch>
             ");
+
+            var guid = Guid.NewGuid();
+            context.Data["contact"] = new Dictionary<Guid, Entity>
+            {
+                [guid] = new Entity("contact", guid)
+                {
+                    ["contactid"] = guid,
+                    ["lastname"] = "Carrington"
+                }
+            };
+
+            queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+
+            Assert.AreEqual("Carrington", context.Data["contact"][guid]["firstname"]);
+        }
+
+        [TestMethod]
+        public void UpdateFieldToCalculation()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "UPDATE contact SET firstname = 'Hello ' + lastname";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, @"
+                <fetch distinct='true'>
+                    <entity name='contact'>
+                        <attribute name='lastname' />
+                        <attribute name='contactid' />
+                    </entity>
+                </fetch>
+            ");
+
+            var guid = Guid.NewGuid();
+            context.Data["contact"] = new Dictionary<Guid, Entity>
+            {
+                [guid] = new Entity("contact", guid)
+                {
+                    ["contactid"] = guid,
+                    ["lastname"] = "Carrington"
+                }
+            };
+
+            queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+
+            Assert.AreEqual("Hello Carrington", context.Data["contact"][guid]["firstname"]);
         }
 
         private void AssertFetchXml(Query[] queries, string fetchXml)
@@ -666,6 +826,25 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 var fetch = (FetchXml.FetchType)serializer.Deserialize(reader);
                 PropertyEqualityAssert.Equals(fetch, ((FetchXmlQuery)queries[0]).FetchXml);
             }
+        }
+
+        void IQueryExecutionOptions.Progress(string message)
+        {
+        }
+
+        bool IQueryExecutionOptions.ContinueRetrieve(int count)
+        {
+            return true;
+        }
+
+        bool IQueryExecutionOptions.ConfirmUpdate(int count, EntityMetadata meta)
+        {
+            return true;
+        }
+
+        bool IQueryExecutionOptions.ConfirmDelete(int count, EntityMetadata meta)
+        {
+            return true;
         }
     }
 }

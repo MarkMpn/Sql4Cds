@@ -76,6 +76,11 @@ namespace MarkMpn.Sql4Cds.Engine
         public bool AllPages { get; set; }
 
         /// <summary>
+        /// The additional predicate to be applied to the results
+        /// </summary>
+        public Func<Entity,bool> PostFilter { get; set; }
+
+        /// <summary>
         /// Retrieves all the data matched by the <see cref="FetchXml"/>
         /// </summary>
         /// <param name="org">The <see cref="IOrganizationService"/> to execute the query against</param>
@@ -108,13 +113,16 @@ namespace MarkMpn.Sql4Cds.Engine
             var mainEntity = FetchXml.Items.OfType<FetchEntityType>().Single();
             var name = mainEntity.name;
             var meta = metadata[name];
-            options.Progress($"Retrieving {meta.DisplayCollectionName.UserLocalizedLabel.Label}...");
+            options.Progress($"Retrieving {meta.DisplayCollectionName?.UserLocalizedLabel?.Label}...");
 
             // Get the first page of results
             var res = org.RetrieveMultiple(new FetchExpression(Serialize(FetchXml)));
 
             foreach (var entity in res.Entities)
-                yield return entity;
+            {
+                if (PostFilter == null || PostFilter(entity))
+                    yield return entity;
+            }
 
             var count = res.Entities.Count;
 
@@ -126,7 +134,7 @@ namespace MarkMpn.Sql4Cds.Engine
             // Move on to subsequent pages
             while (AllPages && res.MoreRecords && !options.Cancelled && options.ContinueRetrieve(count))
             {
-                options.Progress($"Retrieved {count:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label}...");
+                options.Progress($"Retrieved {count:N0} {meta.DisplayCollectionName?.UserLocalizedLabel?.Label}...");
 
                 if (FetchXml.page == null)
                     FetchXml.page = "2";
@@ -138,7 +146,10 @@ namespace MarkMpn.Sql4Cds.Engine
                 var nextPage = org.RetrieveMultiple(new FetchExpression(Serialize(FetchXml)));
 
                 foreach (var entity in nextPage.Entities)
-                    yield return entity;
+                {
+                    if (PostFilter == null || PostFilter(entity))
+                        yield return entity;
+                }
 
                 count += nextPage.Entities.Count;
                 res = nextPage;
@@ -491,7 +502,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// A mapping of attribute names to values to apply updates to
         /// </summary>
-        public IDictionary<string,object> Updates { get; set; }
+        public IDictionary<string,Func<Entity,object>> Updates { get; set; }
 
         /// <inheritdoc/>
         protected override object ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
@@ -532,11 +543,11 @@ namespace MarkMpn.Sql4Cds.Engine
                 update.Id = (Guid)id;
 
                 foreach (var attr in Updates)
-                    update[attr.Key] = attr.Value;
+                    update[attr.Key] = attr.Value(entity);
 
                 if (options.BatchSize == 1)
                 {
-                    options.Progress($"Updating {meta.DisplayName.UserLocalizedLabel.Label} {count + 1:N0} of {entities.Count:N0}...");
+                    options.Progress($"Updating {meta.DisplayName?.UserLocalizedLabel?.Label} {count + 1:N0} of {entities.Count:N0}...");
                     org.Update(update);
                     count++;
                 }
@@ -559,10 +570,10 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     if (multiple.Requests.Count == options.BatchSize)
                     {
-                        options.Progress($"Updating {meta.DisplayCollectionName.UserLocalizedLabel.Label} {count + 1:N0} - {count + multiple.Requests.Count:N0} of {entities.Count:N0}...");
+                        options.Progress($"Updating {meta.DisplayCollectionName?.UserLocalizedLabel?.Label} {count + 1:N0} - {count + multiple.Requests.Count:N0} of {entities.Count:N0}...");
                         var resp = (ExecuteMultipleResponse) org.Execute(multiple);
                         if (resp.IsFaulted)
-                            throw new ApplicationException($"Error updating {meta.DisplayCollectionName.UserLocalizedLabel.Label}");
+                            throw new ApplicationException($"Error updating {meta.DisplayCollectionName?.UserLocalizedLabel?.Label}");
 
                         count += multiple.Requests.Count;
 
@@ -573,15 +584,15 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (!options.Cancelled && multiple != null)
             {
-                options.Progress($"Updating {meta.DisplayCollectionName.UserLocalizedLabel.Label} {count + 1:N0} - {count + multiple.Requests.Count:N0} of {entities.Count:N0}...");
+                options.Progress($"Updating {meta.DisplayCollectionName?.UserLocalizedLabel?.Label} {count + 1:N0} - {count + multiple.Requests.Count:N0} of {entities.Count:N0}...");
                 var resp = (ExecuteMultipleResponse)org.Execute(multiple);
                 if (resp.IsFaulted)
-                    throw new ApplicationException($"Error updating {meta.DisplayCollectionName.UserLocalizedLabel.Label}");
+                    throw new ApplicationException($"Error updating {meta.DisplayCollectionName?.UserLocalizedLabel?.Label}");
 
                 count += multiple.Requests.Count;
             }
 
-            return $"{count:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label} updated";
+            return $"{count:N0} {meta.DisplayCollectionName?.UserLocalizedLabel?.Label} updated";
         }
     }
 

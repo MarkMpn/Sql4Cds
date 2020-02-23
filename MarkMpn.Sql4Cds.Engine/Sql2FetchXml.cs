@@ -6,6 +6,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Linq.Expressions;
+using System.Reflection;
 using System.ServiceModel;
 
 namespace MarkMpn.Sql4Cds.Engine
@@ -115,9 +117,38 @@ namespace MarkMpn.Sql4Cds.Engine
             internal void Sort()
             {
                 if (LinkEntity?.Items != null)
+                {
                     LinkEntity.Items.StableSort(new FetchXmlElementComparer());
+                    LinkEntity.Items = RemoveEmptyFilters(LinkEntity.Items);
+                }
                 else if (Entity?.Items != null)
+                {
                     Entity.Items.StableSort(new FetchXmlElementComparer());
+                    Entity.Items = RemoveEmptyFilters(Entity.Items);
+                }
+            }
+
+            private object[] RemoveEmptyFilters(object[] items)
+            {
+                if (items == null)
+                    return null;
+
+                var keep = new List<object>();
+
+                foreach (var item in items)
+                {
+                    if (item is filter f)
+                    {
+                        f.Items = RemoveEmptyFilters(f.Items);
+
+                        if (f.Items == null || f.Items.Length == 0)
+                            continue;
+                    }
+
+                    keep.Add(item);
+                }
+
+                return keep.ToArray();
             }
         }
 
@@ -344,7 +375,7 @@ namespace MarkMpn.Sql4Cds.Engine
             fetch.distinctSpecified = true;
             var tables = HandleFromClause(delete.DeleteSpecification.FromClause, fetch);
             HandleTopClause(delete.DeleteSpecification.TopRowFilter, fetch);
-            HandleWhereClause(delete.DeleteSpecification.WhereClause, tables);
+            HandleWhereClause(delete.DeleteSpecification.WhereClause, tables, false, out var postFilter);
             
             // To delete a record we need the primary key field of the target entity
             var table = FindTable(target, tables);
@@ -362,6 +393,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var query = new DeleteQuery
             {
                 FetchXml = fetch,
+                PostFilter = postFilter,
                 EntityName = table.EntityName,
                 IdColumn = cols[0],
                 AllPages = fetch.page == null && fetch.top == null
@@ -412,14 +444,15 @@ namespace MarkMpn.Sql4Cds.Engine
             fetch.distinctSpecified = true;
             var tables = HandleFromClause(update.UpdateSpecification.FromClause, fetch);
             HandleTopClause(update.UpdateSpecification.TopRowFilter, fetch);
-            HandleWhereClause(update.UpdateSpecification.WhereClause, tables);
+            HandleWhereClause(update.UpdateSpecification.WhereClause, tables, false, out var postFilter);
 
-            // Get the details of what fields should be updated to what
-            var updates = HandleSetClause(update.UpdateSpecification.SetClauses);
-
-            // To update a record we need the primary key field of the target entity
             var table = FindTable(target, tables);
             var meta = Metadata[table.EntityName];
+
+            // Get the details of what fields should be updated to what
+            var updates = HandleSetClause(update.UpdateSpecification.SetClauses, tables, meta);
+
+            // To update a record we need the primary key field of the target entity
             table.AddItem(new FetchAttributeType { name = meta.PrimaryIdAttribute });
             var cols = new[] { meta.PrimaryIdAttribute };
             if (table.Entity == null)
@@ -433,9 +466,10 @@ namespace MarkMpn.Sql4Cds.Engine
             var query = new UpdateQuery
             {
                 FetchXml = fetch,
+                PostFilter = postFilter,
                 EntityName = table.EntityName,
                 IdColumn = cols[0],
-                Updates = ConvertAttributeValueTypes(meta, updates),
+                Updates = updates,
                 AllPages = fetch.page == null && fetch.top == null
             };
 
@@ -525,8 +559,10 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Converts the SET clause of an UPDATE statement to a mapping of attribute name to the value to set it to
         /// </summary>
         /// <param name="setClauses">The SET clause to convert</param>
+        /// <param name="tables">The tables in the FROM clause of the query</param>
+        /// <param name="metadata">The metadata of the entity to be updated</param>
         /// <returns>A mapping of attribute name to value extracted from the <paramref name="setClauses"/></returns>
-        private IDictionary<string,string> HandleSetClause(IList<SetClause> setClauses)
+        private IDictionary<string,Func<Entity,object>> HandleSetClause(IList<SetClause> setClauses, List<EntityTable> tables, EntityMetadata metadata)
         {
             return setClauses
                 .Select(set =>
@@ -541,16 +577,248 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (assign.Column.MultiPartIdentifier.Identifiers.Count > 1)
                         throw new NotSupportedQueryFragmentException("Unsupported UPDATE SET clause", assign.Column);
 
-                    if (!(assign.NewValue is Literal literal))
-                        throw new NotSupportedQueryFragmentException("Unsupported UPDATE SET clause", assign);
+                    var attrName = assign.Column.MultiPartIdentifier.Identifiers[0].Value.ToLower();
+                    var attr = metadata.Attributes.SingleOrDefault(a => a.LogicalName == attrName);
+                    if (attr == null)
+                        throw new NotSupportedQueryFragmentException("Unknown column name", assign.Column);
 
-                    // Special case for null, otherwise the value is extracted as a string
-                    if (literal is NullLiteral)
-                        return new { Key = assign.Column.MultiPartIdentifier.Identifiers[0].Value, Value = (string)null };
+                    if (assign.NewValue is Literal literal)
+                    {
+                        // Handle updates to literal values
+                        // Special case for null, otherwise the value is extracted as a string, so convert it to the required type
+                        if (literal is NullLiteral)
+                        {
+                            return new { Key = attrName, Value = (Func<Entity,object>) (e => null) };
+                        }
+                        else
+                        {
+                            var value = ConvertAttributeValueType(metadata, attrName, literal.Value);
+                            return new { Key = attrName, Value = (Func<Entity, object>)(e => value) };
+                        }
+                    }
                     else
-                        return new { Key = assign.Column.MultiPartIdentifier.Identifiers[0].Value, Value = literal.Value };
+                    {
+                        // Handle updates to the value from another field
+                        // Ensure the source field is included in the query
+                        return new { Key = attrName, Value = CompileScalarExpression(assign.NewValue, tables, false) };
+                    }
                 })
                 .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+        }
+
+        private Func<Entity,object> CompileScalarExpression(ScalarExpression expr, List<EntityTable> tables, bool aggregate)
+        {
+            var param = Expression.Parameter(typeof(Entity), "entity");
+            return Expression.Lambda<Func<Entity, object>>(ConvertScalarExpression(expr, tables, aggregate, param), param).Compile();
+        }
+
+        /// <summary>
+        /// Converts a scalar SQL expression to a compiled function that evaluates the final value of the expression for a given entity.
+        /// </summary>
+        /// <param name="expr">The <see cref="ScalarExpression"/> to convert</param>
+        /// <param name="tables">The tables to use as the data source for the expression</param>
+        /// <param name="aggregate">Indicates if the query is an aggregate query</param>
+        /// <returns>A compiled expression that evaluates the supplied <paramref name="expr"/> for a given entity</returns>
+        /// <remarks>
+        /// This method will ensure any attributes required by the <paramref name="expr"/> are added to the query.
+        /// </remarks>
+        private Expression ConvertScalarExpression(ScalarExpression expr, List<EntityTable> tables, bool aggregate, ParameterExpression param)
+        {
+            if (expr is Microsoft.SqlServer.TransactSql.ScriptDom.BinaryExpression binary)
+            {
+                var lhs = ConvertScalarExpression(binary.FirstExpression, tables, aggregate, param);
+                var rhs = ConvertScalarExpression(binary.SecondExpression, tables, aggregate, param);
+
+                switch (binary.BinaryExpressionType)
+                {
+                    case BinaryExpressionType.Add:
+                        if (lhs.Type == typeof(string))
+                            return Expression.Add(lhs, rhs, typeof(string).GetMethod("Concat", new[] { typeof(object), typeof(object) }));
+
+                        return Expression.Add(lhs, rhs);
+
+                    case BinaryExpressionType.BitwiseAnd:
+                        return Expression.And(lhs, rhs);
+
+                    case BinaryExpressionType.BitwiseOr:
+                        return Expression.Or(lhs, rhs);
+
+                    case BinaryExpressionType.BitwiseXor:
+                        return Expression.ExclusiveOr(lhs, rhs);
+
+                    case BinaryExpressionType.Divide:
+                        return Expression.Divide(lhs, rhs);
+
+                    case BinaryExpressionType.Modulo:
+                        return Expression.Modulo(lhs, rhs);
+
+                    case BinaryExpressionType.Multiply:
+                        return Expression.Multiply(lhs, rhs);
+
+                    case BinaryExpressionType.Subtract:
+                        return Expression.Subtract(lhs, rhs);
+                }
+            }
+            else if (expr is ColumnReferenceExpression col)
+            {
+                // Check where this attribute should be taken from
+                var tableAlias = GetColumnTableAlias(col, tables, out var table);
+                var attrName = GetColumnAttribute(col);
+                
+                // Check if the attribute needs to be added to the query
+                if (!table.Contains(i => i is allattributes) &&
+                    !table.Contains(i => i is FetchAttributeType attr && attr.name == attrName && attr.alias == null && !attr.aggregateSpecified && !attr.dategroupingSpecified))
+                {
+                    // Can't add the column in aggregate queries without breaking the grouping
+                    if (aggregate)
+                        throw new NotSupportedQueryFragmentException("Column is not included in a GROUP BY expression", expr);
+
+                    table.AddItem(new FetchAttributeType { name = attrName });
+                }
+
+                var attrMetadata = Metadata[table.EntityName].Attributes.SingleOrDefault(a => a.LogicalName == attrName);
+                if (attrMetadata == null)
+                    throw new NotSupportedQueryFragmentException("Unknown attribute", expr);
+
+                if (attrMetadata.AttributeType == null)
+                    throw new NotSupportedQueryFragmentException("Unknown attribute type", expr);
+
+                var type = GetAttributeType(attrMetadata.AttributeType.Value);
+
+                if (type == null)
+                    throw new NotSupportedQueryFragmentException("Unknown attribute type", expr);
+
+                if (tableAlias != null)
+                    attrName = tableAlias + "." + attrName;
+                
+                return
+                    Expression.Convert(
+                        Expression.Call(
+                            null, 
+                            typeof(Sql2FetchXml).GetMethod(nameof(GetAttributeValue), BindingFlags.Static | BindingFlags.NonPublic), 
+                            param, 
+                            Expression.Constant(attrName)
+                        ),
+                        type);
+            }
+            else if (expr is Literal literal)
+            {
+                return Expression.Constant(ConvertLiteralValue(literal));
+            }
+            else if (expr is Microsoft.SqlServer.TransactSql.ScriptDom.UnaryExpression unary)
+            {
+                var child = ConvertScalarExpression(unary.Expression, tables, aggregate, param);
+
+                switch (unary.UnaryExpressionType)
+                {
+                    case UnaryExpressionType.BitwiseNot:
+                        return Expression.Not(child);
+
+                    case UnaryExpressionType.Negative:
+                        return Expression.Negate(child);
+
+                    case UnaryExpressionType.Positive:
+                        return child;
+                }
+            }
+
+            throw new NotSupportedQueryFragmentException("Unsupported expression", expr);
+        }
+
+        private static Type GetAttributeType(AttributeTypeCode type)
+        {
+            switch (type)
+            {
+                case AttributeTypeCode.BigInt:
+                    return typeof(long);
+
+                case AttributeTypeCode.Boolean:
+                    return typeof(bool);
+
+                case AttributeTypeCode.Customer:
+                    return typeof(EntityReference);
+
+                case AttributeTypeCode.DateTime:
+                    return typeof(DateTime);
+
+                case AttributeTypeCode.Decimal:
+                    return typeof(decimal);
+
+                case AttributeTypeCode.Double:
+                    return typeof(double);
+
+                case AttributeTypeCode.EntityName:
+                    return typeof(string);
+
+                case AttributeTypeCode.Integer:
+                    return typeof(int);
+
+                case AttributeTypeCode.Lookup:
+                    return typeof(EntityReference);
+
+                case AttributeTypeCode.Memo:
+                    return typeof(string);
+
+                case AttributeTypeCode.Money:
+                    return typeof(decimal);
+
+                case AttributeTypeCode.Owner:
+                    return typeof(EntityReference);
+
+                case AttributeTypeCode.Picklist:
+                case AttributeTypeCode.State:
+                case AttributeTypeCode.Status:
+                    return typeof(int);
+
+                case AttributeTypeCode.String:
+                    return typeof(string);
+
+                case AttributeTypeCode.Uniqueidentifier:
+                    return typeof(Guid);
+            }
+
+            return null;
+        }
+
+        private static object GetAttributeValue(Entity entity, string attrName)
+        {
+            if (!entity.Attributes.TryGetValue(attrName, out var value))
+                return null;
+
+            if (value is AliasedValue alias)
+                value = alias.Value;
+
+            if (value is OptionSetValue osv)
+                return osv.Value;
+
+            if (value is Money money)
+                return money.Value;
+
+            return value;
+        }
+
+        private object ConvertLiteralValue(Literal literal)
+        {
+            switch (literal.LiteralType)
+            {
+                case LiteralType.Integer:
+                    return Int32.Parse(literal.Value);
+
+                case LiteralType.Money:
+                case LiteralType.Numeric:
+                    return Decimal.Parse(literal.Value);
+
+                case LiteralType.Null:
+                    return null;
+
+                case LiteralType.Real:
+                    return Double.Parse(literal.Value);
+
+                case LiteralType.String:
+                    return literal.Value;
+            }
+
+            throw new NotSupportedQueryFragmentException("Unsupported expression", literal);
         }
 
         /// <summary>
@@ -594,8 +862,8 @@ namespace MarkMpn.Sql4Cds.Engine
             HandleSelectClause(querySpec, fetch, tables, out var columns);
             HandleTopClause(querySpec.TopRowFilter, fetch);
             HandleOffsetClause(querySpec, fetch);
-            HandleWhereClause(querySpec.WhereClause, tables);
             HandleGroupByClause(querySpec, fetch, tables, columns);
+            HandleWhereClause(querySpec.WhereClause, tables, fetch.aggregate, out var postFilter);
             HandleOrderByClause(querySpec, fetch, tables, columns);
             HandleDistinctClause(querySpec, fetch);
 
@@ -607,6 +875,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return new SelectQuery
             {
                 FetchXml = fetch,
+                PostFilter = postFilter,
                 ColumnSet = columns,
                 AllPages = fetch.page == null && fetch.count == null
             };
@@ -983,8 +1252,12 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="where">The WHERE clause to convert</param>
         /// <param name="tables">The tables involved in the query</param>
-        private void HandleWhereClause(WhereClause where, List<EntityTable> tables)
+        /// <param name="aggregate">Indicates if the query is an aggregate query</param>
+        /// <param name="postFilter">The filter to be applied in memory</param>
+        private void HandleWhereClause(WhereClause where, List<EntityTable> tables, bool aggregate, out Func<Entity,bool> postFilter)
         {
+            postFilter = null;
+
             // Check for any DOM elements that don't have an equivalent in CDS
             if (where == null)
                 return;
@@ -1003,11 +1276,16 @@ namespace MarkMpn.Sql4Cds.Engine
             // Add the conditions into the filter
             ColumnReferenceExpression col1 = null;
             ColumnReferenceExpression col2 = null;
-            HandleFilter(where.SearchCondition, filter, tables, tables[0], true, false, ref col1, ref col2);
+            Expression postFilterExpression = null;
+            var param = Expression.Parameter(typeof(Entity), "entity");
+            HandleFilter(where.SearchCondition, filter, tables, tables[0], true, ref col1, ref col2, aggregate, ref postFilterExpression, param);
 
             // If no specific logical operator was found, switch to "and"
             if (filter.type == (filterType)2)
                 filter.type = filterType.and;
+
+            if (postFilterExpression != null)
+                postFilter = Expression.Lambda<Func<Entity, bool>>(postFilterExpression, param).Compile();
         }
 
         /// <summary>
@@ -1021,7 +1299,44 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="inOr">Indicates if the filter is within an OR filter</param>
         /// <param name="col1">Identifies the first column in the filter (for JOIN purposes)</param>
         /// <param name="col2">Identifies the second column in the filter (for JOIN purposes)</param>
-        private void HandleFilter(BooleanExpression searchCondition, filter criteria, List<EntityTable> tables, EntityTable targetTable, bool where, bool inOr, ref ColumnReferenceExpression col1, ref ColumnReferenceExpression col2)
+        /// <param name="aggregate">Indicates if the query is an aggregate query</param>
+        /// <param name="postFilter">The additional in-memory predicate to be applied to any results</param>
+        /// <param name="param">The entity parameter to be supplied to the <paramref name="postFilter"/></param>
+        private void HandleFilter(BooleanExpression searchCondition, filter criteria, List<EntityTable> tables, EntityTable targetTable, bool where, ref ColumnReferenceExpression col1, ref ColumnReferenceExpression col2, bool aggregate, ref Expression postFilter, ParameterExpression param)
+        {
+            try
+            {
+                HandleFilterFetchXml(searchCondition, criteria, tables, targetTable, where, false, ref col1, ref col2, aggregate, ref postFilter, param);
+            }
+            catch (PostProcessingRequiredException ex)
+            {
+                if (!where)
+                    throw;
+
+                var predicate = HandleFilterPredicate(searchCondition, tables, targetTable, aggregate, param);
+
+                if (postFilter == null)
+                    postFilter = predicate;
+                else
+                    postFilter = Expression.And(postFilter, predicate);
+            }
+        }
+
+        /// <summary>
+        /// Converts filter criteria to FetchXML
+        /// </summary>
+        /// <param name="searchCondition">The SQL filter to convert from</param>
+        /// <param name="criteria">The FetchXML to convert to</param>
+        /// <param name="tables">The tables involved in the query</param>
+        /// <param name="targetTable">The table that the filters will be applied to</param>
+        /// <param name="where">Indicates if the filters are part of a WHERE clause</param>
+        /// <param name="inOr">Indicates if the filter is within an OR filter</param>
+        /// <param name="col1">Identifies the first column in the filter (for JOIN purposes)</param>
+        /// <param name="col2">Identifies the second column in the filter (for JOIN purposes)</param>
+        /// <param name="aggregate">Indicates if the query is an aggregate query</param>
+        /// <param name="postFilter">The additional in-memory predicate to be applied to any results</param>
+        /// <param name="param">The entity parameter to be supplied to the <paramref name="postFilter"/></param>
+        private void HandleFilterFetchXml(BooleanExpression searchCondition, filter criteria, List<EntityTable> tables, EntityTable targetTable, bool where, bool inOr, ref ColumnReferenceExpression col1, ref ColumnReferenceExpression col2, bool aggregate, ref Expression postFilter, ParameterExpression param)
         {
             if (searchCondition is BooleanComparisonExpression comparison)
             {
@@ -1040,18 +1355,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     // The operator is comparing two attributes. This is not allowed in a FetchXML filter,
                     // but is allowed in join criteria
                     if (where)
-                    {
-                        if ((field.MultiPartIdentifier.Identifiers.Count == 1 && field.MultiPartIdentifier.Identifiers[0].QuoteType == QuoteType.DoubleQuote ^
-                            field2.MultiPartIdentifier.Identifiers.Count == 1 && field2.MultiPartIdentifier.Identifiers[0].QuoteType == QuoteType.DoubleQuote) &&
-                            QuotedIdentifiers)
-                        {
-                            // If the criteria was `attribute = "value"` (i.e. using double-quotes for a string literal) but the query was
-                            // parsed using quoted identifiers, return a more helpful error to indicate how to fix it
-                            throw new NotSupportedQueryFragmentException("Unsupported comparison of two fields. Did you mean to use single quotes for a string literal?", comparison);
-                        }
-
-                        throw new NotSupportedQueryFragmentException("Unsupported comparison", comparison);
-                    }
+                        throw new PostProcessingRequiredException("Unsupported comparison", comparison);
 
                     if (col1 == null && col2 == null)
                     {
@@ -1097,7 +1401,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 // If we still couldn't find the column name and value, this isn't a pattern we can support in FetchXML
                 if (field == null || (literal == null && func == null))
-                    throw new NotSupportedQueryFragmentException("Unsupported comparison", comparison);
+                    throw new PostProcessingRequiredException("Unsupported comparison", comparison);
 
                 // Select the correct FetchXML operator
                 @operator op;
@@ -1238,9 +1542,38 @@ namespace MarkMpn.Sql4Cds.Engine
                     criteria.type = op;
                 }
 
-                // Recurse into the sub-expressoins
-                HandleFilter(binary.FirstExpression, criteria, tables, targetTable, where, inOr || op == filterType.or, ref col1, ref col2);
-                HandleFilter(binary.SecondExpression, criteria, tables, targetTable, where, inOr || op == filterType.or, ref col1, ref col2);
+                // Recurse into the sub-expressions
+                try
+                {
+                    HandleFilterFetchXml(binary.FirstExpression, criteria, tables, targetTable, where, inOr || op == filterType.or, ref col1, ref col2, aggregate, ref postFilter, param);
+                }
+                catch (PostProcessingRequiredException)
+                {
+                    if (inOr || op != filterType.and || !where)
+                        throw;
+
+                    var lhsPredicate = HandleFilterPredicate(binary.FirstExpression, tables, targetTable, aggregate, param);
+                    if (postFilter == null)
+                        postFilter = lhsPredicate;
+                    else
+                        postFilter = Expression.And(postFilter, lhsPredicate);
+                }
+
+                try
+                {
+                    HandleFilterFetchXml(binary.SecondExpression, criteria, tables, targetTable, where, inOr || op == filterType.or, ref col1, ref col2, aggregate, ref postFilter, param);
+                }
+                catch (PostProcessingRequiredException)
+                {
+                    if (inOr || op != filterType.and || !where)
+                        throw;
+
+                    var rhsPredicate = HandleFilterPredicate(binary.SecondExpression, tables, targetTable, aggregate, param);
+                    if (postFilter == null)
+                        postFilter = rhsPredicate;
+                    else
+                        postFilter = Expression.And(postFilter, rhsPredicate);
+                }
             }
             else if (searchCondition is BooleanParenthesisExpression paren)
             {
@@ -1250,7 +1583,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 criteria.Items = AddItem(criteria.Items, subFilter);
                 criteria = subFilter;
 
-                HandleFilter(paren.Expression, criteria, tables, targetTable, where, inOr, ref col1, ref col2);
+                HandleFilterFetchXml(paren.Expression, criteria, tables, targetTable, where, inOr, ref col1, ref col2, aggregate, ref postFilter, param);
 
                 if (subFilter.type == (filterType)2)
                     subFilter.type = filterType.and;
@@ -1281,12 +1614,12 @@ namespace MarkMpn.Sql4Cds.Engine
                 var field = like.FirstExpression as ColumnReferenceExpression;
 
                 if (field == null)
-                    throw new NotSupportedQueryFragmentException("Unsupported comparison", like.FirstExpression);
+                    throw new PostProcessingRequiredException("Unsupported comparison", like.FirstExpression);
 
                 var value = like.SecondExpression as StringLiteral;
 
                 if (value == null)
-                    throw new NotSupportedQueryFragmentException("Unsupported comparison", like.SecondExpression);
+                    throw new PostProcessingRequiredException("Unsupported comparison", like.SecondExpression);
 
                 var entityName = GetColumnTableAlias(field, tables, out var entityTable);
                 if (entityTable == targetTable)
@@ -1326,7 +1659,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     .Select(v =>
                     {
                         if (!(v is Literal literal))
-                            throw new NotSupportedQueryFragmentException("Unsupported comparison", v);
+                            throw new PostProcessingRequiredException("Unsupported comparison", v);
 
                         return new conditionValue
                         {
@@ -1339,8 +1672,116 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             else
             {
-                throw new NotSupportedQueryFragmentException("Unhandled WHERE clause", searchCondition);
+                throw new PostProcessingRequiredException("Unhandled WHERE clause", searchCondition);
             }
+        }
+
+
+        /// <summary>
+        /// Converts filter criteria to a predicate expression
+        /// </summary>
+        /// <param name="searchCondition">The SQL filter to convert from</param>
+        /// <param name="tables">The tables involved in the query</param>
+        /// <param name="targetTable">The table that the filters will be applied to</param>
+        /// <param name="aggregate">Indicates if the query is an aggregate query</param>
+        /// <param name="param">The parameter that identifies the entity to apply the predicate to</param>
+        /// <returns>The expression that implements the <paramref name="searchCondition"/></returns>
+        private Expression HandleFilterPredicate(BooleanExpression searchCondition, List<EntityTable> tables, EntityTable targetTable, bool aggregate, ParameterExpression param)
+        {
+            if (searchCondition is BooleanComparisonExpression comparison)
+            {
+                var lhs = ConvertScalarExpression(comparison.FirstExpression, tables, aggregate, param);
+                var rhs = ConvertScalarExpression(comparison.SecondExpression, tables, aggregate, param);
+
+                switch (comparison.ComparisonType)
+                {
+                    case BooleanComparisonType.Equals:
+                        return Expression.Equal(lhs, rhs);
+
+                    case BooleanComparisonType.GreaterThan:
+                        return Expression.GreaterThan(lhs, rhs);
+
+                    case BooleanComparisonType.GreaterThanOrEqualTo:
+                        return Expression.GreaterThanOrEqual(lhs, rhs);
+
+                    case BooleanComparisonType.LessThan:
+                        return Expression.LessThan(lhs, rhs);
+
+                    case BooleanComparisonType.LessThanOrEqualTo:
+                        return Expression.LessThanOrEqual(lhs, rhs);
+
+                    case BooleanComparisonType.NotEqualToBrackets:
+                    case BooleanComparisonType.NotEqualToExclamation:
+                        return Expression.NotEqual(lhs, rhs);
+
+                    default:
+                        throw new NotSupportedQueryFragmentException("Unsupported comparison type", comparison);
+                }
+            }
+            else if (searchCondition is BooleanBinaryExpression binary)
+            {
+                var lhs = HandleFilterPredicate(binary.FirstExpression, tables, targetTable, aggregate, param);
+                var rhs = HandleFilterPredicate(binary.SecondExpression, tables, targetTable, aggregate, param);
+
+                if (binary.BinaryExpressionType == BooleanBinaryExpressionType.And)
+                    return Expression.And(lhs, rhs);
+                else
+                    return Expression.Or(lhs, rhs);
+            }
+            else if (searchCondition is BooleanParenthesisExpression paren)
+            {
+                var child = HandleFilterPredicate(paren.Expression, tables, targetTable, aggregate, param);
+                return child;
+            }
+            else if (searchCondition is BooleanIsNullExpression isNull)
+            {
+                var value = ConvertScalarExpression(isNull.Expression, tables, aggregate, param);
+
+                if (isNull.IsNot)
+                    return Expression.NotEqual(value, Expression.Constant(null));
+                else
+                    return Expression.Equal(value, Expression.Constant(null));
+            }
+            else if (searchCondition is LikePredicate like)
+            {
+                var lhs = ConvertScalarExpression(like.FirstExpression, tables, aggregate, param);
+                var rhs = ConvertScalarExpression(like.SecondExpression, tables, aggregate, param);
+                var func = Expression.Call(typeof(Sql2FetchXml).GetMethod(nameof(LikeFunction), BindingFlags.Static | BindingFlags.NonPublic), lhs, rhs);
+
+                if (like.NotDefined)
+                    return Expression.Not(func);
+                else
+                    return func;
+            }
+            else if (searchCondition is InPredicate @in)
+            {
+                if (@in.Subquery != null)
+                    throw new NotSupportedQueryFragmentException("Unsupported subquery, rewrite query as join", @in.Subquery);
+
+                Expression converted = null;
+                var value = ConvertScalarExpression(@in.Expression, tables, aggregate, param);
+
+                foreach (var v in @in.Values)
+                {
+                    var equal = Expression.Equal(value, ConvertScalarExpression(v, tables, aggregate, param));
+
+                    if (converted == null)
+                        converted = equal;
+                    else
+                        converted = Expression.Or(converted, equal);
+                }
+
+                return converted;
+            }
+            else
+            {
+                throw new PostProcessingRequiredException("Unhandled WHERE clause", searchCondition);
+            }
+        }
+
+        private static bool LikeFunction(string value, string pattern)
+        {
+            throw new NotImplementedException();
         }
 
         /// <summary>
@@ -1672,7 +2113,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 
                 ColumnReferenceExpression col1 = null;
                 ColumnReferenceExpression col2 = null;
-                HandleFilter(join.SearchCondition, filter, tables, linkTable, false, false, ref col1, ref col2);
+                Expression postFilter = null;
+                HandleFilter(join.SearchCondition, filter, tables, linkTable, false, ref col1, ref col2, false, ref postFilter, null);
 
                 // We need a join condition comparing a column in the link entity to one in another table
                 if (col1 == null || col2 == null)
