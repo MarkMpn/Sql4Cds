@@ -372,9 +372,11 @@ namespace MarkMpn.Sql4Cds.Engine
 
             // Convert the FROM, TOP and WHERE clauses from the query to identify the records to delete.
             // Each record can only be deleted once, so apply the DISTINCT option as well
-            var fetch = new FetchXml.FetchType();
-            fetch.distinct = true;
-            fetch.distinctSpecified = true;
+            var fetch = new FetchXml.FetchType
+            {
+                distinct = true,
+                distinctSpecified = true
+            };
             var tables = HandleFromClause(delete.DeleteSpecification.FromClause, fetch);
             HandleTopClause(delete.DeleteSpecification.TopRowFilter, fetch);
             HandleWhereClause(delete.DeleteSpecification.WhereClause, tables, false, out var postFilter);
@@ -441,9 +443,11 @@ namespace MarkMpn.Sql4Cds.Engine
 
             // Convert the FROM, TOP and WHERE clauses from the query to identify the records to update.
             // Each record can only be updated once, so apply the DISTINCT option as well
-            var fetch = new FetchXml.FetchType();
-            fetch.distinct = true;
-            fetch.distinctSpecified = true;
+            var fetch = new FetchXml.FetchType
+            {
+                distinct = true,
+                distinctSpecified = true
+            };
             var tables = HandleFromClause(update.UpdateSpecification.FromClause, fetch);
             HandleTopClause(update.UpdateSpecification.TopRowFilter, fetch);
             HandleWhereClause(update.UpdateSpecification.WhereClause, tables, false, out var postFilter);
@@ -611,6 +615,9 @@ namespace MarkMpn.Sql4Cds.Engine
         private Func<Entity,T> CompileScalarExpression<T>(ScalarExpression expr, List<EntityTable> tables, bool aggregate, IDictionary<string,Expression> calculatedFields, out Expression expression)
         {
             expression = ConvertScalarExpression(expr, tables, aggregate, calculatedFields, _param);
+
+            expression = Expr.Convert<T>(expression);
+
             return Expression.Lambda<Func<Entity, T>>(expression, _param).Compile();
         }
 
@@ -726,6 +733,45 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     case UnaryExpressionType.Positive:
                         return child;
+                }
+            }
+            else if (expr is FunctionCall func)
+            {
+                switch (func.FunctionName.Value.ToLower())
+                {
+                    case "dateadd":
+                        {
+                            if (func.Parameters.Count != 3)
+                                throw new NotSupportedQueryFragmentException("DATEPART function requires 3 arguments", func);
+
+                            if (!(func.Parameters[0] is ColumnReferenceExpression datepart))
+                                throw new NotSupportedQueryFragmentException("Invalid DATEPART argument", func.Parameters[0]);
+
+                            var number = ConvertScalarExpression(func.Parameters[1], tables, aggregate, calculatedFields, param);
+                            var date = ConvertScalarExpression(func.Parameters[2], tables, aggregate, calculatedFields, param);
+
+                            return Expr.Call(() => ExpressionFunctions.DateAdd(Expr.Arg<string>(), Expr.Arg<int>(), Expr.Arg<DateTime>()),
+                                Expression.Constant(datepart.MultiPartIdentifier.Identifiers[0].Value),
+                                number,
+                                date);
+                        }
+
+                    case "datediff":
+                        {
+                            if (func.Parameters.Count != 3)
+                                throw new NotSupportedQueryFragmentException("DATEDIFF function requires 3 arguments", func);
+
+                            if (!(func.Parameters[0] is ColumnReferenceExpression datepart))
+                                throw new NotSupportedQueryFragmentException("Invalid DATEPART argument", func.Parameters[0]);
+
+                            var startdate = ConvertScalarExpression(func.Parameters[1], tables, aggregate, calculatedFields, param);
+                            var enddate = ConvertScalarExpression(func.Parameters[2], tables, aggregate, calculatedFields, param);
+
+                            return Expr.Call(() => ExpressionFunctions.DateDiff(Expr.Arg<string>(), Expr.Arg<DateTime>(), Expr.Arg<DateTime>()),
+                                Expression.Constant(datepart.MultiPartIdentifier.Identifiers[0].Value),
+                                startdate,
+                                enddate);
+                        }
                 }
             }
 
@@ -1671,9 +1717,7 @@ namespace MarkMpn.Sql4Cds.Engine
             else if (searchCondition is BooleanIsNullExpression isNull)
             {
                 // Handle IS NULL and IS NOT NULL expresisons
-                var field = isNull.Expression as ColumnReferenceExpression;
-
-                if (field == null)
+                if (!(isNull.Expression is ColumnReferenceExpression field))
                     throw new NotSupportedQueryFragmentException("Unsupported comparison", isNull.Expression);
 
                 var entityName = GetColumnTableAlias(field, tables, out var entityTable);
@@ -1691,14 +1735,10 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 // Handle LIKE and NOT LIKE expressions. We can only support `column LIKE 'value'` expressions, not
                 // `'value' LIKE column`
-                var field = like.FirstExpression as ColumnReferenceExpression;
-
-                if (field == null)
+                if (!(like.FirstExpression is ColumnReferenceExpression field))
                     throw new PostProcessingRequiredException("Unsupported comparison", like.FirstExpression);
 
-                var value = like.SecondExpression as StringLiteral;
-
-                if (value == null)
+                if (!(like.SecondExpression is StringLiteral value))
                     throw new PostProcessingRequiredException("Unsupported comparison", like.SecondExpression);
 
                 var entityName = GetColumnTableAlias(field, tables, out var entityTable);
@@ -1716,9 +1756,7 @@ namespace MarkMpn.Sql4Cds.Engine
             else if (searchCondition is InPredicate @in)
             {
                 // Handle IN and NOT IN expressions. We can only support `column IN ('value1', 'value2', ...)` expressions
-                var field = @in.Expression as ColumnReferenceExpression;
-
-                if (field == null)
+                if (!(@in.Expression is ColumnReferenceExpression field))
                     throw new NotSupportedQueryFragmentException("Unsupported comparison", @in.Expression);
 
                 if (@in.Subquery != null)
@@ -1826,7 +1864,9 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 var lhs = ConvertScalarExpression(like.FirstExpression, tables, aggregate, null, param);
                 var rhs = ConvertScalarExpression(like.SecondExpression, tables, aggregate, null, param);
-                var func = Expression.Call(typeof(Sql2FetchXml).GetMethod(nameof(LikeFunction), BindingFlags.Static | BindingFlags.NonPublic), lhs, rhs);
+                var func = Expr.Call(() => ExpressionFunctions.LikeFunction(Expr.Arg<string>(), Expr.Arg<string>()),
+                    lhs,
+                    rhs);
 
                 if (like.NotDefined)
                     return Expression.Not(func);
@@ -1857,11 +1897,6 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 throw new PostProcessingRequiredException("Unhandled WHERE clause", searchCondition);
             }
-        }
-
-        private static bool LikeFunction(string value, string pattern)
-        {
-            throw new NotImplementedException();
         }
 
         /// <summary>
@@ -2415,8 +2450,10 @@ namespace MarkMpn.Sql4Cds.Engine
             if (items == null)
                 return new[] { item };
 
-            var list = new List<object>(items);
-            list.Add(item);
+            var list = new List<object>(items)
+            {
+                item
+            };
             return list.ToArray();
         }
     }

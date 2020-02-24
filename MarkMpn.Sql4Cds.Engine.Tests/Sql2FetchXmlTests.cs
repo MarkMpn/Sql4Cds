@@ -743,6 +743,51 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void BackToFrontLikeExpression()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT contactid FROM contact WHERE 'Mark' like firstname";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='contactid' />
+                        <attribute name='firstname' />
+                    </entity>
+                </fetch>
+            ");
+
+            var guid1 = Guid.NewGuid();
+            var guid2 = Guid.NewGuid();
+            context.Data["contact"] = new Dictionary<Guid, Entity>
+            {
+                [guid1] = new Entity("contact", guid1)
+                {
+                    ["contactid"] = guid1,
+                    ["firstname"] = "Foo"
+                },
+                [guid2] = new Entity("contact", guid2)
+                {
+                    ["contactid"] = guid2,
+                    ["firstname"] = "M%"
+                }
+            };
+
+            queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+
+            Assert.AreEqual(1, ((EntityCollection)queries[0].Result).Entities.Count);
+            Assert.AreEqual(guid2, ((EntityCollection)queries[0].Result).Entities[0].Id);
+        }
+
+        [TestMethod]
         public void UpdateFieldToField()
         {
             var context = new XrmFakedContext();
@@ -999,6 +1044,51 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(2, ((EntityCollection)queries[0].Result).Entities.Count);
             Assert.AreEqual(guid2, ((EntityCollection)queries[0].Result).Entities[0].Id);
             Assert.AreEqual(guid1, ((EntityCollection)queries[0].Result).Entities[1].Id);
+        }
+
+        [TestMethod]
+        public void DateCalculations()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT DATEADD(day, 1, createdon) AS nextday FROM contact WHERE DATEDIFF(hour, '2020-01-01', createdon) < 1";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='createdon' />
+                    </entity>
+                </fetch>
+            ");
+
+            var guid1 = Guid.NewGuid();
+            var guid2 = Guid.NewGuid();
+            context.Data["contact"] = new Dictionary<Guid, Entity>
+            {
+                [guid1] = new Entity("contact", guid1)
+                {
+                    ["contactid"] = guid1,
+                    ["createdon"] = new DateTime(2020, 2, 1)
+                },
+                [guid2] = new Entity("contact", guid2)
+                {
+                    ["contactid"] = guid2,
+                    ["createdon"] = new DateTime(2020, 1, 1, 0, 30, 0)
+                }
+            };
+
+            queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+
+            Assert.AreEqual(1, ((EntityCollection)queries[0].Result).Entities.Count);
+            Assert.AreEqual(guid2, ((EntityCollection)queries[0].Result).Entities[0].Id);
+            Assert.AreEqual(new DateTime(2020, 1, 2, 0, 30, 0), ((EntityCollection)queries[0].Result).Entities[0].GetAttributeValue<DateTime>("nextday"));
         }
 
         private void AssertFetchXml(Query[] queries, string fetchXml)

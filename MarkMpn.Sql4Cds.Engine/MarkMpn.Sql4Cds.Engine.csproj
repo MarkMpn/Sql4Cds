@@ -37,6 +37,7 @@
     <Reference Include="Microsoft.SqlServer.TransactSql.ScriptDom, Version=15.0.0.0, Culture=neutral, PublicKeyToken=89845dcd8080cc91, processorArchitecture=MSIL">
       <HintPath>..\packages\Microsoft.SqlServer.TransactSql.ScriptDom.15.0.4200.1\lib\net40\Microsoft.SqlServer.TransactSql.ScriptDom.dll</HintPath>
     </Reference>
+    <Reference Include="Microsoft.VisualBasic" />
     <Reference Include="Microsoft.Xrm.Sdk, Version=9.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
       <HintPath>..\packages\Microsoft.CrmSdk.CoreAssemblies.9.0.2.17\lib\net462\Microsoft.Xrm.Sdk.dll</HintPath>
     </Reference>
@@ -60,6 +61,7 @@
   <ItemGroup>
     <Compile Include="Aggregate.cs" />
     <Compile Include="AttributeMetadataCache.cs" />
+    <Compile Include="ExpressionFunctions.cs" />
     <Compile Include="FetchXml.cs">
       <DependentUpon>FetchXml.xsd</DependentUpon>
     </Compile>

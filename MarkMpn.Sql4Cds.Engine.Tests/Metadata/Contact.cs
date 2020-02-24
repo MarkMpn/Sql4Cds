@@ -21,5 +21,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests.Metadata
 
         [AttributeLogicalName("parentcustomerid")]
         public EntityReference ParentCustomerId { get; set; }
+
+        [AttributeLogicalName("createdon")]
+        public DateTime? CreatedOn { get; set; }
     }
 }
