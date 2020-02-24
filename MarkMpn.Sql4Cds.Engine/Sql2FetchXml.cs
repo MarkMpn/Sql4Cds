@@ -152,6 +152,8 @@ namespace MarkMpn.Sql4Cds.Engine
             }
         }
 
+        private static readonly ParameterExpression _param = Expression.Parameter(typeof(Entity), "entity");
+
         /// <summary>
         /// Creates a new <see cref="Sql2FetchXml"/> converter
         /// </summary>
@@ -600,16 +602,16 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         // Handle updates to the value from another field
                         // Ensure the source field is included in the query
-                        return new { Key = attrName, Value = CompileScalarExpression(assign.NewValue, tables, false) };
+                        return new { Key = attrName, Value = CompileScalarExpression<object>(assign.NewValue, tables, false, null, out _) };
                     }
                 })
                 .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
         }
 
-        private Func<Entity,object> CompileScalarExpression(ScalarExpression expr, List<EntityTable> tables, bool aggregate)
+        private Func<Entity,T> CompileScalarExpression<T>(ScalarExpression expr, List<EntityTable> tables, bool aggregate, IDictionary<string,Expression> calculatedFields, out Expression expression)
         {
-            var param = Expression.Parameter(typeof(Entity), "entity");
-            return Expression.Lambda<Func<Entity, object>>(ConvertScalarExpression(expr, tables, aggregate, param), param).Compile();
+            expression = ConvertScalarExpression(expr, tables, aggregate, calculatedFields, _param);
+            return Expression.Lambda<Func<Entity, T>>(expression, _param).Compile();
         }
 
         /// <summary>
@@ -618,16 +620,17 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="expr">The <see cref="ScalarExpression"/> to convert</param>
         /// <param name="tables">The tables to use as the data source for the expression</param>
         /// <param name="aggregate">Indicates if the query is an aggregate query</param>
+        /// <param name="calculatedFields">Any calculated fields that will be created when running the query</param>
         /// <returns>A compiled expression that evaluates the supplied <paramref name="expr"/> for a given entity</returns>
         /// <remarks>
         /// This method will ensure any attributes required by the <paramref name="expr"/> are added to the query.
         /// </remarks>
-        private Expression ConvertScalarExpression(ScalarExpression expr, List<EntityTable> tables, bool aggregate, ParameterExpression param)
+        private Expression ConvertScalarExpression(ScalarExpression expr, List<EntityTable> tables, bool aggregate, IDictionary<string,Expression> calculatedFields, ParameterExpression param)
         {
             if (expr is Microsoft.SqlServer.TransactSql.ScriptDom.BinaryExpression binary)
             {
-                var lhs = ConvertScalarExpression(binary.FirstExpression, tables, aggregate, param);
-                var rhs = ConvertScalarExpression(binary.SecondExpression, tables, aggregate, param);
+                var lhs = ConvertScalarExpression(binary.FirstExpression, tables, aggregate, calculatedFields, param);
+                var rhs = ConvertScalarExpression(binary.SecondExpression, tables, aggregate, calculatedFields, param);
 
                 switch (binary.BinaryExpressionType)
                 {
@@ -661,6 +664,10 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             else if (expr is ColumnReferenceExpression col)
             {
+                // Check if this attribute is really a calculated field
+                if (col.MultiPartIdentifier.Identifiers.Count == 1 && calculatedFields != null && calculatedFields.TryGetValue(col.MultiPartIdentifier.Identifiers[0].Value, out var calculated))
+                    return calculated;
+
                 // Check where this attribute should be taken from
                 var tableAlias = GetColumnTableAlias(col, tables, out var table);
                 var attrName = GetColumnAttribute(col);
@@ -707,7 +714,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             else if (expr is Microsoft.SqlServer.TransactSql.ScriptDom.UnaryExpression unary)
             {
-                var child = ConvertScalarExpression(unary.Expression, tables, aggregate, param);
+                var child = ConvertScalarExpression(unary.Expression, tables, aggregate, calculatedFields, param);
 
                 switch (unary.UnaryExpressionType)
                 {
@@ -859,12 +866,12 @@ namespace MarkMpn.Sql4Cds.Engine
             // Convert the FROM clause first so we've got the context for each other clause
             var fetch = new FetchXml.FetchType();
             var tables = HandleFromClause(querySpec.FromClause, fetch);
-            HandleSelectClause(querySpec, fetch, tables, out var columns);
+            HandleSelectClause(querySpec, fetch, tables, out var columns, out var calculatedFields, out var calculatedFieldExpressions);
             HandleTopClause(querySpec.TopRowFilter, fetch);
             HandleOffsetClause(querySpec, fetch);
             HandleGroupByClause(querySpec, fetch, tables, columns);
             HandleWhereClause(querySpec.WhereClause, tables, fetch.aggregate, out var postFilter);
-            HandleOrderByClause(querySpec, fetch, tables, columns);
+            var sorts = HandleOrderByClause(querySpec, fetch, tables, columns, calculatedFieldExpressions);
             HandleDistinctClause(querySpec, fetch);
 
             // Sort the elements in the query so they're in the order users expect based on online samples
@@ -876,6 +883,8 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 FetchXml = fetch,
                 PostFilter = postFilter,
+                CalculatedFields = calculatedFields,
+                PostSorts = sorts,
                 ColumnSet = columns,
                 AllPages = fetch.page == null && fetch.count == null
             };
@@ -1116,11 +1125,32 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="fetch">The FetchXML query converted so far</param>
         /// <param name="tables">The tables involved in the query</param>
         /// <param name="columns">The columns included in the output of the query</param>
-        private void HandleOrderByClause(QuerySpecification querySpec, FetchXml.FetchType fetch, List<EntityTable> tables, string[] columns)
+        /// <returns>The sorts to apply to the results of the query</returns>
+        private SortExpression[] HandleOrderByClause(QuerySpecification querySpec, FetchXml.FetchType fetch, List<EntityTable> tables, string[] columns, IDictionary<string, Expression> calculatedFieldExpressions)
         {
             if (querySpec.OrderByClause == null)
-                return;
+                return null;
 
+            try
+            {
+                HandleOrderByClauseFetchXml(querySpec, fetch, tables, columns, calculatedFieldExpressions);
+                return null;
+            }
+            catch (PostProcessingRequiredException)
+            {
+                return HandleOrderByClauseExpression(querySpec, fetch, tables, columns, calculatedFieldExpressions);
+            }
+        }
+
+        /// <summary>
+        /// Converts the ORDER BY clause of a SELECT query to FetchXML
+        /// </summary>
+        /// <param name="querySpec">The SELECT query to convert the ORDER BY clause from</param>
+        /// <param name="fetch">The FetchXML query converted so far</param>
+        /// <param name="tables">The tables involved in the query</param>
+        /// <param name="columns">The columns included in the output of the query</param>
+        private void HandleOrderByClauseFetchXml(QuerySpecification querySpec, FetchXml.FetchType fetch, List<EntityTable> tables, string[] columns, IDictionary<string, Expression> calculatedFieldExpressions)
+        {
             // Convert each ORDER BY expression in turn
             foreach (var sort in querySpec.OrderByClause.OrderByElements)
             {
@@ -1131,6 +1161,10 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (sort.Expression is IntegerLiteral colIndex)
                     {
                         var colName = columns[Int32.Parse(colIndex.Value) - 1];
+
+                        if (calculatedFieldExpressions != null && calculatedFieldExpressions.ContainsKey(colName))
+                            throw new PostProcessingRequiredException("Cannot sort by calculated field", sort.Expression);
+
                         col = new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier() };
 
                         foreach (var part in colName.Split('.'))
@@ -1148,9 +1182,12 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
                     else
                     {
-                        throw new NotSupportedQueryFragmentException("Unsupported ORDER BY clause", sort.Expression);
+                        throw new PostProcessingRequiredException("Unsupported ORDER BY clause", sort.Expression);
                     }
                 }
+
+                if (col.MultiPartIdentifier.Identifiers.Count == 1 && calculatedFieldExpressions != null && calculatedFieldExpressions.ContainsKey(col.MultiPartIdentifier.Identifiers[0].Value))
+                    throw new PostProcessingRequiredException("Cannot sort by calculated field", sort.Expression);
 
                 // Find the table from which the column is taken
                 GetColumnTableAlias(col, tables, out var orderTable);
@@ -1158,7 +1195,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 // Can't control sequence of orders between link-entities. Orders are always applied in depth-first-search order, so
                 // check there is no order already applied on a later entity.
                 if (LaterEntityHasOrder(tables, orderTable))
-                    throw new NotSupportedQueryFragmentException("Order already applied to later link-entity", sort.Expression);
+                    throw new PostProcessingRequiredException("Order already applied to later link-entity", sort.Expression);
                 
                 var order = new FetchOrderType
                 {
@@ -1202,6 +1239,49 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 orderTable.AddItem(order);
             }
+        }
+
+
+        /// <summary>
+        /// Converts the ORDER BY clause of a SELECT query to expressions
+        /// </summary>
+        /// <param name="querySpec">The SELECT query to convert the ORDER BY clause from</param>
+        /// <param name="fetch">The FetchXML query converted so far</param>
+        /// <param name="tables">The tables involved in the query</param>
+        /// <param name="columns">The columns included in the output of the query</param>
+        private SortExpression[] HandleOrderByClauseExpression(QuerySpecification querySpec, FetchXml.FetchType fetch, List<EntityTable> tables, string[] columns, IDictionary<string, Expression> calculatedFieldExpressions)
+        {
+            // Check how many sorts were already converted to native FetchXML - we can use these results to only sort partial sequences
+            // of results rather than having to sort the entire result set in memory.
+            var fetchXmlSorts = tables.SelectMany(t => (t.Entity?.Items ?? t.LinkEntity?.Items).OfType<FetchOrderType>()).Count();
+
+            // Convert each ORDER BY expression in turn
+            var sortNumber = 0;
+            var sorts = new List<SortExpression>();
+
+            foreach (var sort in querySpec.OrderByClause.OrderByElements)
+            {
+                var expression = sort.Expression;
+
+                if (expression is IntegerLiteral colIndex)
+                {
+                    var colName = columns[Int32.Parse(colIndex.Value) - 1];
+
+                    expression = new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier() };
+
+                    foreach (var part in colName.Split('.'))
+                        ((ColumnReferenceExpression)expression).MultiPartIdentifier.Identifiers.Add(new Identifier { Value = part });
+                }
+
+                sortNumber++;
+                var isFetchXml = sortNumber <= fetchXmlSorts;
+                var selector = CompileScalarExpression<IComparable>(expression, tables, fetch.aggregateSpecified && fetch.aggregate, calculatedFieldExpressions, out _);
+                var descending = sort.SortOrder == SortOrder.Descending;
+
+                sorts.Add(new SortExpression(isFetchXml, selector, descending));
+            }
+
+            return sorts.ToArray();
         }
 
         /// <summary>
@@ -1308,7 +1388,7 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 HandleFilterFetchXml(searchCondition, criteria, tables, targetTable, where, false, ref col1, ref col2, aggregate, ref postFilter, param);
             }
-            catch (PostProcessingRequiredException ex)
+            catch (PostProcessingRequiredException)
             {
                 if (!where)
                     throw;
@@ -1690,8 +1770,8 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             if (searchCondition is BooleanComparisonExpression comparison)
             {
-                var lhs = ConvertScalarExpression(comparison.FirstExpression, tables, aggregate, param);
-                var rhs = ConvertScalarExpression(comparison.SecondExpression, tables, aggregate, param);
+                var lhs = ConvertScalarExpression(comparison.FirstExpression, tables, aggregate, null, param);
+                var rhs = ConvertScalarExpression(comparison.SecondExpression, tables, aggregate, null, param);
 
                 switch (comparison.ComparisonType)
                 {
@@ -1735,7 +1815,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             else if (searchCondition is BooleanIsNullExpression isNull)
             {
-                var value = ConvertScalarExpression(isNull.Expression, tables, aggregate, param);
+                var value = ConvertScalarExpression(isNull.Expression, tables, aggregate, null, param);
 
                 if (isNull.IsNot)
                     return Expression.NotEqual(value, Expression.Constant(null));
@@ -1744,8 +1824,8 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             else if (searchCondition is LikePredicate like)
             {
-                var lhs = ConvertScalarExpression(like.FirstExpression, tables, aggregate, param);
-                var rhs = ConvertScalarExpression(like.SecondExpression, tables, aggregate, param);
+                var lhs = ConvertScalarExpression(like.FirstExpression, tables, aggregate, null, param);
+                var rhs = ConvertScalarExpression(like.SecondExpression, tables, aggregate, null, param);
                 var func = Expression.Call(typeof(Sql2FetchXml).GetMethod(nameof(LikeFunction), BindingFlags.Static | BindingFlags.NonPublic), lhs, rhs);
 
                 if (like.NotDefined)
@@ -1759,11 +1839,11 @@ namespace MarkMpn.Sql4Cds.Engine
                     throw new NotSupportedQueryFragmentException("Unsupported subquery, rewrite query as join", @in.Subquery);
 
                 Expression converted = null;
-                var value = ConvertScalarExpression(@in.Expression, tables, aggregate, param);
+                var value = ConvertScalarExpression(@in.Expression, tables, aggregate, null, param);
 
                 foreach (var v in @in.Values)
                 {
-                    var equal = Expression.Equal(value, ConvertScalarExpression(v, tables, aggregate, param));
+                    var equal = Expression.Equal(value, ConvertScalarExpression(v, tables, aggregate, null, param));
 
                     if (converted == null)
                         converted = equal;
@@ -1791,9 +1871,13 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="fetch">The FetchXML query converted so far</param>
         /// <param name="tables">The tables involved in the query</param>
         /// <param name="columns">The columns included in the output of the query</param>
-        private void HandleSelectClause(QuerySpecification select, FetchXml.FetchType fetch, List<EntityTable> tables, out string[] columns)
+        /// <param name="calculatedFields">The functions to use to generate calculated fields</param>
+        /// <param name="calculatedFieldExpressions">The expressions that generate the calculated fields</param>
+        private void HandleSelectClause(QuerySpecification select, FetchXml.FetchType fetch, List<EntityTable> tables, out string[] columns, out IDictionary<string,Func<Entity,object>> calculatedFields, out IDictionary<string,Expression> calculatedFieldExpressions)
         {
             var cols = new List<string>();
+            calculatedFields = null;
+            calculatedFieldExpressions = null;
             
             // Process each column in the SELECT list in turn
             foreach (var field in select.SelectElements)
@@ -1840,13 +1924,36 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     // Get the requested alias for the column, if any.
                     var alias = scalar.ColumnName?.Identifier?.Value;
-                    AddAttribute(fetch, tables, cols, expr, out var table, out var attr, ref alias);
 
-                    // Even if the attribute wasn't added to the entity because there's already an <all-attributes>, add it to the column list again
-                    if (alias == null)
-                        cols.Add((table.LinkEntity == null ? "" : ((table.Alias ?? table.EntityName) + ".")) + attr.name);
-                    else
+                    try
+                    {
+                        AddAttribute(fetch, tables, cols, expr, out var table, out var attr, ref alias);
+
+                        // Even if the attribute wasn't added to the entity because there's already an <all-attributes>, add it to the column list again
+                        if (alias == null)
+                            cols.Add((table.LinkEntity == null ? "" : ((table.Alias ?? table.EntityName) + ".")) + attr.name);
+                        else
+                            cols.Add(alias);
+                    }
+                    catch (NotSupportedQueryFragmentException)
+                    {
+                        // Try again converting to an expression
+                        var func = CompileScalarExpression<object>(expr, tables, false, null, out var expression);
+
+                        if (calculatedFields == null)
+                            calculatedFields = new Dictionary<string, Func<Entity, object>>();
+
+                        if (calculatedFieldExpressions == null)
+                            calculatedFieldExpressions = new Dictionary<string, Expression>();
+
+                        // Calculated field must have an alias, auto-generate one if one is not given
+                        if (alias == null)
+                            alias = $"Expr{cols.Count + 1}";
+
+                        calculatedFields[alias] = func;
+                        calculatedFieldExpressions[alias] = expression;
                         cols.Add(alias);
+                    }
                 }
                 else
                 {

@@ -81,6 +81,16 @@ namespace MarkMpn.Sql4Cds.Engine
         public Func<Entity,bool> PostFilter { get; set; }
 
         /// <summary>
+        /// The details of the calculated fields to generate
+        /// </summary>
+        public IDictionary<string,Func<Entity,object>> CalculatedFields { get; set; }
+
+        /// <summary>
+        /// The additional sorts to by applied to the results
+        /// </summary>
+        public SortExpression[] PostSorts { get; set; }
+
+        /// <summary>
         /// Retrieves all the data matched by the <see cref="FetchXml"/>
         /// </summary>
         /// <param name="org">The <see cref="IOrganizationService"/> to execute the query against</param>
@@ -104,8 +114,25 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="org">The <see cref="IOrganizationService"/> to execute the query against</param>
         /// <param name="metadata">The metadata cache to use when executing the query</param>
         /// <param name="options">The options to apply to the query execution</param>
-        /// <returns>The records matched by the query</returns>
+        /// <returns>The records matched by the query, with any custom filters, calculated fields and sorted applied</returns>
         protected IEnumerable<Entity> RetrieveSequence(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        {
+            var sequence = RetrieveSequenceInternal(org, metadata, options);
+
+            if (PostSorts != null)
+                sequence = sequence.OrderBy(PostSorts);
+
+            return sequence;
+        }
+
+        /// <summary>
+        /// Retrieves all the data matched by the <see cref="FetchXml"/>
+        /// </summary>
+        /// <param name="org">The <see cref="IOrganizationService"/> to execute the query against</param>
+        /// <param name="metadata">The metadata cache to use when executing the query</param>
+        /// <param name="options">The options to apply to the query execution</param>
+        /// <returns>The records matched by the query, with any custom filters and calculated fields applied</returns>
+        private IEnumerable<Entity> RetrieveSequenceInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
             if (options.Cancelled)
                 yield break;
@@ -121,7 +148,10 @@ namespace MarkMpn.Sql4Cds.Engine
             foreach (var entity in res.Entities)
             {
                 if (PostFilter == null || PostFilter(entity))
+                {
+                    AddCalculatedFields(entity);
                     yield return entity;
+                }
             }
 
             var count = res.Entities.Count;
@@ -148,12 +178,24 @@ namespace MarkMpn.Sql4Cds.Engine
                 foreach (var entity in nextPage.Entities)
                 {
                     if (PostFilter == null || PostFilter(entity))
+                    {
+                        AddCalculatedFields(entity);
                         yield return entity;
+                    }
                 }
 
                 count += nextPage.Entities.Count;
                 res = nextPage;
             }
+        }
+
+        private void AddCalculatedFields(Entity entity)
+        {
+            if (CalculatedFields == null)
+                return;
+
+            foreach (var calculation in CalculatedFields)
+                entity[calculation.Key] = calculation.Value(entity);
         }
 
         /// <summary>

@@ -77,6 +77,8 @@
     </Compile>
     <Compile Include="Query.cs" />
     <Compile Include="QueryParseException.cs" />
+    <Compile Include="AggregateSortExtensions.cs" />
+    <Compile Include="SortExpression.cs" />
     <Compile Include="Sql2FetchXml.cs" />
   </ItemGroup>
   <ItemGroup>
