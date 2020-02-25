@@ -636,9 +636,11 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             if (expr is Microsoft.SqlServer.TransactSql.ScriptDom.BinaryExpression binary)
             {
+                // Binary operator - convert the two operands to expressions first
                 var lhs = ConvertScalarExpression(binary.FirstExpression, tables, aggregate, calculatedFields, param);
                 var rhs = ConvertScalarExpression(binary.SecondExpression, tables, aggregate, calculatedFields, param);
 
+                // If either operand is a Nullable<T>, get the inner Value to use for the main operator
                 var lhsValue = lhs;
                 var rhsValue = rhs;
 
@@ -721,6 +723,8 @@ namespace MarkMpn.Sql4Cds.Engine
                     coreOperator = Expression.Convert(coreOperator, targetType);
                 }
 
+                // Final result for int? lhs + int? rhs is
+                // lhs == null || rhs == null ? (int?) null : (int?) (lhs.Value + rhs.Value)
                 return Expression.Condition(
                     test: nullCheck,
                     ifTrue: Expression.Convert(Expression.Constant(null), targetType),
@@ -794,6 +798,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             else if (expr is FunctionCall func)
             {
+                // Function calls become method calls. All allowed methods are statics in the ExpressionFunctions class
                 var method = typeof(ExpressionFunctions).GetMethod(func.FunctionName.Value, BindingFlags.Static | BindingFlags.Public | BindingFlags.IgnoreCase);
 
                 if (method == null)
@@ -833,6 +838,10 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             else if (expr is SearchedCaseExpression searchedCase)
             {
+                // CASE WHEN field = 1 THEN 'Big' WHEN field = 2 THEN 'Small' ELSE 'Unknown' END
+                // becomes
+                // field = 1 ? 'Big' : field = 2 ? 'Small' : 'Unknown'
+                // Build the expression up from the end and work backwards
                 var converted = searchedCase.ElseExpression == null ? Expression.Constant(null) : ConvertScalarExpression(searchedCase.ElseExpression, tables, aggregate, calculatedFields, param);
 
                 foreach (var when in searchedCase.WhenClauses.Reverse())
@@ -847,6 +856,10 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             else if (expr is SimpleCaseExpression simpleCase)
             {
+                // CASE field WHEN 1 THEN 'Big' WHEN 2 THEN 'Small' ELSE 'Unknown' END
+                // becomes
+                // field = 1 ? 'Big' : field = 2 ? 'Small' : 'Unknown'
+                // Build the expression up from the end and work backwards
                 var value = ConvertScalarExpression(simpleCase.InputExpression, tables, aggregate, calculatedFields, param);
                 var converted = simpleCase.ElseExpression == null ? Expression.Constant(null) : ConvertScalarExpression(simpleCase.ElseExpression, tables, aggregate, calculatedFields, param);
 
