@@ -639,35 +639,92 @@ namespace MarkMpn.Sql4Cds.Engine
                 var lhs = ConvertScalarExpression(binary.FirstExpression, tables, aggregate, calculatedFields, param);
                 var rhs = ConvertScalarExpression(binary.SecondExpression, tables, aggregate, calculatedFields, param);
 
+                var lhsValue = lhs;
+                var rhsValue = rhs;
+
+                if (lhsValue.Type.IsGenericType && lhsValue.Type.GetGenericTypeDefinition() == typeof(Nullable<>))
+                    lhsValue = Expression.Property(lhsValue, lhsValue.Type.GetProperty("Value"));
+
+                if (rhsValue.Type.IsGenericType && rhsValue.Type.GetGenericTypeDefinition() == typeof(Nullable<>))
+                    rhsValue = Expression.Property(rhsValue, rhsValue.Type.GetProperty("Value"));
+
+                Expression coreOperator;
+
                 switch (binary.BinaryExpressionType)
                 {
                     case BinaryExpressionType.Add:
                         if (lhs.Type == typeof(string))
-                            return Expression.Add(lhs, rhs, typeof(string).GetMethod("Concat", new[] { typeof(object), typeof(object) }));
-
-                        return Expression.Add(lhs, rhs);
+                            coreOperator = Expression.Add(lhs, rhs, typeof(string).GetMethod("Concat", new[] { typeof(object), typeof(object) }));
+                        else
+                            coreOperator = Expression.Add(lhs, rhs);
+                        break;
 
                     case BinaryExpressionType.BitwiseAnd:
-                        return Expression.And(lhs, rhs);
+                        coreOperator = Expression.And(lhs, rhs);
+                        break;
 
                     case BinaryExpressionType.BitwiseOr:
-                        return Expression.Or(lhs, rhs);
+                        coreOperator = Expression.Or(lhs, rhs);
+                        break;
 
                     case BinaryExpressionType.BitwiseXor:
-                        return Expression.ExclusiveOr(lhs, rhs);
+                        coreOperator = Expression.ExclusiveOr(lhs, rhs);
+                        break;
 
                     case BinaryExpressionType.Divide:
-                        return Expression.Divide(lhs, rhs);
+                        coreOperator = Expression.Divide(lhs, rhs);
+                        break;
 
                     case BinaryExpressionType.Modulo:
-                        return Expression.Modulo(lhs, rhs);
+                        coreOperator = Expression.Modulo(lhs, rhs);
+                        break;
 
                     case BinaryExpressionType.Multiply:
-                        return Expression.Multiply(lhs, rhs);
+                        coreOperator = Expression.Multiply(lhs, rhs);
+                        break;
 
                     case BinaryExpressionType.Subtract:
-                        return Expression.Subtract(lhs, rhs);
+                        coreOperator = Expression.Subtract(lhs, rhs);
+                        break;
+
+                    default:
+                        throw new NotSupportedQueryFragmentException("Unsupported operator", expr);
                 }
+
+                // Add null checking for all operator types
+                Expression nullCheck = null;
+
+                if (lhs.Type.IsClass || lhs.Type.IsGenericType && lhs.Type.GetGenericTypeDefinition() == typeof(Nullable<>))
+                    nullCheck = Expression.Equal(lhs, Expression.Constant(null));
+
+                if (rhs.Type.IsClass || rhs.Type.IsGenericType && lhs.Type.GetGenericTypeDefinition() == typeof(Nullable<>))
+                {
+                    var rhsNullCheck = Expression.Equal(rhs, Expression.Constant(null));
+
+                    if (nullCheck == null)
+                        nullCheck = rhsNullCheck;
+                    else
+                        nullCheck = Expression.OrElse(nullCheck, rhsNullCheck);
+                }
+
+                // If neither type was nullable, nothing to do
+                if (nullCheck == null)
+                    return coreOperator;
+
+                // If the core operator returns non-nullable value (e.g. int + int), make it nullable (i.e. (int?) int + int)
+                // so we can return a null value of the same type if either argument was actually null.
+                var targetType = coreOperator.Type;
+
+                if (targetType.IsPrimitive)
+                {
+                    targetType = typeof(Nullable<>).MakeGenericType(targetType);
+                    coreOperator = Expression.Convert(coreOperator, targetType);
+                }
+
+                return Expression.Condition(
+                    test: nullCheck,
+                    ifTrue: Expression.Convert(Expression.Constant(null), targetType),
+                    ifFalse: coreOperator);
             }
             else if (expr is ColumnReferenceExpression col)
             {
@@ -774,6 +831,35 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 return Expr.Call(method, args);
             }
+            else if (expr is SearchedCaseExpression searchedCase)
+            {
+                var converted = searchedCase.ElseExpression == null ? Expression.Constant(null) : ConvertScalarExpression(searchedCase.ElseExpression, tables, aggregate, calculatedFields, param);
+
+                foreach (var when in searchedCase.WhenClauses.Reverse())
+                {
+                    converted = Expression.Condition(
+                        test: HandleFilterPredicate(when.WhenExpression, tables, aggregate, param),
+                        ifTrue: ConvertScalarExpression(when.ThenExpression, tables, aggregate, calculatedFields, param),
+                        ifFalse: converted);
+                }
+
+                return converted;
+            }
+            else if (expr is SimpleCaseExpression simpleCase)
+            {
+                var value = ConvertScalarExpression(simpleCase.InputExpression, tables, aggregate, calculatedFields, param);
+                var converted = simpleCase.ElseExpression == null ? Expression.Constant(null) : ConvertScalarExpression(simpleCase.ElseExpression, tables, aggregate, calculatedFields, param);
+
+                foreach (var when in simpleCase.WhenClauses.Reverse())
+                {
+                    converted = Expression.Condition(
+                        test: Expression.Equal(value, ConvertScalarExpression(when.WhenExpression, tables, aggregate, calculatedFields, param)),
+                        ifTrue: ConvertScalarExpression(when.ThenExpression, tables, aggregate, calculatedFields, param),
+                        ifFalse: converted);
+                }
+
+                return converted;
+            }
 
             throw new NotSupportedQueryFragmentException("Unsupported expression", expr);
         }
@@ -783,28 +869,28 @@ namespace MarkMpn.Sql4Cds.Engine
             switch (type)
             {
                 case AttributeTypeCode.BigInt:
-                    return typeof(long);
+                    return typeof(long?);
 
                 case AttributeTypeCode.Boolean:
-                    return typeof(bool);
+                    return typeof(bool?);
 
                 case AttributeTypeCode.Customer:
                     return typeof(EntityReference);
 
                 case AttributeTypeCode.DateTime:
-                    return typeof(DateTime);
+                    return typeof(DateTime?);
 
                 case AttributeTypeCode.Decimal:
-                    return typeof(decimal);
+                    return typeof(decimal?);
 
                 case AttributeTypeCode.Double:
-                    return typeof(double);
+                    return typeof(double?);
 
                 case AttributeTypeCode.EntityName:
                     return typeof(string);
 
                 case AttributeTypeCode.Integer:
-                    return typeof(int);
+                    return typeof(int?);
 
                 case AttributeTypeCode.Lookup:
                     return typeof(EntityReference);
@@ -813,7 +899,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     return typeof(string);
 
                 case AttributeTypeCode.Money:
-                    return typeof(decimal);
+                    return typeof(decimal?);
 
                 case AttributeTypeCode.Owner:
                     return typeof(EntityReference);
@@ -821,13 +907,13 @@ namespace MarkMpn.Sql4Cds.Engine
                 case AttributeTypeCode.Picklist:
                 case AttributeTypeCode.State:
                 case AttributeTypeCode.Status:
-                    return typeof(int);
+                    return typeof(int?);
 
                 case AttributeTypeCode.String:
                     return typeof(string);
 
                 case AttributeTypeCode.Uniqueidentifier:
-                    return typeof(Guid);
+                    return typeof(Guid?);
             }
 
             return null;
@@ -1439,7 +1525,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (!where)
                     throw;
 
-                var predicate = HandleFilterPredicate(searchCondition, tables, targetTable, aggregate, param);
+                var predicate = HandleFilterPredicate(searchCondition, tables, aggregate, param);
 
                 if (postFilter == null)
                     postFilter = predicate;
@@ -1678,7 +1764,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (inOr || op != filterType.and || !where)
                         throw;
 
-                    var lhsPredicate = HandleFilterPredicate(binary.FirstExpression, tables, targetTable, aggregate, param);
+                    var lhsPredicate = HandleFilterPredicate(binary.FirstExpression, tables, aggregate, param);
                     if (postFilter == null)
                         postFilter = lhsPredicate;
                     else
@@ -1694,7 +1780,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (inOr || op != filterType.and || !where)
                         throw;
 
-                    var rhsPredicate = HandleFilterPredicate(binary.SecondExpression, tables, targetTable, aggregate, param);
+                    var rhsPredicate = HandleFilterPredicate(binary.SecondExpression, tables, aggregate, param);
                     if (postFilter == null)
                         postFilter = rhsPredicate;
                     else
@@ -1800,46 +1886,92 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="searchCondition">The SQL filter to convert from</param>
         /// <param name="tables">The tables involved in the query</param>
-        /// <param name="targetTable">The table that the filters will be applied to</param>
         /// <param name="aggregate">Indicates if the query is an aggregate query</param>
         /// <param name="param">The parameter that identifies the entity to apply the predicate to</param>
         /// <returns>The expression that implements the <paramref name="searchCondition"/></returns>
-        private Expression HandleFilterPredicate(BooleanExpression searchCondition, List<EntityTable> tables, EntityTable targetTable, bool aggregate, ParameterExpression param)
+        private Expression HandleFilterPredicate(BooleanExpression searchCondition, List<EntityTable> tables, bool aggregate, ParameterExpression param)
         {
             if (searchCondition is BooleanComparisonExpression comparison)
             {
                 var lhs = ConvertScalarExpression(comparison.FirstExpression, tables, aggregate, null, param);
                 var rhs = ConvertScalarExpression(comparison.SecondExpression, tables, aggregate, null, param);
 
+                // Type conversions for DateTime vs. string
+                if (lhs.Type == typeof(DateTime?) && rhs.Type == typeof(string))
+                    rhs = Expr.Convert<DateTime?>(rhs);
+                else if (lhs.Type == typeof(string) && rhs.Type == typeof(DateTime?))
+                    lhs = Expr.Convert<DateTime?>(lhs);
+
+                var lhsValue = lhs;
+                var rhsValue = rhs;
+
+                if (lhsValue.Type.IsGenericType && lhsValue.Type.GetGenericTypeDefinition() == typeof(Nullable<>))
+                    lhsValue = Expression.Property(lhsValue, lhsValue.Type.GetProperty("Value"));
+
+                if (rhsValue.Type.IsGenericType && rhsValue.Type.GetGenericTypeDefinition() == typeof(Nullable<>))
+                    rhsValue = Expression.Property(rhsValue, rhsValue.Type.GetProperty("Value"));
+
+                Expression coreComparison;
+
                 switch (comparison.ComparisonType)
                 {
                     case BooleanComparisonType.Equals:
-                        return Expression.Equal(lhs, rhs);
+                        coreComparison = Expression.Equal(lhsValue, rhsValue);
+                        break;
 
                     case BooleanComparisonType.GreaterThan:
-                        return Expression.GreaterThan(lhs, rhs);
+                        coreComparison = Expression.GreaterThan(lhsValue, rhsValue);
+                        break;
 
                     case BooleanComparisonType.GreaterThanOrEqualTo:
-                        return Expression.GreaterThanOrEqual(lhs, rhs);
+                        coreComparison = Expression.GreaterThanOrEqual(lhsValue, rhsValue);
+                        break;
 
                     case BooleanComparisonType.LessThan:
-                        return Expression.LessThan(lhs, rhs);
+                        coreComparison = Expression.LessThan(lhsValue, rhsValue);
+                        break;
 
                     case BooleanComparisonType.LessThanOrEqualTo:
-                        return Expression.LessThanOrEqual(lhs, rhs);
+                        coreComparison = Expression.LessThanOrEqual(lhsValue, rhsValue);
+                        break;
 
                     case BooleanComparisonType.NotEqualToBrackets:
                     case BooleanComparisonType.NotEqualToExclamation:
-                        return Expression.NotEqual(lhs, rhs);
+                        coreComparison = Expression.NotEqual(lhsValue, rhsValue);
+                        break;
 
                     default:
                         throw new NotSupportedQueryFragmentException("Unsupported comparison type", comparison);
                 }
+
+                // Add null checking for all comparison types
+                Expression nullCheck = null;
+
+                if (lhs.Type.IsClass || lhs.Type.IsGenericType && lhs.Type.GetGenericTypeDefinition() == typeof(Nullable<>))
+                    nullCheck = Expression.Equal(lhs, Expression.Constant(null));
+
+                if (rhs.Type.IsClass || rhs.Type.IsGenericType && lhs.Type.GetGenericTypeDefinition() == typeof(Nullable<>))
+                {
+                    var rhsNullCheck = Expression.Equal(rhs, Expression.Constant(null));
+
+                    if (nullCheck == null)
+                        nullCheck = rhsNullCheck;
+                    else
+                        nullCheck = Expression.OrElse(nullCheck, rhsNullCheck);
+                }
+
+                if (nullCheck == null)
+                    return coreComparison;
+
+                return Expression.Condition(
+                    test: nullCheck,
+                    ifTrue: Expression.Constant(false),
+                    ifFalse: coreComparison);
             }
             else if (searchCondition is BooleanBinaryExpression binary)
             {
-                var lhs = HandleFilterPredicate(binary.FirstExpression, tables, targetTable, aggregate, param);
-                var rhs = HandleFilterPredicate(binary.SecondExpression, tables, targetTable, aggregate, param);
+                var lhs = HandleFilterPredicate(binary.FirstExpression, tables, aggregate, param);
+                var rhs = HandleFilterPredicate(binary.SecondExpression, tables, aggregate, param);
 
                 if (binary.BinaryExpressionType == BooleanBinaryExpressionType.And)
                     return Expression.And(lhs, rhs);
@@ -1848,7 +1980,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             else if (searchCondition is BooleanParenthesisExpression paren)
             {
-                var child = HandleFilterPredicate(paren.Expression, tables, targetTable, aggregate, param);
+                var child = HandleFilterPredicate(paren.Expression, tables, aggregate, param);
                 return child;
             }
             else if (searchCondition is BooleanIsNullExpression isNull)

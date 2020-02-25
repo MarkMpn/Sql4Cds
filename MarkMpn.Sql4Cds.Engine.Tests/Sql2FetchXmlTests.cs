@@ -903,6 +903,46 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void SelectExpressionNullValues()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT firstname, 'Hello ' + firstname AS greeting, case when createdon > '2020-01-01' then 'new' else 'old' end AS age FROM contact";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <attribute name='createdon' />
+                    </entity>
+                </fetch>
+            ");
+
+            var guid = Guid.NewGuid();
+            context.Data["contact"] = new Dictionary<Guid, Entity>
+            {
+                [guid] = new Entity("contact", guid)
+                {
+                    ["contactid"] = guid
+                }
+            };
+
+            queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+
+            Assert.AreEqual(1, ((EntityCollection)queries[0].Result).Entities.Count);
+            Assert.IsNull(((EntityCollection)queries[0].Result).Entities[0].GetAttributeValue<string>("firstname"));
+            Assert.IsNull(((EntityCollection)queries[0].Result).Entities[0].GetAttributeValue<string>("greeting"));
+            Assert.AreEqual("old", ((EntityCollection)queries[0].Result).Entities[0].GetAttributeValue<string>("age"));
+        }
+
+        [TestMethod]
         public void OrderByExpression()
         {
             var context = new XrmFakedContext();

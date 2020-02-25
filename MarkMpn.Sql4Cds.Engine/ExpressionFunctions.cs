@@ -20,6 +20,9 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <returns><c>true</c> if the <paramref name="value"/> matches the <paramref name="pattern"/>, or <c>false</c> otherwise</returns>
         public static bool Like(string value, string pattern)
         {
+            if (value == null || pattern == null)
+                return false;
+
             var regex = "^" + Regex.Escape(pattern).Replace("%", ".*").Replace("_", ".") + "$";
             return Regex.IsMatch(value, regex, RegexOptions.IgnoreCase);
         }
@@ -32,10 +35,13 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="date">The date value to add to</param>
         /// <returns>The modified date</returns>
         /// <see href="https://docs.microsoft.com/en-us/sql/t-sql/functions/dateadd-transact-sql?view=sql-server-ver15"/>
-        public static DateTime DateAdd(string datepart, double number, DateTime date)
+        public static DateTime? DateAdd(string datepart, double? number, DateTime? date)
         {
+            if (number == null || date == null)
+                return null;
+
             var interval = DatePartToInterval(datepart);
-            return DateAndTime.DateAdd(interval, number, date);
+            return DateAndTime.DateAdd(interval, number.Value, date.Value);
         }
 
         /// <summary>
@@ -46,10 +52,13 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="enddate">The second date to compare to</param>
         /// <returns>The number of whole <paramref name="datepart"/> units between <paramref name="startdate"/> and <paramref name="enddate"/></returns>
         /// <see href="https://docs.microsoft.com/en-us/sql/t-sql/functions/datediff-transact-sql?view=sql-server-ver15"/>
-        public static int DateDiff(string datepart, DateTime startdate, DateTime enddate)
+        public static int? DateDiff(string datepart, DateTime? startdate, DateTime? enddate)
         {
+            if (startdate == null || enddate == null)
+                return null;
+
             var interval = DatePartToInterval(datepart);
-            return (int) DateAndTime.DateDiff(interval, startdate, enddate);
+            return (int) DateAndTime.DateDiff(interval, startdate.Value, enddate.Value);
         }
 
         /// <summary>
@@ -58,10 +67,13 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="datepart">The specific part of the <paramref name="date"/> argument for which DATEPART will return an integer</param>
         /// <param name="date">The date to extract the <paramref name="datepart"/> from</param>
         /// <returns>The <paramref name="datepart"/> of the <paramref name="date"/></returns>
-        public static int DatePart(string datepart, DateTime date)
+        public static int? DatePart(string datepart, DateTime? date)
         {
+            if (date == null)
+                return null;
+
             var interval = DatePartToInterval(datepart);
-            return DateAndTime.DatePart(interval, date);
+            return DateAndTime.DatePart(interval, date.Value);
         }
 
         /// <summary>
@@ -226,8 +238,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 return Expression.Convert(expr, type);
 
             // Parse string literals to DateTime values
-            if (expr.Type == typeof(string) && type == typeof(DateTime))
-                return Expr.Call(() => DateTime.Parse(Arg<string>()), expr);
+            if (expr.Type == typeof(string) && type == typeof(DateTime?))
+                return Expr.Call(() => ParseDateTime(Arg<string>()), expr);
 
             // Check for compatible class types
             if (expr.Type.IsClass && type.IsClass)
@@ -244,6 +256,14 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             throw new NotSupportedException($"Cannot convert from {expr.Type} to {type}");
+        }
+
+        private static DateTime? ParseDateTime(string str)
+        {
+            if (str == null)
+                return null;
+
+            return DateTime.Parse(str);
         }
     }
 }

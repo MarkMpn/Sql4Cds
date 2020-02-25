@@ -438,12 +438,43 @@ namespace MarkMpn.Sql4Cds
                                 xmlDisplay.Text = FetchXmlQuery.Serialize(fxq.FetchXml);
                                 xmlDisplay.ReadOnly = true;
 
+                                Panel postWarning = null;
+                                if (fxq.CalculatedFields != null || fxq.PostFilter != null || fxq.PostSorts != null)
+                                {
+                                    postWarning = new Panel
+                                    {
+                                        BackColor = SystemColors.Info,
+                                        BorderStyle = BorderStyle.FixedSingle,
+                                        Dock = DockStyle.Top,
+                                        Padding = new Padding(4),
+                                        Height = 24
+                                    };
+                                    postWarning.Controls.Add(new System.Windows.Forms.Label
+                                    {
+                                        Text = "This query required additional processing. This FetchXML gives the required data, but will not give the final results when run outside SQL 4 CDS",
+                                        ForeColor = SystemColors.InfoText,
+                                        AutoSize = false,
+                                        Dock = DockStyle.Fill
+                                    });
+                                    postWarning.Controls.Add(new PictureBox
+                                    {
+                                        Image = SystemIcons.Information.ToBitmap(),
+                                        Height = 16,
+                                        Width = 16,
+                                        Dock = DockStyle.Left
+                                    }); ;
+                                }
+
                                 var toolbar = CreateFXBToolbar(xmlDisplay);
 
                                 if (display == null)
                                 {
                                     var panel = new Panel();
                                     panel.Controls.Add(xmlDisplay);
+
+                                    if (postWarning != null)
+                                        panel.Controls.Add(postWarning);
+
                                     panel.Controls.Add(toolbar);
                                     display = panel;
                                 }
@@ -454,6 +485,10 @@ namespace MarkMpn.Sql4Cds
                                     tab.TabPages.Add("FetchXML");
                                     tab.TabPages[0].Controls.Add(display);
                                     tab.TabPages[1].Controls.Add(xmlDisplay);
+
+                                    if (postWarning != null)
+                                        tab.TabPages[1].Controls.Add(postWarning);
+
                                     tab.TabPages[1].Controls.Add(toolbar);
 
                                     display.Dock = DockStyle.Fill;

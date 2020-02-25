@@ -17,6 +17,7 @@ using System.Xml.Serialization;
 using System.Collections.Generic;
 using Microsoft.ApplicationInsights;
 using MarkMpn.Sql4Cds.Engine;
+using WeifenLuo.WinFormsUI.Docking;
 
 namespace MarkMpn.Sql4Cds
 {
@@ -34,6 +35,7 @@ namespace MarkMpn.Sql4Cds
             _objectExplorer.Show(dockPanel, WeifenLuo.WinFormsUI.Docking.DockState.DockLeft);
             _objectExplorer.CloseButtonVisible = false;
             _ai = new TelemetryClient(new Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration("79761278-a908-4575-afbf-2f4d82560da6"));
+            dockPanel.Theme = new VS2015LightTheme();
         }
 
         protected override void OnConnectionUpdated(ConnectionUpdatedEventArgs e)
