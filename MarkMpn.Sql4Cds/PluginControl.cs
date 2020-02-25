@@ -25,17 +25,17 @@ namespace MarkMpn.Sql4Cds
     {
         private readonly IDictionary<ConnectionDetail, IAttributeMetadataCache> _metadata;
         private readonly TelemetryClient _ai;
-        private ObjectExplorer _objectExplorer;
+        private readonly ObjectExplorer _objectExplorer;
 
         public PluginControl()
         {
             InitializeComponent();
+            dockPanel.Theme = new VS2015LightTheme();
             _metadata = new Dictionary<ConnectionDetail, IAttributeMetadataCache>();
             _objectExplorer = new ObjectExplorer(_metadata, WorkAsync);
             _objectExplorer.Show(dockPanel, WeifenLuo.WinFormsUI.Docking.DockState.DockLeft);
             _objectExplorer.CloseButtonVisible = false;
             _ai = new TelemetryClient(new Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration("79761278-a908-4575-afbf-2f4d82560da6"));
-            dockPanel.Theme = new VS2015LightTheme();
         }
 
         protected override void OnConnectionUpdated(ConnectionUpdatedEventArgs e)
