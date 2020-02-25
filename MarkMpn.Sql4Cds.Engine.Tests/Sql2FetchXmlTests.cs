@@ -1056,7 +1056,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var metadata = new AttributeMetadataCache(org);
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
 
-            var query = "SELECT DATEADD(day, 1, createdon) AS nextday FROM contact WHERE DATEDIFF(hour, '2020-01-01', createdon) < 1";
+            var query = "SELECT DATEADD(day, 1, createdon) AS nextday, DATEPART(minute, createdon) AS minute FROM contact WHERE DATEDIFF(hour, '2020-01-01', createdon) < 1";
 
             var queries = sql2FetchXml.Convert(query);
 
@@ -1089,6 +1089,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, ((EntityCollection)queries[0].Result).Entities.Count);
             Assert.AreEqual(guid2, ((EntityCollection)queries[0].Result).Entities[0].Id);
             Assert.AreEqual(new DateTime(2020, 1, 2, 0, 30, 0), ((EntityCollection)queries[0].Result).Entities[0].GetAttributeValue<DateTime>("nextday"));
+            Assert.AreEqual(30, ((EntityCollection)queries[0].Result).Entities[0].GetAttributeValue<int>("minute"));
         }
 
         private void AssertFetchXml(Query[] queries, string fetchXml)

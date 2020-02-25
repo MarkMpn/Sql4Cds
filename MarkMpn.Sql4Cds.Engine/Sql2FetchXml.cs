@@ -772,6 +772,21 @@ namespace MarkMpn.Sql4Cds.Engine
                                 startdate,
                                 enddate);
                         }
+
+                    case "datepart":
+                        {
+                            if (func.Parameters.Count != 2)
+                                throw new NotSupportedQueryFragmentException("DATEPART function requires 3 arguments", func);
+
+                            if (!(func.Parameters[0] is ColumnReferenceExpression datepart))
+                                throw new NotSupportedQueryFragmentException("Invalid DATEPART argument", func.Parameters[0]);
+
+                            var date = ConvertScalarExpression(func.Parameters[1], tables, aggregate, calculatedFields, param);
+
+                            return Expr.Call(() => ExpressionFunctions.DatePart(Expr.Arg<string>(), Expr.Arg<DateTime>()),
+                                Expression.Constant(datepart.MultiPartIdentifier.Identifiers[0].Value),
+                                date);
+                        }
                 }
             }
 
