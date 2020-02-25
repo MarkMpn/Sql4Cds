@@ -196,7 +196,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="list">The sequence of entities to sort</param>
         /// <param name="sorts">The sorts to apply</param>
         /// <returns>The sorted sequence of entities</returns>
-        public static IOrderedEnumerable<Entity> OrderBy(this IEnumerable<Entity> list, FetchOrderType[] sorts)
+        public static IEnumerable<Entity> OrderBy(this IEnumerable<Entity> list, FetchOrderType[] sorts)
         {
             IOrderedEnumerable<Entity> sorted = null;
 
@@ -218,7 +218,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
             }
 
-            return sorted;
+            return sorted ?? list;
         }
 
         /// <summary>
