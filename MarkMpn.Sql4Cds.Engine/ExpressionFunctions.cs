@@ -18,7 +18,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="value">The value to match from</param>
         /// <param name="pattern">The pattern to match against</param>
         /// <returns><c>true</c> if the <paramref name="value"/> matches the <paramref name="pattern"/>, or <c>false</c> otherwise</returns>
-        public static bool LikeFunction(string value, string pattern)
+        public static bool Like(string value, string pattern)
         {
             var regex = "^" + Regex.Escape(pattern).Replace("%", ".*").Replace("_", ".") + "$";
             return Regex.IsMatch(value, regex, RegexOptions.IgnoreCase);
@@ -134,16 +134,27 @@ namespace MarkMpn.Sql4Cds.Engine
     class Expr
     {
         /// <summary>
-        /// Given a lambda expression that calls a method, returns the method info.
+        /// Create a method call expression
         /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <param name="expression">The expression.</param>
-        /// <returns></returns>
+        /// <typeparam name="T">The type of value returned by the method</typeparam>
+        /// <param name="expression">The expression containing the method call to</param>
+        /// <param name="args">The expressions to supply as arguments to the method call</param>
+        /// <returns>The method call expression</returns>
         /// <see href="http://blog.functionalfun.net/2009/10/getting-methodinfo-of-generic-method.html"/>
         public static MethodCallExpression Call<T>(Expression<Func<T>> expression, params Expression[] args)
         {
             var method = GetMethodInfo((LambdaExpression)expression);
+            return Call(method, args);
+        }
 
+        /// <summary>
+        /// Creates a method call expression
+        /// </summary>
+        /// <param name="method">The details of the method to call</param>
+        /// <param name="args">The expressions to supply as arguments to the method call</param>
+        /// <returns>The method call expression</returns>
+        public static MethodCallExpression Call(MethodInfo method, params Expression[] args)
+        {
             var parameters = method.GetParameters();
 
             for (var i = 0; i < parameters.Length; i++)

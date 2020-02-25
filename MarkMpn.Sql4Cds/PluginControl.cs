@@ -129,13 +129,21 @@ namespace MarkMpn.Sql4Cds
                 MessageWidth = info.MessageWidth,
                 PostWorkCallBack = (args) =>
                 {
-                    tsbStop.Enabled = false;
+                    if (InvokeRequired)
+                        Invoke((Action) (() => { tsbStop.Enabled = false; }));
+                    else
+                        tsbStop.Enabled = false;
+
                     info.PostWorkCallBack(args);
                 },
                 ProgressChanged = info.ProgressChanged,
                 Work = (worker, args) =>
                 {
-                    tsbStop.Enabled = true;
+                    if (InvokeRequired)
+                        Invoke((Action)(() => { tsbStop.Enabled = true; }));
+                    else
+                        tsbStop.Enabled = true;
+
                     info.Work(worker, args);
                 }
             });

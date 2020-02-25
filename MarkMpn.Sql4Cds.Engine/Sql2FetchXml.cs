@@ -737,57 +737,42 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             else if (expr is FunctionCall func)
             {
+                var method = typeof(ExpressionFunctions).GetMethod(func.FunctionName.Value, BindingFlags.Static | BindingFlags.Public | BindingFlags.IgnoreCase);
+
+                if (method == null)
+                    throw new NotSupportedQueryFragmentException("Unknown function", func);
+
+                var parameters = method.GetParameters();
+
+                if (func.Parameters.Count != parameters.Length)
+                    throw new NotSupportedQueryFragmentException($"{method.Name} function requires {parameters.Length} parameter(s)", func);
+
+                Expression[] args;
+
                 switch (func.FunctionName.Value.ToLower())
                 {
                     case "dateadd":
-                        {
-                            if (func.Parameters.Count != 3)
-                                throw new NotSupportedQueryFragmentException("DATEPART function requires 3 arguments", func);
-
-                            if (!(func.Parameters[0] is ColumnReferenceExpression datepart))
-                                throw new NotSupportedQueryFragmentException("Invalid DATEPART argument", func.Parameters[0]);
-
-                            var number = ConvertScalarExpression(func.Parameters[1], tables, aggregate, calculatedFields, param);
-                            var date = ConvertScalarExpression(func.Parameters[2], tables, aggregate, calculatedFields, param);
-
-                            return Expr.Call(() => ExpressionFunctions.DateAdd(Expr.Arg<string>(), Expr.Arg<int>(), Expr.Arg<DateTime>()),
-                                Expression.Constant(datepart.MultiPartIdentifier.Identifiers[0].Value),
-                                number,
-                                date);
-                        }
-
                     case "datediff":
-                        {
-                            if (func.Parameters.Count != 3)
-                                throw new NotSupportedQueryFragmentException("DATEDIFF function requires 3 arguments", func);
-
-                            if (!(func.Parameters[0] is ColumnReferenceExpression datepart))
-                                throw new NotSupportedQueryFragmentException("Invalid DATEPART argument", func.Parameters[0]);
-
-                            var startdate = ConvertScalarExpression(func.Parameters[1], tables, aggregate, calculatedFields, param);
-                            var enddate = ConvertScalarExpression(func.Parameters[2], tables, aggregate, calculatedFields, param);
-
-                            return Expr.Call(() => ExpressionFunctions.DateDiff(Expr.Arg<string>(), Expr.Arg<DateTime>(), Expr.Arg<DateTime>()),
-                                Expression.Constant(datepart.MultiPartIdentifier.Identifiers[0].Value),
-                                startdate,
-                                enddate);
-                        }
-
                     case "datepart":
-                        {
-                            if (func.Parameters.Count != 2)
-                                throw new NotSupportedQueryFragmentException("DATEPART function requires 3 arguments", func);
+                        // Special case for datepart argument
+                        if (!(func.Parameters[0] is ColumnReferenceExpression datepart))
+                            throw new NotSupportedQueryFragmentException("Invalid DATEPART argument", func.Parameters[0]);
 
-                            if (!(func.Parameters[0] is ColumnReferenceExpression datepart))
-                                throw new NotSupportedQueryFragmentException("Invalid DATEPART argument", func.Parameters[0]);
+                        args = new Expression[parameters.Length];
+                        args[0] = Expression.Constant(datepart.MultiPartIdentifier.Identifiers[0].Value);
 
-                            var date = ConvertScalarExpression(func.Parameters[1], tables, aggregate, calculatedFields, param);
+                        for (var i = 1; i < args.Length; i++)
+                            args[i] = ConvertScalarExpression(func.Parameters[i], tables, aggregate, calculatedFields, param);
+                        break;
 
-                            return Expr.Call(() => ExpressionFunctions.DatePart(Expr.Arg<string>(), Expr.Arg<DateTime>()),
-                                Expression.Constant(datepart.MultiPartIdentifier.Identifiers[0].Value),
-                                date);
-                        }
+                    default:
+                        args = func.Parameters
+                            .Select(p => ConvertScalarExpression(p, tables, aggregate, calculatedFields, param))
+                            .ToArray();
+                        break;
                 }
+
+                return Expr.Call(method, args);
             }
 
             throw new NotSupportedQueryFragmentException("Unsupported expression", expr);
@@ -1879,7 +1864,7 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 var lhs = ConvertScalarExpression(like.FirstExpression, tables, aggregate, null, param);
                 var rhs = ConvertScalarExpression(like.SecondExpression, tables, aggregate, null, param);
-                var func = Expr.Call(() => ExpressionFunctions.LikeFunction(Expr.Arg<string>(), Expr.Arg<string>()),
+                var func = Expr.Call(() => ExpressionFunctions.Like(Expr.Arg<string>(), Expr.Arg<string>()),
                     lhs,
                     rhs);
 
