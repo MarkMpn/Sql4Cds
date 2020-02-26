@@ -438,33 +438,7 @@ namespace MarkMpn.Sql4Cds
                                 xmlDisplay.Text = FetchXmlQuery.Serialize(fxq.FetchXml);
                                 xmlDisplay.ReadOnly = true;
 
-                                Panel postWarning = null;
-                                if (fxq.CalculatedFields != null || fxq.PostFilter != null || fxq.PostSorts != null)
-                                {
-                                    postWarning = new Panel
-                                    {
-                                        BackColor = SystemColors.Info,
-                                        BorderStyle = BorderStyle.FixedSingle,
-                                        Dock = DockStyle.Top,
-                                        Padding = new Padding(4),
-                                        Height = 24
-                                    };
-                                    postWarning.Controls.Add(new System.Windows.Forms.Label
-                                    {
-                                        Text = "This query required additional processing. This FetchXML gives the required data, but will not give the final results when run outside SQL 4 CDS",
-                                        ForeColor = SystemColors.InfoText,
-                                        AutoSize = false,
-                                        Dock = DockStyle.Fill
-                                    });
-                                    postWarning.Controls.Add(new PictureBox
-                                    {
-                                        Image = SystemIcons.Information.ToBitmap(),
-                                        Height = 16,
-                                        Width = 16,
-                                        Dock = DockStyle.Left
-                                    }); ;
-                                }
-
+                                var postWarning = CreatePostProcessingWarning(fxq);
                                 var toolbar = CreateFXBToolbar(xmlDisplay);
 
                                 if (display == null)
@@ -506,9 +480,14 @@ namespace MarkMpn.Sql4Cds
                             xmlDisplay.Text = FetchXmlQuery.Serialize(fxq.FetchXml);
                             xmlDisplay.ReadOnly = true;
                             xmlDisplay.Dock = DockStyle.Fill;
+                            var postWarning = CreatePostProcessingWarning(fxq);
                             var toolbar = CreateFXBToolbar(xmlDisplay);
                             var container = new Panel();
                             container.Controls.Add(xmlDisplay);
+
+                            if (postWarning != null)
+                                container.Controls.Add(postWarning);
+
                             container.Controls.Add(toolbar);
                             AddResult(container, queries.Length > 1);
                         }
@@ -586,6 +565,45 @@ namespace MarkMpn.Sql4Cds
             }
 
             return toolbar;
+        }
+
+        private Panel CreatePostProcessingWarning(FetchXmlQuery fxq)
+        {
+            if (fxq.CalculatedFields == null && fxq.PostFilter == null && fxq.PostSorts == null)
+                return null;
+
+            var postWarning = new Panel
+            {
+                BackColor = SystemColors.Info,
+                BorderStyle = BorderStyle.FixedSingle,
+                Dock = DockStyle.Top,
+                Padding = new Padding(4),
+                Height = 24
+            };
+            postWarning.Controls.Add(new System.Windows.Forms.Label
+            {
+                Text = "This query required additional processing. This FetchXML gives the required data, but will not give the final results when run outside SQL 4 CDS",
+                ForeColor = SystemColors.InfoText,
+                AutoSize = false,
+                Dock = DockStyle.Fill
+            });
+
+            var image = new Bitmap(16, 16);
+
+            using (var g = Graphics.FromImage(image))
+            {
+                g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                g.DrawImage(SystemIcons.Warning.ToBitmap(), new Rectangle(Point.Empty, image.Size));
+            }
+            postWarning.Controls.Add(new PictureBox
+            {
+                Image = image,
+                Height = 16,
+                Width = 16,
+                Dock = DockStyle.Left
+            });
+            
+            return postWarning;
         }
 
         private void AddResult(Control control, bool multi)
