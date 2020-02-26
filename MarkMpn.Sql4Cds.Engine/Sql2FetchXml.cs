@@ -403,6 +403,12 @@ namespace MarkMpn.Sql4Cds.Engine
                 AllPages = fetch.page == null && fetch.top == null
             };
 
+            if (postFilter != null && fetch.top != null)
+            {
+                query.PostTop = Int32.Parse(fetch.top);
+                fetch.top = null;
+            }
+
             return query;
         }
 
@@ -478,6 +484,12 @@ namespace MarkMpn.Sql4Cds.Engine
                 Updates = updates,
                 AllPages = fetch.page == null && fetch.top == null
             };
+
+            if (postFilter != null && fetch.top != null)
+            {
+                query.PostTop = Int32.Parse(fetch.top);
+                fetch.top = null;
+            }
 
             return query;
         }
@@ -1024,7 +1036,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 table.Sort();
             
             // Return the final query
-            return new SelectQuery
+            var query = new SelectQuery
             {
                 FetchXml = fetch,
                 PostFilter = postFilter,
@@ -1033,6 +1045,14 @@ namespace MarkMpn.Sql4Cds.Engine
                 ColumnSet = columns,
                 AllPages = fetch.page == null && fetch.count == null
             };
+
+            if ((postFilter != null || sorts != null) && fetch.top != null)
+            {
+                query.PostTop = Int32.Parse(fetch.top);
+                fetch.top = null;
+            }
+
+            return query;
         }
 
         /// <summary>

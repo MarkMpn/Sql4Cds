@@ -91,6 +91,11 @@ namespace MarkMpn.Sql4Cds.Engine
         public SortExpression[] PostSorts { get; set; }
 
         /// <summary>
+        /// The final number of records to retrieve
+        /// </summary>
+        public int? PostTop { get; set; }
+
+        /// <summary>
         /// Retrieves all the data matched by the <see cref="FetchXml"/>
         /// </summary>
         /// <param name="org">The <see cref="IOrganizationService"/> to execute the query against</param>
@@ -121,6 +126,9 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (PostSorts != null)
                 sequence = sequence.OrderBy(PostSorts);
+
+            if (PostTop != null)
+                sequence = sequence.Take(PostTop.Value);
 
             return sequence;
         }

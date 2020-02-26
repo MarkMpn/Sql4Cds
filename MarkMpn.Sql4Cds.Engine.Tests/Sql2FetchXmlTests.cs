@@ -1132,6 +1132,33 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(30, ((EntityCollection)queries[0].Result).Entities[0].GetAttributeValue<int>("minute"));
         }
 
+        [TestMethod]
+        public void TopAppliedAfterCustomFilter()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT TOP 10 contactid FROM contact WHERE firstname = lastname";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='contactid' />
+                        <attribute name='firstname' />
+                        <attribute name='lastname' />
+                    </entity>
+                </fetch>
+            ");
+
+            Assert.AreEqual(10, ((FetchXmlQuery)queries[0]).PostTop);
+        }
+
         private void AssertFetchXml(Query[] queries, string fetchXml)
         {
             Assert.AreEqual(1, queries.Length);
