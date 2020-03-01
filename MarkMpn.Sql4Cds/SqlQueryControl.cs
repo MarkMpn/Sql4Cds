@@ -569,7 +569,7 @@ namespace MarkMpn.Sql4Cds
 
         private Panel CreatePostProcessingWarning(FetchXmlQuery fxq)
         {
-            if (fxq.CalculatedFields == null && fxq.PostFilter == null && fxq.PostSorts == null && fxq.PostTop == null)
+            if (fxq.Extensions.Count == 0)
                 return null;
 
             var postWarning = new Panel

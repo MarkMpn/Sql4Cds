@@ -1,4 +1,5 @@
 ﻿using MarkMpn.Sql4Cds.Engine.FetchXml;
+using MarkMpn.Sql4Cds.Engine.QueryExtensions;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
@@ -76,24 +77,9 @@ namespace MarkMpn.Sql4Cds.Engine
         public bool AllPages { get; set; }
 
         /// <summary>
-        /// The additional predicate to be applied to the results
+        /// A list of any post-processing functions to be applied to the results
         /// </summary>
-        public Func<Entity,bool> PostFilter { get; set; }
-
-        /// <summary>
-        /// The details of the calculated fields to generate
-        /// </summary>
-        public IDictionary<string,Func<Entity,object>> CalculatedFields { get; set; }
-
-        /// <summary>
-        /// The additional sorts to by applied to the results
-        /// </summary>
-        public SortExpression[] PostSorts { get; set; }
-
-        /// <summary>
-        /// The final number of records to retrieve
-        /// </summary>
-        public int? PostTop { get; set; }
+        public IList<IQueryExtension> Extensions { get; } = new List<IQueryExtension>();
 
         /// <summary>
         /// Retrieves all the data matched by the <see cref="FetchXml"/>
@@ -124,11 +110,8 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             var sequence = RetrieveSequenceInternal(org, metadata, options);
 
-            if (PostSorts != null)
-                sequence = sequence.OrderBy(PostSorts);
-
-            if (PostTop != null)
-                sequence = sequence.Take(PostTop.Value);
+            foreach (var extension in Extensions)
+                sequence = extension.ApplyTo(sequence, options);
 
             return sequence;
         }
@@ -154,13 +137,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var res = org.RetrieveMultiple(new FetchExpression(Serialize(FetchXml)));
 
             foreach (var entity in res.Entities)
-            {
-                if (PostFilter == null || PostFilter(entity))
-                {
-                    AddCalculatedFields(entity);
-                    yield return entity;
-                }
-            }
+                yield return entity;
 
             var count = res.Entities.Count;
 
@@ -184,26 +161,11 @@ namespace MarkMpn.Sql4Cds.Engine
                 var nextPage = org.RetrieveMultiple(new FetchExpression(Serialize(FetchXml)));
 
                 foreach (var entity in nextPage.Entities)
-                {
-                    if (PostFilter == null || PostFilter(entity))
-                    {
-                        AddCalculatedFields(entity);
-                        yield return entity;
-                    }
-                }
+                    yield return entity;
 
                 count += nextPage.Entities.Count;
                 res = nextPage;
             }
-        }
-
-        private void AddCalculatedFields(Entity entity)
-        {
-            if (CalculatedFields == null)
-                return;
-
-            foreach (var calculation in CalculatedFields)
-                entity[calculation.Key] = calculation.Value(entity);
         }
 
         /// <summary>
@@ -256,7 +218,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (!ex.Message.Contains("AggregateQueryRecordLimit"))
                     throw;
 
-                if (!RetrieveManualAggregate(org, metadata, options, out result))
+                if (!/*RetrieveManualAggregate(org, metadata, options, out result)*/false)
                     throw new ApplicationException("Unable to apply custom aggregation for large datasets when using DATEPART", ex);
 
                 return result;
@@ -307,148 +269,6 @@ namespace MarkMpn.Sql4Cds.Engine
 
             result = new EntityCollection { EntityName = entity.name, Entities = { resultEntity } };
             return true;
-        }
-
-        /// <summary>
-        /// Rewrites an aggregate query to retrieve the individual records and calculate the aggregates in-memory
-        /// </summary>
-        /// <param name="org">The <see cref="IOrganizationService"/> to execute the query against</param>
-        /// <param name="metadata">The metadata cache to use when executing the query</param>
-        /// <param name="options">The options to apply to the query execution</param>
-        /// <returns><c>true</c> if this method has retrieved the requested details, or <c>false</c> otherwise</returns>
-        private bool RetrieveManualAggregate(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, out EntityCollection results)
-        {
-            results = null;
-
-            // Remove aggregate flags
-            FetchXml.aggregate = false;
-            FetchXml.aggregateSpecified = false;
-
-            var entity = FetchXml.Items.OfType<FetchEntityType>().Single();
-            var aggregates = new Dictionary<string, Aggregate>();
-            RemoveAggregate(entity.Items, aggregates);
-
-            // Remove groupby flags
-            var groupByAttributes = new List<FetchAttributeType>();
-            RemoveGroupBy(entity.Items, groupByAttributes);
-
-            // Can't handle manual grouping by date parts as we can't get CDS to sort the data appropriately
-            if (groupByAttributes.Any(a => a.dategroupingSpecified))
-                return false;
-
-            // Ensure sort order follows groupby attributes
-            var sorts = SortByGroups(entity, groupByAttributes);
-
-            var top = String.IsNullOrEmpty(FetchXml.top) ? (int?)null : Int32.Parse(FetchXml.top);
-            var count = String.IsNullOrEmpty(FetchXml.count) ? (int?)null : Int32.Parse(FetchXml.count);
-            var page = String.IsNullOrEmpty(FetchXml.page) ? (int?)null : Int32.Parse(FetchXml.page);
-
-            FetchXml.top = null;
-            FetchXml.count = null;
-            FetchXml.page = null;
-
-            // Retrieve records and track aggregates per group
-            var result = RetrieveSequence(org, metadata, options)
-                .AggregateGroupBy(groupByAttributes.Select(a => a.alias).ToList(), aggregates, options);
-
-            // Manually re-apply original orders
-            if (sorts != null)
-                result = result.OrderBy(sorts);
-            
-            // Apply top/page
-            if (top != null)
-                result = result.Take(top.Value);
-            else if (page != null && count != null)
-                result = result.Skip((page.Value - 1) * count.Value).Take(count.Value);
-
-            results = new EntityCollection(result.ToList())
-            {
-                EntityName = entity.name
-            };
-
-            return true;
-        }
-
-        /// <summary>
-        /// Find any aggregates specified in the FetchXML, unset the <see cref="FetchAttributeType.aggregate"/> attribute and
-        /// add the corresponding calculation to the <paramref name="aggregates"/> list to be calculated in-memory
-        /// </summary>
-        /// <param name="items">The FetchXML items in an &lt;entity&gt; or &lt;link-entity&gt;</param>
-        /// <param name="aggregates">A mapping from output attribute alias to the aggregate calculation to use to generate it</param>
-        private void RemoveAggregate(object[] items, IDictionary<string,Aggregate> aggregates)
-        {
-            if (items == null)
-                return;
-
-            foreach (var attr in items.OfType<FetchAttributeType>().Where(a => a.aggregateSpecified))
-            {
-                Aggregate aggregate = null;
-
-                switch (attr.aggregate)
-                {
-                    case AggregateType.avg:
-                        aggregate = new Average();
-                        break;
-
-                    case AggregateType.count:
-                        aggregate = new Count();
-                        break;
-
-                    case AggregateType.countcolumn:
-                        aggregate = attr.distinctSpecified && attr.distinct == FetchBoolType.@true ? (Aggregate) new CountColumnDistinct() : new CountColumn();
-                        break;
-
-                    case AggregateType.max:
-                        aggregate = new Max();
-                        break;
-
-                    case AggregateType.min:
-                        aggregate = new Min();
-                        break;
-
-                    case AggregateType.sum:
-                        aggregate = new Sum();
-                        break;
-                }
-
-                aggregates[attr.alias] = aggregate;
-
-                attr.aggregateSpecified = false;
-                attr.distinctSpecified = false;
-            }
-
-            foreach (var link in items.OfType<FetchLinkEntityType>())
-                RemoveAggregate(link.Items, aggregates);
-        }
-
-        /// <summary>
-        /// Find any groupings applied in the FetchXML, unset the <see cref="FetchAttributeType.groupby"/> attribute and add the details
-        /// of the grouping to apply to the <paramref name="groupByAttributes"/> list
-        /// </summary>
-        /// <param name="items">The FetchXML items in an &lt;entity&gt; or &lt;link-entity&gt;</param>
-        /// <param name="groupByAttributes">The grouping attributes to apply to the output</param>
-        private void RemoveGroupBy(object[] items, List<FetchAttributeType> groupByAttributes)
-        {
-            if (items == null)
-                return;
-
-            foreach (var attr in items.OfType<FetchAttributeType>().Where(a => a.groupbySpecified && a.groupby == FetchBoolType.@true))
-            {
-                groupByAttributes.Add(new FetchAttributeType
-                {
-                    groupby = FetchBoolType.@true,
-                    groupbySpecified = true,
-                    name = attr.name,
-                    alias = attr.alias,
-                    dategroupingSpecified = attr.dategroupingSpecified
-                });
-
-                attr.groupby = FetchBoolType.@false;
-                attr.groupbySpecified = false;
-            }
-
-            foreach (var link in items.OfType<FetchLinkEntityType>())
-                RemoveGroupBy(link.Items, groupByAttributes);
         }
 
         /// <summary>

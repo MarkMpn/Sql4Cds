@@ -138,6 +138,17 @@ namespace MarkMpn.Sql4Cds.Engine
                     throw new ArgumentOutOfRangeException(nameof(datepart), $"Unsupported DATEPART value {datepart}");
             }
         }
+
+        public static string Left(string s, int length)
+        {
+            if (s == null)
+                return s;
+
+            if (s.Length <= length)
+                return s;
+
+            return s.Substring(0, length);
+        }
     }
 
     /// <summary>

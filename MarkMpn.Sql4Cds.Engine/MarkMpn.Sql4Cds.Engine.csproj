@@ -59,14 +59,16 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Aggregate.cs" />
     <Compile Include="AttributeMetadataCache.cs" />
+    <Compile Include="AggregateCollectingVisitor.cs" />
     <Compile Include="ExpressionFunctions.cs" />
     <Compile Include="FetchXml.cs">
       <DependentUpon>FetchXml.xsd</DependentUpon>
     </Compile>
     <Compile Include="FetchXml2Sql.cs" />
     <Compile Include="FetchXmlElementComparer.cs" />
+    <Compile Include="ColumnCollectingVisitor.cs" />
+    <Compile Include="GroupValidationVisitor.cs" />
     <Compile Include="IAttributeMetadataCache.cs" />
     <Compile Include="IQueryExecutionOptions.cs" />
     <Compile Include="NotSupportedQueryFragmentException.cs" />
@@ -78,8 +80,19 @@
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
     <Compile Include="Query.cs" />
+    <Compile Include="QueryExtensions\Aggregate.cs" />
+    <Compile Include="QueryExtensions\Distinct.cs" />
+    <Compile Include="QueryExtensions\Having.cs" />
+    <Compile Include="QueryExtensions\Offset.cs" />
+    <Compile Include="QueryExtensions\Projection.cs" />
+    <Compile Include="QueryExtensions\Sort.cs" />
+    <Compile Include="QueryExtensions\Top.cs" />
+    <Compile Include="QueryExtensions\Where.cs" />
+    <Compile Include="QueryExtensions\IQueryExtension.cs" />
     <Compile Include="QueryParseException.cs" />
-    <Compile Include="AggregateSortExtensions.cs" />
+    <Compile Include="ReplacePrimaryFunctionsVisitor.cs" />
+    <Compile Include="RewriteVisitorBase.cs" />
+    <Compile Include="RewriteVisitor.cs" />
     <Compile Include="SortExpression.cs" />
     <Compile Include="Sql2FetchXml.cs" />
   </ItemGroup>

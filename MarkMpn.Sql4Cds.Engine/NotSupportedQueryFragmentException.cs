@@ -37,11 +37,17 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <returns>The string that the fragment was parsed from</returns>
         private static string GetText(TSqlFragment fragment)
         {
-            return String.Join("",
-                fragment.ScriptTokenStream
-                    .Skip(fragment.FirstTokenIndex)
-                    .Take(fragment.LastTokenIndex - fragment.FirstTokenIndex + 1)
-                    .Select(t => t.Text));
+            if (fragment.ScriptTokenStream != null)
+            {
+                return String.Join("",
+                    fragment.ScriptTokenStream
+                        .Skip(fragment.FirstTokenIndex)
+                        .Take(fragment.LastTokenIndex - fragment.FirstTokenIndex + 1)
+                        .Select(t => t.Text));
+            }
+
+            new Sql150ScriptGenerator().GenerateScript(fragment, out var sql);
+            return sql;
         }
     }
 }

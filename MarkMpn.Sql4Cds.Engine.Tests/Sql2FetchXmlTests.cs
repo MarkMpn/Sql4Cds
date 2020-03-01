@@ -511,9 +511,20 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var queries = sql2FetchXml.Convert(query);
 
-            Assert.AreEqual(2, ((FetchXmlQuery)queries[0]).PostSorts.Length);
-            Assert.AreEqual(true, ((FetchXmlQuery)queries[0]).PostSorts[0].FetchXmlSorted);
-            Assert.AreEqual(false, ((FetchXmlQuery)queries[0]).PostSorts[1].FetchXmlSorted);
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                        <attribute name='name' />
+                        <link-entity name='contact' from='parentcustomerid' to='accountid' alias='contact' link-type='inner'>
+                            <attribute name='firstname' />
+                            <order attribute='firstname' />
+                        </link-entity>
+                    </entity>
+                </fetch>
+            ");
+
+            Assert.AreEqual(1, ((FetchXmlQuery)queries[0]).Extensions.Count);
         }
 
         [TestMethod]
@@ -534,8 +545,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 <fetch aggregate='true'>
                     <entity name='account'>
                         <attribute name='accountid' aggregate='count' alias='accountid_count' />
-                        <attribute name='name' aggregate='countcolumn' alias='name_countcolumn' />
-                        <attribute name='name' aggregate='countcolumn' distinct='true' alias='name_countcolumn_2' />
+                        <attribute name='name' aggregate='countcolumn' alias='name_count' />
+                        <attribute name='name' aggregate='countcolumn' distinct='true' alias='name_count_2' />
                         <attribute name='name' aggregate='max' alias='name_max' />
                         <attribute name='name' aggregate='min' alias='name_min' />
                         <attribute name='name' aggregate='avg' alias='name_avg' />
@@ -663,9 +674,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             AssertFetchXml(queries, @"
                 <fetch>
                     <entity name='contact'>
-                        <attribute name='contactid' />
                         <attribute name='firstname' />
                         <attribute name='lastname' />
+                        <attribute name='contactid' />
                     </entity>
                 </fetch>
             ");
@@ -711,9 +722,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             AssertFetchXml(queries, @"
                 <fetch>
                     <entity name='contact'>
-                        <attribute name='contactid' />
                         <attribute name='lastname' />
                         <attribute name='firstname' />
+                        <attribute name='contactid' />
                     </entity>
                 </fetch>
             ");
@@ -759,8 +770,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             AssertFetchXml(queries, @"
                 <fetch>
                     <entity name='contact'>
-                        <attribute name='contactid' />
                         <attribute name='firstname' />
+                        <attribute name='contactid' />
                     </entity>
                 </fetch>
             ");
@@ -1149,14 +1160,43 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             AssertFetchXml(queries, @"
                 <fetch>
                     <entity name='contact'>
-                        <attribute name='contactid' />
                         <attribute name='firstname' />
                         <attribute name='lastname' />
+                        <attribute name='contactid' />
                     </entity>
                 </fetch>
             ");
 
-            Assert.AreEqual(10, ((FetchXmlQuery)queries[0]).PostTop);
+            Assert.AreEqual(2, ((FetchXmlQuery)queries[0]).Extensions.Count);
+        }
+
+        [TestMethod]
+        public void CustomFilterAggregateHavingProjectionSortAndTop()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT TOP 10 lastname, SUM(CASE WHEN firstname = 'Mark' THEN 1 ELSE 0 END) as nummarks, LEFT(lastname, 1) AS lastinitial FROM contact WHERE DATEDIFF(day, '2020-01-01', createdon) > 10 GROUP BY lastname HAVING count(*) > 1 ORDER BY 2";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='createdon' />
+                        <attribute name='lastname' />
+                        <attribute name='firstname' />
+                        <attribute name='contactid' />
+                        <order attribute='lastname' />
+                    </entity>
+                </fetch>
+            ");
+
+            Assert.AreEqual(6, ((FetchXmlQuery)queries[0]).Extensions.Count);
         }
 
         private void AssertFetchXml(Query[] queries, string fetchXml)
