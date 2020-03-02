@@ -124,7 +124,7 @@ namespace MarkMpn.Sql4Cds.Engine.QueryExtensions
 
     class Grouping
     {
-        public Func<Entity,IComparable> Selector { get; set; }
+        public Func<Entity,object> Selector { get; set; }
 
         public bool Sorted { get; set; }
 
@@ -149,7 +149,7 @@ namespace MarkMpn.Sql4Cds.Engine.QueryExtensions
 
         public void NextRecord(Entity entity)
         {
-            var value = _selector(entity);
+            var value = _selector == null ? entity : _selector(entity);
             Update(value);
         }
 

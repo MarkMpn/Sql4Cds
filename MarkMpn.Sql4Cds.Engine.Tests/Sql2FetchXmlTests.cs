@@ -1180,7 +1180,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var metadata = new AttributeMetadataCache(org);
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
 
-            var query = "SELECT TOP 10 lastname, SUM(CASE WHEN firstname = 'Mark' THEN 1 ELSE 0 END) as nummarks, LEFT(lastname, 1) AS lastinitial FROM contact WHERE DATEDIFF(day, '2020-01-01', createdon) > 10 GROUP BY lastname HAVING count(*) > 1 ORDER BY 2";
+            var query = "SELECT TOP 10 lastname, SUM(CASE WHEN firstname = 'Mark' THEN 1 ELSE 0 END) as nummarks, LEFT(lastname, 1) AS lastinitial FROM contact WHERE DATEDIFF(day, '2020-01-01', createdon) > 10 GROUP BY lastname HAVING count(*) > 1 ORDER BY 2 DESC";
 
             var queries = sql2FetchXml.Convert(query);
 
@@ -1197,6 +1197,52 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             ");
 
             Assert.AreEqual(6, ((FetchXmlQuery)queries[0]).Extensions.Count);
+
+            context.Data["contact"] = new Dictionary<Guid, Entity>
+            {
+                [Guid.NewGuid()] = new Entity("contact")
+                {
+                    ["lastname"] = "Carrington",
+                    ["firstname"] = "Mark",
+                    ["createdon"] = DateTime.Parse("2020-01-01") // Ignored by WHERE
+                },
+                [Guid.NewGuid()] = new Entity("contact")
+                {
+                    ["lastname"] = "Carrington",
+                    ["firstname"] = "Mark", // nummarks = 1
+                    ["createdon"] = DateTime.Parse("2020-02-01") // Included by WHERE
+                },
+                [Guid.NewGuid()] = new Entity("contact")
+                {
+                    ["lastname"] = "Carrington", // Included by HAVING count(*) > 1
+                    ["firstname"] = "Matt", // nummarks = 1
+                    ["createdon"] = DateTime.Parse("2020-02-01") // Included by WHERE
+                },
+                [Guid.NewGuid()] = new Entity("contact")
+                {
+                    ["lastname"] = "Doe",
+                    ["firstname"] = "Mark", // nummarks = 1
+                    ["createdon"] = DateTime.Parse("2020-02-01") // Included by WHERE
+                },
+                [Guid.NewGuid()] = new Entity("contact")
+                {
+                    ["lastname"] = "Doe", // Included by HAVING count(*) > 1
+                    ["firstname"] = "Mark", // nummarks = 2
+                    ["createdon"] = DateTime.Parse("2020-02-01") // Included by WHERE
+                }
+            };
+
+            queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            var results = (EntityCollection)queries[0].Result;
+            Assert.AreEqual(2, results.Entities.Count);
+
+            Assert.AreEqual("Doe", results.Entities[0].GetAttributeValue<string>("lastname"));
+            Assert.AreEqual(2, results.Entities[0].GetAttributeValue<int>("nummarks"));
+            Assert.AreEqual("D", results.Entities[0].GetAttributeValue<string>("lastinitial"));
+
+            Assert.AreEqual("Carrington", results.Entities[1].GetAttributeValue<string>("lastname"));
+            Assert.AreEqual(1, results.Entities[1].GetAttributeValue<int>("nummarks"));
+            Assert.AreEqual("C", results.Entities[1].GetAttributeValue<string>("lastinitial"));
         }
 
         private void AssertFetchXml(Query[] queries, string fetchXml)

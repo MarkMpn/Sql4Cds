@@ -624,9 +624,9 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             expression = ConvertScalarExpression(expr, tables, calculatedFields, _param);
 
-            expression = Expr.Convert<T>(expression);
+            var finalExpr = Expr.Convert<T>(expression);
 
-            return Expression.Lambda<Func<Entity, T>>(expression, _param).Compile();
+            return Expression.Lambda<Func<Entity, T>>(finalExpr, _param).Compile();
         }
 
         /// <summary>
@@ -1159,7 +1159,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (!(grouping is ExpressionGroupingSpecification exprGroup))
                     throw new NotSupportedQueryFragmentException("Unhandled GROUP BY expression", grouping);
 
-                var selector = CompileScalarExpression<IComparable>(exprGroup.Expression, tables, null, out var expression);
+                var selector = CompileScalarExpression<object>(exprGroup.Expression, tables, null, out var expression);
                 groupings.Add(new Grouping { Selector = selector, SqlExpression = exprGroup.Expression, Expression = expression });
 
                 if (!(exprGroup.Expression is ColumnReferenceExpression column))
@@ -1716,13 +1716,24 @@ namespace MarkMpn.Sql4Cds.Engine
             if (querySpec.OrderByClause == null)
                 return;
 
-            try
+            // If there's any sorts from previous extensions, do all these sorts in memory
+            var useFetchSorts = !tables.SelectMany(t => t.GetItems()).OfType<FetchOrderType>().Any();
+
+            if (useFetchSorts)
             {
-                HandleOrderByClauseFetchXml(querySpec, fetch, tables, columns, calculatedFields);
+                try
+                {
+                    HandleOrderByClauseFetchXml(querySpec, fetch, tables, columns, calculatedFields);
+                }
+                catch (PostProcessingRequiredException)
+                {
+                    var sorts = HandleOrderByClauseExpression(querySpec, fetch, tables, columns, calculatedFields, true);
+                    extensions.Add(new Sort(sorts));
+                }
             }
-            catch (PostProcessingRequiredException)
+            else
             {
-                var sorts = HandleOrderByClauseExpression(querySpec, fetch, tables, columns, calculatedFields);
+                var sorts = HandleOrderByClauseExpression(querySpec, fetch, tables, columns, calculatedFields, false);
                 extensions.Add(new Sort(sorts));
             }
         }
@@ -1835,11 +1846,11 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="fetch">The FetchXML query converted so far</param>
         /// <param name="tables">The tables involved in the query</param>
         /// <param name="columns">The columns included in the output of the query</param>
-        private SortExpression[] HandleOrderByClauseExpression(QuerySpecification querySpec, FetchXml.FetchType fetch, List<EntityTable> tables, string[] columns, IDictionary<string, Type> calculatedFields)
+        private SortExpression[] HandleOrderByClauseExpression(QuerySpecification querySpec, FetchXml.FetchType fetch, List<EntityTable> tables, string[] columns, IDictionary<string, Type> calculatedFields, bool useFetchSorts)
         {
             // Check how many sorts were already converted to native FetchXML - we can use these results to only sort partial sequences
             // of results rather than having to sort the entire result set in memory.
-            var fetchXmlSorts = tables.SelectMany(t => (t.Entity?.Items ?? t.LinkEntity?.Items).OfType<FetchOrderType>()).Count();
+            var fetchXmlSorts = useFetchSorts ? tables.SelectMany(t => (t.Entity?.Items ?? t.LinkEntity?.Items).OfType<FetchOrderType>()).Count() : 0;
 
             // Convert each ORDER BY expression in turn
             var sortNumber = 0;

@@ -25,9 +25,17 @@ namespace MarkMpn.Sql4Cds.Engine
         public override void ExplicitVisit(SelectScalarExpression node)
         {
             base.ExplicitVisit(node);
+            var originalColumn = node.Expression as ColumnReferenceExpression;
             var name = ReplaceExpression(node, n => n.Expression);
             if (name != null && node.ColumnName == null)
-                node.ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = name } };
+            {
+                var alias = name;
+
+                if (originalColumn != null)
+                    alias = originalColumn.MultiPartIdentifier.Identifiers.Last().Value;
+
+                node.ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = alias } };
+            }
         }
 
         public override void ExplicitVisit(ExpressionWithSortOrder node)
