@@ -1,19 +1,20 @@
 ﻿using Microsoft.Xrm.Sdk;
-using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace MarkMpn.Sql4Cds.Engine.QueryExtensions
 {
     /// <summary>
-    /// Sixth, take only the TOP x records
+    /// Take only the TOP x records
     /// </summary>
     class Top : IQueryExtension
     {
         private readonly int _top;
 
+        /// <summary>
+        /// Creates a new <see cref="Top"/>
+        /// </summary>
+        /// <param name="top">The number of records to retrieve</param>
         public Top(int top)
         {
             _top = top;

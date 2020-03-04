@@ -1,12 +1,12 @@
 ﻿using Microsoft.Xrm.Sdk;
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace MarkMpn.Sql4Cds.Engine.QueryExtensions
 {
+    /// <summary>
+    /// Filters the data so only unique records are returned
+    /// </summary>
     class Distinct : IQueryExtension
     {
         class EntityKey

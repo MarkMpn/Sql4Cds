@@ -8,12 +8,16 @@ using System.Threading.Tasks;
 namespace MarkMpn.Sql4Cds.Engine.QueryExtensions
 {
     /// <summary>
-    /// Fifth, apply any sorts from the ORDER BY clause
+    /// Applies any sorts from the ORDER BY clause
     /// </summary>
     class Sort : IQueryExtension
     {
         private readonly SortExpression[] _sorts;
 
+        /// <summary>
+        /// Creates a new <see cref="Sort"/>
+        /// </summary>
+        /// <param name="sorts">The details of the sort orders to apply</param>
         public Sort(SortExpression[] sorts)
         {
             _sorts = sorts;
@@ -48,7 +52,7 @@ namespace MarkMpn.Sql4Cds.Engine.QueryExtensions
                         var blockValue = sort.Selector(block[0]);
                         var newValue = sort.Selector(entity);
 
-                        if (!Equals(blockValue, newValue))
+                        if (!Equal(blockValue, newValue))
                         {
                             sameBlock = false;
                             break;
@@ -130,8 +134,17 @@ namespace MarkMpn.Sql4Cds.Engine.QueryExtensions
         }
     }
 
+    /// <summary>
+    /// Represents a sort order to be applied
+    /// </summary>
     public class SortExpression
     {
+        /// <summary>
+        /// Creates a new <see cref="SortExpression"/>
+        /// </summary>
+        /// <param name="fetchXmlSorted">Indicates whether the native FetchXML results will already be sorted by this expression</param>
+        /// <param name="selector">A function that extracts the value to sort by from the source <see cref="Entity"/></param>
+        /// <param name="descending">Indicates whether the sort order should be reversed</param>
         public SortExpression(bool fetchXmlSorted, Func<Entity, object> selector, bool descending)
         {
             FetchXmlSorted = fetchXmlSorted;
@@ -139,10 +152,19 @@ namespace MarkMpn.Sql4Cds.Engine.QueryExtensions
             Descending = descending;
         }
 
+        /// <summary>
+        /// Indicates whether the native FetchXML results will already be sorted by this expression
+        /// </summary>
         public bool FetchXmlSorted { get; }
 
+        /// <summary>
+        /// A function that extracts the value to sort by from the source <see cref="Entity"/>
+        /// </summary>
         public Func<Entity, object> Selector { get; }
 
+        /// <summary>
+        /// Indicates whether the sort order should be reversed
+        /// </summary>
         public bool Descending { get; }
     }
 }
