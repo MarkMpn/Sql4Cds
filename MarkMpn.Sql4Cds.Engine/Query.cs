@@ -173,9 +173,9 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="fetch">The FetchXML query object to convert</param>
         /// <returns>The string representation of the query</returns>
-        public static string Serialize(FetchXml.FetchType fetch)
+        public static string Serialize(FetchType fetch)
         {
-            var serializer = new XmlSerializer(typeof(FetchXml.FetchType));
+            var serializer = new XmlSerializer(typeof(FetchType));
 
             using (var writer = new StringWriter())
             using (var xmlWriter = System.Xml.XmlWriter.Create(writer, new System.Xml.XmlWriterSettings
@@ -220,6 +220,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (!/*RetrieveManualAggregate(org, metadata, options, out result)*/false)
                     throw new ApplicationException("Unable to apply custom aggregation for large datasets when using DATEPART", ex);
+
+                // TODO: Run query using second alternate conversion that uses in-memory aggregation
 
                 return result;
             }
@@ -269,83 +271,6 @@ namespace MarkMpn.Sql4Cds.Engine
 
             result = new EntityCollection { EntityName = entity.name, Entities = { resultEntity } };
             return true;
-        }
-
-        /// <summary>
-        /// Ensures the results retrieved from CDS will be sorted by the attributes we want to group by, so all records
-        /// in a group are retrieved sequentially
-        /// </summary>
-        /// <param name="entity">The root &lt;entity&gt; in the query</param>
-        /// <param name="groupByAttributes">The attributes that the query should group by</param>
-        /// <returns></returns>
-        private FetchOrderType[] SortByGroups(FetchEntityType entity, List<FetchAttributeType> groupByAttributes)
-        {
-            // Keep track of which grouping attributes haven't currently got a sort order applied and which
-            // sorts will need to be applied at the end of the query
-            var unsortedGroupByAttributes = new HashSet<string>(groupByAttributes.Select(attr => attr.alias));
-            var requiredSorts = new List<FetchOrderType>();
-
-            entity.Items = SortByGroups(entity.Items, groupByAttributes, unsortedGroupByAttributes, requiredSorts);
-
-            return requiredSorts.ToArray();
-        }
-
-        /// <summary>
-        /// Checks the groupings applied to an &lt;entity&gt; or &lt;link-entity&gt; to ensure the results are correctly sorted
-        /// </summary>
-        /// <param name="items">The FetchXML items in the &lt;entity&gt; or &lt;link-entity&gt;</param>
-        /// <param name="groupByAttributes">The attributes that the query is grouped by</param>
-        /// <param name="unsortedGroupByAttributes">The grouping attributes that haven't had a sort identified for them yet</param>
-        /// <param name="requiredSorts">The sorts that need to be applied to the final results</param>
-        /// <returns>The FetchXML items to use in place of the supplied <paramref name="items"/></returns>
-        private object[] SortByGroups(object[] items, List<FetchAttributeType> groupByAttributes, HashSet<string> unsortedGroupByAttributes, List<FetchOrderType> requiredSorts)
-        {
-            if (items == null)
-                return null;
-
-            // Check through each of the sorts in the current items to see which are needed and which can be removed
-            var sorts = items.OfType<FetchOrderType>().ToArray();
-            
-            for (var i = 0; i < sorts.Length; i++)
-            {
-                var attr = groupByAttributes.SingleOrDefault(a => a.alias.Equals(sorts[i].alias, StringComparison.OrdinalIgnoreCase));
-
-                if (attr != null && unsortedGroupByAttributes.Remove(attr.alias))
-                {
-                    // Sort by attributes instead of aliases
-                    sorts[i].alias = null;
-                    sorts[i].attribute = attr.name;
-
-                    // Ensure the attribute is included without an alias
-                    if (!String.IsNullOrEmpty(attr.alias) && attr.alias != attr.name)
-                        items = items.Concat(new object[] { new FetchAttributeType { name = attr.name } }).ToArray();
-
-                    // Re-apply the sort at the end as well to ensure the ordering remains consistent
-                    requiredSorts.Add(sorts[i]);
-
-                    continue;
-                }
-
-                // Remove this unnecessary sort
-                items = items.Except(new[] { sorts[i] }).ToArray();
-
-                // Indicate that we need to re-sort the results later
-                requiredSorts.Add(sorts[i]);
-            }
-
-            // Add any more sorts required for grouping attributes in this entity that don't already have a sort
-            items = items.Concat(unsortedGroupByAttributes
-                    .Where(a => items.OfType<FetchAttributeType>().Any(attr => attr.alias == a))
-                    .Select(a => new FetchOrderType { attribute = a })
-                ).ToArray();
-
-            // Recurse through any link-entities
-            var links = items.OfType<FetchLinkEntityType>();
-
-            foreach (var link in links)
-                link.Items = SortByGroups(link.Items, groupByAttributes, unsortedGroupByAttributes, requiredSorts);
-
-            return items;
         }
 
         /// <summary>
@@ -494,7 +419,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var meta = metadata[EntityName];
 
             // If we are using a bulk delete job, start the job
-            if (options.UseBulkDelete)
+            if (options.UseBulkDelete && Extensions.Count == 0)
             {
                 var query = ((FetchXmlToQueryExpressionResponse)org.Execute(new FetchXmlToQueryExpressionRequest { FetchXml = Serialize(FetchXml) })).Query;
 

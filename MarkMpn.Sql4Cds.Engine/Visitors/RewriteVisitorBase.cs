@@ -1,15 +1,14 @@
-﻿using MarkMpn.Sql4Cds.Engine.QueryExtensions;
-using Microsoft.SqlServer.TransactSql.ScriptDom;
+﻿using Microsoft.SqlServer.TransactSql.ScriptDom;
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
+    /// <summary>
+    /// Provides a standard method for replacing individual scalar expressions within the SQL DOM
+    /// </summary>
     abstract class RewriteVisitorBase : TSqlFragmentVisitor
     {
         private string ReplaceExpression<T>(T target, Expression<Func<T, ScalarExpression>> selector)

@@ -23,6 +23,7 @@ namespace MarkMpn.Sql4Cds.Engine
             _metadata = new Dictionary<string, EntityMetadata>();
         }
 
+        /// <inheritdoc cref="IAttributeMetadataCache.this{string}"/>
         public EntityMetadata this[string name]
         {
             get

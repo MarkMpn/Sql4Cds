@@ -139,6 +139,12 @@ namespace MarkMpn.Sql4Cds.Engine
             }
         }
 
+        /// <summary>
+        /// Returns the prefix of a string
+        /// </summary>
+        /// <param name="s">The string to get the prefix of</param>
+        /// <param name="length">The number of characters to return</param>
+        /// <returns>The first <paramref name="length"/> characters of the string <paramref name="s"/></returns>
         public static string Left(string s, int length)
         {
             if (s == null)

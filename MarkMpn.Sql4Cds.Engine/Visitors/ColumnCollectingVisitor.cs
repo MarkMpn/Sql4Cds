@@ -5,8 +5,14 @@ using System.Linq;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
+    /// <summary>
+    /// Collect all the columns used throughout a query
+    /// </summary>
     class ColumnCollectingVisitor : TSqlFragmentVisitor
     {
+        /// <summary>
+        /// Returns the list of columns used throughout the query
+        /// </summary>
         public IList<ColumnReferenceExpression> Columns { get; } = new List<ColumnReferenceExpression>();
 
         public override void ExplicitVisit(ColumnReferenceExpression node)

@@ -3,10 +3,19 @@ using System;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
+    /// <summary>
+    /// Checks if the GROUP BY clause and aggregate functions used in a query are valid for conversion directly to FetchXML
+    /// </summary>
     class GroupValidationVisitor : TSqlFragmentVisitor
     {
+        /// <summary>
+        /// Indicates if the query is valid for conversion to FetchXML
+        /// </summary>
         public bool Valid { get; private set; } = true;
 
+        /// <summary>
+        /// Returns the SQL fragment that was found to make the query not valid for conversion directly to FetchXML
+        /// </summary>
         public TSqlFragment InvalidFragment { get; private set; }
 
         public override void ExplicitVisit(GroupingSpecification node)

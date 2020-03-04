@@ -1269,6 +1269,11 @@ namespace MarkMpn.Sql4Cds.Engine
             for (var i = 0; i < aggregates.Count; i++)
                 aggregates[i].OutputName = $"agg{i + 1}";
 
+            // If there are groupings that are not already sorted in FetchXML, sort on them before aggregation as
+            // the Aggregate class requires its input to be sorted
+            if (groupings.Any(g => !g.Sorted))
+                extensions.Add(new Sort(groupings.Select(g => new SortExpression(g.Sorted, g.Selector, false)).ToArray()));
+
             // Add the grouping & aggregation into the post-processing chain
             extensions.Add(new Aggregate(groupings, aggregates));
 

@@ -60,15 +60,15 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AttributeMetadataCache.cs" />
-    <Compile Include="AggregateCollectingVisitor.cs" />
+    <Compile Include="Visitors\AggregateCollectingVisitor.cs" />
     <Compile Include="ExpressionFunctions.cs" />
     <Compile Include="FetchXml.cs">
       <DependentUpon>FetchXml.xsd</DependentUpon>
     </Compile>
     <Compile Include="FetchXml2Sql.cs" />
     <Compile Include="FetchXmlElementComparer.cs" />
-    <Compile Include="ColumnCollectingVisitor.cs" />
-    <Compile Include="GroupValidationVisitor.cs" />
+    <Compile Include="Visitors\ColumnCollectingVisitor.cs" />
+    <Compile Include="Visitors\GroupValidationVisitor.cs" />
     <Compile Include="IAttributeMetadataCache.cs" />
     <Compile Include="IQueryExecutionOptions.cs" />
     <Compile Include="NotSupportedQueryFragmentException.cs" />
@@ -90,10 +90,9 @@
     <Compile Include="QueryExtensions\Where.cs" />
     <Compile Include="QueryExtensions\IQueryExtension.cs" />
     <Compile Include="QueryParseException.cs" />
-    <Compile Include="ReplacePrimaryFunctionsVisitor.cs" />
-    <Compile Include="RewriteVisitorBase.cs" />
-    <Compile Include="RewriteVisitor.cs" />
-    <Compile Include="SortExpression.cs" />
+    <Compile Include="Visitors\ReplacePrimaryFunctionsVisitor.cs" />
+    <Compile Include="Visitors\RewriteVisitorBase.cs" />
+    <Compile Include="Visitors\RewriteVisitor.cs" />
     <Compile Include="Sql2FetchXml.cs" />
   </ItemGroup>
   <ItemGroup>
