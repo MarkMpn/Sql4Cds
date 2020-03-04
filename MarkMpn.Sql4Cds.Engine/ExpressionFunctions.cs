@@ -155,6 +155,23 @@ namespace MarkMpn.Sql4Cds.Engine
 
             return s.Substring(0, length);
         }
+
+        /// <summary>
+        /// Returns the suffix of a string
+        /// </summary>
+        /// <param name="s">The string to get the suffix of</param>
+        /// <param name="length">The number of characters to return</param>
+        /// <returns>The last <paramref name="length"/> characters of the string <paramref name="s"/></returns>
+        public static string Right(string s, int length)
+        {
+            if (s == null)
+                return s;
+
+            if (s.Length <= length)
+                return s;
+
+            return s.Substring(s.Length - length, length);
+        }
     }
 
     /// <summary>
