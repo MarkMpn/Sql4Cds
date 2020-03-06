@@ -79,10 +79,13 @@ namespace MarkMpn.Sql4Cds.Engine.QueryExtensions
             }
 
             // Sort the final block
-            var finalSorted = OrderBy(block, _sorts);
+            if (block != null)
+            {
+                var finalSorted = OrderBy(block, _sorts);
 
-            foreach (var e in finalSorted)
-                yield return e;
+                foreach (var e in finalSorted)
+                    yield return e;
+            }
         }
 
         /// <summary>

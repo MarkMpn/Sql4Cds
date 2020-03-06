@@ -172,6 +172,28 @@ namespace MarkMpn.Sql4Cds.Engine
 
             return s.Substring(s.Length - length, length);
         }
+
+        /// <summary>
+        /// Implements a case-insensitive string equality comparison to match the standard SQL collation
+        /// </summary>
+        /// <param name="x">The first string to compare</param>
+        /// <param name="y">The second string to compare</param>
+        /// <returns><c>true</c> if the two strings are equal, or <c>false</c> otherwise</returns>
+        public static bool CaseInsensitiveEquals(string x, string y)
+        {
+            return StringComparer.OrdinalIgnoreCase.Equals(x, y);
+        }
+
+        /// <summary>
+        /// Implements a case-insensitive string inequality comparison to match the standard SQL collation
+        /// </summary>
+        /// <param name="x">The first string to compare</param>
+        /// <param name="y">The second string to compare</param>
+        /// <returns><c>true</c> if the two strings are not equal, or <c>false</c> otherwise</returns>
+        public static bool CaseInsensitiveNotEquals(string x, string y)
+        {
+            return !StringComparer.OrdinalIgnoreCase.Equals(x, y);
+        }
     }
 
     /// <summary>
@@ -210,6 +232,16 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             return Expression.Call(method, args);
+        }
+
+        /// <summary>
+        /// Given a lambda expression that calls a method, returns the method info.
+        /// </summary>
+        /// <param name="expression">The expression.</param>
+        public static MethodInfo GetMethodInfo<T>(Expression<Func<T>> expression)
+        {
+            var method = GetMethodInfo((LambdaExpression)expression);
+            return method;
         }
 
         /// <summary>

@@ -2432,7 +2432,10 @@ namespace MarkMpn.Sql4Cds.Engine
                 switch (comparison.ComparisonType)
                 {
                     case BooleanComparisonType.Equals:
-                        coreComparison = Expression.Equal(lhsValue, rhsValue);
+                        if (lhsValue.Type == typeof(string) && rhsValue.Type == typeof(string))
+                            coreComparison = Expression.Equal(lhsValue, rhsValue, false, Expr.GetMethodInfo(() => ExpressionFunctions.CaseInsensitiveEquals(Expr.Arg<string>(), Expr.Arg<string>())));
+                        else
+                            coreComparison = Expression.Equal(lhsValue, rhsValue);
                         break;
 
                     case BooleanComparisonType.GreaterThan:
@@ -2453,7 +2456,10 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     case BooleanComparisonType.NotEqualToBrackets:
                     case BooleanComparisonType.NotEqualToExclamation:
-                        coreComparison = Expression.NotEqual(lhsValue, rhsValue);
+                        if (lhsValue.Type == typeof(string) && rhsValue.Type == typeof(string))
+                            coreComparison = Expression.NotEqual(lhsValue, rhsValue, false, Expr.GetMethodInfo(() => ExpressionFunctions.CaseInsensitiveNotEquals(Expr.Arg<string>(), Expr.Arg<string>())));
+                        else
+                            coreComparison = Expression.NotEqual(lhsValue, rhsValue);
                         break;
 
                     default:

@@ -1245,6 +1245,130 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual("C", results.Entities[1].GetAttributeValue<string>("lastinitial"));
         }
 
+        [TestMethod]
+        public void FilterCaseInsensitive()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT contactid FROM contact WHERE DATEDIFF(day, '2020-01-01', createdon) < 10 OR lastname = 'Carrington' ORDER BY createdon";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='createdon' />
+                        <attribute name='lastname' />
+                        <attribute name='contactid' />
+                        <order attribute='createdon' />
+                    </entity>
+                </fetch>
+            ");
+
+            var guid1 = Guid.NewGuid();
+            var guid2 = Guid.NewGuid();
+            var guid3 = Guid.NewGuid();
+
+            context.Data["contact"] = new Dictionary<Guid, Entity>
+            {
+                [guid1] = new Entity("contact", guid1)
+                {
+                    ["lastname"] = "Carrington",
+                    ["firstname"] = "Mark",
+                    ["createdon"] = DateTime.Parse("2020-02-01"),
+                    ["contactid"] = guid1
+                },
+                [guid2] = new Entity("contact", guid2)
+                {
+                    ["lastname"] = "CARRINGTON",
+                    ["firstname"] = "Mark",
+                    ["createdon"] = DateTime.Parse("2020-03-01"),
+                    ["contactid"] = guid2
+                },
+                [guid3] = new Entity("contact", guid3)
+                {
+                    ["lastname"] = "Bloggs",
+                    ["firstname"] = "Joe",
+                    ["createdon"] = DateTime.Parse("2020-04-01"),
+                    ["contactid"] = guid3
+                }
+            };
+
+            queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            var results = (EntityCollection)queries[0].Result;
+            Assert.AreEqual(2, results.Entities.Count);
+
+            Assert.AreEqual(guid1, results.Entities[0].Id);
+            Assert.AreEqual(guid2, results.Entities[1].Id);
+        }
+
+        [TestMethod]
+        public void GroupCaseInsensitive()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT lastname, count(*) FROM contact WHERE DATEDIFF(day, '2020-01-01', createdon) > 10 GROUP BY lastname ORDER BY 2 DESC";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='createdon' />
+                        <attribute name='lastname' />
+                        <attribute name='contactid' />
+                        <order attribute='lastname' />
+                    </entity>
+                </fetch>
+            ");
+
+            var guid1 = Guid.NewGuid();
+            var guid2 = Guid.NewGuid();
+            var guid3 = Guid.NewGuid();
+
+            context.Data["contact"] = new Dictionary<Guid, Entity>
+            {
+                [guid1] = new Entity("contact", guid1)
+                {
+                    ["lastname"] = "Carrington",
+                    ["firstname"] = "Mark",
+                    ["createdon"] = DateTime.Parse("2020-02-01"),
+                    ["contactid"] = guid1
+                },
+                [guid2] = new Entity("contact", guid2)
+                {
+                    ["lastname"] = "CARRINGTON",
+                    ["firstname"] = "Mark",
+                    ["createdon"] = DateTime.Parse("2020-03-01"),
+                    ["contactid"] = guid2
+                },
+                [guid3] = new Entity("contact", guid3)
+                {
+                    ["lastname"] = "Bloggs",
+                    ["firstname"] = "Joe",
+                    ["createdon"] = DateTime.Parse("2020-04-01"),
+                    ["contactid"] = guid3
+                }
+            };
+
+            queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            var results = (EntityCollection)queries[0].Result;
+            Assert.AreEqual(2, results.Entities.Count);
+
+            Assert.AreEqual("Carrington", results.Entities[0].GetAttributeValue<string>("lastname"), true);
+            Assert.AreEqual("BLoggs", results.Entities[1].GetAttributeValue<string>("lastname"), true);
+        }
+
         private void AssertFetchXml(Query[] queries, string fetchXml)
         {
             Assert.AreEqual(1, queries.Length);

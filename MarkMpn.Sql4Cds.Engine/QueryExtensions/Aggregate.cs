@@ -88,15 +88,18 @@ namespace MarkMpn.Sql4Cds.Engine.QueryExtensions
             }
 
             // Return the final group
-            var finalGroup = new Entity(entityName);
+            if (!first)
+            {
+                var finalGroup = new Entity(entityName);
 
-            for (var j = 0; j < _groupings.Count; j++)
-                finalGroup[_groupings[j].OutputName] = groupByValues[j];
+                for (var j = 0; j < _groupings.Count; j++)
+                    finalGroup[_groupings[j].OutputName] = groupByValues[j];
 
-            foreach (var aggregate in _aggregates)
-                finalGroup[aggregate.OutputName] = aggregate.Value;
+                foreach (var aggregate in _aggregates)
+                    finalGroup[aggregate.OutputName] = aggregate.Value;
 
-            yield return finalGroup;
+                yield return finalGroup;
+            }
         }
 
         /// <summary>
@@ -112,6 +115,9 @@ namespace MarkMpn.Sql4Cds.Engine.QueryExtensions
 
             if (x == null ^ y == null)
                 return false;
+
+            if (x is string xs && y is string ys)
+                return StringComparer.OrdinalIgnoreCase.Equals(xs, ys);
 
             return x.Equals(y);
         }
