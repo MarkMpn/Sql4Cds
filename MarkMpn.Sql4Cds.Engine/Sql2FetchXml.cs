@@ -620,6 +620,15 @@ namespace MarkMpn.Sql4Cds.Engine
                 .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
         }
 
+        /// <summary>
+        /// Converts a scalar SQL expression to a compiled function that evaluates the final value of the expression for a given entity.
+        /// </summary>
+        /// <typeparam name="T">The type of value to be returned by the function</typeparam>
+        /// <param name="expr">The <see cref="ScalarExpression"/> to convert</param>
+        /// <param name="tables">The tables to use as the data source for the expression</param>
+        /// <param name="calculatedFields">Any calculated fields that will be created when running the query</param>
+        /// <param name="expression">The <see cref="System.Linq.Expressions.Expression"/> that the <paramref name="expr"/> was converted to before compilation</param>
+        /// <returns>A compiled expresson that evaluates the supplied <paramref name="expr"/> for a given entity</returns>
         private Func<Entity,T> CompileScalarExpression<T>(ScalarExpression expr, List<EntityTable> tables, IDictionary<string,Type> calculatedFields, out Expression expression)
         {
             expression = ConvertScalarExpression(expr, tables, calculatedFields, _param);
@@ -882,6 +891,11 @@ namespace MarkMpn.Sql4Cds.Engine
             throw new NotSupportedQueryFragmentException("Unsupported expression", expr);
         }
 
+        /// <summary>
+        /// Determines the type of value that is stored in an attribute
+        /// </summary>
+        /// <param name="type">The type of attribute</param>
+        /// <returns>The type of values that can be stored in the attribute</returns>
         private static Type GetAttributeType(AttributeTypeCode type)
         {
             switch (type)
@@ -937,6 +951,12 @@ namespace MarkMpn.Sql4Cds.Engine
             return null;
         }
 
+        /// <summary>
+        /// Gets the value from an attribute to use when evaluating expressions
+        /// </summary>
+        /// <param name="entity">The entity to get the value from</param>
+        /// <param name="attrName">The name of the attribute to get the value from</param>
+        /// <returns>The value stored in the requested attribute to use in expressions</returns>
         private static object GetAttributeValue(Entity entity, string attrName)
         {
             if (!entity.Attributes.TryGetValue(attrName, out var value))
@@ -954,6 +974,11 @@ namespace MarkMpn.Sql4Cds.Engine
             return value;
         }
 
+        /// <summary>
+        /// Gets the value stored in a literal value
+        /// </summary>
+        /// <param name="literal">The SQL literal value</param>
+        /// <returns>The value converted to the appropriate type for use in expressions</returns>
         private object ConvertLiteralValue(Literal literal)
         {
             switch (literal.LiteralType)
@@ -979,9 +1004,9 @@ namespace MarkMpn.Sql4Cds.Engine
         }
 
         /// <summary>
-        /// Converts an UPDATE query
+        /// Converts a SELECT query
         /// </summary>
-        /// <param name="update">The SQL query to convert</param>
+        /// <param name="select">The SQL query to convert</param>
         /// <returns>The equivalent query converted for execution against CDS</returns>
         private SelectQuery ConvertSelectStatement(SelectStatement select)
         {
@@ -1114,6 +1139,14 @@ namespace MarkMpn.Sql4Cds.Engine
             }
         }
 
+        /// <summary>
+        /// Converts a GROUP BY clause to expressions when they cannot be handled by FetchXML
+        /// </summary>
+        /// <param name="querySpec">The SELECT query to convert the GROUP BY clause from</param>
+        /// <param name="fetch">The FetchXML query converted so far</param>
+        /// <param name="tables">The tables involved in the query</param>
+        /// <param name="extensions">A list of extensions to be applied to the results of the FetchXML</param>
+        /// <returns>The names and types of the columns produced by the GROUP BY expression</returns>
         private IDictionary<string, Type> HandleGroupByExpression(QuerySpecification querySpec, FetchXml.FetchType fetch, List<EntityTable> tables, IList<IQueryExtension> extensions)
         {
             // If we need to do any grouping/aggregation as expressions, we need to do it ALL as expressions, so don't attempt
@@ -1192,7 +1225,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (sortedGroupings.Count > 0)
             {
                 // Sort the groupings according to how the sort orders will be applied
-                var sorts = Dfs(fetch).OfType<FetchOrderType>();
+                var sorts = GetSorts(tables[0].Entity);
                 var i = 0;
 
                 foreach (var sort in sorts)
@@ -1300,25 +1333,41 @@ namespace MarkMpn.Sql4Cds.Engine
             return outputColumns;
         }
 
-        private IEnumerable<object> Dfs(object root)
+        /// <summary>
+        /// Gets the sorts from a query in the order in which they will be applied
+        /// </summary>
+        /// <param name="root">The entity or link-entity object to get the sorts from</param>
+        /// <returns>The sequence of sorts that are applied by the query</returns>
+        private IEnumerable<FetchOrderType> GetSorts(object root)
         {
-            yield return root;
+            object[] items = null;
 
-            var itemsProp = root.GetType().GetProperty("Items");
-            if (itemsProp == null)
-                yield break;
+            if (root is FetchEntityType entity)
+                items = entity.Items;
+            else if (root is FetchLinkEntityType link)
+                items = link.Items;
 
-            var items = (object[])itemsProp.GetValue(root);
             if (items == null)
                 yield break;
 
-            foreach (var item in items)
+            foreach (var sort in items.OfType<FetchOrderType>())
+                yield return sort;
+
+            foreach (var child in items.OfType<FetchLinkEntityType>())
             {
-                foreach (var descendent in Dfs(item))
-                    yield return descendent;
+                foreach (var childSort in GetSorts(child))
+                    yield return childSort;
             }
         }
 
+        /// <summary>
+        /// Converts a GROUP BY clause to expressions when they cannot be handled by FetchXML
+        /// </summary>
+        /// <param name="querySpec">The SELECT query to convert the GROUP BY clause from</param>
+        /// <param name="fetch">The FetchXML query converted so far</param>
+        /// <param name="tables">The tables involved in the query</param>
+        /// <param name="extensions">A list of extensions to be applied to the results of the FetchXML</param>
+        /// <returns>The names and types of the columns produced by the GROUP BY expression</returns>
         private IDictionary<string,Type> HandleGroupByFetchXml(QuerySpecification querySpec, FetchXml.FetchType fetch, List<EntityTable> tables)
         {
             // Check if all groupings and aggregate functions are supported in FetchXML
