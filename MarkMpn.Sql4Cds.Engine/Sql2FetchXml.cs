@@ -1508,7 +1508,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             // Create the aggregate functions
             var aggregateCollector = new AggregateCollectingVisitor();
-            querySpec.Accept(aggregateCollector);
+            aggregateCollector.GetAggregates(querySpec);
 
             foreach (var func in aggregateCollector.Aggregates.Select(f => new { Alias = (string)null, Func = f })
                 .Concat(aggregateCollector.SelectAggregates.Select(s => new { Alias = s.ColumnName?.Identifier?.Value, Func = (FunctionCall)s.Expression })))
