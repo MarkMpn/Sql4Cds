@@ -14,7 +14,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="message">The error message to display</param>
         /// <param name="fragment">The fragment of the query that caused the error</param>
-        public NotSupportedQueryFragmentException(string message, TSqlFragment fragment) : base(message + ": " + GetText(fragment))
+        public NotSupportedQueryFragmentException(string message, TSqlFragment fragment) : base(message + ": " + fragment.ToSql())
         {
             Error = message;
             Fragment = fragment;
@@ -29,25 +29,5 @@ namespace MarkMpn.Sql4Cds.Engine
         /// The fragment of the query that caused the error
         /// </summary>
         public TSqlFragment Fragment { get; set; }
-
-        /// <summary>
-        /// Gets the text of the SQL fragment that caused the error
-        /// </summary>
-        /// <param name="fragment">A SQL fragment</param>
-        /// <returns>The string that the fragment was parsed from</returns>
-        private static string GetText(TSqlFragment fragment)
-        {
-            if (fragment.ScriptTokenStream != null)
-            {
-                return String.Join("",
-                    fragment.ScriptTokenStream
-                        .Skip(fragment.FirstTokenIndex)
-                        .Take(fragment.LastTokenIndex - fragment.FirstTokenIndex + 1)
-                        .Select(t => t.Text));
-            }
-
-            new Sql150ScriptGenerator().GenerateScript(fragment, out var sql);
-            return sql;
-        }
     }
 }

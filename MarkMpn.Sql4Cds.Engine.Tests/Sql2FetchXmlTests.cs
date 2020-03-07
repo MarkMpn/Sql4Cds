@@ -1369,6 +1369,89 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual("BLoggs", results.Entities[1].GetAttributeValue<string>("lastname"), true);
         }
 
+        [TestMethod]
+        public void AggregateExpressionsWithoutGrouping()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT count(DISTINCT firstname + ' ' + lastname) AS distinctnames FROM contact";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <attribute name='lastname' />
+                    </entity>
+                </fetch>
+            ");
+
+            var guid1 = Guid.NewGuid();
+            var guid2 = Guid.NewGuid();
+            var guid3 = Guid.NewGuid();
+
+            context.Data["contact"] = new Dictionary<Guid, Entity>
+            {
+                [guid1] = new Entity("contact", guid1)
+                {
+                    ["lastname"] = "Carrington",
+                    ["firstname"] = "Mark",
+                    ["contactid"] = guid1
+                },
+                [guid2] = new Entity("contact", guid2)
+                {
+                    ["lastname"] = "CARRINGTON",
+                    ["firstname"] = "Mark",
+                    ["contactid"] = guid2
+                },
+                [guid3] = new Entity("contact", guid3)
+                {
+                    ["lastname"] = "Bloggs",
+                    ["firstname"] = "Joe",
+                    ["contactid"] = guid3
+                }
+            };
+
+            queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            var results = (EntityCollection)queries[0].Result;
+            Assert.AreEqual(1, results.Entities.Count);
+
+            Assert.AreEqual(2, results.Entities[0].GetAttributeValue<int>("distinctnames"));
+        }
+
+        [TestMethod]
+        public void AggregateQueryProducesAlternative()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT count(*), count(name), count(DISTINCT name), max(name), min(name), avg(name) FROM account";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            var simpleAggregate = (FetchXmlQuery) queries[0];
+            var alterativeQuery = (FetchXmlQuery)simpleAggregate.AggregateAlternative;
+
+            AssertFetchXml(new[] { alterativeQuery }, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                        <attribute name='name' />
+                    </entity>
+                </fetch>
+            ");
+        }
+
         private void AssertFetchXml(Query[] queries, string fetchXml)
         {
             Assert.AreEqual(1, queries.Length);

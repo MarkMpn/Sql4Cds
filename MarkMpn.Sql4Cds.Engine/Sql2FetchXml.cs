@@ -208,7 +208,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 foreach (var statement in batch.Statements)
                 {
                     if (statement is SelectStatement select)
-                        queries.Add(ConvertSelectStatement(select));
+                        queries.Add(ConvertSelectStatement(select, false));
                     else if (statement is UpdateStatement update)
                         queries.Add(ConvertUpdateStatement(update));
                     else if (statement is DeleteStatement delete)
@@ -273,7 +273,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 QueryExpression = select.Select
             };
 
-            var selectQuery = ConvertSelectStatement(qry);
+            var selectQuery = ConvertSelectStatement(qry, false);
 
             // Check that the number of columns for the source query and target columns match
             if (columns.Count != selectQuery.ColumnSet.Length)
@@ -1008,7 +1008,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="select">The SQL query to convert</param>
         /// <returns>The equivalent query converted for execution against CDS</returns>
-        private SelectQuery ConvertSelectStatement(SelectStatement select)
+        private SelectQuery ConvertSelectStatement(SelectStatement select, bool forceAggregateExpression)
         {
             // Check for any DOM elements that don't have an equivalent in CDS
             if (!(select.QueryExpression is QuerySpecification querySpec))
@@ -1035,6 +1035,10 @@ namespace MarkMpn.Sql4Cds.Engine
             if (querySpec.FromClause == null)
                 throw new NotSupportedQueryFragmentException("No source entity specified", querySpec);
 
+            // Store the original SQL again now so we can re-parse it if required to generate an alternative query
+            // to handle aggregates via an expression rather than FetchXML.
+            var sql = select.ToSql();
+
             // Convert the query from the "inside out":
             // 1. FROM clause gives the data source for everything else
             // 2. WHERE clause filters the initial result set
@@ -1053,7 +1057,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var fetch = new FetchXml.FetchType();
             var tables = HandleFromClause(querySpec.FromClause, fetch);
             HandleWhereClause(querySpec.WhereClause, tables, extensions);
-            var computedColumns = HandleGroupByClause(querySpec, fetch, tables, extensions) ?? new Dictionary<string,Type>();
+            var computedColumns = HandleGroupByClause(querySpec, fetch, tables, extensions, forceAggregateExpression) ?? new Dictionary<string,Type>();
             var columns = HandleSelectClause(querySpec, fetch, tables, computedColumns, extensions);
             HandleDistinctClause(querySpec, fetch, extensions);
             HandleOrderByClause(querySpec, fetch, tables, columns, computedColumns, extensions);
@@ -1075,6 +1079,20 @@ namespace MarkMpn.Sql4Cds.Engine
 
             foreach (var extension in extensions)
                 query.Extensions.Add(extension);
+
+            if (fetch.aggregateSpecified && fetch.aggregate)
+            {
+                // We've generated a FetchXML aggregate query. These can generate errors when there are a lot of source records involved in the query,
+                // so convert the query again, this time processing the aggregates via expressions.
+                // We'll have changed the SQL DOM during the conversion to FetchXML, so recreate it by parsing the original SQL again
+                var dom = new TSql150Parser(QuotedIdentifiers);
+                var fragment = dom.Parse(new StringReader(sql), out _);
+                var script = (TSqlScript)fragment;
+                script.Accept(new ReplacePrimaryFunctionsVisitor());
+                var originalSelect = (SelectStatement)script.Batches.Single().Statements.Single();
+
+                query.AggregateAlternative = ConvertSelectStatement((SelectStatement) originalSelect, true);
+            }
 
             return query;
         }
@@ -1103,7 +1121,8 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="fetch">The FetchXML query converted so far</param>
         /// <param name="tables">The tables involved in the query</param>
         /// <param name="extensions">A list of extensions to be applied to the results of the FetchXML</param>
-        private IDictionary<string,Type> HandleGroupByClause(QuerySpecification querySpec, FetchXml.FetchType fetch, List<EntityTable> tables, IList<IQueryExtension> extensions)
+        /// <param name="forceAggregateExpression">Indicates if aggregates should be converted to expressions even if it could be converted to FetchXML</param>
+        private IDictionary<string,Type> HandleGroupByClause(QuerySpecification querySpec, FetchXml.FetchType fetch, List<EntityTable> tables, IList<IQueryExtension> extensions, bool forceAggregateExpression)
         {
             // Check if there is a GROUP BY clause or aggregate functions to convert
             if (querySpec.GroupByClause == null)
@@ -1122,7 +1141,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     throw new NotSupportedQueryFragmentException("Unhandled GROUP BY option", querySpec.GroupByClause);
             }
 
-            if (extensions.Count == 0)
+            if (extensions.Count == 0 && !forceAggregateExpression)
             {
                 try
                 {
@@ -1187,39 +1206,42 @@ namespace MarkMpn.Sql4Cds.Engine
             var groupings = new List<Grouping>();
             var sortedGroupings = new Dictionary<FetchOrderType, List<Grouping>>();
 
-            foreach (var grouping in querySpec.GroupByClause.GroupingSpecifications)
+            if (querySpec.GroupByClause != null)
             {
-                if (!(grouping is ExpressionGroupingSpecification exprGroup))
-                    throw new NotSupportedQueryFragmentException("Unhandled GROUP BY expression", grouping);
-
-                var selector = CompileScalarExpression<object>(exprGroup.Expression, tables, null, out var expression);
-                groupings.Add(new Grouping { Selector = selector, SqlExpression = exprGroup.Expression, Expression = expression });
-
-                if (!(exprGroup.Expression is ColumnReferenceExpression column))
-                    continue;
-
-                // Grouping is by a single column, so add a sort for efficiency later on
-                GetColumnTableAlias(column, tables, out var table);
-                var columnName = column.MultiPartIdentifier.Identifiers.Last().Value.ToLower();
-                var sort = table.GetItems().OfType<FetchOrderType>().FirstOrDefault(order => order.attribute == columnName);
-                if (sort == null)
+                foreach (var grouping in querySpec.GroupByClause.GroupingSpecifications)
                 {
-                    sort = new FetchOrderType
+                    if (!(grouping is ExpressionGroupingSpecification exprGroup))
+                        throw new NotSupportedQueryFragmentException("Unhandled GROUP BY expression", grouping);
+
+                    var selector = CompileScalarExpression<object>(exprGroup.Expression, tables, null, out var expression);
+                    groupings.Add(new Grouping { Selector = selector, SqlExpression = exprGroup.Expression, Expression = expression });
+
+                    if (!(exprGroup.Expression is ColumnReferenceExpression column))
+                        continue;
+
+                    // Grouping is by a single column, so add a sort for efficiency later on
+                    GetColumnTableAlias(column, tables, out var table);
+                    var columnName = column.MultiPartIdentifier.Identifiers.Last().Value.ToLower();
+                    var sort = table.GetItems().OfType<FetchOrderType>().FirstOrDefault(order => order.attribute == columnName);
+                    if (sort == null)
                     {
-                        attribute = columnName
-                    };
+                        sort = new FetchOrderType
+                        {
+                            attribute = columnName
+                        };
 
-                    table.AddItem(sort);
+                        table.AddItem(sort);
+                    }
+
+                    // Keep track of which sorts are used for which groupings
+                    if (!sortedGroupings.TryGetValue(sort, out var groupingsUsingSort))
+                    {
+                        groupingsUsingSort = new List<Grouping>();
+                        sortedGroupings.Add(sort, groupingsUsingSort);
+                    }
+
+                    groupingsUsingSort.Add(groupings.Last());
                 }
-
-                // Keep track of which sorts are used for which groupings
-                if (!sortedGroupings.TryGetValue(sort, out var groupingsUsingSort))
-                {
-                    groupingsUsingSort = new List<Grouping>();
-                    sortedGroupings.Add(sort, groupingsUsingSort);
-                }
-
-                groupingsUsingSort.Add(groupings.Last());
             }
 
             if (sortedGroupings.Count > 0)

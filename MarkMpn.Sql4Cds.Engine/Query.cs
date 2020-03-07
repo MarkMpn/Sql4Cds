@@ -82,6 +82,11 @@ namespace MarkMpn.Sql4Cds.Engine
         public IList<IQueryExtension> Extensions { get; } = new List<IQueryExtension>();
 
         /// <summary>
+        /// Returns an alternative query that can be used if the main aggregate query results in an AggregateQueryRecordLimit error
+        /// </summary>
+        public FetchXmlQuery AggregateAlternative { get; set; }
+
+        /// <summary>
         /// Retrieves all the data matched by the <see cref="FetchXml"/>
         /// </summary>
         /// <param name="org">The <see cref="IOrganizationService"/> to execute the query against</param>
@@ -93,10 +98,25 @@ namespace MarkMpn.Sql4Cds.Engine
             if (options.Cancelled)
                 return null;
 
-            var res = new EntityCollection(RetrieveSequence(org, metadata, options).ToList());
-            res.EntityName = FetchXml.Items.OfType<FetchEntityType>().Single().name;
+            try
+            {
+                var res = new EntityCollection(RetrieveSequence(org, metadata, options).ToList());
+                res.EntityName = FetchXml.Items.OfType<FetchEntityType>().Single().name;
 
-            return res;
+                return res;
+            }
+            catch (Exception ex)
+            {
+                // Attempt to handle aggregate queries that go over the standard FetchXML limit by rewriting them to retrieve the
+                // individual records and apply the aggregation in-memory
+                if (!ex.Message.Contains("AggregateQueryRecordLimit"))
+                    throw;
+
+                if (AggregateAlternative == null)
+                    throw;
+
+                return AggregateAlternative.RetrieveAll(org, metadata, options);
+            }
         }
 
         /// <summary>

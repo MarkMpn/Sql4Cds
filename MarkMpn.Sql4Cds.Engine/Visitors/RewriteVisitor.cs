@@ -24,13 +24,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public RewriteVisitor(IDictionary<ScalarExpression,string> rewrites)
         {
-            _mappings = rewrites.ToDictionary(kvp => Serialize(kvp.Key), kvp => kvp.Value);
-        }
-
-        private string Serialize(ScalarExpression expr)
-        {
-            new Sql150ScriptGenerator().GenerateScript(expr, out var sql);
-            return sql;
+            _mappings = rewrites.ToDictionary(kvp => kvp.Key.ToSql(), kvp => kvp.Value);
         }
 
         protected override ScalarExpression ReplaceExpression(ScalarExpression expression, out string name)
@@ -40,7 +34,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (expression == null)
                 return null;
 
-            if (_mappings.TryGetValue(Serialize(expression), out var column))
+            if (_mappings.TryGetValue(expression.ToSql(), out var column))
             {
                 name = column;
                 return new ColumnReferenceExpression

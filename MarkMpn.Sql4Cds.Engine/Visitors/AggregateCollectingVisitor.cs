@@ -34,7 +34,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (element.Expression is FunctionCall func && IsAggregate(func))
                 {
                     SelectAggregates.Add(element);
-                    _aggregates.Add(Serialize(func));
+                    _aggregates.Add(func.ToSql());
                 }
                 else
                 {
@@ -52,7 +52,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             // Generate a unique list of the aggregates that are required
             // Even if the query references the same aggregate twice, we only need to calculate it once
-            if (IsAggregate(node) && _aggregates.Add(Serialize(node)))
+            if (IsAggregate(node) && _aggregates.Add(node.ToSql()))
                 Aggregates.Add(node);
         }
 
@@ -73,12 +73,6 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             return false;
-        }
-
-        private string Serialize(ScalarExpression expr)
-        {
-            new Sql150ScriptGenerator().GenerateScript(expr, out var sql);
-            return sql;
         }
     }
 }
