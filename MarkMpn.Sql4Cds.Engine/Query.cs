@@ -226,25 +226,8 @@ namespace MarkMpn.Sql4Cds.Engine
             if (RetrieveTotalRecordCount(org, metadata, out var result))
                 return result;
 
-            try
-            {
-                // Start off trying to execute the original FetchXML
-                return RetrieveAll(org, metadata, options);
-            }
-            catch (Exception ex)
-            {
-                // Attempt to handle aggregate queries that go over the standard FetchXML limit by rewriting them to retrieve the
-                // individual records and apply the aggregation in-memory
-                if (!ex.Message.Contains("AggregateQueryRecordLimit"))
-                    throw;
-
-                if (!/*RetrieveManualAggregate(org, metadata, options, out result)*/false)
-                    throw new ApplicationException("Unable to apply custom aggregation for large datasets when using DATEPART", ex);
-
-                // TODO: Run query using second alternate conversion that uses in-memory aggregation
-
-                return result;
-            }
+            // Execute the FetchXML
+            return RetrieveAll(org, metadata, options);
         }
 
         /// <summary>
