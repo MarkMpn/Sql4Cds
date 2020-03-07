@@ -66,10 +66,25 @@ namespace MarkMpn.Sql4Cds.Engine
     /// </summary>
     public abstract class FetchXmlQuery : Query
     {
+        private FetchType _fetch;
+
         /// <summary>
         /// The FetchXML query
         /// </summary>
-        public FetchType FetchXml { get; set; }
+        public FetchType FetchXml
+        {
+            get { return _fetch; }
+            set
+            {
+                _fetch = value;
+                FetchXmlString = Serialize(_fetch);
+            }
+        }
+
+        /// <summary>
+        /// The string representation of the <see cref="FetchXml"/>
+        /// </summary>
+        public string FetchXmlString { get; private set; }
 
         /// <summary>
         /// Indicates if the query will page across all the available data
@@ -193,7 +208,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="fetch">The FetchXML query object to convert</param>
         /// <returns>The string representation of the query</returns>
-        public static string Serialize(FetchType fetch)
+        internal static string Serialize(FetchType fetch)
         {
             var serializer = new XmlSerializer(typeof(FetchType));
 

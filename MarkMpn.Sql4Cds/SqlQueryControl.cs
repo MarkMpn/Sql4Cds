@@ -435,7 +435,7 @@ namespace MarkMpn.Sql4Cds
                             if (query is FetchXmlQuery fxq)
                             {
                                 var xmlDisplay = CreateXmlEditor();
-                                xmlDisplay.Text = FetchXmlQuery.Serialize(fxq.FetchXml);
+                                xmlDisplay.Text = fxq.FetchXmlString;
                                 xmlDisplay.ReadOnly = true;
 
                                 var postWarning = CreatePostProcessingWarning(fxq);
@@ -477,7 +477,7 @@ namespace MarkMpn.Sql4Cds
                         else if (query is FetchXmlQuery fxq)
                         {
                             var xmlDisplay = CreateXmlEditor();
-                            xmlDisplay.Text = FetchXmlQuery.Serialize(fxq.FetchXml);
+                            xmlDisplay.Text = fxq.FetchXmlString;
                             xmlDisplay.ReadOnly = true;
                             xmlDisplay.Dock = DockStyle.Fill;
                             var postWarning = CreatePostProcessingWarning(fxq);
@@ -575,7 +575,7 @@ namespace MarkMpn.Sql4Cds
             var postWarning = new Panel
             {
                 BackColor = SystemColors.Info,
-                BorderStyle = BorderStyle.FixedSingle,
+                BorderStyle = BorderStyle.None,
                 Dock = DockStyle.Top,
                 Padding = new Padding(4),
                 Height = 24
