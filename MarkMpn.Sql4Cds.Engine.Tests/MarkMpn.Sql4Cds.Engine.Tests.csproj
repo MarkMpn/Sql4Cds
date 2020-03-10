@@ -10,7 +10,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>MarkMpn.Sql4Cds.Engine.Tests</RootNamespace>
     <AssemblyName>MarkMpn.Sql4Cds.Engine.Tests</AssemblyName>
-    <TargetFrameworkVersion>v4.6.2</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <ProjectTypeGuids>{3AC096D0-A1C2-E12C-1390-A8335801FDAB};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
     <VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">15.0</VisualStudioVersion>
@@ -20,6 +20,7 @@
     <TestProjectType>UnitTest</TestProjectType>
     <NuGetPackageImportStamp>
     </NuGetPackageImportStamp>
+    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -96,6 +97,7 @@
     <Reference Include="System.Xml.Linq" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="AutocompleteTests.cs" />
     <Compile Include="Metadata\Contact.cs" />
     <Compile Include="Metadata\Account.cs" />
     <Compile Include="PropertyEqualityComparer.cs" />
@@ -109,6 +111,10 @@
     <ProjectReference Include="..\MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.csproj">
       <Project>{583628f7-a027-451b-b3a1-e85ffb241dfb}</Project>
       <Name>MarkMpn.Sql4Cds.Engine</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\MarkMpn.Sql4Cds\MarkMpn.Sql4Cds.csproj">
+      <Project>{a7af5d13-a44e-426d-b3fc-ae390832c7df}</Project>
+      <Name>MarkMpn.Sql4Cds</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VSToolsPath)\TeamTest\Microsoft.TestTools.targets" Condition="Exists('$(VSToolsPath)\TeamTest\Microsoft.TestTools.targets')" />

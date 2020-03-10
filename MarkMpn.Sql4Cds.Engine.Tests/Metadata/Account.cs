@@ -15,5 +15,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests.Metadata
 
         [AttributeLogicalName("name")]
         public string Name { get; set; }
+
+        [AttributeLogicalName("createdon")]
+        public DateTime? CreatedOn { get; set; }
     }
 }

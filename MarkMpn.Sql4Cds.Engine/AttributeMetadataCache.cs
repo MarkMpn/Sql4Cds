@@ -2,6 +2,7 @@
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
@@ -12,6 +13,7 @@ namespace MarkMpn.Sql4Cds.Engine
     {
         private readonly IOrganizationService _org;
         private readonly IDictionary<string, EntityMetadata> _metadata;
+        private readonly ISet<string> _loading;
 
         /// <summary>
         /// Creates a new <see cref="AttributeMetadataCache"/>
@@ -21,6 +23,7 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             _org = org;
             _metadata = new Dictionary<string, EntityMetadata>();
+            _loading = new HashSet<string>();
         }
 
         /// <inheritdoc cref="IAttributeMetadataCache.this{string}"/>
@@ -40,6 +43,17 @@ namespace MarkMpn.Sql4Cds.Engine
                 _metadata[name] = metadata.EntityMetadata;
                 return metadata.EntityMetadata;
             }
+        }
+
+        public bool TryGetValue(string logicalName, out EntityMetadata metadata)
+        {
+            if (_metadata.TryGetValue(logicalName, out metadata))
+                return true;
+
+            if (_loading.Add(logicalName))
+                Task.Run(() => this[logicalName]);
+
+            return false;
         }
     }
 }

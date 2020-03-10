@@ -103,6 +103,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             CollectionAssert.AreEqual(new[]
             {
                 "accountid",
+                "createdon",
                 "name"
             }, ((SelectQuery)queries[0]).ColumnSet);
         }
@@ -132,6 +133,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             CollectionAssert.AreEqual(new[]
             {
                 "accountid",
+                "createdon",
                 "name",
                 "name"
             }, ((SelectQuery)queries[0]).ColumnSet);
@@ -158,6 +160,33 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <attribute name='name' />
                         <filter>
                             <condition attribute='name' operator='eq' value='test' />
+                        </filter>
+                    </entity>
+                </fetch>
+            ");
+        }
+
+        [TestMethod]
+        public void FetchFilter()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT contactid, firstname FROM contact WHERE createdon = lastxdays(7)";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='contactid' />
+                        <attribute name='firstname' />
+                        <filter>
+                            <condition attribute='createdon' operator='last-x-days' value='7' />
                         </filter>
                     </entity>
                 </fetch>

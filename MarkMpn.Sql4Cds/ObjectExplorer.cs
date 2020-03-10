@@ -65,12 +65,9 @@ namespace MarkMpn.Sql4Cds
 
         private TreeNode[] LoadEntities(TreeNode parent)
         {
-            var metadata = (RetrieveAllEntitiesResponse)GetService(parent).ServiceClient.Execute(new RetrieveAllEntitiesRequest
-            {
-                EntityFilters = EntityFilters.Entity
-            });
+            var metadata = EntityCache.GetEntities(GetService(parent).ServiceClient);
 
-            return metadata.EntityMetadata
+            return metadata
                 .OrderBy(e => e.LogicalName)
                 .Select(e =>
                 {

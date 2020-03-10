@@ -238,7 +238,28 @@ namespace MarkMpn.Sql4Cds
                 }
             };
 
+            // Intellisense
+            scintilla.CharAdded += ShowIntellisense;
+
             return scintilla;
+        }
+
+        private void ShowIntellisense(object sender, EventArgs e)
+        {
+            var pos = _editor.CurrentPosition - 1;
+
+            if (pos == 0)
+                return;
+
+            var text = _editor.Text;
+            EntityCache.TryGetEntities(_con.ServiceClient, out var entities);
+
+            var suggestions = new Autocomplete(entities, Metadata).GetSuggestions(text, pos, out var currentLength).ToList();
+
+            if (suggestions.Count == 0)
+                return;
+
+            _editor.AutoCShow(currentLength, String.Join(_editor.AutoCSeparator.ToString(), suggestions));
         }
 
         private Scintilla CreateXmlEditor()

@@ -61,6 +61,9 @@ namespace MarkMpn.Sql4Cds
         {
             _metadata[con] = new AttributeMetadataCache(con.ServiceClient);
             _objectExplorer.AddConnection(con);
+
+            // Start loading the entity list in the background
+            EntityCache.TryGetEntities(con.ServiceClient, out _);
         }
 
         private void PluginControl_Load(object sender, EventArgs e)

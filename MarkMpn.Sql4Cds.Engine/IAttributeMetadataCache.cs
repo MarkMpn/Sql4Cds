@@ -17,5 +17,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="name">The logical name of the entity to get the metadata for</param>
         /// <returns>The metadata for the requested entity</returns>
         EntityMetadata this[string name] { get; }
+
+        bool TryGetValue(string logicalName, out EntityMetadata metadata);
     }
 }
