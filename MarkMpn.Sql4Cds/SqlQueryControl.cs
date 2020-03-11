@@ -240,11 +240,26 @@ namespace MarkMpn.Sql4Cds
 
             // Intellisense
             scintilla.CharAdded += ShowIntellisense;
-
+            scintilla.KeyDown += ForceIntellisense;
+            scintilla.ClearCmdKey(Keys.Control | Keys.Space);
             return scintilla;
         }
 
+        private void ForceIntellisense(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Space && e.Control)
+            {
+                e.Handled = true;
+                ShowIntellisense(true);
+            }
+        }
+
         private void ShowIntellisense(object sender, EventArgs e)
+        {
+            ShowIntellisense(false);
+        }
+
+        private void ShowIntellisense(bool force)
         {
             var pos = _editor.CurrentPosition - 1;
 
@@ -259,7 +274,8 @@ namespace MarkMpn.Sql4Cds
             if (suggestions.Count == 0)
                 return;
 
-            _editor.AutoCShow(currentLength, String.Join(_editor.AutoCSeparator.ToString(), suggestions));
+            if (force || currentLength > 0 || text[pos] == '.')
+                _editor.AutoCShow(currentLength, String.Join(_editor.AutoCSeparator.ToString(), suggestions));
         }
 
         private Scintilla CreateXmlEditor()

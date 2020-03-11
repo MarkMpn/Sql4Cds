@@ -9,20 +9,34 @@ using System.Threading.Tasks;
 
 namespace MarkMpn.Sql4Cds
 {
+    /// <summary>
+    /// Produces Intellisense suggestions
+    /// </summary>
     public class Autocomplete
     {
         private readonly EntityMetadata[] _entities;
         private readonly IAttributeMetadataCache _metadata;
 
+        /// <summary>
+        /// Creates a new <see cref="Autocomplete"/>
+        /// </summary>
+        /// <param name="entities">The list of entities available to use in the query</param>
+        /// <param name="metadata">The cache of metadata about each entity</param>
         public Autocomplete(EntityMetadata[] entities, IAttributeMetadataCache metadata)
         {
             _entities = entities;
             _metadata = metadata;
         }
 
+        /// <summary>
+        /// Gets the list of Intellisense suggestions to show
+        /// </summary>
+        /// <param name="text">The current query text</param>
+        /// <param name="pos">The index of the character in the <paramref name="text"/> that has just been entered</param>
+        /// <param name="currentLength">The length of the current word that is being auto-completed</param>
+        /// <returns>A sequence of suggestions to be shown to the user</returns>
         public IEnumerable<string> GetSuggestions(string text, int pos, out int currentLength)
         {
-
             // If we're in the first word after a FROM or JOIN, show a list of table names
             string currentWord = null;
             string prevWord = null;
@@ -203,6 +217,10 @@ namespace MarkMpn.Sql4Cds
                             while (i < words.Count && words[i].ToLower() != "join")
                                 i++;
                         }
+
+                        // Start loading all the appropriate metadata in the background
+                        foreach (var table in tables.Values)
+                            _metadata.TryGetValue(table, out _);
 
                         if (currentWord.Contains("."))
                         {
