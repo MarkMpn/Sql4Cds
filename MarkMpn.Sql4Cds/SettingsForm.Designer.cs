@@ -77,7 +77,7 @@
             this.topPanel.Controls.Add(this.label1);
             this.topPanel.Dock = System.Windows.Forms.DockStyle.Top;
             this.topPanel.Location = new System.Drawing.Point(0, 0);
-            this.topPanel.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
+            this.topPanel.Margin = new System.Windows.Forms.Padding(2);
             this.topPanel.Name = "topPanel";
             this.topPanel.Size = new System.Drawing.Size(400, 52);
             this.topPanel.TabIndex = 0;
@@ -87,7 +87,7 @@
             this.pictureBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(7)))), ((int)(((byte)(14)))), ((int)(((byte)(22)))));
             this.pictureBox.Image = ((System.Drawing.Image)(resources.GetObject("pictureBox.Image")));
             this.pictureBox.Location = new System.Drawing.Point(6, 6);
-            this.pictureBox.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
+            this.pictureBox.Margin = new System.Windows.Forms.Padding(2);
             this.pictureBox.Name = "pictureBox";
             this.pictureBox.Size = new System.Drawing.Size(40, 40);
             this.pictureBox.SizeMode = System.Windows.Forms.PictureBoxSizeMode.StretchImage;
@@ -112,7 +112,7 @@
             this.panel2.Controls.Add(this.okButton);
             this.panel2.Dock = System.Windows.Forms.DockStyle.Bottom;
             this.panel2.Location = new System.Drawing.Point(0, 419);
-            this.panel2.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
+            this.panel2.Margin = new System.Windows.Forms.Padding(2);
             this.panel2.Name = "panel2";
             this.panel2.Size = new System.Drawing.Size(400, 45);
             this.panel2.TabIndex = 0;
@@ -315,9 +315,9 @@
             this.groupBox1.Controls.Add(this.label6);
             this.groupBox1.Controls.Add(this.deleteWarnThresholdUpDown);
             this.groupBox1.Location = new System.Drawing.Point(11, 134);
-            this.groupBox1.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
+            this.groupBox1.Margin = new System.Windows.Forms.Padding(2);
             this.groupBox1.Name = "groupBox1";
-            this.groupBox1.Padding = new System.Windows.Forms.Padding(2, 2, 2, 2);
+            this.groupBox1.Padding = new System.Windows.Forms.Padding(2);
             this.groupBox1.Size = new System.Drawing.Size(382, 197);
             this.groupBox1.TabIndex = 16;
             this.groupBox1.TabStop = false;
@@ -330,9 +330,9 @@
             this.groupBox2.Controls.Add(this.friendlyNamesComboBox);
             this.groupBox2.Controls.Add(this.label10);
             this.groupBox2.Location = new System.Drawing.Point(11, 340);
-            this.groupBox2.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
+            this.groupBox2.Margin = new System.Windows.Forms.Padding(2);
             this.groupBox2.Name = "groupBox2";
-            this.groupBox2.Padding = new System.Windows.Forms.Padding(2, 2, 2, 2);
+            this.groupBox2.Padding = new System.Windows.Forms.Padding(2);
             this.groupBox2.Size = new System.Drawing.Size(382, 76);
             this.groupBox2.TabIndex = 17;
             this.groupBox2.TabStop = false;
@@ -344,11 +344,11 @@
             this.localTimesComboBox.FormattingEnabled = true;
             this.localTimesComboBox.Items.AddRange(new object[] {
             "UTC times",
-            "local times"});
-            this.localTimesComboBox.Location = new System.Drawing.Point(136, 44);
-            this.localTimesComboBox.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
+            "Local times"});
+            this.localTimesComboBox.Location = new System.Drawing.Point(168, 43);
+            this.localTimesComboBox.Margin = new System.Windows.Forms.Padding(2);
             this.localTimesComboBox.Name = "localTimesComboBox";
-            this.localTimesComboBox.Size = new System.Drawing.Size(116, 21);
+            this.localTimesComboBox.Size = new System.Drawing.Size(203, 21);
             this.localTimesComboBox.TabIndex = 3;
             // 
             // label11
@@ -366,12 +366,12 @@
             this.friendlyNamesComboBox.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.friendlyNamesComboBox.FormattingEnabled = true;
             this.friendlyNamesComboBox.Items.AddRange(new object[] {
-            "GUID values",
+            "Raw values (GUID, number)",
             "Names"});
-            this.friendlyNamesComboBox.Location = new System.Drawing.Point(136, 19);
-            this.friendlyNamesComboBox.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
+            this.friendlyNamesComboBox.Location = new System.Drawing.Point(168, 18);
+            this.friendlyNamesComboBox.Margin = new System.Windows.Forms.Padding(2);
             this.friendlyNamesComboBox.Name = "friendlyNamesComboBox";
-            this.friendlyNamesComboBox.Size = new System.Drawing.Size(116, 21);
+            this.friendlyNamesComboBox.Size = new System.Drawing.Size(203, 21);
             this.friendlyNamesComboBox.TabIndex = 1;
             // 
             // label10
@@ -380,9 +380,9 @@
             this.label10.Location = new System.Drawing.Point(10, 21);
             this.label10.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
             this.label10.Name = "label10";
-            this.label10.Size = new System.Drawing.Size(110, 13);
+            this.label10.Size = new System.Drawing.Size(154, 13);
             this.label10.TabIndex = 0;
-            this.label10.Text = "Show lookup fields as";
+            this.label10.Text = "Show lookup && picklist fields as";
             // 
             // groupBox3
             // 
@@ -417,7 +417,7 @@
             this.Controls.Add(this.panel2);
             this.Controls.Add(this.topPanel);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
-            this.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
+            this.Margin = new System.Windows.Forms.Padding(2);
             this.MaximizeBox = false;
             this.MinimizeBox = false;
             this.Name = "SettingsForm";
