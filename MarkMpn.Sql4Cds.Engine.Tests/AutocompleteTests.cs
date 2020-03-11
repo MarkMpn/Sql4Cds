@@ -102,5 +102,50 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             CollectionAssert.AreEqual(new[] { "account", "accountid", "contact", "contactid", "firstname", "lastname", "name", "parentcustomerid" }, suggestions);
         }
+
+        [TestMethod]
+        public void Function()
+        {
+            var sql = "SELECT count( FROM account";
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.IndexOf("("), out _).ToList();
+
+            CollectionAssert.AreEqual(new[] { "account", "accountid", "createdon", "name" }, suggestions);
+        }
+
+        [TestMethod]
+        public void Update()
+        {
+            var sql = "UPDATE ";
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).ToList();
+
+            CollectionAssert.AreEqual(new[] { "account", "contact" }, suggestions);
+        }
+
+        [TestMethod]
+        public void UpdateFrom()
+        {
+            var sql = "UPDATE  FROM account a";
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.IndexOf(" ") + 1, out _).ToList();
+
+            CollectionAssert.AreEqual(new[] { "a" }, suggestions);
+        }
+
+        [TestMethod]
+        public void Set()
+        {
+            var sql = "UPDATE account SET ";
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).ToList();
+
+            CollectionAssert.AreEqual(new[] { "accountid", "createdon", "name" }, suggestions);
+        }
+
+        [TestMethod]
+        public void Set2()
+        {
+            var sql = "UPDATE account SET name = 'test', ";
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).ToList();
+
+            CollectionAssert.AreEqual(new[] { "accountid", "createdon", "name" }, suggestions);
+        }
     }
 }

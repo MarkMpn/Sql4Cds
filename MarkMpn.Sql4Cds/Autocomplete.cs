@@ -63,6 +63,7 @@ namespace MarkMpn.Sql4Cds
             {
                 case "from":
                 case "join":
+                case "into":
                     // Show table list
                     if (_entities != null)
                         return _entities.Select(x => x.LogicalName).Where(x => x.StartsWith(currentWord)).OrderBy(x => x);
@@ -88,7 +89,10 @@ namespace MarkMpn.Sql4Cds
                         !prevWord.Equals("where", StringComparison.OrdinalIgnoreCase) &&
                         !prevWord.Equals("on", StringComparison.OrdinalIgnoreCase) &&
                         !prevWord.Equals("by", StringComparison.OrdinalIgnoreCase) &&
-                        !prevWord.Equals("having", StringComparison.OrdinalIgnoreCase))
+                        !prevWord.Equals("having", StringComparison.OrdinalIgnoreCase) &&
+                        !prevWord.Equals("update", StringComparison.OrdinalIgnoreCase) &&
+                        !prevWord.Equals("delete", StringComparison.OrdinalIgnoreCase) &&
+                        !prevWord.Equals("set", StringComparison.OrdinalIgnoreCase))
                         return Array.Empty<string>();
 
                     // Find the FROM clause
@@ -96,10 +100,7 @@ namespace MarkMpn.Sql4Cds
                     var foundFrom = false;
                     var foundQueryStart = false;
                     var foundPossibleFrom = false;
-                    var inFrom = false;
-                    var inJoin = false;
-                    var inOn = false;
-                    var afterFrom = false;
+                    string clause = null;
 
                     foreach (var word in ReverseWords(text, pos))
                     {
@@ -107,8 +108,7 @@ namespace MarkMpn.Sql4Cds
                         {
                             case "from":
                                 foundFrom = true;
-                                if (!afterFrom)
-                                    inFrom = true;
+                                clause = clause ?? "from";
                                 break;
 
                             case "select":
@@ -123,28 +123,31 @@ namespace MarkMpn.Sql4Cds
                                 break;
 
                             case "join":
-                                inJoin = true;
+                                clause = clause ?? "join";
                                 words.Insert(0, word);
                                 break;
 
                             case "on":
-                                if (!inJoin)
-                                    inOn = true;
+                                clause = clause ?? "on";
                                 words.Insert(0, word);
                                 break;
 
                             case "where":
                                 words.Clear();
-                                afterFrom = true;
                                 break;
 
                             case "order":
                             case "group":
-                                afterFrom = true;
+                                break;
+
+                            case "set":
+                                words.Clear();
+                                clause = clause ?? "set";
                                 break;
 
                             default:
-                                words.Insert(0, word);
+                                if (!String.IsNullOrEmpty(word))
+                                    words.Insert(0, word);
                                 break;
                         }
 
@@ -188,7 +191,7 @@ namespace MarkMpn.Sql4Cds
                             words = nextWords;
                     }
 
-                    if (foundFrom || foundPossibleFrom)
+                    if (foundFrom || (foundPossibleFrom && words.Count > 0))
                     {
                         // Try to get the table & alias names from the words in the possible FROM clause
                         var tables = new Dictionary<string, string>();
@@ -218,6 +221,26 @@ namespace MarkMpn.Sql4Cds
                                 i++;
                         }
 
+                        if (prevWord.Equals("update", StringComparison.OrdinalIgnoreCase) ||
+                            prevWord.Equals("delete", StringComparison.OrdinalIgnoreCase))
+                            return tables.Keys.Where(x => x.StartsWith(currentWord)).OrderBy(x => x);
+
+                        if (clause == "set" && (prevWord.Equals("set", StringComparison.OrdinalIgnoreCase) || prevWord == ","))
+                        {
+                            var targetTable = "";
+
+                            foreach (var word in ReverseWords(text, pos))
+                            {
+                                if (word.Equals("update", StringComparison.OrdinalIgnoreCase))
+                                    break;
+
+                                targetTable = word;
+                            }
+
+                            if (tables.TryGetValue(targetTable, out var tableName) && _metadata.TryGetValue(tableName, out var metadata))
+                                return metadata.Attributes.Where(a => a.IsValidForUpdate != false && a.LogicalName.StartsWith(currentWord, StringComparison.OrdinalIgnoreCase)).Select(a => a.LogicalName).OrderBy(a => a);
+                        }
+
                         // Start loading all the appropriate metadata in the background
                         foreach (var table in tables.Values)
                             _metadata.TryGetValue(table, out _);
@@ -235,7 +258,7 @@ namespace MarkMpn.Sql4Cds
                                     return metadata.Attributes.Select(x => x.LogicalName).Where(x => x.StartsWith(currentWord)).OrderBy(x => x);
                             }
                         }
-                        else if (inFrom && !inOn)
+                        else if (clause == "join")
                         {
                             // Entering a table alias, nothing useful to auto-complete
                         }
@@ -262,6 +285,10 @@ namespace MarkMpn.Sql4Cds
 
                             return items.Where(x => x.StartsWith(currentWord)).OrderBy(x => x);
                         }
+                    }
+                    else if (prevWord.Equals("update", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return _entities.Select(x => x.LogicalName).Where(x => x.StartsWith(currentWord)).OrderBy(x => x);
                     }
 
                     break;
@@ -304,7 +331,7 @@ namespace MarkMpn.Sql4Cds
 
             for (var i = end; i >= 0; i--)
             {
-                if (Char.IsWhiteSpace(text[i]))
+                if (Char.IsWhiteSpace(text[i]) || (Char.IsPunctuation(text[i]) && text[i] != '.'))
                 {
                     if (inWord)
                     {
@@ -313,6 +340,12 @@ namespace MarkMpn.Sql4Cds
 
                         yield return word;
                         inWord = false;
+                    }
+
+                    if (Char.IsPunctuation(text[i]))
+                    {
+                        yield return text[i].ToString();
+                        i--;
                     }
                 }
                 else if (!inWord)
