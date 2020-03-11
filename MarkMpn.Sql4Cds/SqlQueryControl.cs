@@ -205,6 +205,12 @@ namespace MarkMpn.Sql4Cds
                         e.Handled = true;
                     }
                 }
+                if (e.KeyCode == Keys.Space && e.Control)
+                {
+                    ShowIntellisense(true);
+                    e.Handled = true;
+                    e.SuppressKeyPress = true;
+                }
             };
 
             // Auto-indent new lines
@@ -240,18 +246,9 @@ namespace MarkMpn.Sql4Cds
 
             // Intellisense
             scintilla.CharAdded += ShowIntellisense;
-            scintilla.KeyDown += ForceIntellisense;
-            scintilla.ClearCmdKey(Keys.Control | Keys.Space);
-            return scintilla;
-        }
+            scintilla.AutoCIgnoreCase = true;
 
-        private void ForceIntellisense(object sender, KeyEventArgs e)
-        {
-            if (e.KeyCode == Keys.Space && e.Control)
-            {
-                e.Handled = true;
-                ShowIntellisense(true);
-            }
+            return scintilla;
         }
 
         private void ShowIntellisense(object sender, EventArgs e)
