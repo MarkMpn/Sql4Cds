@@ -32,6 +32,14 @@ namespace MarkMpn.Sql4Cds
         private string _filename;
         private bool _modified;
         private static int _queryCounter;
+        private static Bitmap[] _images;
+
+        static SqlQueryControl()
+        {
+            _images = new ObjectExplorer(null, null).GetImages()
+                .Select(i => i is Bitmap b ? b : new Bitmap(i))
+                .ToArray();
+        }
 
         public SqlQueryControl(ConnectionDetail con, IAttributeMetadataCache metadata, TelemetryClient ai, Action<WorkAsyncInfo> workAsync, Action<string> setWorkingMessage, Action<Action> executeMethod, Action<MessageBusEventArgs> outgoingMessageHandler, string sourcePlugin)
         {
@@ -247,6 +255,9 @@ namespace MarkMpn.Sql4Cds
             // Intellisense
             scintilla.CharAdded += ShowIntellisense;
             scintilla.AutoCIgnoreCase = true;
+
+            for (var i = 0; i < _images.Length; i++)
+                scintilla.RegisterRgbaImage(i, _images[i]);
 
             return scintilla;
         }

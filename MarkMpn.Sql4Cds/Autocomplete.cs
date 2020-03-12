@@ -1,11 +1,8 @@
 ﻿using MarkMpn.Sql4Cds.Engine;
-using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace MarkMpn.Sql4Cds
 {
@@ -71,7 +68,7 @@ namespace MarkMpn.Sql4Cds
                 case "into":
                     // Show table list
                     if (_entities != null)
-                        return _entities.Select(x => x.LogicalName).Where(x => x.StartsWith(currentWord)).OrderBy(x => x);
+                        return _entities.Select(x => x.LogicalName + "?4").Where(x => x.StartsWith(currentWord)).OrderBy(x => x);
                     break;
 
                 default:
@@ -229,7 +226,7 @@ namespace MarkMpn.Sql4Cds
 
                         if (prevWord.Equals("update", StringComparison.OrdinalIgnoreCase) ||
                             prevWord.Equals("delete", StringComparison.OrdinalIgnoreCase))
-                            return tables.Keys.Where(x => x.StartsWith(currentWord)).OrderBy(x => x);
+                            return tables.Keys.Select(x => x + "?4").Where(x => x.StartsWith(currentWord)).OrderBy(x => x);
 
                         if (clause == "set" && (prevWord.Equals("set", StringComparison.OrdinalIgnoreCase) || prevWord == ","))
                         {
@@ -244,7 +241,7 @@ namespace MarkMpn.Sql4Cds
                             }
 
                             if (tables.TryGetValue(targetTable, out var tableName) && _metadata.TryGetValue(tableName, out var metadata))
-                                return metadata.Attributes.Where(a => a.IsValidForUpdate != false && a.LogicalName.StartsWith(currentWord, StringComparison.OrdinalIgnoreCase)).Select(a => a.LogicalName).OrderBy(a => a);
+                                return metadata.Attributes.Where(a => a.IsValidForUpdate != false && a.LogicalName.StartsWith(currentWord, StringComparison.OrdinalIgnoreCase)).Select(a => a.LogicalName + GetIconIndex(a)).OrderBy(a => a);
                         }
 
                         // Start loading all the appropriate metadata in the background
@@ -261,7 +258,7 @@ namespace MarkMpn.Sql4Cds
                             if (tables.TryGetValue(alias, out var tableName))
                             {
                                 if (_metadata.TryGetValue(tableName, out var metadata))
-                                    return metadata.Attributes.Select(x => x.LogicalName).Where(x => x.StartsWith(currentWord)).OrderBy(x => x);
+                                    return metadata.Attributes.Select(x => x.LogicalName + GetIconIndex(x)).Where(x => x.StartsWith(currentWord)).OrderBy(x => x);
                             }
                         }
                         else if (clause == "join")
@@ -276,17 +273,17 @@ namespace MarkMpn.Sql4Cds
                             // * functions
                             var items = new List<string>();
 
-                            items.AddRange(tables.Keys);
+                            items.AddRange(tables.Keys.Select(x => x + "?4"));
 
-                            var attributes = new List<string>();
+                            var attributes = new List<AttributeMetadata>();
 
                             foreach (var table in tables)
                             {
                                 if (_metadata.TryGetValue(table.Value, out var metadata))
-                                    attributes.AddRange(metadata.Attributes.Select(x => x.LogicalName));
+                                    attributes.AddRange(metadata.Attributes);
                             }
 
-                            items.AddRange(attributes.GroupBy(x => x).Where(g => g.Count() == 1).Select(g => g.Key));
+                            items.AddRange(attributes.GroupBy(x => x.LogicalName).Where(g => g.Count() == 1).Select(g => g.Key + GetIconIndex(g.First())));
                             items.Sort();
 
                             return items.Where(x => x.StartsWith(currentWord)).OrderBy(x => x);
@@ -294,7 +291,7 @@ namespace MarkMpn.Sql4Cds
                     }
                     else if (prevWord.Equals("update", StringComparison.OrdinalIgnoreCase))
                     {
-                        return _entities.Select(x => x.LogicalName).Where(x => x.StartsWith(currentWord)).OrderBy(x => x);
+                        return _entities.Select(x => x.LogicalName + "?4").Where(x => x.StartsWith(currentWord)).OrderBy(x => x);
                     }
 
                     break;
@@ -363,6 +360,55 @@ namespace MarkMpn.Sql4Cds
 
             if (inWord)
                 yield return text.Substring(0, end + 1);
+        }
+
+        private string GetIconIndex(AttributeMetadata a)
+        {
+            switch (a.AttributeType.Value)
+            {
+                case AttributeTypeCode.BigInt:
+                case AttributeTypeCode.Integer:
+                    return "?8";
+
+                case AttributeTypeCode.Boolean:
+                case AttributeTypeCode.Picklist:
+                case AttributeTypeCode.State:
+                case AttributeTypeCode.Status:
+                    return "?11";
+
+                case AttributeTypeCode.Customer:
+                case AttributeTypeCode.Owner:
+                case AttributeTypeCode.PartyList:
+                    return "?12";
+
+                case AttributeTypeCode.DateTime:
+                    return "?2";
+
+                case AttributeTypeCode.Decimal:
+                    return "?3";
+
+                case AttributeTypeCode.Double:
+                    return null;
+
+                case AttributeTypeCode.Lookup:
+                    return "?9";
+
+                case AttributeTypeCode.Memo:
+                    return "?10";
+
+                case AttributeTypeCode.Money:
+                    return "?0";
+
+                case AttributeTypeCode.String:
+                case AttributeTypeCode.Virtual:
+                    return "?13";
+
+                case AttributeTypeCode.Uniqueidentifier:
+                    return "?14";
+
+                default:
+                    return null;
+            }
         }
     }
 }

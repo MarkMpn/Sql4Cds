@@ -1,11 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Drawing;
 using System.Data;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Messages;
@@ -61,6 +58,11 @@ namespace MarkMpn.Sql4Cds
             node.ImageKey = imageKey;
             node.StateImageKey = imageKey;
             node.SelectedImageKey = imageKey;
+        }
+
+        public IEnumerable<Image> GetImages()
+        {
+            return imageList.Images.OfType<Image>();
         }
 
         private TreeNode[] LoadEntities(TreeNode parent)

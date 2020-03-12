@@ -34,7 +34,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out var currentLength).ToList();
 
             Assert.AreEqual(1, currentLength);
-            CollectionAssert.AreEqual(new[] { "account" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "account?4" }, suggestions);
         }
 
         [TestMethod]
@@ -52,7 +52,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var sql = "SELECT * FROM account left outer join ";
             var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).ToList();
 
-            CollectionAssert.AreEqual(new[] { "account", "contact" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "account?4", "contact?4" }, suggestions);
         }
 
         [TestMethod]
@@ -62,7 +62,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out var currentLength).ToList();
 
             Assert.AreEqual(1, currentLength);
-            CollectionAssert.AreEqual(new[] { "parentcustomerid" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "parentcustomerid?9" }, suggestions);
         }
 
         [TestMethod]
@@ -71,7 +71,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var sql = "SELECT * FROM account a left outer join contact c on a.accountid = c.parentcustomerid where ";
             var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).ToList();
 
-            CollectionAssert.AreEqual(new[] { "a", "accountid", "c", "contactid", "firstname", "lastname", "name", "parentcustomerid" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "a?4", "accountid?14", "c?4", "contactid?14", "firstname?13", "lastname?13", "name?13", "parentcustomerid?9" }, suggestions);
         }
 
         [TestMethod]
@@ -80,7 +80,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var sql = "SELECT * FROM account a left outer join contact c on a.accountid = c.parentcustomerid where a.";
             var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).ToList();
 
-            CollectionAssert.AreEqual(new[] { "accountid", "createdon", "name" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "accountid?14", "createdon?2", "name?13" }, suggestions);
         }
 
         [TestMethod]
@@ -89,7 +89,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var sql = "SELECT a. FROM account a left outer join contact c on a.accountid = c.parentcustomerid";
             var suggestions = _autocomplete.GetSuggestions(sql, sql.IndexOf("."), out _).ToList();
 
-            CollectionAssert.AreEqual(new[] { "accountid", "createdon", "name" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "accountid?14", "createdon?2", "name?13" }, suggestions);
         }
 
         [TestMethod]
@@ -100,7 +100,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var sql = sql1 + "\r\n" + sql2;
             var suggestions = _autocomplete.GetSuggestions(sql, sql1.Length + 2 + sql2.IndexOf(" ") + 1, out _).ToList();
 
-            CollectionAssert.AreEqual(new[] { "account", "accountid", "contact", "contactid", "firstname", "lastname", "name", "parentcustomerid" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "account?4", "accountid?14", "contact?4", "contactid?14", "firstname?13", "lastname?13", "name?13", "parentcustomerid?9" }, suggestions);
         }
 
         [TestMethod]
@@ -109,7 +109,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var sql = "SELECT count( FROM account";
             var suggestions = _autocomplete.GetSuggestions(sql, sql.IndexOf("("), out _).ToList();
 
-            CollectionAssert.AreEqual(new[] { "account", "accountid", "createdon", "name" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "account?4", "accountid?14", "createdon?2", "name?13" }, suggestions);
         }
 
         [TestMethod]
@@ -118,7 +118,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var sql = "UPDATE ";
             var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).ToList();
 
-            CollectionAssert.AreEqual(new[] { "account", "contact" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "account?4", "contact?4" }, suggestions);
         }
 
         [TestMethod]
@@ -127,7 +127,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var sql = "UPDATE  FROM account a";
             var suggestions = _autocomplete.GetSuggestions(sql, sql.IndexOf(" ") + 1, out _).ToList();
 
-            CollectionAssert.AreEqual(new[] { "a" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "a?4" }, suggestions);
         }
 
         [TestMethod]
@@ -136,7 +136,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var sql = "UPDATE account SET ";
             var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).ToList();
 
-            CollectionAssert.AreEqual(new[] { "accountid", "createdon", "name" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "accountid?14", "createdon?2", "name?13" }, suggestions);
         }
 
         [TestMethod]
@@ -145,7 +145,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var sql = "UPDATE account SET name = 'test', ";
             var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).ToList();
 
-            CollectionAssert.AreEqual(new[] { "accountid", "createdon", "name" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "accountid?14", "createdon?2", "name?13" }, suggestions);
         }
 
         [TestMethod]
@@ -154,7 +154,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var sql = "SELECT TOP 10 n FROM account";
             var suggestions = _autocomplete.GetSuggestions(sql, sql.IndexOf("n"), out _).ToList();
 
-            CollectionAssert.AreEqual(new[] { "name" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "name?13" }, suggestions);
         }
     }
 }
