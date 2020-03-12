@@ -147,5 +147,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             CollectionAssert.AreEqual(new[] { "accountid", "createdon", "name" }, suggestions);
         }
+
+        [TestMethod]
+        public void Top()
+        {
+            var sql = "SELECT TOP 10 n FROM account";
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.IndexOf("n"), out _).ToList();
+
+            CollectionAssert.AreEqual(new[] { "name" }, suggestions);
+        }
     }
 }

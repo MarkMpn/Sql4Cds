@@ -40,6 +40,7 @@ namespace MarkMpn.Sql4Cds
             // If we're in the first word after a FROM or JOIN, show a list of table names
             string currentWord = null;
             string prevWord = null;
+            string prevPrevWord = null;
 
             foreach (var word in ReverseWords(text, pos))
             {
@@ -50,6 +51,10 @@ namespace MarkMpn.Sql4Cds
                 else if (prevWord == null)
                 {
                     prevWord = word;
+                }
+                else if (prevPrevWord == null)
+                {
+                    prevPrevWord = word;
                     break;
                 }
             }
@@ -92,7 +97,8 @@ namespace MarkMpn.Sql4Cds
                         !prevWord.Equals("having", StringComparison.OrdinalIgnoreCase) &&
                         !prevWord.Equals("update", StringComparison.OrdinalIgnoreCase) &&
                         !prevWord.Equals("delete", StringComparison.OrdinalIgnoreCase) &&
-                        !prevWord.Equals("set", StringComparison.OrdinalIgnoreCase))
+                        !prevWord.Equals("set", StringComparison.OrdinalIgnoreCase) &&
+                        !prevPrevWord.Equals("top", StringComparison.OrdinalIgnoreCase))
                         return Array.Empty<string>();
 
                     // Find the FROM clause
