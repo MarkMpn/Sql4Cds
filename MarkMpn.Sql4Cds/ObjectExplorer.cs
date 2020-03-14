@@ -14,7 +14,7 @@ namespace MarkMpn.Sql4Cds
 {
     public partial class ObjectExplorer : WeifenLuo.WinFormsUI.Docking.DockContent
     {
-        private readonly IDictionary<ConnectionDetail, IAttributeMetadataCache> _metadata;
+        private readonly IDictionary<ConnectionDetail, AttributeMetadataCache> _metadata;
 
         class LoaderParam
         {
@@ -22,7 +22,7 @@ namespace MarkMpn.Sql4Cds
             public TreeNode Parent;
         }
 
-        public ObjectExplorer(IDictionary<ConnectionDetail, IAttributeMetadataCache> metadata, Action<WorkAsyncInfo> workAsync)
+        public ObjectExplorer(IDictionary<ConnectionDetail, AttributeMetadataCache> metadata, Action<WorkAsyncInfo> workAsync)
         {
             InitializeComponent();
 

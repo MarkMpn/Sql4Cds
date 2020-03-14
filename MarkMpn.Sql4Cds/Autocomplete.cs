@@ -71,33 +71,6 @@ namespace MarkMpn.Sql4Cds
                     break;
 
                 default:
-                    if (!prevWord.EndsWith(".") &&
-                        !prevWord.EndsWith(",") &&
-                        !prevWord.EndsWith("(") &&
-                        !prevWord.EndsWith("+") &&
-                        !prevWord.EndsWith("-") &&
-                        !prevWord.EndsWith("*") &&
-                        !prevWord.EndsWith("/") &&
-                        !prevWord.EndsWith("=") &&
-                        !prevWord.EndsWith(">") &&
-                        !prevWord.EndsWith("<") &&
-                        !prevWord.Equals("and", StringComparison.OrdinalIgnoreCase) &&
-                        !prevWord.Equals("or", StringComparison.OrdinalIgnoreCase) &&
-                        !prevWord.Equals("select", StringComparison.OrdinalIgnoreCase) &&
-                        !prevWord.Equals("case", StringComparison.OrdinalIgnoreCase) &&
-                        !prevWord.Equals("when", StringComparison.OrdinalIgnoreCase) &&
-                        !prevWord.Equals("like", StringComparison.OrdinalIgnoreCase) &&
-                        !prevWord.Equals("where", StringComparison.OrdinalIgnoreCase) &&
-                        !prevWord.Equals("on", StringComparison.OrdinalIgnoreCase) &&
-                        !prevWord.Equals("by", StringComparison.OrdinalIgnoreCase) &&
-                        !prevWord.Equals("having", StringComparison.OrdinalIgnoreCase) &&
-                        !prevWord.Equals("update", StringComparison.OrdinalIgnoreCase) &&
-                        !prevWord.Equals("delete", StringComparison.OrdinalIgnoreCase) &&
-                        !prevWord.Equals("set", StringComparison.OrdinalIgnoreCase) &&
-                        !prevWord.Equals("join", StringComparison.OrdinalIgnoreCase) &&
-                        !prevPrevWord.Equals("top", StringComparison.OrdinalIgnoreCase))
-                        return Array.Empty<string>();
-
                     // Find the FROM clause
                     var words = new List<string>();
                     var foundFrom = false;
@@ -194,10 +167,12 @@ namespace MarkMpn.Sql4Cds
                             words = nextWords;
                     }
 
+                    IDictionary<string, string> tables = null;
+
                     if (foundFrom || (foundPossibleFrom && words.Count > 0))
                     {
                         // Try to get the table & alias names from the words in the possible FROM clause
-                        var tables = new Dictionary<string, string>();
+                        tables = new Dictionary<string, string>();
 
                         for (var i = 0; i < words.Count; i++)
                         {
@@ -224,9 +199,48 @@ namespace MarkMpn.Sql4Cds
                                 i++;
                         }
 
+                        // Start loading all the appropriate metadata in the background
+                        foreach (var table in tables.Values)
+                        {
+                            if (_entities.Any(e => e.LogicalName.Equals(table, StringComparison.OrdinalIgnoreCase)))
+                                _metadata.TryGetValue(table, out _);
+                        }
+                    }
+
+                    if (!prevWord.EndsWith(".") &&
+                        !prevWord.EndsWith(",") &&
+                        !prevWord.EndsWith("(") &&
+                        !prevWord.EndsWith("+") &&
+                        !prevWord.EndsWith("-") &&
+                        !prevWord.EndsWith("*") &&
+                        !prevWord.EndsWith("/") &&
+                        !prevWord.EndsWith("=") &&
+                        !prevWord.EndsWith(">") &&
+                        !prevWord.EndsWith("<") &&
+                        !prevWord.Equals("and", StringComparison.OrdinalIgnoreCase) &&
+                        !prevWord.Equals("or", StringComparison.OrdinalIgnoreCase) &&
+                        !prevWord.Equals("select", StringComparison.OrdinalIgnoreCase) &&
+                        !prevWord.Equals("case", StringComparison.OrdinalIgnoreCase) &&
+                        !prevWord.Equals("when", StringComparison.OrdinalIgnoreCase) &&
+                        !prevWord.Equals("like", StringComparison.OrdinalIgnoreCase) &&
+                        !prevWord.Equals("where", StringComparison.OrdinalIgnoreCase) &&
+                        !prevWord.Equals("on", StringComparison.OrdinalIgnoreCase) &&
+                        !prevWord.Equals("by", StringComparison.OrdinalIgnoreCase) &&
+                        !prevWord.Equals("having", StringComparison.OrdinalIgnoreCase) &&
+                        !prevWord.Equals("update", StringComparison.OrdinalIgnoreCase) &&
+                        !prevWord.Equals("delete", StringComparison.OrdinalIgnoreCase) &&
+                        !prevWord.Equals("set", StringComparison.OrdinalIgnoreCase) &&
+                        !prevWord.Equals("join", StringComparison.OrdinalIgnoreCase) &&
+                        !prevPrevWord.Equals("top", StringComparison.OrdinalIgnoreCase))
+                        return Array.Empty<string>();
+
+                    if (tables != null)
+                    {
                         if (prevWord.Equals("join", StringComparison.OrdinalIgnoreCase))
                         {
                             // Suggest known relationships from the entities already in the FROM clause, followed by a list of all entities
+                            // Exclude the table that's currently being entered from the suggestion sources
+                            tables.Remove(currentWord);
                             var joinSuggestions = new List<string>();
 
                             foreach (var table in tables)
@@ -234,10 +248,10 @@ namespace MarkMpn.Sql4Cds
                                 if (_metadata.TryGetValue(table.Value, out var metadata))
                                 {
                                     if (metadata.OneToManyRelationships != null)
-                                        joinSuggestions.AddRange(metadata.OneToManyRelationships.Select(rel => $"{rel.ReferencingEntity} ON {table.Key}.{rel.ReferencedAttribute} = {rel.ReferencingEntity}.{rel.ReferencingAttribute}?19"));
+                                        joinSuggestions.AddRange(metadata.OneToManyRelationships.Select(rel => $"{rel.ReferencingEntity}{GetUniqueTableAlias(rel.ReferencingEntity, tables)} ON {table.Key}.{rel.ReferencedAttribute} = {GetUniqueTableName(rel.ReferencingEntity, tables)}.{rel.ReferencingAttribute}?19"));
                                     
                                     if (metadata.ManyToOneRelationships != null)
-                                        joinSuggestions.AddRange(metadata.ManyToOneRelationships.Select(rel => $"{rel.ReferencedEntity} ON {table.Key}.{rel.ReferencingAttribute} = {rel.ReferencedEntity}.{rel.ReferencedAttribute}?18"));
+                                        joinSuggestions.AddRange(metadata.ManyToOneRelationships.Select(rel => $"{rel.ReferencedEntity}{GetUniqueTableAlias(rel.ReferencedEntity, tables)} ON {table.Key}.{rel.ReferencingAttribute} = {GetUniqueTableName(rel.ReferencedEntity, tables)}.{rel.ReferencedAttribute}?18"));
                                 }
                             }
 
@@ -282,10 +296,6 @@ namespace MarkMpn.Sql4Cds
                             if (tables.TryGetValue(targetTable, out var tableName) && _metadata.TryGetValue(tableName, out var metadata))
                                 return metadata.Attributes.Where(a => a.IsValidForUpdate != false && a.LogicalName.StartsWith(currentWord, StringComparison.OrdinalIgnoreCase)).Select(a => a.LogicalName + GetIconIndex(a)).OrderBy(a => a);
                         }
-
-                        // Start loading all the appropriate metadata in the background
-                        foreach (var table in tables.Values)
-                            _metadata.TryGetValue(table, out _);
 
                         if (currentWord.Contains("."))
                         {
@@ -448,6 +458,29 @@ namespace MarkMpn.Sql4Cds
                 default:
                     return null;
             }
+        }
+
+        private string GetUniqueTableAlias(string name, IDictionary<string,string> tables)
+        {
+            var alias = GetUniqueTableName(name, tables);
+
+            if (name == alias)
+                return null;
+
+            return " AS " + alias;
+        }
+
+        private string GetUniqueTableName(string name, IDictionary<string,string> tables)
+        {
+            if (!tables.ContainsKey(name))
+                return name;
+
+            var suffix = 2;
+
+            while (tables.ContainsKey(name + suffix))
+                suffix++;
+
+            return name + suffix;
         }
     }
 }

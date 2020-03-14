@@ -1,39 +1,34 @@
 ﻿using System;
-using System.Drawing;
-using System.Data;
-using System.Linq;
 using System.Windows.Forms;
 using XrmToolBox.Extensibility;
 using McTools.Xrm.Connection;
-using Microsoft.Xrm.Sdk.Messages;
 using System.Collections.Specialized;
-using Microsoft.Xrm.Sdk.Metadata;
-using Microsoft.Xrm.Sdk;
 using System.Diagnostics;
 using XrmToolBox.Extensibility.Interfaces;
-using System.Xml;
 using System.IO;
 using System.Xml.Serialization;
 using System.Collections.Generic;
 using Microsoft.ApplicationInsights;
 using MarkMpn.Sql4Cds.Engine;
 using WeifenLuo.WinFormsUI.Docking;
+using System.Threading;
 
 namespace MarkMpn.Sql4Cds
 {
     public partial class PluginControl : MultipleConnectionsPluginControlBase, IMessageBusHost, IGitHubPlugin, IHelpPlugin
     {
-        private readonly IDictionary<ConnectionDetail, IAttributeMetadataCache> _metadata;
+        private readonly IDictionary<ConnectionDetail, AttributeMetadataCache> _metadata;
         private readonly TelemetryClient _ai;
         private readonly ObjectExplorer _objectExplorer;
+        private int _metadataLoadingTasks;
 
         public PluginControl()
         {
             InitializeComponent();
             dockPanel.Theme = new VS2015LightTheme();
-            _metadata = new Dictionary<ConnectionDetail, IAttributeMetadataCache>();
+            _metadata = new Dictionary<ConnectionDetail, AttributeMetadataCache>();
             _objectExplorer = new ObjectExplorer(_metadata, WorkAsync);
-            _objectExplorer.Show(dockPanel, WeifenLuo.WinFormsUI.Docking.DockState.DockLeft);
+            _objectExplorer.Show(dockPanel, DockState.DockLeft);
             _objectExplorer.CloseButtonVisible = false;
             _ai = new TelemetryClient(new Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration("79761278-a908-4575-afbf-2f4d82560da6"));
         }
@@ -64,6 +59,26 @@ namespace MarkMpn.Sql4Cds
 
             // Start loading the entity list in the background
             EntityCache.TryGetEntities(con.ServiceClient, out _);
+
+            _metadata[con].MetadataLoading += MetadataLoading;
+            //_metadata[con].LoadAllAsync();
+        }
+
+        private void MetadataLoading(object sender, MetadataLoadingEventArgs e)
+        {
+            if (Interlocked.Increment(ref _metadataLoadingTasks) == 1)
+                progressBar.Style = ProgressBarStyle.Marquee;
+
+            e.Task.ContinueWith(t =>
+            {
+                if (Interlocked.Decrement(ref _metadataLoadingTasks) == 0)
+                {
+                    if (InvokeRequired)
+                        Invoke((Action)(() => { progressBar.Style = ProgressBarStyle.Blocks; }));
+                    else
+                        progressBar.Style = ProgressBarStyle.Blocks;
+                }
+            });
         }
 
         private void PluginControl_Load(object sender, EventArgs e)
