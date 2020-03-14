@@ -253,6 +253,7 @@ namespace MarkMpn.Sql4Cds
             };
 
             // Intellisense
+            scintilla.AutoCSeparator = ':';
             scintilla.CharAdded += ShowIntellisense;
             scintilla.AutoCIgnoreCase = true;
 

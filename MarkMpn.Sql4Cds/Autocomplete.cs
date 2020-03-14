@@ -64,7 +64,6 @@ namespace MarkMpn.Sql4Cds
             switch (prevWord.ToLower())
             {
                 case "from":
-                case "join":
                 case "into":
                     // Show table list
                     if (_entities != null)
@@ -95,6 +94,7 @@ namespace MarkMpn.Sql4Cds
                         !prevWord.Equals("update", StringComparison.OrdinalIgnoreCase) &&
                         !prevWord.Equals("delete", StringComparison.OrdinalIgnoreCase) &&
                         !prevWord.Equals("set", StringComparison.OrdinalIgnoreCase) &&
+                        !prevWord.Equals("join", StringComparison.OrdinalIgnoreCase) &&
                         !prevPrevWord.Equals("top", StringComparison.OrdinalIgnoreCase))
                         return Array.Empty<string>();
 
@@ -224,6 +224,45 @@ namespace MarkMpn.Sql4Cds
                                 i++;
                         }
 
+                        if (prevWord.Equals("join", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // Suggest known relationships from the entities already in the FROM clause, followed by a list of all entities
+                            var joinSuggestions = new List<string>();
+
+                            foreach (var table in tables)
+                            {
+                                if (_metadata.TryGetValue(table.Value, out var metadata))
+                                {
+                                    if (metadata.OneToManyRelationships != null)
+                                        joinSuggestions.AddRange(metadata.OneToManyRelationships.Select(rel => $"{rel.ReferencingEntity} ON {table.Key}.{rel.ReferencedAttribute} = {rel.ReferencingEntity}.{rel.ReferencingAttribute}?19"));
+                                    
+                                    if (metadata.ManyToOneRelationships != null)
+                                        joinSuggestions.AddRange(metadata.ManyToOneRelationships.Select(rel => $"{rel.ReferencedEntity} ON {table.Key}.{rel.ReferencingAttribute} = {rel.ReferencedEntity}.{rel.ReferencedAttribute}?18"));
+                                }
+                            }
+
+                            joinSuggestions.Sort();
+
+                            joinSuggestions.AddRange(_entities.Select(e => e.LogicalName + "?4").OrderBy(name => name));
+                            return joinSuggestions.Where(s => s.StartsWith(currentWord));
+                        }
+
+                        var additionalSuggestions = (IEnumerable<string>) Array.Empty<string>();
+
+                        if (prevWord.Equals("on", StringComparison.OrdinalIgnoreCase) && _metadata.TryGetValue(tables[prevPrevWord], out var newTableMetadata))
+                        {
+                            // Suggest known relationships from the other entities in the FROM clause, followed by the normal list of attributes
+                            additionalSuggestions = new List<string>();
+
+                            if (newTableMetadata.OneToManyRelationships != null)
+                                ((List<string>)additionalSuggestions).AddRange(newTableMetadata.OneToManyRelationships.SelectMany(rel => tables.Where(table => table.Key != prevPrevWord && table.Value == rel.ReferencingEntity).Select(table => $"{table.Key}.{rel.ReferencingAttribute} = {prevPrevWord}.{rel.ReferencedAttribute}?18")));
+
+                            if (newTableMetadata.ManyToOneRelationships != null)
+                                ((List<string>)additionalSuggestions).AddRange(newTableMetadata.ManyToOneRelationships.SelectMany(rel => tables.Where(table => table.Key != prevPrevWord && table.Value == rel.ReferencedEntity).Select(table => $"{table.Key}.{rel.ReferencedAttribute} = {prevPrevWord}.{rel.ReferencingAttribute}?19")));
+
+                            ((List<string>)additionalSuggestions).Sort();
+                        }
+
                         if (prevWord.Equals("update", StringComparison.OrdinalIgnoreCase) ||
                             prevWord.Equals("delete", StringComparison.OrdinalIgnoreCase))
                             return tables.Keys.Select(x => x + "?4").Where(x => x.StartsWith(currentWord)).OrderBy(x => x);
@@ -286,7 +325,7 @@ namespace MarkMpn.Sql4Cds
                             items.AddRange(attributes.GroupBy(x => x.LogicalName).Where(g => g.Count() == 1).Select(g => g.Key + GetIconIndex(g.First())));
                             items.Sort();
 
-                            return items.Where(x => x.StartsWith(currentWord)).OrderBy(x => x);
+                            return additionalSuggestions.Concat(items.Where(x => x.StartsWith(currentWord)).OrderBy(x => x));
                         }
                     }
                     else if (prevWord.Equals("update", StringComparison.OrdinalIgnoreCase))

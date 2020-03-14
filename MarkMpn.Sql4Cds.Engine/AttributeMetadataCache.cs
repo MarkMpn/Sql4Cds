@@ -37,7 +37,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 var metadata = (RetrieveEntityResponse)_org.Execute(new RetrieveEntityRequest
                 {
                     LogicalName = name,
-                    EntityFilters = EntityFilters.Attributes
+                    EntityFilters = EntityFilters.Attributes | EntityFilters.Relationships
                 });
 
                 _metadata[name] = metadata.EntityMetadata;
