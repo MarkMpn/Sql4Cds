@@ -1280,7 +1280,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 Expression expression = null;
 
                 if (!(aggregate.Parameters[0] is ColumnReferenceExpression col) || col.ColumnType != ColumnType.Wildcard)
-                    selector =  CompileScalarExpression<object>(aggregate.Parameters[0], tables, null, out expression);
+                    selector = CompileScalarExpression<object>(aggregate.Parameters[0], tables, null, out expression);
 
                 AggregateFunction aggregateFunction;
 
@@ -1318,11 +1318,38 @@ namespace MarkMpn.Sql4Cds.Engine
                 aggregateFunction.SqlExpression = aggregate;
                 aggregateFunction.Expression = expression;
                 aggregates.Add(aggregateFunction);
-            }
 
-            // Create a name for the column that holds the aggregate value in the result set
-            for (var i = 0; i < aggregates.Count; i++)
-                aggregates[i].OutputName = $"agg{i + 1}";
+                // Create a name for the column that holds the aggregate value in the result set. The name must be consistent with
+                // what would be generated for the same column when the aggregate is converted directly to FetchXML.
+                if (aggregate.Parameters[0] is ColumnReferenceExpression colRef)
+                {
+                    string attrName;
+                    EntityTable table;
+
+                    if (colRef.ColumnType == ColumnType.Wildcard)
+                    {
+                        attrName = tables[0].Metadata.PrimaryIdAttribute;
+                        table = tables[0];
+                    }
+                    else
+                    {
+                        attrName = GetColumnAttribute(colRef);
+                        GetColumnTableAlias(colRef, tables, out table);
+                    }
+
+                    var name = attrName;
+
+                    if (table != tables[0])
+                        name = table.Alias + "_" + name;
+
+                    name += "_" + aggregate.FunctionName.Value.ToLower();
+                    aggregateFunction.OutputName = name;
+                }
+                else
+                {
+                    aggregateFunction.OutputName = $"agg{aggregates.Count + 1}";
+                }
+            }
 
             // If there are groupings that are not already sorted in FetchXML, sort on them before aggregation as
             // the Aggregate class requires its input to be sorted
@@ -2456,6 +2483,10 @@ namespace MarkMpn.Sql4Cds.Engine
                     case BooleanComparisonType.Equals:
                         if (lhsValue.Type == typeof(string) && rhsValue.Type == typeof(string))
                             coreComparison = Expression.Equal(lhsValue, rhsValue, false, Expr.GetMethodInfo(() => ExpressionFunctions.CaseInsensitiveEquals(Expr.Arg<string>(), Expr.Arg<string>())));
+                        else if (lhsValue.Type == typeof(EntityReference) && rhsValue.Type == typeof(Guid))
+                            coreComparison = Expression.Equal(lhsValue, rhsValue, false, Expr.GetMethodInfo(() => ExpressionFunctions.Equal(Expr.Arg<EntityReference>(), Expr.Arg<Guid>())));
+                        else if (lhsValue.Type == typeof(Guid) && rhsValue.Type == typeof(EntityReference))
+                            coreComparison = Expression.Equal(lhsValue, rhsValue, false, Expr.GetMethodInfo(() => ExpressionFunctions.Equal(Expr.Arg<Guid>(), Expr.Arg<EntityReference>())));
                         else
                             coreComparison = Expression.Equal(lhsValue, rhsValue);
                         break;
@@ -2480,6 +2511,10 @@ namespace MarkMpn.Sql4Cds.Engine
                     case BooleanComparisonType.NotEqualToExclamation:
                         if (lhsValue.Type == typeof(string) && rhsValue.Type == typeof(string))
                             coreComparison = Expression.NotEqual(lhsValue, rhsValue, false, Expr.GetMethodInfo(() => ExpressionFunctions.CaseInsensitiveNotEquals(Expr.Arg<string>(), Expr.Arg<string>())));
+                        else if (lhsValue.Type == typeof(EntityReference) && rhsValue.Type == typeof(Guid))
+                            coreComparison = Expression.NotEqual(lhsValue, rhsValue, false, Expr.GetMethodInfo(() => ExpressionFunctions.NotEqual(Expr.Arg<EntityReference>(), Expr.Arg<Guid>())));
+                        else if (lhsValue.Type == typeof(Guid) && rhsValue.Type == typeof(EntityReference))
+                            coreComparison = Expression.NotEqual(lhsValue, rhsValue, false, Expr.GetMethodInfo(() => ExpressionFunctions.NotEqual(Expr.Arg<Guid>(), Expr.Arg<EntityReference>())));
                         else
                             coreComparison = Expression.NotEqual(lhsValue, rhsValue);
                         break;
@@ -2494,7 +2529,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (lhs.Type.IsClass || lhs.Type.IsGenericType && lhs.Type.GetGenericTypeDefinition() == typeof(Nullable<>))
                     nullCheck = Expression.Equal(lhs, Expression.Constant(null));
 
-                if (rhs.Type.IsClass || rhs.Type.IsGenericType && lhs.Type.GetGenericTypeDefinition() == typeof(Nullable<>))
+                if (rhs.Type.IsClass || rhs.Type.IsGenericType && rhs.Type.GetGenericTypeDefinition() == typeof(Nullable<>))
                 {
                     var rhsNullCheck = Expression.Equal(rhs, Expression.Constant(null));
 

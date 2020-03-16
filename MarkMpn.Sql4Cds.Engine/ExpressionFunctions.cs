@@ -1,4 +1,5 @@
 ﻿using Microsoft.VisualBasic;
+using Microsoft.Xrm.Sdk;
 using System;
 using System.Linq;
 using System.Linq.Expressions;
@@ -193,6 +194,26 @@ namespace MarkMpn.Sql4Cds.Engine
         public static bool CaseInsensitiveNotEquals(string x, string y)
         {
             return !StringComparer.OrdinalIgnoreCase.Equals(x, y);
+        }
+
+        public static bool Equal(EntityReference x, Guid y)
+        {
+            return x.Id == y;
+        }
+
+        public static bool Equal(Guid x, EntityReference y)
+        {
+            return x == y.Id;
+        }
+
+        public static bool NotEqual(EntityReference x, Guid y)
+        {
+            return x.Id != y;
+        }
+
+        public static bool NotEqual(Guid x, EntityReference y)
+        {
+            return x != y.Id;
         }
     }
 

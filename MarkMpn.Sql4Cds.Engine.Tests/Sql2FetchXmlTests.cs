@@ -1464,21 +1464,54 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var metadata = new AttributeMetadataCache(org);
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
 
-            var query = "SELECT count(*), count(name), count(DISTINCT name), max(name), min(name), avg(name) FROM account";
+            var query = "SELECT name, count(*) FROM account GROUP BY name ORDER BY 2 DESC";
 
             var queries = sql2FetchXml.Convert(query);
 
-            var simpleAggregate = (FetchXmlQuery) queries[0];
-            var alterativeQuery = (FetchXmlQuery)simpleAggregate.AggregateAlternative;
+            var simpleAggregate = (SelectQuery) queries[0];
+            var alterativeQuery = (SelectQuery)simpleAggregate.AggregateAlternative;
 
             AssertFetchXml(new[] { alterativeQuery }, @"
                 <fetch>
                     <entity name='account'>
-                        <attribute name='accountid' />
                         <attribute name='name' />
+                        <attribute name='accountid' />
+                        <order attribute='name' />
                     </entity>
                 </fetch>
             ");
+
+            CollectionAssert.AreEqual(simpleAggregate.ColumnSet, alterativeQuery.ColumnSet);
+
+            var guid1 = Guid.NewGuid();
+            var guid2 = Guid.NewGuid();
+            var guid3 = Guid.NewGuid();
+
+            context.Data["account"] = new Dictionary<Guid, Entity>
+            {
+                [guid1] = new Entity("account", guid1)
+                {
+                    ["name"] = "Data8",
+                    ["accountid"] = guid1
+                },
+                [guid2] = new Entity("account", guid2)
+                {
+                    ["name"] = "Data8",
+                    ["accountid"] = guid2
+                },
+                [guid3] = new Entity("account", guid3)
+                {
+                    ["name"] = "Microsoft",
+                    ["accountid"] = guid3
+                }
+            };
+
+            alterativeQuery.Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            var results = (EntityCollection)alterativeQuery.Result;
+            Assert.AreEqual(2, results.Entities.Count);
+
+            Assert.AreEqual("Data8", results.Entities[0].GetAttributeValue<string>("name"));
+            Assert.AreEqual(2, results.Entities[0].GetAttributeValue<int>(simpleAggregate.ColumnSet[1]));
         }
 
         private void AssertFetchXml(Query[] queries, string fetchXml)
