@@ -532,10 +532,7 @@ namespace MarkMpn.Sql4Cds.Engine
         }
     }
 
-    /// <summary>
-    /// An INSERT query to add fixed values
-    /// </summary>
-    public class InsertValues : Query
+    public abstract class InsertQuery : Query
     {
         /// <summary>
         /// The logical name of the entity to add
@@ -543,61 +540,135 @@ namespace MarkMpn.Sql4Cds.Engine
         public string LogicalName { get; set; }
 
         /// <summary>
-        /// A list of records to insert
+        /// Returns a sequence of the entities to insert
         /// </summary>
-        public IDictionary<string, object>[] Values { get; set; }
+        /// <returns></returns>
+        protected abstract Entity[] GetValues(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options);
 
-        /// <inheritdoc/>
         protected override object ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
             var meta = metadata[LogicalName];
 
             // Add each record in turn
-            for (var i = 0; i < Values.Length && !options.Cancelled; i++)
+            var count = 0;
+            var entities = GetValues(org, metadata, options);
+
+            if (entities != null)
             {
-                var entity = new Entity(LogicalName);
+                foreach (var entity in entities)
+                {
+                    if (options.Cancelled)
+                        break;
 
-                foreach (var attr in Values[i])
-                    entity[attr.Key] = attr.Value;
+                    // Special cases for intersect entities
+                    if (LogicalName == "listmember")
+                    {
+                        var listId = entity.GetAttributeValue<EntityReference>("listid");
+                        var entityId = entity.GetAttributeValue<EntityReference>("entityid");
 
-                org.Create(entity);
+                        if (listId == null)
+                            throw new ApplicationException("listid is required");
 
-                options.Progress($"Inserted {i:N0} of {Values.Length:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label} ({(float)i / Values.Length:P0})");
+                        if (entityId == null)
+                            throw new ApplicationException("entityid is required");
+
+                        org.Execute(new AddMemberListRequest
+                        {
+                            ListId = listId.Id,
+                            EntityId = entityId.Id
+                        });
+                    }
+                    else if (meta.IsIntersect == true)
+                    {
+                        // For generic intersect entities we expect a single many-to-many relationship in the metadata which describes
+                        // the relationship that this is the intersect entity for
+                        var relationship = meta.ManyToManyRelationships.Single();
+
+                        var entity1 = entity.GetAttributeValue<EntityReference>(relationship.Entity1IntersectAttribute);
+                        var entity2 = entity.GetAttributeValue<EntityReference>(relationship.Entity2IntersectAttribute);
+
+                        if (entity1 == null)
+                            throw new ApplicationException($"{relationship.Entity1IntersectAttribute} is required");
+
+                        if (entity2 == null)
+                            throw new ApplicationException($"{relationship.Entity2IntersectAttribute} is required");
+
+                        org.Execute(new AssociateRequest
+                        {
+                            Target = entity1,
+                            Relationship = new Relationship(relationship.SchemaName) { PrimaryEntityRole = EntityRole.Referencing },
+                            RelatedEntities = new EntityReferenceCollection(new[] { entity2 })
+                        });
+                    }
+                    else
+                    {
+                        org.Create(entity);
+                    }
+
+                    count++;
+
+                    options.Progress($"Inserted {count:N0} of {entities.Length:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label} ({(float)count / entities.Length:P0})");
+                }
             }
 
-            return $"{Values.Length:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label} inserted";
+            return $"{entities.Length:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label} inserted";
+        }
+    }
+
+    /// <summary>
+    /// An INSERT query to add fixed values
+    /// </summary>
+    public class InsertValues : InsertQuery
+    {
+        /// <summary>
+        /// A list of records to insert
+        /// </summary>
+        public IDictionary<string, object>[] Values { get; set; }
+
+        protected override Entity[] GetValues(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        {
+            return Values
+                .Select(dictionary =>
+                {
+                    var entity = new Entity(LogicalName);
+
+                    foreach (var attr in dictionary)
+                        entity[attr.Key] = attr.Value;
+
+                    return entity;
+                })
+                .ToArray();
         }
     }
 
     /// <summary>
     /// An INSERT query to add records based on the results of a FetchXML query
     /// </summary>
-    public class InsertSelect : FetchXmlQuery
+    public class InsertSelect : InsertQuery
     {
         /// <summary>
-        /// The logical name of the entity to insert
+        /// The SELECT query that produces the values to insert
         /// </summary>
-        public string LogicalName { get; set; }
+        public SelectQuery Source { get; set; }
 
         /// <summary>
         /// The mappings of columns from the FetchXML results to the attributes of the entity to insert
         /// </summary>
         public IDictionary<string, string> Mappings { get; set; }
 
-        /// <inheritdoc/>
-        protected override object ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        protected override Entity[] GetValues(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
-            // Get all the records to insert
-            var count = 0;
-            var entities = RetrieveAll(org, metadata, options).Entities;
+            Source.Execute(org, metadata, options);
 
-            if (entities == null)
+            if (Source.Result is Exception ex)
+                throw ex;
+
+            if (!(Source.Result is EntityCollection entities))
                 return null;
 
-            var meta = metadata[LogicalName];
+            var converted = new List<Entity>(entities.Entities.Count);
 
-            // Insert each record in turn
-            foreach (var entity in entities)
+            foreach (var entity in entities.Entities)
             {
                 if (options.Cancelled)
                     break;
@@ -617,13 +688,10 @@ namespace MarkMpn.Sql4Cds.Engine
                     newEntity[attr.Value] = value;
                 }
 
-                org.Create(newEntity);
-
-                count++;
-                options.Progress($"Inserted {count:N0} of {entities.Count:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label} ({(float)count / entities.Count:P0})");
+                converted.Add(newEntity);
             }
 
-            return $"{count:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label} inserted";
+            return converted.ToArray();
         }
     }
 }

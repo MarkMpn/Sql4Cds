@@ -196,24 +196,59 @@ namespace MarkMpn.Sql4Cds.Engine
             return !StringComparer.OrdinalIgnoreCase.Equals(x, y);
         }
 
+        /// <summary>
+        /// Implements equality between <see cref="EntityReference"/> and <see cref="Guid"/>
+        /// </summary>
+        /// <param name="x">The <see cref="EntityReference"/> to compare</param>
+        /// <param name="y">The <see cref="Guid"/> to compare</param>
+        /// <returns><c>true</c> if the ID in the <see cref="EntityReference"/> matches the supplied <see cref="Guid"/>, or <c>false</c> otherwise</returns>
         public static bool Equal(EntityReference x, Guid y)
         {
             return x.Id == y;
         }
 
+        /// <summary>
+        /// Implements equality between <see cref="EntityReference"/> and <see cref="Guid"/>
+        /// </summary>
+        /// <param name="x">The <see cref="Guid"/> to compare</param>
+        /// <param name="y">The <see cref="EntityReference"/> to compare</param>
+        /// <returns><c>true</c> if the ID in the <see cref="EntityReference"/> matches the supplied <see cref="Guid"/>, or <c>false</c> otherwise</returns>
         public static bool Equal(Guid x, EntityReference y)
         {
             return x == y.Id;
         }
 
+        /// <summary>
+        /// Implements inequality between <see cref="EntityReference"/> and <see cref="Guid"/>
+        /// </summary>
+        /// <param name="x">The <see cref="EntityReference"/> to compare</param>
+        /// <param name="y">The <see cref="Guid"/> to compare</param>
+        /// <returns><c>false</c> if the ID in the <see cref="EntityReference"/> matches the supplied <see cref="Guid"/>, or <c>true</c> otherwise</returns>
         public static bool NotEqual(EntityReference x, Guid y)
         {
             return x.Id != y;
         }
 
+        /// <summary>
+        /// Implements inequality between <see cref="EntityReference"/> and <see cref="Guid"/>
+        /// </summary>
+        /// <param name="x">The <see cref="Guid"/> to compare</param>
+        /// <param name="y">The <see cref="EntityReference"/> to compare</param>
+        /// <returns><c>false</c> if the ID in the <see cref="EntityReference"/> matches the supplied <see cref="Guid"/>, or <c>true</c> otherwise</returns>
         public static bool NotEqual(Guid x, EntityReference y)
         {
             return x != y.Id;
+        }
+
+        /// <summary>
+        /// Creates an <see cref="EntityReference"/> value
+        /// </summary>
+        /// <param name="entityType">The logical name of the entity to reference</param>
+        /// <param name="id">The unique identifier of the entity to reference</param>
+        /// <returns>An <see cref="EntityReference"/> with the requested values</returns>
+        public static EntityReference CreateLookup(string entityType, string id)
+        {
+            return new EntityReference(entityType, new Guid(id));
         }
     }
 

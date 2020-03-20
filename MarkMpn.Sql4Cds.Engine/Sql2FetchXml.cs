@@ -283,9 +283,8 @@ namespace MarkMpn.Sql4Cds.Engine
             var query = new InsertSelect
             {
                 LogicalName = target,
-                FetchXml = selectQuery.FetchXml,
+                Source = selectQuery,
                 Mappings = new Dictionary<string, string>(),
-                AllPages = selectQuery.FetchXml.page == null && selectQuery.FetchXml.count == null
             };
 
             for (var i = 0; i < columns.Count; i++)
@@ -299,32 +298,38 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="target">The entity to insert the values into</param>
         /// <param name="columns">The list of columns within the <paramref name="target"/> entity to populate with the supplied <paramref name="values"/></param>
-        /// <param name="values">The values to insert</param>
+        /// <param name="source">The values to insert</param>
         /// <returns>The equivalent query converted for execution against CDS</returns>
-        private Query ConvertInsertValuesStatement(string target, IList<ColumnReferenceExpression> columns, ValuesInsertSource values)
+        private Query ConvertInsertValuesStatement(string target, IList<ColumnReferenceExpression> columns, ValuesInsertSource source)
         {
             // Get the metadata for the target entity
             var rowValues = new List<IDictionary<string, object>>();
             var meta = Metadata[target];
 
             // Convert the supplied values to the appropriate type for the attribute it is to be inserted into
-            foreach (var row in values.RowValues)
+            foreach (var row in source.RowValues)
             {
-                var stringValues = new Dictionary<string, string>();
+                var values = new Dictionary<string, object>();
 
                 if (row.ColumnValues.Count != columns.Count)
                     throw new NotSupportedQueryFragmentException("Number of values does not match number of columns", row);
 
                 for (var i = 0; i < columns.Count; i++)
                 {
-                    if (!(row.ColumnValues[i] is Literal literal))
-                        throw new NotSupportedQueryFragmentException("Only literal values are supported", row.ColumnValues[i]);
+                    var columnName = columns[i].MultiPartIdentifier.Identifiers.Last().Value;
 
-                    stringValues[columns[i].MultiPartIdentifier.Identifiers.Last().Value] = literal.Value;
+                    if (row.ColumnValues[i] is Literal literal)
+                    {
+                        values[columnName] = ConvertAttributeValueType(meta, columnName, literal.Value);
+                    }
+                    else
+                    {
+                        var expr = CompileScalarExpression<object>(row.ColumnValues[i], new List<EntityTable>(), null, out _);
+                        values[columnName] = expr(null);
+                    }
                 }
 
-                var rowValue = ConvertAttributeValueTypes(meta, stringValues);
-                rowValues.Add(rowValue);
+                rowValues.Add(values);
             }
 
             // Return the final query
@@ -385,6 +390,7 @@ namespace MarkMpn.Sql4Cds.Engine
             HandleTopClause(delete.DeleteSpecification.TopRowFilter, fetch, extensions);
             
             // To delete a record we need the primary key field of the target entity
+            // TODO: For intersect entities we need the two foreign key fields instead
             var table = FindTable(target, tables);
             var meta = Metadata[table.EntityName];
             table.AddItem(new FetchAttributeType { name = meta.PrimaryIdAttribute });
@@ -491,18 +497,6 @@ namespace MarkMpn.Sql4Cds.Engine
         }
 
         /// <summary>
-        /// Converts attribute values to the appropriate type for INSERT and UPDATE queries
-        /// </summary>
-        /// <param name="metadata">The metadata of the entity being affected</param>
-        /// <param name="values">A mapping of attribute name to value</param>
-        /// <returns>A mapping of attribute name to value</returns>
-        private IDictionary<string, object> ConvertAttributeValueTypes(EntityMetadata metadata, IDictionary<string, string> values)
-        {
-            return values
-                .ToDictionary(kvp => kvp.Key, kvp => ConvertAttributeValueType(metadata, kvp.Key, kvp.Value));
-        }
-
-        /// <summary>
         /// Converts an attribute value to the appropriate type for INSERT and UPDATE queries
         /// </summary>
         /// <param name="metadata">The metadata of the entity being affected</param>
@@ -549,7 +543,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 case AttributeTypeCode.Lookup:
                     var targets = ((LookupAttributeMetadata)attr).Targets;
                     if (targets.Length != 1)
-                        throw new NotSupportedException($"Unsupported polymorphic lookup attribute {attrName}");
+                        throw new NotSupportedException($"Cannot use guid value for polymorphic lookup attribute {attrName}. Use CREATELOOKUP(logicalname, guid) function instead");
                     return new EntityReference(targets[0], Guid.Parse(value));
 
                 case AttributeTypeCode.Memo:
