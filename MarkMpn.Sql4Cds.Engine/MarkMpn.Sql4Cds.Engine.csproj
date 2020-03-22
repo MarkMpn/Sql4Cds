@@ -60,6 +60,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AttributeMetadataCache.cs" />
+    <Compile Include="EntityExtensions.cs" />
     <Compile Include="TSqlFragmentExtensions.cs" />
     <Compile Include="Visitors\AggregateCollectingVisitor.cs" />
     <Compile Include="ExpressionFunctions.cs" />

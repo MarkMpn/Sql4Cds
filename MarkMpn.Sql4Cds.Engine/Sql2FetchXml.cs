@@ -390,13 +390,35 @@ namespace MarkMpn.Sql4Cds.Engine
             HandleTopClause(delete.DeleteSpecification.TopRowFilter, fetch, extensions);
             
             // To delete a record we need the primary key field of the target entity
-            // TODO: For intersect entities we need the two foreign key fields instead
+            // For intersect entities we need the two foreign key fields instead
             var table = FindTable(target, tables);
             var meta = Metadata[table.EntityName];
-            table.AddItem(new FetchAttributeType { name = meta.PrimaryIdAttribute });
-            var cols = new[] { meta.PrimaryIdAttribute };
+
+            if (table.EntityName == "listmember")
+            {
+                table.AddItem(new FetchAttributeType { name = "listid" });
+                table.AddItem(new FetchAttributeType { name = "entityid" });
+            }
+            else if (meta.IsIntersect == true)
+            {
+                var relationship = meta.ManyToManyRelationships.Single();
+                table.AddItem(new FetchAttributeType { name = relationship.Entity1IntersectAttribute });
+                table.AddItem(new FetchAttributeType { name = relationship.Entity2IntersectAttribute });
+            }
+            else
+            {
+                table.AddItem(new FetchAttributeType { name = meta.PrimaryIdAttribute });
+            }
+
+            var cols = table.GetItems().OfType<FetchAttributeType>().Select(a => a.name).ToArray();
+
             if (table.Entity == null)
-                cols[0] = (table.Alias ?? table.EntityName) + "." + cols[0];
+            {
+                // If we're deleting from a table other than the first one in the joins, we need to include the table name/alias
+                // prefix in the column list
+                for (var i = 0; i < cols.Length; i++)
+                    cols[i] = (table.Alias ?? table.EntityName) + "." + cols[i];
+            }
 
             // Sort the elements in the query so they're in the order users expect based on online samples
             foreach (var t in tables)
@@ -407,7 +429,7 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 FetchXml = fetch,
                 EntityName = table.EntityName,
-                IdColumn = cols[0],
+                IdColumns = cols,
                 AllPages = fetch.page == null && fetch.top == null
             };
 

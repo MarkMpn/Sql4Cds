@@ -3,6 +3,7 @@ using MarkMpn.Sql4Cds.Engine.QueryExtensions;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
+using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
 using System;
 using System.Collections.Generic;
@@ -420,9 +421,9 @@ namespace MarkMpn.Sql4Cds.Engine
         public string EntityName { get; set; }
 
         /// <summary>
-        /// The primary key column of the entity to delete
+        /// The primary key columns of the entity to delete
         /// </summary>
-        public string IdColumn { get; set; }
+        public string[] IdColumns { get; set; }
 
         /// <inheritdoc/>
         protected override object ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
@@ -437,7 +438,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var meta = metadata[EntityName];
 
             // If we are using a bulk delete job, start the job
-            if (options.UseBulkDelete && Extensions.Count == 0)
+            if (options.UseBulkDelete && Extensions.Count == 0 && meta.IsIntersect != true)
             {
                 var query = ((FetchXmlToQueryExpressionResponse)org.Execute(new FetchXmlToQueryExpressionRequest { FetchXml = Serialize(FetchXml) })).Query;
 
@@ -477,14 +478,10 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (options.Cancelled)
                     break;
 
-                var id = entity[IdColumn];
-                if (id is AliasedValue alias)
-                    id = alias.Value;
-
                 if (options.BatchSize == 1)
                 {
                     options.Progress($"Deleting {meta.DisplayName.UserLocalizedLabel.Label} {count + 1:N0} of {entities.Count:N0}...");
-                    org.Delete(EntityName, (Guid)id);
+                    org.Execute(CreateDeleteRequest(meta, entity));
                     count++;
                 }
                 else
@@ -502,7 +499,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         };
                     }
 
-                    multiple.Requests.Add(new DeleteRequest { Target = new EntityReference(EntityName, (Guid)id) });
+                    multiple.Requests.Add(CreateDeleteRequest(meta, entity));
 
                     if (multiple.Requests.Count == options.BatchSize)
                     {
@@ -529,6 +526,37 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             return $"{count:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label} deleted";
+        }
+
+        private OrganizationRequest CreateDeleteRequest(EntityMetadata meta, Entity entity)
+        {
+            // Special case messages for intersect entities
+            if (meta.LogicalName == "listmember")
+            {
+                var listId = entity.GetAliasedAttributeValue<EntityReference>(IdColumns[0]);
+                var entityId = entity.GetAliasedAttributeValue<EntityReference>(IdColumns[1]);
+
+                return new RemoveMemberListRequest { ListId = listId.Id, EntityId = entityId.Id };
+            }
+            else if (meta.IsIntersect == true)
+            {
+                var entity1Id = entity.GetAliasedAttributeValue<EntityReference>(IdColumns[0]);
+                var entity2Id = entity.GetAliasedAttributeValue<EntityReference>(IdColumns[1]);
+                var relationship = meta.ManyToManyRelationships.Single();
+
+                return new DisassociateRequest
+                {
+                    Target = entity1Id,
+                    RelatedEntities = new EntityReferenceCollection(new[] { entity2Id }),
+                    Relationship = new Relationship(relationship.SchemaName) { PrimaryEntityRole = EntityRole.Referencing }
+                };
+            }
+            else
+            {
+                var id = entity.GetAliasedAttributeValue<Guid>(IdColumns[0]);
+
+                return new DeleteRequest { Target = new EntityReference(EntityName, id) };
+            }
         }
     }
 
