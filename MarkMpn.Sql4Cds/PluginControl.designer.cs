@@ -202,9 +202,10 @@
             // tslAboutLink
             // 
             this.tslAboutLink.Alignment = System.Windows.Forms.ToolStripItemAlignment.Right;
+            this.tslAboutLink.Image = global::MarkMpn.Sql4Cds.Properties.Resources.SQL4CDS_Icon_16;
             this.tslAboutLink.IsLink = true;
             this.tslAboutLink.Name = "tslAboutLink";
-            this.tslAboutLink.Size = new System.Drawing.Size(168, 28);
+            this.tslAboutLink.Size = new System.Drawing.Size(192, 28);
             this.tslAboutLink.Text = "SQL 4 CDS by Mark Carrington";
             this.tslAboutLink.Click += new System.EventHandler(this.tslAboutLink_Click);
             // 

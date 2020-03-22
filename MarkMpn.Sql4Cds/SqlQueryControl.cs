@@ -627,13 +627,19 @@ namespace MarkMpn.Sql4Cds
                 Padding = new Padding(4),
                 Height = 24
             };
-            postWarning.Controls.Add(new System.Windows.Forms.Label
+            var link = new LinkLabel
             {
-                Text = "This query required additional processing. This FetchXML gives the required data, but will not give the final results when run outside SQL 4 CDS",
+                Text = "This query required additional processing. This FetchXML gives the required data, but will not give the final results when run outside SQL 4 CDS.",
                 ForeColor = SystemColors.InfoText,
                 AutoSize = false,
                 Dock = DockStyle.Fill
-            });
+            };
+            var linkText = "Learn more";
+            link.Text += " " + linkText;
+            link.LinkArea = new LinkArea(link.Text.Length - linkText.Length, linkText.Length);
+            link.LinkClicked += (s, e) => Process.Start("https://markcarrington.dev/sql-4-cds/additional-processing/");
+
+            postWarning.Controls.Add(link);
 
             var image = new Bitmap(16, 16);
 
