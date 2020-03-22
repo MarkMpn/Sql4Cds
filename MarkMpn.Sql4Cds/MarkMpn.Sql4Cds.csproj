@@ -291,6 +291,12 @@
       <Name>MarkMpn.Sql4Cds.Engine</Name>
     </ProjectReference>
   </ItemGroup>
+  <ItemGroup>
+    <None Include="Images\SQL4CDS Icon 16.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Images\SQLFile_16x.png" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>

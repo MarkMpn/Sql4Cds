@@ -31,6 +31,9 @@ namespace MarkMpn.Sql4Cds
             _objectExplorer.Show(dockPanel, DockState.DockLeft);
             _objectExplorer.CloseButtonVisible = false;
             _ai = new TelemetryClient(new Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration("79761278-a908-4575-afbf-2f4d82560da6"));
+
+            TabIcon = Properties.Resources.SQL4CDS_Icon_16;
+            PluginIcon = System.Drawing.Icon.FromHandle(Properties.Resources.SQL4CDS_Icon_16.GetHicon());
         }
 
         protected override void OnConnectionUpdated(ConnectionUpdatedEventArgs e)

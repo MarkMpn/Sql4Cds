@@ -33,12 +33,15 @@ namespace MarkMpn.Sql4Cds
         private bool _modified;
         private static int _queryCounter;
         private static Bitmap[] _images;
+        private static Icon _sqlIcon;
 
         static SqlQueryControl()
         {
             _images = new ObjectExplorer(null, null).GetImages()
                 .Select(i => i is Bitmap b ? b : new Bitmap(i))
                 .ToArray();
+
+            _sqlIcon = Icon.FromHandle(Properties.Resources.SQLFile_16x.GetHicon());
         }
 
         public SqlQueryControl(ConnectionDetail con, IAttributeMetadataCache metadata, TelemetryClient ai, Action<WorkAsyncInfo> workAsync, Action<string> setWorkingMessage, Action<Action> executeMethod, Action<MessageBusEventArgs> outgoingMessageHandler, string sourcePlugin)
@@ -59,6 +62,7 @@ namespace MarkMpn.Sql4Cds
             SyncTitle();
 
             splitContainer.Panel1.Controls.Add(_editor);
+            Icon = _sqlIcon;
         }
 
         public IOrganizationService Service { get; }
