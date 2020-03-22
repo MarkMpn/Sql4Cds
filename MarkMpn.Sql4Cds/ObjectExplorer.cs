@@ -4,11 +4,11 @@ using System.Drawing;
 using System.Data;
 using System.Linq;
 using System.Windows.Forms;
-using Microsoft.Xrm.Sdk.Metadata;
-using Microsoft.Xrm.Sdk.Messages;
-using McTools.Xrm.Connection;
-using XrmToolBox.Extensibility;
 using MarkMpn.Sql4Cds.Engine;
+using McTools.Xrm.Connection;
+using Microsoft.Xrm.Sdk.Messages;
+using Microsoft.Xrm.Sdk.Metadata;
+using XrmToolBox.Extensibility;
 
 namespace MarkMpn.Sql4Cds
 {

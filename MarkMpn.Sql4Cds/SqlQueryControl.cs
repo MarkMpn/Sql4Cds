@@ -1,24 +1,21 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Drawing;
 using System.Data;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows.Forms;
-using Microsoft.Xrm.Sdk;
-using ScintillaNET;
-using XrmToolBox.Extensibility;
-using System.Text.RegularExpressions;
-using Microsoft.Xrm.Sdk.Metadata;
-using Microsoft.SqlServer.TransactSql.ScriptDom;
+using System.Diagnostics;
+using System.Drawing;
 using System.IO;
+using System.Linq;
+using System.Text.RegularExpressions;
+using System.Windows.Forms;
+using MarkMpn.Sql4Cds.Engine;
 using McTools.Xrm.Connection;
 using Microsoft.ApplicationInsights;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
+using Microsoft.Xrm.Sdk;
+using ScintillaNET;
 using xrmtb.XrmToolBox.Controls;
-using MarkMpn.Sql4Cds.Engine;
-using System.Diagnostics;
+using XrmToolBox.Extensibility;
 
 namespace MarkMpn.Sql4Cds
 {

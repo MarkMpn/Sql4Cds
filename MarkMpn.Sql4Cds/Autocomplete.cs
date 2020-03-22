@@ -1,8 +1,8 @@
-﻿using MarkMpn.Sql4Cds.Engine;
-using Microsoft.Xrm.Sdk.Metadata;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using MarkMpn.Sql4Cds.Engine;
+using Microsoft.Xrm.Sdk.Metadata;
 
 namespace MarkMpn.Sql4Cds
 {

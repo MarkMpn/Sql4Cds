@@ -1,8 +1,8 @@
-﻿using Microsoft.Xrm.Sdk;
+﻿using System.Collections.Generic;
+using System.Threading.Tasks;
+using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 
 namespace MarkMpn.Sql4Cds
 {

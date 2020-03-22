@@ -1,17 +1,17 @@
 ﻿using System;
-using System.Windows.Forms;
-using XrmToolBox.Extensibility;
-using McTools.Xrm.Connection;
+using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Diagnostics;
-using XrmToolBox.Extensibility.Interfaces;
 using System.IO;
-using System.Xml.Serialization;
-using System.Collections.Generic;
-using Microsoft.ApplicationInsights;
-using MarkMpn.Sql4Cds.Engine;
-using WeifenLuo.WinFormsUI.Docking;
 using System.Threading;
+using System.Windows.Forms;
+using System.Xml.Serialization;
+using MarkMpn.Sql4Cds.Engine;
+using McTools.Xrm.Connection;
+using Microsoft.ApplicationInsights;
+using WeifenLuo.WinFormsUI.Docking;
+using XrmToolBox.Extensibility;
+using XrmToolBox.Extensibility.Interfaces;
 
 namespace MarkMpn.Sql4Cds
 {
