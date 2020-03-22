@@ -170,5 +170,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             CollectionAssert.AreEqual(new[] { "name?13" }, suggestions);
         }
+
+        [TestMethod]
+        public void InsertColumns()
+        {
+            var sql = "INSERT INTO account (";
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).ToList();
+
+            CollectionAssert.AreEqual(new[] { "accountid?14", "createdon?2", "name?13" }, suggestions);
+        }
     }
 }

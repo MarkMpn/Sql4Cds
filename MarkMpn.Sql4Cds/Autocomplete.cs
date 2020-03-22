@@ -88,7 +88,6 @@ namespace MarkMpn.Sql4Cds
                                 break;
 
                             case "select":
-                            case "insert":
                                 foundQueryStart = true;
                                 break;
 
@@ -109,6 +108,7 @@ namespace MarkMpn.Sql4Cds
                                 break;
 
                             case "where":
+                            case "(":
                                 words.Clear();
                                 break;
 
@@ -119,6 +119,13 @@ namespace MarkMpn.Sql4Cds
                             case "set":
                                 words.Clear();
                                 clause = clause ?? "set";
+                                break;
+
+                            case "insert":
+                            case "into":
+                                clause = clause ?? "insert";
+                                foundQueryStart = true;
+                                foundFrom = true;
                                 break;
 
                             default:
@@ -322,7 +329,8 @@ namespace MarkMpn.Sql4Cds
                             // * functions
                             var items = new List<string>();
 
-                            items.AddRange(tables.Keys.Select(x => x + "?4"));
+                            if (clause != "insert")
+                                items.AddRange(tables.Keys.Select(x => x + "?4"));
 
                             var attributes = new List<AttributeMetadata>();
 
