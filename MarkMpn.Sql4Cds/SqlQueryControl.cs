@@ -431,6 +431,7 @@ namespace MarkMpn.Sql4Cds
                                         }
 
                                         grid.Columns.Add(colName, colName);
+                                        grid.Columns[colName].FillWeight = 1;
                                     }
                                 }
 
