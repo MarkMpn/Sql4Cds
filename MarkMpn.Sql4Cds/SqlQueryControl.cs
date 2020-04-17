@@ -1,24 +1,21 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Drawing;
 using System.Data;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows.Forms;
-using Microsoft.Xrm.Sdk;
-using ScintillaNET;
-using XrmToolBox.Extensibility;
-using System.Text.RegularExpressions;
-using Microsoft.Xrm.Sdk.Metadata;
-using Microsoft.SqlServer.TransactSql.ScriptDom;
+using System.Diagnostics;
+using System.Drawing;
 using System.IO;
+using System.Linq;
+using System.Text.RegularExpressions;
+using System.Windows.Forms;
+using MarkMpn.Sql4Cds.Engine;
 using McTools.Xrm.Connection;
 using Microsoft.ApplicationInsights;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
+using Microsoft.Xrm.Sdk;
+using ScintillaNET;
 using xrmtb.XrmToolBox.Controls;
-using MarkMpn.Sql4Cds.Engine;
-using System.Diagnostics;
+using XrmToolBox.Extensibility;
 
 namespace MarkMpn.Sql4Cds
 {
@@ -32,6 +29,17 @@ namespace MarkMpn.Sql4Cds
         private string _filename;
         private bool _modified;
         private static int _queryCounter;
+        private static Bitmap[] _images;
+        private static Icon _sqlIcon;
+
+        static SqlQueryControl()
+        {
+            _images = new ObjectExplorer(null, null).GetImages()
+                .Select(i => i is Bitmap b ? b : new Bitmap(i))
+                .ToArray();
+
+            _sqlIcon = Icon.FromHandle(Properties.Resources.SQLFile_16x.GetHicon());
+        }
 
         public SqlQueryControl(ConnectionDetail con, IAttributeMetadataCache metadata, TelemetryClient ai, Action<WorkAsyncInfo> workAsync, Action<string> setWorkingMessage, Action<Action> executeMethod, Action<MessageBusEventArgs> outgoingMessageHandler, string sourcePlugin)
         {
@@ -51,6 +59,7 @@ namespace MarkMpn.Sql4Cds
             SyncTitle();
 
             splitContainer.Panel1.Controls.Add(_editor);
+            Icon = _sqlIcon;
         }
 
         public IOrganizationService Service { get; }
@@ -205,6 +214,12 @@ namespace MarkMpn.Sql4Cds
                         e.Handled = true;
                     }
                 }
+                if (e.KeyCode == Keys.Space && e.Control)
+                {
+                    ShowIntellisense(true);
+                    e.Handled = true;
+                    e.SuppressKeyPress = true;
+                }
             };
 
             // Auto-indent new lines
@@ -238,7 +253,39 @@ namespace MarkMpn.Sql4Cds
                 }
             };
 
+            // Intellisense
+            scintilla.AutoCSeparator = ':';
+            scintilla.CharAdded += ShowIntellisense;
+            scintilla.AutoCIgnoreCase = true;
+
+            for (var i = 0; i < _images.Length; i++)
+                scintilla.RegisterRgbaImage(i, _images[i]);
+
             return scintilla;
+        }
+
+        private void ShowIntellisense(object sender, EventArgs e)
+        {
+            ShowIntellisense(false);
+        }
+
+        private void ShowIntellisense(bool force)
+        {
+            var pos = _editor.CurrentPosition - 1;
+
+            if (pos == 0)
+                return;
+
+            var text = _editor.Text;
+            EntityCache.TryGetEntities(_con.ServiceClient, out var entities);
+
+            var suggestions = new Autocomplete(entities, Metadata).GetSuggestions(text, pos, out var currentLength).ToList();
+
+            if (suggestions.Count == 0)
+                return;
+
+            if (force || currentLength > 0 || text[pos] == '.')
+                _editor.AutoCShow(currentLength, String.Join(_editor.AutoCSeparator.ToString(), suggestions));
         }
 
         private Scintilla CreateXmlEditor()
@@ -384,6 +431,7 @@ namespace MarkMpn.Sql4Cds
                                         }
 
                                         grid.Columns.Add(colName, colName);
+                                        grid.Columns[colName].FillWeight = 1;
                                     }
                                 }
 
@@ -435,15 +483,20 @@ namespace MarkMpn.Sql4Cds
                             if (query is FetchXmlQuery fxq)
                             {
                                 var xmlDisplay = CreateXmlEditor();
-                                xmlDisplay.Text = FetchXmlQuery.Serialize(fxq.FetchXml);
+                                xmlDisplay.Text = fxq.FetchXmlString;
                                 xmlDisplay.ReadOnly = true;
 
+                                var postWarning = CreatePostProcessingWarning(fxq);
                                 var toolbar = CreateFXBToolbar(xmlDisplay);
 
                                 if (display == null)
                                 {
                                     var panel = new Panel();
                                     panel.Controls.Add(xmlDisplay);
+
+                                    if (postWarning != null)
+                                        panel.Controls.Add(postWarning);
+
                                     panel.Controls.Add(toolbar);
                                     display = panel;
                                 }
@@ -454,6 +507,10 @@ namespace MarkMpn.Sql4Cds
                                     tab.TabPages.Add("FetchXML");
                                     tab.TabPages[0].Controls.Add(display);
                                     tab.TabPages[1].Controls.Add(xmlDisplay);
+
+                                    if (postWarning != null)
+                                        tab.TabPages[1].Controls.Add(postWarning);
+
                                     tab.TabPages[1].Controls.Add(toolbar);
 
                                     display.Dock = DockStyle.Fill;
@@ -468,12 +525,17 @@ namespace MarkMpn.Sql4Cds
                         else if (query is FetchXmlQuery fxq)
                         {
                             var xmlDisplay = CreateXmlEditor();
-                            xmlDisplay.Text = FetchXmlQuery.Serialize(fxq.FetchXml);
+                            xmlDisplay.Text = fxq.FetchXmlString;
                             xmlDisplay.ReadOnly = true;
                             xmlDisplay.Dock = DockStyle.Fill;
+                            var postWarning = CreatePostProcessingWarning(fxq);
                             var toolbar = CreateFXBToolbar(xmlDisplay);
                             var container = new Panel();
                             container.Controls.Add(xmlDisplay);
+
+                            if (postWarning != null)
+                                container.Controls.Add(postWarning);
+
                             container.Controls.Add(toolbar);
                             AddResult(container, queries.Length > 1);
                         }
@@ -551,6 +613,51 @@ namespace MarkMpn.Sql4Cds
             }
 
             return toolbar;
+        }
+
+        private Panel CreatePostProcessingWarning(FetchXmlQuery fxq)
+        {
+            if (fxq.Extensions.Count == 0)
+                return null;
+
+            var postWarning = new Panel
+            {
+                BackColor = SystemColors.Info,
+                BorderStyle = BorderStyle.None,
+                Dock = DockStyle.Top,
+                Padding = new Padding(4),
+                Height = 24
+            };
+            var link = new LinkLabel
+            {
+                Text = "This query required additional processing. This FetchXML gives the required data, but will not give the final results when run outside SQL 4 CDS.",
+                ForeColor = SystemColors.InfoText,
+                AutoSize = false,
+                Dock = DockStyle.Fill
+            };
+            var linkText = "Learn more";
+            link.Text += " " + linkText;
+            link.LinkArea = new LinkArea(link.Text.Length - linkText.Length, linkText.Length);
+            link.LinkClicked += (s, e) => Process.Start("https://markcarrington.dev/sql-4-cds/additional-processing/");
+
+            postWarning.Controls.Add(link);
+
+            var image = new Bitmap(16, 16);
+
+            using (var g = Graphics.FromImage(image))
+            {
+                g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                g.DrawImage(SystemIcons.Warning.ToBitmap(), new Rectangle(Point.Empty, image.Size));
+            }
+            postWarning.Controls.Add(new PictureBox
+            {
+                Image = image,
+                Height = 16,
+                Width = 16,
+                Dock = DockStyle.Left
+            });
+            
+            return postWarning;
         }
 
         private void AddResult(Control control, bool multi)

@@ -1,4 +1,5 @@
 ﻿using MarkMpn.Sql4Cds.Engine.FetchXml;
+using MarkMpn.Sql4Cds.Engine.QueryExtensions;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
@@ -6,6 +7,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Linq.Expressions;
+using System.Reflection;
 using System.ServiceModel;
 
 namespace MarkMpn.Sql4Cds.Engine
@@ -95,18 +98,18 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             /// <summary>
-            /// Checks if the entity or link-entity contains any items that match a predicate
+            /// Gets the list of items within the entity or link-entity
             /// </summary>
-            /// <param name="predicate">The predicate to search for</param>
-            /// <returns><c>true</c> if there is a child item that matches the <paramref name="predicate"/>, or <c>false</c> otherwise</returns>
-            internal bool Contains(Func<object, bool> predicate)
+            /// <returns>The list of child items</returns>
+            internal object[] GetItems()
             {
-                if (LinkEntity?.Items != null)
-                    return LinkEntity.Items.Any(predicate);
-                else if (Entity?.Items != null)
-                    return Entity.Items.Where(predicate).Any();
+                if (Entity?.Items != null)
+                    return Entity.Items;
 
-                return false;
+                if (LinkEntity?.Items != null)
+                    return LinkEntity.Items;
+
+                return Array.Empty<object>();
             }
 
             /// <summary>
@@ -115,11 +118,42 @@ namespace MarkMpn.Sql4Cds.Engine
             internal void Sort()
             {
                 if (LinkEntity?.Items != null)
+                {
                     LinkEntity.Items.StableSort(new FetchXmlElementComparer());
+                    LinkEntity.Items = RemoveEmptyFilters(LinkEntity.Items);
+                }
                 else if (Entity?.Items != null)
+                {
                     Entity.Items.StableSort(new FetchXmlElementComparer());
+                    Entity.Items = RemoveEmptyFilters(Entity.Items);
+                }
+            }
+
+            private object[] RemoveEmptyFilters(object[] items)
+            {
+                if (items == null)
+                    return null;
+
+                var keep = new List<object>();
+
+                foreach (var item in items)
+                {
+                    if (item is filter f)
+                    {
+                        f.Items = RemoveEmptyFilters(f.Items);
+
+                        if (f.Items == null || f.Items.Length == 0)
+                            continue;
+                    }
+
+                    keep.Add(item);
+                }
+
+                return keep.ToArray();
             }
         }
+
+        private static readonly ParameterExpression _param = Expression.Parameter(typeof(Entity), "entity");
 
         /// <summary>
         /// Creates a new <see cref="Sql2FetchXml"/> converter
@@ -166,6 +200,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 throw new QueryParseException(errors[0]);
 
             var script = (TSqlScript)fragment;
+            script.Accept(new ReplacePrimaryFunctionsVisitor());
 
             // Convert each statement in turn to the appropriate query type
             foreach (var batch in script.Batches)
@@ -173,7 +208,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 foreach (var statement in batch.Statements)
                 {
                     if (statement is SelectStatement select)
-                        queries.Add(ConvertSelectStatement(select));
+                        queries.Add(ConvertSelectStatement(select, false));
                     else if (statement is UpdateStatement update)
                         queries.Add(ConvertUpdateStatement(update));
                     else if (statement is DeleteStatement delete)
@@ -238,7 +273,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 QueryExpression = select.Select
             };
 
-            var selectQuery = ConvertSelectStatement(qry);
+            var selectQuery = ConvertSelectStatement(qry, false);
 
             // Check that the number of columns for the source query and target columns match
             if (columns.Count != selectQuery.ColumnSet.Length)
@@ -248,9 +283,8 @@ namespace MarkMpn.Sql4Cds.Engine
             var query = new InsertSelect
             {
                 LogicalName = target,
-                FetchXml = selectQuery.FetchXml,
+                Source = selectQuery,
                 Mappings = new Dictionary<string, string>(),
-                AllPages = selectQuery.FetchXml.page == null && selectQuery.FetchXml.count == null
             };
 
             for (var i = 0; i < columns.Count; i++)
@@ -264,32 +298,38 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="target">The entity to insert the values into</param>
         /// <param name="columns">The list of columns within the <paramref name="target"/> entity to populate with the supplied <paramref name="values"/></param>
-        /// <param name="values">The values to insert</param>
+        /// <param name="source">The values to insert</param>
         /// <returns>The equivalent query converted for execution against CDS</returns>
-        private Query ConvertInsertValuesStatement(string target, IList<ColumnReferenceExpression> columns, ValuesInsertSource values)
+        private Query ConvertInsertValuesStatement(string target, IList<ColumnReferenceExpression> columns, ValuesInsertSource source)
         {
             // Get the metadata for the target entity
             var rowValues = new List<IDictionary<string, object>>();
             var meta = Metadata[target];
 
             // Convert the supplied values to the appropriate type for the attribute it is to be inserted into
-            foreach (var row in values.RowValues)
+            foreach (var row in source.RowValues)
             {
-                var stringValues = new Dictionary<string, string>();
+                var values = new Dictionary<string, object>();
 
                 if (row.ColumnValues.Count != columns.Count)
                     throw new NotSupportedQueryFragmentException("Number of values does not match number of columns", row);
 
                 for (var i = 0; i < columns.Count; i++)
                 {
-                    if (!(row.ColumnValues[i] is Literal literal))
-                        throw new NotSupportedQueryFragmentException("Only literal values are supported", row.ColumnValues[i]);
+                    var columnName = columns[i].MultiPartIdentifier.Identifiers.Last().Value;
 
-                    stringValues[columns[i].MultiPartIdentifier.Identifiers.Last().Value] = literal.Value;
+                    if (row.ColumnValues[i] is Literal literal)
+                    {
+                        values[columnName] = ConvertAttributeValueType(meta, columnName, literal.Value);
+                    }
+                    else
+                    {
+                        var expr = CompileScalarExpression<object>(row.ColumnValues[i], new List<EntityTable>(), null, out _);
+                        values[columnName] = expr(null);
+                    }
                 }
 
-                var rowValue = ConvertAttributeValueTypes(meta, stringValues);
-                rowValues.Add(rowValue);
+                rowValues.Add(values);
             }
 
             // Return the final query
@@ -339,20 +379,46 @@ namespace MarkMpn.Sql4Cds.Engine
 
             // Convert the FROM, TOP and WHERE clauses from the query to identify the records to delete.
             // Each record can only be deleted once, so apply the DISTINCT option as well
-            var fetch = new FetchXml.FetchType();
-            fetch.distinct = true;
-            fetch.distinctSpecified = true;
+            var fetch = new FetchXml.FetchType
+            {
+                distinct = true,
+                distinctSpecified = true
+            };
+            var extensions = new List<IQueryExtension>();
             var tables = HandleFromClause(delete.DeleteSpecification.FromClause, fetch);
-            HandleTopClause(delete.DeleteSpecification.TopRowFilter, fetch);
-            HandleWhereClause(delete.DeleteSpecification.WhereClause, tables);
+            HandleWhereClause(delete.DeleteSpecification.WhereClause, tables, extensions);
+            HandleTopClause(delete.DeleteSpecification.TopRowFilter, fetch, extensions);
             
             // To delete a record we need the primary key field of the target entity
+            // For intersect entities we need the two foreign key fields instead
             var table = FindTable(target, tables);
             var meta = Metadata[table.EntityName];
-            table.AddItem(new FetchAttributeType { name = meta.PrimaryIdAttribute });
-            var cols = new[] { meta.PrimaryIdAttribute };
+
+            if (table.EntityName == "listmember")
+            {
+                table.AddItem(new FetchAttributeType { name = "listid" });
+                table.AddItem(new FetchAttributeType { name = "entityid" });
+            }
+            else if (meta.IsIntersect == true)
+            {
+                var relationship = meta.ManyToManyRelationships.Single();
+                table.AddItem(new FetchAttributeType { name = relationship.Entity1IntersectAttribute });
+                table.AddItem(new FetchAttributeType { name = relationship.Entity2IntersectAttribute });
+            }
+            else
+            {
+                table.AddItem(new FetchAttributeType { name = meta.PrimaryIdAttribute });
+            }
+
+            var cols = table.GetItems().OfType<FetchAttributeType>().Select(a => a.name).ToArray();
+
             if (table.Entity == null)
-                cols[0] = (table.Alias ?? table.EntityName) + "." + cols[0];
+            {
+                // If we're deleting from a table other than the first one in the joins, we need to include the table name/alias
+                // prefix in the column list
+                for (var i = 0; i < cols.Length; i++)
+                    cols[i] = (table.Alias ?? table.EntityName) + "." + cols[i];
+            }
 
             // Sort the elements in the query so they're in the order users expect based on online samples
             foreach (var t in tables)
@@ -363,9 +429,12 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 FetchXml = fetch,
                 EntityName = table.EntityName,
-                IdColumn = cols[0],
+                IdColumns = cols,
                 AllPages = fetch.page == null && fetch.top == null
             };
+
+            foreach (var extension in extensions)
+                query.Extensions.Add(extension);
 
             return query;
         }
@@ -407,19 +476,23 @@ namespace MarkMpn.Sql4Cds.Engine
 
             // Convert the FROM, TOP and WHERE clauses from the query to identify the records to update.
             // Each record can only be updated once, so apply the DISTINCT option as well
-            var fetch = new FetchXml.FetchType();
-            fetch.distinct = true;
-            fetch.distinctSpecified = true;
+            var fetch = new FetchXml.FetchType
+            {
+                distinct = true,
+                distinctSpecified = true
+            };
+            var extensions = new List<IQueryExtension>();
             var tables = HandleFromClause(update.UpdateSpecification.FromClause, fetch);
-            HandleTopClause(update.UpdateSpecification.TopRowFilter, fetch);
-            HandleWhereClause(update.UpdateSpecification.WhereClause, tables);
+            HandleWhereClause(update.UpdateSpecification.WhereClause, tables, extensions);
+            HandleTopClause(update.UpdateSpecification.TopRowFilter, fetch, extensions);
 
-            // Get the details of what fields should be updated to what
-            var updates = HandleSetClause(update.UpdateSpecification.SetClauses);
-
-            // To update a record we need the primary key field of the target entity
             var table = FindTable(target, tables);
             var meta = Metadata[table.EntityName];
+
+            // Get the details of what fields should be updated to what
+            var updates = HandleSetClause(update.UpdateSpecification.SetClauses, tables, meta);
+
+            // To update a record we need the primary key field of the target entity
             table.AddItem(new FetchAttributeType { name = meta.PrimaryIdAttribute });
             var cols = new[] { meta.PrimaryIdAttribute };
             if (table.Entity == null)
@@ -435,23 +508,14 @@ namespace MarkMpn.Sql4Cds.Engine
                 FetchXml = fetch,
                 EntityName = table.EntityName,
                 IdColumn = cols[0],
-                Updates = ConvertAttributeValueTypes(meta, updates),
+                Updates = updates,
                 AllPages = fetch.page == null && fetch.top == null
             };
 
-            return query;
-        }
+            foreach (var extension in extensions)
+                query.Extensions.Add(extension);
 
-        /// <summary>
-        /// Converts attribute values to the appropriate type for INSERT and UPDATE queries
-        /// </summary>
-        /// <param name="metadata">The metadata of the entity being affected</param>
-        /// <param name="values">A mapping of attribute name to value</param>
-        /// <returns>A mapping of attribute name to value</returns>
-        private IDictionary<string, object> ConvertAttributeValueTypes(EntityMetadata metadata, IDictionary<string, string> values)
-        {
-            return values
-                .ToDictionary(kvp => kvp.Key, kvp => ConvertAttributeValueType(metadata, kvp.Key, kvp.Value));
+            return query;
         }
 
         /// <summary>
@@ -501,7 +565,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 case AttributeTypeCode.Lookup:
                     var targets = ((LookupAttributeMetadata)attr).Targets;
                     if (targets.Length != 1)
-                        throw new NotSupportedException($"Unsupported polymorphic lookup attribute {attrName}");
+                        throw new NotSupportedException($"Cannot use guid value for polymorphic lookup attribute {attrName}. Use CREATELOOKUP(logicalname, guid) function instead");
                     return new EntityReference(targets[0], Guid.Parse(value));
 
                 case AttributeTypeCode.Memo:
@@ -525,8 +589,10 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Converts the SET clause of an UPDATE statement to a mapping of attribute name to the value to set it to
         /// </summary>
         /// <param name="setClauses">The SET clause to convert</param>
+        /// <param name="tables">The tables in the FROM clause of the query</param>
+        /// <param name="metadata">The metadata of the entity to be updated</param>
         /// <returns>A mapping of attribute name to value extracted from the <paramref name="setClauses"/></returns>
-        private IDictionary<string,string> HandleSetClause(IList<SetClause> setClauses)
+        private IDictionary<string,Func<Entity,object>> HandleSetClause(IList<SetClause> setClauses, List<EntityTable> tables, EntityMetadata metadata)
         {
             return setClauses
                 .Select(set =>
@@ -541,24 +607,424 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (assign.Column.MultiPartIdentifier.Identifiers.Count > 1)
                         throw new NotSupportedQueryFragmentException("Unsupported UPDATE SET clause", assign.Column);
 
-                    if (!(assign.NewValue is Literal literal))
-                        throw new NotSupportedQueryFragmentException("Unsupported UPDATE SET clause", assign);
+                    var attrName = assign.Column.MultiPartIdentifier.Identifiers[0].Value.ToLower();
+                    var attr = metadata.Attributes.SingleOrDefault(a => a.LogicalName == attrName);
+                    if (attr == null)
+                        throw new NotSupportedQueryFragmentException("Unknown column name", assign.Column);
 
-                    // Special case for null, otherwise the value is extracted as a string
-                    if (literal is NullLiteral)
-                        return new { Key = assign.Column.MultiPartIdentifier.Identifiers[0].Value, Value = (string)null };
+                    if (assign.NewValue is Literal literal)
+                    {
+                        // Handle updates to literal values
+                        // Special case for null, otherwise the value is extracted as a string, so convert it to the required type
+                        if (literal is NullLiteral)
+                        {
+                            return new { Key = attrName, Value = (Func<Entity,object>) (e => null) };
+                        }
+                        else
+                        {
+                            var value = ConvertAttributeValueType(metadata, attrName, literal.Value);
+                            return new { Key = attrName, Value = (Func<Entity, object>)(e => value) };
+                        }
+                    }
                     else
-                        return new { Key = assign.Column.MultiPartIdentifier.Identifiers[0].Value, Value = literal.Value };
+                    {
+                        // Handle updates to the value from another field
+                        // Ensure the source field is included in the query
+                        return new { Key = attrName, Value = CompileScalarExpression<object>(assign.NewValue, tables, null, out _) };
+                    }
                 })
                 .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
         }
 
         /// <summary>
-        /// Converts an UPDATE query
+        /// Converts a scalar SQL expression to a compiled function that evaluates the final value of the expression for a given entity.
         /// </summary>
-        /// <param name="update">The SQL query to convert</param>
+        /// <typeparam name="T">The type of value to be returned by the function</typeparam>
+        /// <param name="expr">The <see cref="ScalarExpression"/> to convert</param>
+        /// <param name="tables">The tables to use as the data source for the expression</param>
+        /// <param name="calculatedFields">Any calculated fields that will be created when running the query</param>
+        /// <param name="expression">The <see cref="System.Linq.Expressions.Expression"/> that the <paramref name="expr"/> was converted to before compilation</param>
+        /// <returns>A compiled expresson that evaluates the supplied <paramref name="expr"/> for a given entity</returns>
+        private Func<Entity,T> CompileScalarExpression<T>(ScalarExpression expr, List<EntityTable> tables, IDictionary<string,Type> calculatedFields, out Expression expression)
+        {
+            expression = ConvertScalarExpression(expr, tables, calculatedFields, _param);
+
+            var finalExpr = Expr.Convert<T>(expression);
+
+            return Expression.Lambda<Func<Entity, T>>(finalExpr, _param).Compile();
+        }
+
+        /// <summary>
+        /// Converts a scalar SQL expression to a compiled function that evaluates the final value of the expression for a given entity.
+        /// </summary>
+        /// <param name="expr">The <see cref="ScalarExpression"/> to convert</param>
+        /// <param name="tables">The tables to use as the data source for the expression</param>
+        /// <param name="calculatedFields">Any calculated fields that will be created when running the query</param>
+        /// <returns>A compiled expression that evaluates the supplied <paramref name="expr"/> for a given entity</returns>
+        /// <remarks>
+        /// This method will ensure any attributes required by the <paramref name="expr"/> are added to the query.
+        /// </remarks>
+        private Expression ConvertScalarExpression(ScalarExpression expr, List<EntityTable> tables, IDictionary<string,Type> calculatedFields, ParameterExpression param)
+        {
+            if (expr is Microsoft.SqlServer.TransactSql.ScriptDom.BinaryExpression binary)
+            {
+                // Binary operator - convert the two operands to expressions first
+                var lhs = ConvertScalarExpression(binary.FirstExpression, tables, calculatedFields, param);
+                var rhs = ConvertScalarExpression(binary.SecondExpression, tables, calculatedFields, param);
+
+                // If either operand is a Nullable<T>, get the inner Value to use for the main operator
+                var lhsValue = lhs;
+                var rhsValue = rhs;
+
+                if (lhsValue.Type.IsGenericType && lhsValue.Type.GetGenericTypeDefinition() == typeof(Nullable<>))
+                    lhsValue = Expression.Property(lhsValue, lhsValue.Type.GetProperty("Value"));
+
+                if (rhsValue.Type.IsGenericType && rhsValue.Type.GetGenericTypeDefinition() == typeof(Nullable<>))
+                    rhsValue = Expression.Property(rhsValue, rhsValue.Type.GetProperty("Value"));
+
+                Expression coreOperator;
+
+                switch (binary.BinaryExpressionType)
+                {
+                    case BinaryExpressionType.Add:
+                        if (lhs.Type == typeof(string))
+                            coreOperator = Expression.Add(lhs, rhs, typeof(string).GetMethod("Concat", new[] { typeof(object), typeof(object) }));
+                        else
+                            coreOperator = Expression.Add(lhs, rhs);
+                        break;
+
+                    case BinaryExpressionType.BitwiseAnd:
+                        coreOperator = Expression.And(lhs, rhs);
+                        break;
+
+                    case BinaryExpressionType.BitwiseOr:
+                        coreOperator = Expression.Or(lhs, rhs);
+                        break;
+
+                    case BinaryExpressionType.BitwiseXor:
+                        coreOperator = Expression.ExclusiveOr(lhs, rhs);
+                        break;
+
+                    case BinaryExpressionType.Divide:
+                        coreOperator = Expression.Divide(lhs, rhs);
+                        break;
+
+                    case BinaryExpressionType.Modulo:
+                        coreOperator = Expression.Modulo(lhs, rhs);
+                        break;
+
+                    case BinaryExpressionType.Multiply:
+                        coreOperator = Expression.Multiply(lhs, rhs);
+                        break;
+
+                    case BinaryExpressionType.Subtract:
+                        coreOperator = Expression.Subtract(lhs, rhs);
+                        break;
+
+                    default:
+                        throw new NotSupportedQueryFragmentException("Unsupported operator", expr);
+                }
+
+                // Add null checking for all operator types
+                Expression nullCheck = null;
+
+                if (lhs.Type.IsClass || lhs.Type.IsGenericType && lhs.Type.GetGenericTypeDefinition() == typeof(Nullable<>))
+                    nullCheck = Expression.Equal(lhs, Expression.Constant(null));
+
+                if (rhs.Type.IsClass || rhs.Type.IsGenericType && lhs.Type.GetGenericTypeDefinition() == typeof(Nullable<>))
+                {
+                    var rhsNullCheck = Expression.Equal(rhs, Expression.Constant(null));
+
+                    if (nullCheck == null)
+                        nullCheck = rhsNullCheck;
+                    else
+                        nullCheck = Expression.OrElse(nullCheck, rhsNullCheck);
+                }
+
+                // If neither type was nullable, nothing to do
+                if (nullCheck == null)
+                    return coreOperator;
+
+                // If the core operator returns non-nullable value (e.g. int + int), make it nullable (i.e. (int?) int + int)
+                // so we can return a null value of the same type if either argument was actually null.
+                var targetType = coreOperator.Type;
+
+                if (targetType.IsPrimitive)
+                {
+                    targetType = typeof(Nullable<>).MakeGenericType(targetType);
+                    coreOperator = Expression.Convert(coreOperator, targetType);
+                }
+
+                // Final result for int? lhs + int? rhs is
+                // lhs == null || rhs == null ? (int?) null : (int?) (lhs.Value + rhs.Value)
+                return Expression.Condition(
+                    test: nullCheck,
+                    ifTrue: Expression.Convert(Expression.Constant(null), targetType),
+                    ifFalse: coreOperator);
+            }
+            else if (expr is ColumnReferenceExpression col)
+            {
+                // Check if this attribute is really a calculated field
+                var attrName = GetColumnAttribute(col);
+                Type type;
+                
+                if (col.MultiPartIdentifier.Identifiers.Count != 1 || calculatedFields == null || !calculatedFields.TryGetValue(col.MultiPartIdentifier.Identifiers[0].Value, out type))
+                {
+                    // Check where this attribute should be taken from
+                    var tableAlias = GetColumnTableAlias(col, tables, out var table);
+                    
+                    // Check if the attribute needs to be added to the query
+                    if (!table.GetItems().Any(i => i is allattributes) &&
+                        !table.GetItems().Any(i => i is FetchAttributeType attr && attr.name == attrName && attr.alias == null && !attr.aggregateSpecified && !attr.dategroupingSpecified))
+                    {
+                        table.AddItem(new FetchAttributeType { name = attrName });
+                    }
+
+                    var attrMetadata = Metadata[table.EntityName].Attributes.SingleOrDefault(a => a.LogicalName == attrName);
+                    if (attrMetadata == null)
+                        throw new NotSupportedQueryFragmentException("Unknown attribute", expr);
+
+                    if (attrMetadata.AttributeType == null)
+                        throw new NotSupportedQueryFragmentException("Unknown attribute type", expr);
+
+                    type = GetAttributeType(attrMetadata.AttributeType.Value);
+
+                    if (type == null)
+                        throw new NotSupportedQueryFragmentException("Unknown attribute type", expr);
+
+                    if (tableAlias != null)
+                        attrName = tableAlias + "." + attrName;
+                }
+
+                return
+                    Expression.Convert(
+                        Expression.Call(
+                            null, 
+                            typeof(Sql2FetchXml).GetMethod(nameof(GetAttributeValue), BindingFlags.Static | BindingFlags.NonPublic), 
+                            param, 
+                            Expression.Constant(attrName)
+                        ),
+                        type);
+            }
+            else if (expr is Literal literal)
+            {
+                return Expression.Constant(ConvertLiteralValue(literal));
+            }
+            else if (expr is Microsoft.SqlServer.TransactSql.ScriptDom.UnaryExpression unary)
+            {
+                var child = ConvertScalarExpression(unary.Expression, tables, calculatedFields, param);
+
+                switch (unary.UnaryExpressionType)
+                {
+                    case UnaryExpressionType.BitwiseNot:
+                        return Expression.Not(child);
+
+                    case UnaryExpressionType.Negative:
+                        return Expression.Negate(child);
+
+                    case UnaryExpressionType.Positive:
+                        return child;
+                }
+            }
+            else if (expr is FunctionCall func)
+            {
+                // Function calls become method calls. All allowed methods are statics in the ExpressionFunctions class
+                var method = typeof(ExpressionFunctions).GetMethod(func.FunctionName.Value, BindingFlags.Static | BindingFlags.Public | BindingFlags.IgnoreCase);
+
+                if (method == null)
+                    throw new NotSupportedQueryFragmentException("Unknown function", func);
+
+                var parameters = method.GetParameters();
+
+                if (func.Parameters.Count != parameters.Length)
+                    throw new NotSupportedQueryFragmentException($"{method.Name} function requires {parameters.Length} parameter(s)", func);
+
+                Expression[] args;
+
+                switch (func.FunctionName.Value.ToLower())
+                {
+                    case "dateadd":
+                    case "datediff":
+                    case "datepart":
+                        // Special case for datepart argument
+                        if (!(func.Parameters[0] is ColumnReferenceExpression datepart))
+                            throw new NotSupportedQueryFragmentException("Invalid DATEPART argument", func.Parameters[0]);
+
+                        args = new Expression[parameters.Length];
+                        args[0] = Expression.Constant(datepart.MultiPartIdentifier.Identifiers[0].Value);
+
+                        for (var i = 1; i < args.Length; i++)
+                            args[i] = ConvertScalarExpression(func.Parameters[i], tables, calculatedFields, param);
+                        break;
+
+                    default:
+                        args = func.Parameters
+                            .Select(p => ConvertScalarExpression(p, tables, calculatedFields, param))
+                            .ToArray();
+                        break;
+                }
+
+                return Expr.Call(method, args);
+            }
+            else if (expr is SearchedCaseExpression searchedCase)
+            {
+                // CASE WHEN field = 1 THEN 'Big' WHEN field = 2 THEN 'Small' ELSE 'Unknown' END
+                // becomes
+                // field = 1 ? 'Big' : field = 2 ? 'Small' : 'Unknown'
+                // Build the expression up from the end and work backwards
+                var converted = searchedCase.ElseExpression == null ? Expression.Constant(null) : ConvertScalarExpression(searchedCase.ElseExpression, tables, calculatedFields, param);
+
+                foreach (var when in searchedCase.WhenClauses.Reverse())
+                {
+                    converted = Expression.Condition(
+                        test: HandleFilterPredicate(when.WhenExpression, tables, calculatedFields, param),
+                        ifTrue: ConvertScalarExpression(when.ThenExpression, tables, calculatedFields, param),
+                        ifFalse: converted);
+                }
+
+                return converted;
+            }
+            else if (expr is SimpleCaseExpression simpleCase)
+            {
+                // CASE field WHEN 1 THEN 'Big' WHEN 2 THEN 'Small' ELSE 'Unknown' END
+                // becomes
+                // field = 1 ? 'Big' : field = 2 ? 'Small' : 'Unknown'
+                // Build the expression up from the end and work backwards
+                var value = ConvertScalarExpression(simpleCase.InputExpression, tables, calculatedFields, param);
+                var converted = simpleCase.ElseExpression == null ? Expression.Constant(null) : ConvertScalarExpression(simpleCase.ElseExpression, tables, calculatedFields, param);
+
+                foreach (var when in simpleCase.WhenClauses.Reverse())
+                {
+                    converted = Expression.Condition(
+                        test: Expression.Equal(value, ConvertScalarExpression(when.WhenExpression, tables, calculatedFields, param)),
+                        ifTrue: ConvertScalarExpression(when.ThenExpression, tables, calculatedFields, param),
+                        ifFalse: converted);
+                }
+
+                return converted;
+            }
+
+            throw new NotSupportedQueryFragmentException("Unsupported expression", expr);
+        }
+
+        /// <summary>
+        /// Determines the type of value that is stored in an attribute
+        /// </summary>
+        /// <param name="type">The type of attribute</param>
+        /// <returns>The type of values that can be stored in the attribute</returns>
+        private static Type GetAttributeType(AttributeTypeCode type)
+        {
+            switch (type)
+            {
+                case AttributeTypeCode.BigInt:
+                    return typeof(long?);
+
+                case AttributeTypeCode.Boolean:
+                    return typeof(bool?);
+
+                case AttributeTypeCode.Customer:
+                    return typeof(EntityReference);
+
+                case AttributeTypeCode.DateTime:
+                    return typeof(DateTime?);
+
+                case AttributeTypeCode.Decimal:
+                    return typeof(decimal?);
+
+                case AttributeTypeCode.Double:
+                    return typeof(double?);
+
+                case AttributeTypeCode.EntityName:
+                    return typeof(string);
+
+                case AttributeTypeCode.Integer:
+                    return typeof(int?);
+
+                case AttributeTypeCode.Lookup:
+                    return typeof(EntityReference);
+
+                case AttributeTypeCode.Memo:
+                    return typeof(string);
+
+                case AttributeTypeCode.Money:
+                    return typeof(decimal?);
+
+                case AttributeTypeCode.Owner:
+                    return typeof(EntityReference);
+
+                case AttributeTypeCode.Picklist:
+                case AttributeTypeCode.State:
+                case AttributeTypeCode.Status:
+                    return typeof(int?);
+
+                case AttributeTypeCode.String:
+                    return typeof(string);
+
+                case AttributeTypeCode.Uniqueidentifier:
+                    return typeof(Guid?);
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Gets the value from an attribute to use when evaluating expressions
+        /// </summary>
+        /// <param name="entity">The entity to get the value from</param>
+        /// <param name="attrName">The name of the attribute to get the value from</param>
+        /// <returns>The value stored in the requested attribute to use in expressions</returns>
+        private static object GetAttributeValue(Entity entity, string attrName)
+        {
+            if (!entity.Attributes.TryGetValue(attrName, out var value))
+                return null;
+
+            if (value is AliasedValue alias)
+                value = alias.Value;
+
+            if (value is OptionSetValue osv)
+                return osv.Value;
+
+            if (value is Money money)
+                return money.Value;
+
+            return value;
+        }
+
+        /// <summary>
+        /// Gets the value stored in a literal value
+        /// </summary>
+        /// <param name="literal">The SQL literal value</param>
+        /// <returns>The value converted to the appropriate type for use in expressions</returns>
+        private object ConvertLiteralValue(Literal literal)
+        {
+            switch (literal.LiteralType)
+            {
+                case LiteralType.Integer:
+                    return Int32.Parse(literal.Value);
+
+                case LiteralType.Money:
+                case LiteralType.Numeric:
+                    return Decimal.Parse(literal.Value);
+
+                case LiteralType.Null:
+                    return null;
+
+                case LiteralType.Real:
+                    return Double.Parse(literal.Value);
+
+                case LiteralType.String:
+                    return literal.Value;
+            }
+
+            throw new NotSupportedQueryFragmentException("Unsupported expression", literal);
+        }
+
+        /// <summary>
+        /// Converts a SELECT query
+        /// </summary>
+        /// <param name="select">The SQL query to convert</param>
         /// <returns>The equivalent query converted for execution against CDS</returns>
-        private SelectQuery ConvertSelectStatement(SelectStatement select)
+        private SelectQuery ConvertSelectStatement(SelectStatement select, bool forceAggregateExpression)
         {
             // Check for any DOM elements that don't have an equivalent in CDS
             if (!(select.QueryExpression is QuerySpecification querySpec))
@@ -582,34 +1048,86 @@ namespace MarkMpn.Sql4Cds.Engine
             if (querySpec.ForClause != null)
                 throw new NotSupportedQueryFragmentException("Unhandled SELECT FOR clause", querySpec.ForClause);
 
-            if (querySpec.HavingClause != null)
-                throw new NotSupportedQueryFragmentException("Unhandled SELECT HAVING clause", querySpec.HavingClause);
-
             if (querySpec.FromClause == null)
                 throw new NotSupportedQueryFragmentException("No source entity specified", querySpec);
 
-            // Convert the FROM clause first so we've got the context for each other clause
+            // Store the original SQL again now so we can re-parse it if required to generate an alternative query
+            // to handle aggregates via an expression rather than FetchXML.
+            var sql = select.ToSql();
+
+            // Convert the query from the "inside out":
+            // 1. FROM clause gives the data source for everything else
+            // 2. WHERE clause filters the initial result set
+            // 3. GROUP BY changes the schema of the data source after filtering
+            // 4. HAVING clause filters the result set after grouping
+            // 5. SELECT clause defines the final columns to include in the results
+            // 6. DISTINCT clause checks for unique-ness across the columns in the SELECT clause
+            // 7. ORDER BY clause sequences the results
+            // 8. OFFSET / TOP clauses skips rows in the final results
+
+            // At each point, convert as much of the query as possible to FetchXML. Anything that can't be converted
+            // directly should be handled in-memory using an expression. If any previous step has generated an expression,
+            // all later steps must use expressions only as the FetchXML results will be incomplete.
+            var extensions = new List<IQueryExtension>();
+
             var fetch = new FetchXml.FetchType();
             var tables = HandleFromClause(querySpec.FromClause, fetch);
-            HandleSelectClause(querySpec, fetch, tables, out var columns);
-            HandleTopClause(querySpec.TopRowFilter, fetch);
-            HandleOffsetClause(querySpec, fetch);
-            HandleWhereClause(querySpec.WhereClause, tables);
-            HandleGroupByClause(querySpec, fetch, tables, columns);
-            HandleOrderByClause(querySpec, fetch, tables, columns);
-            HandleDistinctClause(querySpec, fetch);
+            HandleWhereClause(querySpec.WhereClause, tables, extensions);
+            var computedColumns = HandleGroupByClause(querySpec, fetch, tables, extensions, forceAggregateExpression) ?? new Dictionary<string,Type>();
+            var columns = HandleSelectClause(querySpec, fetch, tables, computedColumns, extensions);
+            HandleDistinctClause(querySpec, fetch, extensions);
+            HandleOrderByClause(querySpec, fetch, tables, columns, computedColumns, extensions);
+            HandleHavingClause(querySpec, computedColumns, extensions);
+            HandleOffsetClause(querySpec, fetch, extensions);
+            HandleTopClause(querySpec.TopRowFilter, fetch, extensions);
 
             // Sort the elements in the query so they're in the order users expect based on online samples
             foreach (var table in tables)
                 table.Sort();
             
             // Return the final query
-            return new SelectQuery
+            var query = new SelectQuery
             {
                 FetchXml = fetch,
                 ColumnSet = columns,
                 AllPages = fetch.page == null && fetch.count == null
             };
+
+            foreach (var extension in extensions)
+                query.Extensions.Add(extension);
+
+            if (fetch.aggregateSpecified && fetch.aggregate)
+            {
+                // We've generated a FetchXML aggregate query. These can generate errors when there are a lot of source records involved in the query,
+                // so convert the query again, this time processing the aggregates via expressions.
+                // We'll have changed the SQL DOM during the conversion to FetchXML, so recreate it by parsing the original SQL again
+                var dom = new TSql150Parser(QuotedIdentifiers);
+                var fragment = dom.Parse(new StringReader(sql), out _);
+                var script = (TSqlScript)fragment;
+                script.Accept(new ReplacePrimaryFunctionsVisitor());
+                var originalSelect = (SelectStatement)script.Batches.Single().Statements.Single();
+
+                query.AggregateAlternative = ConvertSelectStatement((SelectStatement) originalSelect, true);
+            }
+
+            return query;
+        }
+
+        /// <summary>
+        /// Converts the HAVING clause of a SELECT statement to a post-processing extensino
+        /// </summary>
+        /// <param name="querySpec">The query to convert</param>
+        /// <param name="computedColumns">The grouped and aggregated columns created by a GROUP BY clause</param>
+        /// <param name="extensions">The query extensions to be applied to the results of the FetchXML</param>
+        private void HandleHavingClause(QuerySpecification querySpec, IDictionary<string, Type> computedColumns, List<IQueryExtension> extensions)
+        {
+            if (querySpec.HavingClause == null)
+                return;
+
+            // HAVING doesn't have a FetchXML equivalent, so convert directly to expression
+            var expression = HandleFilterPredicate(querySpec.HavingClause.SearchCondition, new List<EntityTable>(), computedColumns, _param);
+            var filter = Expression.Lambda<Func<Entity, bool>>(expression, _param).Compile();
+            extensions.Add(new Having(filter));
         }
 
         /// <summary>
@@ -618,30 +1136,324 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="querySpec">The SELECT query to convert the GROUP BY clause from</param>
         /// <param name="fetch">The FetchXML query converted so far</param>
         /// <param name="tables">The tables involved in the query</param>
-        /// <param name="columns">The columns included in the output of the query</param>
-        private void HandleGroupByClause(QuerySpecification querySpec, FetchXml.FetchType fetch, List<EntityTable> tables, string[] columns)
+        /// <param name="extensions">A list of extensions to be applied to the results of the FetchXML</param>
+        /// <param name="forceAggregateExpression">Indicates if aggregates should be converted to expressions even if it could be converted to FetchXML</param>
+        private IDictionary<string,Type> HandleGroupByClause(QuerySpecification querySpec, FetchXml.FetchType fetch, List<EntityTable> tables, IList<IQueryExtension> extensions, bool forceAggregateExpression)
         {
-            // Check for any DOM elements that don't have an equivalent in CDS
+            // Check if there is a GROUP BY clause or aggregate functions to convert
             if (querySpec.GroupByClause == null)
-                return;
+            {
+                var aggregates = new AggregateCollectingVisitor();
+                aggregates.GetAggregates(querySpec);
+                if (aggregates.SelectAggregates.Count == 0 && aggregates.Aggregates.Count == 0)
+                    return null;
+            }
+            else
+            {
+                if (querySpec.GroupByClause.All == true)
+                    throw new NotSupportedQueryFragmentException("Unhandled GROUP BY ALL clause", querySpec.GroupByClause);
 
-            if (querySpec.GroupByClause.All == true)
-                throw new NotSupportedQueryFragmentException("Unhandled GROUP BY ALL clause", querySpec.GroupByClause);
+                if (querySpec.GroupByClause.GroupByOption != GroupByOption.None)
+                    throw new NotSupportedQueryFragmentException("Unhandled GROUP BY option", querySpec.GroupByClause);
+            }
 
-            if (querySpec.GroupByClause.GroupByOption != GroupByOption.None)
-                throw new NotSupportedQueryFragmentException("Unhandled GROUP BY option", querySpec.GroupByClause);
+            if (extensions.Count == 0 && !forceAggregateExpression)
+            {
+                try
+                {
+                    return HandleGroupByFetchXml(querySpec, fetch, tables);
+                }
+                catch (PostProcessingRequiredException)
+                {
+                    return HandleGroupByExpression(querySpec, fetch, tables, extensions);
+                }
+            }
+            else
+            {
+                return HandleGroupByExpression(querySpec, fetch, tables, extensions);
+            }
+        }
+
+        /// <summary>
+        /// Converts a GROUP BY clause to expressions when they cannot be handled by FetchXML
+        /// </summary>
+        /// <param name="querySpec">The SELECT query to convert the GROUP BY clause from</param>
+        /// <param name="fetch">The FetchXML query converted so far</param>
+        /// <param name="tables">The tables involved in the query</param>
+        /// <param name="extensions">A list of extensions to be applied to the results of the FetchXML</param>
+        /// <returns>The names and types of the columns produced by the GROUP BY expression</returns>
+        private IDictionary<string, Type> HandleGroupByExpression(QuerySpecification querySpec, FetchXml.FetchType fetch, List<EntityTable> tables, IList<IQueryExtension> extensions)
+        {
+            // If we need to do any grouping/aggregation as expressions, we need to do it ALL as expressions, so don't attempt
+            // any conversion of groupings/aggregations to FetchXML here. However, we can make the grouping more efficient by sorting
+            // the results in FetchXml where possible, and we need to make sure that any columns referenced by the grouping/aggregation
+            // expressions are included
+
+            // Add all the columns we need
+            var columns = new ColumnCollectingVisitor();
+            querySpec.Accept(columns);
+
+            foreach (var column in columns.Columns)
+            {
+                EntityTable table;
+                string columnName;
+
+                if (column.ColumnType == ColumnType.Wildcard)
+                {
+                    table = tables[0];
+                    columnName = table.Metadata.PrimaryIdAttribute;
+                }
+                else
+                {
+                    GetColumnTableAlias(column, tables, out table);
+                    columnName = column.MultiPartIdentifier.Identifiers.Last().Value.ToLower();
+                }
+
+                if (!table.GetItems().Any(a => a is FetchAttributeType attr && attr.name == columnName))
+                {
+                    table.AddItem(new FetchAttributeType
+                    {
+                        name = columnName
+                    });
+                }
+            }
+
+            // Create the grouping expressions
+            var groupings = new List<Grouping>();
+            var sortedGroupings = new Dictionary<FetchOrderType, List<Grouping>>();
+
+            if (querySpec.GroupByClause != null)
+            {
+                foreach (var grouping in querySpec.GroupByClause.GroupingSpecifications)
+                {
+                    if (!(grouping is ExpressionGroupingSpecification exprGroup))
+                        throw new NotSupportedQueryFragmentException("Unhandled GROUP BY expression", grouping);
+
+                    var selector = CompileScalarExpression<object>(exprGroup.Expression, tables, null, out var expression);
+                    groupings.Add(new Grouping { Selector = selector, SqlExpression = exprGroup.Expression, Expression = expression });
+
+                    if (!(exprGroup.Expression is ColumnReferenceExpression column))
+                        continue;
+
+                    // Grouping is by a single column, so add a sort for efficiency later on
+                    GetColumnTableAlias(column, tables, out var table);
+                    var columnName = column.MultiPartIdentifier.Identifiers.Last().Value.ToLower();
+                    var sort = table.GetItems().OfType<FetchOrderType>().FirstOrDefault(order => order.attribute == columnName);
+                    if (sort == null)
+                    {
+                        sort = new FetchOrderType
+                        {
+                            attribute = columnName
+                        };
+
+                        table.AddItem(sort);
+                    }
+
+                    // Keep track of which sorts are used for which groupings
+                    if (!sortedGroupings.TryGetValue(sort, out var groupingsUsingSort))
+                    {
+                        groupingsUsingSort = new List<Grouping>();
+                        sortedGroupings.Add(sort, groupingsUsingSort);
+                    }
+
+                    groupingsUsingSort.Add(groupings.Last());
+                }
+            }
+
+            if (sortedGroupings.Count > 0)
+            {
+                // Sort the groupings according to how the sort orders will be applied
+                var sorts = GetSorts(tables[0].Entity);
+                var i = 0;
+
+                foreach (var sort in sorts)
+                {
+                    if (!sortedGroupings.TryGetValue(sort, out var groupingsUsingSort))
+                        break;
+
+                    foreach (var group in groupingsUsingSort)
+                    {
+                        group.Sorted = true;
+                        groupings.Remove(group);
+                        groupings.Insert(i, group);
+                        i++;
+                    }
+                }
+            }
+
+            // Create a name for the column that holds the grouping value in the reuslt set
+            for (var i = 0; i < groupings.Count; i++)
+                groupings[i].OutputName = $"grp{i + 1}";
+
+            // Create the aggregate functions
+            var aggregateCollector = new AggregateCollectingVisitor();
+            aggregateCollector.GetAggregates(querySpec);
+            var aggregates = new List<AggregateFunction>();
+
+            foreach (var aggregate in aggregateCollector.Aggregates.Concat(aggregateCollector.SelectAggregates.Select(s => (FunctionCall) s.Expression)))
+            {
+                Func<Entity, object> selector = null;
+                Expression expression = null;
+
+                if (!(aggregate.Parameters[0] is ColumnReferenceExpression col) || col.ColumnType != ColumnType.Wildcard)
+                    selector = CompileScalarExpression<object>(aggregate.Parameters[0], tables, null, out expression);
+
+                AggregateFunction aggregateFunction;
+
+                switch (aggregate.FunctionName.Value.ToUpper())
+                {
+                    case "AVG":
+                        aggregateFunction = new Average(selector);
+                        break;
+
+                    case "COUNT":
+                        if (selector == null)
+                            aggregateFunction = new Count(selector);
+                        else if (aggregate.UniqueRowFilter == UniqueRowFilter.Distinct)
+                            aggregateFunction = new CountColumnDistinct(selector);
+                        else
+                            aggregateFunction = new CountColumn(selector);
+                        break;
+
+                    case "MAX":
+                        aggregateFunction = new Max(selector);
+                        break;
+
+                    case "MIN":
+                        aggregateFunction = new Min(selector);
+                        break;
+
+                    case "SUM":
+                        aggregateFunction = new Sum(selector);
+                        break;
+
+                    default:
+                        throw new NotSupportedQueryFragmentException("Unknown aggregate function", aggregate);
+                }
+
+                aggregateFunction.SqlExpression = aggregate;
+                aggregateFunction.Expression = expression;
+                aggregates.Add(aggregateFunction);
+
+                // Create a name for the column that holds the aggregate value in the result set. The name must be consistent with
+                // what would be generated for the same column when the aggregate is converted directly to FetchXML.
+                if (aggregate.Parameters[0] is ColumnReferenceExpression colRef)
+                {
+                    string attrName;
+                    EntityTable table;
+
+                    if (colRef.ColumnType == ColumnType.Wildcard)
+                    {
+                        attrName = tables[0].Metadata.PrimaryIdAttribute;
+                        table = tables[0];
+                    }
+                    else
+                    {
+                        attrName = GetColumnAttribute(colRef);
+                        GetColumnTableAlias(colRef, tables, out table);
+                    }
+
+                    var name = attrName;
+
+                    if (table != tables[0])
+                        name = table.Alias + "_" + name;
+
+                    name += "_" + aggregate.FunctionName.Value.ToLower();
+                    aggregateFunction.OutputName = name;
+                }
+                else
+                {
+                    aggregateFunction.OutputName = $"agg{aggregates.Count + 1}";
+                }
+            }
+
+            // If there are groupings that are not already sorted in FetchXML, sort on them before aggregation as
+            // the Aggregate class requires its input to be sorted
+            if (groupings.Any(g => !g.Sorted))
+                extensions.Add(new Sort(groupings.Select(g => new SortExpression(g.Sorted, g.Selector, false)).ToArray()));
+
+            // Add the grouping & aggregation into the post-processing chain
+            extensions.Add(new Aggregate(groupings, aggregates));
+
+            // Rewrite the rest of the query to refer to the new names for the grouped & aggregated data
+            var rewrites = new Dictionary<ScalarExpression, string>();
+
+            foreach (var grouping in groupings)
+                rewrites[grouping.SqlExpression] = grouping.OutputName;
+
+            foreach (var aggregate in aggregates)
+                rewrites[aggregate.SqlExpression] = aggregate.OutputName;
+
+            var rewrite = new RewriteVisitor(rewrites);
+            querySpec.Accept(rewrite);
+
+            var outputColumns = new Dictionary<string, Type>();
+
+            foreach (var grouping in groupings)
+                outputColumns[grouping.OutputName] = grouping.Expression.Type;
+
+            foreach (var aggregate in aggregates)
+                outputColumns[aggregate.OutputName] = aggregate.Type;
+
+            return outputColumns;
+        }
+
+        /// <summary>
+        /// Gets the sorts from a query in the order in which they will be applied
+        /// </summary>
+        /// <param name="root">The entity or link-entity object to get the sorts from</param>
+        /// <returns>The sequence of sorts that are applied by the query</returns>
+        private IEnumerable<FetchOrderType> GetSorts(object root)
+        {
+            object[] items = null;
+
+            if (root is FetchEntityType entity)
+                items = entity.Items;
+            else if (root is FetchLinkEntityType link)
+                items = link.Items;
+
+            if (items == null)
+                yield break;
+
+            foreach (var sort in items.OfType<FetchOrderType>())
+                yield return sort;
+
+            foreach (var child in items.OfType<FetchLinkEntityType>())
+            {
+                foreach (var childSort in GetSorts(child))
+                    yield return childSort;
+            }
+        }
+
+        /// <summary>
+        /// Converts a GROUP BY clause to expressions when they cannot be handled by FetchXML
+        /// </summary>
+        /// <param name="querySpec">The SELECT query to convert the GROUP BY clause from</param>
+        /// <param name="fetch">The FetchXML query converted so far</param>
+        /// <param name="tables">The tables involved in the query</param>
+        /// <param name="extensions">A list of extensions to be applied to the results of the FetchXML</param>
+        /// <returns>The names and types of the columns produced by the GROUP BY expression</returns>
+        private IDictionary<string,Type> HandleGroupByFetchXml(QuerySpecification querySpec, FetchXml.FetchType fetch, List<EntityTable> tables)
+        {
+            // Check if all groupings and aggregate functions are supported in FetchXML
+            var groupValidationVisitor = new GroupValidationVisitor();
+            querySpec.Accept(groupValidationVisitor);
+
+            if (!groupValidationVisitor.Valid)
+                throw new PostProcessingRequiredException("Unhandled GROUP BY/aggregate expression", groupValidationVisitor.InvalidFragment);
+
+            var outputColumns = new Dictionary<string, Type>();
+            var rewrites = new Dictionary<ScalarExpression, string>();
 
             // Set the aggregate flag on the FetchXML query
             fetch.aggregate = true;
             fetch.aggregateSpecified = true;
 
             // Process each field that the data should be grouped by
-            foreach (var group in querySpec.GroupByClause.GroupingSpecifications)
-            {
-                // Check this is a grouping type we understand. This can be a simple attribute or a date part
-                if (!(group is ExpressionGroupingSpecification exprGroup))
-                    throw new NotSupportedQueryFragmentException("Unhandled GROUP BY clause", group);
+            var uniqueGroupings = new HashSet<string>();
 
+            foreach (var exprGroup in querySpec.GroupByClause?.GroupingSpecifications?.Cast<ExpressionGroupingSpecification>() ?? Array.Empty<ExpressionGroupingSpecification>())
+            {
                 var expr = exprGroup.Expression;
                 DateGroupingType? dateGrouping = null;
 
@@ -654,55 +1466,211 @@ namespace MarkMpn.Sql4Cds.Engine
                     expr = dateCol;
                 }
 
-                if (!(expr is ColumnReferenceExpression col))
-                    throw new NotSupportedQueryFragmentException("Unhandled GROUP BY clause", exprGroup.Expression);
+                var col = (ColumnReferenceExpression)expr;
 
                 // Find the table in the query that the grouping attribute is from
                 GetColumnTableAlias(col, tables, out var table);
+                var columnName = GetColumnAttribute(col);
 
                 if (table == null)
                     throw new NotSupportedQueryFragmentException("Unknown table", col);
 
-                // Check if the attribute has already been added to the FetchXML query. It usually will because you'd normally
-                // include the same attribute in the SELECT clause, but it's possible to group the data by an attribute that isn't
-                // included in the result
-                var attr = (table.Entity?.Items ?? table.LinkEntity.Items)
-                    .OfType<FetchAttributeType>()
-                    .Where(a => a.name == col.MultiPartIdentifier.Identifiers.Last().Value && (a.dategroupingSpecified == false && dateGrouping == null || (a.dategroupingSpecified && dateGrouping != null && a.dategrouping == dateGrouping.Value)))
-                    .SingleOrDefault();
+                // Ignore any cases where we are grouping by the same column twice
+                var groupingKey = table.Alias + "." + columnName + "." + dateGrouping;
+                if (!uniqueGroupings.Add(groupingKey))
+                    continue;
 
-                if (attr == null)
+                var metadata = table.Metadata.Attributes.Single(a => a.LogicalName == columnName);
+                var type = GetAttributeType(metadata.AttributeType.Value);
+
+                // If the attribute isn't already included, add it to the appropriate table
+                var attr = new FetchAttributeType
                 {
-                    // If the attribute isn't already included, add it to the appropriate table
-                    attr = new FetchAttributeType { name = col.MultiPartIdentifier.Identifiers.Last().Value };
+                    name = columnName,
+                    groupby = FetchBoolType.@true,
+                    groupbySpecified = true
+                };
 
-                    if (dateGrouping != null)
-                    {
-                        attr.dategrouping = dateGrouping.Value;
-                        attr.dategroupingSpecified = true;
-                    }
-
-                    table.AddItem(attr);
+                if (dateGrouping != null)
+                {
+                    attr.dategrouping = dateGrouping.Value;
+                    attr.dategroupingSpecified = true;
                 }
 
-                // Groupings in FetchXML must have aliases, so create an alias if we don't already have one
-                if (attr.alias == null)
-                {
-                    attr.alias = attr.name;
+                table.AddItem(attr);
 
-                    // Once we've given the attribute an alias, we might need to change the output column list to use the alias instead of
-                    // the table-qualified name
-                    for (var i = 0; i < columns.Length; i++)
+                // Find the references to this grouping in the SELECT clause so we include it with all those aliases
+                var selectElements = querySpec.SelectElements.OfType<SelectScalarExpression>().Where(s =>
                     {
-                        if (columns[i].Equals($"{table.Alias ?? table.EntityName}.{attr.name}", StringComparison.OrdinalIgnoreCase))
-                            columns[i] = attr.name;
+                        var selectExpr = s.Expression;
+
+                        if (selectExpr is FunctionCall selectFunc && TryParseDatePart(selectFunc, out var selectDateGrouping, out var selectDateCol))
+                        {
+                            selectExpr = selectDateCol;
+
+                            if (selectDateGrouping != dateGrouping)
+                                return false;
+                        }
+
+                        if (!(s.Expression is ColumnReferenceExpression selectCol))
+                            return false;
+
+                        if (GetColumnAttribute(selectCol) != attr.name)
+                            return false;
+
+                        GetColumnTableAlias(selectCol, tables, out var selectTable);
+
+                        if (selectTable != table)
+                            return false;
+
+                        return true;
+                    })
+                    .ToList();
+
+                Func<string> generateAlias = () =>
+                {
+                    var alias = attr.name;
+                    var num = 0;
+
+                    while (tables.SelectMany(t => t.GetItems()).OfType<FetchAttributeType>().Any(a => a.alias == alias))
+                        alias = attr.name + (++num);
+
+                    return alias;
+                };
+
+                if (selectElements.Count > 0)
+                {
+                    // Use the existing <attribute> generated for the GROUP BY clause for the first instance of the column in the SELECT clause
+                    attr.alias = selectElements[0].ColumnName?.Identifier?.Value ?? generateAlias();
+                    outputColumns[attr.alias] = type;
+
+                    foreach (var duplicateSelectElement in selectElements.Skip(1))
+                    {
+                        // Create additional <attribute> elements for any later instances of the same attribute in the SELECT clause
+                        var duplicateAttr = new FetchAttributeType
+                        {
+                            name = attr.name,
+                            groupby = FetchBoolType.@true,
+                            groupbySpecified = true,
+                            dategrouping = attr.dategrouping,
+                            dategroupingSpecified = attr.dategroupingSpecified,
+                            alias = duplicateSelectElement.ColumnName?.Identifier?.Value ?? generateAlias()
+                        };
+
+                        table.AddItem(duplicateAttr);
+                        outputColumns[duplicateAttr.alias] = type;
                     }
                 }
+                else
+                {
+                    var alias = generateAlias();
+                    attr.alias = alias;
+                    outputColumns[alias] = type;
+                }
 
-                // Ensure the grouping flag is set on the attribute
-                attr.groupby = FetchBoolType.@true;
-                attr.groupbySpecified = true;
+                rewrites[exprGroup.Expression] = attr.alias;
             }
+
+            // Create the aggregate functions
+            var aggregateCollector = new AggregateCollectingVisitor();
+            aggregateCollector.GetAggregates(querySpec);
+
+            foreach (var func in aggregateCollector.Aggregates.Select(f => new { Alias = (string)null, Func = f })
+                .Concat(aggregateCollector.SelectAggregates.Select(s => new { Alias = s.ColumnName?.Identifier?.Value, Func = (FunctionCall)s.Expression })))
+            {
+                var col = (ColumnReferenceExpression)func.Func.Parameters[0];
+                string attrName;
+                EntityTable table;
+
+                if (col.ColumnType == ColumnType.Wildcard)
+                {
+                    attrName = tables[0].Metadata.PrimaryIdAttribute;
+                    table = tables[0];
+                }
+                else
+                {
+                    attrName = GetColumnAttribute(col);
+                    GetColumnTableAlias(col, tables, out table);
+                }
+
+                var attr = new FetchAttributeType { name = attrName };
+                table.AddItem(attr);
+
+                switch (func.Func.FunctionName.Value.ToLower())
+                {
+                    case "count":
+                        // Select the appropriate aggregate depending on whether we're doing count(*) or count(field)
+                        attr.aggregate = col.ColumnType == ColumnType.Wildcard ? AggregateType.count : AggregateType.countcolumn;
+                        attr.aggregateSpecified = true;
+                        break;
+
+                    case "avg":
+                    case "min":
+                    case "max":
+                    case "sum":
+                        // All other aggregates can be applied directly
+                        attr.aggregate = (AggregateType)Enum.Parse(typeof(AggregateType), func.Func.FunctionName.Value.ToLower());
+                        attr.aggregateSpecified = true;
+                        break;
+
+                    default:
+                        // No other function calls are supported
+                        throw new NotSupportedQueryFragmentException("Unhandled function", func.Func);
+                }
+
+                if (func.Func.UniqueRowFilter == UniqueRowFilter.Distinct)
+                {
+                    // Handle `count(distinct col)` expressions
+                    attr.distinct = FetchBoolType.@true;
+                    attr.distinctSpecified = true;
+                }
+
+                // Create a unique alias for each aggregate function
+                // Check if there is an alias for this function in the SELECT clause
+                if (func.Alias != null)
+                {
+                    attr.alias = func.Alias;
+                }
+                else
+                {
+                    var baseAlias = attr.name + "_" + func.Func.FunctionName.Value.ToLower();
+                    if (table != tables[0])
+                        baseAlias = table.Alias + "_" + baseAlias;
+
+                    var alias = baseAlias;
+                    var num = 1;
+
+                    while (tables.SelectMany(t => t.GetItems()).OfType<FetchAttributeType>().Any(a => a.alias == alias))
+                        alias = baseAlias + "_" + (++num);
+
+                    attr.alias = alias;
+                }
+
+                rewrites[func.Func] = attr.alias;
+
+                switch (attr.aggregate)
+                {
+                    case AggregateType.count:
+                    case AggregateType.countcolumn:
+                        outputColumns[attr.alias] = typeof(int);
+                        break;
+
+                    case AggregateType.avg:
+                        outputColumns[attr.alias] = typeof(decimal);
+                        break;
+
+                    default:
+                        var metadata = table.Metadata.Attributes.Single(a => a.LogicalName == attr.name);
+                        outputColumns[attr.alias] = GetAttributeType(metadata.AttributeType.Value);
+                        break;
+                }
+            }
+
+            // Rewrite the rest of the query to refer to the new names for the grouped & aggregated data
+            var rewrite = new RewriteVisitor(rewrites);
+            querySpec.Accept(rewrite);
+
+            return outputColumns;
         }
 
         /// <summary>
@@ -781,12 +1749,19 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="querySpec">The SELECT query to convert the GROUP BY clause from</param>
         /// <param name="fetch">The FetchXML query converted so far</param>
-        private void HandleDistinctClause(QuerySpecification querySpec, FetchXml.FetchType fetch)
+        private void HandleDistinctClause(QuerySpecification querySpec, FetchXml.FetchType fetch, IList<IQueryExtension> extensions)
         {
             if (querySpec.UniqueRowFilter == UniqueRowFilter.Distinct)
             {
-                fetch.distinct = true;
-                fetch.distinctSpecified = true;
+                if (extensions.Count == 0)
+                {
+                    fetch.distinct = true;
+                    fetch.distinctSpecified = true;
+                }
+                else
+                {
+                    extensions.Add(new Distinct());
+                }
             }
         }
 
@@ -795,7 +1770,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="querySpec">The SELECT query to convert the OFFSET clause from</param>
         /// <param name="fetch">The FetchXML query converted so far</param>
-        private void HandleOffsetClause(QuerySpecification querySpec, FetchXml.FetchType fetch)
+        private void HandleOffsetClause(QuerySpecification querySpec, FetchXml.FetchType fetch, IList<IQueryExtension> extensions)
         {
             // The OFFSET clause doesn't have a direct equivalent in FetchXML, but in some circumstances we can get the same effect
             // by going direct to a specific page. For this to work the offset must be an exact multiple of the fetch count
@@ -811,11 +1786,15 @@ namespace MarkMpn.Sql4Cds.Engine
             var pageSize = Int32.Parse(fetchCount.Value);
             var pageNumber = (decimal)Int32.Parse(offset.Value) / pageSize + 1;
 
-            if (pageNumber != (int)pageNumber)
-                throw new NotSupportedQueryFragmentException("Offset must be an integer multiple of fetch", querySpec.OffsetClause);
-
-            fetch.count = pageSize.ToString();
-            fetch.page = pageNumber.ToString();
+            if (extensions.Count == 0 && pageNumber == (int)pageNumber)
+            {
+                fetch.count = pageSize.ToString();
+                fetch.page = pageNumber.ToString();
+            }
+            else
+            {
+                extensions.Add(new Offset(Int32.Parse(offset.Value), pageSize));
+            }
         }
 
         /// <summary>
@@ -823,7 +1802,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="top">The TOP clause of the SELECT query to convert from</param>
         /// <param name="fetch">The FetchXML query converted so far</param>
-        private void HandleTopClause(TopRowFilter top, FetchXml.FetchType fetch)
+        private void HandleTopClause(TopRowFilter top, FetchXml.FetchType fetch, IList<IQueryExtension> extensions)
         {
             if (top == null)
                 return;
@@ -837,7 +1816,10 @@ namespace MarkMpn.Sql4Cds.Engine
             if (!(top.Expression is IntegerLiteral topLiteral))
                 throw new NotSupportedQueryFragmentException("Unhandled TOP expression", top.Expression);
 
-            fetch.top = topLiteral.Value;
+            if (extensions.Count == 0)
+                fetch.top = topLiteral.Value;
+            else
+                extensions.Add(new Top(Int32.Parse(topLiteral.Value)));
         }
 
         /// <summary>
@@ -847,11 +1829,43 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="fetch">The FetchXML query converted so far</param>
         /// <param name="tables">The tables involved in the query</param>
         /// <param name="columns">The columns included in the output of the query</param>
-        private void HandleOrderByClause(QuerySpecification querySpec, FetchXml.FetchType fetch, List<EntityTable> tables, string[] columns)
+        /// <returns>The sorts to apply to the results of the query</returns>
+        private void HandleOrderByClause(QuerySpecification querySpec, FetchXml.FetchType fetch, List<EntityTable> tables, string[] columns, IDictionary<string, Type> calculatedFields, IList<IQueryExtension> extensions)
         {
             if (querySpec.OrderByClause == null)
                 return;
 
+            // If there's any sorts from previous extensions, do all these sorts in memory
+            var useFetchSorts = !tables.SelectMany(t => t.GetItems()).OfType<FetchOrderType>().Any();
+
+            if (useFetchSorts)
+            {
+                try
+                {
+                    HandleOrderByClauseFetchXml(querySpec, fetch, tables, columns, calculatedFields);
+                }
+                catch (PostProcessingRequiredException)
+                {
+                    var sorts = HandleOrderByClauseExpression(querySpec, fetch, tables, columns, calculatedFields, true);
+                    extensions.Add(new Sort(sorts));
+                }
+            }
+            else
+            {
+                var sorts = HandleOrderByClauseExpression(querySpec, fetch, tables, columns, calculatedFields, false);
+                extensions.Add(new Sort(sorts));
+            }
+        }
+
+        /// <summary>
+        /// Converts the ORDER BY clause of a SELECT query to FetchXML
+        /// </summary>
+        /// <param name="querySpec">The SELECT query to convert the ORDER BY clause from</param>
+        /// <param name="fetch">The FetchXML query converted so far</param>
+        /// <param name="tables">The tables involved in the query</param>
+        /// <param name="columns">The columns included in the output of the query</param>
+        private void HandleOrderByClauseFetchXml(QuerySpecification querySpec, FetchXml.FetchType fetch, List<EntityTable> tables, string[] columns, IDictionary<string, Type> calculatedFields)
+        {
             // Convert each ORDER BY expression in turn
             foreach (var sort in querySpec.OrderByClause.OrderByElements)
             {
@@ -862,6 +1876,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (sort.Expression is IntegerLiteral colIndex)
                     {
                         var colName = columns[Int32.Parse(colIndex.Value) - 1];
+
                         col = new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier() };
 
                         foreach (var part in colName.Split('.'))
@@ -871,7 +1886,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         // Check if we already have this aggregate as an attribute. If not, add it.
                         var alias = "";
-                        AddAttribute(fetch, tables, new List<string>(columns), sort.Expression, out var table, out var attr, ref alias);
+                        AddAttribute(tables, sort.Expression, calculatedFields, out var table, out var attr, ref alias);
 
                         // Finally, sort by the alias of the aggregate attribute
                         col = new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier() };
@@ -879,21 +1894,28 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
                     else
                     {
-                        throw new NotSupportedQueryFragmentException("Unsupported ORDER BY clause", sort.Expression);
+                        throw new PostProcessingRequiredException("Unsupported ORDER BY clause", sort.Expression);
                     }
                 }
 
                 // Find the table from which the column is taken
-                GetColumnTableAlias(col, tables, out var orderTable);
+                GetColumnTableAlias(col, tables, out var orderTable, calculatedFields);
+                var attrName = GetColumnAttribute(col);
+
+                if (!orderTable.GetItems().OfType<FetchAttributeType>().Any(a => a.alias?.Equals(attrName, StringComparison.OrdinalIgnoreCase) == true) &&
+                    col.MultiPartIdentifier.Identifiers.Count == 1 && 
+                    calculatedFields != null && 
+                    calculatedFields.ContainsKey(col.MultiPartIdentifier.Identifiers[0].Value))
+                    throw new PostProcessingRequiredException("Cannot sort by calculated field", sort.Expression);
 
                 // Can't control sequence of orders between link-entities. Orders are always applied in depth-first-search order, so
                 // check there is no order already applied on a later entity.
                 if (LaterEntityHasOrder(tables, orderTable))
-                    throw new NotSupportedQueryFragmentException("Order already applied to later link-entity", sort.Expression);
+                    throw new PostProcessingRequiredException("Order already applied to later link-entity", sort.Expression);
                 
                 var order = new FetchOrderType
                 {
-                    attribute = GetColumnAttribute(col),
+                    attribute = attrName,
                     descending = sort.SortOrder == SortOrder.Descending
                 };
 
@@ -925,7 +1947,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 // add the attribute again without an alias
                 if (!fetch.aggregateSpecified || !fetch.aggregate)
                 {
-                    var containsAliasedAttr = orderTable.Contains(i => i is FetchAttributeType a && a.name.Equals(order.attribute) && a.alias != null && a.alias != a.name);
+                    var containsAliasedAttr = orderTable.GetItems().Any(i => i is FetchAttributeType a && a.name.Equals(order.attribute) && a.alias != null && a.alias != a.name);
 
                     if (containsAliasedAttr)
                         orderTable.AddItem(new FetchAttributeType { name = order.attribute });
@@ -933,6 +1955,49 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 orderTable.AddItem(order);
             }
+        }
+
+
+        /// <summary>
+        /// Converts the ORDER BY clause of a SELECT query to expressions
+        /// </summary>
+        /// <param name="querySpec">The SELECT query to convert the ORDER BY clause from</param>
+        /// <param name="fetch">The FetchXML query converted so far</param>
+        /// <param name="tables">The tables involved in the query</param>
+        /// <param name="columns">The columns included in the output of the query</param>
+        private SortExpression[] HandleOrderByClauseExpression(QuerySpecification querySpec, FetchXml.FetchType fetch, List<EntityTable> tables, string[] columns, IDictionary<string, Type> calculatedFields, bool useFetchSorts)
+        {
+            // Check how many sorts were already converted to native FetchXML - we can use these results to only sort partial sequences
+            // of results rather than having to sort the entire result set in memory.
+            var fetchXmlSorts = useFetchSorts ? tables.SelectMany(t => (t.Entity?.Items ?? t.LinkEntity?.Items).OfType<FetchOrderType>()).Count() : 0;
+
+            // Convert each ORDER BY expression in turn
+            var sortNumber = 0;
+            var sorts = new List<SortExpression>();
+
+            foreach (var sort in querySpec.OrderByClause.OrderByElements)
+            {
+                var expression = sort.Expression;
+
+                if (expression is IntegerLiteral colIndex)
+                {
+                    var colName = columns[Int32.Parse(colIndex.Value) - 1];
+
+                    expression = new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier() };
+
+                    foreach (var part in colName.Split('.'))
+                        ((ColumnReferenceExpression)expression).MultiPartIdentifier.Identifiers.Add(new Identifier { Value = part });
+                }
+
+                sortNumber++;
+                var isFetchXml = sortNumber <= fetchXmlSorts;
+                var selector = CompileScalarExpression<object>(expression, tables, calculatedFields, out _);
+                var descending = sort.SortOrder == SortOrder.Descending;
+
+                sorts.Add(new SortExpression(isFetchXml, selector, descending));
+            }
+
+            return sorts.ToArray();
         }
 
         /// <summary>
@@ -983,9 +2048,10 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="where">The WHERE clause to convert</param>
         /// <param name="tables">The tables involved in the query</param>
-        private void HandleWhereClause(WhereClause where, List<EntityTable> tables)
+        /// <param name="extensions">A list of extensions to be applied to the results of the FetchXML</param>
+        private void HandleWhereClause(WhereClause where, List<EntityTable> tables, IList<IQueryExtension> extensions)
         {
-            // Check for any DOM elements that don't have an equivalent in CDS
+            // Check if there is a WHERE clause to apply
             if (where == null)
                 return;
 
@@ -1003,11 +2069,51 @@ namespace MarkMpn.Sql4Cds.Engine
             // Add the conditions into the filter
             ColumnReferenceExpression col1 = null;
             ColumnReferenceExpression col2 = null;
-            HandleFilter(where.SearchCondition, filter, tables, tables[0], true, false, ref col1, ref col2);
+            Expression postFilterExpression = null;
+            var param = Expression.Parameter(typeof(Entity), "entity");
+            HandleFilter(where.SearchCondition, filter, tables, tables[0], null, true, ref col1, ref col2, ref postFilterExpression, param);
 
             // If no specific logical operator was found, switch to "and"
             if (filter.type == (filterType)2)
                 filter.type = filterType.and;
+
+            if (postFilterExpression != null)
+            {
+                var postFilter = Expression.Lambda<Func<Entity, bool>>(postFilterExpression, param).Compile();
+                extensions.Add(new Where(postFilter));
+            }
+        }
+
+        /// <summary>
+        /// Converts filter criteria to FetchXML
+        /// </summary>
+        /// <param name="searchCondition">The SQL filter to convert from</param>
+        /// <param name="criteria">The FetchXML to convert to</param>
+        /// <param name="tables">The tables involved in the query</param>
+        /// <param name="targetTable">The table that the filters will be applied to</param>
+        /// <param name="where">Indicates if the filters are part of a WHERE clause</param>
+        /// <param name="col1">Identifies the first column in the filter (for JOIN purposes)</param>
+        /// <param name="col2">Identifies the second column in the filter (for JOIN purposes)</param>
+        /// <param name="postFilter">The additional in-memory predicate to be applied to any results</param>
+        /// <param name="param">The entity parameter to be supplied to the <paramref name="postFilter"/></param>
+        private void HandleFilter(BooleanExpression searchCondition, filter criteria, List<EntityTable> tables, EntityTable targetTable, IDictionary<string,Type> computedColumns, bool where, ref ColumnReferenceExpression col1, ref ColumnReferenceExpression col2, ref Expression postFilter, ParameterExpression param)
+        {
+            try
+            {
+                HandleFilterFetchXml(searchCondition, criteria, tables, targetTable, computedColumns, where, false, ref col1, ref col2, ref postFilter, param);
+            }
+            catch (PostProcessingRequiredException)
+            {
+                if (!where)
+                    throw;
+
+                var predicate = HandleFilterPredicate(searchCondition, tables, computedColumns, param);
+
+                if (postFilter == null)
+                    postFilter = predicate;
+                else
+                    postFilter = Expression.And(postFilter, predicate);
+            }
         }
 
         /// <summary>
@@ -1021,7 +2127,9 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="inOr">Indicates if the filter is within an OR filter</param>
         /// <param name="col1">Identifies the first column in the filter (for JOIN purposes)</param>
         /// <param name="col2">Identifies the second column in the filter (for JOIN purposes)</param>
-        private void HandleFilter(BooleanExpression searchCondition, filter criteria, List<EntityTable> tables, EntityTable targetTable, bool where, bool inOr, ref ColumnReferenceExpression col1, ref ColumnReferenceExpression col2)
+        /// <param name="postFilter">The additional in-memory predicate to be applied to any results</param>
+        /// <param name="param">The entity parameter to be supplied to the <paramref name="postFilter"/></param>
+        private void HandleFilterFetchXml(BooleanExpression searchCondition, filter criteria, List<EntityTable> tables, EntityTable targetTable, IDictionary<string,Type> computedColumns, bool where, bool inOr, ref ColumnReferenceExpression col1, ref ColumnReferenceExpression col2, ref Expression postFilter, ParameterExpression param)
         {
             if (searchCondition is BooleanComparisonExpression comparison)
             {
@@ -1040,18 +2148,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     // The operator is comparing two attributes. This is not allowed in a FetchXML filter,
                     // but is allowed in join criteria
                     if (where)
-                    {
-                        if ((field.MultiPartIdentifier.Identifiers.Count == 1 && field.MultiPartIdentifier.Identifiers[0].QuoteType == QuoteType.DoubleQuote ^
-                            field2.MultiPartIdentifier.Identifiers.Count == 1 && field2.MultiPartIdentifier.Identifiers[0].QuoteType == QuoteType.DoubleQuote) &&
-                            QuotedIdentifiers)
-                        {
-                            // If the criteria was `attribute = "value"` (i.e. using double-quotes for a string literal) but the query was
-                            // parsed using quoted identifiers, return a more helpful error to indicate how to fix it
-                            throw new NotSupportedQueryFragmentException("Unsupported comparison of two fields. Did you mean to use single quotes for a string literal?", comparison);
-                        }
-
-                        throw new NotSupportedQueryFragmentException("Unsupported comparison", comparison);
-                    }
+                        throw new PostProcessingRequiredException("Unsupported comparison", comparison);
 
                     if (col1 == null && col2 == null)
                     {
@@ -1097,7 +2194,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 // If we still couldn't find the column name and value, this isn't a pattern we can support in FetchXML
                 if (field == null || (literal == null && func == null))
-                    throw new NotSupportedQueryFragmentException("Unsupported comparison", comparison);
+                    throw new PostProcessingRequiredException("Unsupported comparison", comparison);
 
                 // Select the correct FetchXML operator
                 @operator op;
@@ -1238,9 +2335,38 @@ namespace MarkMpn.Sql4Cds.Engine
                     criteria.type = op;
                 }
 
-                // Recurse into the sub-expressoins
-                HandleFilter(binary.FirstExpression, criteria, tables, targetTable, where, inOr || op == filterType.or, ref col1, ref col2);
-                HandleFilter(binary.SecondExpression, criteria, tables, targetTable, where, inOr || op == filterType.or, ref col1, ref col2);
+                // Recurse into the sub-expressions
+                try
+                {
+                    HandleFilterFetchXml(binary.FirstExpression, criteria, tables, targetTable, computedColumns, where, inOr || op == filterType.or, ref col1, ref col2, ref postFilter, param);
+                }
+                catch (PostProcessingRequiredException)
+                {
+                    if (inOr || op != filterType.and || !where)
+                        throw;
+
+                    var lhsPredicate = HandleFilterPredicate(binary.FirstExpression, tables, computedColumns, param);
+                    if (postFilter == null)
+                        postFilter = lhsPredicate;
+                    else
+                        postFilter = Expression.And(postFilter, lhsPredicate);
+                }
+
+                try
+                {
+                    HandleFilterFetchXml(binary.SecondExpression, criteria, tables, targetTable, computedColumns, where, inOr || op == filterType.or, ref col1, ref col2, ref postFilter, param);
+                }
+                catch (PostProcessingRequiredException)
+                {
+                    if (inOr || op != filterType.and || !where)
+                        throw;
+
+                    var rhsPredicate = HandleFilterPredicate(binary.SecondExpression, tables, computedColumns, param);
+                    if (postFilter == null)
+                        postFilter = rhsPredicate;
+                    else
+                        postFilter = Expression.And(postFilter, rhsPredicate);
+                }
             }
             else if (searchCondition is BooleanParenthesisExpression paren)
             {
@@ -1250,7 +2376,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 criteria.Items = AddItem(criteria.Items, subFilter);
                 criteria = subFilter;
 
-                HandleFilter(paren.Expression, criteria, tables, targetTable, where, inOr, ref col1, ref col2);
+                HandleFilterFetchXml(paren.Expression, criteria, tables, targetTable, computedColumns, where, inOr, ref col1, ref col2, ref postFilter, param);
 
                 if (subFilter.type == (filterType)2)
                     subFilter.type = filterType.and;
@@ -1258,9 +2384,7 @@ namespace MarkMpn.Sql4Cds.Engine
             else if (searchCondition is BooleanIsNullExpression isNull)
             {
                 // Handle IS NULL and IS NOT NULL expresisons
-                var field = isNull.Expression as ColumnReferenceExpression;
-
-                if (field == null)
+                if (!(isNull.Expression is ColumnReferenceExpression field))
                     throw new NotSupportedQueryFragmentException("Unsupported comparison", isNull.Expression);
 
                 var entityName = GetColumnTableAlias(field, tables, out var entityTable);
@@ -1278,15 +2402,11 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 // Handle LIKE and NOT LIKE expressions. We can only support `column LIKE 'value'` expressions, not
                 // `'value' LIKE column`
-                var field = like.FirstExpression as ColumnReferenceExpression;
+                if (!(like.FirstExpression is ColumnReferenceExpression field))
+                    throw new PostProcessingRequiredException("Unsupported comparison", like.FirstExpression);
 
-                if (field == null)
-                    throw new NotSupportedQueryFragmentException("Unsupported comparison", like.FirstExpression);
-
-                var value = like.SecondExpression as StringLiteral;
-
-                if (value == null)
-                    throw new NotSupportedQueryFragmentException("Unsupported comparison", like.SecondExpression);
+                if (!(like.SecondExpression is StringLiteral value))
+                    throw new PostProcessingRequiredException("Unsupported comparison", like.SecondExpression);
 
                 var entityName = GetColumnTableAlias(field, tables, out var entityTable);
                 if (entityTable == targetTable)
@@ -1303,9 +2423,7 @@ namespace MarkMpn.Sql4Cds.Engine
             else if (searchCondition is InPredicate @in)
             {
                 // Handle IN and NOT IN expressions. We can only support `column IN ('value1', 'value2', ...)` expressions
-                var field = @in.Expression as ColumnReferenceExpression;
-
-                if (field == null)
+                if (!(@in.Expression is ColumnReferenceExpression field))
                     throw new NotSupportedQueryFragmentException("Unsupported comparison", @in.Expression);
 
                 if (@in.Subquery != null)
@@ -1326,7 +2444,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     .Select(v =>
                     {
                         if (!(v is Literal literal))
-                            throw new NotSupportedQueryFragmentException("Unsupported comparison", v);
+                            throw new PostProcessingRequiredException("Unsupported comparison", v);
 
                         return new conditionValue
                         {
@@ -1339,7 +2457,172 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             else
             {
-                throw new NotSupportedQueryFragmentException("Unhandled WHERE clause", searchCondition);
+                throw new PostProcessingRequiredException("Unhandled WHERE clause", searchCondition);
+            }
+        }
+
+
+        /// <summary>
+        /// Converts filter criteria to a predicate expression
+        /// </summary>
+        /// <param name="searchCondition">The SQL filter to convert from</param>
+        /// <param name="tables">The tables involved in the query</param>
+        /// <param name="computedColumns">The columns created by a GROUP BY clause</param>
+        /// <param name="param">The parameter that identifies the entity to apply the predicate to</param>
+        /// <returns>The expression that implements the <paramref name="searchCondition"/></returns>
+        private Expression HandleFilterPredicate(BooleanExpression searchCondition, List<EntityTable> tables, IDictionary<string, Type> computedColumns, ParameterExpression param)
+        {
+            if (searchCondition is BooleanComparisonExpression comparison)
+            {
+                var lhs = ConvertScalarExpression(comparison.FirstExpression, tables, computedColumns, param);
+                var rhs = ConvertScalarExpression(comparison.SecondExpression, tables, computedColumns, param);
+
+                // Type conversions for DateTime vs. string
+                if (lhs.Type == typeof(DateTime?) && rhs.Type == typeof(string))
+                    rhs = Expr.Convert<DateTime?>(rhs);
+                else if (lhs.Type == typeof(string) && rhs.Type == typeof(DateTime?))
+                    lhs = Expr.Convert<DateTime?>(lhs);
+
+                var lhsValue = lhs;
+                var rhsValue = rhs;
+
+                if (lhsValue.Type.IsGenericType && lhsValue.Type.GetGenericTypeDefinition() == typeof(Nullable<>))
+                    lhsValue = Expression.Property(lhsValue, lhsValue.Type.GetProperty("Value"));
+
+                if (rhsValue.Type.IsGenericType && rhsValue.Type.GetGenericTypeDefinition() == typeof(Nullable<>))
+                    rhsValue = Expression.Property(rhsValue, rhsValue.Type.GetProperty("Value"));
+
+                Expression coreComparison;
+
+                switch (comparison.ComparisonType)
+                {
+                    case BooleanComparisonType.Equals:
+                        if (lhsValue.Type == typeof(string) && rhsValue.Type == typeof(string))
+                            coreComparison = Expression.Equal(lhsValue, rhsValue, false, Expr.GetMethodInfo(() => ExpressionFunctions.CaseInsensitiveEquals(Expr.Arg<string>(), Expr.Arg<string>())));
+                        else if (lhsValue.Type == typeof(EntityReference) && rhsValue.Type == typeof(Guid))
+                            coreComparison = Expression.Equal(lhsValue, rhsValue, false, Expr.GetMethodInfo(() => ExpressionFunctions.Equal(Expr.Arg<EntityReference>(), Expr.Arg<Guid>())));
+                        else if (lhsValue.Type == typeof(Guid) && rhsValue.Type == typeof(EntityReference))
+                            coreComparison = Expression.Equal(lhsValue, rhsValue, false, Expr.GetMethodInfo(() => ExpressionFunctions.Equal(Expr.Arg<Guid>(), Expr.Arg<EntityReference>())));
+                        else
+                            coreComparison = Expression.Equal(lhsValue, rhsValue);
+                        break;
+
+                    case BooleanComparisonType.GreaterThan:
+                        coreComparison = Expression.GreaterThan(lhsValue, rhsValue);
+                        break;
+
+                    case BooleanComparisonType.GreaterThanOrEqualTo:
+                        coreComparison = Expression.GreaterThanOrEqual(lhsValue, rhsValue);
+                        break;
+
+                    case BooleanComparisonType.LessThan:
+                        coreComparison = Expression.LessThan(lhsValue, rhsValue);
+                        break;
+
+                    case BooleanComparisonType.LessThanOrEqualTo:
+                        coreComparison = Expression.LessThanOrEqual(lhsValue, rhsValue);
+                        break;
+
+                    case BooleanComparisonType.NotEqualToBrackets:
+                    case BooleanComparisonType.NotEqualToExclamation:
+                        if (lhsValue.Type == typeof(string) && rhsValue.Type == typeof(string))
+                            coreComparison = Expression.NotEqual(lhsValue, rhsValue, false, Expr.GetMethodInfo(() => ExpressionFunctions.CaseInsensitiveNotEquals(Expr.Arg<string>(), Expr.Arg<string>())));
+                        else if (lhsValue.Type == typeof(EntityReference) && rhsValue.Type == typeof(Guid))
+                            coreComparison = Expression.NotEqual(lhsValue, rhsValue, false, Expr.GetMethodInfo(() => ExpressionFunctions.NotEqual(Expr.Arg<EntityReference>(), Expr.Arg<Guid>())));
+                        else if (lhsValue.Type == typeof(Guid) && rhsValue.Type == typeof(EntityReference))
+                            coreComparison = Expression.NotEqual(lhsValue, rhsValue, false, Expr.GetMethodInfo(() => ExpressionFunctions.NotEqual(Expr.Arg<Guid>(), Expr.Arg<EntityReference>())));
+                        else
+                            coreComparison = Expression.NotEqual(lhsValue, rhsValue);
+                        break;
+
+                    default:
+                        throw new NotSupportedQueryFragmentException("Unsupported comparison type", comparison);
+                }
+
+                // Add null checking for all comparison types
+                Expression nullCheck = null;
+
+                if (lhs.Type.IsClass || lhs.Type.IsGenericType && lhs.Type.GetGenericTypeDefinition() == typeof(Nullable<>))
+                    nullCheck = Expression.Equal(lhs, Expression.Constant(null));
+
+                if (rhs.Type.IsClass || rhs.Type.IsGenericType && rhs.Type.GetGenericTypeDefinition() == typeof(Nullable<>))
+                {
+                    var rhsNullCheck = Expression.Equal(rhs, Expression.Constant(null));
+
+                    if (nullCheck == null)
+                        nullCheck = rhsNullCheck;
+                    else
+                        nullCheck = Expression.OrElse(nullCheck, rhsNullCheck);
+                }
+
+                if (nullCheck == null)
+                    return coreComparison;
+
+                return Expression.Condition(
+                    test: nullCheck,
+                    ifTrue: Expression.Constant(false),
+                    ifFalse: coreComparison);
+            }
+            else if (searchCondition is BooleanBinaryExpression binary)
+            {
+                var lhs = HandleFilterPredicate(binary.FirstExpression, tables, computedColumns, param);
+                var rhs = HandleFilterPredicate(binary.SecondExpression, tables, computedColumns, param);
+
+                if (binary.BinaryExpressionType == BooleanBinaryExpressionType.And)
+                    return Expression.And(lhs, rhs);
+                else
+                    return Expression.Or(lhs, rhs);
+            }
+            else if (searchCondition is BooleanParenthesisExpression paren)
+            {
+                var child = HandleFilterPredicate(paren.Expression, tables, computedColumns, param);
+                return child;
+            }
+            else if (searchCondition is BooleanIsNullExpression isNull)
+            {
+                var value = ConvertScalarExpression(isNull.Expression, tables, computedColumns, param);
+
+                if (isNull.IsNot)
+                    return Expression.NotEqual(value, Expression.Constant(null));
+                else
+                    return Expression.Equal(value, Expression.Constant(null));
+            }
+            else if (searchCondition is LikePredicate like)
+            {
+                var lhs = ConvertScalarExpression(like.FirstExpression, tables, computedColumns, param);
+                var rhs = ConvertScalarExpression(like.SecondExpression, tables, computedColumns, param);
+                var func = Expr.Call(() => ExpressionFunctions.Like(Expr.Arg<string>(), Expr.Arg<string>()),
+                    lhs,
+                    rhs);
+
+                if (like.NotDefined)
+                    return Expression.Not(func);
+                else
+                    return func;
+            }
+            else if (searchCondition is InPredicate @in)
+            {
+                if (@in.Subquery != null)
+                    throw new NotSupportedQueryFragmentException("Unsupported subquery, rewrite query as join", @in.Subquery);
+
+                Expression converted = null;
+                var value = ConvertScalarExpression(@in.Expression, tables, computedColumns, param);
+
+                foreach (var v in @in.Values)
+                {
+                    var equal = Expression.Equal(value, ConvertScalarExpression(v, tables, computedColumns, param));
+
+                    if (converted == null)
+                        converted = equal;
+                    else
+                        converted = Expression.Or(converted, equal);
+                }
+
+                return converted;
+            }
+            else
+            {
+                throw new PostProcessingRequiredException("Unhandled WHERE clause", searchCondition);
             }
         }
 
@@ -1350,9 +2633,12 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="fetch">The FetchXML query converted so far</param>
         /// <param name="tables">The tables involved in the query</param>
         /// <param name="columns">The columns included in the output of the query</param>
-        private void HandleSelectClause(QuerySpecification select, FetchXml.FetchType fetch, List<EntityTable> tables, out string[] columns)
+        /// <param name="calculatedFields">The functions to use to generate calculated fields</param>
+        /// <param name="calculatedFieldExpressions">The expressions that generate the calculated fields</param>
+        private string[] HandleSelectClause(QuerySpecification select, FetchXml.FetchType fetch, List<EntityTable> tables, IDictionary<string,Type> calculatedColumns, IList<IQueryExtension> extensions)
         {
             var cols = new List<string>();
+            var projections = new Dictionary<string, Func<Entity, object>>();
             
             // Process each column in the SELECT list in turn
             foreach (var field in select.SelectElements)
@@ -1368,44 +2654,84 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     foreach (var starTable in starTables)
                     {
-                        // If we're adding all attributes we can remove individual attributes
-                        // FetchXML will ignore an <all-attributes> element if there are any individual <attribute> elements. We can cope
-                        // with this by removing the <attribute> elements, but this won't give the expected results if any of the attributes
-                        // have aliases
-                        if (starTable.Contains(i => i is FetchAttributeType attr && attr.alias != null))
-                            throw new NotSupportedQueryFragmentException("Cannot add aliased column and wildcard columns from same table", star);
-
-                        starTable.RemoveItems(i => i is FetchAttributeType);
-
-                        starTable.AddItem(new allattributes());
-
                         // We need to check the metadata to list all the columns we're going to include in the output dataset. Order these
                         // by name for a more readable result
                         var meta = Metadata[starTable.EntityName];
 
-                        foreach (var attr in meta.Attributes.Where(a => a.IsValidForRead != false).OrderBy(a => a.LogicalName))
+                        // If we're adding all attributes we can remove individual attributes
+                        // FetchXML will ignore an <all-attributes> element if there are any individual <attribute> elements. We can cope
+                        // with this by removing the <attribute> elements, but this won't give the expected results if any of the attributes
+                        // have aliases
+                        if (starTable.GetItems().Any(i => i is FetchAttributeType attr && attr.alias != null))
                         {
-                            if (starTable.LinkEntity == null)
-                                cols.Add(attr.LogicalName);
-                            else
-                                cols.Add((starTable.Alias ?? starTable.EntityName) + "." + attr.LogicalName);
+                            foreach (var attr in meta.Attributes.Where(a => a.IsValidForRead != false).OrderBy(a => a.LogicalName))
+                            {
+                                var alias = "";
+                                AddAttribute(tables, new ColumnReferenceExpression
+                                {
+                                    MultiPartIdentifier = new MultiPartIdentifier
+                                    {
+                                        Identifiers =
+                                        {
+                                            new Identifier{Value = starTable.Alias},
+                                            new Identifier{Value = attr.LogicalName}
+                                        }
+                                    }
+                                }, calculatedColumns, out _, out _, ref alias);
+
+                                if (starTable.LinkEntity == null)
+                                    cols.Add(attr.LogicalName);
+                                else
+                                    cols.Add((starTable.Alias ?? starTable.EntityName) + "." + attr.LogicalName);
+                            }
+                        }
+                        else
+                        {
+                            starTable.RemoveItems(i => i is FetchAttributeType);
+                            starTable.AddItem(new allattributes());
+
+                            foreach (var attr in meta.Attributes.Where(a => a.IsValidForRead != false).OrderBy(a => a.LogicalName))
+                            {
+                                if (starTable.LinkEntity == null)
+                                    cols.Add(attr.LogicalName);
+                                else
+                                    cols.Add((starTable.Alias ?? starTable.EntityName) + "." + attr.LogicalName);
+                            }
                         }
                     }
                 }
                 else if (field is SelectScalarExpression scalar)
                 {
-                    // Handle SELECT field, SELECT aggregate(field) and SELECT DATEPART(part, field)
+                    // Handle SELECT <expression>. Aggregates and groupings will already have been handled, and the SELECT expression replaced with
+                    // a temporary field name, e.g SELECT agg1 instead of SELECT min(field)
                     var expr = scalar.Expression;
 
                     // Get the requested alias for the column, if any.
                     var alias = scalar.ColumnName?.Identifier?.Value;
-                    AddAttribute(fetch, tables, cols, expr, out var table, out var attr, ref alias);
 
-                    // Even if the attribute wasn't added to the entity because there's already an <all-attributes>, add it to the column list again
-                    if (alias == null)
-                        cols.Add((table.LinkEntity == null ? "" : ((table.Alias ?? table.EntityName) + ".")) + attr.name);
-                    else
+                    try
+                    {
+                        AddAttribute(tables, expr, calculatedColumns, out var table, out var attr, ref alias);
+
+                        // Even if the attribute wasn't added to the entity because there's already an <all-attributes>, add it to the column list again
+                        if (alias == null)
+                            cols.Add((table.LinkEntity == null ? "" : ((table.Alias ?? table.EntityName) + ".")) + attr.name);
+                        else
+                            cols.Add(alias);
+                    }
+                    catch (NotSupportedQueryFragmentException)
+                    {
+                        // Try again converting to an expression
+                        var func = CompileScalarExpression<object>(expr, tables, calculatedColumns, out var expression);
+
+                        // Calculated field must have an alias, auto-generate one if one is not given
+                        if (alias == null)
+                            alias = $"Expr{cols.Count + 1}";
+
+                        projections[alias] = func;
+                        calculatedColumns[alias] = expression.Type;
                         cols.Add(alias);
+                    }
                 }
                 else
                 {
@@ -1413,126 +2739,35 @@ namespace MarkMpn.Sql4Cds.Engine
                     throw new NotSupportedQueryFragmentException("Unhandled SELECT clause", field);
                 }
             }
+
+            if (projections.Count > 0)
+                extensions.Add(new Projection(projections));
             
-            columns = cols.ToArray();
+            return cols.ToArray();
         }
 
-        private void AddAttribute(FetchXml.FetchType fetch, List<EntityTable> tables, List<string> cols, ScalarExpression expr, out EntityTable table, out FetchAttributeType attr, ref string alias)
+        private void AddAttribute(List<EntityTable> tables, ScalarExpression expr, IDictionary<string,Type> calculatedColumns, out EntityTable table, out FetchAttributeType attr, ref string alias)
         {
-            var originalExpr = expr;
-            var func = expr as FunctionCall;
-
-            if (func != null)
-            {
-                if (TryParseDatePart(func, out var dateGrouping, out var dateCol))
-                {
-                    // Rewrite DATEPART(part, field) as part(field) for simpler code later
-                    func = new FunctionCall
-                    {
-                        FunctionName = new Identifier { Value = dateGrouping.ToString() },
-                        Parameters = { dateCol }
-                    };
-                }
-
-                // All function calls (aggregates) must be based on a single column
-                if (func.Parameters.Count != 1)
-                    throw new NotSupportedQueryFragmentException("Unhandled function", func);
-
-                if (!(func.Parameters[0] is ColumnReferenceExpression colParam))
-                    throw new NotSupportedQueryFragmentException("Unhandled function parameter", func.Parameters[0]);
-
-                expr = colParam;
-            }
-
             if (!(expr is ColumnReferenceExpression col))
-                throw new NotSupportedQueryFragmentException("Unhandled SELECT clause", originalExpr);
+                throw new NotSupportedQueryFragmentException("Unhandled SELECT clause", expr);
 
-            // We now have a column, either on it's own or taken from the function parameter
-            // Find the appropriate table and add the attribute to the table. For count(*), the "column"
-            // is a wildcard type column - use the primary key column of the main entity instead
-            string attrName;
-            if (col.ColumnType == ColumnType.Wildcard)
-                attrName = Metadata[tables[0].EntityName].PrimaryIdAttribute;
-            else
-                attrName = col.MultiPartIdentifier.Identifiers.Last().Value;
+            // Find the appropriate table and add the attribute to the table
+            var attrName = GetColumnAttribute(col);
+            GetColumnTableAlias(col, tables, out table);
 
-            if (col.ColumnType == ColumnType.Wildcard)
-                table = tables[0];
-            else
-                GetColumnTableAlias(col, tables, out table);
+            // Check if this is a column that has already been generated by the GROUP BY clause
+            if (col.MultiPartIdentifier.Identifiers.Count == 1 && calculatedColumns != null && calculatedColumns.ContainsKey(attrName))
+            {
+                attr = tables.SelectMany(t => t.GetItems()).OfType<FetchAttributeType>().First(a => a.alias == attrName);
+                return;
+            }
 
             var matchAnyAlias = alias == "";
-            attr = new FetchAttributeType { name = attrName };
-
-            // If the column is being used within an aggregate or date grouping function, apply that now
-            if (func != null)
-            {
-                switch (func.FunctionName.Value.ToLower())
-                {
-                    case "count":
-                        // Select the appropriate aggregate depending on whether we're doing count(*) or count(field)
-                        attr.aggregate = col.ColumnType == ColumnType.Wildcard ? AggregateType.count : AggregateType.countcolumn;
-                        attr.aggregateSpecified = true;
-                        break;
-
-                    case "avg":
-                    case "min":
-                    case "max":
-                    case "sum":
-                        // All other aggregates can be applied directly
-                        attr.aggregate = (AggregateType)Enum.Parse(typeof(AggregateType), func.FunctionName.Value.ToLower());
-                        attr.aggregateSpecified = true;
-                        break;
-
-                    case "day":
-                    case "week":
-                    case "month":
-                    case "quarter":
-                    case "year":
-                    case "fiscalperiod":
-                    case "fiscalyear":
-                        // Date groupings that have actually come from a rewritten DATEPART function
-                        attr.dategrouping = (DateGroupingType)Enum.Parse(typeof(DateGroupingType), func.FunctionName.Value.ToLower());
-                        attr.dategroupingSpecified = true;
-                        break;
-
-                    default:
-                        // No other function calls are supported
-                        throw new NotSupportedQueryFragmentException("Unhandled function", func);
-                }
-
-                // If we have either an aggregate or date grouping function, indicate that this is an aggregate query
-                fetch.aggregate = true;
-                fetch.aggregateSpecified = true;
-
-                if (func.UniqueRowFilter == UniqueRowFilter.Distinct)
-                {
-                    // Handle `count(distinct col)` expressions
-                    attr.distinct = FetchBoolType.@true;
-                    attr.distinctSpecified = true;
-                }
-
-                if (String.IsNullOrEmpty(alias))
-                {
-                    // All aggregate and date grouping attributes must have an aggregate. If none is specified, auto-generate one
-                    var aliasSuffix = attr.aggregateSpecified ? attr.aggregate.ToString() : attr.dategrouping.ToString();
-
-                    alias = $"{attrName.Replace(".", "_")}_{aliasSuffix}";
-                    var counter = 1;
-
-                    while (cols.Contains(alias))
-                    {
-                        counter++;
-                        alias = $"{attrName.Replace(".", "_")}_{aliasSuffix}_{counter}";
-                    }
-                }
-            }
-
-            attr.alias = alias;
+            attr = new FetchAttributeType { name = attrName, alias = alias };
 
             var addAttribute = true;
 
-            if (table.Contains(i => i is allattributes))
+            if (table.GetItems().Any(i => i is allattributes))
             {
                 // If we've already got an <all-attributes> element in this entity, either discard this <attribute> as it will be included
                 // in the results anyway or generate an error if it has an alias as we can't combine <all-attributes> and an individual
@@ -1540,7 +2775,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (alias == null)
                     addAttribute = false;
                 else
-                    throw new NotSupportedQueryFragmentException("Cannot add aliased column and wildcard columns from same table", originalExpr);
+                    throw new PostProcessingRequiredException("Cannot add aliased column and wildcard columns from same table", expr);
             }
 
             // Don't add the attribute if we've already got it
@@ -1592,7 +2827,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Converts a table or join within a FROM clause to FetchXML
         /// </summary>
         /// <param name="tableReference">The table or join to convert</param>
-        /// <param name="fetch">The FetchXML wuery to add the &lt;entity&gt; and &lt;link-entity&gt; elements to</param>
+        /// <param name="fetch">The FetchXML query to add the &lt;entity&gt; and &lt;link-entity&gt; elements to</param>
         /// <param name="tables">The details of the tables added to the query so far</param>
         private void HandleFromClause(TableReference tableReference, FetchXml.FetchType fetch, List<EntityTable> tables)
         {
@@ -1601,35 +2836,38 @@ namespace MarkMpn.Sql4Cds.Engine
                 // Handle a single table. First check we don't already have it in our list of tables
                 var table = FindTable(namedTable, tables);
 
-                if (table == null && fetch.Items == null)
+                if (table != null)
+                    throw new NotSupportedQueryFragmentException("Duplicate table reference", namedTable);
+
+                if (fetch.Items != null)
+                    throw new NotSupportedQueryFragmentException("Additional table reference", namedTable);
+
+                // This is the first table in our query, so add it to the root of the FetchXML
+                var entity = new FetchEntityType
                 {
-                    // This is the first table in our query, so add it to the root of the FetchXML
-                    var entity = new FetchEntityType
-                    {
-                        name = namedTable.SchemaObject.BaseIdentifier.Value
-                    };
-                    fetch.Items = new object[] { entity };
+                    name = namedTable.SchemaObject.BaseIdentifier.Value
+                };
+                fetch.Items = new object[] { entity };
 
-                    try
-                    {
-                        table = new EntityTable(Metadata, entity) { Alias = namedTable.Alias?.Value };
-                    }
-                    catch (FaultException ex)
-                    {
-                        throw new NotSupportedQueryFragmentException(ex.Message, tableReference);
-                    }
+                try
+                {
+                    table = new EntityTable(Metadata, entity) { Alias = namedTable.Alias?.Value };
+                }
+                catch (FaultException ex)
+                {
+                    throw new NotSupportedQueryFragmentException(ex.Message, tableReference);
+                }
 
-                    tables.Add(table);
+                tables.Add(table);
 
-                    // Apply the NOLOCK table hint. This isn't quite equivalent as it's applied at the table level in T-SQL but at
-                    // the query level in FetchXML. Return an error if there's any other hints that FetchXML doesn't support
-                    foreach (var hint in namedTable.TableHints)
-                    {
-                        if (hint.HintKind == TableHintKind.NoLock)
-                            fetch.nolock = true;
-                        else
-                            throw new NotSupportedQueryFragmentException("Unsupported table hint", hint);
-                    }
+                // Apply the NOLOCK table hint. This isn't quite equivalent as it's applied at the table level in T-SQL but at
+                // the query level in FetchXML. Return an error if there's any other hints that FetchXML doesn't support
+                foreach (var hint in namedTable.TableHints)
+                {
+                    if (hint.HintKind == TableHintKind.NoLock)
+                        fetch.nolock = true;
+                    else
+                        throw new NotSupportedQueryFragmentException("Unsupported table hint", hint);
                 }
             }
             else if (tableReference is QualifiedJoin join)
@@ -1672,11 +2910,17 @@ namespace MarkMpn.Sql4Cds.Engine
                 
                 ColumnReferenceExpression col1 = null;
                 ColumnReferenceExpression col2 = null;
-                HandleFilter(join.SearchCondition, filter, tables, linkTable, false, false, ref col1, ref col2);
+                Expression postFilter = null;
+                HandleFilter(join.SearchCondition, filter, tables, linkTable, null, false, ref col1, ref col2, ref postFilter, null);
 
                 // We need a join condition comparing a column in the link entity to one in another table
                 if (col1 == null || col2 == null)
                     throw new NotSupportedQueryFragmentException("Missing join condition", join.SearchCondition);
+
+                // Check we don't need to apply any custom filter expressions - we can't do this in the FROM clause as it can break the application
+                // of OUTER joins
+                if (postFilter != null)
+                    throw new NotSupportedQueryFragmentException("Unsupported join condition - rewrite as WHERE clause", join.SearchCondition);
 
                 // If there were any other criteria in the join, add them as the filter
                 if (filter.type != (filterType)2)
@@ -1804,7 +3048,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="tables">The tables involved in the query</param>
         /// <param name="table">The full details of the table that the column comes from</param>
         /// <returns>The alias or name of the matching <paramref name="table"/></returns>
-        private string GetColumnTableAlias(ColumnReferenceExpression col, List<EntityTable> tables, out EntityTable table)
+        private string GetColumnTableAlias(ColumnReferenceExpression col, List<EntityTable> tables, out EntityTable table, IDictionary<string,Type> calculatedFields = null)
         {
             if (col.MultiPartIdentifier.Identifiers.Count > 2)
                 throw new NotSupportedQueryFragmentException("Unsupported column reference", col);
@@ -1843,7 +3087,12 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             if (possibleEntities.Length == 0)
+            {
+                if (col.MultiPartIdentifier.Identifiers.Count == 1 && calculatedFields != null && calculatedFields.ContainsKey(col.MultiPartIdentifier.Identifiers[0].Value))
+                    throw new PostProcessingRequiredException("Calculated field requires post processing", col);
+
                 throw new NotSupportedQueryFragmentException("Unknown attribute", col);
+            }
 
             if (possibleEntities.Length > 1)
                 throw new NotSupportedQueryFragmentException("Ambiguous attribute", col);
@@ -1866,8 +3115,10 @@ namespace MarkMpn.Sql4Cds.Engine
             if (items == null)
                 return new[] { item };
 
-            var list = new List<object>(items);
-            list.Add(item);
+            var list = new List<object>(items)
+            {
+                item
+            };
             return list.ToArray();
         }
     }

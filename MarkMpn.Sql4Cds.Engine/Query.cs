@@ -1,7 +1,9 @@
 ﻿using MarkMpn.Sql4Cds.Engine.FetchXml;
+using MarkMpn.Sql4Cds.Engine.QueryExtensions;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
+using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
 using System;
 using System.Collections.Generic;
@@ -65,15 +67,40 @@ namespace MarkMpn.Sql4Cds.Engine
     /// </summary>
     public abstract class FetchXmlQuery : Query
     {
+        private FetchType _fetch;
+
         /// <summary>
         /// The FetchXML query
         /// </summary>
-        public FetchType FetchXml { get; set; }
+        public FetchType FetchXml
+        {
+            get { return _fetch; }
+            set
+            {
+                _fetch = value;
+                FetchXmlString = Serialize(_fetch);
+            }
+        }
+
+        /// <summary>
+        /// The string representation of the <see cref="FetchXml"/>
+        /// </summary>
+        public string FetchXmlString { get; private set; }
 
         /// <summary>
         /// Indicates if the query will page across all the available data
         /// </summary>
         public bool AllPages { get; set; }
+
+        /// <summary>
+        /// A list of any post-processing functions to be applied to the results
+        /// </summary>
+        public IList<IQueryExtension> Extensions { get; } = new List<IQueryExtension>();
+
+        /// <summary>
+        /// Returns an alternative query that can be used if the main aggregate query results in an AggregateQueryRecordLimit error
+        /// </summary>
+        public FetchXmlQuery AggregateAlternative { get; set; }
 
         /// <summary>
         /// Retrieves all the data matched by the <see cref="FetchXml"/>
@@ -87,10 +114,25 @@ namespace MarkMpn.Sql4Cds.Engine
             if (options.Cancelled)
                 return null;
 
-            var res = new EntityCollection(RetrieveSequence(org, metadata, options).ToList());
-            res.EntityName = FetchXml.Items.OfType<FetchEntityType>().Single().name;
+            try
+            {
+                var res = new EntityCollection(RetrieveSequence(org, metadata, options).ToList());
+                res.EntityName = FetchXml.Items.OfType<FetchEntityType>().Single().name;
 
-            return res;
+                return res;
+            }
+            catch (Exception ex)
+            {
+                // Attempt to handle aggregate queries that go over the standard FetchXML limit by rewriting them to retrieve the
+                // individual records and apply the aggregation in-memory
+                if (!ex.Message.Contains("AggregateQueryRecordLimit"))
+                    throw;
+
+                if (AggregateAlternative == null)
+                    throw;
+
+                return AggregateAlternative.RetrieveAll(org, metadata, options);
+            }
         }
 
         /// <summary>
@@ -99,8 +141,25 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="org">The <see cref="IOrganizationService"/> to execute the query against</param>
         /// <param name="metadata">The metadata cache to use when executing the query</param>
         /// <param name="options">The options to apply to the query execution</param>
-        /// <returns>The records matched by the query</returns>
+        /// <returns>The records matched by the query, with any custom filters, calculated fields and sorted applied</returns>
         protected IEnumerable<Entity> RetrieveSequence(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        {
+            var sequence = RetrieveSequenceInternal(org, metadata, options);
+
+            foreach (var extension in Extensions)
+                sequence = extension.ApplyTo(sequence, options);
+
+            return sequence;
+        }
+
+        /// <summary>
+        /// Retrieves all the data matched by the <see cref="FetchXml"/>
+        /// </summary>
+        /// <param name="org">The <see cref="IOrganizationService"/> to execute the query against</param>
+        /// <param name="metadata">The metadata cache to use when executing the query</param>
+        /// <param name="options">The options to apply to the query execution</param>
+        /// <returns>The records matched by the query, with any custom filters and calculated fields applied</returns>
+        private IEnumerable<Entity> RetrieveSequenceInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
             if (options.Cancelled)
                 yield break;
@@ -108,7 +167,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var mainEntity = FetchXml.Items.OfType<FetchEntityType>().Single();
             var name = mainEntity.name;
             var meta = metadata[name];
-            options.Progress($"Retrieving {meta.DisplayCollectionName.UserLocalizedLabel.Label}...");
+            options.Progress($"Retrieving {meta.DisplayCollectionName?.UserLocalizedLabel?.Label}...");
 
             // Get the first page of results
             var res = org.RetrieveMultiple(new FetchExpression(Serialize(FetchXml)));
@@ -126,7 +185,7 @@ namespace MarkMpn.Sql4Cds.Engine
             // Move on to subsequent pages
             while (AllPages && res.MoreRecords && !options.Cancelled && options.ContinueRetrieve(count))
             {
-                options.Progress($"Retrieved {count:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label}...");
+                options.Progress($"Retrieved {count:N0} {meta.DisplayCollectionName?.UserLocalizedLabel?.Label}...");
 
                 if (FetchXml.page == null)
                     FetchXml.page = "2";
@@ -150,9 +209,9 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="fetch">The FetchXML query object to convert</param>
         /// <returns>The string representation of the query</returns>
-        public static string Serialize(FetchXml.FetchType fetch)
+        internal static string Serialize(FetchType fetch)
         {
-            var serializer = new XmlSerializer(typeof(FetchXml.FetchType));
+            var serializer = new XmlSerializer(typeof(FetchType));
 
             using (var writer = new StringWriter())
             using (var xmlWriter = System.Xml.XmlWriter.Create(writer, new System.Xml.XmlWriterSettings
@@ -183,23 +242,8 @@ namespace MarkMpn.Sql4Cds.Engine
             if (RetrieveTotalRecordCount(org, metadata, out var result))
                 return result;
 
-            try
-            {
-                // Start off trying to execute the original FetchXML
-                return RetrieveAll(org, metadata, options);
-            }
-            catch (Exception ex)
-            {
-                // Attempt to handle aggregate queries that go over the standard FetchXML limit by rewriting them to retrieve the
-                // individual records and apply the aggregation in-memory
-                if (!ex.Message.Contains("AggregateQueryRecordLimit"))
-                    throw;
-
-                if (!RetrieveManualAggregate(org, metadata, options, out result))
-                    throw new ApplicationException("Unable to apply custom aggregation for large datasets when using DATEPART", ex);
-
-                return result;
-            }
+            // Execute the FetchXML
+            return RetrieveAll(org, metadata, options);
         }
 
         /// <summary>
@@ -249,225 +293,6 @@ namespace MarkMpn.Sql4Cds.Engine
         }
 
         /// <summary>
-        /// Rewrites an aggregate query to retrieve the individual records and calculate the aggregates in-memory
-        /// </summary>
-        /// <param name="org">The <see cref="IOrganizationService"/> to execute the query against</param>
-        /// <param name="metadata">The metadata cache to use when executing the query</param>
-        /// <param name="options">The options to apply to the query execution</param>
-        /// <returns><c>true</c> if this method has retrieved the requested details, or <c>false</c> otherwise</returns>
-        private bool RetrieveManualAggregate(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, out EntityCollection results)
-        {
-            results = null;
-
-            // Remove aggregate flags
-            FetchXml.aggregate = false;
-            FetchXml.aggregateSpecified = false;
-
-            var entity = FetchXml.Items.OfType<FetchEntityType>().Single();
-            var aggregates = new Dictionary<string, Aggregate>();
-            RemoveAggregate(entity.Items, aggregates);
-
-            // Remove groupby flags
-            var groupByAttributes = new List<FetchAttributeType>();
-            RemoveGroupBy(entity.Items, groupByAttributes);
-
-            // Can't handle manual grouping by date parts as we can't get CDS to sort the data appropriately
-            if (groupByAttributes.Any(a => a.dategroupingSpecified))
-                return false;
-
-            // Ensure sort order follows groupby attributes
-            var sorts = SortByGroups(entity, groupByAttributes);
-
-            var top = String.IsNullOrEmpty(FetchXml.top) ? (int?)null : Int32.Parse(FetchXml.top);
-            var count = String.IsNullOrEmpty(FetchXml.count) ? (int?)null : Int32.Parse(FetchXml.count);
-            var page = String.IsNullOrEmpty(FetchXml.page) ? (int?)null : Int32.Parse(FetchXml.page);
-
-            FetchXml.top = null;
-            FetchXml.count = null;
-            FetchXml.page = null;
-
-            // Retrieve records and track aggregates per group
-            var result = RetrieveSequence(org, metadata, options)
-                .AggregateGroupBy(groupByAttributes.Select(a => a.alias).ToList(), aggregates, options);
-
-            // Manually re-apply original orders
-            if (sorts != null)
-                result = result.OrderBy(sorts);
-            
-            // Apply top/page
-            if (top != null)
-                result = result.Take(top.Value);
-            else if (page != null && count != null)
-                result = result.Skip((page.Value - 1) * count.Value).Take(count.Value);
-
-            results = new EntityCollection(result.ToList())
-            {
-                EntityName = entity.name
-            };
-
-            return true;
-        }
-
-        /// <summary>
-        /// Find any aggregates specified in the FetchXML, unset the <see cref="FetchAttributeType.aggregate"/> attribute and
-        /// add the corresponding calculation to the <paramref name="aggregates"/> list to be calculated in-memory
-        /// </summary>
-        /// <param name="items">The FetchXML items in an &lt;entity&gt; or &lt;link-entity&gt;</param>
-        /// <param name="aggregates">A mapping from output attribute alias to the aggregate calculation to use to generate it</param>
-        private void RemoveAggregate(object[] items, IDictionary<string,Aggregate> aggregates)
-        {
-            if (items == null)
-                return;
-
-            foreach (var attr in items.OfType<FetchAttributeType>().Where(a => a.aggregateSpecified))
-            {
-                Aggregate aggregate = null;
-
-                switch (attr.aggregate)
-                {
-                    case AggregateType.avg:
-                        aggregate = new Average();
-                        break;
-
-                    case AggregateType.count:
-                        aggregate = new Count();
-                        break;
-
-                    case AggregateType.countcolumn:
-                        aggregate = attr.distinctSpecified && attr.distinct == FetchBoolType.@true ? (Aggregate) new CountColumnDistinct() : new CountColumn();
-                        break;
-
-                    case AggregateType.max:
-                        aggregate = new Max();
-                        break;
-
-                    case AggregateType.min:
-                        aggregate = new Min();
-                        break;
-
-                    case AggregateType.sum:
-                        aggregate = new Sum();
-                        break;
-                }
-
-                aggregates[attr.alias] = aggregate;
-
-                attr.aggregateSpecified = false;
-                attr.distinctSpecified = false;
-            }
-
-            foreach (var link in items.OfType<FetchLinkEntityType>())
-                RemoveAggregate(link.Items, aggregates);
-        }
-
-        /// <summary>
-        /// Find any groupings applied in the FetchXML, unset the <see cref="FetchAttributeType.groupby"/> attribute and add the details
-        /// of the grouping to apply to the <paramref name="groupByAttributes"/> list
-        /// </summary>
-        /// <param name="items">The FetchXML items in an &lt;entity&gt; or &lt;link-entity&gt;</param>
-        /// <param name="groupByAttributes">The grouping attributes to apply to the output</param>
-        private void RemoveGroupBy(object[] items, List<FetchAttributeType> groupByAttributes)
-        {
-            if (items == null)
-                return;
-
-            foreach (var attr in items.OfType<FetchAttributeType>().Where(a => a.groupbySpecified && a.groupby == FetchBoolType.@true))
-            {
-                groupByAttributes.Add(new FetchAttributeType
-                {
-                    groupby = FetchBoolType.@true,
-                    groupbySpecified = true,
-                    name = attr.name,
-                    alias = attr.alias,
-                    dategroupingSpecified = attr.dategroupingSpecified
-                });
-
-                attr.groupby = FetchBoolType.@false;
-                attr.groupbySpecified = false;
-            }
-
-            foreach (var link in items.OfType<FetchLinkEntityType>())
-                RemoveGroupBy(link.Items, groupByAttributes);
-        }
-
-        /// <summary>
-        /// Ensures the results retrieved from CDS will be sorted by the attributes we want to group by, so all records
-        /// in a group are retrieved sequentially
-        /// </summary>
-        /// <param name="entity">The root &lt;entity&gt; in the query</param>
-        /// <param name="groupByAttributes">The attributes that the query should group by</param>
-        /// <returns></returns>
-        private FetchOrderType[] SortByGroups(FetchEntityType entity, List<FetchAttributeType> groupByAttributes)
-        {
-            // Keep track of which grouping attributes haven't currently got a sort order applied and which
-            // sorts will need to be applied at the end of the query
-            var unsortedGroupByAttributes = new HashSet<string>(groupByAttributes.Select(attr => attr.alias));
-            var requiredSorts = new List<FetchOrderType>();
-
-            entity.Items = SortByGroups(entity.Items, groupByAttributes, unsortedGroupByAttributes, requiredSorts);
-
-            return requiredSorts.ToArray();
-        }
-
-        /// <summary>
-        /// Checks the groupings applied to an &lt;entity&gt; or &lt;link-entity&gt; to ensure the results are correctly sorted
-        /// </summary>
-        /// <param name="items">The FetchXML items in the &lt;entity&gt; or &lt;link-entity&gt;</param>
-        /// <param name="groupByAttributes">The attributes that the query is grouped by</param>
-        /// <param name="unsortedGroupByAttributes">The grouping attributes that haven't had a sort identified for them yet</param>
-        /// <param name="requiredSorts">The sorts that need to be applied to the final results</param>
-        /// <returns>The FetchXML items to use in place of the supplied <paramref name="items"/></returns>
-        private object[] SortByGroups(object[] items, List<FetchAttributeType> groupByAttributes, HashSet<string> unsortedGroupByAttributes, List<FetchOrderType> requiredSorts)
-        {
-            if (items == null)
-                return null;
-
-            // Check through each of the sorts in the current items to see which are needed and which can be removed
-            var sorts = items.OfType<FetchOrderType>().ToArray();
-            
-            for (var i = 0; i < sorts.Length; i++)
-            {
-                var attr = groupByAttributes.SingleOrDefault(a => a.alias.Equals(sorts[i].alias, StringComparison.OrdinalIgnoreCase));
-
-                if (attr != null && unsortedGroupByAttributes.Remove(attr.alias))
-                {
-                    // Sort by attributes instead of aliases
-                    sorts[i].alias = null;
-                    sorts[i].attribute = attr.name;
-
-                    // Ensure the attribute is included without an alias
-                    if (!String.IsNullOrEmpty(attr.alias) && attr.alias != attr.name)
-                        items = items.Concat(new object[] { new FetchAttributeType { name = attr.name } }).ToArray();
-
-                    // Re-apply the sort at the end as well to ensure the ordering remains consistent
-                    requiredSorts.Add(sorts[i]);
-
-                    continue;
-                }
-
-                // Remove this unnecessary sort
-                items = items.Except(new[] { sorts[i] }).ToArray();
-
-                // Indicate that we need to re-sort the results later
-                requiredSorts.Add(sorts[i]);
-            }
-
-            // Add any more sorts required for grouping attributes in this entity that don't already have a sort
-            items = items.Concat(unsortedGroupByAttributes
-                    .Where(a => items.OfType<FetchAttributeType>().Any(attr => attr.alias == a))
-                    .Select(a => new FetchOrderType { attribute = a })
-                ).ToArray();
-
-            // Recurse through any link-entities
-            var links = items.OfType<FetchLinkEntityType>();
-
-            foreach (var link in links)
-                link.Items = SortByGroups(link.Items, groupByAttributes, unsortedGroupByAttributes, requiredSorts);
-
-            return items;
-        }
-
-        /// <summary>
         /// The columns that should be included in the query results
         /// </summary>
         public string[] ColumnSet { get; set; }
@@ -491,7 +316,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// A mapping of attribute names to values to apply updates to
         /// </summary>
-        public IDictionary<string,object> Updates { get; set; }
+        public IDictionary<string,Func<Entity,object>> Updates { get; set; }
 
         /// <inheritdoc/>
         protected override object ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
@@ -532,11 +357,11 @@ namespace MarkMpn.Sql4Cds.Engine
                 update.Id = (Guid)id;
 
                 foreach (var attr in Updates)
-                    update[attr.Key] = attr.Value;
+                    update[attr.Key] = attr.Value(entity);
 
                 if (options.BatchSize == 1)
                 {
-                    options.Progress($"Updating {meta.DisplayName.UserLocalizedLabel.Label} {count + 1:N0} of {entities.Count:N0}...");
+                    options.Progress($"Updating {meta.DisplayName?.UserLocalizedLabel?.Label} {count + 1:N0} of {entities.Count:N0}...");
                     org.Update(update);
                     count++;
                 }
@@ -559,10 +384,10 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     if (multiple.Requests.Count == options.BatchSize)
                     {
-                        options.Progress($"Updating {meta.DisplayCollectionName.UserLocalizedLabel.Label} {count + 1:N0} - {count + multiple.Requests.Count:N0} of {entities.Count:N0}...");
+                        options.Progress($"Updating {meta.DisplayCollectionName?.UserLocalizedLabel?.Label} {count + 1:N0} - {count + multiple.Requests.Count:N0} of {entities.Count:N0}...");
                         var resp = (ExecuteMultipleResponse) org.Execute(multiple);
                         if (resp.IsFaulted)
-                            throw new ApplicationException($"Error updating {meta.DisplayCollectionName.UserLocalizedLabel.Label}");
+                            throw new ApplicationException($"Error updating {meta.DisplayCollectionName?.UserLocalizedLabel?.Label}");
 
                         count += multiple.Requests.Count;
 
@@ -573,15 +398,15 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (!options.Cancelled && multiple != null)
             {
-                options.Progress($"Updating {meta.DisplayCollectionName.UserLocalizedLabel.Label} {count + 1:N0} - {count + multiple.Requests.Count:N0} of {entities.Count:N0}...");
+                options.Progress($"Updating {meta.DisplayCollectionName?.UserLocalizedLabel?.Label} {count + 1:N0} - {count + multiple.Requests.Count:N0} of {entities.Count:N0}...");
                 var resp = (ExecuteMultipleResponse)org.Execute(multiple);
                 if (resp.IsFaulted)
-                    throw new ApplicationException($"Error updating {meta.DisplayCollectionName.UserLocalizedLabel.Label}");
+                    throw new ApplicationException($"Error updating {meta.DisplayCollectionName?.UserLocalizedLabel?.Label}");
 
                 count += multiple.Requests.Count;
             }
 
-            return $"{count:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label} updated";
+            return $"{count:N0} {meta.DisplayCollectionName?.UserLocalizedLabel?.Label} updated";
         }
     }
 
@@ -596,9 +421,9 @@ namespace MarkMpn.Sql4Cds.Engine
         public string EntityName { get; set; }
 
         /// <summary>
-        /// The primary key column of the entity to delete
+        /// The primary key columns of the entity to delete
         /// </summary>
-        public string IdColumn { get; set; }
+        public string[] IdColumns { get; set; }
 
         /// <inheritdoc/>
         protected override object ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
@@ -613,7 +438,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var meta = metadata[EntityName];
 
             // If we are using a bulk delete job, start the job
-            if (options.UseBulkDelete)
+            if (options.UseBulkDelete && Extensions.Count == 0 && meta.IsIntersect != true)
             {
                 var query = ((FetchXmlToQueryExpressionResponse)org.Execute(new FetchXmlToQueryExpressionRequest { FetchXml = Serialize(FetchXml) })).Query;
 
@@ -653,14 +478,10 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (options.Cancelled)
                     break;
 
-                var id = entity[IdColumn];
-                if (id is AliasedValue alias)
-                    id = alias.Value;
-
                 if (options.BatchSize == 1)
                 {
                     options.Progress($"Deleting {meta.DisplayName.UserLocalizedLabel.Label} {count + 1:N0} of {entities.Count:N0}...");
-                    org.Delete(EntityName, (Guid)id);
+                    org.Execute(CreateDeleteRequest(meta, entity));
                     count++;
                 }
                 else
@@ -678,7 +499,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         };
                     }
 
-                    multiple.Requests.Add(new DeleteRequest { Target = new EntityReference(EntityName, (Guid)id) });
+                    multiple.Requests.Add(CreateDeleteRequest(meta, entity));
 
                     if (multiple.Requests.Count == options.BatchSize)
                     {
@@ -706,12 +527,40 @@ namespace MarkMpn.Sql4Cds.Engine
 
             return $"{count:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label} deleted";
         }
+
+        private OrganizationRequest CreateDeleteRequest(EntityMetadata meta, Entity entity)
+        {
+            // Special case messages for intersect entities
+            if (meta.LogicalName == "listmember")
+            {
+                var listId = entity.GetAliasedAttributeValue<EntityReference>(IdColumns[0]);
+                var entityId = entity.GetAliasedAttributeValue<EntityReference>(IdColumns[1]);
+
+                return new RemoveMemberListRequest { ListId = listId.Id, EntityId = entityId.Id };
+            }
+            else if (meta.IsIntersect == true)
+            {
+                var entity1Id = entity.GetAliasedAttributeValue<EntityReference>(IdColumns[0]);
+                var entity2Id = entity.GetAliasedAttributeValue<EntityReference>(IdColumns[1]);
+                var relationship = meta.ManyToManyRelationships.Single();
+
+                return new DisassociateRequest
+                {
+                    Target = entity1Id,
+                    RelatedEntities = new EntityReferenceCollection(new[] { entity2Id }),
+                    Relationship = new Relationship(relationship.SchemaName) { PrimaryEntityRole = EntityRole.Referencing }
+                };
+            }
+            else
+            {
+                var id = entity.GetAliasedAttributeValue<Guid>(IdColumns[0]);
+
+                return new DeleteRequest { Target = new EntityReference(EntityName, id) };
+            }
+        }
     }
 
-    /// <summary>
-    /// An INSERT query to add fixed values
-    /// </summary>
-    public class InsertValues : Query
+    public abstract class InsertQuery : Query
     {
         /// <summary>
         /// The logical name of the entity to add
@@ -719,61 +568,135 @@ namespace MarkMpn.Sql4Cds.Engine
         public string LogicalName { get; set; }
 
         /// <summary>
-        /// A list of records to insert
+        /// Returns a sequence of the entities to insert
         /// </summary>
-        public IDictionary<string, object>[] Values { get; set; }
+        /// <returns></returns>
+        protected abstract Entity[] GetValues(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options);
 
-        /// <inheritdoc/>
         protected override object ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
             var meta = metadata[LogicalName];
 
             // Add each record in turn
-            for (var i = 0; i < Values.Length && !options.Cancelled; i++)
+            var count = 0;
+            var entities = GetValues(org, metadata, options);
+
+            if (entities != null)
             {
-                var entity = new Entity(LogicalName);
+                foreach (var entity in entities)
+                {
+                    if (options.Cancelled)
+                        break;
 
-                foreach (var attr in Values[i])
-                    entity[attr.Key] = attr.Value;
+                    // Special cases for intersect entities
+                    if (LogicalName == "listmember")
+                    {
+                        var listId = entity.GetAttributeValue<EntityReference>("listid");
+                        var entityId = entity.GetAttributeValue<EntityReference>("entityid");
 
-                org.Create(entity);
+                        if (listId == null)
+                            throw new ApplicationException("listid is required");
 
-                options.Progress($"Inserted {i:N0} of {Values.Length:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label} ({(float)i / Values.Length:P0})");
+                        if (entityId == null)
+                            throw new ApplicationException("entityid is required");
+
+                        org.Execute(new AddMemberListRequest
+                        {
+                            ListId = listId.Id,
+                            EntityId = entityId.Id
+                        });
+                    }
+                    else if (meta.IsIntersect == true)
+                    {
+                        // For generic intersect entities we expect a single many-to-many relationship in the metadata which describes
+                        // the relationship that this is the intersect entity for
+                        var relationship = meta.ManyToManyRelationships.Single();
+
+                        var entity1 = entity.GetAttributeValue<EntityReference>(relationship.Entity1IntersectAttribute);
+                        var entity2 = entity.GetAttributeValue<EntityReference>(relationship.Entity2IntersectAttribute);
+
+                        if (entity1 == null)
+                            throw new ApplicationException($"{relationship.Entity1IntersectAttribute} is required");
+
+                        if (entity2 == null)
+                            throw new ApplicationException($"{relationship.Entity2IntersectAttribute} is required");
+
+                        org.Execute(new AssociateRequest
+                        {
+                            Target = entity1,
+                            Relationship = new Relationship(relationship.SchemaName) { PrimaryEntityRole = EntityRole.Referencing },
+                            RelatedEntities = new EntityReferenceCollection(new[] { entity2 })
+                        });
+                    }
+                    else
+                    {
+                        org.Create(entity);
+                    }
+
+                    count++;
+
+                    options.Progress($"Inserted {count:N0} of {entities.Length:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label} ({(float)count / entities.Length:P0})");
+                }
             }
 
-            return $"{Values.Length:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label} inserted";
+            return $"{entities.Length:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label} inserted";
+        }
+    }
+
+    /// <summary>
+    /// An INSERT query to add fixed values
+    /// </summary>
+    public class InsertValues : InsertQuery
+    {
+        /// <summary>
+        /// A list of records to insert
+        /// </summary>
+        public IDictionary<string, object>[] Values { get; set; }
+
+        protected override Entity[] GetValues(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        {
+            return Values
+                .Select(dictionary =>
+                {
+                    var entity = new Entity(LogicalName);
+
+                    foreach (var attr in dictionary)
+                        entity[attr.Key] = attr.Value;
+
+                    return entity;
+                })
+                .ToArray();
         }
     }
 
     /// <summary>
     /// An INSERT query to add records based on the results of a FetchXML query
     /// </summary>
-    public class InsertSelect : FetchXmlQuery
+    public class InsertSelect : InsertQuery
     {
         /// <summary>
-        /// The logical name of the entity to insert
+        /// The SELECT query that produces the values to insert
         /// </summary>
-        public string LogicalName { get; set; }
+        public SelectQuery Source { get; set; }
 
         /// <summary>
         /// The mappings of columns from the FetchXML results to the attributes of the entity to insert
         /// </summary>
         public IDictionary<string, string> Mappings { get; set; }
 
-        /// <inheritdoc/>
-        protected override object ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        protected override Entity[] GetValues(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
-            // Get all the records to insert
-            var count = 0;
-            var entities = RetrieveAll(org, metadata, options).Entities;
+            Source.Execute(org, metadata, options);
 
-            if (entities == null)
+            if (Source.Result is Exception ex)
+                throw ex;
+
+            if (!(Source.Result is EntityCollection entities))
                 return null;
 
-            var meta = metadata[LogicalName];
+            var converted = new List<Entity>(entities.Entities.Count);
 
-            // Insert each record in turn
-            foreach (var entity in entities)
+            foreach (var entity in entities.Entities)
             {
                 if (options.Cancelled)
                     break;
@@ -793,13 +716,10 @@ namespace MarkMpn.Sql4Cds.Engine
                     newEntity[attr.Value] = value;
                 }
 
-                org.Create(newEntity);
-
-                count++;
-                options.Progress($"Inserted {count:N0} of {entities.Count:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label} ({(float)count / entities.Count:P0})");
+                converted.Add(newEntity);
             }
 
-            return $"{count:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label} inserted";
+            return converted.ToArray();
         }
     }
 }

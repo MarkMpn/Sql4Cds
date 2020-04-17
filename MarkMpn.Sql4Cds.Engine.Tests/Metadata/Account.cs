@@ -1,6 +1,7 @@
 ﻿using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Client;
 using System;
+using System.Collections.Generic;
 
 namespace MarkMpn.Sql4Cds.Engine.Tests.Metadata
 {
@@ -15,5 +16,11 @@ namespace MarkMpn.Sql4Cds.Engine.Tests.Metadata
 
         [AttributeLogicalName("name")]
         public string Name { get; set; }
+
+        [AttributeLogicalName("createdon")]
+        public DateTime? CreatedOn { get; set; }
+
+        [RelationshipSchemaName("contact_account")]
+        public IEnumerable<Contact> Contacts { get; }
     }
 }

@@ -37,6 +37,7 @@
             this.tsbSave = new System.Windows.Forms.ToolStripButton();
             this.toolStripSeparator2 = new System.Windows.Forms.ToolStripSeparator();
             this.tsbExecute = new System.Windows.Forms.ToolStripButton();
+            this.tsbStop = new System.Windows.Forms.ToolStripButton();
             this.tsbPreviewFetchXml = new System.Windows.Forms.ToolStripButton();
             this.tssSeparator1 = new System.Windows.Forms.ToolStripSeparator();
             this.tsbFormat = new System.Windows.Forms.ToolStripButton();
@@ -45,7 +46,7 @@
             this.tsbClose = new System.Windows.Forms.ToolStripButton();
             this.tslAboutLink = new System.Windows.Forms.ToolStripLabel();
             this.dockPanel = new WeifenLuo.WinFormsUI.Docking.DockPanel();
-            this.tsbStop = new System.Windows.Forms.ToolStripButton();
+            this.progressBar = new System.Windows.Forms.ProgressBar();
             this.toolStripMenu.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -138,6 +139,17 @@
             this.tsbExecute.ToolTipText = "Execute Selected Query";
             this.tsbExecute.Click += new System.EventHandler(this.tsbExecute_Click);
             // 
+            // tsbStop
+            // 
+            this.tsbStop.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Image;
+            this.tsbStop.Enabled = false;
+            this.tsbStop.Image = ((System.Drawing.Image)(resources.GetObject("tsbStop.Image")));
+            this.tsbStop.ImageTransparentColor = System.Drawing.Color.Magenta;
+            this.tsbStop.Name = "tsbStop";
+            this.tsbStop.Size = new System.Drawing.Size(28, 28);
+            this.tsbStop.Text = "Stop";
+            this.tsbStop.Click += new System.EventHandler(this.tsbStop_Click);
+            // 
             // tsbPreviewFetchXml
             // 
             this.tsbPreviewFetchXml.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Image;
@@ -190,9 +202,10 @@
             // tslAboutLink
             // 
             this.tslAboutLink.Alignment = System.Windows.Forms.ToolStripItemAlignment.Right;
+            this.tslAboutLink.Image = global::MarkMpn.Sql4Cds.Properties.Resources.SQL4CDS_Icon_16;
             this.tslAboutLink.IsLink = true;
             this.tslAboutLink.Name = "tslAboutLink";
-            this.tslAboutLink.Size = new System.Drawing.Size(168, 28);
+            this.tslAboutLink.Size = new System.Drawing.Size(192, 28);
             this.tslAboutLink.Text = "SQL 4 CDS by Mark Carrington";
             this.tslAboutLink.Click += new System.EventHandler(this.tslAboutLink_Click);
             // 
@@ -206,21 +219,22 @@
             this.dockPanel.TabIndex = 5;
             this.dockPanel.ActiveDocumentChanged += new System.EventHandler(this.dockPanel_ActiveDocumentChanged);
             // 
-            // tsbStop
+            // progressBar
             // 
-            this.tsbStop.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Image;
-            this.tsbStop.Enabled = false;
-            this.tsbStop.Image = ((System.Drawing.Image)(resources.GetObject("tsbStop.Image")));
-            this.tsbStop.ImageTransparentColor = System.Drawing.Color.Magenta;
-            this.tsbStop.Name = "tsbStop";
-            this.tsbStop.Size = new System.Drawing.Size(28, 28);
-            this.tsbStop.Text = "Stop";
-            this.tsbStop.Click += new System.EventHandler(this.tsbStop_Click);
+            this.progressBar.Dock = System.Windows.Forms.DockStyle.Bottom;
+            this.progressBar.Enabled = false;
+            this.progressBar.ForeColor = System.Drawing.Color.Lime;
+            this.progressBar.Location = new System.Drawing.Point(0, 493);
+            this.progressBar.MarqueeAnimationSpeed = 10;
+            this.progressBar.Name = "progressBar";
+            this.progressBar.Size = new System.Drawing.Size(861, 10);
+            this.progressBar.TabIndex = 6;
             // 
             // PluginControl
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
+            this.Controls.Add(this.progressBar);
             this.Controls.Add(this.dockPanel);
             this.Controls.Add(this.toolStripMenu);
             this.Margin = new System.Windows.Forms.Padding(2, 3, 2, 3);
@@ -252,5 +266,6 @@
         private System.Windows.Forms.ToolStripButton tsbSave;
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator2;
         private System.Windows.Forms.ToolStripButton tsbStop;
+        private System.Windows.Forms.ProgressBar progressBar;
     }
 }

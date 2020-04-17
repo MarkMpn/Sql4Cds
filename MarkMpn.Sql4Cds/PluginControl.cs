@@ -1,39 +1,39 @@
 ﻿using System;
-using System.Drawing;
-using System.Data;
-using System.Linq;
-using System.Windows.Forms;
-using XrmToolBox.Extensibility;
-using McTools.Xrm.Connection;
-using Microsoft.Xrm.Sdk.Messages;
-using System.Collections.Specialized;
-using Microsoft.Xrm.Sdk.Metadata;
-using Microsoft.Xrm.Sdk;
-using System.Diagnostics;
-using XrmToolBox.Extensibility.Interfaces;
-using System.Xml;
-using System.IO;
-using System.Xml.Serialization;
 using System.Collections.Generic;
-using Microsoft.ApplicationInsights;
+using System.Collections.Specialized;
+using System.Diagnostics;
+using System.IO;
+using System.Threading;
+using System.Windows.Forms;
+using System.Xml.Serialization;
 using MarkMpn.Sql4Cds.Engine;
+using McTools.Xrm.Connection;
+using Microsoft.ApplicationInsights;
+using WeifenLuo.WinFormsUI.Docking;
+using XrmToolBox.Extensibility;
+using XrmToolBox.Extensibility.Interfaces;
 
 namespace MarkMpn.Sql4Cds
 {
     public partial class PluginControl : MultipleConnectionsPluginControlBase, IMessageBusHost, IGitHubPlugin, IHelpPlugin
     {
-        private readonly IDictionary<ConnectionDetail, IAttributeMetadataCache> _metadata;
+        private readonly IDictionary<ConnectionDetail, AttributeMetadataCache> _metadata;
         private readonly TelemetryClient _ai;
-        private ObjectExplorer _objectExplorer;
+        private readonly ObjectExplorer _objectExplorer;
+        private int _metadataLoadingTasks;
 
         public PluginControl()
         {
             InitializeComponent();
-            _metadata = new Dictionary<ConnectionDetail, IAttributeMetadataCache>();
+            dockPanel.Theme = new VS2015LightTheme();
+            _metadata = new Dictionary<ConnectionDetail, AttributeMetadataCache>();
             _objectExplorer = new ObjectExplorer(_metadata, WorkAsync);
-            _objectExplorer.Show(dockPanel, WeifenLuo.WinFormsUI.Docking.DockState.DockLeft);
+            _objectExplorer.Show(dockPanel, DockState.DockLeft);
             _objectExplorer.CloseButtonVisible = false;
             _ai = new TelemetryClient(new Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration("79761278-a908-4575-afbf-2f4d82560da6"));
+
+            TabIcon = Properties.Resources.SQL4CDS_Icon_16;
+            PluginIcon = System.Drawing.Icon.FromHandle(Properties.Resources.SQL4CDS_Icon_16.GetHicon());
         }
 
         protected override void OnConnectionUpdated(ConnectionUpdatedEventArgs e)
@@ -59,6 +59,29 @@ namespace MarkMpn.Sql4Cds
         {
             _metadata[con] = new AttributeMetadataCache(con.ServiceClient);
             _objectExplorer.AddConnection(con);
+
+            // Start loading the entity list in the background
+            EntityCache.TryGetEntities(con.ServiceClient, out _);
+
+            _metadata[con].MetadataLoading += MetadataLoading;
+            //_metadata[con].LoadAllAsync();
+        }
+
+        private void MetadataLoading(object sender, MetadataLoadingEventArgs e)
+        {
+            if (Interlocked.Increment(ref _metadataLoadingTasks) == 1)
+                progressBar.Style = ProgressBarStyle.Marquee;
+
+            e.Task.ContinueWith(t =>
+            {
+                if (Interlocked.Decrement(ref _metadataLoadingTasks) == 0)
+                {
+                    if (InvokeRequired)
+                        Invoke((Action)(() => { progressBar.Style = ProgressBarStyle.Blocks; }));
+                    else
+                        progressBar.Style = ProgressBarStyle.Blocks;
+                }
+            });
         }
 
         private void PluginControl_Load(object sender, EventArgs e)
@@ -129,13 +152,21 @@ namespace MarkMpn.Sql4Cds
                 MessageWidth = info.MessageWidth,
                 PostWorkCallBack = (args) =>
                 {
-                    tsbStop.Enabled = false;
+                    if (InvokeRequired)
+                        Invoke((Action) (() => { tsbStop.Enabled = false; }));
+                    else
+                        tsbStop.Enabled = false;
+
                     info.PostWorkCallBack(args);
                 },
                 ProgressChanged = info.ProgressChanged,
                 Work = (worker, args) =>
                 {
-                    tsbStop.Enabled = true;
+                    if (InvokeRequired)
+                        Invoke((Action)(() => { tsbStop.Enabled = true; }));
+                    else
+                        tsbStop.Enabled = true;
+
                     info.Work(worker, args);
                 }
             });

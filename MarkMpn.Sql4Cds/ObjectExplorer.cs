@@ -1,23 +1,20 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Drawing;
 using System.Data;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Forms;
-using Microsoft.Xrm.Sdk.Metadata;
-using Microsoft.Xrm.Sdk.Messages;
-using McTools.Xrm.Connection;
-using XrmToolBox.Extensibility;
 using MarkMpn.Sql4Cds.Engine;
+using McTools.Xrm.Connection;
+using Microsoft.Xrm.Sdk.Messages;
+using Microsoft.Xrm.Sdk.Metadata;
+using XrmToolBox.Extensibility;
 
 namespace MarkMpn.Sql4Cds
 {
     public partial class ObjectExplorer : WeifenLuo.WinFormsUI.Docking.DockContent
     {
-        private readonly IDictionary<ConnectionDetail, IAttributeMetadataCache> _metadata;
+        private readonly IDictionary<ConnectionDetail, AttributeMetadataCache> _metadata;
 
         class LoaderParam
         {
@@ -25,7 +22,7 @@ namespace MarkMpn.Sql4Cds
             public TreeNode Parent;
         }
 
-        public ObjectExplorer(IDictionary<ConnectionDetail, IAttributeMetadataCache> metadata, Action<WorkAsyncInfo> workAsync)
+        public ObjectExplorer(IDictionary<ConnectionDetail, AttributeMetadataCache> metadata, Action<WorkAsyncInfo> workAsync)
         {
             InitializeComponent();
 
@@ -63,14 +60,16 @@ namespace MarkMpn.Sql4Cds
             node.SelectedImageKey = imageKey;
         }
 
+        public IEnumerable<Image> GetImages()
+        {
+            return imageList.Images.OfType<Image>();
+        }
+
         private TreeNode[] LoadEntities(TreeNode parent)
         {
-            var metadata = (RetrieveAllEntitiesResponse)GetService(parent).ServiceClient.Execute(new RetrieveAllEntitiesRequest
-            {
-                EntityFilters = EntityFilters.Entity
-            });
+            var metadata = EntityCache.GetEntities(GetService(parent).ServiceClient);
 
-            return metadata.EntityMetadata
+            return metadata
                 .OrderBy(e => e.LogicalName)
                 .Select(e =>
                 {
