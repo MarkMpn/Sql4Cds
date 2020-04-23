@@ -2373,13 +2373,14 @@ namespace MarkMpn.Sql4Cds.Engine
                 // Create a new sub-filter to handle the contents of brackets, but we won't know the logical operator type to apply until
                 // we encounter the first AND or OR within it
                 var subFilter = new filter { type = (filterType)2 };
-                criteria.Items = AddItem(criteria.Items, subFilter);
-                criteria = subFilter;
 
-                HandleFilterFetchXml(paren.Expression, criteria, tables, targetTable, computedColumns, where, inOr, ref col1, ref col2, ref postFilter, param);
+                HandleFilterFetchXml(paren.Expression, subFilter, tables, targetTable, computedColumns, where, inOr, ref col1, ref col2, ref postFilter, param);
 
                 if (subFilter.type == (filterType)2)
                     subFilter.type = filterType.and;
+
+                criteria.Items = AddItem(criteria.Items, subFilter);
+                criteria = subFilter;
             }
             else if (searchCondition is BooleanIsNullExpression isNull)
             {
