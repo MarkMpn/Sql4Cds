@@ -58,6 +58,7 @@
             this.label10 = new System.Windows.Forms.Label();
             this.groupBox3 = new System.Windows.Forms.GroupBox();
             this.quotedIdentifiersCheckbox = new System.Windows.Forms.CheckBox();
+            this.tsqlEndpointCheckBox = new System.Windows.Forms.CheckBox();
             this.topPanel.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox)).BeginInit();
             this.panel2.SuspendLayout();
@@ -111,7 +112,7 @@
             this.panel2.Controls.Add(this.cancelButton);
             this.panel2.Controls.Add(this.okButton);
             this.panel2.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.panel2.Location = new System.Drawing.Point(0, 419);
+            this.panel2.Location = new System.Drawing.Point(0, 442);
             this.panel2.Margin = new System.Windows.Forms.Padding(2);
             this.panel2.Name = "panel2";
             this.panel2.Size = new System.Drawing.Size(400, 45);
@@ -299,6 +300,7 @@
             // 
             // groupBox1
             // 
+            this.groupBox1.Controls.Add(this.tsqlEndpointCheckBox);
             this.groupBox1.Controls.Add(this.label2);
             this.groupBox1.Controls.Add(this.label8);
             this.groupBox1.Controls.Add(this.selectLimitUpDown);
@@ -318,7 +320,7 @@
             this.groupBox1.Margin = new System.Windows.Forms.Padding(2);
             this.groupBox1.Name = "groupBox1";
             this.groupBox1.Padding = new System.Windows.Forms.Padding(2);
-            this.groupBox1.Size = new System.Drawing.Size(382, 197);
+            this.groupBox1.Size = new System.Drawing.Size(382, 223);
             this.groupBox1.TabIndex = 16;
             this.groupBox1.TabStop = false;
             this.groupBox1.Text = "Query Execution";
@@ -329,7 +331,7 @@
             this.groupBox2.Controls.Add(this.label11);
             this.groupBox2.Controls.Add(this.friendlyNamesComboBox);
             this.groupBox2.Controls.Add(this.label10);
-            this.groupBox2.Location = new System.Drawing.Point(11, 340);
+            this.groupBox2.Location = new System.Drawing.Point(11, 361);
             this.groupBox2.Margin = new System.Windows.Forms.Padding(2);
             this.groupBox2.Name = "groupBox2";
             this.groupBox2.Padding = new System.Windows.Forms.Padding(2);
@@ -404,13 +406,23 @@
             this.quotedIdentifiersCheckbox.Text = "Quoted Identifiers";
             this.quotedIdentifiersCheckbox.UseVisualStyleBackColor = true;
             // 
+            // tsqlEndpointCheckBox
+            // 
+            this.tsqlEndpointCheckBox.AutoSize = true;
+            this.tsqlEndpointCheckBox.Location = new System.Drawing.Point(12, 193);
+            this.tsqlEndpointCheckBox.Name = "tsqlEndpointCheckBox";
+            this.tsqlEndpointCheckBox.Size = new System.Drawing.Size(244, 17);
+            this.tsqlEndpointCheckBox.TabIndex = 16;
+            this.tsqlEndpointCheckBox.Text = "Use T-SQL Endpoint where possible (Preview)";
+            this.tsqlEndpointCheckBox.UseVisualStyleBackColor = true;
+            // 
             // SettingsForm
             // 
             this.AcceptButton = this.okButton;
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.CancelButton = this.cancelButton;
-            this.ClientSize = new System.Drawing.Size(400, 464);
+            this.ClientSize = new System.Drawing.Size(400, 487);
             this.Controls.Add(this.groupBox3);
             this.Controls.Add(this.groupBox2);
             this.Controls.Add(this.groupBox1);
@@ -474,5 +486,6 @@
         private System.Windows.Forms.Label label11;
         private System.Windows.Forms.GroupBox groupBox3;
         private System.Windows.Forms.CheckBox quotedIdentifiersCheckbox;
+        private System.Windows.Forms.CheckBox tsqlEndpointCheckBox;
     }
 }

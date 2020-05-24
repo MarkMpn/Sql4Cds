@@ -35,5 +35,7 @@ namespace MarkMpn.Sql4Cds
         public bool ShowLocalTimes { get; set; }
 
         public bool QuotedIdentifiers { get; set; } = true;
+
+        public bool UseTSQLEndpoint { get; set; }
     }
 }

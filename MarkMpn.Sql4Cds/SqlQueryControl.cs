@@ -13,6 +13,7 @@ using McTools.Xrm.Connection;
 using Microsoft.ApplicationInsights;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Tooling.Connector;
 using ScintillaNET;
 using xrmtb.XrmToolBox.Controls;
 using XrmToolBox.Extensibility;
@@ -327,7 +328,14 @@ namespace MarkMpn.Sql4Cds
                 IsCancelable = execute,
                 Work = (worker, args) =>
                 {
-                    var queries = new Sql2FetchXml(Metadata, Settings.Instance.QuotedIdentifiers).Convert(sql);
+                    var converter = new Sql2FetchXml(Metadata, Settings.Instance.QuotedIdentifiers);
+
+                    if (Settings.Instance.UseTSQLEndpoint &&
+                        execute &&
+                        !String.IsNullOrEmpty(((CrmServiceClient)Service).CurrentAccessToken))
+                        converter.TSqlEndpointAvailable = true;
+
+                    var queries = converter.Convert(sql);
 
                     if (execute)
                     {
@@ -378,9 +386,12 @@ namespace MarkMpn.Sql4Cds
                         {
                             Control display = null;
 
-                            if (query.Result is EntityCollection queryResults)
+                            if (query.Result is EntityCollection || query.Result is DataTable)
                             {
-                                var grid = new CRMGridView();
+                                var entityCollection = query.Result as EntityCollection;
+                                var dataTable = query.Result as DataTable;
+
+                                var grid = entityCollection != null ? new CRMGridView() : new DataGridView();
 
                                 grid.AllowUserToAddRows = false;
                                 grid.AllowUserToDeleteRows = false;
@@ -394,50 +405,59 @@ namespace MarkMpn.Sql4Cds
                                 grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
                                 grid.Dock = DockStyle.Fill;
                                 grid.EnableHeadersVisualStyles = false;
-                                grid.EntityReferenceClickable = true;
-                                grid.OrganizationService = Service;
                                 grid.ReadOnly = true;
                                 grid.RowHeadersWidth = 24;
                                 grid.ShowEditingIcon = false;
-                                grid.ShowFriendlyNames = Settings.Instance.ShowEntityReferenceNames;
-                                grid.ShowIdColumn = false;
-                                grid.ShowIndexColumn = false;
-                                grid.ShowLocalTimes = Settings.Instance.ShowLocalTimes;
                                 grid.ContextMenuStrip = gridContextMenuStrip;
-                                grid.RecordClick += Grid_RecordClick;
-                                grid.CellMouseUp += Grid_CellMouseUp;
 
-                                if (query is SelectQuery select)
+                                if (entityCollection != null)
                                 {
-                                    foreach (var col in select.ColumnSet)
+                                    var crmGrid = (CRMGridView) grid;
+
+                                    crmGrid.EntityReferenceClickable = true;
+                                    crmGrid.OrganizationService = Service;
+                                    crmGrid.ShowFriendlyNames = Settings.Instance.ShowEntityReferenceNames;
+                                    crmGrid.ShowIdColumn = false;
+                                    crmGrid.ShowIndexColumn = false;
+                                    crmGrid.ShowLocalTimes = Settings.Instance.ShowLocalTimes;
+                                    crmGrid.RecordClick += Grid_RecordClick;
+                                    crmGrid.CellMouseUp += Grid_CellMouseUp;
+
+                                    if (query is SelectQuery select)
                                     {
-                                        var colName = col;
-
-                                        if (grid.Columns.Contains(col))
+                                        foreach (var col in select.ColumnSet)
                                         {
-                                            var suffix = 1;
-                                            while (grid.Columns.Contains($"{col}_{suffix}"))
-                                                suffix++;
+                                            var colName = col;
 
-                                            var newCol = $"{col}_{suffix}";
-
-                                            foreach (var entity in queryResults.Entities)
+                                            if (grid.Columns.Contains(col))
                                             {
-                                                if (entity.Contains(col))
-                                                    entity[newCol] = entity[col];
+                                                var suffix = 1;
+                                                while (grid.Columns.Contains($"{col}_{suffix}"))
+                                                    suffix++;
+
+                                                var newCol = $"{col}_{suffix}";
+
+                                                foreach (var entity in entityCollection.Entities)
+                                                {
+                                                    if (entity.Contains(col))
+                                                        entity[newCol] = entity[col];
+                                                }
+
+                                                colName = newCol;
                                             }
 
-                                            colName = newCol;
+                                            grid.Columns.Add(colName, colName);
+                                            grid.Columns[colName].FillWeight = 1;
                                         }
-
-                                        grid.Columns.Add(colName, colName);
-                                        grid.Columns[colName].FillWeight = 1;
                                     }
                                 }
 
                                 grid.HandleCreated += (s, e) =>
                                 {
-                                    grid.DataSource = queryResults;
+                                    if (grid is CRMGridView crmGrid)
+                                        crmGrid.DataSource = query.Result;
+                                    else
+                                        grid.DataSource = query.Result;
                                 };
 
                                 grid.RowPostPaint += (s, e) =>
@@ -460,7 +480,12 @@ namespace MarkMpn.Sql4Cds
                                 panel.Controls.Add(grid);
 
                                 var statusBar = new StatusBar();
-                                statusBar.Text = $"{queryResults.Entities.Count:N0} record(s) returned";
+
+                                if (entityCollection != null)
+                                    statusBar.Text = $"{entityCollection.Entities.Count:N0} record(s) returned";
+                                else
+                                    statusBar.Text = $"{dataTable.Rows.Count:N0} record(s) returned (using T-SQL Endpoint)";
+
                                 statusBar.SizingGrip = false;
                                 panel.Controls.Add(statusBar);
                                 display = panel;
@@ -480,7 +505,7 @@ namespace MarkMpn.Sql4Cds
                                 display = msgDisplay;
                             }
 
-                            if (query is FetchXmlQuery fxq)
+                            if (query is FetchXmlQuery fxq && fxq.FetchXml != null)
                             {
                                 var xmlDisplay = CreateXmlEditor();
                                 xmlDisplay.Text = fxq.FetchXmlString;

@@ -28,6 +28,7 @@ namespace MarkMpn.Sql4Cds
             bulkDeleteCheckbox.Checked = settings.UseBulkDelete;
             friendlyNamesComboBox.SelectedIndex = settings.ShowEntityReferenceNames ? 1 : 0;
             localTimesComboBox.SelectedIndex = settings.ShowLocalTimes ? 1 : 0;
+            tsqlEndpointCheckBox.Checked = settings.UseTSQLEndpoint;
 
             _settings = settings;
         }
@@ -48,6 +49,7 @@ namespace MarkMpn.Sql4Cds
                 _settings.UseBulkDelete = bulkDeleteCheckbox.Checked;
                 _settings.ShowEntityReferenceNames = friendlyNamesComboBox.SelectedIndex == 1;
                 _settings.ShowLocalTimes = localTimesComboBox.SelectedIndex == 1;
+                _settings.UseTSQLEndpoint = tsqlEndpointCheckBox.Checked;
             }
         }
     }

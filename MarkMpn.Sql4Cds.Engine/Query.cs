@@ -5,10 +5,14 @@ using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
+using Microsoft.Xrm.Tooling.Connector;
 using System;
 using System.Collections.Generic;
+using System.Data;
+using System.Data.SqlClient;
 using System.IO;
 using System.Linq;
+using System.Xml;
 using System.Xml.Serialization;
 
 namespace MarkMpn.Sql4Cds.Engine
@@ -22,6 +26,11 @@ namespace MarkMpn.Sql4Cds.Engine
     /// </remarks>
     public abstract class Query
     {
+        /// <summary>
+        /// The original SQL that the query was created from
+        /// </summary>
+        public string Sql { get; set; }
+
         /// <summary>
         /// Executes the query
         /// </summary>
@@ -242,8 +251,58 @@ namespace MarkMpn.Sql4Cds.Engine
             if (RetrieveTotalRecordCount(org, metadata, out var result))
                 return result;
 
+            // Run the raw SQL query against the T-SQL endpoint
+            if (ExecuteTSQL(org, options, out var dataTable))
+                return dataTable;
+
             // Execute the FetchXML
             return RetrieveAll(org, metadata, options);
+        }
+
+        /// <summary>
+        /// Run the raw SQL query against the T-SQL endpoint
+        /// </summary>
+        /// <param name="org">The <see cref="IOrganizationService"/> to execute the query against</param>
+        /// <param name="options">The options that indicate if the T-SQL endpoint should be used</param>
+        /// <param name="result">The results of running the query</param>
+        /// <returns><c>true</c> if this method has executed the query, or <c>false otherwise</c></returns>
+        private bool ExecuteTSQL(IOrganizationService org, IQueryExecutionOptions options, out DataTable result)
+        {
+            result = null;
+
+            if (String.IsNullOrEmpty(Sql))
+                return false;
+
+            if (!options.UseTSQLEndpoint)
+                return false;
+
+            if (!(org is CrmServiceClient svc))
+                return false;
+
+            if (String.IsNullOrEmpty(svc.CurrentAccessToken))
+                return false;
+
+            if (!TSqlEndpoint.IsEnabled(svc))
+                return false;
+
+            using (var con = new SqlConnection("server=" + svc.CrmConnectOrgUriActual.Host + ",5558"))
+            {
+                con.AccessToken = svc.CurrentAccessToken;
+                con.Open();
+
+                using (var cmd = con.CreateCommand())
+                {
+                    cmd.CommandText = Sql;
+                    result = new DataTable();
+
+                    using (var adapter = new SqlDataAdapter(cmd))
+                    {
+                        adapter.Fill(result);
+                    }
+
+                    return true;
+                }
+            }
         }
 
         /// <summary>
@@ -255,6 +314,12 @@ namespace MarkMpn.Sql4Cds.Engine
         private bool RetrieveTotalRecordCount(IOrganizationService org, IAttributeMetadataCache metadata, out EntityCollection result)
         {
             result = null;
+
+            if (FetchXml == null)
+                return false;
+
+            if (Extensions.Count > 0)
+                return false;
 
             // Special case - SELECT count(primaryid) with no filter
             if (!FetchXml.aggregate)

@@ -50,7 +50,7 @@ namespace MarkMpn.Sql4Cds
             Assembly currAssembly = Assembly.GetExecutingAssembly();
 
             // base name of the assembly that failed to resolve
-            var argName = args.Name.Substring(0, args.Name.IndexOf(","));
+            var argName = args.Name.Split(',')[0];
 
             // check to see if the failing assembly is one that we reference.
             List<AssemblyName> refAssemblies = currAssembly.GetReferencedAssemblies().ToList();

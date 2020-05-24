@@ -96,6 +96,37 @@ namespace MarkMpn.Sql4Cds
             SetIcon(entitiesNode, "Folder");
             AddVirtualChildNodes(entitiesNode, LoadEntities);
             treeView.SelectedNode = conNode;
+
+            if (new Uri(con.OrganizationServiceUrl).Host.EndsWith(".dynamics.com") &&
+                new Version(con.OrganizationVersion) >= new Version("9.1.0.17437"))
+            {
+                var tsqlNode = conNode.Nodes.Add("T-SQL Endpoint");
+
+                if (TSqlEndpoint.IsEnabled(con.ServiceClient))
+                {
+                    if (!String.IsNullOrEmpty(con.ServiceClient.CurrentAccessToken))
+                    {
+                        tsqlNode.ImageIndex = 21;
+                        tsqlNode.SelectedImageIndex = 21;
+                    }
+                    else
+                    {
+                        tsqlNode.Text += " (Unavailable - OAuth authentication required)";
+                        tsqlNode.ImageIndex = 22;
+                        tsqlNode.SelectedImageIndex = 22;
+                    }
+                }
+                else
+                {
+                    tsqlNode.Text += " (Disabled)";
+                    tsqlNode.ImageIndex = 20;
+                    tsqlNode.SelectedImageIndex = 20;
+                }
+
+                tsqlNode.ContextMenuStrip = contextMenuStrip;
+            }
+
+            conNode.Expand();
         }
 
         private TreeNode[] LoadAttributes(TreeNode parent)
@@ -293,6 +324,56 @@ INNER JOIN {manyToMany.Entity2LogicalName}
             else
             {
                 query.InsertText(e.Node.Text);
+            }
+        }
+
+        private void contextMenuStrip_Opening(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            enableTSQLToolStripMenuItem.Enabled = treeView.SelectedNode.ImageIndex == 20;
+            disableTSQLToolStripMenuItem.Enabled = treeView.SelectedNode.ImageIndex != 20;
+        }
+
+        private void enableTSQLToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var con = GetService(treeView.SelectedNode);
+
+            try
+            {
+                TSqlEndpoint.Enable(con.ServiceClient);
+                treeView.SelectedNode.Text = "T-SQL Endpoint";
+
+                if (!String.IsNullOrEmpty(con.ServiceClient.CurrentAccessToken))
+                {
+                    treeView.SelectedNode.ImageIndex = 21;
+                    treeView.SelectedNode.SelectedImageIndex = 21;
+                }
+                else
+                {
+                    treeView.SelectedNode.ImageIndex = 21;
+                    treeView.SelectedNode.SelectedImageIndex = 21;
+                    treeView.SelectedNode.Text += " (Unavailable - OAuth authentication required)";
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Error enabling T-SQL Endpoint:\r\n\r\n" + ex.Message);
+            }
+        }
+
+        private void disableTSQLToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var con = GetService(treeView.SelectedNode);
+
+            try
+            {
+                TSqlEndpoint.Disable(con.ServiceClient);
+                treeView.SelectedNode.ImageIndex = 20;
+                treeView.SelectedNode.SelectedImageIndex = 20;
+                treeView.SelectedNode.Text = "T-SQL Endpoint (Disabled)";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Error enabling T-SQL Endpoint:\r\n\r\n" + ex.Message);
             }
         }
     }

@@ -23,6 +23,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         int IQueryExecutionOptions.BatchSize => 1;
 
+        bool IQueryExecutionOptions.UseTSQLEndpoint => false;
+
         [TestMethod]
         public void SimpleSelect()
         {

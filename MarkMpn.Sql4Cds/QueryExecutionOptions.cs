@@ -59,5 +59,7 @@ namespace MarkMpn.Sql4Cds
         }
 
         public int BatchSize => Settings.Instance.BatchSize;
+
+        public bool UseTSQLEndpoint => Settings.Instance.UseTSQLEndpoint;
     }
 }

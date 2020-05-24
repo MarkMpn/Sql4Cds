@@ -32,6 +32,10 @@
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(ObjectExplorer));
             this.treeView = new System.Windows.Forms.TreeView();
             this.imageList = new System.Windows.Forms.ImageList(this.components);
+            this.contextMenuStrip = new System.Windows.Forms.ContextMenuStrip(this.components);
+            this.enableTSQLToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.disableTSQLToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.contextMenuStrip.SuspendLayout();
             this.SuspendLayout();
             // 
             // treeView
@@ -72,6 +76,32 @@
             this.imageList.Images.SetKeyName(17, "ManyToMany");
             this.imageList.Images.SetKeyName(18, "ManyToOne");
             this.imageList.Images.SetKeyName(19, "OneToMany");
+            this.imageList.Images.SetKeyName(20, "DatabaseStop_16x.png");
+            this.imageList.Images.SetKeyName(21, "DatabaseRun_16x.png");
+            this.imageList.Images.SetKeyName(22, "DatabaseWarning_16x.png");
+            // 
+            // contextMenuStrip
+            // 
+            this.contextMenuStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.enableTSQLToolStripMenuItem,
+            this.disableTSQLToolStripMenuItem});
+            this.contextMenuStrip.Name = "contextMenuStrip";
+            this.contextMenuStrip.Size = new System.Drawing.Size(113, 48);
+            this.contextMenuStrip.Opening += new System.ComponentModel.CancelEventHandler(this.contextMenuStrip_Opening);
+            // 
+            // enableTSQLToolStripMenuItem
+            // 
+            this.enableTSQLToolStripMenuItem.Name = "enableTSQLToolStripMenuItem";
+            this.enableTSQLToolStripMenuItem.Size = new System.Drawing.Size(112, 22);
+            this.enableTSQLToolStripMenuItem.Text = "Enable";
+            this.enableTSQLToolStripMenuItem.Click += new System.EventHandler(this.enableTSQLToolStripMenuItem_Click);
+            // 
+            // disableTSQLToolStripMenuItem
+            // 
+            this.disableTSQLToolStripMenuItem.Name = "disableTSQLToolStripMenuItem";
+            this.disableTSQLToolStripMenuItem.Size = new System.Drawing.Size(112, 22);
+            this.disableTSQLToolStripMenuItem.Text = "Disable";
+            this.disableTSQLToolStripMenuItem.Click += new System.EventHandler(this.disableTSQLToolStripMenuItem_Click);
             // 
             // ObjectExplorer
             // 
@@ -81,6 +111,7 @@
             this.Controls.Add(this.treeView);
             this.Name = "ObjectExplorer";
             this.Text = "Object Explorer";
+            this.contextMenuStrip.ResumeLayout(false);
             this.ResumeLayout(false);
 
         }
@@ -89,5 +120,8 @@
 
         private System.Windows.Forms.TreeView treeView;
         private System.Windows.Forms.ImageList imageList;
+        private System.Windows.Forms.ContextMenuStrip contextMenuStrip;
+        private System.Windows.Forms.ToolStripMenuItem enableTSQLToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem disableTSQLToolStripMenuItem;
     }
 }

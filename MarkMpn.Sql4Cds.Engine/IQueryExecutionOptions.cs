@@ -60,5 +60,10 @@ namespace MarkMpn.Sql4Cds.Engine
         /// The number of records that should be inserted, updated or deleted in a single batch
         /// </summary>
         int BatchSize { get; }
+
+        /// <summary>
+        /// Indicates if the T-SQL Endpoint should be used for query execution where possible
+        /// </summary>
+        bool UseTSQLEndpoint { get; }
     }
 }

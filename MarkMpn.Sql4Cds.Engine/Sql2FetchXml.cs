@@ -177,6 +177,11 @@ namespace MarkMpn.Sql4Cds.Engine
         public bool QuotedIdentifiers { get; set; }
 
         /// <summary>
+        /// Indicates if the CDS T-SQL endpoint can be used as a fallback if a query cannot be converted to FetchXML
+        /// </summary>
+        public bool TSqlEndpointAvailable { get; set; }
+
+        /// <summary>
         /// Parses a SQL batch and returns the queries identified in it
         /// </summary>
         /// <param name="sql">The SQL batch to parse</param>
@@ -207,16 +212,21 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 foreach (var statement in batch.Statements)
                 {
+                    Query query;
+
                     if (statement is SelectStatement select)
-                        queries.Add(ConvertSelectStatement(select, false));
+                        query = ConvertSelectStatement(select, false);
                     else if (statement is UpdateStatement update)
-                        queries.Add(ConvertUpdateStatement(update));
+                        query = ConvertUpdateStatement(update);
                     else if (statement is DeleteStatement delete)
-                        queries.Add(ConvertDeleteStatement(delete));
+                        query = ConvertDeleteStatement(delete);
                     else if (statement is InsertStatement insert)
-                        queries.Add(ConvertInsertStatement(insert));
+                        query = ConvertInsertStatement(insert);
                     else
                         throw new NotSupportedQueryFragmentException("Unsupported statement", statement);
+
+                    query.Sql = statement.ToSql();
+                    queries.Add(query);
                 }
             }
 
@@ -1026,91 +1036,105 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <returns>The equivalent query converted for execution against CDS</returns>
         private SelectQuery ConvertSelectStatement(SelectStatement select, bool forceAggregateExpression)
         {
-            // Check for any DOM elements that don't have an equivalent in CDS
-            if (!(select.QueryExpression is QuerySpecification querySpec))
-                throw new NotSupportedQueryFragmentException("Unhandled SELECT query expression", select.QueryExpression);
-
-            if (select.ComputeClauses.Count != 0)
-                throw new NotSupportedQueryFragmentException("Unhandled SELECT compute clause", select);
-
-            if (select.Into != null)
-                throw new NotSupportedQueryFragmentException("Unhandled SELECT INTO clause", select.Into);
-
-            if (select.On != null)
-                throw new NotSupportedQueryFragmentException("Unhandled SELECT ON clause", select.On);
-
-            if (select.OptimizerHints.Count != 0)
-                throw new NotSupportedQueryFragmentException("Unhandled SELECT optimizer hints", select);
-
-            if (select.WithCtesAndXmlNamespaces != null)
-                throw new NotSupportedQueryFragmentException("Unhandled SELECT WITH clause", select.WithCtesAndXmlNamespaces);
-
-            if (querySpec.ForClause != null)
-                throw new NotSupportedQueryFragmentException("Unhandled SELECT FOR clause", querySpec.ForClause);
-
-            if (querySpec.FromClause == null)
-                throw new NotSupportedQueryFragmentException("No source entity specified", querySpec);
-
-            // Store the original SQL again now so we can re-parse it if required to generate an alternative query
-            // to handle aggregates via an expression rather than FetchXML.
-            var sql = select.ToSql();
-
-            // Convert the query from the "inside out":
-            // 1. FROM clause gives the data source for everything else
-            // 2. WHERE clause filters the initial result set
-            // 3. GROUP BY changes the schema of the data source after filtering
-            // 4. HAVING clause filters the result set after grouping
-            // 5. SELECT clause defines the final columns to include in the results
-            // 6. DISTINCT clause checks for unique-ness across the columns in the SELECT clause
-            // 7. ORDER BY clause sequences the results
-            // 8. OFFSET / TOP clauses skips rows in the final results
-
-            // At each point, convert as much of the query as possible to FetchXML. Anything that can't be converted
-            // directly should be handled in-memory using an expression. If any previous step has generated an expression,
-            // all later steps must use expressions only as the FetchXML results will be incomplete.
-            var extensions = new List<IQueryExtension>();
-
-            var fetch = new FetchXml.FetchType();
-            var tables = HandleFromClause(querySpec.FromClause, fetch);
-            HandleWhereClause(querySpec.WhereClause, tables, extensions);
-            var computedColumns = HandleGroupByClause(querySpec, fetch, tables, extensions, forceAggregateExpression) ?? new Dictionary<string,Type>();
-            var columns = HandleSelectClause(querySpec, fetch, tables, computedColumns, extensions);
-            HandleDistinctClause(querySpec, fetch, extensions);
-            HandleOrderByClause(querySpec, fetch, tables, columns, computedColumns, extensions);
-            HandleHavingClause(querySpec, computedColumns, extensions);
-            HandleOffsetClause(querySpec, fetch, extensions);
-            HandleTopClause(querySpec.TopRowFilter, fetch, extensions);
-
-            // Sort the elements in the query so they're in the order users expect based on online samples
-            foreach (var table in tables)
-                table.Sort();
-            
-            // Return the final query
-            var query = new SelectQuery
+            try
             {
-                FetchXml = fetch,
-                ColumnSet = columns,
-                AllPages = fetch.page == null && fetch.count == null
-            };
+                // Check for any DOM elements that don't have an equivalent in CDS
+                if (!(select.QueryExpression is QuerySpecification querySpec))
+                    throw new NotSupportedQueryFragmentException("Unhandled SELECT query expression", select.QueryExpression);
 
-            foreach (var extension in extensions)
-                query.Extensions.Add(extension);
+                if (select.ComputeClauses.Count != 0)
+                    throw new NotSupportedQueryFragmentException("Unhandled SELECT compute clause", select);
 
-            if (fetch.aggregateSpecified && fetch.aggregate)
-            {
-                // We've generated a FetchXML aggregate query. These can generate errors when there are a lot of source records involved in the query,
-                // so convert the query again, this time processing the aggregates via expressions.
-                // We'll have changed the SQL DOM during the conversion to FetchXML, so recreate it by parsing the original SQL again
-                var dom = new TSql150Parser(QuotedIdentifiers);
-                var fragment = dom.Parse(new StringReader(sql), out _);
-                var script = (TSqlScript)fragment;
-                script.Accept(new ReplacePrimaryFunctionsVisitor());
-                var originalSelect = (SelectStatement)script.Batches.Single().Statements.Single();
+                if (select.Into != null)
+                    throw new NotSupportedQueryFragmentException("Unhandled SELECT INTO clause", select.Into);
 
-                query.AggregateAlternative = ConvertSelectStatement((SelectStatement) originalSelect, true);
+                if (select.On != null)
+                    throw new NotSupportedQueryFragmentException("Unhandled SELECT ON clause", select.On);
+
+                if (select.OptimizerHints.Count != 0)
+                    throw new NotSupportedQueryFragmentException("Unhandled SELECT optimizer hints", select);
+
+                if (select.WithCtesAndXmlNamespaces != null)
+                    throw new NotSupportedQueryFragmentException("Unhandled SELECT WITH clause", select.WithCtesAndXmlNamespaces);
+
+                if (querySpec.ForClause != null)
+                    throw new NotSupportedQueryFragmentException("Unhandled SELECT FOR clause", querySpec.ForClause);
+
+                if (querySpec.FromClause == null)
+                    throw new NotSupportedQueryFragmentException("No source entity specified", querySpec);
+
+                // Store the original SQL again now so we can re-parse it if required to generate an alternative query
+                // to handle aggregates via an expression rather than FetchXML.
+                var sql = select.ToSql();
+
+                // Convert the query from the "inside out":
+                // 1. FROM clause gives the data source for everything else
+                // 2. WHERE clause filters the initial result set
+                // 3. GROUP BY changes the schema of the data source after filtering
+                // 4. HAVING clause filters the result set after grouping
+                // 5. SELECT clause defines the final columns to include in the results
+                // 6. DISTINCT clause checks for unique-ness across the columns in the SELECT clause
+                // 7. ORDER BY clause sequences the results
+                // 8. OFFSET / TOP clauses skips rows in the final results
+
+                // At each point, convert as much of the query as possible to FetchXML. Anything that can't be converted
+                // directly should be handled in-memory using an expression. If any previous step has generated an expression,
+                // all later steps must use expressions only as the FetchXML results will be incomplete.
+                var extensions = new List<IQueryExtension>();
+
+                var fetch = new FetchXml.FetchType();
+                var tables = HandleFromClause(querySpec.FromClause, fetch);
+                HandleWhereClause(querySpec.WhereClause, tables, extensions);
+                var computedColumns = HandleGroupByClause(querySpec, fetch, tables, extensions, forceAggregateExpression) ?? new Dictionary<string, Type>();
+                var columns = HandleSelectClause(querySpec, fetch, tables, computedColumns, extensions);
+                HandleDistinctClause(querySpec, fetch, extensions);
+                HandleOrderByClause(querySpec, fetch, tables, columns, computedColumns, extensions);
+                HandleHavingClause(querySpec, computedColumns, extensions);
+                HandleOffsetClause(querySpec, fetch, extensions);
+                HandleTopClause(querySpec.TopRowFilter, fetch, extensions);
+
+                // Sort the elements in the query so they're in the order users expect based on online samples
+                foreach (var table in tables)
+                    table.Sort();
+
+                // Return the final query
+                var query = new SelectQuery
+                {
+                    FetchXml = fetch,
+                    ColumnSet = columns,
+                    AllPages = fetch.page == null && fetch.count == null
+                };
+
+                foreach (var extension in extensions)
+                    query.Extensions.Add(extension);
+
+                if (fetch.aggregateSpecified && fetch.aggregate)
+                {
+                    // We've generated a FetchXML aggregate query. These can generate errors when there are a lot of source records involved in the query,
+                    // so convert the query again, this time processing the aggregates via expressions.
+                    // We'll have changed the SQL DOM during the conversion to FetchXML, so recreate it by parsing the original SQL again
+                    var dom = new TSql150Parser(QuotedIdentifiers);
+                    var fragment = dom.Parse(new StringReader(sql), out _);
+                    var script = (TSqlScript)fragment;
+                    script.Accept(new ReplacePrimaryFunctionsVisitor());
+                    var originalSelect = (SelectStatement)script.Batches.Single().Statements.Single();
+
+                    query.AggregateAlternative = ConvertSelectStatement((SelectStatement)originalSelect, true);
+                }
+
+                return query;
             }
+            catch (NotSupportedQueryFragmentException)
+            {
+                // Check if we can still execute the raw query using the T-SQL endpoint instead
+                if (!TSqlEndpointAvailable)
+                    throw;
 
-            return query;
+                return new SelectQuery
+                {
+                    Sql = select.ToSql()
+                };
+            }
         }
 
         /// <summary>
