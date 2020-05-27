@@ -23,8 +23,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var metadata = new AttributeMetadataCache(org);
             var a = metadata["account"];
             var c = metadata["contact"];
+            var n = metadata["new_customentity"];
 
-            _autocomplete = new Autocomplete(new[] { a, c }, metadata);
+            _autocomplete = new Autocomplete(new[] { a, c, n }, metadata);
         }
 
         [TestMethod]
@@ -132,7 +133,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var sql = "UPDATE ";
             var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).ToList();
 
-            CollectionAssert.AreEqual(new[] { "account?4", "contact?4" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "account?4", "contact?4", "new_customentity?4" }, suggestions);
         }
 
         [TestMethod]
@@ -178,6 +179,21 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).ToList();
 
             CollectionAssert.AreEqual(new[] { "accountid?14", "createdon?2", "name?13" }, suggestions);
+        }
+
+        [TestMethod]
+        public void Custom()
+        {
+            var sql = @"
+                select count(distinct p.new_customentityid)
+                from
+                    new_customentity n
+                    inner join new_customentity p on n";
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).ToList();
+
+            // FakeXrmEasy seems to miss the referencing attribute from the metadata, so these aren't what we'd actually like to
+            // see but it's what's currently available.
+            CollectionAssert.AreEqual(new[] { "n. = p.new_parentid?18", "n.new_parentid = p.?19", "n?4" }, suggestions);
         }
     }
 }

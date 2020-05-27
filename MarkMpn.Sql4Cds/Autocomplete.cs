@@ -391,7 +391,7 @@ namespace MarkMpn.Sql4Cds
 
             for (var i = end; i >= 0; i--)
             {
-                if (Char.IsWhiteSpace(text[i]) || (Char.IsPunctuation(text[i]) && text[i] != '.'))
+                if (Char.IsWhiteSpace(text[i]) || (Char.IsPunctuation(text[i]) && text[i] != '.' && text[i] != '_'))
                 {
                     if (inWord)
                     {
@@ -405,7 +405,7 @@ namespace MarkMpn.Sql4Cds
                     if (Char.IsPunctuation(text[i]))
                     {
                         yield return text[i].ToString();
-                        i--;
+                        //i--;
                     }
                 }
                 else if (!inWord)

@@ -98,6 +98,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AutocompleteTests.cs" />
+    <Compile Include="Metadata\New_CustomEntity.cs" />
     <Compile Include="Metadata\Contact.cs" />
     <Compile Include="Metadata\Account.cs" />
     <Compile Include="PropertyEqualityComparer.cs" />
