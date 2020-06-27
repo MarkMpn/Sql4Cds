@@ -5,6 +5,7 @@ using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
@@ -330,7 +331,14 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     if (row.ColumnValues[i] is Literal literal)
                     {
-                        values[columnName] = ConvertAttributeValueType(meta, columnName, literal.Value);
+                        try
+                        {
+                            values[columnName] = ConvertAttributeValueType(meta, columnName, literal.Value);
+                        }
+                        catch (FormatException)
+                        {
+                            throw new NotSupportedQueryFragmentException("Invalid value format", literal);
+                        }
                     }
                     else
                     {
@@ -551,7 +559,7 @@ namespace MarkMpn.Sql4Cds.Engine
             switch (attr.AttributeType)
             {
                 case AttributeTypeCode.BigInt:
-                    return Int64.Parse(value);
+                    return Int64.Parse(value, CultureInfo.InvariantCulture);
 
                 case AttributeTypeCode.Boolean:
                     if (value == "0")
@@ -561,16 +569,16 @@ namespace MarkMpn.Sql4Cds.Engine
                     throw new FormatException($"Cannot convert value {value} to boolean for attribute {attrName}");
 
                 case AttributeTypeCode.DateTime:
-                    return DateTime.Parse(value);
+                    return DateTime.Parse(value, CultureInfo.InvariantCulture);
 
                 case AttributeTypeCode.Decimal:
-                    return Decimal.Parse(value);
+                    return Decimal.Parse(value, CultureInfo.InvariantCulture);
 
                 case AttributeTypeCode.Double:
-                    return Double.Parse(value);
+                    return Double.Parse(value, CultureInfo.InvariantCulture);
 
                 case AttributeTypeCode.Integer:
-                    return Int32.Parse(value);
+                    return Int32.Parse(value, CultureInfo.InvariantCulture);
 
                 case AttributeTypeCode.Lookup:
                     var targets = ((LookupAttributeMetadata)attr).Targets;
@@ -583,12 +591,12 @@ namespace MarkMpn.Sql4Cds.Engine
                     return value;
 
                 case AttributeTypeCode.Money:
-                    return new Money(Decimal.Parse(value));
+                    return new Money(Decimal.Parse(value, CultureInfo.InvariantCulture));
 
                 case AttributeTypeCode.Picklist:
                 case AttributeTypeCode.State:
                 case AttributeTypeCode.Status:
-                    return new OptionSetValue(Int32.Parse(value));
+                    return new OptionSetValue(Int32.Parse(value, CultureInfo.InvariantCulture));
 
                 default:
                     throw new NotSupportedException($"Unsupport attribute type {attr.AttributeType} for attribute {attrName}");
@@ -632,8 +640,15 @@ namespace MarkMpn.Sql4Cds.Engine
                         }
                         else
                         {
-                            var value = ConvertAttributeValueType(metadata, attrName, literal.Value);
-                            return new { Key = attrName, Value = (Func<Entity, object>)(e => value) };
+                            try
+                            {
+                                var value = ConvertAttributeValueType(metadata, attrName, literal.Value);
+                                return new { Key = attrName, Value = (Func<Entity, object>)(e => value) };
+                            }
+                            catch (FormatException)
+                            {
+                                throw new NotSupportedQueryFragmentException("Invalid value format", literal);
+                            }
                         }
                     }
                     else
@@ -818,7 +833,14 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             else if (expr is Literal literal)
             {
-                return Expression.Constant(ConvertLiteralValue(literal));
+                try
+                {
+                    return Expression.Constant(ConvertLiteralValue(literal));
+                }
+                catch (FormatException)
+                {
+                    throw new NotSupportedQueryFragmentException("Invalid value format", literal);
+                }
             }
             else if (expr is Microsoft.SqlServer.TransactSql.ScriptDom.UnaryExpression unary)
             {
@@ -1010,17 +1032,17 @@ namespace MarkMpn.Sql4Cds.Engine
             switch (literal.LiteralType)
             {
                 case LiteralType.Integer:
-                    return Int32.Parse(literal.Value);
+                    return Int32.Parse(literal.Value, CultureInfo.InvariantCulture);
 
                 case LiteralType.Money:
                 case LiteralType.Numeric:
-                    return Decimal.Parse(literal.Value);
+                    return Decimal.Parse(literal.Value, CultureInfo.InvariantCulture);
 
                 case LiteralType.Null:
                     return null;
 
                 case LiteralType.Real:
-                    return Double.Parse(literal.Value);
+                    return Double.Parse(literal.Value, CultureInfo.InvariantCulture);
 
                 case LiteralType.String:
                     return literal.Value;
@@ -1807,17 +1829,17 @@ namespace MarkMpn.Sql4Cds.Engine
             if (!(querySpec.OffsetClause.FetchExpression is IntegerLiteral fetchCount))
                 throw new NotSupportedQueryFragmentException("Unhandled OFFSET clause fetch expression", querySpec.OffsetClause.FetchExpression);
 
-            var pageSize = Int32.Parse(fetchCount.Value);
-            var pageNumber = (decimal)Int32.Parse(offset.Value) / pageSize + 1;
+            var pageSize = Int32.Parse(fetchCount.Value, CultureInfo.InvariantCulture);
+            var pageNumber = (decimal)Int32.Parse(offset.Value, CultureInfo.InvariantCulture) / pageSize + 1;
 
             if (extensions.Count == 0 && pageNumber == (int)pageNumber)
             {
-                fetch.count = pageSize.ToString();
-                fetch.page = pageNumber.ToString();
+                fetch.count = pageSize.ToString(CultureInfo.InvariantCulture);
+                fetch.page = pageNumber.ToString(CultureInfo.InvariantCulture);
             }
             else
             {
-                extensions.Add(new Offset(Int32.Parse(offset.Value), pageSize));
+                extensions.Add(new Offset(Int32.Parse(offset.Value, CultureInfo.InvariantCulture), pageSize));
             }
         }
 
@@ -1843,7 +1865,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (extensions.Count == 0)
                 fetch.top = topLiteral.Value;
             else
-                extensions.Add(new Top(Int32.Parse(topLiteral.Value)));
+                extensions.Add(new Top(Int32.Parse(topLiteral.Value, CultureInfo.InvariantCulture)));
         }
 
         /// <summary>
@@ -1899,7 +1921,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     if (sort.Expression is IntegerLiteral colIndex)
                     {
-                        var colName = columns[Int32.Parse(colIndex.Value) - 1];
+                        var colName = columns[Int32.Parse(colIndex.Value, CultureInfo.InvariantCulture) - 1];
 
                         col = new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier() };
 
@@ -2005,7 +2027,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (expression is IntegerLiteral colIndex)
                 {
-                    var colName = columns[Int32.Parse(colIndex.Value) - 1];
+                    var colName = columns[Int32.Parse(colIndex.Value, CultureInfo.InvariantCulture) - 1];
 
                     expression = new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier() };
 
@@ -2254,33 +2276,11 @@ namespace MarkMpn.Sql4Cds.Engine
                         throw new NotSupportedQueryFragmentException("Unsupported comparison type", comparison);
                 }
                 
-                object value = null;
+                string value = null;
 
                 if (literal != null)
                 {
-                    // Convert the literal value to the correct type, if specified
-                    switch (literal.LiteralType)
-                    {
-                        case LiteralType.Integer:
-                            value = Int32.Parse(literal.Value);
-                            break;
-
-                        case LiteralType.Money:
-                            value = Decimal.Parse(literal.Value);
-                            break;
-
-                        case LiteralType.Numeric:
-                        case LiteralType.Real:
-                            value = Double.Parse(literal.Value);
-                            break;
-
-                        case LiteralType.String:
-                            value = literal.Value;
-                            break;
-
-                        default:
-                            throw new NotSupportedQueryFragmentException("Unsupported literal type", literal);
-                    }
+                    value = literal.Value;
                 }
                 else if (op == @operator.eq)
                 {
@@ -2339,7 +2339,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     entityname = entityName,
                     attribute = GetColumnAttribute(field),
                     @operator = op,
-                    value = value?.ToString()
+                    value = value
                 });
             }
             else if (searchCondition is BooleanBinaryExpression binary)
