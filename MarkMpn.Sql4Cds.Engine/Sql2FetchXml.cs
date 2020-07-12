@@ -328,6 +328,10 @@ namespace MarkMpn.Sql4Cds.Engine
                 for (var i = 0; i < columns.Count; i++)
                 {
                     var columnName = columns[i].MultiPartIdentifier.Identifiers.Last().Value;
+                    var attr = meta.Attributes.SingleOrDefault(a => a.LogicalName == columnName);
+
+                    if (attr == null)
+                        throw new NotSupportedQueryFragmentException("Unknown attribute name", columns[i]);
 
                     if (row.ColumnValues[i] is Literal literal)
                     {
@@ -342,7 +346,8 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
                     else
                     {
-                        var expr = CompileScalarExpression<object>(row.ColumnValues[i], new List<EntityTable>(), null, out _);
+                        var attrType = GetAttributeType(attr.AttributeType.Value);
+                        var expr = CompileScalarExpression(row.ColumnValues[i], new List<EntityTable>(), null, attrType, out _);
                         values[columnName] = expr(null);
                     }
                 }
@@ -655,7 +660,8 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         // Handle updates to the value from another field
                         // Ensure the source field is included in the query
-                        return new { Key = attrName, Value = CompileScalarExpression<object>(assign.NewValue, tables, null, out _) };
+                        var targetType = GetAttributeType(attr.AttributeType.Value);
+                        return new { Key = attrName, Value = CompileScalarExpression(assign.NewValue, tables, null, targetType, out _) };
                     }
                 })
                 .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
@@ -664,19 +670,28 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// Converts a scalar SQL expression to a compiled function that evaluates the final value of the expression for a given entity.
         /// </summary>
-        /// <typeparam name="T">The type of value to be returned by the function</typeparam>
         /// <param name="expr">The <see cref="ScalarExpression"/> to convert</param>
         /// <param name="tables">The tables to use as the data source for the expression</param>
         /// <param name="calculatedFields">Any calculated fields that will be created when running the query</param>
         /// <param name="expression">The <see cref="System.Linq.Expressions.Expression"/> that the <paramref name="expr"/> was converted to before compilation</param>
+        /// <param name="targetType">The type of value to be returned by the function</param>
         /// <returns>A compiled expresson that evaluates the supplied <paramref name="expr"/> for a given entity</returns>
-        private Func<Entity,T> CompileScalarExpression<T>(ScalarExpression expr, List<EntityTable> tables, IDictionary<string,Type> calculatedFields, out Expression expression)
+        private Func<Entity,object> CompileScalarExpression(ScalarExpression expr, List<EntityTable> tables, IDictionary<string, Type> calculatedFields, Type targetType, out Expression expression)
         {
             expression = ConvertScalarExpression(expr, tables, calculatedFields, _param);
 
-            var finalExpr = Expr.Convert<T>(expression);
+            if (expression.Type == typeof(Guid?) && targetType == typeof(EntityReference) && expr is ColumnReferenceExpression col)
+            {
+                // We're trying to convert a primary key to a lookup field, so get the logical name from the source
+                GetColumnTableAlias(col, tables, out var table);
+                var logicalName = table.EntityName;
 
-            return Expression.Lambda<Func<Entity, T>>(finalExpr, _param).Compile();
+                expression = Expr.Call(() => ExpressionFunctions.CreateLookup(Expr.Arg<string>(), Expr.Arg<Guid?>()), Expression.Constant(logicalName), expression);
+            }
+
+            var finalExpr = Expr.Convert(expression, targetType);
+
+            return Expression.Lambda<Func<Entity, object>>(finalExpr, _param).Compile();
         }
 
         /// <summary>
@@ -1275,7 +1290,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (!(grouping is ExpressionGroupingSpecification exprGroup))
                         throw new NotSupportedQueryFragmentException("Unhandled GROUP BY expression", grouping);
 
-                    var selector = CompileScalarExpression<object>(exprGroup.Expression, tables, null, out var expression);
+                    var selector = CompileScalarExpression(exprGroup.Expression, tables, null, typeof(object), out var expression);
                     groupings.Add(new Grouping { Selector = selector, SqlExpression = exprGroup.Expression, Expression = expression });
 
                     if (!(exprGroup.Expression is ColumnReferenceExpression column))
@@ -1342,7 +1357,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 Expression expression = null;
 
                 if (!(aggregate.Parameters[0] is ColumnReferenceExpression col) || col.ColumnType != ColumnType.Wildcard)
-                    selector = CompileScalarExpression<object>(aggregate.Parameters[0], tables, null, out expression);
+                    selector = CompileScalarExpression(aggregate.Parameters[0], tables, null, typeof(object), out expression);
 
                 AggregateFunction aggregateFunction;
 
@@ -2037,7 +2052,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 sortNumber++;
                 var isFetchXml = sortNumber <= fetchXmlSorts;
-                var selector = CompileScalarExpression<object>(expression, tables, calculatedFields, out _);
+                var selector = CompileScalarExpression(expression, tables, calculatedFields, typeof(object), out _);
                 var descending = sort.SortOrder == SortOrder.Descending;
 
                 sorts.Add(new SortExpression(isFetchXml, selector, descending));
@@ -2747,7 +2762,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     catch (NotSupportedQueryFragmentException)
                     {
                         // Try again converting to an expression
-                        var func = CompileScalarExpression<object>(expr, tables, calculatedColumns, out var expression);
+                        var func = CompileScalarExpression(expr, tables, calculatedColumns, typeof(object), out var expression);
 
                         // Calculated field must have an alias, auto-generate one if one is not given
                         if (alias == null)

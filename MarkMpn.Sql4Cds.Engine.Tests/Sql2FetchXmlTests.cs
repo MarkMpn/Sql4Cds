@@ -106,7 +106,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 "accountid",
                 "createdon",
-                "name"
+                "name",
+                "primarycontactid"
             }, ((SelectQuery)queries[0]).ColumnSet);
         }
 
@@ -137,6 +138,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 "accountid",
                 "createdon",
                 "name",
+                "primarycontactid",
                 "name"
             }, ((SelectQuery)queries[0]).ColumnSet);
         }
@@ -1571,6 +1573,60 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, results.Entities.Count);
 
             Assert.AreEqual("Data8", results.Entities[0].GetAttributeValue<string>("name"));
+        }
+
+        [TestMethod]
+        public void UpdateGuidToEntityReference()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "UPDATE a SET primarycontactid = c.contactid FROM account AS a INNER JOIN contact AS c ON a.accountid = c.parentcustomerid";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            var update = (UpdateQuery)queries[0];
+
+            var account1 = Guid.NewGuid();
+            var account2 = Guid.NewGuid();
+            var contact1 = Guid.NewGuid();
+            var contact2 = Guid.NewGuid();
+
+            context.Data["account"] = new Dictionary<Guid, Entity>
+            {
+                [account1] = new Entity("account", account1)
+                {
+                    ["name"] = "Data8",
+                    ["accountid"] = account1
+                },
+                [account2] = new Entity("account", account2)
+                {
+                    ["name"] = "Microsoft",
+                    ["accountid"] = account2
+                }
+            };
+            context.Data["contact"] = new Dictionary<Guid, Entity>
+            {
+                [contact1] = new Entity("contact", contact1)
+                {
+                    ["parentcustomerid"] = new EntityReference("account", account1),
+                    ["contactid"] = contact1
+                },
+                [contact2] = new Entity("contact", contact2)
+                {
+                    ["parentcustomerid"] = new EntityReference("account", account2),
+                    ["contactid"] = contact2
+                }
+            };
+
+            update.Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+
+            Assert.AreEqual(new EntityReference("contact", contact1), context.Data["account"][account1].GetAttributeValue<EntityReference>("primarycontactid"));
+            Assert.AreEqual(new EntityReference("contact", contact2), context.Data["account"][account2].GetAttributeValue<EntityReference>("primarycontactid"));
         }
 
         private void AssertFetchXml(Query[] queries, string fetchXml)

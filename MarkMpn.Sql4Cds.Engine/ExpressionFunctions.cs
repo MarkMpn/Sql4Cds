@@ -248,7 +248,24 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <returns>An <see cref="EntityReference"/> with the requested values</returns>
         public static EntityReference CreateLookup(string entityType, string id)
         {
+            if (id == null)
+                return null;
+
             return new EntityReference(entityType, new Guid(id));
+        }
+
+        /// <summary>
+        /// Creates an <see cref="EntityReference"/> value
+        /// </summary>
+        /// <param name="entityType">The logical name of the entity to reference</param>
+        /// <param name="id">The unique identifier of the entity to reference</param>
+        /// <returns>An <see cref="EntityReference"/> with the requested values</returns>
+        public static EntityReference CreateLookup(string entityType, Guid? id)
+        {
+            if (id == null)
+                return null;
+
+            return new EntityReference(entityType, id.Value);
         }
     }
 

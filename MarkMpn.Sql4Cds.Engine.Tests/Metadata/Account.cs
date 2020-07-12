@@ -22,5 +22,12 @@ namespace MarkMpn.Sql4Cds.Engine.Tests.Metadata
 
         [RelationshipSchemaName("contact_account")]
         public IEnumerable<Contact> Contacts { get; }
+
+        [AttributeLogicalName("primarycontactid")]
+        public EntityReference PrimaryContactId { get; set; }
+
+        [AttributeLogicalName("primarycontactid")]
+        [RelationshipSchemaName("account_primarycontact")]
+        public Contact PrimaryContact { get; set; }
     }
 }
