@@ -1629,6 +1629,23 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(new EntityReference("contact", contact2), context.Data["account"][account2].GetAttributeValue<EntityReference>("primarycontactid"));
         }
 
+        [TestMethod]
+        public void CompareDateFields()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "DELETE c2 FROM contact c1 INNER JOIN contact c2 ON c1.parentcustomerid = c2.parentcustomerid AND c2.createdon > c1.createdon";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            var delete = (DeleteQuery)queries[0];
+        }
+
         private void AssertFetchXml(Query[] queries, string fetchXml)
         {
             Assert.AreEqual(1, queries.Length);

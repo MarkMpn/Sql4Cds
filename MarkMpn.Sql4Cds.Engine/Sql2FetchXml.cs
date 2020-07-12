@@ -2222,7 +2222,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         return;
                     }
 
-                    throw new NotSupportedQueryFragmentException("Unsupported comparison", comparison);
+                    throw new NotSupportedQueryFragmentException("Unsupported comparison - rewrite as WHERE clause", comparison);
                 }
 
                 // If we couldn't find the pattern `column = value` or `column = func()`, try looking in the opposite order
@@ -2951,16 +2951,21 @@ namespace MarkMpn.Sql4Cds.Engine
                 ColumnReferenceExpression col1 = null;
                 ColumnReferenceExpression col2 = null;
                 Expression postFilter = null;
-                HandleFilter(join.SearchCondition, filter, tables, linkTable, null, false, ref col1, ref col2, ref postFilter, null);
 
-                // We need a join condition comparing a column in the link entity to one in another table
-                if (col1 == null || col2 == null)
-                    throw new NotSupportedQueryFragmentException("Missing join condition", join.SearchCondition);
+                try
+                {
+                    HandleFilter(join.SearchCondition, filter, tables, linkTable, null, false, ref col1, ref col2, ref postFilter, null);
 
-                // Check we don't need to apply any custom filter expressions - we can't do this in the FROM clause as it can break the application
-                // of OUTER joins
-                if (postFilter != null)
-                    throw new NotSupportedQueryFragmentException("Unsupported join condition - rewrite as WHERE clause", join.SearchCondition);
+                    // We need a join condition comparing a column in the link entity to one in another table
+                    if (col1 == null || col2 == null)
+                        throw new NotSupportedQueryFragmentException("Missing join condition", join.SearchCondition);
+                }
+                catch (PostProcessingRequiredException ex)
+                {
+                    // Check we don't need to apply any custom filter expressions -
+                    // we can't do this in the FROM clause as it can break the application of OUTER joins
+                    throw new NotSupportedQueryFragmentException("Unsupported join condition - rewrite as WHERE clause", ex.Fragment);
+                }
 
                 // If there were any other criteria in the join, add them as the filter
                 if (filter.type != (filterType)2)

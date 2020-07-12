@@ -440,7 +440,7 @@ namespace MarkMpn.Sql4Cds.Engine
                             Settings = new ExecuteMultipleSettings
                             {
                                 ContinueOnError = false,
-                                ReturnResponses = false
+                                ReturnResponses = true
                             }
                         };
                     }
@@ -452,7 +452,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         options.Progress($"Updating {meta.DisplayCollectionName?.UserLocalizedLabel?.Label} {count + 1:N0} - {count + multiple.Requests.Count:N0} of {entities.Count:N0}...");
                         var resp = (ExecuteMultipleResponse) org.Execute(multiple);
                         if (resp.IsFaulted)
-                            throw new ApplicationException($"Error updating {meta.DisplayCollectionName?.UserLocalizedLabel?.Label}");
+                            throw new ApplicationException($"Error updating {meta.DisplayCollectionName?.UserLocalizedLabel?.Label} - " + resp.Responses.First(r => r.Fault != null).Fault.Message);
 
                         count += multiple.Requests.Count;
 
@@ -466,7 +466,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 options.Progress($"Updating {meta.DisplayCollectionName?.UserLocalizedLabel?.Label} {count + 1:N0} - {count + multiple.Requests.Count:N0} of {entities.Count:N0}...");
                 var resp = (ExecuteMultipleResponse)org.Execute(multiple);
                 if (resp.IsFaulted)
-                    throw new ApplicationException($"Error updating {meta.DisplayCollectionName?.UserLocalizedLabel?.Label}");
+                    throw new ApplicationException($"Error updating {meta.DisplayCollectionName?.UserLocalizedLabel?.Label} - " + resp.Responses.First(r => r.Fault != null).Fault.Message);
 
                 count += multiple.Requests.Count;
             }
@@ -559,7 +559,7 @@ namespace MarkMpn.Sql4Cds.Engine
                             Settings = new ExecuteMultipleSettings
                             {
                                 ContinueOnError = false,
-                                ReturnResponses = false
+                                ReturnResponses = true
                             }
                         };
                     }
@@ -571,7 +571,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         options.Progress($"Deleting {meta.DisplayCollectionName.UserLocalizedLabel.Label} {count + 1:N0} - {count + multiple.Requests.Count:N0} of {entities.Count:N0}...");
                         var resp = (ExecuteMultipleResponse)org.Execute(multiple);
                         if (resp.IsFaulted)
-                            throw new ApplicationException($"Error deleting {meta.DisplayCollectionName.UserLocalizedLabel.Label}");
+                            throw new ApplicationException($"Error deleting {meta.DisplayCollectionName.UserLocalizedLabel.Label} - " + resp.Responses.First(r => r.Fault != null).Fault.Message);
 
                         count += multiple.Requests.Count;
 
@@ -585,7 +585,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 options.Progress($"Deleting {meta.DisplayCollectionName.UserLocalizedLabel.Label} {count + 1:N0} - {count + multiple.Requests.Count:N0}...");
                 var resp = (ExecuteMultipleResponse)org.Execute(multiple);
                 if (resp.IsFaulted)
-                    throw new ApplicationException($"Error deleting {meta.DisplayCollectionName.UserLocalizedLabel.Label}");
+                    throw new ApplicationException($"Error deleting {meta.DisplayCollectionName.UserLocalizedLabel.Label} - " + resp.Responses.First(r => r.Fault != null).Fault.Message);
 
                 count += multiple.Requests.Count;
             }
