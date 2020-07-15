@@ -460,6 +460,8 @@ namespace MarkMpn.Sql4Cds
                                         crmGrid.DataSource = query.Result;
                                     else
                                         grid.DataSource = query.Result;
+
+                                    grid.AutoResizeColumns();
                                 };
 
                                 grid.RowPostPaint += (s, e) =>
