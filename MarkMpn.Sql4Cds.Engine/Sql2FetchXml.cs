@@ -183,6 +183,11 @@ namespace MarkMpn.Sql4Cds.Engine
         public bool TSqlEndpointAvailable { get; set; }
 
         /// <summary>
+        /// Indicates if column comparison conditions are supported
+        /// </summary>
+        public bool ColumnComparisonAvailable { get; set; }
+
+        /// <summary>
         /// Parses a SQL batch and returns the queries identified in it
         /// </summary>
         /// <param name="sql">The SQL batch to parse</param>
@@ -2206,23 +2211,29 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (field != null && field2 != null)
                 {
-                    // The operator is comparing two attributes. This is not allowed in a FetchXML filter,
-                    // but is allowed in join criteria
+                    // The operator is comparing two attributes. This is allowed in join criteria,
+                    // but not in filter conditions before version 9.1.0.19251
                     if (where)
-                        throw new PostProcessingRequiredException("Unsupported comparison", comparison);
-
-                    if (col1 == null && col2 == null)
                     {
-                        // We've found the join columns - don't apply this as an extra filter
-                        if (inOr)
-                            throw new NotSupportedQueryFragmentException("Cannot combine join criteria with OR", comparison);
-
-                        col1 = field;
-                        col2 = field2;
-                        return;
+                        if (!ColumnComparisonAvailable)
+                            throw new PostProcessingRequiredException("Unsupported comparison", comparison);
                     }
+                    else
+                    {
+                        if (col1 == null && col2 == null && type == BooleanComparisonType.Equals)
+                        {
+                            // We've found the join columns - don't apply this as an extra filter
+                            if (inOr)
+                                throw new NotSupportedQueryFragmentException("Cannot combine join criteria with OR", comparison);
 
-                    throw new NotSupportedQueryFragmentException("Unsupported comparison - rewrite as WHERE clause", comparison);
+                            col1 = field;
+                            col2 = field2;
+                            return;
+                        }
+
+                        if (!ColumnComparisonAvailable)
+                            throw new NotSupportedQueryFragmentException("Unsupported comparison - rewrite as WHERE clause", comparison);
+                    }
                 }
 
                 // If we couldn't find the pattern `column = value` or `column = func()`, try looking in the opposite order
@@ -2254,7 +2265,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
 
                 // If we still couldn't find the column name and value, this isn't a pattern we can support in FetchXML
-                if (field == null || (literal == null && func == null))
+                if (field == null || (literal == null && func == null && (field2 == null || !ColumnComparisonAvailable)))
                     throw new PostProcessingRequiredException("Unsupported comparison", comparison);
 
                 // Select the correct FetchXML operator
@@ -2297,7 +2308,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     value = literal.Value;
                 }
-                else if (op == @operator.eq)
+                else if (op == @operator.eq && func != null)
                 {
                     // If we've got the pattern `column = func()`, select the FetchXML operator from the function name
                     op = (@operator) Enum.Parse(typeof(@operator), func.FunctionName.Value.ToLower());
@@ -2336,7 +2347,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         throw new NotSupportedQueryFragmentException("Too many function parameters", func);
                     }
                 }
-                else
+                else if (op != @operator.eq && func != null)
                 {
                     // Can't use functions with other operators
                     throw new NotSupportedQueryFragmentException("Unsupported function use. Only <field> = <func>(<param>) usage is supported", comparison);
@@ -2348,14 +2359,36 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (entityTable == targetTable)
                     entityName = null;
-                
-                criteria.Items = AddItem(criteria.Items, new condition
+
+                if (field2 == null)
                 {
-                    entityname = entityName,
-                    attribute = GetColumnAttribute(field),
-                    @operator = op,
-                    value = value
-                });
+                    criteria.Items = AddItem(criteria.Items, new condition
+                    {
+                        entityname = entityName,
+                        attribute = GetColumnAttribute(field),
+                        @operator = op,
+                        value = value
+                    });
+                }
+                else
+                {
+                    // Column comparisons can only happen within a single entity
+                    var entityName2 = GetColumnTableAlias(field2, tables, out var entityTable2);
+
+                    if (entityTable != entityTable2)
+                        throw new PostProcessingRequiredException("Unsupported comparison", comparison);
+
+                    if (entityTable2 == targetTable)
+                        entityName2 = null;
+
+                    criteria.Items = AddItem(criteria.Items, new condition
+                    {
+                        entityname = entityName,
+                        attribute = GetColumnAttribute(field),
+                        @operator = op,
+                        valueof = GetColumnAttribute(field2)
+                    });
+                }
             }
             else if (searchCondition is BooleanBinaryExpression binary)
             {

@@ -402,14 +402,18 @@ namespace MarkMpn.Sql4Cds.Engine
                 var newExpression = GetCondition(metadata, condition, prefix, aliasToLogicalName);
 
                 if (expression == null)
+                {
                     expression = newExpression;
+                }
                 else
+                {
                     expression = new BooleanBinaryExpression
                     {
                         FirstExpression = expression,
                         BinaryExpressionType = type,
                         SecondExpression = newExpression
                     };
+                }
             }
 
             // Recurse into sub-<filter>s
@@ -418,14 +422,18 @@ namespace MarkMpn.Sql4Cds.Engine
                 var newExpression = GetFilter(metadata, subFilter, prefix, aliasToLogicalName);
 
                 if (expression == null)
+                {
                     expression = newExpression;
+                }
                 else
+                {
                     expression = new BooleanBinaryExpression
                     {
                         FirstExpression = expression,
                         BinaryExpressionType = type,
                         SecondExpression = newExpression
                     };
+                }
             }
 
             return expression;
@@ -465,7 +473,19 @@ namespace MarkMpn.Sql4Cds.Engine
             var attr = meta.Attributes.SingleOrDefault(a => a.LogicalName == condition.attribute);
 
             // Get the literal value to compare to
-            if (attr == null)
+            if (!String.IsNullOrEmpty(condition.valueof))
+                value = new ColumnReferenceExpression
+                {
+                    MultiPartIdentifier = new MultiPartIdentifier
+                    {
+                        Identifiers =
+                        {
+                        new Identifier{Value = condition.entityname ?? prefix},
+                        new Identifier{Value = condition.attribute}
+                        }
+                    }
+                };
+            else if (attr == null)
                 value = new StringLiteral { Value = condition.value };
             else if (attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.BigInt ||
                 attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.Integer ||

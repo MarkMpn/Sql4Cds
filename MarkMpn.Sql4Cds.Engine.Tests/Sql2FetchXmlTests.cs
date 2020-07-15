@@ -1641,9 +1641,36 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "DELETE c2 FROM contact c1 INNER JOIN contact c2 ON c1.parentcustomerid = c2.parentcustomerid AND c2.createdon > c1.createdon";
 
+            var ex = Assert.ThrowsException<NotSupportedQueryFragmentException>(() => sql2FetchXml.Convert(query));
+            Assert.IsTrue(ex.Message.Contains("rewrite as WHERE clause"));
+        }
+
+        [TestMethod]
+        public void ColumnComparison()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+            sql2FetchXml.ColumnComparisonAvailable = true;
+
+            var query = "SELECT firstname, lastname FROM contact WHERE firstname = lastname";
+
             var queries = sql2FetchXml.Convert(query);
 
-            var delete = (DeleteQuery)queries[0];
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <attribute name='lastname' />
+                        <filter>
+                            <condition attribute='firstname' operator='eq' valueof='lastname' />
+                        </filter>
+                    </entity>
+                </fetch>
+            ");
         }
 
         private void AssertFetchXml(Query[] queries, string fetchXml)

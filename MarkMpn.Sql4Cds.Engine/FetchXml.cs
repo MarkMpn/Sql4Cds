@@ -218,6 +218,9 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml {
                 this.uihiddenFieldSpecified = value;
             }
         }
+
+        [XmlAttribute]
+        public string valueof { get; set; }
     }
     
     /// <remarks/>

@@ -335,6 +335,8 @@ namespace MarkMpn.Sql4Cds
                         !String.IsNullOrEmpty(((CrmServiceClient)Service).CurrentAccessToken))
                         converter.TSqlEndpointAvailable = true;
 
+                    converter.ColumnComparisonAvailable = new Version(_con.OrganizationVersion) >= new Version("9.1.0.19251");
+
                     var queries = converter.Convert(sql);
 
                     if (execute)
