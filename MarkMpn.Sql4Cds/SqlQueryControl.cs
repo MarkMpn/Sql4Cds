@@ -35,7 +35,7 @@ namespace MarkMpn.Sql4Cds
 
         static SqlQueryControl()
         {
-            _images = new ObjectExplorer(null, null).GetImages()
+            _images = new ObjectExplorer(null, null, null).GetImages()
                 .Select(i => i is Bitmap b ? b : new Bitmap(i))
                 .ToArray();
 

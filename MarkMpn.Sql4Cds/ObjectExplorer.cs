@@ -15,6 +15,7 @@ namespace MarkMpn.Sql4Cds
     public partial class ObjectExplorer : WeifenLuo.WinFormsUI.Docking.DockContent
     {
         private readonly IDictionary<ConnectionDetail, AttributeMetadataCache> _metadata;
+        private readonly Action<ConnectionDetail> _newQuery;
 
         class LoaderParam
         {
@@ -22,12 +23,13 @@ namespace MarkMpn.Sql4Cds
             public TreeNode Parent;
         }
 
-        public ObjectExplorer(IDictionary<ConnectionDetail, AttributeMetadataCache> metadata, Action<WorkAsyncInfo> workAsync)
+        public ObjectExplorer(IDictionary<ConnectionDetail, AttributeMetadataCache> metadata, Action<WorkAsyncInfo> workAsync, Action<ConnectionDetail> newQuery)
         {
             InitializeComponent();
 
             _metadata = metadata;
             WorkAsync = workAsync;
+            _newQuery = newQuery;
         }
 
         public Action<WorkAsyncInfo> WorkAsync { get; }
@@ -91,6 +93,7 @@ namespace MarkMpn.Sql4Cds
         {
             var conNode = treeView.Nodes.Add(con.ConnectionName);
             conNode.Tag = con;
+            conNode.ContextMenuStrip = serverContextMenuStrip;
             SetIcon(conNode, "Environment");
             var entitiesNode = conNode.Nodes.Add("Entities");
             SetIcon(entitiesNode, "Folder");
@@ -123,7 +126,7 @@ namespace MarkMpn.Sql4Cds
                     tsqlNode.SelectedImageIndex = 20;
                 }
 
-                tsqlNode.ContextMenuStrip = contextMenuStrip;
+                tsqlNode.ContextMenuStrip = tsqlContextMenuStrip;
             }
 
             conNode.Expand();
@@ -400,6 +403,12 @@ INNER JOIN {manyToMany.Entity2LogicalName}
         private void treeView_NodeMouseClick(object sender, TreeNodeMouseClickEventArgs e)
         {
             treeView.SelectedNode = e.Node;
+        }
+
+        private void newQueryToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var con = GetService(treeView.SelectedNode);
+            _newQuery(con);
         }
     }
 }

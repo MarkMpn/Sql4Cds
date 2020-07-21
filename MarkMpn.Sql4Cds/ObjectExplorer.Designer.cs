@@ -32,10 +32,13 @@
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(ObjectExplorer));
             this.treeView = new System.Windows.Forms.TreeView();
             this.imageList = new System.Windows.Forms.ImageList(this.components);
-            this.contextMenuStrip = new System.Windows.Forms.ContextMenuStrip(this.components);
+            this.tsqlContextMenuStrip = new System.Windows.Forms.ContextMenuStrip(this.components);
             this.enableTSQLToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.disableTSQLToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.contextMenuStrip.SuspendLayout();
+            this.serverContextMenuStrip = new System.Windows.Forms.ContextMenuStrip(this.components);
+            this.newQueryToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.tsqlContextMenuStrip.SuspendLayout();
+            this.serverContextMenuStrip.SuspendLayout();
             this.SuspendLayout();
             // 
             // treeView
@@ -81,14 +84,14 @@
             this.imageList.Images.SetKeyName(21, "DatabaseRun_16x.png");
             this.imageList.Images.SetKeyName(22, "DatabaseWarning_16x.png");
             // 
-            // contextMenuStrip
+            // tsqlContextMenuStrip
             // 
-            this.contextMenuStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.tsqlContextMenuStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.enableTSQLToolStripMenuItem,
             this.disableTSQLToolStripMenuItem});
-            this.contextMenuStrip.Name = "contextMenuStrip";
-            this.contextMenuStrip.Size = new System.Drawing.Size(113, 48);
-            this.contextMenuStrip.Opening += new System.ComponentModel.CancelEventHandler(this.contextMenuStrip_Opening);
+            this.tsqlContextMenuStrip.Name = "contextMenuStrip";
+            this.tsqlContextMenuStrip.Size = new System.Drawing.Size(113, 48);
+            this.tsqlContextMenuStrip.Opening += new System.ComponentModel.CancelEventHandler(this.contextMenuStrip_Opening);
             // 
             // enableTSQLToolStripMenuItem
             // 
@@ -104,6 +107,21 @@
             this.disableTSQLToolStripMenuItem.Text = "Disable";
             this.disableTSQLToolStripMenuItem.Click += new System.EventHandler(this.disableTSQLToolStripMenuItem_Click);
             // 
+            // serverContextMenuStrip
+            // 
+            this.serverContextMenuStrip.ImageScalingSize = new System.Drawing.Size(32, 32);
+            this.serverContextMenuStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.newQueryToolStripMenuItem});
+            this.serverContextMenuStrip.Name = "serverContextMenuStrip";
+            this.serverContextMenuStrip.Size = new System.Drawing.Size(181, 48);
+            // 
+            // newQueryToolStripMenuItem
+            // 
+            this.newQueryToolStripMenuItem.Name = "newQueryToolStripMenuItem";
+            this.newQueryToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
+            this.newQueryToolStripMenuItem.Text = "New Query";
+            this.newQueryToolStripMenuItem.Click += new System.EventHandler(this.newQueryToolStripMenuItem_Click);
+            // 
             // ObjectExplorer
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -112,7 +130,8 @@
             this.Controls.Add(this.treeView);
             this.Name = "ObjectExplorer";
             this.Text = "Object Explorer";
-            this.contextMenuStrip.ResumeLayout(false);
+            this.tsqlContextMenuStrip.ResumeLayout(false);
+            this.serverContextMenuStrip.ResumeLayout(false);
             this.ResumeLayout(false);
 
         }
@@ -121,8 +140,10 @@
 
         private System.Windows.Forms.TreeView treeView;
         private System.Windows.Forms.ImageList imageList;
-        private System.Windows.Forms.ContextMenuStrip contextMenuStrip;
+        private System.Windows.Forms.ContextMenuStrip tsqlContextMenuStrip;
         private System.Windows.Forms.ToolStripMenuItem enableTSQLToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem disableTSQLToolStripMenuItem;
+        private System.Windows.Forms.ContextMenuStrip serverContextMenuStrip;
+        private System.Windows.Forms.ToolStripMenuItem newQueryToolStripMenuItem;
     }
 }

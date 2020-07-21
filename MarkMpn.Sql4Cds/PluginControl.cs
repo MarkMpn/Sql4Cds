@@ -27,7 +27,7 @@ namespace MarkMpn.Sql4Cds
             InitializeComponent();
             dockPanel.Theme = new VS2015LightTheme();
             _metadata = new Dictionary<ConnectionDetail, AttributeMetadataCache>();
-            _objectExplorer = new ObjectExplorer(_metadata, WorkAsync);
+            _objectExplorer = new ObjectExplorer(_metadata, WorkAsync, con => CreateQuery(con, "", null));
             _objectExplorer.Show(dockPanel, DockState.DockLeft);
             _objectExplorer.CloseButtonVisible = false;
             _ai = new TelemetryClient(new Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration("79761278-a908-4575-afbf-2f4d82560da6"));

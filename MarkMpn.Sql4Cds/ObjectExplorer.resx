@@ -118,14 +118,14 @@
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
   <metadata name="imageList.TrayLocation" type="System.Drawing.Point, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
-    <value>17, 17</value>
+    <value>34, 34</value>
   </metadata>
   <data name="imageList.ImageStream" mimetype="application/x-microsoft.net.object.binary.base64">
     <value>
         AAEAAAD/////AQAAAAAAAAAMAgAAAFdTeXN0ZW0uV2luZG93cy5Gb3JtcywgVmVyc2lvbj00LjAuMC4w
         LCBDdWx0dXJlPW5ldXRyYWwsIFB1YmxpY0tleVRva2VuPWI3N2E1YzU2MTkzNGUwODkFAQAAACZTeXN0
         ZW0uV2luZG93cy5Gb3Jtcy5JbWFnZUxpc3RTdHJlYW1lcgEAAAAERGF0YQcCAgAAAAkDAAAADwMAAAD8
-        FgAAAk1TRnQBSQFMAgEBFwEAAXgBAAF4AQABEAEAARABAAT/AQkBAAj/AUIBTQE2AQQGAAE2AQQCAAEo
+        FgAAAk1TRnQBSQFMAgEBFwEAAYABAAGAAQABEAEAARABAAT/AQkBAAj/AUIBTQE2AQQGAAE2AQQCAAEo
         AwABQAMAAWADAAEBAQABCAYAARgYAAGAAgABgAMAAoABAAGAAwABgAEAAYABAAKAAgADwAEAAcAB3AHA
         AQAB8AHKAaYBAAEzBQABMwEAATMBAAEzAQACMwIAAxYBAAMcAQADIgEAAykBAANVAQADTQEAA0IBAAM5
         AQABgAF8Af8BAAJQAf8BAAGTAQAB1gEAAf8B7AHMAQABxgHWAe8BAAHWAucBAAGQAakBrQIAAf8BMwMA
@@ -155,9 +155,9 @@
         AQABIQEAAaUBAANfAQADdwEAA4YBAAOWAQADywEAA7IBAAPXAQAD3QEAA+MBAAPqAQAD8QEAA/gBAAHw
         AfsB/wEAAaQCoAEAA4ADAAH/AgAB/wMAAv8BAAH/AwAB/wEAAf8BAAL/AgAD/wkAAf8F9AH/CQAB/wX0
         Af8IAAn0FwAB/wH0AeMDIAHjAfQB/wcAAf8B9AGYA08BmAH0Af8GAAH/AfQBWQU4AVkB9BcAAfQB4wUg
-        AeMB9AcAAfQBmAVPAZgB9AYAAf8B9AFZAjgBAAI4AVkB9BcAAfQCIAP/AiAB9AcAAfQCTwH1AZgDTwH0
+        AeMB9AcAAfQBmAVPAZgB9AYAAf8B9AFZAjgBAAI4AVkB9BcAAfQCIAP/AiAB9AcAAfQCTwH/AZgDTwH0
         BwAB9AGaBTgBwwH0EgAG9AIgA/8CIAEaAgAG9AJPA/8BlwFPAfQBAAj0AVkBOAEAATgBWQH0EgAB9AEZ
-        AdsDswEJAiAD/wIgAfQBAAH0ARkB2wKzAQkB9AJPAfUBmANPAvQBGQHbBLMB2wEZAZoBOAEAATgBwwH0
+        AdsDswEJAiAD/wIgAfQBAAH0ARkB2wKzAQkB9AJPAf8BmANPAvQBGQHbBLMB2wEZAZoBOAEAATgBwwH0
         EgAB9AWzAdsB4wUgAeMB9AEAAfQEswHbAfQBmAVPAZgC9AizAfQBWQE4AVkB9BMAAfQGswEJAeMDIAHj
         AfQB/wEAAfQFswEJAfQBmANPAZgB9AH/AfQIswH0AZoBOAGaAfQTAAH0B7MB2wT0Af8CAAH0BrMB2wX0
         Af8BAAH0CLME9AH/EwAB9AizAfQGAAH0B7MB2wH0BQAB9AizAfQXAAH0CLMB9AYAAfQIswH0BQAB9Aiz
@@ -226,7 +226,10 @@
         AX//AP8AhAAL
 </value>
   </data>
-  <metadata name="contextMenuStrip.TrayLocation" type="System.Drawing.Point, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
-    <value>120, 17</value>
+  <metadata name="tsqlContextMenuStrip.TrayLocation" type="System.Drawing.Point, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
+    <value>120, 18</value>
+  </metadata>
+  <metadata name="serverContextMenuStrip.TrayLocation" type="System.Drawing.Point, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
+    <value>224, 34</value>
   </metadata>
 </root>
