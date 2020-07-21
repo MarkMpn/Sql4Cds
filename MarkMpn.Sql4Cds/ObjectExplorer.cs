@@ -336,45 +336,70 @@ INNER JOIN {manyToMany.Entity2LogicalName}
         private void enableTSQLToolStripMenuItem_Click(object sender, EventArgs e)
         {
             var con = GetService(treeView.SelectedNode);
+            var node = treeView.SelectedNode;
 
-            try
+            WorkAsync(new WorkAsyncInfo
             {
-                TSqlEndpoint.Enable(con.ServiceClient);
-                treeView.SelectedNode.Text = "T-SQL Endpoint";
+                Message = "Enabling...",
+                Work = (worker, args) =>
+                {
+                    TSqlEndpoint.Enable(con.ServiceClient);
+                },
+                PostWorkCallBack = (args) =>
+                {
+                    if (args.Error != null)
+                    {
+                        MessageBox.Show("Error enabling T-SQL Endpoint:\r\n\r\n" + args.Error.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        return;
+                    }
 
-                if (!String.IsNullOrEmpty(con.ServiceClient.CurrentAccessToken))
-                {
-                    treeView.SelectedNode.ImageIndex = 21;
-                    treeView.SelectedNode.SelectedImageIndex = 21;
+                    node.Text = "T-SQL Endpoint";
+
+                    if (!String.IsNullOrEmpty(con.ServiceClient.CurrentAccessToken))
+                    {
+                        node.ImageIndex = 21;
+                        node.SelectedImageIndex = 21;
+                    }
+                    else
+                    {
+                        node.ImageIndex = 21;
+                        node.SelectedImageIndex = 21;
+                        node.Text += " (Unavailable - OAuth authentication required)";
+                    }
                 }
-                else
-                {
-                    treeView.SelectedNode.ImageIndex = 21;
-                    treeView.SelectedNode.SelectedImageIndex = 21;
-                    treeView.SelectedNode.Text += " (Unavailable - OAuth authentication required)";
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Error enabling T-SQL Endpoint:\r\n\r\n" + ex.Message);
-            }
+            });
         }
 
         private void disableTSQLToolStripMenuItem_Click(object sender, EventArgs e)
         {
             var con = GetService(treeView.SelectedNode);
+            var node = treeView.SelectedNode;
 
-            try
+            WorkAsync(new WorkAsyncInfo
             {
-                TSqlEndpoint.Disable(con.ServiceClient);
-                treeView.SelectedNode.ImageIndex = 20;
-                treeView.SelectedNode.SelectedImageIndex = 20;
-                treeView.SelectedNode.Text = "T-SQL Endpoint (Disabled)";
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Error enabling T-SQL Endpoint:\r\n\r\n" + ex.Message);
-            }
+                Message = "Disabling...",
+                Work = (worker, args) =>
+                {
+                    TSqlEndpoint.Disable(con.ServiceClient);
+                },
+                PostWorkCallBack = (args) =>
+                {
+                    if (args.Error != null)
+                    {
+                        MessageBox.Show("Error disabling T-SQL Endpoint:\r\n\r\n" + args.Error.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        return;
+                    }
+
+                    node.Text = "T-SQL Endpoint (Disabled)";
+                    node.ImageIndex = 20;
+                    node.SelectedImageIndex = 20;
+                }
+            });
+        }
+
+        private void treeView_NodeMouseClick(object sender, TreeNodeMouseClickEventArgs e)
+        {
+            treeView.SelectedNode = e.Node;
         }
     }
 }
