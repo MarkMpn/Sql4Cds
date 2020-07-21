@@ -390,7 +390,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 return null;
 
             // Check if the update is allowed
-            if (options.BlockUpdateWithoutWhere && !FetchXml.Items.OfType<FetchEntityType>().Single().Items.OfType<filter>().Any())
+            if (options.BlockUpdateWithoutWhere && !FetchXml.Items.OfType<FetchEntityType>().Single().Items.OfType<filter>().Any() && !Extensions.OfType<Where>().Any())
                 throw new InvalidOperationException("UPDATE without WHERE is blocked by your settings");
 
             // Get the records to update
@@ -497,7 +497,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (options.Cancelled)
                 return null;
 
-            if (options.BlockDeleteWithoutWhere && !FetchXml.Items.OfType<FetchEntityType>().Single().Items.OfType<filter>().Any())
+            if (options.BlockDeleteWithoutWhere && !FetchXml.Items.OfType<FetchEntityType>().Single().Items.OfType<filter>().Any() && !Extensions.OfType<Where>().Any())
                 throw new InvalidOperationException("DELETE without WHERE is blocked by your settings");
 
             var meta = metadata[EntityName];
