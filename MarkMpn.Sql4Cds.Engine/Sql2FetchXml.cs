@@ -1260,8 +1260,12 @@ namespace MarkMpn.Sql4Cds.Engine
             // the results in FetchXml where possible, and we need to make sure that any columns referenced by the grouping/aggregation
             // expressions are included
 
-            // Add all the columns we need
+            // Add all the columns we need. Process the values in the SELECT clause first so we can correctly handle aliases
             var columns = new ColumnCollectingVisitor();
+
+            foreach (var col in querySpec.SelectElements)
+                col.Accept(columns);
+
             querySpec.Accept(columns);
 
             foreach (var column in columns.Columns)
@@ -3160,16 +3164,15 @@ namespace MarkMpn.Sql4Cds.Engine
                 return alias;
             }
 
-            // If no table is explicitly specified, check in the metadata for each available table
             var possibleEntities = tables
-                .Where(t => t.Metadata.Attributes.Any(attr => attr.LogicalName.Equals(col.MultiPartIdentifier.Identifiers[0].Value, StringComparison.OrdinalIgnoreCase)))
+                .Where(t => t.GetItems().OfType<FetchAttributeType>().Any(attr => attr.alias?.Equals(col.MultiPartIdentifier.Identifiers[0].Value, StringComparison.OrdinalIgnoreCase) == true))
                 .ToArray();
 
             if (possibleEntities.Length == 0)
             {
-                // If we couldn't find a match in the metadata, we might have an alias we can use instead
+                // If no table is explicitly specified, check in the metadata for each available table
                 possibleEntities = tables
-                    .Where(t => (t.Entity?.Items ?? t.LinkEntity?.Items)?.OfType<FetchAttributeType>()?.Any(attr => attr.alias?.Equals(col.MultiPartIdentifier.Identifiers[0].Value, StringComparison.OrdinalIgnoreCase) == true) == true)
+                    .Where(t => t.Metadata.Attributes.Any(attr => attr.LogicalName.Equals(col.MultiPartIdentifier.Identifiers[0].Value, StringComparison.OrdinalIgnoreCase)))
                     .ToArray();
             }
 

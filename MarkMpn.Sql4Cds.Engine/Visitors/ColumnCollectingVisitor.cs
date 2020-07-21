@@ -10,6 +10,9 @@ namespace MarkMpn.Sql4Cds.Engine
     /// </summary>
     class ColumnCollectingVisitor : TSqlFragmentVisitor
     {
+        private readonly ISet<string> _selectAliases = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private bool _ignoreAliases;
+
         /// <summary>
         /// Returns the list of columns used throughout the query
         /// </summary>
@@ -19,7 +22,13 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             base.ExplicitVisit(node);
 
-            Columns.Add(node);
+            if (_ignoreAliases &&
+                node.MultiPartIdentifier?.Identifiers.Count == 1 &&
+                _selectAliases.Contains(node.MultiPartIdentifier.Identifiers[0].Value))
+                return;
+
+            if (!Columns.Contains(node))
+                Columns.Add(node);
         }
 
         public override void ExplicitVisit(FunctionCall node)
@@ -36,6 +45,29 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 base.ExplicitVisit(node);
             }
+        }
+
+        public override void ExplicitVisit(SelectScalarExpression node)
+        {
+            base.ExplicitVisit(node);
+
+            // Keep track of aliases introduced in the SELECT clause so we can ignore them later
+            if (!String.IsNullOrEmpty(node.ColumnName?.Identifier?.Value))
+                _selectAliases.Add(node.ColumnName.Identifier.Value);
+        }
+
+        public override void ExplicitVisit(OrderByClause node)
+        {
+            _ignoreAliases = true;
+            base.ExplicitVisit(node);
+            _ignoreAliases = false;
+        }
+
+        public override void ExplicitVisit(HavingClause node)
+        {
+            _ignoreAliases = true;
+            base.ExplicitVisit(node);
+            _ignoreAliases = false;
         }
     }
 }

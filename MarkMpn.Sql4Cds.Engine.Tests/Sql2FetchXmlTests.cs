@@ -668,6 +668,34 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void GroupBySortingOnAliasedAggregate()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT name, firstname, count(*) as count FROM account INNER JOIN contact ON parentcustomerid = account.accountid GROUP BY name, firstname ORDER BY count";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, @"
+                <fetch aggregate='true'>
+                    <entity name='account'>
+                        <attribute name='name' groupby='true' alias='name' />
+                        <attribute name='accountid' aggregate='count' alias='count' />
+                        <link-entity name='contact' from='parentcustomerid' to='accountid' link-type='inner' alias='contact'>
+                            <attribute name='firstname' groupby='true' alias='firstname' />
+                        </link-entity>
+                        <order alias='count' />
+                    </entity>
+                </fetch>
+            ");
+        }
+
+        [TestMethod]
         public void UpdateFieldToValue()
         {
             var context = new XrmFakedContext();
