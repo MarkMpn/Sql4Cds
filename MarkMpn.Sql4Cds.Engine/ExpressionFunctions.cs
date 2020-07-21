@@ -219,6 +219,17 @@ namespace MarkMpn.Sql4Cds.Engine
         }
 
         /// <summary>
+        /// Implements equality between two <see cref="EntityReference"/>s
+        /// </summary>
+        /// <param name="x">The first <see cref="EntityReference"/> to compare</param>
+        /// <param name="y">The second <see cref="EntityReference"/> to compare</param>
+        /// <returns><c>true</c> if the first <see cref="EntityReference"/> matches the second <see cref="EntityReference"/>, or <c>false</c> otherwise</returns>
+        public static bool Equal(EntityReference x, EntityReference y)
+        {
+            return x.Equals(y);
+        }
+
+        /// <summary>
         /// Implements inequality between <see cref="EntityReference"/> and <see cref="Guid"/>
         /// </summary>
         /// <param name="x">The <see cref="EntityReference"/> to compare</param>
@@ -238,6 +249,17 @@ namespace MarkMpn.Sql4Cds.Engine
         public static bool NotEqual(Guid x, EntityReference y)
         {
             return x != y.Id;
+        }
+
+        /// <summary>
+        /// Implements inequality between two <see cref="EntityReference"/>s
+        /// </summary>
+        /// <param name="x">The first <see cref="EntityReference"/> to compare</param>
+        /// <param name="y">The second <see cref="EntityReference"/> to compare</param>
+        /// <returns><c>false</c> if the first <see cref="EntityReference"/> matches the second <see cref="EntityReference"/>, or <c>true</c> otherwise</returns>
+        public static bool NotEqual(EntityReference x, EntityReference y)
+        {
+            return !x.Equals(y);
         }
 
         /// <summary>

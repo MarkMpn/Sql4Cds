@@ -955,6 +955,11 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 return converted;
             }
+            else if (expr is ParenthesisExpression paren)
+            {
+                var value = ConvertScalarExpression(paren.Expression, tables, calculatedFields, param);
+                return value;
+            }
 
             throw new NotSupportedQueryFragmentException("Unsupported expression", expr);
         }
@@ -2576,6 +2581,8 @@ namespace MarkMpn.Sql4Cds.Engine
                             coreComparison = Expression.Equal(lhsValue, rhsValue, false, Expr.GetMethodInfo(() => ExpressionFunctions.Equal(Expr.Arg<EntityReference>(), Expr.Arg<Guid>())));
                         else if (lhsValue.Type == typeof(Guid) && rhsValue.Type == typeof(EntityReference))
                             coreComparison = Expression.Equal(lhsValue, rhsValue, false, Expr.GetMethodInfo(() => ExpressionFunctions.Equal(Expr.Arg<Guid>(), Expr.Arg<EntityReference>())));
+                        else if (lhsValue.Type == typeof(EntityReference) && rhsValue.Type == typeof(EntityReference))
+                            coreComparison = Expression.Equal(lhsValue, rhsValue, false, Expr.GetMethodInfo(() => ExpressionFunctions.Equal(Expr.Arg<EntityReference>(), Expr.Arg<EntityReference>())));
                         else
                             coreComparison = Expression.Equal(lhsValue, rhsValue);
                         break;
@@ -2604,6 +2611,8 @@ namespace MarkMpn.Sql4Cds.Engine
                             coreComparison = Expression.NotEqual(lhsValue, rhsValue, false, Expr.GetMethodInfo(() => ExpressionFunctions.NotEqual(Expr.Arg<EntityReference>(), Expr.Arg<Guid>())));
                         else if (lhsValue.Type == typeof(Guid) && rhsValue.Type == typeof(EntityReference))
                             coreComparison = Expression.NotEqual(lhsValue, rhsValue, false, Expr.GetMethodInfo(() => ExpressionFunctions.NotEqual(Expr.Arg<Guid>(), Expr.Arg<EntityReference>())));
+                        else if (lhsValue.Type == typeof(EntityReference) && rhsValue.Type == typeof(EntityReference))
+                            coreComparison = Expression.NotEqual(lhsValue, rhsValue, false, Expr.GetMethodInfo(() => ExpressionFunctions.NotEqual(Expr.Arg<EntityReference>(), Expr.Arg<EntityReference>())));
                         else
                             coreComparison = Expression.NotEqual(lhsValue, rhsValue);
                         break;
