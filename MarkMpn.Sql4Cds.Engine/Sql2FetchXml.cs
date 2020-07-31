@@ -591,6 +591,8 @@ namespace MarkMpn.Sql4Cds.Engine
                     return Int32.Parse(value, CultureInfo.InvariantCulture);
 
                 case AttributeTypeCode.Lookup:
+                case AttributeTypeCode.Customer:
+                case AttributeTypeCode.Owner:
                     var targets = ((LookupAttributeMetadata)attr).Targets;
                     if (targets.Length != 1)
                         throw new NotSupportedException($"Cannot use guid value for polymorphic lookup attribute {attrName}. Use CREATELOOKUP(logicalname, guid) function instead");
@@ -691,7 +693,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 GetColumnTableAlias(col, tables, out var table);
                 var logicalName = table.EntityName;
 
-                expression = Expr.Call(() => ExpressionFunctions.CreateLookup(Expr.Arg<string>(), Expr.Arg<Guid?>()), Expression.Constant(logicalName), expression);
+                expression = Expr.Call(() => ExpressionFunctions.CreatePrimaryKeyLookup(Expr.Arg<string>(), Expr.Arg<Guid?>()), Expression.Constant(logicalName), expression);
             }
 
             var finalExpr = Expr.Convert(expression, targetType);
