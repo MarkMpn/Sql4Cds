@@ -282,7 +282,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="entityType">The logical name of the entity to reference</param>
         /// <param name="id">The unique identifier of the entity to reference</param>
         /// <returns>An <see cref="EntityReference"/> with the requested values</returns>
-        public static EntityReference CreateLookup(string entityType, Guid? id)
+        public static EntityReference CreatePrimaryKeyLookup(string entityType, Guid? id)
         {
             if (id == null)
                 return null;
