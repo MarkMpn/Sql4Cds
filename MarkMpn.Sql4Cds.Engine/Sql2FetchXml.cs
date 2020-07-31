@@ -698,6 +698,9 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var finalExpr = Expr.Convert(expression, targetType);
 
+            if (targetType.IsValueType)
+                finalExpr = Expr.Convert(expression, typeof(object));
+
             return Expression.Lambda<Func<Entity, object>>(finalExpr, _param).Compile();
         }
 
