@@ -2376,10 +2376,20 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (field2 == null)
                 {
+                    var attribute = GetColumnAttribute(field);
+
+                    if (!Int32.TryParse(value, out _) && entityTable.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attribute, StringComparison.OrdinalIgnoreCase))?.AttributeType == AttributeTypeCode.EntityName)
+                    {
+                        // Convert the entity name to the object type code
+                        var targetMetadata = Metadata[value];
+
+                        value = targetMetadata.ObjectTypeCode?.ToString();
+                    }
+
                     criteria.Items = AddItem(criteria.Items, new condition
                     {
                         entityname = entityName,
-                        attribute = GetColumnAttribute(field),
+                        attribute = attribute,
                         @operator = op,
                         value = value
                     });
