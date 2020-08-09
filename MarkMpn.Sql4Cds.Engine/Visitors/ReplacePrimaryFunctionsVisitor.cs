@@ -1,6 +1,6 @@
 ﻿using Microsoft.SqlServer.TransactSql.ScriptDom;
 
-namespace MarkMpn.Sql4Cds.Engine
+namespace MarkMpn.Sql4Cds.Engine.Visitors
 {
     /// <summary>
     /// Replaces certain "special" functions with standard function calls for easier handling

@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 
-namespace MarkMpn.Sql4Cds.Engine
+namespace MarkMpn.Sql4Cds.Engine.Visitors
 {
     /// <summary>
     /// Replaces expressions with the equivalent column names

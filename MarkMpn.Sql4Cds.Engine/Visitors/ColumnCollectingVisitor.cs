@@ -3,7 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace MarkMpn.Sql4Cds.Engine
+namespace MarkMpn.Sql4Cds.Engine.Visitors
 {
     /// <summary>
     /// Collect all the columns used throughout a query

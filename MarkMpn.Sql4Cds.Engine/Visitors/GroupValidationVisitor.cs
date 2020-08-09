@@ -1,7 +1,7 @@
 ﻿using Microsoft.SqlServer.TransactSql.ScriptDom;
 using System;
 
-namespace MarkMpn.Sql4Cds.Engine
+namespace MarkMpn.Sql4Cds.Engine.Visitors
 {
     /// <summary>
     /// Checks if the GROUP BY clause and aggregate functions used in a query are valid for conversion directly to FetchXML

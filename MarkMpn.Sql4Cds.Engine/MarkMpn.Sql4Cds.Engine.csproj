@@ -54,6 +54,7 @@
     <Compile Include="EntityExtensions.cs" />
     <Compile Include="TSqlEndpoint.cs" />
     <Compile Include="TSqlFragmentExtensions.cs" />
+    <Compile Include="Visitors\AddDefaultTableAliasesVisitor.cs" />
     <Compile Include="Visitors\AggregateCollectingVisitor.cs" />
     <Compile Include="ExpressionFunctions.cs" />
     <Compile Include="FetchXml.cs">

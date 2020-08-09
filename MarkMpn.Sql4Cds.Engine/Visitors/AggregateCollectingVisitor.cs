@@ -3,7 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace MarkMpn.Sql4Cds.Engine
+namespace MarkMpn.Sql4Cds.Engine.Visitors
 {
     /// <summary>
     /// Collects all the aggregate functions used throughout a query

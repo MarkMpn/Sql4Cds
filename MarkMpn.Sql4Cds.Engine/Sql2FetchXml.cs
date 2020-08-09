@@ -1,5 +1,6 @@
 ﻿using MarkMpn.Sql4Cds.Engine.FetchXml;
 using MarkMpn.Sql4Cds.Engine.QueryExtensions;
+using MarkMpn.Sql4Cds.Engine.Visitors;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
@@ -230,6 +231,9 @@ namespace MarkMpn.Sql4Cds.Engine
                         query = ConvertInsertStatement(insert);
                     else
                         throw new NotSupportedQueryFragmentException("Unsupported statement", statement);
+
+                    statement.Accept(new AddDefaultTableAliasesVisitor());
+                    statement.ScriptTokenStream = null;
 
                     query.Sql = statement.ToSql();
                     queries.Add(query);
@@ -1181,6 +1185,9 @@ namespace MarkMpn.Sql4Cds.Engine
                 // Check if we can still execute the raw query using the T-SQL endpoint instead
                 if (!TSqlEndpointAvailable)
                     throw;
+
+                select.Accept(new AddDefaultTableAliasesVisitor());
+                select.ScriptTokenStream = null;
 
                 return new SelectQuery
                 {
