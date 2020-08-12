@@ -1701,6 +1701,30 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             ");
         }
 
+        [TestMethod]
+        public void QuotedIdentifierError()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+            sql2FetchXml.ColumnComparisonAvailable = true;
+
+            var query = "SELECT firstname, lastname FROM contact WHERE firstname = \"mark\"";
+
+            try
+            {
+                sql2FetchXml.Convert(query);
+                Assert.Fail("Expected exception");
+            }
+            catch (NotSupportedQueryFragmentException ex)
+            {
+                Assert.IsTrue(ex.Message.Contains("Did you mean 'mark'?"));
+            }
+        }
+
         private void AssertFetchXml(Query[] queries, string fetchXml)
         {
             Assert.AreEqual(1, queries.Length);

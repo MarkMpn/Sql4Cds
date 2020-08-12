@@ -3203,6 +3203,9 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (col.MultiPartIdentifier.Identifiers.Count == 1 && calculatedFields != null && calculatedFields.ContainsKey(col.MultiPartIdentifier.Identifiers[0].Value))
                     throw new PostProcessingRequiredException("Calculated field requires post processing", col);
 
+                if (col.MultiPartIdentifier.Identifiers.Last().QuoteType == QuoteType.DoubleQuote && QuotedIdentifiers)
+                    throw new NotSupportedQueryFragmentException("Unknown attribute. Double quotes are used to enclose names, single quotes are for strings. Did you mean '" + col.MultiPartIdentifier.Identifiers.Last().Value + "'?", col);
+
                 throw new NotSupportedQueryFragmentException("Unknown attribute", col);
             }
 
