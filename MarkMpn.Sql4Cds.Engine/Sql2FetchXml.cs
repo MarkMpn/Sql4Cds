@@ -1900,7 +1900,12 @@ namespace MarkMpn.Sql4Cds.Engine
             if (top.WithTies)
                 throw new NotSupportedQueryFragmentException("Unhandled TOP WITH TIES clause", top);
 
-            if (!(top.Expression is IntegerLiteral topLiteral))
+            var expr = top.Expression;
+
+            while (expr is ParenthesisExpression paren)
+                expr = paren.Expression;
+
+            if (!(expr is IntegerLiteral topLiteral))
                 throw new NotSupportedQueryFragmentException("Unhandled TOP expression", top.Expression);
 
             if (extensions.Count == 0)
