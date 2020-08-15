@@ -807,8 +807,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             AssertFetchXml(queries, @"
                 <fetch>
                     <entity name='contact'>
-                        <attribute name='lastname' />
                         <attribute name='firstname' />
+                        <attribute name='lastname' />
                         <attribute name='contactid' />
                     </entity>
                 </fetch>
@@ -1734,7 +1734,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
-            sql2FetchXml.ColumnComparisonAvailable = true;
 
             var query = "SELECT firstname, lastname FROM contact WHERE firstname = \"mark\"";
 
@@ -1747,6 +1746,56 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 Assert.IsTrue(ex.Message.Contains("Did you mean 'mark'?"));
             }
+        }
+
+        [TestMethod]
+        public void FilterExpressionConstantValueToFetchXml()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT firstname, lastname FROM contact WHERE firstname = 'Ma' + 'rk'";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, $@"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <attribute name='lastname' />
+                        <filter>
+                            <condition attribute='firstname' operator='eq' value='Mark' />
+                        </filter>
+                    </entity>
+                </fetch>
+            ");
+        }
+
+        [TestMethod]
+        public void Count1ConvertedToCountStar()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT COUNT(1) FROM contact";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, $@"
+                <fetch aggregate='true'>
+                    <entity name='contact'>
+                        <attribute name='contactid' aggregate='count' alias='contactid_count' />
+                    </entity>
+                </fetch>
+            ");
         }
 
         private void AssertFetchXml(Query[] queries, string fetchXml)

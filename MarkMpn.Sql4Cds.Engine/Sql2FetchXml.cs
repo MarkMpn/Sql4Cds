@@ -689,7 +689,8 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <returns>A compiled expresson that evaluates the supplied <paramref name="expr"/> for a given entity</returns>
         private Func<Entity,object> CompileScalarExpression(ScalarExpression expr, List<EntityTable> tables, IDictionary<string, Type> calculatedFields, Type targetType, out Expression expression)
         {
-            expression = ConvertScalarExpression(expr, tables, calculatedFields, _param);
+            var constantValue = true;
+            expression = ConvertScalarExpression(expr, tables, calculatedFields, _param, ref constantValue);
 
             if (expression.Type == typeof(Guid?) && targetType == typeof(EntityReference) && expr is ColumnReferenceExpression col)
             {
@@ -714,17 +715,82 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="expr">The <see cref="ScalarExpression"/> to convert</param>
         /// <param name="tables">The tables to use as the data source for the expression</param>
         /// <param name="calculatedFields">Any calculated fields that will be created when running the query</param>
+        /// <param name="param">The parameter that holds the entity the expression is being evaluated for</param>
         /// <returns>A compiled expression that evaluates the supplied <paramref name="expr"/> for a given entity</returns>
         /// <remarks>
         /// This method will ensure any attributes required by the <paramref name="expr"/> are added to the query.
         /// </remarks>
-        private Expression ConvertScalarExpression(ScalarExpression expr, List<EntityTable> tables, IDictionary<string,Type> calculatedFields, ParameterExpression param)
+        private Expression ConvertScalarExpression(ScalarExpression expr, List<EntityTable> tables, IDictionary<string, Type> calculatedFields, ParameterExpression param)
+        {
+            var constantValue = true;
+            return ConvertScalarExpression(expr, tables, calculatedFields, param, ref constantValue);
+        }
+
+        private bool IsConstantValueExpression(ScalarExpression expr, List<EntityTable> tables, IDictionary<string, Type> calculatedFields, ParameterExpression param, out Literal literal)
+        {
+            var constantValue = true;
+            var converted = ConvertScalarExpression(expr, tables, calculatedFields, param, ref constantValue);
+
+            if (constantValue)
+            {
+                if (converted.Type.IsValueType)
+                    converted = Expr.Convert(converted, typeof(object));
+
+                var lambda = Expression.Lambda<Func<Entity, object>>(converted, _param).Compile();
+
+                var value = lambda(null);
+
+                if (value is int i)
+                    literal = new IntegerLiteral { Value = i.ToString() };
+                else if (value == null)
+                    literal = new NullLiteral();
+                else if (value is decimal dec)
+                    literal = new NumericLiteral { Value = dec.ToString() };
+                else if (value is double dbl)
+                    literal = new NumericLiteral { Value = dbl.ToString() };
+                else if (value is float flt)
+                    literal = new RealLiteral { Value = flt.ToString() };
+                else if (value is string str)
+                    literal = new StringLiteral { Value = str };
+                else if (value is DateTime dt)
+                    literal = new StringLiteral { Value = dt.ToString("o") };
+                else if (value is EntityReference er)
+                    literal = new StringLiteral { Value = er.Id.ToString() };
+                else if (value is Guid g)
+                    literal = new StringLiteral { Value = g.ToString() };
+                else
+                {
+                    literal = null;
+                    constantValue = false;
+                }
+            }
+            else
+            {
+                literal = null;
+            }
+
+            return constantValue;
+        }
+
+        /// <summary>
+        /// Converts a scalar SQL expression to a compiled function that evaluates the final value of the expression for a given entity.
+        /// </summary>
+        /// <param name="expr">The <see cref="ScalarExpression"/> to convert</param>
+        /// <param name="tables">The tables to use as the data source for the expression</param>
+        /// <param name="calculatedFields">Any calculated fields that will be created when running the query</param>
+        /// <param name="param">The parameter that holds the entity the expression is being evaluated for</param>
+        /// <param name="constantValue">Indicates if the value of the expression is dependant on the <paramref name="param"/> (<c>false</c>) or not (<c>true</c>)</param>
+        /// <returns>A compiled expression that evaluates the supplied <paramref name="expr"/> for a given entity</returns>
+        /// <remarks>
+        /// This method will ensure any attributes required by the <paramref name="expr"/> are added to the query.
+        /// </remarks>
+        private Expression ConvertScalarExpression(ScalarExpression expr, List<EntityTable> tables, IDictionary<string,Type> calculatedFields, ParameterExpression param, ref bool constantValue)
         {
             if (expr is Microsoft.SqlServer.TransactSql.ScriptDom.BinaryExpression binary)
             {
                 // Binary operator - convert the two operands to expressions first
-                var lhs = ConvertScalarExpression(binary.FirstExpression, tables, calculatedFields, param);
-                var rhs = ConvertScalarExpression(binary.SecondExpression, tables, calculatedFields, param);
+                var lhs = ConvertScalarExpression(binary.FirstExpression, tables, calculatedFields, param, ref constantValue);
+                var rhs = ConvertScalarExpression(binary.SecondExpression, tables, calculatedFields, param, ref constantValue);
 
                 // If either operand is a Nullable<T>, get the inner Value to use for the main operator
                 var lhsValue = lhs;
@@ -850,6 +916,8 @@ namespace MarkMpn.Sql4Cds.Engine
                         attrName = tableAlias + "." + attrName;
                 }
 
+                constantValue = false;
+
                 return
                     Expression.Convert(
                         Expression.Call(
@@ -873,7 +941,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             else if (expr is Microsoft.SqlServer.TransactSql.ScriptDom.UnaryExpression unary)
             {
-                var child = ConvertScalarExpression(unary.Expression, tables, calculatedFields, param);
+                var child = ConvertScalarExpression(unary.Expression, tables, calculatedFields, param, ref constantValue);
 
                 switch (unary.UnaryExpressionType)
                 {
@@ -915,13 +983,14 @@ namespace MarkMpn.Sql4Cds.Engine
                         args[0] = Expression.Constant(datepart.MultiPartIdentifier.Identifiers[0].Value);
 
                         for (var i = 1; i < args.Length; i++)
-                            args[i] = ConvertScalarExpression(func.Parameters[i], tables, calculatedFields, param);
+                            args[i] = ConvertScalarExpression(func.Parameters[i], tables, calculatedFields, param, ref constantValue);
                         break;
 
                     default:
-                        args = func.Parameters
-                            .Select(p => ConvertScalarExpression(p, tables, calculatedFields, param))
-                            .ToArray();
+                        args = new Expression[func.Parameters.Count];
+
+                        for (var i = 0; i < func.Parameters.Count; i++)
+                            args[i] = ConvertScalarExpression(func.Parameters[i], tables, calculatedFields, param, ref constantValue);
                         break;
                 }
 
@@ -933,13 +1002,13 @@ namespace MarkMpn.Sql4Cds.Engine
                 // becomes
                 // field = 1 ? 'Big' : field = 2 ? 'Small' : 'Unknown'
                 // Build the expression up from the end and work backwards
-                var converted = searchedCase.ElseExpression == null ? Expression.Constant(null) : ConvertScalarExpression(searchedCase.ElseExpression, tables, calculatedFields, param);
+                var converted = searchedCase.ElseExpression == null ? Expression.Constant(null) : ConvertScalarExpression(searchedCase.ElseExpression, tables, calculatedFields, param, ref constantValue);
 
                 foreach (var when in searchedCase.WhenClauses.Reverse())
                 {
                     converted = Expression.Condition(
                         test: HandleFilterPredicate(when.WhenExpression, tables, calculatedFields, param),
-                        ifTrue: ConvertScalarExpression(when.ThenExpression, tables, calculatedFields, param),
+                        ifTrue: ConvertScalarExpression(when.ThenExpression, tables, calculatedFields, param, ref constantValue),
                         ifFalse: converted);
                 }
 
@@ -951,14 +1020,14 @@ namespace MarkMpn.Sql4Cds.Engine
                 // becomes
                 // field = 1 ? 'Big' : field = 2 ? 'Small' : 'Unknown'
                 // Build the expression up from the end and work backwards
-                var value = ConvertScalarExpression(simpleCase.InputExpression, tables, calculatedFields, param);
-                var converted = simpleCase.ElseExpression == null ? Expression.Constant(null) : ConvertScalarExpression(simpleCase.ElseExpression, tables, calculatedFields, param);
+                var value = ConvertScalarExpression(simpleCase.InputExpression, tables, calculatedFields, param, ref constantValue);
+                var converted = simpleCase.ElseExpression == null ? Expression.Constant(null) : ConvertScalarExpression(simpleCase.ElseExpression, tables, calculatedFields, param, ref constantValue);
 
                 foreach (var when in simpleCase.WhenClauses.Reverse())
                 {
                     converted = Expression.Condition(
-                        test: Expression.Equal(value, ConvertScalarExpression(when.WhenExpression, tables, calculatedFields, param)),
-                        ifTrue: ConvertScalarExpression(when.ThenExpression, tables, calculatedFields, param),
+                        test: Expression.Equal(value, ConvertScalarExpression(when.WhenExpression, tables, calculatedFields, param, ref constantValue)),
+                        ifTrue: ConvertScalarExpression(when.ThenExpression, tables, calculatedFields, param, ref constantValue),
                         ifFalse: converted);
                 }
 
@@ -966,7 +1035,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             else if (expr is ParenthesisExpression paren)
             {
-                var value = ConvertScalarExpression(paren.Expression, tables, calculatedFields, param);
+                var value = ConvertScalarExpression(paren.Expression, tables, calculatedFields, param, ref constantValue);
                 return value;
             }
 
@@ -2233,6 +2302,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 var literal = comparison.SecondExpression as Literal;
                 var func = comparison.SecondExpression as FunctionCall;
                 var field2 = comparison.SecondExpression as ColumnReferenceExpression;
+                var expr = comparison.SecondExpression;
                 var type = comparison.ComparisonType;
 
                 if (field != null && field2 != null)
@@ -2268,6 +2338,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     field = comparison.SecondExpression as ColumnReferenceExpression;
                     literal = comparison.FirstExpression as Literal;
                     func = comparison.FirstExpression as FunctionCall;
+                    expr = comparison.FirstExpression;
 
                     // Switch the operator depending on the order of the column and value, so `column > 3` uses gt but `3 > column` uses le
                     switch (type)
@@ -2291,7 +2362,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
 
                 // If we still couldn't find the column name and value, this isn't a pattern we can support in FetchXML
-                if (field == null || (literal == null && func == null && (field2 == null || !ColumnComparisonAvailable)))
+                if (field == null || (literal == null && func == null && (field2 == null || !ColumnComparisonAvailable) && !IsConstantValueExpression(expr, tables, null, _param, out literal)))
                     throw new PostProcessingRequiredException("Unsupported comparison", comparison);
 
                 // Select the correct FetchXML operator
@@ -2334,50 +2405,61 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     value = literal.Value;
                 }
-                else if (op == @operator.eq && func != null)
+                else if (func != null && Enum.TryParse<@operator>(func.FunctionName.Value.ToLower(), out var customOperator))
                 {
-                    // If we've got the pattern `column = func()`, select the FetchXML operator from the function name
-                    op = (@operator) Enum.Parse(typeof(@operator), func.FunctionName.Value.ToLower());
-
-                    // Check for unsupported SQL DOM elements within the function call
-                    if (func.CallTarget != null)
-                        throw new NotSupportedQueryFragmentException("Unsupported function call target", func);
-
-                    if (func.Collation != null)
-                        throw new NotSupportedQueryFragmentException("Unsupported function collation", func);
-
-                    if (func.OverClause != null)
-                        throw new NotSupportedQueryFragmentException("Unsupported function OVER clause", func);
-
-                    if (func.UniqueRowFilter != UniqueRowFilter.NotSpecified)
-                        throw new NotSupportedQueryFragmentException("Unsupported function unique filter", func);
-
-                    if (func.WithinGroupClause != null)
-                        throw new NotSupportedQueryFragmentException("Unsupported function group clause", func);
-
-                    if (func.Parameters.Count > 1)
-                        throw new NotSupportedQueryFragmentException("Unsupported number of function parameters", func);
-
-                    // Some advanced FetchXML operators use a value as well - take this as the function parameter
-                    // This provides support for queries such as `createdon = lastxdays(3)` becoming <condition attribute="createdon" operator="last-x-days" value="3" />
-                    if (func.Parameters.Count == 1)
+                    if (op == @operator.eq)
                     {
-                        if (!(func.Parameters[0] is Literal paramLiteral))
-                            throw new NotSupportedQueryFragmentException("Unsupported function parameter", func.Parameters[0]);
+                        // If we've got the pattern `column = func()`, select the FetchXML operator from the function name
+                        op = customOperator;
 
-                        value = paramLiteral.Value;
+                        // Check for unsupported SQL DOM elements within the function call
+                        if (func.CallTarget != null)
+                            throw new NotSupportedQueryFragmentException("Unsupported function call target", func);
+
+                        if (func.Collation != null)
+                            throw new NotSupportedQueryFragmentException("Unsupported function collation", func);
+
+                        if (func.OverClause != null)
+                            throw new NotSupportedQueryFragmentException("Unsupported function OVER clause", func);
+
+                        if (func.UniqueRowFilter != UniqueRowFilter.NotSpecified)
+                            throw new NotSupportedQueryFragmentException("Unsupported function unique filter", func);
+
+                        if (func.WithinGroupClause != null)
+                            throw new NotSupportedQueryFragmentException("Unsupported function group clause", func);
+
+                        if (func.Parameters.Count > 1)
+                            throw new NotSupportedQueryFragmentException("Unsupported number of function parameters", func);
+
+                        // Some advanced FetchXML operators use a value as well - take this as the function parameter
+                        // This provides support for queries such as `createdon = lastxdays(3)` becoming <condition attribute="createdon" operator="last-x-days" value="3" />
+                        if (func.Parameters.Count == 1)
+                        {
+                            if (!(func.Parameters[0] is Literal paramLiteral))
+                                throw new NotSupportedQueryFragmentException("Unsupported function parameter", func.Parameters[0]);
+
+                            value = paramLiteral.Value;
+                        }
+                        else if (func.Parameters.Count > 1)
+                        {
+                            // Only functions with 0 or 1 parameters are supported in FetchXML
+                            throw new NotSupportedQueryFragmentException("Too many function parameters", func);
+                        }
                     }
-                    else if (func.Parameters.Count > 1)
+                    else
                     {
-                        // Only functions with 0 or 1 parameters are supported in FetchXML
-                        throw new NotSupportedQueryFragmentException("Too many function parameters", func);
+                        // Can't use functions with other operators
+                        throw new NotSupportedQueryFragmentException("Unsupported function use. Only <field> = <func>(<param>) usage is supported", comparison);
                     }
                 }
-                else if (op != @operator.eq && func != null)
+                else if (func != null)
                 {
-                    // Can't use functions with other operators
-                    throw new NotSupportedQueryFragmentException("Unsupported function use. Only <field> = <func>(<param>) usage is supported", comparison);
+                    if (IsConstantValueExpression(func, tables, null, _param, out literal))
+                        value = literal.Value;
+                    else
+                        throw new PostProcessingRequiredException("Unsupported FetchXML function", func);
                 }
+
 
                 // Find the entity that the condition applies to, which may be different to the entity that the condition FetchXML element will be 
                 // added within
