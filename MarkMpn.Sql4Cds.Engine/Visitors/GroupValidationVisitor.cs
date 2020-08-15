@@ -89,6 +89,17 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                     return;
                 }
 
+                if (node.Parameters[0] is Literal lit)
+                {
+                    if (node.FunctionName.Value.Equals("COUNT", StringComparison.OrdinalIgnoreCase) ||
+                        node.FunctionName.Value.Equals("SUM", StringComparison.OrdinalIgnoreCase) && lit.Value == "1")
+                    {
+                        // COUNT(1) and SUM(1) can be translated to COUNT(*)
+                        node.Parameters[0] = new ColumnReferenceExpression { ColumnType = ColumnType.Wildcard };
+                        node.FunctionName.Value = "COUNT";
+                    }
+                }
+
                 if (!(node.Parameters[0] is ColumnReferenceExpression))
                 {
                     Valid = false;
