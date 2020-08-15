@@ -42,7 +42,13 @@ namespace MarkMpn.Sql4Cds.Engine
                 return null;
 
             var interval = DatePartToInterval(datepart);
-            return DateAndTime.DateAdd(interval, number.Value, date.Value);
+            var value = DateAndTime.DateAdd(interval, number.Value, date.Value);
+
+            // DateAdd loses the Kind property for some interval types - add it back in again
+            if (value.Kind == DateTimeKind.Unspecified)
+                value = DateTime.SpecifyKind(value, date.Value.Kind);
+
+            return value;
         }
 
         /// <summary>
@@ -138,6 +144,81 @@ namespace MarkMpn.Sql4Cds.Engine
                 default:
                     throw new ArgumentOutOfRangeException(nameof(datepart), $"Unsupported DATEPART value {datepart}");
             }
+        }
+
+        /// <summary>
+        /// Gets the current date/time in user-local timezone
+        /// </summary>
+        /// <returns>The current date/time in user-local timezone</returns>
+        public static DateTime GetDate()
+        {
+            return DateTime.Now;
+        }
+
+        /// <summary>
+        /// Gets the current date/time in user-local timezone
+        /// </summary>
+        /// <returns>The current date/time in user-local timezone</returns>
+        public static DateTime SysDateTime()
+        {
+            return DateTime.Now;
+        }
+
+        /// <summary>
+        /// Gets the current date/time in user-local timezone
+        /// </summary>
+        /// <returns>The current date/time in user-local timezone</returns>
+        public static DateTime SysDateTimeOffset()
+        {
+            return DateTime.Now;
+        }
+
+        /// <summary>
+        /// Gets the current date/time in UTC timezone
+        /// </summary>
+        /// <returns>The current date/time in UTC timezone</returns>
+        public static DateTime GetUtcDate()
+        {
+            return DateTime.UtcNow;
+        }
+
+        /// <summary>
+        /// Gets the current date/time in UTC timezone
+        /// </summary>
+        /// <returns>The current date/time in UTC timezone</returns>
+        public static DateTime SysUtcDateTime()
+        {
+            return DateTime.UtcNow;
+        }
+
+        /// <summary>
+        /// Gets the day of the month from the specified date
+        /// </summary>
+        /// <param name="date">The date to get the day number from</param>
+        /// <returns>The day of the month</returns>
+        public static int? Day(DateTime? date)
+        {
+            return date?.Day;
+        }
+
+        /// <summary>
+        /// Gets the month number from the specified date
+        /// </summary>
+        /// <param name="date">The date to get the month number from</param>
+        /// <returns>The month number</returns>
+        public static int? Month(DateTime? date)
+        {
+            return date?.Month;
+        }
+
+        /// <summary>
+        /// Gets the year from the specified date
+        /// </summary>
+        /// <param name="date">The date to get the year number from</param>
+        /// <returns>The year number</returns>
+        public static int? Year(DateTime? date)
+        {
+            return date?.Year;
         }
 
         /// <summary>
