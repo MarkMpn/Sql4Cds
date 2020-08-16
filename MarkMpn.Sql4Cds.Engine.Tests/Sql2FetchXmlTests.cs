@@ -1798,6 +1798,29 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             ");
         }
 
+        [TestMethod]
+        public void CaseInsensitive()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "Select Name From Account";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, $@"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                    </entity>
+                </fetch>
+            ");
+        }
+
         private void AssertFetchXml(Query[] queries, string fetchXml)
         {
             Assert.AreEqual(1, queries.Length);

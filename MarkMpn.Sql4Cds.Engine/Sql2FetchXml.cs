@@ -32,7 +32,7 @@ namespace MarkMpn.Sql4Cds.Engine
             /// <param name="entity">The entity object in the FetchXML query</param>
             public EntityTable(IAttributeMetadataCache cache, FetchEntityType entity)
             {
-                EntityName = entity.name;
+                EntityName = entity.name.ToLower();
                 Entity = entity;
                 Metadata = cache[EntityName];
             }
@@ -44,7 +44,7 @@ namespace MarkMpn.Sql4Cds.Engine
             /// <param name="link">The link-entity object in the FetchXML query</param>
             public EntityTable(IAttributeMetadataCache cache, FetchLinkEntityType link)
             {
-                EntityName = link.name;
+                EntityName = link.name.ToLower();
                 Alias = link.alias;
                 LinkEntity = link;
                 Metadata = cache[EntityName];
@@ -3040,7 +3040,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 // This is the first table in our query, so add it to the root of the FetchXML
                 var entity = new FetchEntityType
                 {
-                    name = namedTable.SchemaObject.BaseIdentifier.Value
+                    name = namedTable.SchemaObject.BaseIdentifier.Value.ToLower()
                 };
                 fetch.Items = new object[] { entity };
 
@@ -3081,7 +3081,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 // Add a link-entity for the second table in the join
                 var link = new FetchLinkEntityType
                 {
-                    name = table2.SchemaObject.BaseIdentifier.Value,
+                    name = table2.SchemaObject.BaseIdentifier.Value.ToLower(),
                     alias = table2.Alias?.Value ?? table2.SchemaObject.BaseIdentifier.Value
                 };
 
@@ -3309,7 +3309,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         private string GetColumnAttribute(ColumnReferenceExpression col)
         {
-            return col.MultiPartIdentifier.Identifiers.Last().Value;
+            return col.MultiPartIdentifier.Identifiers.Last().Value.ToLower();
         }
 
         private static object[] AddItem(object[] items, object item)
