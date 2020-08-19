@@ -604,73 +604,129 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
                     else
                     {
+                        DateTime? startTime = null;
+                        DateTime? endTime = null;
+
                         switch (condition.@operator)
                         {
+                            case @operator.lastsevendays:
+                            case @operator.lastweek:
+                                startTime = DateTime.Today.AddDays(-7);
+                                endTime = DateTime.Now;
+                                break;
+
                             case @operator.lastxdays:
-                            case @operator.lastxweeks:
+                                startTime = DateTime.Today.AddDays(-Int32.Parse(condition.value));
+                                endTime = DateTime.Now;
+                                break;
+
+                            case @operator.lastxhours:
+                                startTime = DateTime.Today.AddHours(DateTime.Now.Hour - Int32.Parse(condition.value));
+                                endTime = DateTime.Now;
+                                break;
+
                             case @operator.lastxmonths:
+                                startTime = DateTime.Today.AddMonths(-Int32.Parse(condition.value));
+                                endTime = DateTime.Now;
+                                break;
+
+                            case @operator.lastxweeks:
+                                startTime = DateTime.Today.AddDays(-Int32.Parse(condition.value) * 7);
+                                endTime = DateTime.Now;
+                                break;
+
                             case @operator.lastxyears:
-                                var datePart = "day";
-                                var interval = "-" + condition.value;
+                                startTime = DateTime.Today.AddYears(-Int32.Parse(condition.value));
+                                endTime = DateTime.Now;
+                                break;
 
-                                if (condition.@operator == @operator.lastxweeks)
-                                    interval = (Int32.Parse(interval) * 7).ToString();
-                                else if (condition.@operator == @operator.lastxmonths)
-                                    datePart = "month";
-                                else if (condition.@operator == @operator.lastxyears)
-                                    datePart = "year";
+                            case @operator.lastyear:
+                                startTime = DateTime.Today.AddYears(-1);
+                                endTime = DateTime.Now;
+                                break;
 
-                                return new BooleanBinaryExpression
-                                {
-                                    FirstExpression = new BooleanComparisonExpression
-                                    {
-                                        FirstExpression = field,
-                                        ComparisonType = BooleanComparisonType.GreaterThanOrEqualTo,
-                                        SecondExpression = new FunctionCall
-                                        {
-                                            FunctionName = new Identifier { Value = "DATEADD" },
-                                            Parameters =
-                                            {
-                                                new ColumnReferenceExpression
-                                                {
-                                                    MultiPartIdentifier = new MultiPartIdentifier
-                                                    {
-                                                        Identifiers = { new Identifier { Value = datePart } }
-                                                    }
-                                                },
-                                                new IntegerLiteral { Value = interval },
-                                                new ConvertCall
-                                                {
-                                                    DataType = new SqlDataTypeReference
-                                                    {
-                                                        Name = new SchemaObjectName
-                                                        {
-                                                            Identifiers = { new Identifier {  Value = "date" } }
-                                                        }
-                                                    },
-                                                    Parameter = new FunctionCall
-                                                    {
-                                                        FunctionName = new Identifier { Value = "GETDATE" }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    },
-                                    BinaryExpressionType = BooleanBinaryExpressionType.And,
-                                    SecondExpression = new BooleanComparisonExpression
-                                    {
-                                        FirstExpression = field,
-                                        ComparisonType = BooleanComparisonType.LessThanOrEqualTo,
-                                        SecondExpression = new FunctionCall
-                                        {
-                                            FunctionName = new Identifier { Value = "GETDATE" }
-                                        }
-                                    }
-                                };
+                            case @operator.nextmonth:
+                                startTime = DateTime.Now;
+                                endTime = DateTime.Today.AddDays(1).AddMonths(1);
+                                break;
+
+                            case @operator.nextsevendays:
+                            case @operator.nextweek:
+                                startTime = DateTime.Now;
+                                endTime = DateTime.Today.AddDays(8);
+                                break;
+
+                            case @operator.nextxdays:
+                                startTime = DateTime.Now;
+                                endTime = DateTime.Today.AddDays(Int32.Parse(condition.value) + 1);
+                                break;
+
+                            case @operator.nextxhours:
+                                startTime = DateTime.Now;
+                                endTime = DateTime.Today.AddHours(DateTime.Now.Hour + Int32.Parse(condition.value) + 1);
+                                break;
+                                
+                            case @operator.nextxmonths:
+                                startTime = DateTime.Now;
+                                endTime = DateTime.Today.AddDays(1).AddMonths(Int32.Parse(condition.value));
+                                break;
+
+                            case @operator.nextxweeks:
+                                startTime = DateTime.Now;
+                                endTime = DateTime.Today.AddDays(Int32.Parse(condition.value) * 7 + 1);
+                                break;
+
+                            case @operator.nextxyears:
+                                startTime = DateTime.Now;
+                                endTime = DateTime.Today.AddDays(1).AddYears(Int32.Parse(condition.value));
+                                break;
+
+                            case @operator.nextyear:
+                                startTime = DateTime.Now;
+                                endTime = DateTime.Today.AddDays(1).AddYears(1);
+                                break;
 
                             default:
                                 throw new NotImplementedException();
                         }
+
+                        BooleanExpression expr = null;
+
+                        if (startTime != null)
+                        {
+                            expr = new BooleanComparisonExpression
+                            {
+                                FirstExpression = field,
+                                ComparisonType = BooleanComparisonType.GreaterThanOrEqualTo,
+                                SecondExpression = new StringLiteral { Value = startTime.Value.ToString("s") }
+                            };
+                        }
+
+                        if (endTime != null)
+                        {
+                            var endExpr = new BooleanComparisonExpression
+                            {
+                                FirstExpression = field,
+                                ComparisonType = BooleanComparisonType.LessThan,
+                                SecondExpression = new StringLiteral { Value = endTime.Value.ToString("s") }
+                            };
+
+                            if (expr == null)
+                            {
+                                expr = endExpr;
+                            }
+                            else
+                            {
+                                expr = new BooleanBinaryExpression
+                                {
+                                    FirstExpression = expr,
+                                    BinaryExpressionType = BooleanBinaryExpressionType.And,
+                                    SecondExpression = endExpr
+                                };
+                            }
+                        }
+
+                        return expr;
                     }
 
                     break;
