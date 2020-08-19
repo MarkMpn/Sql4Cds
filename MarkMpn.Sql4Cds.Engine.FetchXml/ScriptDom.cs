@@ -254,7 +254,7 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
 
             if (TableHints.Count > 0)
             {
-                buf.Append("(");
+                buf.Append(" WITH (");
 
                 for (var i = 0; i < TableHints.Count; i++)
                 {
