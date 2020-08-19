@@ -25,7 +25,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
                     </entity>
                 </fetch>";
 
-            var converted = FetchXml2Sql.Convert(metadata, fetch);
+            var converted = FetchXml2Sql.Convert(metadata, fetch, new FetchXml2SqlOptions(), out _);
 
             Assert.AreEqual("SELECT firstname, lastname FROM contact", NormalizeWhitespace(converted));
         }
@@ -49,7 +49,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
                     </entity>
                 </fetch>";
 
-            var converted = FetchXml2Sql.Convert(metadata, fetch);
+            var converted = FetchXml2Sql.Convert(metadata, fetch, new FetchXml2SqlOptions(), out _);
 
             Assert.AreEqual("SELECT firstname, lastname FROM contact WHERE firstname = 'Mark'", NormalizeWhitespace(converted));
         }
@@ -73,7 +73,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
                     </entity>
                 </fetch>";
 
-            var converted = FetchXml2Sql.Convert(metadata, fetch);
+            var converted = FetchXml2Sql.Convert(metadata, fetch, new FetchXml2SqlOptions(), out _);
 
             Assert.AreEqual("SELECT contact.firstname, contact.lastname, account.name FROM contact INNER JOIN account ON contact.parentcustomerid = account.accountid", NormalizeWhitespace(converted));
         }
@@ -103,7 +103,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
                     </entity>
                 </fetch>";
 
-            var converted = FetchXml2Sql.Convert(metadata, fetch);
+            var converted = FetchXml2Sql.Convert(metadata, fetch, new FetchXml2SqlOptions(), out _);
 
             Assert.AreEqual("SELECT contact.firstname, contact.lastname, account.name FROM contact INNER JOIN account ON contact.parentcustomerid = account.accountid AND account.name = 'data8' WHERE contact.firstname = 'Mark'", NormalizeWhitespace(converted));
         }
@@ -125,7 +125,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
                     </entity>
                 </fetch>";
 
-            var converted = FetchXml2Sql.Convert(metadata, fetch);
+            var converted = FetchXml2Sql.Convert(metadata, fetch, new FetchXml2SqlOptions(), out _);
 
             Assert.AreEqual("SELECT firstname, lastname FROM contact ORDER BY firstname ASC", NormalizeWhitespace(converted));
         }
@@ -147,7 +147,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
                     </entity>
                 </fetch>";
 
-            var converted = FetchXml2Sql.Convert(metadata, fetch);
+            var converted = FetchXml2Sql.Convert(metadata, fetch, new FetchXml2SqlOptions(), out _);
 
             Assert.AreEqual("SELECT firstname, lastname FROM contact ORDER BY firstname DESC", NormalizeWhitespace(converted));
         }
@@ -168,7 +168,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
                     </entity>
                 </fetch>";
 
-            var converted = FetchXml2Sql.Convert(metadata, fetch);
+            var converted = FetchXml2Sql.Convert(metadata, fetch, new FetchXml2SqlOptions(), out _);
 
             Assert.AreEqual("SELECT firstname, lastname FROM contact WITH (NOLOCK)", NormalizeWhitespace(converted));
         }
@@ -189,7 +189,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
                     </entity>
                 </fetch>";
 
-            var converted = FetchXml2Sql.Convert(metadata, fetch);
+            var converted = FetchXml2Sql.Convert(metadata, fetch, new FetchXml2SqlOptions(), out _);
 
             Assert.AreEqual("SELECT TOP 10 firstname, lastname FROM contact", NormalizeWhitespace(converted));
         }
@@ -210,9 +210,57 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
                     </entity>
                 </fetch>";
 
-            var converted = FetchXml2Sql.Convert(metadata, fetch);
+            var converted = FetchXml2Sql.Convert(metadata, fetch, new FetchXml2SqlOptions(), out _);
 
             Assert.AreEqual("SELECT DISTINCT firstname, lastname FROM contact", NormalizeWhitespace(converted));
+        }
+
+        [TestMethod]
+        public void CustomOperator()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var fetch = @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <attribute name='lastname' />
+                        <filter>
+                            <condition attribute='createdon' operator='last-x-days' value='2' />
+                        </filter>
+                    </entity>
+                </fetch>";
+
+            var converted = FetchXml2Sql.Convert(metadata, fetch, new FetchXml2SqlOptions(), out _);
+
+            Assert.AreEqual("SELECT firstname, lastname FROM contact WHERE createdon = lastxdays(2)", NormalizeWhitespace(converted));
+        }
+
+        [TestMethod]
+        public void CustomOperatorConversion()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var fetch = @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <attribute name='lastname' />
+                        <filter>
+                            <condition attribute='createdon' operator='last-x-days' value='2' />
+                        </filter>
+                    </entity>
+                </fetch>";
+
+            var converted = FetchXml2Sql.Convert(metadata, fetch, new FetchXml2SqlOptions { PreserveFetchXmlOperatorsAsFunctions = false }, out _);
+
+            Assert.AreEqual("SELECT firstname, lastname FROM contact WHERE createdon >= DATEADD(day, -2, CONVERT(date, GETDATE())) AND createdon <= GETDATE()", NormalizeWhitespace(converted));
         }
 
         private static string NormalizeWhitespace(string s)

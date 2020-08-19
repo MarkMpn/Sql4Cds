@@ -560,6 +560,47 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         }
     }
 
+    class ConvertCall : ScalarExpression
+    {
+        public SqlDataTypeReference DataType { get; set; }
+
+        public ScalarExpression Parameter { get; set; }
+
+        public override void Accept(TSqlFragmentVisitor visitor)
+        {
+            visitor.ExplicitVisit(this);
+
+            DataType?.Accept(visitor);
+            Parameter?.Accept(visitor);
+        }
+
+        public override void ToString(StringBuilder buf)
+        {
+            buf.Append("CONVERT(");
+            DataType.ToString(buf);
+            buf.Append(", ");
+            Parameter.ToString(buf);
+            buf.Append(")");
+        }
+    }
+
+    class SqlDataTypeReference
+    {
+        public SchemaObjectName Name { get; set; }
+
+        public void Accept(TSqlFragmentVisitor visitor)
+        {
+            visitor.ExplicitVisit(this);
+
+            Name?.Accept(visitor);
+        }
+
+        public void ToString(StringBuilder buf)
+        {
+            Name.ToString(buf);
+        }
+    }
+
     class IdentifierOrValueExpression
     {
         public Identifier Identifier { get; set; }
@@ -1061,6 +1102,14 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         }
 
         public virtual void ExplicitVisit(TableHint tableHint)
+        {
+        }
+
+        internal void ExplicitVisit(ConvertCall convertCall)
+        {
+        }
+
+        internal void ExplicitVisit(SqlDataTypeReference sqlDataTypeReference)
         {
         }
     }
