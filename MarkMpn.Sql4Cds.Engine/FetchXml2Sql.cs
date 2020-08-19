@@ -686,6 +686,73 @@ namespace MarkMpn.Sql4Cds.Engine
                                 endTime = DateTime.Today.AddDays(1).AddYears(1);
                                 break;
 
+                            case @operator.olderthanxdays:
+                                endTime = DateTime.Today.AddDays(-Int32.Parse(condition.value));
+                                break;
+
+                            case @operator.olderthanxhours:
+                                endTime = DateTime.Today.AddHours(DateTime.Now.Hour - Int32.Parse(condition.value));
+                                break;
+
+                            case @operator.olderthanxminutes:
+                                endTime = DateTime.Today.AddMinutes(Math.Truncate(DateTime.Now.TimeOfDay.TotalMinutes) - Int32.Parse(condition.value));
+                                break;
+
+                            case @operator.olderthanxmonths:
+                                endTime = DateTime.Today.AddMonths(-Int32.Parse(condition.value));
+                                break;
+
+                            case @operator.olderthanxweeks:
+                                endTime = DateTime.Today.AddDays(-Int32.Parse(condition.value) * 7);
+                                break;
+
+                            case @operator.olderthanxyears:
+                                endTime = DateTime.Today.AddYears(-Int32.Parse(condition.value));
+                                break;
+
+                            case @operator.on:
+                                startTime = DateTime.Parse(condition.value).Date;
+                                endTime = startTime.Value.AddDays(1);
+                                break;
+
+                            case @operator.onorafter:
+                                startTime = DateTime.Parse(condition.value).Date;
+                                break;
+
+                            case @operator.onorbefore:
+                                endTime = DateTime.Parse(condition.value).Date.AddDays(1);
+                                break;
+
+                            case @operator.thismonth:
+                                startTime = DateTime.Today.AddDays(1 - DateTime.Today.Day);
+                                endTime = startTime.Value.AddMonths(1);
+                                break;
+
+                            case @operator.thisweek:
+                                startTime = DateTime.Today.AddDays(- (int) DateTime.Today.DayOfWeek);
+                                endTime = startTime.Value.AddDays(7);
+                                break;
+
+                            case @operator.thisyear:
+                                startTime = DateTime.Today.AddDays(1 - DateTime.Today.DayOfYear);
+                                endTime = startTime.Value.AddYears(1);
+                                break;
+
+                            case @operator.today:
+                                startTime = DateTime.Today;
+                                endTime = startTime.Value.AddDays(1);
+                                break;
+
+                            case @operator.tomorrow:
+                                startTime = DateTime.Today.AddDays(1);
+                                endTime = startTime.Value.AddDays(1);
+                                break;
+
+                            case @operator.yesterday:
+                                startTime = DateTime.Today.AddDays(-1);
+                                endTime = startTime.Value.AddDays(1);
+                                break;
+
                             default:
                                 throw new NotImplementedException();
                         }
