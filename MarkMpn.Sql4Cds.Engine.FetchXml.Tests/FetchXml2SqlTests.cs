@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using FakeXrmEasy;
@@ -285,6 +286,31 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
             var converted = FetchXml2Sql.Convert(metadata, fetch, new FetchXml2SqlOptions { PreserveFetchXmlOperatorsAsFunctions = false }, out _);
 
             Assert.AreEqual($"SELECT firstname, lastname FROM contact WHERE createdon >= '{DateTime.Now:s}' AND createdon < '{DateTime.Today.AddDays(1).AddYears(2):s}'", NormalizeWhitespace(converted));
+        }
+
+        [TestMethod]
+        public void ParameterConversion()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var fetch = @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <attribute name='lastname' />
+                        <filter>
+                            <condition attribute='firstname' operator='eq' value='Mark' />
+                        </filter>
+                    </entity>
+                </fetch>";
+
+            var converted = FetchXml2Sql.Convert(metadata, fetch, new FetchXml2SqlOptions { UseParametersForLiterals = true }, out var parameters);
+
+            Assert.AreEqual("SELECT firstname, lastname FROM contact WHERE firstname = @firstname", NormalizeWhitespace(converted));
+            Assert.AreEqual("Mark", parameters["@firstname"]);
         }
 
         private static string NormalizeWhitespace(string s)

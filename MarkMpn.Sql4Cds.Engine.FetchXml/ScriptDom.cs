@@ -181,6 +181,21 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         }
     }
 
+    class VariableReference : ScalarExpression
+    {
+        public string Name { get; set; }
+
+        public override void Accept(TSqlFragmentVisitor visitor)
+        {
+            visitor.ExplicitVisit(this);
+        }
+
+        public override void ToString(StringBuilder buf)
+        {
+            buf.Append(Name);
+        }
+    }
+
     enum UniqueRowFilter
     {
         None,
@@ -1110,6 +1125,10 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         }
 
         internal void ExplicitVisit(SqlDataTypeReference sqlDataTypeReference)
+        {
+        }
+
+        internal void ExplicitVisit(VariableReference variableReference)
         {
         }
     }

@@ -1158,6 +1158,106 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 _parameters = parameters;
             }
+
+            public override void ExplicitVisit(BooleanComparisonExpression node)
+            {
+                base.ExplicitVisit(node);
+
+                if (node.FirstExpression is ColumnReferenceExpression col &&
+                    node.SecondExpression is Literal literal)
+                {
+                    var parameterName = GetParameterName(col.MultiPartIdentifier.Identifiers.Last().Value);
+                    var param = new VariableReference { Name = parameterName };
+                    node.SecondExpression = param;
+                    _parameters[parameterName] = GetParameterValue(literal);
+                }
+            }
+
+            public override void ExplicitVisit(InPredicate node)
+            {
+                base.ExplicitVisit(node);
+
+                if (node.Expression is ColumnReferenceExpression col)
+                {
+                    for (var i = 0; i < node.Values.Count; i++)
+                    {
+                        if (node.Values[i] is Literal literal)
+                        {
+                            var parameterName = GetParameterName(col.MultiPartIdentifier.Identifiers.Last().Value);
+                            var param = new VariableReference { Name = parameterName };
+                            node.Values[i] = param;
+                            _parameters[parameterName] = GetParameterValue(literal);
+                        }
+                    }
+                }
+            }
+
+            public override void ExplicitVisit(BooleanTernaryExpression node)
+            {
+                base.ExplicitVisit(node);
+
+                if (node.FirstExpression is ColumnReferenceExpression col)
+                {
+                    if (node.SecondExpression is Literal lit1)
+                    {
+                        var parameterName = GetParameterName(col.MultiPartIdentifier.Identifiers.Last().Value);
+                        var param = new VariableReference { Name = parameterName };
+                        node.SecondExpression = param;
+                        _parameters[parameterName] = GetParameterValue(lit1);
+                    }
+
+                    if (node.ThirdExpression is Literal lit2)
+                    {
+                        var parameterName = GetParameterName(col.MultiPartIdentifier.Identifiers.Last().Value);
+                        var param = new VariableReference { Name = parameterName };
+                        node.ThirdExpression = param;
+                        _parameters[parameterName] = GetParameterValue(lit2);
+                    }
+                }
+            }
+
+            public override void ExplicitVisit(LikePredicate node)
+            {
+                base.ExplicitVisit(node);
+
+                if (node.FirstExpression is ColumnReferenceExpression col &&
+                    node.SecondExpression is Literal literal)
+                {
+                    var parameterName = GetParameterName(col.MultiPartIdentifier.Identifiers.Last().Value);
+                    var param = new VariableReference { Name = parameterName };
+                    node.SecondExpression = param;
+                    _parameters[parameterName] = GetParameterValue(literal);
+                }
+            }
+
+            private object GetParameterValue(Literal literal)
+            {
+                if (literal is IntegerLiteral i)
+                    return Int32.Parse(i.Value);
+
+                if (literal is MoneyLiteral m)
+                    return Decimal.Parse(m.Value);
+
+                if (literal is NumericLiteral n)
+                    return Decimal.Parse(n.Value);
+
+                return literal.Value;
+            }
+
+            private string GetParameterName(string column)
+            {
+                var baseName = "@" + column;
+
+                if (!_parameters.ContainsKey(baseName))
+                    return baseName;
+
+                var suffix = 1;
+
+                while (_parameters.ContainsKey(baseName + suffix))
+                    suffix++;
+
+                return baseName + suffix;
+            }
         }
     }
 

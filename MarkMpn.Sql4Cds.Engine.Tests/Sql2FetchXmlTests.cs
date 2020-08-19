@@ -490,7 +490,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var metadata = new AttributeMetadataCache(org);
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
 
-            var query = "SELECT accountid, name FROM account INNER JOIN contact ON accountid = parentcustomerid AND (firstname = 'Mark' OR lastname = 'Carrington')";
+            var query = "SELECT accountid, name FROM account INNER JOIN contact ON accountid = parentcustomerid AND @param = 1 AND (firstname = 'Mark' OR lastname = 'Carrington')";
 
             var queries = sql2FetchXml.Convert(query);
 
