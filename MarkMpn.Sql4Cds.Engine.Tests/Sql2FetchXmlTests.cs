@@ -960,6 +960,48 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void UpdateReplace()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "UPDATE contact SET firstname = REPLACE(firstname, 'Dataflex Pro', 'CDS') WHERE lastname = 'Carrington'";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, @"
+                <fetch distinct='true'>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <attribute name='contactid' />
+                        <filter>
+                            <condition attribute='lastname' operator='eq' value='Carrington' />
+                        </filter>
+                    </entity>
+                </fetch>
+            ");
+
+            var guid = Guid.NewGuid();
+            context.Data["contact"] = new Dictionary<Guid, Entity>
+            {
+                [guid] = new Entity("contact", guid)
+                {
+                    ["contactid"] = guid,
+                    ["firstname"] = "--Dataflex Pro--",
+                    ["lastname"] = "Carrington"
+                }
+            };
+
+            queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+
+            Assert.AreEqual("--CDS--", context.Data["contact"][guid]["firstname"]);
+        }
+
+        [TestMethod]
         public void SelectExpression()
         {
             var context = new XrmFakedContext();

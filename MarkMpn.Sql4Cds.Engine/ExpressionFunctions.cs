@@ -370,6 +370,21 @@ namespace MarkMpn.Sql4Cds.Engine
 
             return new EntityReference(entityType, id.Value);
         }
+
+        /// <summary>
+        /// Replaces all occurrences of a specified string value with another string value.
+        /// </summary>
+        /// <param name="input">The string expression to be searched</param>
+        /// <param name="find">The substring to be found</param>
+        /// <param name="replace">The replacement string</param>
+        /// <returns>Replaces any instances of <paramref name="find"/> with <paramref name="replace"/> in the <paramref name="input"/></returns>
+        public static string Replace(string input, string find, string replace)
+        {
+            if (input == null || find == null || replace == null)
+                return null;
+
+            return Regex.Replace(input, Regex.Escape(find), replace.Replace("$", "$$"), RegexOptions.IgnoreCase);
+        }
     }
 
     /// <summary>
