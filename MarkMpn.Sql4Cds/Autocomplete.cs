@@ -64,6 +64,7 @@ namespace MarkMpn.Sql4Cds
             switch (prevWord.ToLower())
             {
                 case "from":
+                case "insert":
                 case "into":
                     // Show table list
                     if (_entities != null)
@@ -236,9 +237,11 @@ namespace MarkMpn.Sql4Cds
                         !prevWord.Equals("having", StringComparison.OrdinalIgnoreCase) &&
                         !prevWord.Equals("update", StringComparison.OrdinalIgnoreCase) &&
                         !prevWord.Equals("delete", StringComparison.OrdinalIgnoreCase) &&
+                        !prevWord.Equals("insert", StringComparison.OrdinalIgnoreCase) &&
+                        !prevWord.Equals("into", StringComparison.OrdinalIgnoreCase) &&
                         !prevWord.Equals("set", StringComparison.OrdinalIgnoreCase) &&
                         !prevWord.Equals("join", StringComparison.OrdinalIgnoreCase) &&
-                        !prevPrevWord.Equals("top", StringComparison.OrdinalIgnoreCase))
+                        (prevPrevWord == null || !prevPrevWord.Equals("top", StringComparison.OrdinalIgnoreCase)))
                         return Array.Empty<string>();
 
                     if (tables != null)

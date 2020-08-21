@@ -39,6 +39,26 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void Insert()
+        {
+            var sql = "INSERT ";
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out var currentLength).ToList();
+
+            Assert.AreEqual(0, currentLength);
+            CollectionAssert.AreEqual(new[] { "account?4", "contact?4", "new_customentity?4" }, suggestions);
+        }
+
+        [TestMethod]
+        public void InsertInto()
+        {
+            var sql = "INSERT INTO ";
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out var currentLength).ToList();
+
+            Assert.AreEqual(0, currentLength);
+            CollectionAssert.AreEqual(new[] { "account?4", "contact?4", "new_customentity?4" }, suggestions);
+        }
+
+        [TestMethod]
         public void Join()
         {
             var sql = "SELECT * FROM account le";
