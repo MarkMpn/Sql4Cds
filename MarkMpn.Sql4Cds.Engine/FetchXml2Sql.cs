@@ -438,9 +438,9 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     expression = new BooleanBinaryExpression
                     {
-                        FirstExpression = expression,
+                        FirstExpression = new BooleanParenthesisExpression { Expression = expression },
                         BinaryExpressionType = type,
-                        SecondExpression = newExpression
+                        SecondExpression = new BooleanParenthesisExpression { Expression = newExpression }
                     };
                 }
             }

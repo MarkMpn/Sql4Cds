@@ -313,6 +313,34 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
             Assert.AreEqual("Mark", parameters["@firstname"]);
         }
 
+        [TestMethod]
+        public void AndOr()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var fetch = @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <attribute name='lastname' />
+                        <filter>
+                            <condition attribute='firstname' operator='eq' value='Mark' />
+                            <filter type='or'>
+                                <condition attribute='lastname' operator='eq' value='Carrington' />
+                                <condition attribute='lastname' operator='eq' value='Twain' />
+                            </filter>
+                        </filter>
+                    </entity>
+                </fetch>";
+
+            var converted = FetchXml2Sql.Convert(metadata, fetch, new FetchXml2SqlOptions(), out _);
+
+            Assert.AreEqual("SELECT firstname, lastname FROM contact WHERE (firstname = 'Mark') AND (lastname = 'Carrington' OR lastname = 'Twain')", NormalizeWhitespace(converted));
+        }
+
         private static string NormalizeWhitespace(string s)
         {
             return Regex.Replace(s, "\\s+", " ");

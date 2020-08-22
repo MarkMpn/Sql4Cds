@@ -744,10 +744,29 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         NotEqualToBrackets
     }
 
+    class BooleanParenthesisExpression : BooleanExpression
+    {
+        public BooleanExpression Expression { get; set; }
+
+        public override void Accept(TSqlFragmentVisitor visitor)
+        {
+            visitor.ExplicitVisit(this);
+
+            Expression?.Accept(visitor);
+        }
+
+        public override void ToString(StringBuilder buf)
+        {
+            buf.Append("(");
+            Expression.ToString(buf);
+            buf.Append(")");
+        }
+    }
+
     class BooleanBinaryExpression : BooleanExpression
     {
-        public Expression FirstExpression { get; set; }
-        public Expression SecondExpression { get; set; }
+        public BooleanExpression FirstExpression { get; set; }
+        public BooleanExpression SecondExpression { get; set; }
         public BooleanBinaryExpressionType BinaryExpressionType { get; set; }
 
         public override void Accept(TSqlFragmentVisitor visitor)
@@ -1129,6 +1148,10 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         }
 
         internal void ExplicitVisit(VariableReference variableReference)
+        {
+        }
+
+        internal void ExplicitVisit(BooleanParenthesisExpression booleanParenthesisExpression)
         {
         }
     }
