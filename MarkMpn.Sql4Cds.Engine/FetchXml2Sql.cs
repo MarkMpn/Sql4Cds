@@ -638,9 +638,18 @@ namespace MarkMpn.Sql4Cds.Engine
                         switch (condition.@operator)
                         {
                             case @operator.lastsevendays:
-                            case @operator.lastweek:
                                 startTime = DateTime.Today.AddDays(-7);
                                 endTime = DateTime.Now;
+                                break;
+
+                            case @operator.lastweek:
+                                startTime = DateTime.Today.AddDays(-(int)DateTime.Today.DayOfWeek - 7);
+                                endTime = startTime.Value.AddDays(7);
+                                break;
+
+                            case @operator.lastmonth:
+                                startTime = DateTime.Today.AddDays(1 - DateTime.Today.Day).AddMonths(-1);
+                                endTime = startTime.Value.AddMonths(1);
                                 break;
 
                             case @operator.lastxdays:
@@ -669,19 +678,23 @@ namespace MarkMpn.Sql4Cds.Engine
                                 break;
 
                             case @operator.lastyear:
-                                startTime = DateTime.Today.AddYears(-1);
-                                endTime = DateTime.Now;
+                                startTime = new DateTime(DateTime.Today.Year, 1, 1);
+                                endTime = startTime.Value.AddYears(1);
                                 break;
 
                             case @operator.nextmonth:
-                                startTime = DateTime.Now;
-                                endTime = DateTime.Today.AddDays(1).AddMonths(1);
+                                startTime = DateTime.Today.AddDays(1 - DateTime.Today.Day).AddMonths(1);
+                                endTime = startTime.Value.AddMonths(1);
                                 break;
 
                             case @operator.nextsevendays:
-                            case @operator.nextweek:
                                 startTime = DateTime.Now;
                                 endTime = DateTime.Today.AddDays(8);
+                                break;
+
+                            case @operator.nextweek:
+                                startTime = DateTime.Today.AddDays(7 - (int)DateTime.Today.DayOfWeek);
+                                endTime = startTime.Value.AddDays(7);
                                 break;
 
                             case @operator.nextxdays:
@@ -710,8 +723,8 @@ namespace MarkMpn.Sql4Cds.Engine
                                 break;
 
                             case @operator.nextyear:
-                                startTime = DateTime.Now;
-                                endTime = DateTime.Today.AddDays(1).AddYears(1);
+                                startTime = new DateTime(DateTime.Today.Year + 1, 1, 1);
+                                endTime = startTime.Value.AddYears(1);
                                 break;
 
                             case @operator.olderthanxdays:
