@@ -1,4 +1,5 @@
 ﻿using MarkMpn.Sql4Cds.Engine.FetchXml;
+using Microsoft.Crm.Sdk.Messages;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 using System;
@@ -781,7 +782,52 @@ namespace MarkMpn.Sql4Cds.Engine
                                 break;
 
                             case @operator.eqbusinessid:
+                                return new BooleanComparisonExpression
+                                {
+                                    FirstExpression = field,
+                                    ComparisonType = BooleanComparisonType.Equals,
+                                    SecondExpression = new IdentifierLiteral { Value = ((WhoAmIResponse)org.Execute(new WhoAmIRequest())).BusinessUnitId.ToString("D") }
+                                };
 
+                            case @operator.equserid:
+                                return new BooleanComparisonExpression
+                                {
+                                    FirstExpression = field,
+                                    ComparisonType = BooleanComparisonType.Equals,
+                                    SecondExpression = new IdentifierLiteral { Value = ((WhoAmIResponse)org.Execute(new WhoAmIRequest())).UserId.ToString("D") }
+                                };
+
+                            case @operator.nebusinessid:
+                                return new BooleanBinaryExpression
+                                {
+                                    FirstExpression = new BooleanComparisonExpression
+                                    {
+                                        FirstExpression = field,
+                                        ComparisonType = BooleanComparisonType.NotEqualToBrackets,
+                                        SecondExpression = new IdentifierLiteral { Value = ((WhoAmIResponse)org.Execute(new WhoAmIRequest())).BusinessUnitId.ToString("D") }
+                                    },
+                                    BinaryExpressionType = BooleanBinaryExpressionType.Or,
+                                    SecondExpression = new BooleanIsNullExpression
+                                    {
+                                        Expression = field
+                                    }
+                                };
+
+                            case @operator.neuserid:
+                                return new BooleanBinaryExpression
+                                {
+                                    FirstExpression = new BooleanComparisonExpression
+                                    {
+                                        FirstExpression = field,
+                                        ComparisonType = BooleanComparisonType.NotEqualToBrackets,
+                                        SecondExpression = new IdentifierLiteral { Value = ((WhoAmIResponse)org.Execute(new WhoAmIRequest())).UserId.ToString("D") }
+                                    },
+                                    BinaryExpressionType = BooleanBinaryExpressionType.Or,
+                                    SecondExpression = new BooleanIsNullExpression
+                                    {
+                                        Expression = field
+                                    }
+                                };
 
                             default:
                                 throw new NotSupportedException($"Conversion of the {condition.@operator} FetchXML operator to native SQL is not currently supported");
