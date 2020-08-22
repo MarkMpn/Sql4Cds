@@ -1,5 +1,6 @@
 ﻿using MarkMpn.Sql4Cds.Engine.FetchXml;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
+using Microsoft.Xrm.Sdk;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -18,27 +19,29 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// Converts a FetchXML query to SQL
         /// </summary>
+        /// <param name="org">A connection to the CDS organization to retrieve any additional required data from</param>
         /// <param name="metadata">The metadata cache to use for the conversion</param>
         /// <param name="fetch">The FetchXML string to convert</param>
         /// <returns>The converted SQL query</returns>
-        public static string Convert(IAttributeMetadataCache metadata, string fetch, FetchXml2SqlOptions options, out IDictionary<string,object> parameterValues)
+        public static string Convert(IOrganizationService org, IAttributeMetadataCache metadata, string fetch, FetchXml2SqlOptions options, out IDictionary<string,object> parameterValues)
         {
             using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(fetch)))
             {
                 var serializer = new XmlSerializer(typeof(FetchXml.FetchType));
                 var parsed = (FetchXml.FetchType)serializer.Deserialize(stream);
 
-                return Convert(metadata, parsed, options, out parameterValues);
+                return Convert(org, metadata, parsed, options, out parameterValues);
             }
         }
 
         /// <summary>
         /// Converts a FetchXML query to SQL
         /// </summary>
+        /// <param name="org">A connection to the CDS organization to retrieve any additional required data from</param>
         /// <param name="metadata">The metadata cache to use for the conversion</param>
         /// <param name="fetch">The query object to convert</param>
         /// <returns>The converted SQL query</returns>
-        public static string Convert(IAttributeMetadataCache metadata, FetchXml.FetchType fetch, FetchXml2SqlOptions options, out IDictionary<string,object> parameterValues)
+        public static string Convert(IOrganizationService org, IAttributeMetadataCache metadata, FetchXml.FetchType fetch, FetchXml2SqlOptions options, out IDictionary<string,object> parameterValues)
         {
             var select = new SelectStatement();
             var query = new QuerySpecification();
@@ -80,7 +83,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     ((NamedTableReference)query.FromClause.TableReferences[0]).TableHints.Add(new TableHint { HintKind = TableHintKind.NoLock });
 
                 // Recurse into link-entities to build joins
-                query.FromClause.TableReferences[0] = BuildJoins(metadata, query.FromClause.TableReferences[0], (NamedTableReference)query.FromClause.TableReferences[0], entity.Items, query, aliasToLogicalName, fetch.nolock, options);
+                query.FromClause.TableReferences[0] = BuildJoins(org, metadata, query.FromClause.TableReferences[0], (NamedTableReference)query.FromClause.TableReferences[0], entity.Items, query, aliasToLogicalName, fetch.nolock, options);
             }
 
             // OFFSET
@@ -97,7 +100,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             // WHERE
-            var filter = GetFilter(metadata, entity.Items, entity.name, aliasToLogicalName, options);
+            var filter = GetFilter(org, metadata, entity.Items, entity.name, aliasToLogicalName, options);
             if (filter != null)
             {
                 query.WhereClause = new WhereClause
@@ -274,6 +277,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// Recurse through link-entities to add joins to FROM clause and update SELECT clause
         /// </summary>
+        /// <param name="org">A connection to the CDS organization to retrieve any additional required data from</param>
         /// <param name="metadata">The metadata cache to use for the conversion</param>
         /// <param name="dataSource">The current data source of the SQL query</param>
         /// <param name="parentTable">The details of the table that this new table is being linked to</param>
@@ -282,7 +286,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="aliasToLogicalName">A mapping of table aliases to the logical name</param>
         /// <param name="nolock">Indicates if the NOLOCK table hint should be applied</param>
         /// <returns>The data source including any required joins</returns>
-        private static TableReference BuildJoins(IAttributeMetadataCache metadata, TableReference dataSource, NamedTableReference parentTable, object[] items, QuerySpecification query, IDictionary<string, string> aliasToLogicalName, bool nolock, FetchXml2SqlOptions options)
+        private static TableReference BuildJoins(IOrganizationService org, IAttributeMetadataCache metadata, TableReference dataSource, NamedTableReference parentTable, object[] items, QuerySpecification query, IDictionary<string, string> aliasToLogicalName, bool nolock, FetchXml2SqlOptions options)
         {
             if (items == null)
                 return dataSource;
@@ -351,7 +355,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 AddSelectElements(query, link.Items, link.alias ?? link.name);
 
                 // Handle any filters within the <link-entity> as additional join criteria
-                var filter = GetFilter(metadata, link.Items, link.alias ?? link.name, aliasToLogicalName, options);
+                var filter = GetFilter(org, metadata, link.Items, link.alias ?? link.name, aliasToLogicalName, options);
 
                 if (filter != null)
                 {
@@ -376,7 +380,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
 
                 // Recurse into any other links
-                dataSource = BuildJoins(metadata, join, (NamedTableReference)join.SecondTableReference, link.Items, query, aliasToLogicalName, nolock, options);
+                dataSource = BuildJoins(org, metadata, join, (NamedTableReference)join.SecondTableReference, link.Items, query, aliasToLogicalName, nolock, options);
             }
 
             return dataSource;
@@ -385,12 +389,13 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// Converts a FetchXML &lt;filter&gt; to a SQL condition
         /// </summary>
+        /// <param name="org">A connection to the CDS organization to retrieve any additional required data from</param>
         /// <param name="metadata">The metadata cache to use for the conversion</param>
         /// <param name="items">The items in the &lt;entity&gt; or &lt;link-entity&gt; to process the &lt;filter&gt; from</param>
         /// <param name="prefix">The alias or name of the table that the &lt;filter&gt; applies to</param>
         /// <param name="aliasToLogicalName">The mapping of table alias to logical name</param>
         /// <returns>The SQL condition equivalent of the &lt;filter&gt; found in the <paramref name="items"/>, or <c>null</c> if no filter was found</returns>
-        private static BooleanExpression GetFilter(IAttributeMetadataCache metadata, object[] items, string prefix, IDictionary<string, string> aliasToLogicalName, FetchXml2SqlOptions options)
+        private static BooleanExpression GetFilter(IOrganizationService org, IAttributeMetadataCache metadata, object[] items, string prefix, IDictionary<string, string> aliasToLogicalName, FetchXml2SqlOptions options)
         {
             if (items == null)
                 return null;
@@ -400,18 +405,19 @@ namespace MarkMpn.Sql4Cds.Engine
             if (filter == null)
                 return null;
 
-            return GetFilter(metadata, filter, prefix, aliasToLogicalName, options);
+            return GetFilter(org, metadata, filter, prefix, aliasToLogicalName, options);
         }
 
         /// <summary>
         /// Converts a FetchXML &lt;filter&gt; to a SQL condition
         /// </summary>
+        /// <param name="org">A connection to the CDS organization to retrieve any additional required data from</param>
         /// <param name="metadata">The metadata cache to use for the conversion</param>
         /// <param name="filter">The FetchXML filter to convert</param>
         /// <param name="prefix">The alias or name of the table that the <paramref name="filter"/> applies to</param>
         /// <param name="aliasToLogicalName">The mapping of table alias to logical name</param>
         /// <returns>The SQL condition equivalent of the <paramref name="filter"/></returns>
-        private static BooleanExpression GetFilter(IAttributeMetadataCache metadata, filter filter, string prefix, IDictionary<string, string> aliasToLogicalName, FetchXml2SqlOptions options)
+        private static BooleanExpression GetFilter(IOrganizationService org, IAttributeMetadataCache metadata, filter filter, string prefix, IDictionary<string, string> aliasToLogicalName, FetchXml2SqlOptions options)
         {
             BooleanExpression expression = null;
             var type = filter.type == filterType.and ? BooleanBinaryExpressionType.And : BooleanBinaryExpressionType.Or;
@@ -419,7 +425,7 @@ namespace MarkMpn.Sql4Cds.Engine
             // Convert each <condition> within the filter
             foreach (var condition in filter.Items.OfType<condition>())
             {
-                var newExpression = GetCondition(metadata, condition, prefix, aliasToLogicalName, options);
+                var newExpression = GetCondition(org, metadata, condition, prefix, aliasToLogicalName, options);
 
                 if (expression == null)
                 {
@@ -439,7 +445,7 @@ namespace MarkMpn.Sql4Cds.Engine
             // Recurse into sub-<filter>s
             foreach (var subFilter in filter.Items.OfType<filter>())
             {
-                var newExpression = GetFilter(metadata, subFilter, prefix, aliasToLogicalName, options);
+                var newExpression = GetFilter(org, metadata, subFilter, prefix, aliasToLogicalName, options);
 
                 if (expression == null)
                 {
@@ -468,12 +474,13 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// Converts a FetchXML &lt;condition&gt; to a SQL condition
         /// </summary>
+        /// <param name="org">A connection to the CDS organization to retrieve any additional required data from</param>
         /// <param name="metadata">The metadata cache to use for the conversion</param>
         /// <param name="condition">The FetchXML condition to convert</param>
         /// <param name="prefix">The alias or name of the table that the <paramref name="condition"/> applies to</param>
         /// <param name="aliasToLogicalName">The mapping of table alias to logical name</param>
         /// <returns>The SQL condition equivalent of the <paramref name="condition"/></returns>
-        private static BooleanExpression GetCondition(IAttributeMetadataCache metadata, condition condition, string prefix, IDictionary<string,string> aliasToLogicalName, FetchXml2SqlOptions options)
+        private static BooleanExpression GetCondition(IOrganizationService org, IAttributeMetadataCache metadata, condition condition, string prefix, IDictionary<string,string> aliasToLogicalName, FetchXml2SqlOptions options)
         {
             // Start with the field reference
             var field = new ColumnReferenceExpression
@@ -621,6 +628,9 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
                     else
                     {
+                        // We want to convert these special FetchXML operators to SQL that a real SQL Server will understand.
+                        // This takes some more work to generate the dynamic values to use. Many of these are date/time related,
+                        // so store some values for a date range for common reuse later.
                         DateTime? startTime = null;
                         DateTime? endTime = null;
 
@@ -770,8 +780,11 @@ namespace MarkMpn.Sql4Cds.Engine
                                 endTime = startTime.Value.AddDays(1);
                                 break;
 
+                            case @operator.eqbusinessid:
+
+
                             default:
-                                throw new NotImplementedException();
+                                throw new NotSupportedException($"Conversion of the {condition.@operator} FetchXML operator to native SQL is not currently supported");
                         }
 
                         BooleanExpression expr = null;
@@ -870,7 +883,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     return new BooleanIsNullExpression { Expression = field, IsNot = condition.@operator == @operator.notnull };
 
                 default:
-                    throw new NotImplementedException();
+                    throw new NotSupportedException($"Conversion of the {condition.@operator} FetchXML operator to SQL is not currently supported");
             }
 
             var expression = new BooleanComparisonExpression

@@ -1,12 +1,14 @@
 ﻿using Microsoft.SqlServer.TransactSql.ScriptDom;
 using System;
 using System.Linq;
+using System.Runtime.Serialization;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
     /// <summary>
     /// Indicates that a fragment of a SQL query cannot be converted to a FetchXML query
     /// </summary>
+    [Serializable]
     public class NotSupportedQueryFragmentException : NotSupportedException
     {
         /// <summary>
@@ -18,6 +20,22 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             Error = message;
             Fragment = fragment;
+        }
+
+        public NotSupportedQueryFragmentException()
+        {
+        }
+
+        public NotSupportedQueryFragmentException(string message) : base(message)
+        {
+        }
+
+        public NotSupportedQueryFragmentException(string message, Exception innerException) : base(message, innerException)
+        {
+        }
+
+        protected NotSupportedQueryFragmentException(SerializationInfo info, StreamingContext context) : base(info, context)
+        {
         }
 
         /// <summary>
