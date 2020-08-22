@@ -2,6 +2,7 @@
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Query;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -842,6 +843,49 @@ namespace MarkMpn.Sql4Cds.Engine
                                     }
                                 };
 
+                            case @operator.equserteams:
+                            case @operator.equseroruserteams:
+                                {
+                                    var userId = ((WhoAmIResponse)org.Execute(new WhoAmIRequest())).UserId;
+                                    var inTeams = new InPredicate { Expression = field };
+
+                                    if (condition.@operator == @operator.equseroruserteams)
+                                        inTeams.Values.Add(new IdentifierLiteral { Value = userId.ToString("D") });
+
+                                    foreach (var teamId in GetUserTeams(org, userId))
+                                        inTeams.Values.Add(new IdentifierLiteral { Value = teamId.ToString("D") });
+
+                                    return inTeams;
+                                }
+
+                            case @operator.equseroruserhierarchy:
+                            case @operator.equseroruserhierarchyandteams:
+                                {
+                                    var userIds = GetUsersInHierarchy(org).ToList();
+                                    var ownerIds = new HashSet<Guid>(userIds);
+
+                                    foreach (var userId in userIds)
+                                    {
+                                        foreach (var teamId in GetUserTeams(org, userId))
+                                            ownerIds.Add(teamId);
+                                    }
+
+                                    var inTeams = new InPredicate { Expression = field };
+
+                                    foreach (var ownerId in ownerIds)
+                                        inTeams.Values.Add(new IdentifierLiteral { Value = ownerId.ToString("D") });
+
+                                    return inTeams;
+                                }
+
+                            case @operator.equserlanguage:
+                                {
+                                    var inLanguage = new InPredicate { Expression = field };
+                                    inLanguage.Values.Add(new IntegerLiteral { Value = GetUserLanguageCode(org).ToString() });
+                                    inLanguage.Values.Add(new IntegerLiteral { Value = "-1" });
+                                    return inLanguage;
+                                }
+
                             default:
                                 throw new NotSupportedException($"Conversion of the {condition.@operator} FetchXML operator to native SQL is not currently supported");
                         }
@@ -953,6 +997,51 @@ namespace MarkMpn.Sql4Cds.Engine
             };
 
             return expression;
+        }
+
+        private static IEnumerable<Guid> GetUsersInHierarchy(IOrganizationService org)
+        {
+            if (org == null)
+                throw new DisconnectedException();
+
+            var qry = new Microsoft.Xrm.Sdk.Query.QueryExpression("systemuser");
+            qry.ColumnSet = new ColumnSet("systemuserid");
+            qry.Criteria.AddCondition("systemuserid", ConditionOperator.EqualUserOrUserHierarchy);
+
+            var results = org.RetrieveMultiple(qry).Entities;
+
+            return results.Select(e => e.Id);
+        }
+
+        private static IEnumerable<Guid> GetUserTeams(IOrganizationService org, Guid userId)
+        {
+            if (org == null)
+                throw new DisconnectedException();
+
+            var qry = new Microsoft.Xrm.Sdk.Query.QueryExpression("teammembership");
+            qry.ColumnSet = new ColumnSet("teamid");
+            qry.Criteria.AddCondition("systemuserid", ConditionOperator.EqualUserId);
+
+            var results = org.RetrieveMultiple(qry).Entities;
+
+            return results.Select(e => e.GetAttributeValue<Guid>("teamid"));
+        }
+
+        private static int GetUserLanguageCode(IOrganizationService org)
+        {
+            if (org == null)
+                throw new DisconnectedException();
+
+            var qry = new Microsoft.Xrm.Sdk.Query.QueryExpression("usersetting");
+            qry.ColumnSet = new ColumnSet("uilanguageid");
+            qry.Criteria.AddCondition("systemuserid", ConditionOperator.EqualUserId);
+
+            var result = org.RetrieveMultiple(qry).Entities.FirstOrDefault();
+
+            if (result == null)
+                return -1;
+
+            return result.GetAttributeValue<int>("uilanguageid");
         }
 
         /// <summary>

@@ -58,6 +58,9 @@
     <Compile Include="..\MarkMpn.Sql4Cds.Engine\AttributeMetadataCache.cs">
       <Link>AttributeMetadataCache.cs</Link>
     </Compile>
+    <Compile Include="..\MarkMpn.Sql4Cds.Engine\DisconnectedException.cs">
+      <Link>DisconnectedException.cs</Link>
+    </Compile>
     <Compile Include="..\MarkMpn.Sql4Cds.Engine\FetchXml.cs">
       <Link>FetchXml.cs</Link>
     </Compile>
