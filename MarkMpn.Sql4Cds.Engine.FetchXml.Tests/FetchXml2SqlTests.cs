@@ -338,11 +338,11 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
 
             var converted = FetchXml2Sql.Convert(metadata, fetch, new FetchXml2SqlOptions(), out _);
 
-            Assert.AreEqual("SELECT firstname, lastname FROM contact WHERE (firstname = 'Mark') AND (lastname = 'Carrington' OR lastname = 'Twain')", NormalizeWhitespace(converted));
+            Assert.AreEqual("SELECT firstname, lastname FROM contact WHERE firstname = 'Mark' AND (lastname = 'Carrington' OR lastname = 'Twain')", NormalizeWhitespace(converted));
         }
 
         [TestMethod]
-        public void JoinFilters()
+        public void JoinFilterOr()
         {
             var context = new XrmFakedContext();
             context.InitializeMetadata(Assembly.GetExecutingAssembly());

@@ -352,16 +352,27 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 // Handle any filters within the <link-entity> as additional join criteria
                 var filter = GetFilter(metadata, link.Items, link.alias ?? link.name, aliasToLogicalName, options);
+
                 if (filter != null)
                 {
-                    var finalFilter = new BooleanBinaryExpression
+                    if (!(filter is BooleanBinaryExpression bbe) || bbe.BinaryExpressionType == BooleanBinaryExpressionType.And)
                     {
-                        FirstExpression = new BooleanParenthesisExpression { Expression = join.SearchCondition },
-                        BinaryExpressionType = BooleanBinaryExpressionType.And,
-                        SecondExpression = new BooleanParenthesisExpression { Expression = filter }
-                    };
-
-                    join.SearchCondition = finalFilter;
+                        join.SearchCondition = new BooleanBinaryExpression
+                        {
+                            FirstExpression = join.SearchCondition,
+                            BinaryExpressionType = BooleanBinaryExpressionType.And,
+                            SecondExpression = filter
+                        };
+                    }
+                    else
+                    {
+                        join.SearchCondition = new BooleanBinaryExpression
+                        {
+                            FirstExpression = new BooleanParenthesisExpression { Expression = join.SearchCondition },
+                            BinaryExpressionType = BooleanBinaryExpressionType.And,
+                            SecondExpression = new BooleanParenthesisExpression { Expression = filter }
+                        };
+                    }
                 }
 
                 // Recurse into any other links
@@ -436,11 +447,17 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
                 else
                 {
+                    if (expression is BooleanBinaryExpression lhs && lhs.BinaryExpressionType != type)
+                        expression = new BooleanParenthesisExpression { Expression = expression };
+
+                    if (newExpression is BooleanBinaryExpression rhs && rhs.BinaryExpressionType != type)
+                        newExpression = new BooleanParenthesisExpression { Expression = newExpression };
+
                     expression = new BooleanBinaryExpression
                     {
-                        FirstExpression = new BooleanParenthesisExpression { Expression = expression },
+                        FirstExpression = expression,
                         BinaryExpressionType = type,
-                        SecondExpression = new BooleanParenthesisExpression { Expression = newExpression }
+                        SecondExpression = newExpression
                     };
                 }
             }
@@ -478,8 +495,8 @@ namespace MarkMpn.Sql4Cds.Engine
             if (!aliasToLogicalName.TryGetValue(condition.entityname ?? prefix, out var logicalName))
                 logicalName = condition.entityname ?? prefix;
 
-            var meta = metadata[logicalName];
-            var attr = meta.Attributes.SingleOrDefault(a => a.LogicalName == condition.attribute);
+            var meta = metadata == null ? null : metadata[logicalName];
+            var attr = meta == null ? null : meta.Attributes.SingleOrDefault(a => a.LogicalName == condition.attribute);
 
             // Get the literal value to compare to
             if (!String.IsNullOrEmpty(condition.valueof))
