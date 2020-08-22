@@ -341,6 +341,33 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
             Assert.AreEqual("SELECT firstname, lastname FROM contact WHERE (firstname = 'Mark') AND (lastname = 'Carrington' OR lastname = 'Twain')", NormalizeWhitespace(converted));
         }
 
+        [TestMethod]
+        public void JoinFilters()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var fetch = @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <attribute name='lastname' />
+                        <link-entity name='account' from='accountid' to='parentcustomerid'>
+                            <filter type='or'>
+                                <condition attribute='name' operator='eq' value='Data8' />
+                                <condition attribute='name' operator='eq' value='Microsoft' />
+                            </filter>
+                        </link-entity>
+                    </entity>
+                </fetch>";
+
+            var converted = FetchXml2Sql.Convert(metadata, fetch, new FetchXml2SqlOptions(), out _);
+
+            Assert.AreEqual("SELECT contact.firstname, contact.lastname FROM contact INNER JOIN account ON (contact.parentcustomerid = account.accountid) AND (account.name = 'Data8' OR account.name = 'Microsoft')", NormalizeWhitespace(converted));
+        }
+
         private static string NormalizeWhitespace(string s)
         {
             return Regex.Replace(s, "\\s+", " ");

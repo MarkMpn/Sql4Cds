@@ -356,9 +356,9 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     var finalFilter = new BooleanBinaryExpression
                     {
-                        FirstExpression = join.SearchCondition,
+                        FirstExpression = new BooleanParenthesisExpression { Expression = join.SearchCondition },
                         BinaryExpressionType = BooleanBinaryExpressionType.And,
-                        SecondExpression = filter
+                        SecondExpression = new BooleanParenthesisExpression { Expression = filter }
                     };
 
                     join.SearchCondition = finalFilter;
