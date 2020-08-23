@@ -886,6 +886,106 @@ namespace MarkMpn.Sql4Cds.Engine
                                     return inLanguage;
                                 }
 
+                            case @operator.thisfiscalyear:
+                                {
+                                    GetFiscalPeriodSettings(org, out _, out var fiscalStartDate);
+                                    startTime = new DateTime(DateTime.Today.Year, fiscalStartDate.Month, fiscalStartDate.Day);
+
+                                    if (startTime.Value < DateTime.Today)
+                                    {
+                                        endTime = startTime.Value.AddYears(1);
+                                    }
+                                    else
+                                    {
+                                        endTime = startTime;
+                                        startTime = endTime.Value.AddYears(-1);
+                                    }
+                                } break;
+
+                            case @operator.thisfiscalperiod:
+                                {
+                                    GetFiscalPeriodSettings(org, out var fiscalPeriodType, out var fiscalStartDate);
+                                    GetFiscalPeriodNumber(fiscalPeriodType, fiscalStartDate, DateTime.Today, out var fiscalYear, out var fiscalPeriod);
+                                    GetFiscalPeriodDates(fiscalStartDate, fiscalPeriodType, fiscalYear, fiscalPeriod, out var startDate, out var endDate);
+
+                                    startTime = startDate;
+                                    endTime = endDate;
+                                } break;
+
+                            case @operator.nextfiscalyear:
+                                {
+                                    GetFiscalPeriodSettings(org, out _, out var fiscalStartDate);
+                                    startTime = new DateTime(DateTime.Today.Year + 1, fiscalStartDate.Month, fiscalStartDate.Day);
+
+                                    if (startTime.Value < DateTime.Today)
+                                    {
+                                        endTime = startTime.Value.AddYears(1);
+                                    }
+                                    else
+                                    {
+                                        endTime = startTime;
+                                        startTime = endTime.Value.AddYears(-1);
+                                    }
+                                } break;
+
+                            case @operator.nextfiscalperiod:
+                                {
+                                    GetFiscalPeriodSettings(org, out var fiscalPeriodType, out var fiscalStartDate);
+                                    GetFiscalPeriodNumber(fiscalPeriodType, fiscalStartDate, DateTime.Today, out var fiscalYear, out var fiscalPeriod);
+                                    GetFiscalPeriodDates(fiscalStartDate, fiscalPeriodType, fiscalYear, fiscalPeriod, out var startDate, out var endDate);
+
+                                    startTime = endDate;
+                                    endTime = AddFiscalPeriod(endDate, fiscalPeriodType);
+                                }
+                                break;
+
+                            case @operator.lastfiscalyear:
+                                {
+                                    GetFiscalPeriodSettings(org, out _, out var fiscalStartDate);
+                                    startTime = new DateTime(DateTime.Today.Year - 1, fiscalStartDate.Month, fiscalStartDate.Day);
+
+                                    if (startTime.Value < DateTime.Today)
+                                    {
+                                        endTime = startTime.Value.AddYears(1);
+                                    }
+                                    else
+                                    {
+                                        endTime = startTime;
+                                        startTime = endTime.Value.AddYears(-1);
+                                    }
+                                }
+                                break;
+
+                            case @operator.lastfiscalperiod:
+                                {
+                                    GetFiscalPeriodSettings(org, out var fiscalPeriodType, out var fiscalStartDate);
+                                    GetFiscalPeriodNumber(fiscalPeriodType, fiscalStartDate, DateTime.Today, out var fiscalYear, out var fiscalPeriod);
+                                    GetFiscalPeriodDates(fiscalStartDate, fiscalPeriodType, fiscalYear, fiscalPeriod, out var startDate, out var endDate);
+
+                                    startTime = SubtractFiscalPeriod(startDate, fiscalPeriodType);
+                                    endTime = startDate;
+                                }
+                                break;
+
+                            /*
+                            case lastxfiscalyears,
+                            case lastxfiscalperiods,
+                            case nextxfiscalyears,
+                            case nextxfiscalperiods,
+                            case infiscalyear,
+                            case infiscalperiod,
+                            case infiscalperiodandyear,
+                            case inorbeforefiscalperiodandyear,
+                            case inorafterfiscalperiodandyear,
+                            case under,
+                            case eqorunder,
+                            case notunder,
+                            case above,
+                            case eqorabove,
+                            case containvalues,
+                            case notcontainvalues,
+                             * */
+
                             default:
                                 throw new NotSupportedException($"Conversion of the {condition.@operator} FetchXML operator to native SQL is not currently supported");
                         }
@@ -997,6 +1097,109 @@ namespace MarkMpn.Sql4Cds.Engine
             };
 
             return expression;
+        }
+
+        enum FiscalPeriodType
+        {
+            Annually = 2000,
+            SemiAnnually = 2001,
+            Quarterly = 2002,
+            Monthly = 2003,
+            FourWeekly = 2004
+        }
+
+        private static void GetFiscalPeriodSettings(IOrganizationService org, out FiscalPeriodType type, out DateTime fiscalStartDate)
+        {
+            if (org == null)
+                throw new DisconnectedException();
+
+            var qry = new Microsoft.Xrm.Sdk.Query.QueryExpression("organization");
+            qry.ColumnSet = new ColumnSet("fiscalperiodtype", "fiscalcalendarstart");
+
+            var result = org.RetrieveMultiple(qry).Entities.Single();
+
+            type = (FiscalPeriodType)result.GetAttributeValue<int>("fiscalperiodtype");
+            fiscalStartDate = result.GetAttributeValue<DateTime>("fiscalcalendarstart");
+        }
+
+        private static void GetFiscalPeriodNumber(FiscalPeriodType type, DateTime fiscalStartDate, DateTime date, out int fiscalYear, out int fiscalPeriod)
+        {
+            var yearStart = new DateTime(date.Year, fiscalStartDate.Month, fiscalStartDate.Day);
+
+            if (yearStart > date)
+                yearStart = yearStart.AddYears(-1);
+
+            fiscalYear = yearStart.Year;
+            fiscalPeriod = 1;
+            var periodStart = yearStart;
+            var periodEnd = AddFiscalPeriod(periodStart, type);
+
+            while (periodEnd < date)
+            {
+                fiscalPeriod++;
+                periodEnd = AddFiscalPeriod(periodEnd, type);
+            }
+        }
+
+        private static DateTime AddFiscalPeriod(DateTime startDate, FiscalPeriodType type)
+        {
+            switch (type)
+            {
+                case FiscalPeriodType.Annually:
+                    return startDate.AddYears(1);
+
+                case FiscalPeriodType.SemiAnnually:
+                    return startDate.AddMonths(6);
+
+                case FiscalPeriodType.Quarterly:
+                    return startDate.AddMonths(3);
+
+                case FiscalPeriodType.Monthly:
+                    return startDate.AddMonths(1);
+
+                case FiscalPeriodType.FourWeekly:
+                    return startDate.AddDays(7 * 4);
+
+                default:
+                    throw new NotSupportedException("Unknown fiscal period type");
+            }
+        }
+
+        private static DateTime SubtractFiscalPeriod(DateTime startDate, FiscalPeriodType type)
+        {
+            switch (type)
+            {
+                case FiscalPeriodType.Annually:
+                    return startDate.AddYears(-1);
+
+                case FiscalPeriodType.SemiAnnually:
+                    return startDate.AddMonths(-6);
+
+                case FiscalPeriodType.Quarterly:
+                    return startDate.AddMonths(-3);
+
+                case FiscalPeriodType.Monthly:
+                    return startDate.AddMonths(-1);
+
+                case FiscalPeriodType.FourWeekly:
+                    return startDate.AddDays(-7 * 4);
+
+                default:
+                    throw new NotSupportedException("Unknown fiscal period type");
+            }
+        }
+
+        private static void GetFiscalPeriodDates(DateTime fiscalStartDate, FiscalPeriodType type, int yearNumber, int periodNumber, out DateTime startDate, out DateTime endDate)
+        {
+            var fiscalYearStart = new DateTime(yearNumber, fiscalStartDate.Month, fiscalStartDate.Day);
+            startDate = fiscalYearStart;
+            endDate = AddFiscalPeriod(startDate, type);
+
+            for (var i = 1; i < periodNumber; i++)
+            {
+                startDate = endDate;
+                endDate = AddFiscalPeriod(startDate, type);
+            }
         }
 
         private static IEnumerable<Guid> GetUsersInHierarchy(IOrganizationService org)
