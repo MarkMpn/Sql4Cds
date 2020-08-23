@@ -402,12 +402,36 @@ namespace MarkMpn.Sql4Cds.Engine
             if (items == null)
                 return null;
 
-            var filter = items.OfType<filter>().SingleOrDefault();
+            var filters = items.OfType<filter>().ToList();
 
-            if (filter == null)
-                return null;
+            BooleanExpression expression = null;
 
-            return GetFilter(org, metadata, filter, prefix, aliasToLogicalName, options);
+            foreach (var filter in filters)
+            {
+                var newExpression = GetFilter(org, metadata, filter, prefix, aliasToLogicalName, options);
+
+                if (expression == null)
+                {
+                    expression = newExpression;
+                }
+                else
+                {
+                    if (expression is BooleanBinaryExpression lhs && lhs.BinaryExpressionType != BooleanBinaryExpressionType.And)
+                        expression = new BooleanParenthesisExpression { Expression = expression };
+
+                    if (newExpression is BooleanBinaryExpression rhs && rhs.BinaryExpressionType != BooleanBinaryExpressionType.And)
+                        newExpression = new BooleanParenthesisExpression { Expression = newExpression };
+
+                    expression = new BooleanBinaryExpression
+                    {
+                        FirstExpression = expression,
+                        BinaryExpressionType = BooleanBinaryExpressionType.And,
+                        SecondExpression = newExpression
+                    };
+                }
+            }
+
+            return expression;
         }
 
         /// <summary>
