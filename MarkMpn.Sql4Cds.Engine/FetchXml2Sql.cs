@@ -991,16 +991,99 @@ namespace MarkMpn.Sql4Cds.Engine
                                 }
                                 break;
 
+                            case @operator.lastxfiscalyears:
+                                {
+                                    GetFiscalPeriodSettings(org, out var fiscalPeriodType, out var fiscalStartDate);
+                                    GetFiscalPeriodNumber(fiscalPeriodType, fiscalStartDate, DateTime.Today, out var fiscalYear, out _);
+
+                                    startTime = new DateTime(fiscalYear - Int32.Parse(condition.value), fiscalStartDate.Month, fiscalStartDate.Day);
+                                    endTime = DateTime.Now;
+                                }
+                                break;
+
+                            case @operator.lastxfiscalperiods:
+                                {
+                                    GetFiscalPeriodSettings(org, out var fiscalPeriodType, out var fiscalStartDate);
+                                    GetFiscalPeriodNumber(fiscalPeriodType, fiscalStartDate, DateTime.Today, out var fiscalYear, out var fiscalPeriod);
+                                    GetFiscalPeriodDates(fiscalStartDate, fiscalPeriodType, fiscalYear, fiscalPeriod, out var startDate, out var endDate);
+
+                                    for (var i = 0; i < Int32.Parse(condition.value); i++)
+                                        startDate = SubtractFiscalPeriod(startDate, fiscalPeriodType);
+
+                                    startTime = startDate;
+                                    endTime = DateTime.Now;
+                                }
+                                break;
+
+                            case @operator.nextxfiscalyears:
+                                {
+                                    GetFiscalPeriodSettings(org, out var fiscalPeriodType, out var fiscalStartDate);
+                                    GetFiscalPeriodNumber(fiscalPeriodType, fiscalStartDate, DateTime.Today, out var fiscalYear, out _);
+
+                                    startTime = DateTime.Now;
+                                    endTime = new DateTime(fiscalYear + Int32.Parse(condition.value) + 1, fiscalStartDate.Month, fiscalStartDate.Day);
+                                }
+                                break;
+
+                            case @operator.nextxfiscalperiods:
+                                {
+                                    GetFiscalPeriodSettings(org, out var fiscalPeriodType, out var fiscalStartDate);
+                                    GetFiscalPeriodNumber(fiscalPeriodType, fiscalStartDate, DateTime.Today, out var fiscalYear, out var fiscalPeriod);
+                                    GetFiscalPeriodDates(fiscalStartDate, fiscalPeriodType, fiscalYear, fiscalPeriod, out var startDate, out var endDate);
+
+                                    for (var i = 0; i < Int32.Parse(condition.value); i++)
+                                        endDate = AddFiscalPeriod(endDate, fiscalPeriodType);
+
+                                    startTime = DateTime.Now;
+                                    endTime = endDate;
+                                }
+                                break;
+
+                            case @operator.infiscalyear:
+                                {
+                                    GetFiscalPeriodSettings(org, out var fiscalPeriodType, out var fiscalStartDate);
+
+                                    startTime = new DateTime(Int32.Parse(condition.value), fiscalStartDate.Month, fiscalStartDate.Day);
+                                    endTime = startTime.Value.AddYears(1);
+                                }
+                                break;
+
+                            case @operator.infiscalperiod:
+                                // This requires the use of a scalar valued function in the target SQL database to get the fiscal period from each
+                                // date in order to check it.
+                                throw new NotSupportedException("infiscalperiod condition operator cannot be converted to native SQL");
+
+                            case @operator.infiscalperiodandyear:
+                                {
+                                    var values = condition.Items.OfType<conditionValue>().Select(v => Int32.Parse(v.Value)).ToArray();
+                                    GetFiscalPeriodSettings(org, out var fiscalPeriodType, out var fiscalStartDate);
+                                    GetFiscalPeriodDates(fiscalStartDate, fiscalPeriodType, values[1], values[0], out var startDate, out var endDate);
+
+                                    startTime = startDate;
+                                    endTime = endDate;
+                                }
+                                break;
+
+                            case @operator.inorbeforefiscalperiodandyear:
+                                {
+                                    var values = condition.Items.OfType<conditionValue>().Select(v => Int32.Parse(v.Value)).ToArray();
+                                    GetFiscalPeriodSettings(org, out var fiscalPeriodType, out var fiscalStartDate);
+                                    GetFiscalPeriodDates(fiscalStartDate, fiscalPeriodType, values[1], values[0], out _, out var endDate);
+
+                                    endTime = endDate;
+                                }
+                                break;
+
+                            case @operator.inorafterfiscalperiodandyear:
+                                {
+                                    var values = condition.Items.OfType<conditionValue>().Select(v => Int32.Parse(v.Value)).ToArray();
+                                    GetFiscalPeriodSettings(org, out var fiscalPeriodType, out var fiscalStartDate);
+                                    GetFiscalPeriodDates(fiscalStartDate, fiscalPeriodType, values[1], values[0], out var startDate, out _);
+
+                                    startTime = startDate;
+                                }
+                                break;
                             /*
-                            case lastxfiscalyears,
-                            case lastxfiscalperiods,
-                            case nextxfiscalyears,
-                            case nextxfiscalperiods,
-                            case infiscalyear,
-                            case infiscalperiod,
-                            case infiscalperiodandyear,
-                            case inorbeforefiscalperiodandyear,
-                            case inorafterfiscalperiodandyear,
                             case under,
                             case eqorunder,
                             case notunder,
