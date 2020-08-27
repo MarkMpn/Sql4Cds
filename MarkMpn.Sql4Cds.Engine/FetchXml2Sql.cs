@@ -421,6 +421,9 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 var newExpression = GetFilter(org, metadata, filter, prefix, aliasToLogicalName, options, ctes);
 
+                if (newExpression is BooleanBinaryExpression bbe && bbe.BinaryExpressionType != BooleanBinaryExpressionType.And)
+                    newExpression = new BooleanParenthesisExpression { Expression = newExpression };
+
                 if (expression == null)
                 {
                     expression = newExpression;
@@ -429,9 +432,6 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     if (expression is BooleanBinaryExpression lhs && lhs.BinaryExpressionType != BooleanBinaryExpressionType.And)
                         expression = new BooleanParenthesisExpression { Expression = expression };
-
-                    if (newExpression is BooleanBinaryExpression rhs && rhs.BinaryExpressionType != BooleanBinaryExpressionType.And)
-                        newExpression = new BooleanParenthesisExpression { Expression = newExpression };
 
                     expression = new BooleanBinaryExpression
                     {
@@ -464,12 +464,18 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 var newExpression = GetCondition(org, metadata, condition, prefix, aliasToLogicalName, options, ctes);
 
+                if (newExpression is BooleanBinaryExpression bbe && bbe.BinaryExpressionType != type)
+                    newExpression = new BooleanParenthesisExpression { Expression = newExpression };
+
                 if (expression == null)
                 {
                     expression = newExpression;
                 }
                 else
                 {
+                    if (expression is BooleanBinaryExpression lhs && lhs.BinaryExpressionType != type)
+                        expression = new BooleanParenthesisExpression { Expression = expression };
+
                     expression = new BooleanBinaryExpression
                     {
                         FirstExpression = expression,
@@ -484,6 +490,9 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 var newExpression = GetFilter(org, metadata, subFilter, prefix, aliasToLogicalName, options, ctes);
 
+                if (newExpression is BooleanBinaryExpression bbe && bbe.BinaryExpressionType != type)
+                    newExpression = new BooleanParenthesisExpression { Expression = newExpression };
+
                 if (expression == null)
                 {
                     expression = newExpression;
@@ -492,9 +501,6 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     if (expression is BooleanBinaryExpression lhs && lhs.BinaryExpressionType != type)
                         expression = new BooleanParenthesisExpression { Expression = expression };
-
-                    if (newExpression is BooleanBinaryExpression rhs && rhs.BinaryExpressionType != type)
-                        newExpression = new BooleanParenthesisExpression { Expression = newExpression };
 
                     expression = new BooleanBinaryExpression
                     {
@@ -1243,10 +1249,22 @@ namespace MarkMpn.Sql4Cds.Engine
 
                                     return inPred;
                                 }
-                            /*
-                            case containvalues,
-                            case notcontainvalues,
-                             * */
+
+                            case @operator.containvalues:
+                            case @operator.notcontainvalues:
+                                {
+                                    BooleanExpression contains = new FullTextPredicate
+                                    {
+                                        Columns = { field },
+                                        FullTextFunctionType = FullTextFunctionType.Contains,
+                                        Value = new StringLiteral { Value = String.Join(" OR ", condition.Items.Select(val => val.Value)) }
+                                    };
+
+                                    if (condition.@operator == @operator.notcontainvalues)
+                                        contains = new BooleanNotExpression { Expression = contains };
+
+                                    return contains;
+                                }
 
                             default:
                                 throw new NotSupportedException($"Conversion of the {condition.@operator} FetchXML operator to native SQL is not currently supported");

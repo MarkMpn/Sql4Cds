@@ -368,7 +368,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
 
             var converted = FetchXml2Sql.Convert(org, metadata, fetch, new FetchXml2SqlOptions(), out _);
 
-            Assert.AreEqual("SELECT contact.firstname, contact.lastname FROM contact INNER JOIN account ON (contact.parentcustomerid = account.accountid) AND (account.name = 'Data8' OR account.name = 'Microsoft')", NormalizeWhitespace(converted));
+            Assert.AreEqual("SELECT contact.firstname, contact.lastname FROM contact INNER JOIN account ON contact.parentcustomerid = account.accountid AND (account.name = 'Data8' OR account.name = 'Microsoft')", NormalizeWhitespace(converted));
         }
 
         [TestMethod]

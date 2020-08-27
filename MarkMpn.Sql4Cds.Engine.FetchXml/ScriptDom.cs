@@ -1014,6 +1014,70 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         }
     }
 
+    class FullTextPredicate : BooleanExpression
+    {
+        public List<ColumnReferenceExpression> Columns { get; } = new List<ColumnReferenceExpression>();
+
+        public FullTextFunctionType FullTextFunctionType { get; set; }
+
+        public StringLiteral Value { get; set; }
+
+        public override void Accept(TSqlFragmentVisitor visitor)
+        {
+            visitor.ExplicitVisit(this);
+
+            foreach (var col in Columns)
+                col.Accept(visitor);
+
+            Value?.Accept(visitor);
+        }
+
+        public override void ToString(StringBuilder buf, int indent)
+        {
+            switch (FullTextFunctionType)
+            {
+                case FullTextFunctionType.Contains:
+                    buf.Append("CONTAINS ");
+                    break;
+
+                default:
+                    throw new NotSupportedException();
+            }
+
+            buf.Append("((");
+
+            foreach (var col in Columns)
+                col.ToString(buf, indent);
+
+            buf.Append("), ");
+            Value.ToString(buf, indent);
+            buf.Append(")");
+        }
+    }
+
+    enum FullTextFunctionType
+    {
+        Contains
+    }
+
+    class BooleanNotExpression : BooleanExpression
+    {
+        public BooleanExpression Expression { get; set; }
+
+        public override void Accept(TSqlFragmentVisitor visitor)
+        {
+            visitor.ExplicitVisit(this);
+
+            Expression?.Accept(visitor);
+        }
+
+        public override void ToString(StringBuilder buf, int indent)
+        {
+            buf.Append("NOT ");
+            Expression.ToString(buf, indent);
+        }
+    }
+
     class BinaryExpression : ScalarExpression
     {
         public ScalarExpression FirstExpression { get; set; }
@@ -1399,6 +1463,14 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         }
 
         internal void ExplicitVisit(BinaryExpression binaryExpression)
+        {
+        }
+
+        internal void ExplicitVisit(FullTextPredicate fullTextPredicate)
+        {
+        }
+
+        internal void ExplicitVisit(BooleanNotExpression notExpression)
         {
         }
     }

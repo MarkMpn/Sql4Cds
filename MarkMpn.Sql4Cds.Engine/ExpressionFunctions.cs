@@ -370,6 +370,20 @@ namespace MarkMpn.Sql4Cds.Engine
 
             return new EntityReference(entityType, id.Value);
         }
+
+        /// <summary>
+        /// Checks if a multi-select picklist field contains specific values
+        /// </summary>
+        /// <param name="selected">The selected values</param>
+        /// <param name="values">The values to check for</param>
+        /// <returns><c>true</c> if the <paramref name="selected"/> values contain any of the requested <paramref name="values"/></returns>
+        public static bool Contains(OptionSetValueCollection selected, int[] values)
+        {
+            if (selected == null)
+                return false;
+
+            return selected.Any(osv => values.Contains(osv.Value));
+        }
     }
 
     /// <summary>
