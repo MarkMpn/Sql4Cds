@@ -2,6 +2,7 @@
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
 using System;
 using System.Collections.Generic;
@@ -45,6 +46,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <returns>The converted SQL query</returns>
         public static string Convert(IOrganizationService org, IAttributeMetadataCache metadata, FetchXml.FetchType fetch, FetchXml2SqlOptions options, out IDictionary<string,object> parameterValues)
         {
+            var ctes = new Dictionary<string, CommonTableExpression>();
             var select = new SelectStatement();
             var query = new QuerySpecification();
             select.QueryExpression = query;
@@ -85,7 +87,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     ((NamedTableReference)query.FromClause.TableReferences[0]).TableHints.Add(new TableHint { HintKind = TableHintKind.NoLock });
 
                 // Recurse into link-entities to build joins
-                query.FromClause.TableReferences[0] = BuildJoins(org, metadata, query.FromClause.TableReferences[0], (NamedTableReference)query.FromClause.TableReferences[0], entity.Items, query, aliasToLogicalName, fetch.nolock, options);
+                query.FromClause.TableReferences[0] = BuildJoins(org, metadata, query.FromClause.TableReferences[0], (NamedTableReference)query.FromClause.TableReferences[0], entity.Items, query, aliasToLogicalName, fetch.nolock, options, ctes);
             }
 
             // OFFSET
@@ -102,7 +104,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             // WHERE
-            var filter = GetFilter(org, metadata, entity.Items, entity.name, aliasToLogicalName, options);
+            var filter = GetFilter(org, metadata, entity.Items, entity.name, aliasToLogicalName, options, ctes);
             if (filter != null)
             {
                 query.WhereClause = new WhereClause
@@ -117,6 +119,15 @@ namespace MarkMpn.Sql4Cds.Engine
             // For single-table queries, don't bother qualifying the column names to make the query easier to read
             if (query.FromClause.TableReferences[0] is NamedTableReference)
                 select.Accept(new SimplifyMultiPartIdentifierVisitor(entity.name));
+
+            // Add in any CTEs that were required by the joins or filters
+            if (ctes.Count > 0)
+            {
+                select.WithCtesAndXmlNamespaces = new WithCtesAndXmlNamespaces();
+
+                foreach (var cte in ctes.Values)
+                    select.WithCtesAndXmlNamespaces.CommonTableExpressions.Add(cte);
+            }
 
             // Check whether each identifier needs to be quoted so we have minimal quoting to make the query easier to read
             select.Accept(new QuoteIdentifiersVisitor());
@@ -288,7 +299,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="aliasToLogicalName">A mapping of table aliases to the logical name</param>
         /// <param name="nolock">Indicates if the NOLOCK table hint should be applied</param>
         /// <returns>The data source including any required joins</returns>
-        private static TableReference BuildJoins(IOrganizationService org, IAttributeMetadataCache metadata, TableReference dataSource, NamedTableReference parentTable, object[] items, QuerySpecification query, IDictionary<string, string> aliasToLogicalName, bool nolock, FetchXml2SqlOptions options)
+        private static TableReference BuildJoins(IOrganizationService org, IAttributeMetadataCache metadata, TableReference dataSource, NamedTableReference parentTable, object[] items, QuerySpecification query, IDictionary<string, string> aliasToLogicalName, bool nolock, FetchXml2SqlOptions options, IDictionary<string, CommonTableExpression> ctes)
         {
             if (items == null)
                 return dataSource;
@@ -357,7 +368,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 AddSelectElements(query, link.Items, link.alias ?? link.name);
 
                 // Handle any filters within the <link-entity> as additional join criteria
-                var filter = GetFilter(org, metadata, link.Items, link.alias ?? link.name, aliasToLogicalName, options);
+                var filter = GetFilter(org, metadata, link.Items, link.alias ?? link.name, aliasToLogicalName, options, ctes);
 
                 if (filter != null)
                 {
@@ -382,7 +393,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
 
                 // Recurse into any other links
-                dataSource = BuildJoins(org, metadata, join, (NamedTableReference)join.SecondTableReference, link.Items, query, aliasToLogicalName, nolock, options);
+                dataSource = BuildJoins(org, metadata, join, (NamedTableReference)join.SecondTableReference, link.Items, query, aliasToLogicalName, nolock, options, ctes);
             }
 
             return dataSource;
@@ -397,7 +408,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="prefix">The alias or name of the table that the &lt;filter&gt; applies to</param>
         /// <param name="aliasToLogicalName">The mapping of table alias to logical name</param>
         /// <returns>The SQL condition equivalent of the &lt;filter&gt; found in the <paramref name="items"/>, or <c>null</c> if no filter was found</returns>
-        private static BooleanExpression GetFilter(IOrganizationService org, IAttributeMetadataCache metadata, object[] items, string prefix, IDictionary<string, string> aliasToLogicalName, FetchXml2SqlOptions options)
+        private static BooleanExpression GetFilter(IOrganizationService org, IAttributeMetadataCache metadata, object[] items, string prefix, IDictionary<string, string> aliasToLogicalName, FetchXml2SqlOptions options, IDictionary<string, CommonTableExpression> ctes)
         {
             if (items == null)
                 return null;
@@ -408,7 +419,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             foreach (var filter in filters)
             {
-                var newExpression = GetFilter(org, metadata, filter, prefix, aliasToLogicalName, options);
+                var newExpression = GetFilter(org, metadata, filter, prefix, aliasToLogicalName, options, ctes);
 
                 if (expression == null)
                 {
@@ -443,7 +454,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="prefix">The alias or name of the table that the <paramref name="filter"/> applies to</param>
         /// <param name="aliasToLogicalName">The mapping of table alias to logical name</param>
         /// <returns>The SQL condition equivalent of the <paramref name="filter"/></returns>
-        private static BooleanExpression GetFilter(IOrganizationService org, IAttributeMetadataCache metadata, filter filter, string prefix, IDictionary<string, string> aliasToLogicalName, FetchXml2SqlOptions options)
+        private static BooleanExpression GetFilter(IOrganizationService org, IAttributeMetadataCache metadata, filter filter, string prefix, IDictionary<string, string> aliasToLogicalName, FetchXml2SqlOptions options, IDictionary<string, CommonTableExpression> ctes)
         {
             BooleanExpression expression = null;
             var type = filter.type == filterType.and ? BooleanBinaryExpressionType.And : BooleanBinaryExpressionType.Or;
@@ -451,7 +462,7 @@ namespace MarkMpn.Sql4Cds.Engine
             // Convert each <condition> within the filter
             foreach (var condition in filter.Items.OfType<condition>())
             {
-                var newExpression = GetCondition(org, metadata, condition, prefix, aliasToLogicalName, options);
+                var newExpression = GetCondition(org, metadata, condition, prefix, aliasToLogicalName, options, ctes);
 
                 if (expression == null)
                 {
@@ -471,7 +482,7 @@ namespace MarkMpn.Sql4Cds.Engine
             // Recurse into sub-<filter>s
             foreach (var subFilter in filter.Items.OfType<filter>())
             {
-                var newExpression = GetFilter(org, metadata, subFilter, prefix, aliasToLogicalName, options);
+                var newExpression = GetFilter(org, metadata, subFilter, prefix, aliasToLogicalName, options, ctes);
 
                 if (expression == null)
                 {
@@ -506,7 +517,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="prefix">The alias or name of the table that the <paramref name="condition"/> applies to</param>
         /// <param name="aliasToLogicalName">The mapping of table alias to logical name</param>
         /// <returns>The SQL condition equivalent of the <paramref name="condition"/></returns>
-        private static BooleanExpression GetCondition(IOrganizationService org, IAttributeMetadataCache metadata, condition condition, string prefix, IDictionary<string,string> aliasToLogicalName, FetchXml2SqlOptions options)
+        private static BooleanExpression GetCondition(IOrganizationService org, IAttributeMetadataCache metadata, condition condition, string prefix, IDictionary<string,string> aliasToLogicalName, FetchXml2SqlOptions options, IDictionary<string, CommonTableExpression> ctes)
         {
             // Start with the field reference
             var field = new ColumnReferenceExpression
@@ -559,10 +570,6 @@ namespace MarkMpn.Sql4Cds.Engine
                 value = new NumericLiteral { Value = condition.value };
             else if (attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.Money)
                 value = new MoneyLiteral { Value = condition.value };
-            else if (attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.Lookup ||
-                attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.Owner ||
-                attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.Customer)
-                value = new IdentifierLiteral { Value = condition.value };
             else
                 value = new StringLiteral { Value = condition.value };
 
@@ -824,7 +831,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                 {
                                     FirstExpression = field,
                                     ComparisonType = BooleanComparisonType.Equals,
-                                    SecondExpression = new IdentifierLiteral { Value = ((WhoAmIResponse)org.Execute(new WhoAmIRequest())).BusinessUnitId.ToString("D") }
+                                    SecondExpression = new StringLiteral { Value = ((WhoAmIResponse)org.Execute(new WhoAmIRequest())).BusinessUnitId.ToString("D") }
                                 };
 
                             case @operator.equserid:
@@ -832,7 +839,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                 {
                                     FirstExpression = field,
                                     ComparisonType = BooleanComparisonType.Equals,
-                                    SecondExpression = new IdentifierLiteral { Value = ((WhoAmIResponse)org.Execute(new WhoAmIRequest())).UserId.ToString("D") }
+                                    SecondExpression = new StringLiteral { Value = ((WhoAmIResponse)org.Execute(new WhoAmIRequest())).UserId.ToString("D") }
                                 };
 
                             case @operator.nebusinessid:
@@ -842,7 +849,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                     {
                                         FirstExpression = field,
                                         ComparisonType = BooleanComparisonType.NotEqualToBrackets,
-                                        SecondExpression = new IdentifierLiteral { Value = ((WhoAmIResponse)org.Execute(new WhoAmIRequest())).BusinessUnitId.ToString("D") }
+                                        SecondExpression = new StringLiteral { Value = ((WhoAmIResponse)org.Execute(new WhoAmIRequest())).BusinessUnitId.ToString("D") }
                                     },
                                     BinaryExpressionType = BooleanBinaryExpressionType.Or,
                                     SecondExpression = new BooleanIsNullExpression
@@ -858,7 +865,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                     {
                                         FirstExpression = field,
                                         ComparisonType = BooleanComparisonType.NotEqualToBrackets,
-                                        SecondExpression = new IdentifierLiteral { Value = ((WhoAmIResponse)org.Execute(new WhoAmIRequest())).UserId.ToString("D") }
+                                        SecondExpression = new StringLiteral { Value = ((WhoAmIResponse)org.Execute(new WhoAmIRequest())).UserId.ToString("D") }
                                     },
                                     BinaryExpressionType = BooleanBinaryExpressionType.Or,
                                     SecondExpression = new BooleanIsNullExpression
@@ -874,10 +881,10 @@ namespace MarkMpn.Sql4Cds.Engine
                                     var inTeams = new InPredicate { Expression = field };
 
                                     if (condition.@operator == @operator.equseroruserteams)
-                                        inTeams.Values.Add(new IdentifierLiteral { Value = userId.ToString("D") });
+                                        inTeams.Values.Add(new StringLiteral { Value = userId.ToString("D") });
 
                                     foreach (var teamId in GetUserTeams(org, userId))
-                                        inTeams.Values.Add(new IdentifierLiteral { Value = teamId.ToString("D") });
+                                        inTeams.Values.Add(new StringLiteral { Value = teamId.ToString("D") });
 
                                     return inTeams;
                                 }
@@ -897,7 +904,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                     var inTeams = new InPredicate { Expression = field };
 
                                     foreach (var ownerId in ownerIds)
-                                        inTeams.Values.Add(new IdentifierLiteral { Value = ownerId.ToString("D") });
+                                        inTeams.Values.Add(new StringLiteral { Value = ownerId.ToString("D") });
 
                                     return inTeams;
                                 }
@@ -1083,12 +1090,160 @@ namespace MarkMpn.Sql4Cds.Engine
                                     startTime = startDate;
                                 }
                                 break;
+
+                            case @operator.under:
+                            case @operator.eqorunder:
+                            case @operator.notunder:
+                                {
+                                    var cte = GetUnderCte(meta, new Guid(condition.value), ctes);
+                                    var inPred = new InPredicate
+                                    {
+                                        Expression = field,
+                                        Subquery = new ScalarSubquery
+                                        {
+                                            QueryExpression = new QuerySpecification
+                                            {
+                                                SelectElements =
+                                                {
+                                                    new SelectScalarExpression
+                                                    {
+                                                        Expression = new ColumnReferenceExpression
+                                                        {
+                                                            MultiPartIdentifier = new MultiPartIdentifier
+                                                            {
+                                                                Identifiers =
+                                                                {
+                                                                    new Identifier { Value = cte.ExpressionName.Value },
+                                                                    new Identifier { Value = meta.PrimaryIdAttribute }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                },
+                                                FromClause = new FromClause
+                                                {
+                                                    TableReferences =
+                                                    {
+                                                        new NamedTableReference
+                                                        {
+                                                            SchemaObject = new SchemaObjectName
+                                                            {
+                                                                Identifiers =
+                                                                {
+                                                                    new Identifier { Value = cte.ExpressionName.Value }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                },
+                                                WhereClause = condition.@operator != @operator.under ? null : new WhereClause
+                                                {
+                                                    SearchCondition = new BooleanComparisonExpression
+                                                    {
+                                                        FirstExpression = new ColumnReferenceExpression
+                                                        {
+                                                            MultiPartIdentifier = new MultiPartIdentifier
+                                                            {
+                                                                Identifiers =
+                                                                {
+                                                                    new Identifier { Value = cte.ExpressionName.Value },
+                                                                    new Identifier { Value = "Level" }
+                                                                }
+                                                            }
+                                                        },
+                                                        ComparisonType = BooleanComparisonType.NotEqualToBrackets,
+                                                        SecondExpression = new IntegerLiteral { Value = "0" }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    };
+
+                                    if (condition.@operator == @operator.notunder)
+                                    {
+                                        inPred.NotDefined = true;
+
+                                        return new BooleanBinaryExpression
+                                        {
+                                            FirstExpression = new BooleanIsNullExpression { Expression = field },
+                                            BinaryExpressionType = BooleanBinaryExpressionType.Or,
+                                            SecondExpression = inPred
+                                        };
+                                    }
+
+                                    return inPred;
+                                }
+
+                            case @operator.above:
+                            case @operator.eqorabove:
+                                {
+                                    var cte = GetAboveCte(meta, new Guid(condition.value), ctes);
+                                    var inPred = new InPredicate
+                                    {
+                                        Expression = field,
+                                        Subquery = new ScalarSubquery
+                                        {
+                                            QueryExpression = new QuerySpecification
+                                            {
+                                                SelectElements =
+                                                {
+                                                    new SelectScalarExpression
+                                                    {
+                                                        Expression = new ColumnReferenceExpression
+                                                        {
+                                                            MultiPartIdentifier = new MultiPartIdentifier
+                                                            {
+                                                                Identifiers =
+                                                                {
+                                                                    new Identifier { Value = cte.ExpressionName.Value },
+                                                                    new Identifier { Value = meta.PrimaryIdAttribute }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                },
+                                                FromClause = new FromClause
+                                                {
+                                                    TableReferences =
+                                                    {
+                                                        new NamedTableReference
+                                                        {
+                                                            SchemaObject = new SchemaObjectName
+                                                            {
+                                                                Identifiers =
+                                                                {
+                                                                    new Identifier { Value = cte.ExpressionName.Value }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                },
+                                                WhereClause = condition.@operator != @operator.above ? null : new WhereClause
+                                                {
+                                                    SearchCondition = new BooleanComparisonExpression
+                                                    {
+                                                        FirstExpression = new ColumnReferenceExpression
+                                                        {
+                                                            MultiPartIdentifier = new MultiPartIdentifier
+                                                            {
+                                                                Identifiers =
+                                                                {
+                                                                    new Identifier { Value = cte.ExpressionName.Value },
+                                                                    new Identifier { Value = "Level" }
+                                                                }
+                                                            }
+                                                        },
+                                                        ComparisonType = BooleanComparisonType.NotEqualToBrackets,
+                                                        SecondExpression = new IntegerLiteral { Value = "0" }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    };
+
+                                    return inPred;
+                                }
                             /*
-                            case under,
-                            case eqorunder,
-                            case notunder,
-                            case above,
-                            case eqorabove,
                             case containvalues,
                             case notcontainvalues,
                              * */
@@ -1204,6 +1359,277 @@ namespace MarkMpn.Sql4Cds.Engine
             };
 
             return expression;
+        }
+
+        /// <summary>
+        /// Generates a Common Table Expression to recurse down a hierarchy from a given record
+        /// </summary>
+        /// <param name="meta">The metadata of the entity to recurse in</param>
+        /// <param name="guid">The unique identifier of the starting record to recurse down from</param>
+        /// <param name="ctes">The details of all the CTEs already in the query</param>
+        /// <returns>The CTE that represents the required query</returns>
+        /// <remarks>
+        /// Generates a CTE like:
+        /// 
+        /// account_hierarchical([Level], AccountId, ParentAccountId) AS 
+        /// (
+        /// SELECT 0, accountid, parentaccountid FROM account WHERE accountid = 'guid'
+        /// UNION ALL
+        /// SELECT Level + 1, account.accountid, account.parentaccountid FROM account INNER JOIN account_hierarchical ON account.parentaccountid = account_hierarchical.accountid
+        /// </remarks>
+        private static CommonTableExpression GetUnderCte(EntityMetadata meta, Guid guid, IDictionary<string, CommonTableExpression> ctes)
+        {
+            return GetCte(meta, guid, false, ctes);
+        }
+
+        /// <summary>
+        /// Generates a Common Table Expression to recurse up a hierarchy from a given record
+        /// </summary>
+        /// <param name="meta">The metadata of the entity to recurse in</param>
+        /// <param name="guid">The unique identifier of the starting record to recurse down from</param>
+        /// <param name="ctes">The details of all the CTEs already in the query</param>
+        /// <returns>The CTE that represents the required query</returns>
+        /// <remarks>
+        /// Generates a CTE like:
+        /// 
+        /// account_hierarchical([Level], AccountId, ParentAccountId) AS 
+        /// (
+        /// SELECT 0, accountid, parentaccountid FROM account WHERE accountid = 'guid'
+        /// UNION ALL
+        /// SELECT Level + 1, account.accountid, account.parentaccountid FROM account INNER JOIN account_hierarchical ON account.accountid = account_hierarchical.parentaccountid
+        /// </remarks>
+        private static CommonTableExpression GetAboveCte(EntityMetadata meta, Guid guid, IDictionary<string, CommonTableExpression> ctes)
+        {
+            return GetCte(meta, guid, true, ctes);
+        }
+
+        /// <summary>
+        /// Generates a Common Table Expression to recurse up or down a hierarchy from a given record
+        /// </summary>
+        /// <param name="meta">The metadata of the entity to recurse in</param>
+        /// <param name="guid">The unique identifier of the starting record to recurse down from</param>
+        /// <param name="above">Indicates if the CTE should find records above the selected record (<c>true</c>) or below (<c>false</c>)</param>
+        /// <param name="ctes">The details of all the CTEs already in the query</param>
+        /// <returns>The CTE that represents the required query</returns>
+        private static CommonTableExpression GetCte(EntityMetadata meta, Guid guid, bool above, IDictionary<string, CommonTableExpression> ctes)
+        {
+            if (meta == null)
+                throw new DisconnectedException();
+
+            var hierarchyRelationship = meta.ManyToOneRelationships.SingleOrDefault(r => r.IsHierarchical == true);
+
+            if (hierarchyRelationship == null)
+                throw new NotSupportedException("No hierarchical relationship defined for " + meta.LogicalName);
+
+            var parentLookupAttribute = hierarchyRelationship.ReferencingAttribute;
+
+            var baseName = $"{meta.LogicalName}_hierarchical";
+            var name = baseName;
+            var counter = 0;
+
+            while (ctes.ContainsKey(name))
+            {
+                name = baseName + counter;
+                counter++;
+            }
+
+            var cte = new CommonTableExpression
+            {
+                ExpressionName = new Identifier { Value = name },
+                Columns =
+                {
+                    new Identifier { Value = "Level" },
+                    new Identifier { Value = meta.PrimaryIdAttribute },
+                    new Identifier { Value = parentLookupAttribute }
+                },
+                QueryExpression = new BinaryQueryExpression
+                {
+                    FirstQueryExpression = new QuerySpecification
+                    {
+                        SelectElements =
+                        {
+                            new SelectScalarExpression
+                            {
+                                Expression = new IntegerLiteral { Value = "0" }
+                            },
+                            new SelectScalarExpression
+                            {
+                                Expression = new ColumnReferenceExpression
+                                {
+                                    MultiPartIdentifier = new MultiPartIdentifier
+                                    {
+                                        Identifiers =
+                                        {
+                                            new Identifier { Value = meta.PrimaryIdAttribute }
+                                        }
+                                    }
+                                }
+                            },
+                            new SelectScalarExpression
+                            {
+                                Expression = new ColumnReferenceExpression
+                                {
+                                    MultiPartIdentifier = new MultiPartIdentifier
+                                    {
+                                        Identifiers =
+                                        {
+                                            new Identifier { Value = parentLookupAttribute }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        FromClause = new FromClause
+                        {
+                            TableReferences =
+                            {
+                                new NamedTableReference
+                                {
+                                    SchemaObject = new SchemaObjectName
+                                    {
+                                        Identifiers =
+                                        {
+                                            new Identifier { Value = meta.LogicalName }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        WhereClause = new WhereClause
+                        {
+                            SearchCondition = new BooleanComparisonExpression
+                            {
+                                FirstExpression = new ColumnReferenceExpression
+                                {
+                                    MultiPartIdentifier = new MultiPartIdentifier
+                                    {
+                                        Identifiers =
+                                        {
+                                            new Identifier { Value = meta.PrimaryIdAttribute }
+                                        }
+                                    }
+                                },
+                                ComparisonType = BooleanComparisonType.Equals,
+                                SecondExpression = new StringLiteral { Value = guid.ToString("D") }
+                            }
+                        }
+                    },
+                    BinaryQueryExpressionType = BinaryQueryExpressionType.Union,
+                    All = true,
+                    SecondQueryExpression = new QuerySpecification
+                    {
+                        SelectElements =
+                        {
+                            new SelectScalarExpression
+                            {
+                                Expression = new BinaryExpression
+                                {
+                                    FirstExpression = new ColumnReferenceExpression
+                                    {
+                                        MultiPartIdentifier = new MultiPartIdentifier
+                                        {
+                                            Identifiers =
+                                            {
+                                                new Identifier { Value = "Level" }
+                                            }
+                                        }
+                                    },
+                                    BinaryExpressionType = BinaryExpressionType.Add,
+                                    SecondExpression = new IntegerLiteral { Value = "1" }
+                                }
+                            },
+                            new SelectScalarExpression
+                            {
+                                Expression = new ColumnReferenceExpression
+                                {
+                                    MultiPartIdentifier = new MultiPartIdentifier
+                                    {
+                                        Identifiers =
+                                        {
+                                            new Identifier { Value = meta.LogicalName },
+                                            new Identifier { Value = meta.PrimaryIdAttribute }
+                                        }
+                                    }
+                                }
+                            },
+                            new SelectScalarExpression
+                            {
+                                Expression = new ColumnReferenceExpression
+                                {
+                                    MultiPartIdentifier = new MultiPartIdentifier
+                                    {
+                                        Identifiers =
+                                        {
+                                            new Identifier { Value = meta.LogicalName },
+                                            new Identifier { Value = parentLookupAttribute }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        FromClause = new FromClause
+                        {
+                            TableReferences =
+                            {
+                                new QualifiedJoin
+                                {
+                                    FirstTableReference = new NamedTableReference
+                                    {
+                                        SchemaObject = new SchemaObjectName
+                                        {
+                                            Identifiers =
+                                            {
+                                                new Identifier { Value = meta.LogicalName }
+                                            }
+                                        }
+                                    },
+                                    QualifiedJoinType = QualifiedJoinType.Inner,
+                                    SecondTableReference = new NamedTableReference
+                                    {
+                                        SchemaObject = new SchemaObjectName
+                                        {
+                                            Identifiers =
+                                            {
+                                                new Identifier { Value = name }
+                                            }
+                                        }
+                                    },
+                                    SearchCondition = new BooleanComparisonExpression
+                                    {
+                                        FirstExpression = new ColumnReferenceExpression
+                                        {
+                                            MultiPartIdentifier = new MultiPartIdentifier
+                                            {
+                                                Identifiers =
+                                                {
+                                                    new Identifier { Value = meta.LogicalName },
+                                                    new Identifier { Value = above ? meta.PrimaryIdAttribute : parentLookupAttribute }
+                                                }
+                                            }
+                                        },
+                                        ComparisonType = BooleanComparisonType.Equals,
+                                        SecondExpression = new ColumnReferenceExpression
+                                        {
+                                            MultiPartIdentifier = new MultiPartIdentifier
+                                            {
+                                                Identifiers =
+                                                {
+                                                    new Identifier { Value = name },
+                                                    new Identifier { Value = above ? parentLookupAttribute : meta.PrimaryIdAttribute }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            ctes.Add(name, cte);
+
+            return cte;
         }
 
         enum FiscalPeriodType

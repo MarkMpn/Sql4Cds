@@ -12,22 +12,32 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
 {
     class SelectStatement
     {
-        public QuerySpecification QueryExpression { get; set; }
+        public QueryExpression QueryExpression { get; set; }
+
+        public WithCtesAndXmlNamespaces WithCtesAndXmlNamespaces { get; set; }
 
         public void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
             QueryExpression?.Accept(visitor);
+            WithCtesAndXmlNamespaces?.Accept(visitor);
         }
 
-        public void ToString(StringBuilder buf)
+        public void ToString(StringBuilder buf, int indent)
         {
-            buf.Append("SELECT ");
-            QueryExpression?.ToString(buf);
+            WithCtesAndXmlNamespaces?.ToString(buf, indent);
+            QueryExpression?.ToString(buf, indent);
         }
     }
 
-    class QuerySpecification
+    abstract class QueryExpression
+    {
+        public abstract void Accept(TSqlFragmentVisitor visitor);
+
+        public abstract void ToString(StringBuilder buf, int indent);
+    }
+
+    class QuerySpecification : QueryExpression
     {
         public TopRowFilter TopRowFilter { get; set; }
 
@@ -45,7 +55,7 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
 
         public OffsetClause OffsetClause { get; set; }
 
-        public void Accept(TSqlFragmentVisitor visitor)
+        public override void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
             TopRowFilter?.Accept(visitor);
@@ -60,28 +70,94 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
             OrderByClause?.Accept(visitor);
         }
 
-        public void ToString(StringBuilder buf)
+        public override void ToString(StringBuilder buf, int indent)
         {
-            TopRowFilter?.ToString(buf);
+            buf.Append(' ', indent);
+
+            var longestClause = "SELECT";
+            if (GroupByClause != null)
+                longestClause = "GROUP BY";
+            else if (OrderByClause != null)
+                longestClause = "ORDER BY";
+
+            buf.Append("SELECT");
+
+            buf.Append(' ', longestClause.Length - "SELECT".Length + 1);
 
             if (UniqueRowFilter == UniqueRowFilter.Distinct)
                 buf.Append("DISTINCT ");
 
+            TopRowFilter?.ToString(buf, indent);
+
+            var selectIndent = Sql150ScriptGenerator.GetCurrentIndent(buf);
+
             for (var i = 0; i < SelectElements.Count; i++)
             {
                 if (i > 0)
-                    buf.Append(", ");
+                {
+                    buf.Append(",\r\n");
+                    buf.Append(' ', selectIndent);
+                }
 
-                SelectElements[i].ToString(buf);
+                SelectElements[i].ToString(buf, selectIndent);
             }
-            buf.Append(" ");
 
-            FromClause?.ToString(buf);
-            WhereClause?.ToString(buf);
-            GroupByClause?.ToString(buf);
-            OrderByClause?.ToString(buf);
-            OffsetClause?.ToString(buf);
+            buf.Append("\r\n");
+
+            FromClause?.ToString(buf, indent, longestClause.Length);
+            WhereClause?.ToString(buf, indent, longestClause.Length);
+            GroupByClause?.ToString(buf, indent, longestClause.Length);
+            OrderByClause?.ToString(buf, indent, longestClause.Length);
+            OffsetClause?.ToString(buf, indent, longestClause.Length);
         }
+    }
+
+    class BinaryQueryExpression : QueryExpression
+    {
+        public QueryExpression FirstQueryExpression { get; set; }
+
+        public BinaryQueryExpressionType BinaryQueryExpressionType { get; set; }
+
+        public bool All { get; set; }
+
+        public QueryExpression SecondQueryExpression { get; set; }
+
+        public override void Accept(TSqlFragmentVisitor visitor)
+        {
+            visitor.ExplicitVisit(this);
+
+            FirstQueryExpression?.Accept(visitor);
+            SecondQueryExpression?.Accept(visitor);
+        }
+
+        public override void ToString(StringBuilder buf, int indent)
+        {
+            FirstQueryExpression.ToString(buf, indent);
+
+            switch (BinaryQueryExpressionType)
+            {
+                case BinaryQueryExpressionType.Union:
+                    buf.Append("\r\n");
+                    buf.Append(' ', indent);
+                    buf.Append("UNION");
+                    break;
+
+                default:
+                    throw new NotSupportedException();
+            }
+
+            if (All)
+                buf.Append(" ALL");
+
+            buf.Append("\r\n");
+
+            SecondQueryExpression.ToString(buf, indent);
+        }
+    }
+
+    enum BinaryQueryExpressionType
+    {
+        Union
     }
 
     class TopRowFilter
@@ -94,10 +170,10 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
             Expression?.Accept(visitor);
         }
 
-        public void ToString(StringBuilder buf)
+        public void ToString(StringBuilder buf, int indent)
         {
             buf.Append("TOP ");
-            Expression?.ToString(buf);
+            Expression?.ToString(buf, indent);
             buf.Append(" ");
         }
     }
@@ -106,14 +182,14 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
     {
         public abstract void Accept(TSqlFragmentVisitor visitor);
 
-        public abstract void ToString(StringBuilder buf);
+        public abstract void ToString(StringBuilder buf, int indent);
     }
 
     abstract class Literal : ScalarExpression
     {
         public string Value { get; set; }
 
-        public override void ToString(StringBuilder buf)
+        public override void ToString(StringBuilder buf, int indent)
         {
             buf.Append(Value);
         }
@@ -134,7 +210,7 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
             visitor.ExplicitVisit(this);
         }
 
-        public override void ToString(StringBuilder buf)
+        public override void ToString(StringBuilder buf, int indent)
         {
             buf.Append("'");
             buf.Append(Value.Replace("'", "''"));
@@ -166,21 +242,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         }
     }
 
-    class IdentifierLiteral : Literal
-    {
-        public override void Accept(TSqlFragmentVisitor visitor)
-        {
-            visitor.ExplicitVisit(this);
-        }
-
-        public override void ToString(StringBuilder buf)
-        {
-            buf.Append("'");
-            buf.Append(Value.Replace("'", "''"));
-            buf.Append("'");
-        }
-    }
-
     class VariableReference : ScalarExpression
     {
         public string Name { get; set; }
@@ -190,7 +251,7 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
             visitor.ExplicitVisit(this);
         }
 
-        public override void ToString(StringBuilder buf)
+        public override void ToString(StringBuilder buf, int indent)
         {
             buf.Append(Name);
         }
@@ -214,19 +275,24 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
                 table.Accept(visitor);
         }
 
-        public void ToString(StringBuilder buf)
+        public void ToString(StringBuilder buf, int indent, int longestClauseLength)
         {
-            buf.Append("FROM ");
+            buf.Append(' ', indent);
+            buf.Append("FROM");
+            buf.Append(' ', longestClauseLength - "FROM".Length + 1);
 
             for (var i = 0; i < TableReferences.Count; i++)
             {
                 if (i > 0)
-                    buf.Append(", ");
+                {
+                    buf.Append(",\r\n");
+                    buf.Append(' ', indent + longestClauseLength + 1);
+                }
 
-                TableReferences[i].ToString(buf);
+                TableReferences[i].ToString(buf, indent + longestClauseLength + 1);
             }
 
-            buf.Append(" ");
+            buf.Append("\r\n");
         }
     }
 
@@ -234,7 +300,7 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
     {
         public abstract void Accept(TSqlFragmentVisitor visitor);
 
-        public abstract void ToString(StringBuilder buf);
+        public abstract void ToString(StringBuilder buf, int indent);
     }
 
     class NamedTableReference : TableReference
@@ -257,9 +323,9 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
             Alias?.Accept(visitor);
         }
 
-        public override void ToString(StringBuilder buf)
+        public override void ToString(StringBuilder buf, int indent)
         {
-            SchemaObject.ToString(buf);
+            SchemaObject.ToString(buf, indent);
 
             if (Alias != null)
             {
@@ -303,18 +369,29 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
             SearchCondition?.Accept(visitor);
         }
 
-        public override void ToString(StringBuilder buf)
+        public override void ToString(StringBuilder buf, int indent)
         {
-            FirstTableReference.ToString(buf);
+            FirstTableReference.ToString(buf, indent);
+
+            buf.Append("\r\n");
+            buf.Append(' ', indent);
 
             if (QualifiedJoinType == QualifiedJoinType.Inner)
-                buf.Append(" INNER JOIN ");
+                buf.Append("INNER JOIN");
             else
-                buf.Append(" LEFT OUTER JOIN ");
+                buf.Append("LEFT OUTER JOIN");
 
-            SecondTableReference.ToString(buf);
-            buf.Append(" ON ");
-            SearchCondition.ToString(buf);
+            buf.Append("\r\n");
+            buf.Append(' ', indent);
+
+            SecondTableReference.ToString(buf, indent);
+
+            buf.Append("\r\n");
+            buf.Append(' ', indent);
+
+            buf.Append("ON ");
+
+            SearchCondition.ToString(buf, indent + 3);
         }
     }
 
@@ -376,7 +453,7 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
                 identifier.Accept(visitor);
         }
 
-        public void ToString(StringBuilder buf)
+        public void ToString(StringBuilder buf, int indent)
         {
             for (var i = 0; i < Identifiers.Count; i++)
             {
@@ -431,13 +508,15 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
             FetchExpression?.Accept(visitor);
         }
 
-        public void ToString(StringBuilder buf)
+        public void ToString(StringBuilder buf, int indent, int longestClauseLength)
         {
-            buf.Append("OFFSET ");
-            OffsetExpression.ToString(buf);
+            buf.Append(' ', indent);
+            buf.Append("OFFSET");
+            buf.Append(' ', longestClauseLength - "OFFSET".Length + 1);
+            OffsetExpression.ToString(buf, indent);
             buf.Append(" ROWS FETCH NEXT ");
-            FetchExpression.ToString(buf);
-            buf.Append(" ROWS ONLY ");
+            FetchExpression.ToString(buf, indent);
+            buf.Append(" ROWS ONLY\r\n");
         }
     }
 
@@ -452,11 +531,13 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
             SearchCondition?.Accept(visitor);
         }
 
-        public void ToString(StringBuilder buf)
+        public void ToString(StringBuilder buf, int indent, int longestClauseLength)
         {
-            buf.Append("WHERE ");
-            SearchCondition.ToString(buf);
-            buf.Append(" ");
+            buf.Append(' ', indent);
+            buf.Append("WHERE");
+            buf.Append(' ', longestClauseLength - "WHERE".Length + 1);
+            SearchCondition.ToString(buf, indent + longestClauseLength + 1);
+            buf.Append("\r\n");
         }
     }
 
@@ -464,7 +545,7 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
     {
         public abstract void Accept(TSqlFragmentVisitor visitor);
 
-        public abstract void ToString(StringBuilder buf);
+        public abstract void ToString(StringBuilder buf, int indent);
     }
 
     class SelectStarExpression : SelectElement
@@ -478,11 +559,11 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
             Qualifier?.Accept(visitor);
         }
 
-        public override void ToString(StringBuilder buf)
+        public override void ToString(StringBuilder buf, int indent)
         {
             if (Qualifier != null)
             {
-                Qualifier.ToString(buf);
+                Qualifier.ToString(buf, indent);
                 buf.Append(".");
             }
 
@@ -504,9 +585,9 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
             ColumnName?.Accept(visitor);
         }
 
-        public override void ToString(StringBuilder buf)
+        public override void ToString(StringBuilder buf, int indent)
         {
-            Expression.ToString(buf);
+            Expression.ToString(buf, indent);
 
             if (ColumnName != null)
             {
@@ -531,9 +612,9 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
             MultiPartIdentifier?.Accept(visitor);
         }
 
-        public override void ToString(StringBuilder buf)
+        public override void ToString(StringBuilder buf, int indent)
         {
-            MultiPartIdentifier.ToString(buf);
+            MultiPartIdentifier.ToString(buf, indent);
         }
     }
 
@@ -555,7 +636,7 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
                 param.Accept(visitor);
         }
 
-        public override void ToString(StringBuilder buf)
+        public override void ToString(StringBuilder buf, int indent)
         {
             FunctionName.ToString(buf);
             buf.Append("(");
@@ -568,7 +649,7 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
                 if (i > 0)
                     buf.Append(", ");
 
-                Parameters[i].ToString(buf);
+                Parameters[i].ToString(buf, indent);
             }
 
             buf.Append(")");
@@ -589,12 +670,12 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
             Parameter?.Accept(visitor);
         }
 
-        public override void ToString(StringBuilder buf)
+        public override void ToString(StringBuilder buf, int indent)
         {
             buf.Append("CONVERT(");
-            DataType.ToString(buf);
+            DataType.ToString(buf, indent);
             buf.Append(", ");
-            Parameter.ToString(buf);
+            Parameter.ToString(buf, indent);
             buf.Append(")");
         }
     }
@@ -610,9 +691,9 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
             Name?.Accept(visitor);
         }
 
-        public void ToString(StringBuilder buf)
+        public void ToString(StringBuilder buf, int indent)
         {
-            Name.ToString(buf);
+            Name.ToString(buf, indent);
         }
     }
 
@@ -645,19 +726,24 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
                 group.Accept(visitor);
         }
 
-        public void ToString(StringBuilder buf)
+        public void ToString(StringBuilder buf, int indent, int longestClauseLength)
         {
-            buf.Append("GROUP BY ");
+            buf.Append(' ', indent);
+            buf.Append("GROUP BY");
+            buf.Append(' ', longestClauseLength - "GROUP BY".Length + 1);
 
             for (var i = 0; i < GroupingSpecifications.Count; i++)
             {
                 if (i > 0)
-                    buf.Append(", ");
+                {
+                    buf.Append(",\r\n");
+                    buf.Append(' ', indent + longestClauseLength + 1);
+                }
 
-                GroupingSpecifications[i].ToString(buf);
+                GroupingSpecifications[i].ToString(buf, indent);
             }
 
-            buf.Append(" ");
+            buf.Append("\r\n");
         }
     }
 
@@ -672,9 +758,9 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
             Expression?.Accept(visitor);
         }
 
-        public void ToString(StringBuilder buf)
+        public void ToString(StringBuilder buf, int indent)
         {
-            Expression.ToString(buf);
+            Expression.ToString(buf, indent);
         }
     }
 
@@ -696,9 +782,9 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
             SecondExpression?.Accept(visitor);
         }
 
-        public override void ToString(StringBuilder buf)
+        public override void ToString(StringBuilder buf, int indent)
         {
-            FirstExpression.ToString(buf);
+            FirstExpression.ToString(buf, indent);
 
             switch (ComparisonType)
             {
@@ -730,7 +816,7 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
                     throw new NotImplementedException();
             }
 
-            SecondExpression.ToString(buf);
+            SecondExpression.ToString(buf, indent);
         }
     }
 
@@ -755,10 +841,10 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
             Expression?.Accept(visitor);
         }
 
-        public override void ToString(StringBuilder buf)
+        public override void ToString(StringBuilder buf, int indent)
         {
             buf.Append("(");
-            Expression.ToString(buf);
+            Expression.ToString(buf, Sql150ScriptGenerator.GetCurrentIndent(buf));
             buf.Append(")");
         }
     }
@@ -777,25 +863,28 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
             SecondExpression?.Accept(visitor);
         }
 
-        public override void ToString(StringBuilder buf)
+        public override void ToString(StringBuilder buf, int indent)
         {
-            FirstExpression.ToString(buf);
+            FirstExpression.ToString(buf, indent);
+
+            buf.Append("\r\n");
+            buf.Append(' ', indent);
 
             switch (BinaryExpressionType)
             {
                 case BooleanBinaryExpressionType.And:
-                    buf.Append(" AND ");
+                    buf.Append("AND ");
                     break;
 
                 case BooleanBinaryExpressionType.Or:
-                    buf.Append(" OR ");
+                    buf.Append("OR ");
                     break;
 
                 default:
                     throw new NotImplementedException();
             }
 
-            SecondExpression.ToString(buf);
+            SecondExpression.ToString(buf, indent);
         }
     }
 
@@ -819,16 +908,16 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
             SecondExpression?.Accept(visitor);
         }
 
-        public override void ToString(StringBuilder buf)
+        public override void ToString(StringBuilder buf, int indent)
         {
-            FirstExpression.ToString(buf);
+            FirstExpression.ToString(buf, indent);
 
             if (NotDefined)
                 buf.Append(" NOT LIKE ");
             else
                 buf.Append(" LIKE ");
 
-            SecondExpression.ToString(buf);
+            SecondExpression.ToString(buf, indent);
         }
     }
 
@@ -848,9 +937,9 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
             ThirdExpression?.Accept(visitor);
         }
 
-        public override void ToString(StringBuilder buf)
+        public override void ToString(StringBuilder buf, int indent)
         {
-            FirstExpression.ToString(buf);
+            FirstExpression.ToString(buf, indent);
 
             switch (TernaryExpressionType)
             {
@@ -866,9 +955,9 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
                     throw new NotImplementedException();
             }
 
-            SecondExpression.ToString(buf);
+            SecondExpression.ToString(buf, indent);
             buf.Append(" AND ");
-            ThirdExpression.ToString(buf);
+            ThirdExpression.ToString(buf, indent);
         }
     }
 
@@ -883,6 +972,7 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public Expression Expression { get; set; }
         public bool NotDefined { get; set; }
         public List<Expression> Values { get; } = new List<Expression>();
+        public ScalarSubquery Subquery { get; set; }
 
         public override void Accept(TSqlFragmentVisitor visitor)
         {
@@ -892,26 +982,91 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
 
             foreach (var value in Values)
                 value.Accept(visitor);
+
+            Subquery?.Accept(visitor);
         }
 
-        public override void ToString(StringBuilder buf)
+        public override void ToString(StringBuilder buf, int indent)
         {
-            Expression.ToString(buf);
+            Expression.ToString(buf, indent);
 
             if (NotDefined)
                 buf.Append(" NOT IN (");
             else
                 buf.Append(" IN (");
 
-            for (var i = 0; i < Values.Count; i++)
+            if (Subquery != null)
             {
-                if (i > 0)
-                    buf.Append(", ");
+                Subquery.ToString(buf, Sql150ScriptGenerator.GetCurrentIndent(buf));
+            }
+            else
+            {
+                for (var i = 0; i < Values.Count; i++)
+                {
+                    if (i > 0)
+                        buf.Append(", ");
 
-                Values[i].ToString(buf);
+                    Values[i].ToString(buf, indent);
+                }
             }
             
             buf.Append(")");
+        }
+    }
+
+    class BinaryExpression : ScalarExpression
+    {
+        public ScalarExpression FirstExpression { get; set; }
+
+        public BinaryExpressionType BinaryExpressionType { get; set; }
+
+        public ScalarExpression SecondExpression { get; set; }
+
+        public override void Accept(TSqlFragmentVisitor visitor)
+        {
+            visitor.ExplicitVisit(this);
+
+            FirstExpression?.Accept(visitor);
+            SecondExpression?.Accept(visitor);
+        }
+
+        public override void ToString(StringBuilder buf, int indent)
+        {
+            FirstExpression.ToString(buf, indent);
+
+            switch (BinaryExpressionType)
+            {
+                case BinaryExpressionType.Add:
+                    buf.Append(" + ");
+                    break;
+
+                default:
+                    throw new NotSupportedException();
+            }
+
+            SecondExpression.ToString(buf, indent);
+        }
+    }
+
+    enum BinaryExpressionType
+    {
+        Add
+    }
+
+    class ScalarSubquery
+    {
+        public QueryExpression QueryExpression { get; set; }
+
+        public void Accept(TSqlFragmentVisitor visitor)
+        {
+            visitor.ExplicitVisit(this);
+
+            QueryExpression?.Accept(visitor);
+        }
+
+        public void ToString(StringBuilder buf, int indent)
+        {
+            QueryExpression.ToString(buf, indent);
         }
     }
 
@@ -927,9 +1082,9 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
             Expression?.Accept(visitor);
         }
 
-        public override void ToString(StringBuilder buf)
+        public override void ToString(StringBuilder buf, int indent)
         {
-            Expression.ToString(buf);
+            Expression.ToString(buf, indent);
 
             if (IsNot)
                 buf.Append(" IS NOT NULL");
@@ -950,19 +1105,24 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
                 order.Accept(visitor);
         }
 
-        public void ToString(StringBuilder buf)
+        public void ToString(StringBuilder buf, int indent, int longestClauseLength)
         {
-            buf.Append("ORDER BY ");
+            buf.Append(' ', indent);
+            buf.Append("ORDER BY");
+            buf.Append(' ', longestClauseLength - "ORDER BY".Length + 1);
 
             for (var i = 0; i < OrderByElements.Count; i++)
             {
                 if (i > 0)
-                    buf.Append(", ");
+                {
+                    buf.Append(",\r\n");
+                    buf.Append(' ', indent + longestClauseLength + 1);
+                }
 
-                OrderByElements[i].ToString(buf);
+                OrderByElements[i].ToString(buf, indent + longestClauseLength + 1);
             }
 
-            buf.Append(" ");
+            buf.Append("\r\n");
         }
     }
 
@@ -979,9 +1139,9 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
             Expression?.Accept(visitor);
         }
 
-        public void ToString(StringBuilder buf)
+        public void ToString(StringBuilder buf, int indent)
         {
-            Expression.ToString(buf);
+            Expression.ToString(buf, indent);
             
             switch (SortOrder)
             {
@@ -996,6 +1156,77 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
                 default:
                     throw new NotImplementedException();
             }
+        }
+    }
+
+    class WithCtesAndXmlNamespaces
+    {
+        public List<CommonTableExpression> CommonTableExpressions { get; } = new List<CommonTableExpression>();
+
+        public void Accept(TSqlFragmentVisitor visitor)
+        {
+            visitor.ExplicitVisit(this);
+
+            foreach (var cte in CommonTableExpressions)
+                cte.Accept(visitor);
+        }
+
+        public void ToString(StringBuilder buf, int indent)
+        {
+            buf.Append(' ', indent);
+            buf.Append("WITH ");
+
+            for (var i = 0; i < CommonTableExpressions.Count; i++)
+            {
+                if (i > 0)
+                {
+                    buf.Append(",\r\n");
+                    buf.Append(' ', indent + 5);
+                }
+
+                CommonTableExpressions[i].ToString(buf, indent + 5);
+            }
+
+            buf.Append(" ");
+        }
+    }
+
+    class CommonTableExpression
+    {
+        public Identifier ExpressionName { get; set; }
+
+        public List<Identifier> Columns { get; } = new List<Identifier>();
+
+        public QueryExpression QueryExpression { get; set; }
+
+        public void Accept(TSqlFragmentVisitor visitor)
+        {
+            visitor.ExplicitVisit(this);
+
+            ExpressionName?.Accept(visitor);
+
+            foreach (var col in Columns)
+                col.Accept(visitor);
+
+            QueryExpression?.Accept(visitor);
+        }
+
+        public void ToString(StringBuilder buf, int indent)
+        {
+            ExpressionName.ToString(buf);
+            buf.Append("(");
+
+            for (var i = 0; i < Columns.Count; i++)
+            {
+                if (i > 0)
+                    buf.Append(", ");
+
+                Columns[i].ToString(buf);
+            }
+
+            buf.Append(") AS (\r\n");
+            QueryExpression.ToString(buf, indent);
+            buf.Append(")");
         }
     }
 
@@ -1044,10 +1275,6 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         }
 
         public virtual void ExplicitVisit(MoneyLiteral moneyLiteral)
-        {
-        }
-
-        public virtual void ExplicitVisit(IdentifierLiteral identifierLiteral)
         {
         }
 
@@ -1154,6 +1381,26 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         internal void ExplicitVisit(BooleanParenthesisExpression booleanParenthesisExpression)
         {
         }
+
+        internal void ExplicitVisit(WithCtesAndXmlNamespaces withCtesAndXmlNamespaces)
+        {
+        }
+
+        internal void ExplicitVisit(CommonTableExpression commonTableExpression)
+        {
+        }
+
+        internal void ExplicitVisit(ScalarSubquery scalarSubquery)
+        {
+        }
+
+        internal void ExplicitVisit(BinaryQueryExpression binaryQueryExpression)
+        {
+        }
+
+        internal void ExplicitVisit(BinaryExpression binaryExpression)
+        {
+        }
     }
 
     class Sql150ScriptGenerator
@@ -1161,8 +1408,18 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public void GenerateScript(SelectStatement statement, out string sql)
         {
             var buf = new StringBuilder();
-            statement.ToString(buf);
+            statement.ToString(buf, 0);
             sql = buf.ToString().Trim();
+        }
+
+        internal static int GetCurrentIndent(StringBuilder buf)
+        {
+            var indent = 0;
+
+            while (indent < buf.Length && buf[buf.Length - indent - 1] != '\n')
+                indent++;
+
+            return indent;
         }
     }
 }
