@@ -1863,6 +1863,64 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             ");
         }
 
+        [TestMethod]
+        public void ContainsValues()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT name FROM account WHERE CONTAINS(name, '1 OR 2')";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, $@"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <filter>
+                            <condition attribute='name' operator='contain-values'>
+                                <value>1</value>
+                                <value>2</value>
+                            </condition>
+                        </filter>
+                    </entity>
+                </fetch>
+            ");
+        }
+
+        [TestMethod]
+        public void NotContainsValues()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT name FROM account WHERE NOT CONTAINS(name, '1 OR 2')";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, $@"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <filter>
+                            <condition attribute='name' operator='not-contain-values'>
+                                <value>1</value>
+                                <value>2</value>
+                            </condition>
+                        </filter>
+                    </entity>
+                </fetch>
+            ");
+        }
+
         private void AssertFetchXml(Query[] queries, string fetchXml)
         {
             Assert.AreEqual(1, queries.Length);

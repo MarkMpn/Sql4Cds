@@ -9,6 +9,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarkMpn.Sql4Cds.Engine", "M
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarkMpn.Sql4Cds.Engine.Tests", "MarkMpn.Sql4Cds.Engine.Tests\MarkMpn.Sql4Cds.Engine.Tests.csproj", "{4448712A-17B8-4D1B-8CEE-6F8CB558FCC1}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarkMpn.Sql4Cds.Engine.FetchXml", "MarkMpn.Sql4Cds.Engine.FetchXml\MarkMpn.Sql4Cds.Engine.FetchXml.csproj", "{CA534229-43FF-4BD4-9C60-182F56936AC3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarkMpn.Sql4Cds.Engine.FetchXml.Tests", "MarkMpn.Sql4Cds.Engine.FetchXml.Tests\MarkMpn.Sql4Cds.Engine.FetchXml.Tests.csproj", "{69F7D111-3542-4E31-A0F8-E544F9FFA587}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +31,14 @@ Global
 		{4448712A-17B8-4D1B-8CEE-6F8CB558FCC1}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4448712A-17B8-4D1B-8CEE-6F8CB558FCC1}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4448712A-17B8-4D1B-8CEE-6F8CB558FCC1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CA534229-43FF-4BD4-9C60-182F56936AC3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CA534229-43FF-4BD4-9C60-182F56936AC3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CA534229-43FF-4BD4-9C60-182F56936AC3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CA534229-43FF-4BD4-9C60-182F56936AC3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{69F7D111-3542-4E31-A0F8-E544F9FFA587}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{69F7D111-3542-4E31-A0F8-E544F9FFA587}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{69F7D111-3542-4E31-A0F8-E544F9FFA587}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{69F7D111-3542-4E31-A0F8-E544F9FFA587}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

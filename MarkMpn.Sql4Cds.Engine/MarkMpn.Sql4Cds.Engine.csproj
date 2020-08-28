@@ -51,6 +51,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AttributeMetadataCache.cs" />
+    <Compile Include="DisconnectedException.cs" />
     <Compile Include="EntityExtensions.cs" />
     <Compile Include="TSqlEndpoint.cs" />
     <Compile Include="TSqlFragmentExtensions.cs" />
@@ -96,7 +97,6 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="MSSQLReservedWords.txt" />
     <EmbeddedResource Include="Properties\Resources.resx">
       <Generator>ResXFileCodeGenerator</Generator>
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>

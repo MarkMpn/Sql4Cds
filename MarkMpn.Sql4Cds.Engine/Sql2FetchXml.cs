@@ -2646,6 +2646,78 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 criteria.Items = AddItem(criteria.Items, condition);
             }
+            else if (searchCondition is FullTextPredicate ftp && ftp.FullTextFunctionType == FullTextFunctionType.Contains)
+            {
+                if (ftp.Columns.Count != 1)
+                    throw new NotSupportedQueryFragmentException("Unsupported full text search, only searches on a single column are supported", ftp);
+
+                var field = ftp.Columns[0];
+
+                var literal = ftp.Value as StringLiteral;
+
+                if (literal == null)
+                    throw new NotSupportedQueryFragmentException("Unsupported full text search, only string literal values are supported", literal);
+
+                var values = literal.Value.Split(new[] { " OR " }, StringSplitOptions.None);
+
+                for (var i = 0; i < values.Length; i++)
+                {
+                    if (!Int32.TryParse(values[i], out _))
+                        throw new NotSupportedQueryFragmentException("Unsupported full text search, only searches in the format '1 OR 2 OR 3' are supported", literal);
+                }
+
+                var entityName = GetColumnTableAlias(field, tables, out var entityTable);
+                if (entityTable == targetTable)
+                    entityName = null;
+
+                var condition = new condition
+                {
+                    entityname = entityName,
+                    attribute = field.MultiPartIdentifier.Identifiers.Last().Value,
+                    @operator = @operator.containvalues
+                };
+
+                condition.Items = values.Select(v => new conditionValue { Value = v })
+                    .ToArray();
+
+                criteria.Items = AddItem(criteria.Items, condition);
+            }
+            else if (searchCondition is BooleanNotExpression not && not.Expression is FullTextPredicate notFtp && notFtp.FullTextFunctionType == FullTextFunctionType.Contains)
+            {
+                if (notFtp.Columns.Count != 1)
+                    throw new NotSupportedQueryFragmentException("Unsupported full text search, only searches on a single column are supported", notFtp);
+
+                var field = notFtp.Columns[0];
+
+                var literal = notFtp.Value as StringLiteral;
+
+                if (literal == null)
+                    throw new NotSupportedQueryFragmentException("Unsupported full text search, only string literal values are supported", literal);
+
+                var values = literal.Value.Split(new[] { " OR " }, StringSplitOptions.None);
+
+                for (var i = 0; i < values.Length; i++)
+                {
+                    if (!Int32.TryParse(values[i], out _))
+                        throw new NotSupportedQueryFragmentException("Unsupported full text search, only searches in the format '1 OR 2 OR 3' are supported", literal);
+                }
+
+                var entityName = GetColumnTableAlias(field, tables, out var entityTable);
+                if (entityTable == targetTable)
+                    entityName = null;
+
+                var condition = new condition
+                {
+                    entityname = entityName,
+                    attribute = field.MultiPartIdentifier.Identifiers.Last().Value,
+                    @operator = @operator.notcontainvalues
+                };
+
+                condition.Items = values.Select(v => new conditionValue { Value = v })
+                    .ToArray();
+
+                criteria.Items = AddItem(criteria.Items, condition);
+            }
             else
             {
                 throw new PostProcessingRequiredException("Unhandled WHERE clause", searchCondition);
@@ -2814,6 +2886,42 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
 
                 return converted;
+            }
+            else if (searchCondition is FullTextPredicate ftp && ftp.FullTextFunctionType == FullTextFunctionType.Contains)
+            {
+                if (ftp.Columns.Count != 1)
+                    throw new NotSupportedQueryFragmentException("Unsupported full text search, only searches on a single column are supported", ftp);
+
+                var column = ConvertScalarExpression(ftp.Columns[0], tables, computedColumns, param);
+
+                if (column.Type != typeof(OptionSetValueCollection))
+                    throw new NotSupportedQueryFragmentException("Unsupported full text search, column must be a multi-select picklist column", ftp.Columns[0]);
+
+                var literal = ftp.Value as StringLiteral;
+
+                if (literal != null)
+                    throw new NotSupportedQueryFragmentException("Unsupported full text search, only string literal values are supported", literal);
+
+                var values = literal.Value.Split(new[] { " OR " }, StringSplitOptions.None);
+
+                for (var i = 0; i < values.Length; i++)
+                {
+                    if (!Int32.TryParse(values[i], out _))
+                        throw new NotSupportedQueryFragmentException("Unsupported full text search, only searches in the format '1 OR 2 OR 3' are supported", literal);
+                }
+
+                var ints = values.Select(v => Int32.Parse(v)).ToArray();
+
+                var func = Expr.Call(() => ExpressionFunctions.Contains(Expr.Arg<OptionSetValueCollection>(), Expr.Arg<int[]>()),
+                    column,
+                    Expression.Constant(ints, typeof(int[])));
+
+                return func;
+            }
+            else if (searchCondition is BooleanNotExpression not)
+            {
+                var inner = HandleFilterPredicate(not.Expression, tables, computedColumns, param);
+                return Expression.Not(inner);
             }
             else
             {

@@ -218,7 +218,7 @@ namespace MarkMpn.Sql4Cds
             var metadata = _metadata[con];
 
             var fetch = DeserializeFetchXml((string)param["FetchXml"]);
-            var sql = FetchXml2Sql.Convert(metadata, fetch);
+            var sql = FetchXml2Sql.Convert(con.ServiceClient, metadata, fetch, new FetchXml2SqlOptions(), out _);
 
             if ((bool)param["ConvertOnly"])
             {
