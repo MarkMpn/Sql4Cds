@@ -2400,6 +2400,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
                 
                 string value = null;
+                List<string> values = null;
 
                 if (literal != null)
                 {
@@ -2428,22 +2429,29 @@ namespace MarkMpn.Sql4Cds.Engine
                         if (func.WithinGroupClause != null)
                             throw new NotSupportedQueryFragmentException("Unsupported function group clause", func);
 
-                        if (func.Parameters.Count > 1)
+                        if (func.Parameters.Count > 1 && op != @operator.containvalues && op != @operator.notcontainvalues)
                             throw new NotSupportedQueryFragmentException("Unsupported number of function parameters", func);
 
                         // Some advanced FetchXML operators use a value as well - take this as the function parameter
                         // This provides support for queries such as `createdon = lastxdays(3)` becoming <condition attribute="createdon" operator="last-x-days" value="3" />
-                        if (func.Parameters.Count == 1)
+                        if (op == @operator.containvalues || op == @operator.notcontainvalues)
+                        {
+                            values = new List<string>();
+
+                            foreach (var funcParam in func.Parameters)
+                            {
+                                if (!(funcParam is Literal paramLiteral))
+                                    throw new NotSupportedQueryFragmentException("Unsupported function parameter", funcParam);
+
+                                values.Add(paramLiteral.Value);
+                            }
+                        }
+                        else if (func.Parameters.Count == 1)
                         {
                             if (!(func.Parameters[0] is Literal paramLiteral))
                                 throw new NotSupportedQueryFragmentException("Unsupported function parameter", func.Parameters[0]);
 
                             value = paramLiteral.Value;
-                        }
-                        else if (func.Parameters.Count > 1)
-                        {
-                            // Only functions with 0 or 1 parameters are supported in FetchXML
-                            throw new NotSupportedQueryFragmentException("Too many function parameters", func);
                         }
                     }
                     else
@@ -2480,13 +2488,18 @@ namespace MarkMpn.Sql4Cds.Engine
                         value = targetMetadata.ObjectTypeCode?.ToString();
                     }
 
-                    criteria.Items = AddItem(criteria.Items, new condition
+                    var condition = new condition
                     {
                         entityname = entityName,
                         attribute = attribute,
                         @operator = op,
                         value = value
-                    });
+                    };
+
+                    criteria.Items = AddItem(criteria.Items, condition);
+
+                    if (values != null)
+                        condition.Items = values.Select(v => new conditionValue { Value = v }).ToArray();
                 }
                 else
                 {

@@ -664,6 +664,16 @@ namespace MarkMpn.Sql4Cds.Engine
                             else
                                 ((FunctionCall)value).Parameters.Add(new StringLiteral { Value = condition.value });
                         }
+                        else if (condition.Items != null)
+                        {
+                            foreach (var conditionValue in condition.Items)
+                            {
+                                if (Int32.TryParse(conditionValue.Value, out _))
+                                    ((FunctionCall)value).Parameters.Add(new IntegerLiteral { Value = conditionValue.Value });
+                                else
+                                    ((FunctionCall)value).Parameters.Add(new StringLiteral { Value = conditionValue.Value });
+                            }
+                        }
                     }
                     else
                     {
