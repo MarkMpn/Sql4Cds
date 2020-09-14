@@ -164,7 +164,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="quotedIdentifiers">Indicates if the SQL should be parsed using quoted identifiers</param>
         public Sql2FetchXml(IAttributeMetadataCache metadata, bool quotedIdentifiers)
         {
-            Metadata = metadata;
+            Metadata = new MetadataCache(metadata);
             QuotedIdentifiers = quotedIdentifiers;
         }
 
@@ -222,7 +222,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     Query query;
 
                     if (statement is SelectStatement select)
-                        query = ConvertSelectStatement(select, false);
+                        query = ConvertSelectStatement(select);
                     else if (statement is UpdateStatement update)
                         query = ConvertUpdateStatement(update);
                     else if (statement is DeleteStatement delete)
@@ -293,7 +293,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 QueryExpression = select.Select
             };
 
-            var selectQuery = ConvertSelectStatement(qry, false);
+            var selectQuery = ConvertSelectStatement(qry);
 
             // Check that the number of columns for the source query and target columns match
             if (columns.Count != selectQuery.ColumnSet.Length)
@@ -1159,35 +1159,62 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="select">The SQL query to convert</param>
         /// <returns>The equivalent query converted for execution against CDS</returns>
-        private SelectQuery ConvertSelectStatement(SelectStatement select, bool forceAggregateExpression)
+        private RetrieveQuery ConvertSelectStatement(SelectStatement select)
         {
+            // Check for any DOM elements that don't have an equivalent in CDS
+            if (!(select.QueryExpression is QuerySpecification querySpec))
+                throw new NotSupportedQueryFragmentException("Unhandled SELECT query expression", select.QueryExpression);
+
+            if (select.ComputeClauses.Count != 0)
+                throw new NotSupportedQueryFragmentException("Unhandled SELECT compute clause", select);
+
+            if (select.Into != null)
+                throw new NotSupportedQueryFragmentException("Unhandled SELECT INTO clause", select.Into);
+
+            if (select.On != null)
+                throw new NotSupportedQueryFragmentException("Unhandled SELECT ON clause", select.On);
+
+            if (select.OptimizerHints.Count != 0)
+                throw new NotSupportedQueryFragmentException("Unhandled SELECT optimizer hints", select);
+
+            if (select.WithCtesAndXmlNamespaces != null)
+                throw new NotSupportedQueryFragmentException("Unhandled SELECT WITH clause", select.WithCtesAndXmlNamespaces);
+
+            if (querySpec.ForClause != null)
+                throw new NotSupportedQueryFragmentException("Unhandled SELECT FOR clause", querySpec.ForClause);
+
+            if (querySpec.FromClause == null)
+                throw new NotSupportedQueryFragmentException("No source entity specified", querySpec);
+
+            var queryType = new QueryTypeVisitor();
+            querySpec.FromClause.Accept(queryType);
+
+            if (queryType.IsData && queryType.IsGlobalOptionSet)
+                throw new NotSupportedQueryFragmentException("Cannot combine metadata and data", querySpec.FromClause);
+
+            if (queryType.IsData)
+                return ConvertDataSelectStatement(select, querySpec, false);
+
+            if (queryType.IsGlobalOptionSet)
+                return ConvertGlobalOptionSetSelectStatement(select, querySpec);
+
+            throw new NotSupportedQueryFragmentException("Unknown query data source", querySpec.FromClause);
+        }
+
+        private GlobalOptionSetQuery ConvertGlobalOptionSetSelectStatement(SelectStatement select, QuerySpecification querySpec)
+        {
+            var qry = new GlobalOptionSetQuery();
+        }
+
+        /// <summary>
+        /// Converts a SELECT query
+        /// </summary>
+        /// <param name="select">The SQL query to convert</param>
+        /// <returns>The equivalent query converted for execution against CDS</returns>
+        private SelectQuery ConvertDataSelectStatement(SelectStatement select, QuerySpecification querySpec, bool forceAggregateExpression)
+        { 
             try
             {
-                // Check for any DOM elements that don't have an equivalent in CDS
-                if (!(select.QueryExpression is QuerySpecification querySpec))
-                    throw new NotSupportedQueryFragmentException("Unhandled SELECT query expression", select.QueryExpression);
-
-                if (select.ComputeClauses.Count != 0)
-                    throw new NotSupportedQueryFragmentException("Unhandled SELECT compute clause", select);
-
-                if (select.Into != null)
-                    throw new NotSupportedQueryFragmentException("Unhandled SELECT INTO clause", select.Into);
-
-                if (select.On != null)
-                    throw new NotSupportedQueryFragmentException("Unhandled SELECT ON clause", select.On);
-
-                if (select.OptimizerHints.Count != 0)
-                    throw new NotSupportedQueryFragmentException("Unhandled SELECT optimizer hints", select);
-
-                if (select.WithCtesAndXmlNamespaces != null)
-                    throw new NotSupportedQueryFragmentException("Unhandled SELECT WITH clause", select.WithCtesAndXmlNamespaces);
-
-                if (querySpec.ForClause != null)
-                    throw new NotSupportedQueryFragmentException("Unhandled SELECT FOR clause", querySpec.ForClause);
-
-                if (querySpec.FromClause == null)
-                    throw new NotSupportedQueryFragmentException("No source entity specified", querySpec);
-
                 // Store the original SQL again now so we can re-parse it if required to generate an alternative query
                 // to handle aggregates via an expression rather than FetchXML.
                 var sql = select.ToSql();
@@ -1244,7 +1271,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     script.Accept(new ReplacePrimaryFunctionsVisitor());
                     var originalSelect = (SelectStatement)script.Batches.Single().Statements.Single();
 
-                    query.AggregateAlternative = ConvertSelectStatement((SelectStatement)originalSelect, true);
+                    query.AggregateAlternative = ConvertDataSelectStatement(originalSelect, (QuerySpecification) originalSelect.QueryExpression, true);
                 }
 
                 return query;

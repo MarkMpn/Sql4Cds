@@ -72,9 +72,27 @@ namespace MarkMpn.Sql4Cds.Engine
     }
 
     /// <summary>
+    /// A CDS data retrieval query that is based on executing a request
+    /// </summary>
+    /// <typeparam name="TRequest">The type of request</typeparam>
+    /// <typeparam name="TResponse">The type of response</typeparam>
+    public abstract class RetrieveQuery : Query
+    {
+        /// <summary>
+        /// A list of any post-processing functions to be applied to the results
+        /// </summary>
+        public IList<IQueryExtension> Extensions { get; } = new List<IQueryExtension>();
+
+        /// <summary>
+        /// The columns that should be included in the query results
+        /// </summary>
+        public string[] ColumnSet { get; set; }
+    }
+
+    /// <summary>
     /// A CDS query that is based on FetchXML
     /// </summary>
-    public abstract class FetchXmlQuery : Query
+    public abstract class FetchXmlQuery : RetrieveQuery
     {
         private FetchType _fetch;
 
@@ -100,11 +118,6 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Indicates if the query will page across all the available data
         /// </summary>
         public bool AllPages { get; set; }
-
-        /// <summary>
-        /// A list of any post-processing functions to be applied to the results
-        /// </summary>
-        public IList<IQueryExtension> Extensions { get; } = new List<IQueryExtension>();
 
         /// <summary>
         /// Returns an alternative query that can be used if the main aggregate query results in an AggregateQueryRecordLimit error
@@ -356,11 +369,6 @@ namespace MarkMpn.Sql4Cds.Engine
             result = new EntityCollection { EntityName = entity.name, Entities = { resultEntity } };
             return true;
         }
-
-        /// <summary>
-        /// The columns that should be included in the query results
-        /// </summary>
-        public string[] ColumnSet { get; set; }
     }
 
     /// <summary>
@@ -742,7 +750,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// The SELECT query that produces the values to insert
         /// </summary>
-        public SelectQuery Source { get; set; }
+        public RetrieveQuery Source { get; set; }
 
         /// <summary>
         /// The mappings of columns from the FetchXML results to the attributes of the entity to insert
@@ -785,6 +793,74 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             return converted.ToArray();
+        }
+    }
+
+    /// <summary>
+    /// A SELECT request that retrieves metadata using a specialized request
+    /// </summary>
+    /// <typeparam name="TRequest"></typeparam>
+    /// <typeparam name="TResponse"></typeparam>
+    public abstract class MetadataQuery<TRequest, TResponse> : RetrieveQuery
+        where TRequest : OrganizationRequest
+        where TResponse : OrganizationResponse
+    {
+        /// <summary>
+        /// Returns or sets the metadata request to execute
+        /// </summary>
+        public TRequest Request { get; set; }
+
+        protected override object ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        {
+            options.Progress($"Executing {Request.GetType().Name}...");
+
+            var response = (TResponse) org.Execute(Request);
+
+            var sequence = ConvertResponse(response);
+
+            foreach (var extension in Extensions)
+                sequence = extension.ApplyTo(sequence, options);
+
+            return new EntityCollection(sequence.ToList());
+        }
+
+        protected abstract IEnumerable<Entity> ConvertResponse(TResponse response);
+
+        protected Entity ObjectToEntity(object obj)
+        {
+            var entity = new Entity(obj.GetType().Name.ToLower());
+
+            foreach (var prop in obj.GetType().GetProperties())
+            {
+                if (!prop.CanRead)
+                    continue;
+
+                var value = prop.GetValue(obj, null);
+
+                // TODO: Convert value types
+                // TODO: Apply joins
+
+                entity[prop.Name.ToLower()] = value;
+            }
+
+            return entity;
+        }
+    }
+
+    /// <summary>
+    /// A SELECT query to return details of global optionset metadata
+    /// </summary>
+    public class GlobalOptionSetQuery : MetadataQuery<RetrieveAllOptionSetsRequest, RetrieveAllOptionSetsResponse>
+    {
+        public GlobalOptionSetQuery()
+        {
+            Request = new RetrieveAllOptionSetsRequest();
+        }
+
+        protected override IEnumerable<Entity> ConvertResponse(RetrieveAllOptionSetsResponse response)
+        {
+            foreach (var optionset in response.OptionSetMetadata)
+                yield return ObjectToEntity(optionset);
         }
     }
 }

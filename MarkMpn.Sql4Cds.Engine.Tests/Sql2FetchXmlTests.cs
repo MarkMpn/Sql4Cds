@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Xml.Serialization;
 using FakeXrmEasy;
@@ -1919,6 +1920,40 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     </entity>
                 </fetch>
             ");
+        }
+
+        [TestMethod]
+        public void GlobalOptionSet()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT displayname FROM globaloptionset WHERE name = 'test'";
+
+            var queries = sql2FetchXml.Convert(query);
+            var gosq = (GlobalOptionSetQuery)queries.Single();
+            Assert.AreEqual(2, gosq.Extensions);
+        }
+
+        [TestMethod]
+        public void GlobalOptionSetTranslations()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT gos.displayname, dn.label FROM globaloptionset AS gos INNER JOIN localizedlabel AS dn ON gos.displaynameid = dn.labelid WHERE gos.name = 'test'";
+
+            var queries = sql2FetchXml.Convert(query);
+            var gosq = (GlobalOptionSetQuery)queries.Single();
+            Assert.AreEqual(2, gosq.Extensions);
         }
 
         private void AssertFetchXml(Query[] queries, string fetchXml)
