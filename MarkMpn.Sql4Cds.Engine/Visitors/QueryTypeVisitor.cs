@@ -13,14 +13,25 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
         public bool IsGlobalOptionSet { get; private set; }
 
+        public bool IsMetadata { get; private set; }
+
         public override void ExplicitVisit(NamedTableReference node)
         {
             base.ExplicitVisit(node);
 
             if (node.SchemaObject.BaseIdentifier.Value.Equals("globaloptionset", StringComparison.OrdinalIgnoreCase))
+            {
                 IsGlobalOptionSet = true;
+                IsMetadata = true;
+            }
+            else if (node.SchemaObject.BaseIdentifier.Value.Equals("localizedlabel", StringComparison.OrdinalIgnoreCase))
+            {
+                IsMetadata = true;
+            }
             else
+            {
                 IsData = true;
+            }
         }
     }
 }

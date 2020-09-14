@@ -54,6 +54,7 @@
     <Compile Include="DisconnectedException.cs" />
     <Compile Include="EntityExtensions.cs" />
     <Compile Include="MetadataCache.cs" />
+    <Compile Include="QueryExtensions\NoOp.cs" />
     <Compile Include="TSqlEndpoint.cs" />
     <Compile Include="TSqlFragmentExtensions.cs" />
     <Compile Include="Visitors\AddDefaultTableAliasesVisitor.cs" />

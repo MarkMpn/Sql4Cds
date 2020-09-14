@@ -72,27 +72,9 @@ namespace MarkMpn.Sql4Cds.Engine
     }
 
     /// <summary>
-    /// A CDS data retrieval query that is based on executing a request
-    /// </summary>
-    /// <typeparam name="TRequest">The type of request</typeparam>
-    /// <typeparam name="TResponse">The type of response</typeparam>
-    public abstract class RetrieveQuery : Query
-    {
-        /// <summary>
-        /// A list of any post-processing functions to be applied to the results
-        /// </summary>
-        public IList<IQueryExtension> Extensions { get; } = new List<IQueryExtension>();
-
-        /// <summary>
-        /// The columns that should be included in the query results
-        /// </summary>
-        public string[] ColumnSet { get; set; }
-    }
-
-    /// <summary>
     /// A CDS query that is based on FetchXML
     /// </summary>
-    public abstract class FetchXmlQuery : RetrieveQuery
+    public abstract class FetchXmlQuery : Query
     {
         private FetchType _fetch;
 
@@ -118,6 +100,16 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Indicates if the query will page across all the available data
         /// </summary>
         public bool AllPages { get; set; }
+
+        /// <summary>
+        /// A list of any post-processing functions to be applied to the results
+        /// </summary>
+        public IList<IQueryExtension> Extensions { get; } = new List<IQueryExtension>();
+
+        /// <summary>
+        /// The columns that should be included in the query results
+        /// </summary>
+        public string[] ColumnSet { get; set; }
 
         /// <summary>
         /// Returns an alternative query that can be used if the main aggregate query results in an AggregateQueryRecordLimit error
@@ -153,7 +145,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (AggregateAlternative == null)
                     throw;
 
-                return AggregateAlternative.RetrieveAll(org, metadata, options);
+                AggregateAlternative.Execute(org, metadata, options);
+                return (EntityCollection)AggregateAlternative.Result;
             }
         }
 
@@ -750,7 +743,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// The SELECT query that produces the values to insert
         /// </summary>
-        public RetrieveQuery Source { get; set; }
+        public SelectQuery Source { get; set; }
 
         /// <summary>
         /// The mappings of columns from the FetchXML results to the attributes of the entity to insert
@@ -801,7 +794,7 @@ namespace MarkMpn.Sql4Cds.Engine
     /// </summary>
     /// <typeparam name="TRequest"></typeparam>
     /// <typeparam name="TResponse"></typeparam>
-    public abstract class MetadataQuery<TRequest, TResponse> : RetrieveQuery
+    public abstract class MetadataQuery<TRequest, TResponse> : SelectQuery
         where TRequest : OrganizationRequest
         where TResponse : OrganizationResponse
     {
@@ -809,6 +802,8 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Returns or sets the metadata request to execute
         /// </summary>
         public TRequest Request { get; set; }
+
+        protected abstract Array GetRootArray(TResponse response);
 
         protected override object ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
@@ -824,7 +819,56 @@ namespace MarkMpn.Sql4Cds.Engine
             return new EntityCollection(sequence.ToList());
         }
 
-        protected abstract IEnumerable<Entity> ConvertResponse(TResponse response);
+        private IEnumerable<Entity> ConvertResponse(TResponse response)
+        {
+            // Create entities from the response array based on the FetchXML
+            var fetchEntity = FetchXml.Items.OfType<FetchEntityType>().Single();
+
+            foreach (var obj in GetRootArray(response))
+            {
+                foreach (var entity in ObjectToEntities(obj, fetchEntity))
+                    yield return entity;
+            }
+        }
+
+        private IEnumerable<Entity> ObjectToEntities(object obj, FetchEntityType fetchEntity)
+        {
+            // Create the basic result entity
+            var entity = new Entity(fetchEntity.name);
+
+            // Populate the attributes
+            if (fetchEntity.Items.OfType<allattributes>().Any())
+            {
+                foreach (var prop in obj.GetType().GetProperties())
+                {
+                    if (!prop.CanRead)
+                        continue;
+
+                    var propName = prop.Name.ToLower();
+                    var propValue = prop.GetValue(obj, null);
+
+                    if (propValue is Label label)
+                        propValue = label.UserLocalizedLabel.Label;
+
+                    entity[propName] = propValue;
+                }
+            }
+            else
+            {
+                foreach (var attr in fetchEntity.Items.OfType<FetchAttributeType>())
+                {
+                    var prop = obj.GetType().GetProperty(attr.name, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.IgnoreCase);
+                    var propValue = prop.GetValue(obj, null);
+
+                    if (propValue is Label label)
+                        propValue = label.UserLocalizedLabel.Label;
+
+                    entity[attr.alias ?? attr.name] = propValue;
+                }
+            }
+
+            yield return entity;
+        }
 
         protected Entity ObjectToEntity(object obj)
         {
@@ -857,10 +901,6 @@ namespace MarkMpn.Sql4Cds.Engine
             Request = new RetrieveAllOptionSetsRequest();
         }
 
-        protected override IEnumerable<Entity> ConvertResponse(RetrieveAllOptionSetsResponse response)
-        {
-            foreach (var optionset in response.OptionSetMetadata)
-                yield return ObjectToEntity(optionset);
-        }
+        protected override Array GetRootArray(RetrieveAllOptionSetsResponse response) => response.OptionSetMetadata;
     }
 }

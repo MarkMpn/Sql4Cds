@@ -1935,8 +1935,18 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var query = "SELECT displayname FROM globaloptionset WHERE name = 'test'";
 
             var queries = sql2FetchXml.Convert(query);
-            var gosq = (GlobalOptionSetQuery)queries.Single();
-            Assert.AreEqual(2, gosq.Extensions);
+
+            Assert.IsInstanceOfType(queries.Single(), typeof(GlobalOptionSetQuery));
+
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='globaloptionset'>
+                        <attribute name='displayname' />
+                        <filter>
+                            <condition attribute='name' operator='eq' value='test' />
+                        </filter>
+                    </entity>
+                </fetch>");
         }
 
         [TestMethod]
@@ -1952,8 +1962,21 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var query = "SELECT gos.displayname, dn.label FROM globaloptionset AS gos INNER JOIN localizedlabel AS dn ON gos.displaynameid = dn.labelid WHERE gos.name = 'test'";
 
             var queries = sql2FetchXml.Convert(query);
-            var gosq = (GlobalOptionSetQuery)queries.Single();
-            Assert.AreEqual(2, gosq.Extensions);
+
+            Assert.IsInstanceOfType(queries.Single(), typeof(GlobalOptionSetQuery));
+
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='globaloptionset'>
+                        <attribute name='displayname' />
+                        <link-entity name='localizedlabel' from='labelid' to='displaynameid' link-type='inner' alias='dn'>
+                            <attribute name='label' />
+                        </link-entity>
+                        <filter>
+                            <condition attribute='name' operator='eq' value='test' />
+                        </filter>
+                    </entity>
+                </fetch>");
         }
 
         private void AssertFetchXml(Query[] queries, string fetchXml)

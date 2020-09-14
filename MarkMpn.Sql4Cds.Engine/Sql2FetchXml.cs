@@ -222,7 +222,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     Query query;
 
                     if (statement is SelectStatement select)
-                        query = ConvertSelectStatement(select);
+                        query = ConvertSelectStatement(select, false);
                     else if (statement is UpdateStatement update)
                         query = ConvertUpdateStatement(update);
                     else if (statement is DeleteStatement delete)
@@ -293,7 +293,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 QueryExpression = select.Select
             };
 
-            var selectQuery = ConvertSelectStatement(qry);
+            var selectQuery = ConvertSelectStatement(qry, false);
 
             // Check that the number of columns for the source query and target columns match
             if (columns.Count != selectQuery.ColumnSet.Length)
@@ -1159,7 +1159,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="select">The SQL query to convert</param>
         /// <returns>The equivalent query converted for execution against CDS</returns>
-        private RetrieveQuery ConvertSelectStatement(SelectStatement select)
+        private SelectQuery ConvertSelectStatement(SelectStatement select, bool forceAggregateExpression)
         {
             // Check for any DOM elements that don't have an equivalent in CDS
             if (!(select.QueryExpression is QuerySpecification querySpec))
@@ -1186,33 +1186,19 @@ namespace MarkMpn.Sql4Cds.Engine
             if (querySpec.FromClause == null)
                 throw new NotSupportedQueryFragmentException("No source entity specified", querySpec);
 
+            // Check if this query is against regular data entities or metadata.
             var queryType = new QueryTypeVisitor();
             querySpec.FromClause.Accept(queryType);
 
-            if (queryType.IsData && queryType.IsGlobalOptionSet)
+            // We can't combine different types of data - each query must have a single ultimate data source
+            if (queryType.IsData && queryType.IsMetadata)
                 throw new NotSupportedQueryFragmentException("Cannot combine metadata and data", querySpec.FromClause);
 
-            if (queryType.IsData)
-                return ConvertDataSelectStatement(select, querySpec, false);
+            // Only regular data queries natively support aggregates. For any metadata queries, make sure we force
+            // them to be done in memory.
+            if (!queryType.IsData)
+                forceAggregateExpression = true;
 
-            if (queryType.IsGlobalOptionSet)
-                return ConvertGlobalOptionSetSelectStatement(select, querySpec);
-
-            throw new NotSupportedQueryFragmentException("Unknown query data source", querySpec.FromClause);
-        }
-
-        private GlobalOptionSetQuery ConvertGlobalOptionSetSelectStatement(SelectStatement select, QuerySpecification querySpec)
-        {
-            var qry = new GlobalOptionSetQuery();
-        }
-
-        /// <summary>
-        /// Converts a SELECT query
-        /// </summary>
-        /// <param name="select">The SQL query to convert</param>
-        /// <returns>The equivalent query converted for execution against CDS</returns>
-        private SelectQuery ConvertDataSelectStatement(SelectStatement select, QuerySpecification querySpec, bool forceAggregateExpression)
-        { 
             try
             {
                 // Store the original SQL again now so we can re-parse it if required to generate an alternative query
@@ -1234,6 +1220,12 @@ namespace MarkMpn.Sql4Cds.Engine
                 // all later steps must use expressions only as the FetchXML results will be incomplete.
                 var extensions = new List<IQueryExtension>();
 
+                if (queryType.IsGlobalOptionSet)
+                {
+                    // This request type doesn't offer any filtering, so force it all in memory
+                    extensions.Add(new NoOp());
+                }
+
                 var fetch = new FetchXml.FetchType();
                 var tables = HandleFromClause(querySpec.FromClause, fetch);
                 HandleWhereClause(querySpec.WhereClause, tables, extensions);
@@ -1250,12 +1242,16 @@ namespace MarkMpn.Sql4Cds.Engine
                     table.Sort();
 
                 // Return the final query
-                var query = new SelectQuery
-                {
-                    FetchXml = fetch,
-                    ColumnSet = columns,
-                    AllPages = fetch.page == null && fetch.count == null
-                };
+                SelectQuery query;
+
+                if (queryType.IsGlobalOptionSet)
+                    query = new GlobalOptionSetQuery();
+                else
+                    query = new SelectQuery();
+
+                query.FetchXml = fetch;
+                query.ColumnSet = columns;
+                query.AllPages = fetch.page == null && fetch.count == null;
 
                 foreach (var extension in extensions)
                     query.Extensions.Add(extension);
@@ -1271,7 +1267,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     script.Accept(new ReplacePrimaryFunctionsVisitor());
                     var originalSelect = (SelectStatement)script.Batches.Single().Statements.Single();
 
-                    query.AggregateAlternative = ConvertDataSelectStatement(originalSelect, (QuerySpecification) originalSelect.QueryExpression, true);
+                    query.AggregateAlternative = ConvertSelectStatement(originalSelect, true);
                 }
 
                 return query;
