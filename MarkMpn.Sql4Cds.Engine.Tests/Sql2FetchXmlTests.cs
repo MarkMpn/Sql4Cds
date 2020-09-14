@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using System.Xml.Serialization;
 using FakeXrmEasy;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -1919,6 +1920,24 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     </entity>
                 </fetch>
             ");
+        }
+
+        [TestMethod]
+        public void TSqlAggregates()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+            sql2FetchXml.TSqlEndpointAvailable = true;
+
+            var query = "SELECT COUNT(*) FROM account WHERE name IS NULL";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            Assert.AreEqual("SELECT COUNT(*) FROM account AS account WHERE name IS NULL; ", Regex.Replace(queries[0].Sql, "\\s+", " "));
         }
 
         private void AssertFetchXml(Query[] queries, string fetchXml)

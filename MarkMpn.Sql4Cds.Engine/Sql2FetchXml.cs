@@ -219,6 +219,17 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 foreach (var statement in batch.Statements)
                 {
+                    string sqlStatement = null;
+
+                    if (TSqlEndpointAvailable)
+                    {
+                        var statementFragment = dom.Parse(new StringReader(statement.ToSql()), out _);
+                        var statementScript = (TSqlScript)statementFragment;
+                        statementScript.Accept(new AddDefaultTableAliasesVisitor());
+                        statementScript.ScriptTokenStream = null;
+                        sqlStatement = statementScript.ToSql();
+                    }
+
                     Query query;
 
                     if (statement is SelectStatement select)
@@ -232,10 +243,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     else
                         throw new NotSupportedQueryFragmentException("Unsupported statement", statement);
 
-                    statement.Accept(new AddDefaultTableAliasesVisitor());
-                    statement.ScriptTokenStream = null;
-
-                    query.Sql = statement.ToSql();
+                    query.Sql = sqlStatement;
                     queries.Add(query);
                 }
             }
