@@ -107,8 +107,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 "accountid",
                 "createdon",
+                "employees",
                 "name",
-                "primarycontactid"
+                "primarycontactid",
+                "turnover"
             }, ((SelectQuery)queries[0]).ColumnSet);
         }
 
@@ -138,8 +140,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 "accountid",
                 "createdon",
+                "employees",
                 "name",
                 "primarycontactid",
+                "turnover",
                 "name"
             }, ((SelectQuery)queries[0]).ColumnSet);
         }
@@ -741,6 +745,51 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     </entity>
                 </fetch>
             ");
+        }
+
+        [TestMethod]
+        public void SelectArithmetic()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT employees + 1 AS a, employees * 2 AS b, turnover / 3 AS c, turnover - 4 AS d, turnover / employees AS e FROM account";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='employees' />
+                        <attribute name='turnover' />
+                    </entity>
+                </fetch>
+            ");
+
+            var id = Guid.NewGuid();
+            context.Data["account"] = new Dictionary<Guid, Entity>
+            {
+                [id] = new Entity("account", id)
+                {
+                    ["accountid"] = id,
+                    ["employees"] = 2,
+                    ["turnover"] = new Money(9)
+                }
+            };
+
+            queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+
+            Assert.AreEqual(1, ((EntityCollection)queries[0].Result).Entities.Count);
+            Assert.AreEqual(3, ((EntityCollection)queries[0].Result).Entities[0]["a"]);
+            Assert.AreEqual(4, ((EntityCollection)queries[0].Result).Entities[0]["b"]);
+            Assert.AreEqual(3M, ((EntityCollection)queries[0].Result).Entities[0]["c"]);
+            Assert.AreEqual(5M, ((EntityCollection)queries[0].Result).Entities[0]["d"]);
+            Assert.AreEqual(4.5M, ((EntityCollection)queries[0].Result).Entities[0]["e"]);
+
         }
 
         [TestMethod]
