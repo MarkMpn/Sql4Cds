@@ -5,8 +5,10 @@ using System.Linq;
 using System.Reflection;
 using System.Xml.Serialization;
 using FakeXrmEasy;
+using FakeXrmEasy.FakeMessageExecutors;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
 
 namespace MarkMpn.Sql4Cds.Engine.Tests
@@ -1927,6 +1929,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var context = new XrmFakedContext();
             context.InitializeMetadata(Assembly.GetExecutingAssembly());
+            context.AddFakeMessageExecutor<RetrieveAllOptionSetsRequest>(new RetrieveAllOptionSetsHandler());
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
@@ -1947,6 +1950,12 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         </filter>
                     </entity>
                 </fetch>");
+
+            queries[0].Execute(org, metadata, this);
+
+            var result = (EntityCollection)queries[0].Result;
+
+            Assert.AreEqual(1, result.Entities.Count);
         }
 
         [TestMethod]
@@ -1954,6 +1963,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var context = new XrmFakedContext();
             context.InitializeMetadata(Assembly.GetExecutingAssembly());
+            context.AddFakeMessageExecutor<RetrieveAllOptionSetsRequest>(new RetrieveAllOptionSetsHandler());
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
@@ -1977,6 +1987,12 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         </filter>
                     </entity>
                 </fetch>");
+
+            queries[0].Execute(org, metadata, this);
+
+            var result = (EntityCollection)queries[0].Result;
+
+            Assert.AreEqual(2, result.Entities.Count);
         }
 
         private void AssertFetchXml(Query[] queries, string fetchXml)
@@ -2009,6 +2025,63 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         bool IQueryExecutionOptions.ConfirmDelete(int count, EntityMetadata meta)
         {
             return true;
+        }
+
+        private class RetrieveAllOptionSetsHandler : IFakeMessageExecutor
+        {
+            public bool CanExecute(OrganizationRequest request)
+            {
+                return request is RetrieveAllOptionSetsRequest;
+            }
+
+            public OrganizationResponse Execute(OrganizationRequest request, XrmFakedContext ctx)
+            {
+                return new RetrieveAllOptionSetsResponse
+                {
+                    Results = new ParameterCollection
+                    {
+                        ["OptionSetMetadata"] = new OptionSetMetadataBase[]
+                        {
+                            new OptionSetMetadata(new OptionMetadataCollection(new[]
+                            {
+                                new OptionMetadata(new Label("Value1", 1033), 1),
+                                new OptionMetadata(new Label("Value2", 1033), 2)
+                            }))
+                            {
+                                Name = "test",
+                                DisplayName = new Label(
+                                    new LocalizedLabel("TestGlobalOptionSet", 1033),
+                                    new[]
+                                    {
+                                        new LocalizedLabel("TestGlobalOptionSet", 1033),
+                                        new LocalizedLabel("TranslatedDisplayName", 9999)
+                                    })
+                            },
+                            new OptionSetMetadata(new OptionMetadataCollection(new[]
+                            {
+                                new OptionMetadata(new Label("Value1", 1033), 1),
+                                new OptionMetadata(new Label("Value2", 1033), 2)
+                            }))
+                            {
+                                Name = "foo"
+                            },
+                            new OptionSetMetadata(new OptionMetadataCollection(new[]
+                            {
+                                new OptionMetadata(new Label("Value1", 1033), 1),
+                                new OptionMetadata(new Label("Value2", 1033), 2)
+                            }))
+                            {
+                                Name = "bar"
+                            }
+                        }
+                    }
+                };
+            }
+
+            public Type GetResponsibleRequestType()
+            {
+                return typeof(RetrieveAllOptionSetsRequest);
+            }
         }
     }
 }
