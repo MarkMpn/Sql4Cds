@@ -2054,7 +2054,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                                     new[]
                                     {
                                         new LocalizedLabel("TestGlobalOptionSet", 1033),
-                                        new LocalizedLabel("TranslatedDisplayName", 9999)
+                                        new LocalizedLabel("TranslatedDisplayName-Test", 9999)
                                     })
                             },
                             new OptionSetMetadata(new OptionMetadataCollection(new[]
@@ -2063,7 +2063,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                                 new OptionMetadata(new Label("Value2", 1033), 2)
                             }))
                             {
-                                Name = "foo"
+                                Name = "foo",
+                                DisplayName = new Label(
+                                    new LocalizedLabel("FooGlobalOptionSet", 1033),
+                                    new[]
+                                    {
+                                        new LocalizedLabel("FooGlobalOptionSet", 1033),
+                                        new LocalizedLabel("TranslatedDisplayName-Foo", 9999)
+                                    })
                             },
                             new OptionSetMetadata(new OptionMetadataCollection(new[]
                             {
@@ -2071,7 +2078,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                                 new OptionMetadata(new Label("Value2", 1033), 2)
                             }))
                             {
-                                Name = "bar"
+                                Name = "bar",
+                                DisplayName = new Label(
+                                    new LocalizedLabel("BarGlobalOptionSet", 1033),
+                                    new[]
+                                    {
+                                        new LocalizedLabel("BarGlobalOptionSet", 1033),
+                                        new LocalizedLabel("TranslatedDisplayName-Bar", 9999)
+                                    })
                             }
                         }
                     }

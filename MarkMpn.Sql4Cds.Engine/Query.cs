@@ -826,68 +826,86 @@ namespace MarkMpn.Sql4Cds.Engine
 
             foreach (var obj in GetRootArray(response))
             {
-                foreach (var entity in ObjectToEntities(obj, fetchEntity))
+                foreach (var entity in ObjectToEntities(obj, fetchEntity.name, fetchEntity.Items))
                     yield return entity;
             }
         }
 
-        private IEnumerable<Entity> ObjectToEntities(object obj, FetchEntityType fetchEntity)
+        private IEnumerable<Entity> ObjectToEntities(object obj, string name, object[] items)
         {
             // Create the basic result entity
-            var entity = new Entity(fetchEntity.name);
+            var entity = new Entity(name);
 
-            // Populate the attributes
-            if (fetchEntity.Items.OfType<allattributes>().Any())
-            {
-                foreach (var prop in obj.GetType().GetProperties())
-                {
-                    if (!prop.CanRead)
-                        continue;
-
-                    var propName = prop.Name.ToLower();
-                    var propValue = prop.GetValue(obj, null);
-
-                    if (propValue is Label label)
-                        propValue = label.UserLocalizedLabel.Label;
-
-                    entity[propName] = propValue;
-                }
-            }
-            else
-            {
-                foreach (var attr in fetchEntity.Items.OfType<FetchAttributeType>())
-                {
-                    var prop = obj.GetType().GetProperty(attr.name, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.IgnoreCase);
-                    var propValue = prop.GetValue(obj, null);
-
-                    if (propValue is Label label)
-                        propValue = label.UserLocalizedLabel.Label;
-
-                    entity[attr.alias ?? attr.name] = propValue;
-                }
-            }
-
-            yield return entity;
-        }
-
-        protected Entity ObjectToEntity(object obj)
-        {
-            var entity = new Entity(obj.GetType().Name.ToLower());
-
+            // Populate the attributes. Include all attributes, not just the requested ones, as others
+            // may be required for filters or ordering
             foreach (var prop in obj.GetType().GetProperties())
             {
                 if (!prop.CanRead)
                     continue;
 
-                var value = prop.GetValue(obj, null);
+                var propName = prop.Name.ToLower();
+                var propValue = prop.GetValue(obj, null);
 
-                // TODO: Convert value types
-                // TODO: Apply joins
+                if (propValue is Label label)
+                    propValue = label.UserLocalizedLabel.Label;
 
-                entity[prop.Name.ToLower()] = value;
+                entity[propName] = propValue;
             }
 
-            return entity;
+            var results = new List<Entity>();
+            results.Add(entity);
+
+            foreach (var link in items.OfType<FetchLinkEntityType>())
+            {
+                // NOTE: Only supports 1:N relationships so far
+
+                // Primary key field is <prop>id
+                var fromProp = obj.GetType().GetProperty(link.to.Substring(0, link.to.Length - 2), System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.IgnoreCase);
+                var propValue = fromProp.GetValue(obj, null);
+
+                // Most joins are directly from the parent object to a child collection, but label translations
+                // go via an additional Label object in the object model which we want to skip in the SQL data model.
+                if (propValue is Label label && link.name == "localizedlabel" && link.from == "labelid")
+                    propValue = label.LocalizedLabels.ToArray();
+
+                var childEntities = ((Array)propValue)
+                    .Cast<object>()
+                    .SelectMany(childObj => ObjectToEntities(childObj, link.name, link.Items))
+                    .ToList();
+
+                var joinResults = new List<Entity>();
+
+                if (childEntities.Count == 0 && link.linktype == "outer")
+                {
+                    joinResults = results;
+                }
+                else
+                {
+                    foreach (var childEntity in childEntities)
+                    {
+                        var joinResult = new Entity(entity.LogicalName, entity.Id);
+
+                        foreach (var attr in entity.Attributes)
+                            joinResult[attr.Key] = attr.Value;
+
+                        foreach (var attr in childEntity.Attributes)
+                        {
+                            if (attr.Value is AliasedValue)
+                                joinResult[attr.Key] = attr.Value;
+                            else
+                                joinResult[link.alias + "." + attr.Key] = new AliasedValue(link.name, attr.Key, attr.Value);
+                        }
+
+                        joinResults.Add(joinResult);
+                    }
+                }
+
+                results = joinResults;
+            }
+
+            // TODO: Apply filters
+
+            return results;
         }
     }
 
