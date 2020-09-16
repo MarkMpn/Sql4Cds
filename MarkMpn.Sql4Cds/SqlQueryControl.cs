@@ -392,6 +392,7 @@ namespace MarkMpn.Sql4Cds
                             {
                                 var entityCollection = query.Result as EntityCollection;
                                 var dataTable = query.Result as DataTable;
+                                var isMetadata = query.GetType().BaseType.IsGenericType && query.GetType().BaseType.GetGenericTypeDefinition() == typeof(MetadataQuery<,>);
 
                                 var grid = entityCollection != null ? new CRMGridView() : new DataGridView();
 
@@ -424,34 +425,44 @@ namespace MarkMpn.Sql4Cds
                                     crmGrid.ShowLocalTimes = Settings.Instance.ShowLocalTimes;
                                     crmGrid.RecordClick += Grid_RecordClick;
                                     crmGrid.CellMouseUp += Grid_CellMouseUp;
+                                }
 
-                                    if (query is SelectQuery select)
+
+                                if (query is SelectQuery select && (entityCollection != null || isMetadata))
+                                {
+                                    foreach (var col in select.ColumnSet)
                                     {
-                                        foreach (var col in select.ColumnSet)
+                                        var colName = col;
+
+                                        if (grid.Columns.Contains(col))
                                         {
-                                            var colName = col;
+                                            var suffix = 1;
+                                            while (grid.Columns.Contains($"{col}_{suffix}"))
+                                                suffix++;
 
-                                            if (grid.Columns.Contains(col))
+                                            var newCol = $"{col}_{suffix}";
+
+                                            if (entityCollection != null)
                                             {
-                                                var suffix = 1;
-                                                while (grid.Columns.Contains($"{col}_{suffix}"))
-                                                    suffix++;
-
-                                                var newCol = $"{col}_{suffix}";
-
                                                 foreach (var entity in entityCollection.Entities)
                                                 {
                                                     if (entity.Contains(col))
                                                         entity[newCol] = entity[col];
                                                 }
-
-                                                colName = newCol;
                                             }
 
-                                            grid.Columns.Add(colName, colName);
-                                            grid.Columns[colName].FillWeight = 1;
+                                            colName = newCol;
                                         }
+
+                                        grid.Columns.Add(colName, colName);
+                                        grid.Columns[colName].FillWeight = 1;
+
+                                        if (entityCollection == null)
+                                            grid.Columns[colName].DataPropertyName = col;
                                     }
+
+                                    if (isMetadata)
+                                        grid.AutoGenerateColumns = false;
                                 }
 
                                 grid.HandleCreated += (s, e) =>
@@ -487,6 +498,8 @@ namespace MarkMpn.Sql4Cds
 
                                 if (entityCollection != null)
                                     statusBar.Text = $"{entityCollection.Entities.Count:N0} record(s) returned";
+                                else if (isMetadata)
+                                    statusBar.Text = $"{dataTable.Rows.Count:N0} record(s) returned (using metadata)";
                                 else
                                     statusBar.Text = $"{dataTable.Rows.Count:N0} record(s) returned (using T-SQL Endpoint)";
 

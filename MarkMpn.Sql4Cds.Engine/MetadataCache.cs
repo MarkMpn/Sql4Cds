@@ -53,11 +53,17 @@ namespace MarkMpn.Sql4Cds.Engine
             if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
                 type = type.GetGenericArguments()[0];
 
-            if (type == typeof(string) || type == typeof(Microsoft.Xrm.Sdk.Label))
+            if (type == typeof(string) || type == typeof(Microsoft.Xrm.Sdk.Label) || type.IsEnum)
                 yield return new StringAttributeMetadata(prop.Name) { LogicalName = prop.Name.ToLower() };
 
             if (type == typeof(Label))
                 yield return new UniqueIdentifierAttributeMetadata(prop.Name + "Id") { LogicalName = prop.Name.ToLower() + "id" };
+
+            if (type == typeof(int))
+                yield return new IntegerAttributeMetadata(prop.Name) { LogicalName = prop.Name.ToLower() };
+
+            if (type == typeof(bool))
+                yield return new BooleanAttributeMetadata(prop.Name) { LogicalName = prop.Name.ToLower() };
 
             // TODO: Add support for more property types
         }

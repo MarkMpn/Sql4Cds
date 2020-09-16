@@ -816,19 +816,103 @@ namespace MarkMpn.Sql4Cds.Engine
             foreach (var extension in Extensions)
                 sequence = extension.ApplyTo(sequence, options);
 
-            return new EntityCollection(sequence.ToList());
+            var entities = sequence.ToList();
+            var table = new DataTable();
+
+            foreach (var col in ColumnSet.Distinct())
+            {
+                var type = typeof(string);
+                var entity = entities.FirstOrDefault(e => e[col] != null);
+
+                if (entity != null)
+                {
+                    var value = entity[col];
+
+                    if (value is AliasedValue a)
+                        value = a.Value;
+
+                    type = value.GetType();
+                }
+
+                table.Columns.Add(col, type);
+            }
+
+            foreach (var entity in entities)
+            {
+                var row = table.NewRow();
+
+                foreach (var col in ColumnSet)
+                {
+                    var value = entity[col];
+
+                    if (value is AliasedValue a)
+                        value = a.Value;
+
+                    row[col] = value;
+                }
+
+                table.Rows.Add(row);
+            }
+
+            return table;
         }
 
         private IEnumerable<Entity> ConvertResponse(TResponse response)
         {
             // Create entities from the response array based on the FetchXML
             var fetchEntity = FetchXml.Items.OfType<FetchEntityType>().Single();
+            var results = new List<Entity>();
 
             foreach (var obj in GetRootArray(response))
             {
                 foreach (var entity in ObjectToEntities(obj, fetchEntity.name, fetchEntity.Items))
-                    yield return entity;
+                    results.Add(entity);
             }
+
+            var sorts = GetSorts(fetchEntity.Items);
+            var sortedResults = (IEnumerable<Entity>) results;
+
+            for (var i = 0; i < sorts.Count; i++)
+            {
+                var sort = sorts[i];
+
+                if (i == 0)
+                {
+                    if (sort.descending)
+                        sortedResults = sortedResults.OrderByDescending(e => GetValue(e, sort.alias ?? sort.attribute));
+                    else
+                        sortedResults = sortedResults.OrderBy(e => GetValue(e, sort.alias ?? sort.attribute));
+                }
+                else
+                {
+                    if (sort.descending)
+                        sortedResults = ((IOrderedEnumerable<Entity>) sortedResults).ThenByDescending(e => GetValue(e, sort.alias ?? sort.attribute));
+                    else
+                        sortedResults = ((IOrderedEnumerable<Entity>)sortedResults).ThenBy(e => GetValue(e, sort.alias ?? sort.attribute));
+                }
+            }
+
+            return sortedResults;
+        }
+
+        private List<FetchOrderType> GetSorts(object[] items)
+        {
+            var sorts = items.OfType<FetchOrderType>().ToList();
+
+            foreach (var linkEntity in items.OfType<FetchLinkEntityType>())
+                sorts.AddRange(GetSorts(linkEntity.Items));
+
+            return sorts;
+        }
+
+        private object GetValue(Entity entity, string attribute)
+        {
+            var value = entity[attribute];
+
+            if (value is AliasedValue a)
+                value = a.Value;
+
+            return value;
         }
 
         private IEnumerable<Entity> ObjectToEntities(object obj, string name, object[] items)
@@ -847,10 +931,23 @@ namespace MarkMpn.Sql4Cds.Engine
                 var propValue = prop.GetValue(obj, null);
 
                 if (propValue is Label label)
-                    propValue = label.UserLocalizedLabel.Label;
+                {
+                    entity[propName + "id"] = Guid.Empty;
+                    propValue = label.UserLocalizedLabel?.Label;
+                }
+
+                if (propValue != null && propValue.GetType().IsEnum)
+                    propValue = propValue.ToString();
 
                 entity[propName] = propValue;
             }
+
+            if (obj is LocalizedLabel)
+                entity["labelid"] = Guid.Empty;
+
+            // If there are any aliased attributes, apply them now
+            foreach (var alias in items.OfType<FetchAttributeType>().Where(a => !String.IsNullOrEmpty(a.alias)))
+                entity[alias.alias] = entity[alias.name];
 
             var results = new List<Entity>();
             results.Add(entity);
@@ -861,12 +958,19 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 // Primary key field is <prop>id
                 var fromProp = obj.GetType().GetProperty(link.to.Substring(0, link.to.Length - 2), System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.IgnoreCase);
+
+                if (fromProp == null)
+                    throw new ApplicationException(link.to + " is not a key field");
+
                 var propValue = fromProp.GetValue(obj, null);
 
                 // Most joins are directly from the parent object to a child collection, but label translations
                 // go via an additional Label object in the object model which we want to skip in the SQL data model.
                 if (propValue is Label label && link.name == "localizedlabel" && link.from == "labelid")
                     propValue = label.LocalizedLabels.ToArray();
+
+                if (!(propValue is Array))
+                    throw new ApplicationException(link.to + " is not a key field");
 
                 var childEntities = ((Array)propValue)
                     .Cast<object>()
@@ -893,7 +997,7 @@ namespace MarkMpn.Sql4Cds.Engine
                             if (attr.Value is AliasedValue)
                                 joinResult[attr.Key] = attr.Value;
                             else
-                                joinResult[link.alias + "." + attr.Key] = new AliasedValue(link.name, attr.Key, attr.Value);
+                                joinResult[link.alias + "." + attr.Key] = attr.Value == null ? null : new AliasedValue(link.name, attr.Key, attr.Value);
                         }
 
                         joinResults.Add(joinResult);
@@ -903,9 +1007,74 @@ namespace MarkMpn.Sql4Cds.Engine
                 results = joinResults;
             }
 
-            // TODO: Apply filters
+            // Apply filters
+            foreach (var filter in items.OfType<filter>())
+                results.RemoveAll(e => !IsMatch(e, filter));
 
             return results;
+        }
+
+        private bool IsMatch(Entity entity, filter filter)
+        {
+            foreach (var condition in filter.Items.OfType<condition>())
+            {
+                var conditionMatch = IsMatch(entity, condition);
+
+                if (filter.type == filterType.and && !conditionMatch)
+                    return false;
+                else if (filter.type == filterType.or && conditionMatch)
+                    return true;
+            }
+
+            foreach (var subFilter in filter.Items.OfType<filter>())
+            {
+                var filterMatch = IsMatch(entity, subFilter);
+
+                if (filter.type == filterType.and && !filterMatch)
+                    return false;
+                else if (filter.type == filterType.or && filterMatch)
+                    return true;
+            }
+
+            if (filter.type == filterType.and)
+                return true;
+
+            return false;
+        }
+
+        private bool IsMatch(Entity entity, condition condition)
+        {
+            var attribute = condition.attribute;
+
+            if (!String.IsNullOrEmpty(condition.entityname))
+                attribute = condition.entityname + "." + condition.attribute;
+
+            var attrValue = entity[condition.attribute];
+            var value = (object) condition.value;
+
+            if (!String.IsNullOrEmpty(condition.valueof))
+                value = entity[condition.valueof];
+
+            if (attrValue is AliasedValue a1)
+                attrValue = a1.Value;
+
+            if (value is AliasedValue a2)
+                value = a2.Value;
+
+            if (attrValue == null)
+                return condition.@operator == @operator.@null;
+
+            if (attrValue != null && value != null)
+                value = Convert.ChangeType(value, attrValue.GetType());
+
+            switch (condition.@operator)
+            {
+                case @operator.eq:
+                    return attrValue.Equals(value);
+
+                default:
+                    throw new NotSupportedException();
+            }
         }
     }
 
