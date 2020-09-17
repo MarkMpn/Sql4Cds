@@ -936,6 +936,15 @@ namespace MarkMpn.Sql4Cds.Engine
                     propValue = label.UserLocalizedLabel?.Label;
                 }
 
+                if (propValue != null && propValue.GetType().IsGenericType && propValue.GetType().GetGenericTypeDefinition() == typeof(ManagedProperty<>))
+                    propValue = propValue.GetType().GetProperty("Value").GetValue(propValue);
+
+                if (propValue != null && propValue.GetType().IsGenericType && propValue.GetType().GetGenericTypeDefinition() == typeof(ConstantsBase<>))
+                    propValue = propValue.GetType().GetProperty("Value").GetValue(propValue);
+
+                if (propValue is BooleanManagedProperty boolManagedProp)
+                    propValue = boolManagedProp.Value;
+
                 if (propValue != null && propValue.GetType().IsEnum)
                     propValue = propValue.ToString();
 
@@ -1089,5 +1098,25 @@ namespace MarkMpn.Sql4Cds.Engine
         }
 
         protected override Array GetRootArray(RetrieveAllOptionSetsResponse response) => response.OptionSetMetadata;
+    }
+
+    /// <summary>
+    /// A SELECT query to return details of entity metadata
+    /// </summary>
+    public class EntityMetadataQuery : MetadataQuery<RetrieveMetadataChangesRequest, RetrieveMetadataChangesResponse>
+    {
+        public EntityMetadataQuery()
+        {
+            Request = new RetrieveMetadataChangesRequest();
+        }
+
+        protected override object ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        {
+            // TODO: Populate request based on FetchXML
+
+            return base.ExecuteInternal(org, metadata, options);
+        }
+
+        protected override Array GetRootArray(RetrieveMetadataChangesResponse response) => response.EntityMetadata.ToArray();
     }
 }

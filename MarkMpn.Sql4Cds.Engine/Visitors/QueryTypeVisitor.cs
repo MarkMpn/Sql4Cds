@@ -13,6 +13,8 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
         public bool IsGlobalOptionSet { get; private set; }
 
+        public bool IsEntityMetadata { get; private set; }
+
         public bool IsMetadata { get; private set; }
 
         public override void ExplicitVisit(NamedTableReference node)
@@ -22,6 +24,14 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             if (node.SchemaObject.BaseIdentifier.Value.Equals("globaloptionset", StringComparison.OrdinalIgnoreCase))
             {
                 IsGlobalOptionSet = true;
+                IsMetadata = true;
+            }
+            else if (node.SchemaObject.BaseIdentifier.Value.Equals("entity", StringComparison.OrdinalIgnoreCase) ||
+                node.SchemaObject.BaseIdentifier.Value.Equals("attribute", StringComparison.OrdinalIgnoreCase) ||
+                node.SchemaObject.BaseIdentifier.Value.Equals("relationship_1_n", StringComparison.OrdinalIgnoreCase) ||
+                node.SchemaObject.BaseIdentifier.Value.Equals("relationship_n_n", StringComparison.OrdinalIgnoreCase))
+            {
+                IsEntityMetadata = true;
                 IsMetadata = true;
             }
             else if (node.SchemaObject.BaseIdentifier.Value.Equals("localizedlabel", StringComparison.OrdinalIgnoreCase))

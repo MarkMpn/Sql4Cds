@@ -1194,6 +1194,9 @@ namespace MarkMpn.Sql4Cds.Engine
             if (queryType.IsData && queryType.IsMetadata)
                 throw new NotSupportedQueryFragmentException("Cannot combine metadata and data", querySpec.FromClause);
 
+            if (queryType.IsGlobalOptionSet && queryType.IsEntityMetadata)
+                throw new NotSupportedQueryFragmentException("Cannot combine entity metadata and global optionset metadata", querySpec.FromClause);
+
             // Only regular data queries natively support aggregates. For any metadata queries, make sure we force
             // them to be done in memory.
             if (!queryType.IsData)
@@ -1220,9 +1223,10 @@ namespace MarkMpn.Sql4Cds.Engine
                 // all later steps must use expressions only as the FetchXML results will be incomplete.
                 var extensions = new List<IQueryExtension>();
 
-                if (queryType.IsGlobalOptionSet)
+                if (queryType.IsMetadata)
                 {
-                    // This request type doesn't offer any filtering, so force it all in memory
+                    // Only minimal FetchXML support is provided in the query implementation for metadata, so force as much as
+                    // possible into memory
                     extensions.Add(new NoOp());
                 }
 
@@ -1246,6 +1250,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (queryType.IsGlobalOptionSet)
                     query = new GlobalOptionSetQuery();
+                else if (queryType.IsEntityMetadata)
+                    query = new EntityMetadataQuery();
                 else
                     query = new SelectQuery();
 
@@ -2065,6 +2071,9 @@ namespace MarkMpn.Sql4Cds.Engine
 
                         foreach (var part in colName.Split('.'))
                             col.MultiPartIdentifier.Identifiers.Add(new Identifier { Value = part });
+
+                        if (col.MultiPartIdentifier.Identifiers.Count == 1 && tables.Count > 1)
+                            col.MultiPartIdentifier.Identifiers.Insert(0, new Identifier { Value = tables[0].Alias ?? tables[0].EntityName });
                     }
                     else if (fetch.aggregateSpecified && fetch.aggregate && sort.Expression is FunctionCall)
                     {

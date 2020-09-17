@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -1953,9 +1954,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             queries[0].Execute(org, metadata, this);
 
-            var result = (EntityCollection)queries[0].Result;
+            var result = (DataTable)queries[0].Result;
 
-            Assert.AreEqual(1, result.Entities.Count);
+            Assert.AreEqual(1, result.Rows.Count);
         }
 
         [TestMethod]
@@ -1990,9 +1991,86 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             queries[0].Execute(org, metadata, this);
 
-            var result = (EntityCollection)queries[0].Result;
+            var result = (DataTable)queries[0].Result;
 
-            Assert.AreEqual(2, result.Entities.Count);
+            Assert.AreEqual(2, result.Rows.Count);
+        }
+
+        [TestMethod]
+        public void EntityDetails()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+            context.AddFakeMessageExecutor<RetrieveMetadataChangesRequest>(new RetrieveMetadataChangesHandler(metadata));
+
+            var query = "SELECT logicalname FROM entity ORDER BY 1";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            Assert.IsInstanceOfType(queries.Single(), typeof(EntityMetadataQuery));
+
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='entity'>
+                        <attribute name='logicalname' />
+                        <order attribute='logicalname' />
+                    </entity>
+                </fetch>");
+
+            queries[0].Execute(org, metadata, this);
+
+            var result = (DataTable)queries[0].Result;
+
+            Assert.AreEqual(3, result.Rows.Count);
+            Assert.AreEqual("account", result.Rows[0]["logicalname"]);
+            Assert.AreEqual("contact", result.Rows[1]["logicalname"]);
+            Assert.AreEqual("new_customentity", result.Rows[2]["logicalname"]);
+        }
+
+        [TestMethod]
+        public void AttributeDetails()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+            context.AddFakeMessageExecutor<RetrieveMetadataChangesRequest>(new RetrieveMetadataChangesHandler(metadata));
+
+            var query = "SELECT e.logicalname, a.logicalname FROM entity e INNER JOIN attribute a ON e.attributesid = a.metadataid WHERE e.logicalname = 'new_customentity' ORDER BY 1, 2";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            Assert.IsInstanceOfType(queries.Single(), typeof(EntityMetadataQuery));
+
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='entity'>
+                        <attribute name='logicalname' />
+                        <link-entity name='attribute' from='metadataid' to='attributesid' alias='a' link-type='inner'>
+                            <attribute name='logicalname' />
+                            <order attribute='logicalname' />
+                        </link-entity>
+                        <filter type='and'>
+                            <condition attribute='logicalname' operator='eq' value='new_customentity' />
+                        </filter>
+                        <order attribute='logicalname' />
+                    </entity>
+                </fetch>");
+
+            queries[0].Execute(org, metadata, this);
+
+            var result = (DataTable)queries[0].Result;
+
+            Assert.AreEqual(3, result.Rows.Count);
+            Assert.AreEqual("new_customentityid", result.Rows[0]["a.logicalname"]);
+            Assert.AreEqual("new_name", result.Rows[1]["a.logicalname"]);
+            Assert.AreEqual("new_parentid", result.Rows[2]["a.logicalname"]);
         }
 
         private void AssertFetchXml(Query[] queries, string fetchXml)
@@ -2025,6 +2103,46 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         bool IQueryExecutionOptions.ConfirmDelete(int count, EntityMetadata meta)
         {
             return true;
+        }
+
+        private class RetrieveMetadataChangesHandler : IFakeMessageExecutor
+        {
+            private readonly IAttributeMetadataCache _metadata;
+
+            public RetrieveMetadataChangesHandler(IAttributeMetadataCache metadata)
+            {
+                _metadata = metadata;
+            }
+
+            public bool CanExecute(OrganizationRequest request)
+            {
+                return request is RetrieveMetadataChangesRequest;
+            }
+
+            public OrganizationResponse Execute(OrganizationRequest request, XrmFakedContext ctx)
+            {
+                var metadata = new EntityMetadataCollection
+                {
+                    _metadata["account"],
+                    _metadata["contact"],
+                    _metadata["new_customentity"]
+                };
+
+                var response = new RetrieveMetadataChangesResponse
+                {
+                    Results = new ParameterCollection
+                    {
+                        ["EntityMetadata"] = metadata
+                    }
+                };
+
+                return response;
+            }
+
+            public Type GetResponsibleRequestType()
+            {
+                return typeof(RetrieveMetadataChangesRequest);
+            }
         }
 
         private class RetrieveAllOptionSetsHandler : IFakeMessageExecutor

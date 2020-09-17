@@ -23,12 +23,17 @@ namespace MarkMpn.Sql4Cds.Engine
 
             _customMetadata["globaloptionset"] = GetEntityMetadata(typeof(OptionSetMetadataBase));
             _customMetadata["localizedlabel"] = GetEntityMetadata(typeof(LocalizedLabel));
+            _customMetadata["entity"] = GetEntityMetadata(typeof(EntityMetadata));
+            _customMetadata["relationship_1_n"] = GetEntityMetadata(typeof(OneToManyRelationshipMetadata));
+            _customMetadata["relationship_n_n"] = GetEntityMetadata(typeof(ManyToManyRelationshipMetadata));
+            _customMetadata["attribute"] = GetEntityMetadata(typeof(AttributeMetadata));
         }
 
         private static EntityMetadata GetEntityMetadata(Type type)
         {
             var metadata = new EntityMetadata();
             metadata.LogicalName = type.Name.ToLower();
+            metadata.SchemaName = type.FullName;
             
             var attributes = type.GetProperties()
                 .SelectMany(prop => GetAttributeMetadata(prop))
@@ -53,6 +58,12 @@ namespace MarkMpn.Sql4Cds.Engine
             if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
                 type = type.GetGenericArguments()[0];
 
+            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(ManagedProperty<>))
+                type = type.GetGenericArguments()[0];
+
+            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(ConstantsBase<>))
+                type = type.GetGenericArguments()[0];
+
             if (type == typeof(string) || type == typeof(Microsoft.Xrm.Sdk.Label) || type.IsEnum)
                 yield return new StringAttributeMetadata(prop.Name) { LogicalName = prop.Name.ToLower() };
 
@@ -64,6 +75,9 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (type == typeof(bool))
                 yield return new BooleanAttributeMetadata(prop.Name) { LogicalName = prop.Name.ToLower() };
+
+            if (type == typeof(Guid))
+                yield return new UniqueIdentifierAttributeMetadata(prop.Name) { LogicalName = prop.Name.ToLower() };
 
             // TODO: Add support for more property types
         }
