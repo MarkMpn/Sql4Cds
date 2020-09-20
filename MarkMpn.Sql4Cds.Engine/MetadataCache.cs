@@ -21,70 +21,8 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             _customMetadata = new Dictionary<string, EntityMetadata>();
 
-            _customMetadata["globaloptionset"] = GetEntityMetadata(typeof(OptionSetMetadataBase));
-            _customMetadata["localizedlabel"] = GetEntityMetadata(typeof(LocalizedLabel));
-            _customMetadata["entity"] = GetEntityMetadata(typeof(EntityMetadata));
-            _customMetadata["relationship_1_n"] = GetEntityMetadata(typeof(OneToManyRelationshipMetadata));
-            _customMetadata["relationship_n_n"] = GetEntityMetadata(typeof(ManyToManyRelationshipMetadata));
-            _customMetadata["attribute"] = GetEntityMetadata(typeof(AttributeMetadata));
-        }
-
-        private static EntityMetadata GetEntityMetadata(Type type)
-        {
-            var metadata = new EntityMetadata();
-            metadata.LogicalName = type.Name.ToLower();
-            metadata.SchemaName = type.FullName;
-            
-            var attributes = type.GetProperties()
-                .SelectMany(prop => GetAttributeMetadata(prop))
-                .Where(attr => attr != null)
-                .ToList();
-
-            if (type == typeof(LocalizedLabel))
-                attributes.Add(new UniqueIdentifierAttributeMetadata("LabelId") { LogicalName = "labelid" });
-
-            SetSealedProperty(metadata, nameof(metadata.Attributes), attributes.ToArray());
-
-            return metadata;
-        }
-
-        private static IEnumerable<AttributeMetadata> GetAttributeMetadata(PropertyInfo prop)
-        {
-            if (!prop.CanRead)
-                yield break;
-
-            var type = prop.PropertyType;
-
-            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
-                type = type.GetGenericArguments()[0];
-
-            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(ManagedProperty<>))
-                type = type.GetGenericArguments()[0];
-
-            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(ConstantsBase<>))
-                type = type.GetGenericArguments()[0];
-
-            if (type == typeof(string) || type == typeof(Microsoft.Xrm.Sdk.Label) || type.IsEnum)
-                yield return new StringAttributeMetadata(prop.Name) { LogicalName = prop.Name.ToLower() };
-
-            if (type == typeof(Label))
-                yield return new UniqueIdentifierAttributeMetadata(prop.Name + "Id") { LogicalName = prop.Name.ToLower() + "id" };
-
-            if (type == typeof(int))
-                yield return new IntegerAttributeMetadata(prop.Name) { LogicalName = prop.Name.ToLower() };
-
-            if (type == typeof(bool))
-                yield return new BooleanAttributeMetadata(prop.Name) { LogicalName = prop.Name.ToLower() };
-
-            if (type == typeof(Guid))
-                yield return new UniqueIdentifierAttributeMetadata(prop.Name) { LogicalName = prop.Name.ToLower() };
-
-            // TODO: Add support for more property types
-        }
-
-        private static void SetSealedProperty(object target, string prop, object value)
-        {
-            target.GetType().GetProperty(prop).SetValue(target, value, null);
+            foreach (var metadata in MetaMetadata.GetMetadata())
+                _customMetadata[metadata.LogicalName] = metadata.GetEntityMetadata();
         }
 
         /// <summary>

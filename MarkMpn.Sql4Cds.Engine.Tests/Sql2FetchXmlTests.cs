@@ -2042,7 +2042,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
             context.AddFakeMessageExecutor<RetrieveMetadataChangesRequest>(new RetrieveMetadataChangesHandler(metadata));
 
-            var query = "SELECT e.logicalname, a.logicalname FROM entity e INNER JOIN attribute a ON e.attributesid = a.metadataid WHERE e.logicalname = 'new_customentity' ORDER BY 1, 2";
+            var query = "SELECT e.logicalname, a.logicalname FROM entity e INNER JOIN attribute a ON e.logicalname = a.entitylogicalname WHERE e.logicalname = 'new_customentity' ORDER BY 1, 2";
 
             var queries = sql2FetchXml.Convert(query);
 
@@ -2052,7 +2052,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 <fetch>
                     <entity name='entity'>
                         <attribute name='logicalname' />
-                        <link-entity name='attribute' from='metadataid' to='attributesid' alias='a' link-type='inner'>
+                        <link-entity name='attribute' from='entitylogicalname' to='logicalname' alias='a' link-type='inner'>
                             <attribute name='logicalname' />
                             <order attribute='logicalname' />
                         </link-entity>
@@ -2128,6 +2128,18 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     _metadata["new_customentity"]
                 };
 
+                foreach (var entity in metadata)
+                {
+                    if (entity.MetadataId == null)
+                        entity.MetadataId = Guid.NewGuid();
+
+                    foreach (var attribute in entity.Attributes)
+                    {
+                        if (attribute.MetadataId == null)
+                            attribute.MetadataId = Guid.NewGuid();
+                    }
+                }
+
                 var response = new RetrieveMetadataChangesResponse
                 {
                     Results = new ParameterCollection
@@ -2154,6 +2166,16 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             public OrganizationResponse Execute(OrganizationRequest request, XrmFakedContext ctx)
             {
+                var labels = new[]
+                {
+                    new LocalizedLabel("TestGlobalOptionSet", 1033) { MetadataId = Guid.NewGuid() },
+                    new LocalizedLabel("TranslatedDisplayName-Test", 9999) { MetadataId = Guid.NewGuid() },
+                    new LocalizedLabel("FooGlobalOptionSet", 1033) { MetadataId = Guid.NewGuid() },
+                    new LocalizedLabel("TranslatedDisplayName-Foo", 9999) { MetadataId = Guid.NewGuid() },
+                    new LocalizedLabel("BarGlobalOptionSet", 1033) { MetadataId = Guid.NewGuid() },
+                    new LocalizedLabel("TranslatedDisplayName-Bar", 9999) { MetadataId = Guid.NewGuid() }
+                };
+
                 return new RetrieveAllOptionSetsResponse
                 {
                     Results = new ParameterCollection
@@ -2166,13 +2188,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                                 new OptionMetadata(new Label("Value2", 1033), 2)
                             }))
                             {
+                                MetadataId = Guid.NewGuid(),
                                 Name = "test",
                                 DisplayName = new Label(
-                                    new LocalizedLabel("TestGlobalOptionSet", 1033),
+                                    labels[0],
                                     new[]
                                     {
-                                        new LocalizedLabel("TestGlobalOptionSet", 1033),
-                                        new LocalizedLabel("TranslatedDisplayName-Test", 9999)
+                                        labels[0],
+                                        labels[1]
                                     })
                             },
                             new OptionSetMetadata(new OptionMetadataCollection(new[]
@@ -2181,13 +2204,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                                 new OptionMetadata(new Label("Value2", 1033), 2)
                             }))
                             {
+                                MetadataId = Guid.NewGuid(),
                                 Name = "foo",
                                 DisplayName = new Label(
-                                    new LocalizedLabel("FooGlobalOptionSet", 1033),
+                                    labels[2],
                                     new[]
                                     {
-                                        new LocalizedLabel("FooGlobalOptionSet", 1033),
-                                        new LocalizedLabel("TranslatedDisplayName-Foo", 9999)
+                                        labels[2],
+                                        labels[3]
                                     })
                             },
                             new OptionSetMetadata(new OptionMetadataCollection(new[]
@@ -2196,13 +2220,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                                 new OptionMetadata(new Label("Value2", 1033), 2)
                             }))
                             {
+                                MetadataId = Guid.NewGuid(),
                                 Name = "bar",
                                 DisplayName = new Label(
-                                    new LocalizedLabel("BarGlobalOptionSet", 1033),
+                                    labels[4],
                                     new[]
                                     {
-                                        new LocalizedLabel("BarGlobalOptionSet", 1033),
-                                        new LocalizedLabel("TranslatedDisplayName-Bar", 9999)
+                                        labels[4],
+                                        labels[5]
                                     })
                             }
                         }

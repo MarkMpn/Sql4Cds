@@ -803,7 +803,12 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         public TRequest Request { get; set; }
 
-        protected abstract Array GetRootArray(TResponse response);
+        /// <summary>
+        /// Extracts the data in the response as a set of entities
+        /// </summary>
+        /// <param name="response">The response from the metadata request</param>
+        /// <returns>The data contained in the response, split y entity type</returns>
+        protected abstract IDictionary<string, IDictionary<Guid, Entity>> GetData(TResponse response);
 
         protected override object ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
@@ -811,11 +816,16 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var response = (TResponse) org.Execute(Request);
 
-            var sequence = ConvertResponse(response);
+            // Convert the response to entities and execute the FetchXML request over that data
+            var data = GetData(response);
+            var sequence = ExecuteFetchRequest(data);
 
+            // Apply any extra query extensions that are required to the results
             foreach (var extension in Extensions)
                 sequence = extension.ApplyTo(sequence, options);
 
+            // Convert the results to a data table. Returning the results as an EntityCollection
+            // will confuse the CrmGridView as the metadata doesn't really exist
             var entities = sequence.ToList();
             var table = new DataTable();
 
@@ -857,17 +867,11 @@ namespace MarkMpn.Sql4Cds.Engine
             return table;
         }
 
-        private IEnumerable<Entity> ConvertResponse(TResponse response)
+        private IEnumerable<Entity> ExecuteFetchRequest(IDictionary<string, IDictionary<Guid, Entity>> data)
         {
             // Create entities from the response array based on the FetchXML
             var fetchEntity = FetchXml.Items.OfType<FetchEntityType>().Single();
-            var results = new List<Entity>();
-
-            foreach (var obj in GetRootArray(response))
-            {
-                foreach (var entity in ObjectToEntities(obj, fetchEntity.name, fetchEntity.Items))
-                    results.Add(entity);
-            }
+            var results = GetFilteredResults(data, fetchEntity.name, null, fetchEntity.Items).ToList();
 
             var sorts = GetSorts(fetchEntity.Items);
             var sortedResults = (IEnumerable<Entity>) results;
@@ -915,105 +919,57 @@ namespace MarkMpn.Sql4Cds.Engine
             return value;
         }
 
-        private IEnumerable<Entity> ObjectToEntities(object obj, string name, object[] items)
+        private IEnumerable<Entity> GetFilteredResults(IDictionary<string, IDictionary<Guid, Entity>> data, string name, string alias, object[] items)
         {
-            // Create the basic result entity
-            var entity = new Entity(name);
-
-            // Populate the attributes. Include all attributes, not just the requested ones, as others
-            // may be required for filters or ordering
-            foreach (var prop in obj.GetType().GetProperties())
-            {
-                if (!prop.CanRead)
-                    continue;
-
-                var propName = prop.Name.ToLower();
-                var propValue = prop.GetValue(obj, null);
-
-                if (propValue is Label label)
-                {
-                    entity[propName + "id"] = Guid.Empty;
-                    propValue = label.UserLocalizedLabel?.Label;
-                }
-
-                if (propValue != null && propValue.GetType().IsGenericType && propValue.GetType().GetGenericTypeDefinition() == typeof(ManagedProperty<>))
-                    propValue = propValue.GetType().GetProperty("Value").GetValue(propValue);
-
-                if (propValue != null && propValue.GetType().IsGenericType && propValue.GetType().GetGenericTypeDefinition() == typeof(ConstantsBase<>))
-                    propValue = propValue.GetType().GetProperty("Value").GetValue(propValue);
-
-                if (propValue is BooleanManagedProperty boolManagedProp)
-                    propValue = boolManagedProp.Value;
-
-                if (propValue != null && propValue.GetType().IsEnum)
-                    propValue = propValue.ToString();
-
-                entity[propName] = propValue;
-            }
-
-            if (obj is LocalizedLabel)
-                entity["labelid"] = Guid.Empty;
-
-            // If there are any aliased attributes, apply them now
-            foreach (var alias in items.OfType<FetchAttributeType>().Where(a => !String.IsNullOrEmpty(a.alias)))
-                entity[alias.alias] = entity[alias.name];
-
             var results = new List<Entity>();
-            results.Add(entity);
 
-            foreach (var link in items.OfType<FetchLinkEntityType>())
+            var joins = items.OfType<FetchLinkEntityType>().ToList();
+
+            foreach (var entity in data[name].Values)
             {
-                // NOTE: Only supports 1:N relationships so far
-
-                // Primary key field is <prop>id
-                var fromProp = obj.GetType().GetProperty(link.to.Substring(0, link.to.Length - 2), System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.IgnoreCase);
-
-                if (fromProp == null)
-                    throw new ApplicationException(link.to + " is not a key field");
-
-                var propValue = fromProp.GetValue(obj, null);
-
-                // Most joins are directly from the parent object to a child collection, but label translations
-                // go via an additional Label object in the object model which we want to skip in the SQL data model.
-                if (propValue is Label label && link.name == "localizedlabel" && link.from == "labelid")
-                    propValue = label.LocalizedLabels.ToArray();
-
-                if (!(propValue is Array))
-                    throw new ApplicationException(link.to + " is not a key field");
-
-                var childEntities = ((Array)propValue)
-                    .Cast<object>()
-                    .SelectMany(childObj => ObjectToEntities(childObj, link.name, link.Items))
-                    .ToList();
-
-                var joinResults = new List<Entity>();
-
-                if (childEntities.Count == 0 && link.linktype == "outer")
+                if (joins.Count == 0)
                 {
-                    joinResults = results;
+                    results.Add(GetAliasedEntity(entity, alias, items));
                 }
                 else
                 {
-                    foreach (var childEntity in childEntities)
+                    // Get the results for each join
+                    var joinResults = new List<List<Entity>>();
+
+                    foreach (var join in joins)
                     {
-                        var joinResult = new Entity(entity.LogicalName, entity.Id);
+                        var joinKey = GetJoinKey(entity, alias, join.to);
 
-                        foreach (var attr in entity.Attributes)
-                            joinResult[attr.Key] = attr.Value;
-
-                        foreach (var attr in childEntity.Attributes)
+                        if (joinKey != null)
                         {
-                            if (attr.Value is AliasedValue)
-                                joinResult[attr.Key] = attr.Value;
-                            else
-                                joinResult[link.alias + "." + attr.Key] = attr.Value == null ? null : new AliasedValue(link.name, attr.Key, attr.Value);
+                            var joinData = GetFilteredResults(data, join.name, join.alias, join.Items)
+                                .Where(e => GetJoinKey(e, join.alias, join.from).Equals(joinKey))
+                                .ToList();
+                            joinResults.Add(joinData);
+                        }
+                        else
+                        {
+                            joinResults.Add(new List<Entity>());
+                        }
+                    }
+
+                    // Add each combination of joined results to the output
+                    foreach (var joinedRecords in GetJoinCombinations(joins, joinResults))
+                    {
+                        var result = GetAliasedEntity(entity, alias, items);
+
+                        foreach (var joinedRecord in joinedRecords)
+                        {
+                            if (joinedRecord == null)
+                                continue;
+
+                            foreach (var attr in joinedRecord.Attributes)
+                                result[attr.Key] = attr.Value;
                         }
 
-                        joinResults.Add(joinResult);
+                        results.Add(result);
                     }
                 }
-
-                results = joinResults;
             }
 
             // Apply filters
@@ -1021,6 +977,93 @@ namespace MarkMpn.Sql4Cds.Engine
                 results.RemoveAll(e => !IsMatch(e, filter));
 
             return results;
+        }
+
+        private object GetJoinKey(Entity e, string alias, string attrName)
+        {
+            if (alias != null)
+                attrName = alias + "." + attrName;
+
+            var value = e[attrName];
+
+            if (value is AliasedValue av)
+                value = av.Value;
+
+            if (value is EntityReference er)
+                value = er.Id;
+
+            return value;
+        }
+
+        private IEnumerable<List<Entity>> GetJoinCombinations(List<FetchLinkEntityType> joins, List<List<Entity>> joinResults)
+        {
+            var joinIndexes = new int[joins.Count];
+
+            while (IsValidJoinCombination(joins, joinResults, joinIndexes))
+            {
+                var combination = new List<Entity>();
+
+                for (var i = 0; i < joins.Count; i++)
+                    combination.Add(joinResults[i][joinIndexes[i]]);
+
+                yield return combination;
+
+                for (var i = 0; i < joins.Count; i++)
+                {
+                    joinIndexes[i]++;
+
+                    if (joinIndexes[i] < joinResults[i].Count)
+                        break;
+
+                    if (i < joins.Count - 1)
+                        joinIndexes[i] = 0;
+                }
+            }
+        }
+
+        private bool IsValidJoinCombination(List<FetchLinkEntityType> joins, List<List<Entity>> joinResults, int[] joinIndexes)
+        {
+            for (var i = 0; i < joins.Count; i++)
+            {
+                if (joinIndexes[i] == 0 && joinResults[i].Count == 0 && joins[i].linktype == "outer")
+                    continue;
+
+                if (joinIndexes[i] >= joinResults[i].Count)
+                    return false;
+            }
+
+            return true;
+        }
+
+        private Entity GetAliasedEntity(Entity entity, string alias, object[] items)
+        {
+            var result = new Entity(entity.LogicalName, entity.Id);
+
+            foreach (var attr in entity.Attributes)
+            {
+                var name = attr.Key;
+                var value = attr.Value;
+
+                if (alias != null && value != null && !(value is AliasedValue))
+                {
+                    name = alias + "." + name;
+                    value = new AliasedValue(entity.LogicalName, attr.Key, value);
+                }
+
+                result[name] = value;
+            }
+
+            foreach (var aliasedAttribute in items.OfType<FetchAttributeType>().Where(a => a.alias != null))
+            {
+                var value = result[aliasedAttribute.name];
+
+                if (!(value is AliasedValue))
+                    value = new AliasedValue(entity.LogicalName, aliasedAttribute.name, value);
+
+                result[aliasedAttribute.alias] = value;
+            }
+
+            return result;
         }
 
         private bool IsMatch(Entity entity, filter filter)
@@ -1097,7 +1140,7 @@ namespace MarkMpn.Sql4Cds.Engine
             Request = new RetrieveAllOptionSetsRequest();
         }
 
-        protected override Array GetRootArray(RetrieveAllOptionSetsResponse response) => response.OptionSetMetadata;
+        protected override IDictionary<string, IDictionary<Guid, Entity>> GetData(RetrieveAllOptionSetsResponse response) => MetaMetadata.GetData(response.OptionSetMetadata);
     }
 
     /// <summary>
@@ -1117,6 +1160,6 @@ namespace MarkMpn.Sql4Cds.Engine
             return base.ExecuteInternal(org, metadata, options);
         }
 
-        protected override Array GetRootArray(RetrieveMetadataChangesResponse response) => response.EntityMetadata.ToArray();
+        protected override IDictionary<string, IDictionary<Guid, Entity>> GetData(RetrieveMetadataChangesResponse response) => MetaMetadata.GetData(response.EntityMetadata.ToArray());
     }
 }
