@@ -14,7 +14,7 @@ namespace MarkMpn.Sql4Cds.Engine
     /// Provides metadata about metadata objects, allowing them to be converted into regular <see cref="Entity"/>
     /// objects that can be queried using FetchXML
     /// </summary>
-    class MetaMetadata
+    public class MetaMetadata
     {
         private static readonly IDictionary<Type, MetaMetadata> _metaMetadata;
 

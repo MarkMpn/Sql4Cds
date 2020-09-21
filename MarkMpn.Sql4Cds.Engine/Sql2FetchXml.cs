@@ -164,7 +164,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="quotedIdentifiers">Indicates if the SQL should be parsed using quoted identifiers</param>
         public Sql2FetchXml(IAttributeMetadataCache metadata, bool quotedIdentifiers)
         {
-            Metadata = new MetadataCache(metadata);
+            Metadata = new MetaMetadataCache(metadata);
             QuotedIdentifiers = quotedIdentifiers;
         }
 

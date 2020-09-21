@@ -53,7 +53,7 @@
     <Compile Include="AttributeMetadataCache.cs" />
     <Compile Include="DisconnectedException.cs" />
     <Compile Include="EntityExtensions.cs" />
-    <Compile Include="MetadataCache.cs" />
+    <Compile Include="MetaMetadataCache.cs" />
     <Compile Include="MetaMetadata.cs" />
     <Compile Include="QueryExtensions\NoOp.cs" />
     <Compile Include="TSqlEndpoint.cs" />

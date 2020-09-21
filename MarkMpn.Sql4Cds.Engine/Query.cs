@@ -4,6 +4,7 @@ using Microsoft.Crm.Sdk.Messages;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
+using Microsoft.Xrm.Sdk.Metadata.Query;
 using Microsoft.Xrm.Sdk.Query;
 using Microsoft.Xrm.Tooling.Connector;
 using System;
@@ -861,6 +862,9 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (value is AliasedValue a)
                         value = a.Value;
 
+                    if (value is EntityReference er)
+                        value = er.Id;
+
                     row[col] = value;
                 }
 
@@ -876,7 +880,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var fetchEntity = FetchXml.Items.OfType<FetchEntityType>().Single();
             var results = GetFilteredResults(data, fetchEntity.name, null, fetchEntity.Items).ToList();
 
-            var sorts = GetSorts(fetchEntity.Items);
+            var sorts = GetSorts(null, fetchEntity.Items);
             var sortedResults = (IEnumerable<Entity>) results;
 
             for (var i = 0; i < sorts.Count; i++)
@@ -885,29 +889,39 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (i == 0)
                 {
-                    if (sort.descending)
-                        sortedResults = sortedResults.OrderByDescending(e => GetValue(e, sort.alias ?? sort.attribute));
+                    if (sort.Descending)
+                        sortedResults = sortedResults.OrderByDescending(e => GetValue(e, sort.Attribute));
                     else
-                        sortedResults = sortedResults.OrderBy(e => GetValue(e, sort.alias ?? sort.attribute));
+                        sortedResults = sortedResults.OrderBy(e => GetValue(e, sort.Attribute));
                 }
                 else
                 {
-                    if (sort.descending)
-                        sortedResults = ((IOrderedEnumerable<Entity>) sortedResults).ThenByDescending(e => GetValue(e, sort.alias ?? sort.attribute));
+                    if (sort.Descending)
+                        sortedResults = ((IOrderedEnumerable<Entity>) sortedResults).ThenByDescending(e => GetValue(e, sort.Attribute));
                     else
-                        sortedResults = ((IOrderedEnumerable<Entity>)sortedResults).ThenBy(e => GetValue(e, sort.alias ?? sort.attribute));
+                        sortedResults = ((IOrderedEnumerable<Entity>)sortedResults).ThenBy(e => GetValue(e, sort.Attribute));
                 }
             }
 
             return sortedResults;
         }
 
-        private List<FetchOrderType> GetSorts(object[] items)
+        class Sort
         {
-            var sorts = items.OfType<FetchOrderType>().ToList();
+            public string Attribute { get; set; }
+
+            public bool Descending { get; set; }
+        }
+
+        private List<Sort> GetSorts(string alias, object[] items)
+        {
+            var sorts = items
+                .OfType<FetchOrderType>()
+                .Select(sort => new Sort { Attribute = sort.alias ?? ((alias == null ? "" : (alias + ".")) + sort.attribute), Descending = sort.descending })
+                .ToList();
 
             foreach (var linkEntity in items.OfType<FetchLinkEntityType>())
-                sorts.AddRange(GetSorts(linkEntity.Items));
+                sorts.AddRange(GetSorts(linkEntity.alias, linkEntity.Items));
 
             return sorts;
         }
@@ -931,31 +945,42 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var joins = items.OfType<FetchLinkEntityType>().ToList();
 
-            foreach (var entity in data[name].Values)
+            if (joins.Count == 0)
             {
-                if (joins.Count == 0)
+                results.AddRange(data[name].Values.Select(entity => GetAliasedEntity(entity, alias, items)));
+            }
+            else
+            {
+                // Get the results for each join
+                var joinData = new List<ILookup<object, Entity>>();
+
+                foreach (var join in joins)
                 {
-                    results.Add(GetAliasedEntity(entity, alias, items));
+                    var joinResult = GetFilteredResults(data, join.name, join.alias, join.Items)
+                        .Select(e => new { Key = GetJoinKey(e, join.alias, join.from), Entity = e })
+                        .Where(kvp => kvp.Key != null)
+                        .ToLookup(kvp => kvp.Key, kvp => kvp.Entity, new FetchEqualityComparer());
+
+                    joinData.Add(joinResult);
                 }
-                else
+
+                foreach (var entity in data[name].Values)
                 {
-                    // Get the results for each join
                     var joinResults = new List<List<Entity>>();
 
-                    foreach (var join in joins)
+                    for (var i = 0; i < joins.Count; i++)
                     {
+                        var join = joins[i];
+                        var joinResult = joinData[i];
                         var joinKey = GetJoinKey(entity, alias, join.to);
 
-                        if (joinKey != null)
+                        if (joinKey == null)
                         {
-                            var joinData = GetFilteredResults(data, join.name, join.alias, join.Items)
-                                .Where(e => GetJoinKey(e, join.alias, join.from).Equals(joinKey))
-                                .ToList();
-                            joinResults.Add(joinData);
+                            joinResults.Add(new List<Entity>());
                         }
                         else
                         {
-                            joinResults.Add(new List<Entity>());
+                            joinResults.Add(joinResult[joinKey].ToList());
                         }
                     }
 
@@ -1137,10 +1162,37 @@ namespace MarkMpn.Sql4Cds.Engine
             switch (condition.@operator)
             {
                 case @operator.eq:
-                    return attrValue.Equals(value);
+                    return IsEqual(attrValue, value);
 
                 default:
                     throw new NotSupportedException();
+            }
+        }
+
+        private static bool IsEqual(object x, object y)
+        {
+            if (x == null || y == null)
+                return false;
+
+            if (x is string xs && y is string ys)
+                return xs.Equals(ys, StringComparison.OrdinalIgnoreCase);
+
+            return x.Equals(y);
+        }
+
+        class FetchEqualityComparer : IEqualityComparer<object>
+        {
+            public new bool Equals(object x, object y)
+            {
+                return IsEqual(x, y);
+            }
+
+            public int GetHashCode(object obj)
+            {
+                if (obj is string s)
+                    return s.ToLowerInvariant().GetHashCode();
+
+                return obj.GetHashCode();
             }
         }
     }
@@ -1168,11 +1220,158 @@ namespace MarkMpn.Sql4Cds.Engine
             Request = new RetrieveMetadataChangesRequest();
         }
 
+        class RequiredEntity
+        {
+            private bool _required;
+
+            public RequiredEntity(string logicalName, params RequiredEntity[] children)
+            {
+                LogicalName = logicalName;
+                Children = children;
+            }
+
+            public string LogicalName { get; }
+
+            public RequiredEntity[] Children { get; }
+
+            public bool Required
+            {
+                get { return _required || Children.Any(c => c.Required); }
+                set { _required = true; }
+            }
+
+            public void SetRequired(IDictionary<string, List<object>> itemsByEntity)
+            {
+                if (itemsByEntity.ContainsKey(LogicalName))
+                    Required = true;
+
+                foreach (var child in Children)
+                    child.SetRequired(itemsByEntity);
+            }
+
+            public bool IsRequired(string logicalName)
+            {
+                if (logicalName == LogicalName)
+                    return Required;
+
+                return Children.Any(c => c.IsRequired(logicalName));
+            }
+        }
+
         protected override object ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
-            // TODO: Populate request based on FetchXML
+            // TODO: Populate request based on FetchXML. Some properties may be required to pull in child objects, e.g. labels
+            // Build a tree to identify what higher level objects are required to retrieve lower level ones
+            var tree = new RequiredEntity("entity",
+                new RequiredEntity("attribute",
+                    new RequiredEntity("label",
+                        new RequiredEntity("localizedlabel")
+                    )
+                ),
+                new RequiredEntity("relationship_1_n",
+                    new RequiredEntity("label",
+                        new RequiredEntity("localizedlabel")
+                    )
+                ),
+                new RequiredEntity("relationship_n_n",
+                    new RequiredEntity("label",
+                        new RequiredEntity("localizedlabel")
+                    )
+                ),
+                new RequiredEntity("label",
+                    new RequiredEntity("localizedlabel")
+                )
+            );
+
+            var itemsByEntity = GetItemsByEntity();
+
+            tree.SetRequired(itemsByEntity);
+
+            Request.Query = new EntityQueryExpression();
+            Request.Query.Properties = new MetadataPropertiesExpression(GetPropertyNames(itemsByEntity, "entity", tree));
+
+            if (tree.IsRequired("attribute"))
+            {
+                Request.Query.AttributeQuery = new AttributeQueryExpression();
+                Request.Query.AttributeQuery.Properties = new MetadataPropertiesExpression(GetPropertyNames(itemsByEntity, "attribute", tree));
+            }
+
+            if (tree.IsRequired("relationship_1_n") || tree.IsRequired("relationship_n_n"))
+            {
+                Request.Query.RelationshipQuery = new RelationshipQueryExpression();
+                Request.Query.RelationshipQuery.Properties = new MetadataPropertiesExpression(GetPropertyNames(itemsByEntity, "relationship_1_n", tree).Union(GetPropertyNames(itemsByEntity, "relationship_n_n", tree)).ToArray());
+            }
+
+            if (!itemsByEntity.ContainsKey("localizedlabel"))
+            {
+                Request.Query.LabelQuery = new LabelQueryExpression();
+                Request.Query.LabelQuery.FilterLanguages.Add(1033); // TODO: Get user language
+            }
 
             return base.ExecuteInternal(org, metadata, options);
+        }
+
+        private IDictionary<string, List<object>> GetItemsByEntity()
+        {
+            var itemsByEntity = new Dictionary<string, List<object>>();
+            var entity = FetchXml.Items.OfType<FetchEntityType>().Single();
+            AddItems(itemsByEntity, entity.name, entity.Items);
+            return itemsByEntity;
+        }
+
+        private void AddItems(IDictionary<string, List<object>> itemsByEntity, string entity, object[] items)
+        {
+            if (!itemsByEntity.TryGetValue(entity, out var list))
+            {
+                list = new List<object>();
+                itemsByEntity[entity] = list;
+            }
+
+            list.AddRange(items);
+
+            foreach (var join in items.OfType<FetchLinkEntityType>())
+            {
+                AddItems(itemsByEntity, join.name, join.Items);
+                AddItems(itemsByEntity, entity, new object[] { new FetchAttributeType { name = join.to } });
+                AddItems(itemsByEntity, join.name, new object[] { new FetchAttributeType { name = join.from } });
+            }
+        }
+
+        private string[] GetPropertyNames(IDictionary<string, List<object>> itemsByEntity, string entity, RequiredEntity tree)
+        {
+            var propNames = new List<string>();
+
+            if (itemsByEntity.TryGetValue(entity, out var items))
+            {
+                var allAttributes = items.OfType<allattributes>().Any();
+                var attributes = items.OfType<FetchAttributeType>().Select(a => a.name).ToArray();
+
+                if (allAttributes || attributes.Length > 0)
+                {
+                    var metadata = MetaMetadata.GetMetadata().Single(md => md.LogicalName == entity);
+
+                    foreach (var prop in metadata.Type.GetProperties())
+                    {
+                        if (!prop.CanRead)
+                            continue;
+
+                        if (allAttributes ||
+                            attributes.Contains(prop.Name.ToLower()) ||
+                            attributes.Contains(prop.Name.ToLower() + "id") ||
+                            (prop.Name == nameof(MetadataBase.MetadataId) && attributes.Contains(metadata.LogicalName + "id")) ||
+                            (entity == "entity" && prop.Name == nameof(EntityMetadata.Attributes) && tree.IsRequired("attribute")) ||
+                            (entity == "entity" && prop.Name == nameof(EntityMetadata.OneToManyRelationships) && tree.IsRequired("relationship_1_n")) ||
+                            (entity == "entity" && prop.Name == nameof(EntityMetadata.ManyToOneRelationships) && tree.IsRequired("relationship_1_n")) ||
+                            (entity == "entity" && prop.Name == nameof(EntityMetadata.ManyToManyRelationships) && tree.IsRequired("relationship_n_n")) ||
+                            (prop.PropertyType == typeof(Label) && tree.IsRequired("label")))
+                        {
+                            propNames.Add(prop.Name);
+                        }
+                    }
+                }
+            }
+
+            return propNames.ToArray();
         }
 
         protected override IDictionary<string, IDictionary<Guid, Entity>> GetData(RetrieveMetadataChangesResponse response) => MetaMetadata.GetData(response.EntityMetadata.ToArray());

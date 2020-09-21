@@ -48,7 +48,7 @@ namespace MarkMpn.Sql4Cds
             _displayName = $"Query {++_queryCounter}";
             _modified = true;
             Service = con.ServiceClient;
-            Metadata = metadata;
+            Metadata = new MetaMetadataCache(metadata);
             WorkAsync = workAsync;
             SetWorkingMessage = setWorkingMessage;
             ExecuteMethod = executeMethod;
@@ -279,6 +279,8 @@ namespace MarkMpn.Sql4Cds
 
             var text = _editor.Text;
             EntityCache.TryGetEntities(_con.ServiceClient, out var entities);
+
+            entities = entities.Concat(MetaMetadata.GetMetadata().Select(m => m.GetEntityMetadata())).ToArray();
 
             var suggestions = new Autocomplete(entities, Metadata).GetSuggestions(text, pos, out var currentLength).ToList();
 
