@@ -3413,6 +3413,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (alias.Equals(tables[0].Alias ?? tables[0].EntityName, StringComparison.OrdinalIgnoreCase))
                 {
                     table = tables[0];
+                    ValidateAttributeName(table, col);
                     return null;
                 }
 
@@ -3423,6 +3424,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (table == null)
                     throw new NotSupportedQueryFragmentException("Unknown table " + col.MultiPartIdentifier.Identifiers[0].Value, col);
 
+                ValidateAttributeName(table, col);
                 return alias;
             }
 
@@ -3458,6 +3460,13 @@ namespace MarkMpn.Sql4Cds.Engine
                 return null;
 
             return possibleEntities[0].Alias ?? possibleEntities[0].EntityName;
+        }
+
+        private void ValidateAttributeName(EntityTable table, ColumnReferenceExpression col)
+        {
+            var attrName = GetColumnAttribute(col);
+            if (!table.Metadata.Attributes.Any(attr => attr.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase)))
+                throw new NotSupportedQueryFragmentException("Unknown attribute", col);
         }
 
         private string GetColumnAttribute(ColumnReferenceExpression col)

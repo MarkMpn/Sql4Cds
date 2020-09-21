@@ -34,7 +34,9 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                 IsEntityMetadata = true;
                 IsMetadata = true;
             }
-            else if (node.SchemaObject.BaseIdentifier.Value.Equals("localizedlabel", StringComparison.OrdinalIgnoreCase))
+            else if (node.SchemaObject.BaseIdentifier.Value.Equals("label", StringComparison.OrdinalIgnoreCase) ||
+                node.SchemaObject.BaseIdentifier.Value.Equals("localizedlabel", StringComparison.OrdinalIgnoreCase) ||
+                node.SchemaObject.BaseIdentifier.Value.Equals("option", StringComparison.OrdinalIgnoreCase))
             {
                 IsMetadata = true;
             }

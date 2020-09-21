@@ -1960,6 +1960,48 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void GlobalOptionSetValues()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+            context.AddFakeMessageExecutor<RetrieveAllOptionSetsRequest>(new RetrieveAllOptionSetsHandler());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT gos.displayname, o.label FROM globaloptionset gos LEFT OUTER JOIN [option] o ON gos.globaloptionsetid = o.optionsetid AND o.value = 2 WHERE gos.name = 'test'";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            Assert.IsInstanceOfType(queries.Single(), typeof(GlobalOptionSetQuery));
+
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='globaloptionset'>
+                        <attribute name='displayname' />
+                        <link-entity name='option' from='optionsetid' to='globaloptionsetid' alias='o' link-type='outer'>
+                            <attribute name='label' />
+                            <filter>
+                                <condition attribute='value' operator='eq' value='2' />
+                            </filter>
+                        </link-entity>
+                        <filter>
+                            <condition attribute='name' operator='eq' value='test' />
+                        </filter>
+                    </entity>
+                </fetch>");
+
+            queries[0].Execute(org, metadata, this);
+
+            var result = (DataTable)queries[0].Result;
+
+            Assert.AreEqual(1, result.Rows.Count);
+            Assert.AreEqual("TestGlobalOptionSet", result.Rows[0][0]);
+            Assert.AreEqual("Value2", result.Rows[0][1]);
+        }
+
+        [TestMethod]
         public void GlobalOptionSetTranslations()
         {
             var context = new XrmFakedContext();
@@ -2173,7 +2215,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     new LocalizedLabel("FooGlobalOptionSet", 1033) { MetadataId = Guid.NewGuid() },
                     new LocalizedLabel("TranslatedDisplayName-Foo", 9999) { MetadataId = Guid.NewGuid() },
                     new LocalizedLabel("BarGlobalOptionSet", 1033) { MetadataId = Guid.NewGuid() },
-                    new LocalizedLabel("TranslatedDisplayName-Bar", 9999) { MetadataId = Guid.NewGuid() }
+                    new LocalizedLabel("TranslatedDisplayName-Bar", 9999) { MetadataId = Guid.NewGuid() },
+                    new LocalizedLabel("Value1", 1033) { MetadataId = Guid.NewGuid() },
+                    new LocalizedLabel("Value2", 1033) { MetadataId = Guid.NewGuid() }
                 };
 
                 return new RetrieveAllOptionSetsResponse
@@ -2184,8 +2228,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         {
                             new OptionSetMetadata(new OptionMetadataCollection(new[]
                             {
-                                new OptionMetadata(new Label("Value1", 1033), 1),
-                                new OptionMetadata(new Label("Value2", 1033), 2)
+                                new OptionMetadata(1) { MetadataId = Guid.NewGuid(), Label = new Label { UserLocalizedLabel = labels[6] } },
+                                new OptionMetadata(2) { MetadataId = Guid.NewGuid(), Label = new Label { UserLocalizedLabel = labels[7] } }
                             }))
                             {
                                 MetadataId = Guid.NewGuid(),
@@ -2200,8 +2244,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                             },
                             new OptionSetMetadata(new OptionMetadataCollection(new[]
                             {
-                                new OptionMetadata(new Label("Value1", 1033), 1),
-                                new OptionMetadata(new Label("Value2", 1033), 2)
+                                new OptionMetadata(1) { MetadataId = Guid.NewGuid(), Label = new Label { UserLocalizedLabel = labels[6] } },
+                                new OptionMetadata(2) { MetadataId = Guid.NewGuid(), Label = new Label { UserLocalizedLabel = labels[7] } }
                             }))
                             {
                                 MetadataId = Guid.NewGuid(),
@@ -2216,8 +2260,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                             },
                             new OptionSetMetadata(new OptionMetadataCollection(new[]
                             {
-                                new OptionMetadata(new Label("Value1", 1033), 1),
-                                new OptionMetadata(new Label("Value2", 1033), 2)
+                                new OptionMetadata(1) { MetadataId = Guid.NewGuid(), Label = new Label { UserLocalizedLabel = labels[6] } },
+                                new OptionMetadata(2) { MetadataId = Guid.NewGuid(), Label = new Label { UserLocalizedLabel = labels[7] } }
                             }))
                             {
                                 MetadataId = Guid.NewGuid(),

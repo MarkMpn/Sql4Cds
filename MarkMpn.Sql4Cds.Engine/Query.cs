@@ -832,7 +832,7 @@ namespace MarkMpn.Sql4Cds.Engine
             foreach (var col in ColumnSet.Distinct())
             {
                 var type = typeof(string);
-                var entity = entities.FirstOrDefault(e => e[col] != null);
+                var entity = entities.FirstOrDefault(e => e.Contains(col) && e[col] != null && (!(e[col] is AliasedValue av) || av.Value != null));
 
                 if (entity != null)
                 {
@@ -853,7 +853,10 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 foreach (var col in ColumnSet)
                 {
-                    var value = entity[col];
+                    object value = null;
+
+                    if (entity.Contains(col))
+                        value = entity[col];
 
                     if (value is AliasedValue a)
                         value = a.Value;
@@ -923,6 +926,9 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             var results = new List<Entity>();
 
+            if (!data.ContainsKey(name))
+                return results;
+
             var joins = items.OfType<FetchLinkEntityType>().ToList();
 
             foreach (var entity in data[name].Values)
@@ -974,7 +980,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             // Apply filters
             foreach (var filter in items.OfType<filter>())
-                results.RemoveAll(e => !IsMatch(e, filter));
+                results.RemoveAll(e => !IsMatch(e, filter, alias));
 
             return results;
         }
@@ -1004,7 +1010,12 @@ namespace MarkMpn.Sql4Cds.Engine
                 var combination = new List<Entity>();
 
                 for (var i = 0; i < joins.Count; i++)
-                    combination.Add(joinResults[i][joinIndexes[i]]);
+                {
+                    if (joinResults[i].Count > joinIndexes[i])
+                        combination.Add(joinResults[i][joinIndexes[i]]);
+                    else
+                        combination.Add(null);
+                }
 
                 yield return combination;
 
@@ -1044,10 +1055,12 @@ namespace MarkMpn.Sql4Cds.Engine
                 var name = attr.Key;
                 var value = attr.Value;
 
-                if (alias != null && value != null && !(value is AliasedValue))
+                if (alias != null)
                 {
                     name = alias + "." + name;
-                    value = new AliasedValue(entity.LogicalName, attr.Key, value);
+
+                    if (value != null && !(value is AliasedValue))
+                        value = new AliasedValue(entity.LogicalName, attr.Key, value);
                 }
 
                 result[name] = value;
@@ -1066,11 +1079,11 @@ namespace MarkMpn.Sql4Cds.Engine
             return result;
         }
 
-        private bool IsMatch(Entity entity, filter filter)
+        private bool IsMatch(Entity entity, filter filter, string alias)
         {
             foreach (var condition in filter.Items.OfType<condition>())
             {
-                var conditionMatch = IsMatch(entity, condition);
+                var conditionMatch = IsMatch(entity, condition, alias);
 
                 if (filter.type == filterType.and && !conditionMatch)
                     return false;
@@ -1080,7 +1093,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             foreach (var subFilter in filter.Items.OfType<filter>())
             {
-                var filterMatch = IsMatch(entity, subFilter);
+                var filterMatch = IsMatch(entity, subFilter, alias);
 
                 if (filter.type == filterType.and && !filterMatch)
                     return false;
@@ -1094,14 +1107,16 @@ namespace MarkMpn.Sql4Cds.Engine
             return false;
         }
 
-        private bool IsMatch(Entity entity, condition condition)
+        private bool IsMatch(Entity entity, condition condition, string alias)
         {
             var attribute = condition.attribute;
 
             if (!String.IsNullOrEmpty(condition.entityname))
                 attribute = condition.entityname + "." + condition.attribute;
+            else if (!String.IsNullOrEmpty(alias))
+                attribute = alias + "." + condition.attribute;
 
-            var attrValue = entity[condition.attribute];
+            var attrValue = entity[attribute];
             var value = (object) condition.value;
 
             if (!String.IsNullOrEmpty(condition.valueof))

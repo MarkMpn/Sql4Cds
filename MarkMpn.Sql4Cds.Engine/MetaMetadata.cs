@@ -25,6 +25,9 @@ namespace MarkMpn.Sql4Cds.Engine
                 [typeof(Label)] = new LabelMetadata(),
                 [typeof(LocalizedLabel)] = new LocalizedLabelMetadata(),
                 [typeof(OptionSetMetadataBase)] = new MetaMetadata(typeof(OptionSetMetadataBase), "globaloptionset"),
+                [typeof(OptionSetMetadata)] = new MetaMetadata(typeof(OptionSetMetadata), "optionset"),
+                [typeof(BooleanOptionSetMetadata)] = new MetaMetadata(typeof(BooleanOptionSetMetadata), "booloptionset"),
+                [typeof(OptionMetadata)] = new OptionMetadataMetadata(),
                 [typeof(EntityMetadata)] = new MetaMetadata(typeof(EntityMetadata), "entity"),
                 [typeof(AttributeMetadata)] = new MetaMetadata(typeof(AttributeMetadata), "attribute"),
                 [typeof(OneToManyRelationshipMetadata)] = new MetaMetadata(typeof(OneToManyRelationshipMetadata), "relationship_1_n"),
@@ -47,7 +50,12 @@ namespace MarkMpn.Sql4Cds.Engine
             var data = new Dictionary<string, IDictionary<Guid, Entity>>();
 
             foreach (var obj in objects)
+            {
                 ExtractEntitiesFromObjectTree(typeof(T), obj, null, data, null);
+
+                if (obj.GetType() != typeof(T) && _metaMetadata.ContainsKey(obj.GetType()))
+                    ExtractEntitiesFromObjectTree(obj.GetType(), obj, null, data, null);
+            }
 
             return data;
         }
@@ -119,17 +127,8 @@ namespace MarkMpn.Sql4Cds.Engine
                         {
                             ExtractEntitiesFromObjectTree(elementType, element, entity, data, null);
 
-                            if (element.GetType() != elementType && _metaMetadata.TryGetValue(element.GetType(), out var derivedMetadata))
-                            {
-                                if (!data.TryGetValue(derivedMetadata.LogicalName, out var derivedCollection))
-                                {
-                                    derivedCollection = new Dictionary<Guid, Entity>();
-                                    data[derivedMetadata.LogicalName] = derivedCollection;
-                                }
-
-                                var derivedEntity = derivedMetadata.GetEntity(element, null, entity);
-                                derivedCollection[derivedEntity.Id] = derivedEntity;
-                            }
+                            if (element.GetType() != elementType && _metaMetadata.ContainsKey(element.GetType()))
+                                ExtractEntitiesFromObjectTree(element.GetType(), element, entity, data, null);
                         }
                     }
                 }
@@ -226,6 +225,9 @@ namespace MarkMpn.Sql4Cds.Engine
                 var attrName = prop.Name.ToLower();
                 var value = prop.GetValue(obj, null);
                 var type = prop.PropertyType;
+
+                if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
+                    type = type.GetGenericArguments()[0];
 
                 if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(ManagedProperty<>))
                 {
@@ -380,7 +382,7 @@ namespace MarkMpn.Sql4Cds.Engine
         protected override AttributeMetadata[] GetAttributes()
         {
             var attributes = new List<AttributeMetadata>(base.GetAttributes());
-            attributes.Add(new UniqueIdentifierAttributeMetadata("LabelId") { LogicalName = "labelid" });
+            attributes.Add(new LookupAttributeMetadata { SchemaName = "LabelId", LogicalName = "labelid", Targets = new[] { "label" } });
             return attributes.ToArray();
         }
 
@@ -388,6 +390,27 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             var entity = base.GetEntity(obj, id, parent);
             entity["labelid"] = parent.ToEntityReference();
+            return entity;
+        }
+    }
+
+    class OptionMetadataMetadata : MetaMetadata
+    {
+        public OptionMetadataMetadata() : base(typeof(OptionMetadata), "option")
+        {
+        }
+
+        protected override AttributeMetadata[] GetAttributes()
+        {
+            var attributes = new List<AttributeMetadata>(base.GetAttributes());
+            attributes.Add(new LookupAttributeMetadata { SchemaName = "OptionSetId", LogicalName = "optionsetid", Targets = new[] { "globaloptionset" } });
+            return attributes.ToArray();
+        }
+
+        public override Entity GetEntity(object obj, Guid? id, Entity parent)
+        {
+            var entity = base.GetEntity(obj, id, parent);
+            entity["optionsetid"] = parent.ToEntityReference();
             return entity;
         }
     }
