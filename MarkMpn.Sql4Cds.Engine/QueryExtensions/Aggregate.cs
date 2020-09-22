@@ -362,8 +362,6 @@ namespace MarkMpn.Sql4Cds.Engine.QueryExtensions
     /// </summary>
     class Max : AggregateFunction
     {
-        private decimal? _maxDecimal;
-
         /// <summary>
         /// Creates a new <see cref="Max"/>
         /// </summary>
@@ -377,19 +375,14 @@ namespace MarkMpn.Sql4Cds.Engine.QueryExtensions
             if (value == null)
                 return;
 
-            var d = Convert.ToDecimal(value);
+            if (!(value is IComparable))
+                throw new InvalidOperationException("MAX is not valid for values of type " + value.GetType().Name);
 
-            if (Value == null || _maxDecimal < d)
+            if (Value == null || ((IComparable) Value).CompareTo(value) < 0)
                 Value = value;
         }
 
         public override Type Type => Expression.Type;
-
-        public override void Reset()
-        {
-            base.Reset();
-            _maxDecimal = null;
-        }
     }
 
     /// <summary>
@@ -397,8 +390,6 @@ namespace MarkMpn.Sql4Cds.Engine.QueryExtensions
     /// </summary>
     class Min : AggregateFunction
     {
-        private decimal? _minDecimal;
-
         /// <summary>
         /// Creates a new <see cref="Min"/>
         /// </summary>
@@ -412,19 +403,14 @@ namespace MarkMpn.Sql4Cds.Engine.QueryExtensions
             if (value == null)
                 return;
 
-            var d = Convert.ToDecimal(value);
+            if (!(value is IComparable))
+                throw new InvalidOperationException("MAX is not valid for values of type " + value.GetType().Name);
 
-            if (Value == null || _minDecimal > d)
+            if (Value == null || ((IComparable)Value).CompareTo(value) > 0)
                 Value = value;
         }
 
         public override Type Type => Expression.Type;
-
-        public override void Reset()
-        {
-            base.Reset();
-            _minDecimal = null;
-        }
     }
 
     /// <summary>
