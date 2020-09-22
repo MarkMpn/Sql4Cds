@@ -204,11 +204,11 @@ namespace MarkMpn.Sql4Cds.Engine
                 yield return new UniqueIdentifierAttributeMetadata(prop.Name) { LogicalName = prop.Name.ToLower() };
 
                 if (typeof(MetadataBase).IsAssignableFrom(Type) && prop.Name == nameof(MetadataBase.MetadataId))
-                    yield return new UniqueIdentifierAttributeMetadata(LogicalName + "id") { LogicalName = LogicalName + "id" };
+                    yield return new UniqueIdentifierAttributeMetadata(prop.Name) { LogicalName = LogicalName + "id" };
             }
 
             if (_metaMetadata.TryGetValue(type, out var lookupMetadata))
-                yield return new LookupAttributeMetadata { SchemaName = prop.Name + "Id", LogicalName = prop.Name.ToLower() + "id", Targets = new[] { lookupMetadata.LogicalName } };
+                yield return new LookupAttributeMetadata { SchemaName = prop.Name, LogicalName = prop.Name.ToLower() + "id", Targets = new[] { lookupMetadata.LogicalName } };
 
             // TODO: Add support for more property types
         }

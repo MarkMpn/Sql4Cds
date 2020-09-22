@@ -1289,26 +1289,157 @@ namespace MarkMpn.Sql4Cds.Engine
 
             Request.Query = new EntityQueryExpression();
             Request.Query.Properties = new MetadataPropertiesExpression(GetPropertyNames(itemsByEntity, "entity", tree));
+            Request.Query.Criteria = GetFilter(itemsByEntity, "entity");
 
             if (tree.IsRequired("attribute"))
             {
                 Request.Query.AttributeQuery = new AttributeQueryExpression();
                 Request.Query.AttributeQuery.Properties = new MetadataPropertiesExpression(GetPropertyNames(itemsByEntity, "attribute", tree));
+                Request.Query.AttributeQuery.Criteria = GetFilter(itemsByEntity, "attribute");
             }
 
             if (tree.IsRequired("relationship_1_n") || tree.IsRequired("relationship_n_n"))
             {
                 Request.Query.RelationshipQuery = new RelationshipQueryExpression();
                 Request.Query.RelationshipQuery.Properties = new MetadataPropertiesExpression(GetPropertyNames(itemsByEntity, "relationship_1_n", tree).Union(GetPropertyNames(itemsByEntity, "relationship_n_n", tree)).ToArray());
+                Request.Query.RelationshipQuery.Criteria = GetFilter(itemsByEntity, "relationship_1_n");
             }
 
             if (!itemsByEntity.ContainsKey("localizedlabel"))
             {
+                var qry = new QueryExpression("usersettings");
+                qry.TopCount = 1;
+                qry.ColumnSet = new ColumnSet("localeid");
+                qry.Criteria.AddCondition("systemuserid", ConditionOperator.EqualUserId);
+                var userLink = qry.AddLink("systemuser", "systemuserid", "systemuserid");
+                var orgLink = userLink.AddLink("organization", "organizationid", "organizationid");
+                orgLink.EntityAlias = "org";
+                orgLink.Columns = new ColumnSet("localeid");
+                var locale = org.RetrieveMultiple(qry).Entities.Single();
+
+                int localeId;
+
+                if (locale.Contains("localeid"))
+                    localeId = locale.GetAttributeValue<int>("localeid");
+                else
+                    localeId = locale.GetAliasedAttributeValue<int>("org.localeid");
+
                 Request.Query.LabelQuery = new LabelQueryExpression();
-                Request.Query.LabelQuery.FilterLanguages.Add(1033); // TODO: Get user language
+                Request.Query.LabelQuery.FilterLanguages.Add(localeId);
             }
 
             return base.ExecuteInternal(org, metadata, options);
+        }
+
+        private MetadataFilterExpression GetFilter(IDictionary<string, List<object>> itemsByEntity, string entity)
+        {
+            if (!itemsByEntity.TryGetValue(entity, out var items))
+                return null;
+
+            var filters = items.OfType<filter>().ToList();
+
+            if (filters.Count != 1)
+                return null;
+
+            if (!ConvertFilter(entity, filters[0], out var filter))
+                return null;
+
+            return filter;
+        }
+
+        private bool ConvertFilter(string entity, filter filter, out MetadataFilterExpression converted)
+        {
+            var mmd = MetaMetadata.GetMetadata().Single(md => md.LogicalName == entity);
+            var metadata = mmd.GetEntityMetadata();
+            var type = mmd.Type;
+
+            converted = new MetadataFilterExpression(filter.type == filterType.and ? LogicalOperator.And : LogicalOperator.Or);
+
+            foreach (var condition in filter.Items.OfType<condition>())
+            {
+                if (!String.IsNullOrEmpty(condition.entityname))
+                {
+                    if (filter.type == filterType.or)
+                        return false;
+
+                    continue;
+                }
+
+                if (!String.IsNullOrEmpty(condition.valueof))
+                {
+                    if (filter.type == filterType.or)
+                        return false;
+
+                    continue;
+                }
+
+                var attribute = metadata.Attributes.Single(a => a.LogicalName == condition.attribute);
+                var prop = type.GetProperty(attribute.SchemaName);
+
+                var convertedCondition = new MetadataConditionExpression();
+                convertedCondition.PropertyName = attribute.SchemaName;
+
+                switch (condition.@operator)
+                {
+                    case @operator.@null:
+                        convertedCondition.ConditionOperator = MetadataConditionOperator.Equals;
+                        convertedCondition.Value = null;
+                        break;
+
+                    case @operator.notnull:
+                        convertedCondition.ConditionOperator = MetadataConditionOperator.NotEquals;
+                        convertedCondition.Value = null;
+                        break;
+
+                    case @operator.eq:
+                        convertedCondition.ConditionOperator = MetadataConditionOperator.Equals;
+                        convertedCondition.Value = Convert.ChangeType(condition.value, prop.PropertyType);
+                        break;
+
+                    case @operator.ne:
+                        convertedCondition.ConditionOperator = MetadataConditionOperator.NotEquals;
+                        convertedCondition.Value = Convert.ChangeType(condition.value, prop.PropertyType);
+                        break;
+
+                    case @operator.lt:
+                        convertedCondition.ConditionOperator = MetadataConditionOperator.LessThan;
+                        convertedCondition.Value = Convert.ChangeType(condition.value, prop.PropertyType);
+                        break;
+
+                    case @operator.gt:
+                        convertedCondition.ConditionOperator = MetadataConditionOperator.GreaterThan;
+                        convertedCondition.Value = Convert.ChangeType(condition.value, prop.PropertyType);
+                        break;
+
+                    case @operator.@in:
+                        convertedCondition.ConditionOperator = MetadataConditionOperator.In;
+                        convertedCondition.Value = condition.Items.Select(i => Convert.ChangeType(i.Value, prop.PropertyType)).ToArray();
+                        break;
+
+                    case @operator.notin:
+                        convertedCondition.ConditionOperator = MetadataConditionOperator.NotIn;
+                        convertedCondition.Value = condition.Items.Select(i => Convert.ChangeType(i.Value, prop.PropertyType)).ToArray();
+                        break;
+
+                    default:
+                        if (filter.type == filterType.or)
+                            return false;
+
+                        continue;
+                }
+
+                converted.Conditions.Add(convertedCondition);
+            }
+
+            foreach (var subFilter in filter.Items.OfType<filter>())
+            {
+                if (ConvertFilter(entity, subFilter, out var convertedSubFilter))
+                    converted.Filters.Add(convertedSubFilter);
+                else
+                    return false;
+            }
+
+            return true;
         }
 
         private IDictionary<string, List<object>> GetItemsByEntity()
