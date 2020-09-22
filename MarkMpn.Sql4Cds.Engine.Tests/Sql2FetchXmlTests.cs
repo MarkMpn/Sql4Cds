@@ -4,6 +4,7 @@ using System.Data;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using System.Xml.Serialization;
 using FakeXrmEasy;
 using FakeXrmEasy.FakeMessageExecutors;
@@ -110,8 +111,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 "accountid",
                 "createdon",
+                "employees",
                 "name",
-                "primarycontactid"
+                "primarycontactid",
+                "turnover"
             }, ((SelectQuery)queries[0]).ColumnSet);
         }
 
@@ -141,8 +144,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 "accountid",
                 "createdon",
+                "employees",
                 "name",
                 "primarycontactid",
+                "turnover",
                 "name"
             }, ((SelectQuery)queries[0]).ColumnSet);
         }
@@ -747,6 +752,51 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void SelectArithmetic()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT employees + 1 AS a, employees * 2 AS b, turnover / 3 AS c, turnover - 4 AS d, turnover / employees AS e FROM account";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='employees' />
+                        <attribute name='turnover' />
+                    </entity>
+                </fetch>
+            ");
+
+            var id = Guid.NewGuid();
+            context.Data["account"] = new Dictionary<Guid, Entity>
+            {
+                [id] = new Entity("account", id)
+                {
+                    ["accountid"] = id,
+                    ["employees"] = 2,
+                    ["turnover"] = new Money(9)
+                }
+            };
+
+            queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+
+            Assert.AreEqual(1, ((EntityCollection)queries[0].Result).Entities.Count);
+            Assert.AreEqual(3, ((EntityCollection)queries[0].Result).Entities[0]["a"]);
+            Assert.AreEqual(4, ((EntityCollection)queries[0].Result).Entities[0]["b"]);
+            Assert.AreEqual(3M, ((EntityCollection)queries[0].Result).Entities[0]["c"]);
+            Assert.AreEqual(5M, ((EntityCollection)queries[0].Result).Entities[0]["d"]);
+            Assert.AreEqual(4.5M, ((EntityCollection)queries[0].Result).Entities[0]["e"]);
+
+        }
+
+        [TestMethod]
         public void WhereComparingTwoFields()
         {
             var context = new XrmFakedContext();
@@ -1003,6 +1053,50 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
 
             Assert.AreEqual("--CDS--", context.Data["contact"][guid]["firstname"]);
+        }
+
+        [TestMethod]
+        public void StringFunctions()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT trim(firstname) as trim, ltrim(firstname) as ltrim, rtrim(firstname) as rtrim, substring(firstname, 2, 3) as substring23, len(firstname) as len FROM contact";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                    </entity>
+                </fetch>
+            ");
+
+            var guid1 = Guid.NewGuid();
+            context.Data["contact"] = new Dictionary<Guid, Entity>
+            {
+                [guid1] = new Entity("contact", guid1)
+                {
+                    ["contactid"] = guid1,
+                    ["firstname"] = " Mark "
+                }
+            };
+
+            queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+
+            Assert.AreEqual(1, ((EntityCollection)queries[0].Result).Entities.Count);
+
+            var entity = ((EntityCollection)queries[0].Result).Entities[0];
+            Assert.AreEqual("Mark", entity.GetAttributeValue<string>("trim"));
+            Assert.AreEqual("Mark ", entity.GetAttributeValue<string>("ltrim"));
+            Assert.AreEqual(" Mark", entity.GetAttributeValue<string>("rtrim"));
+            Assert.AreEqual("Mar", entity.GetAttributeValue<string>("substring23"));
+            Assert.AreEqual(5, entity.GetAttributeValue<int>("len"));
         }
 
         [TestMethod]
@@ -1923,6 +2017,24 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     </entity>
                 </fetch>
             ");
+        }
+
+        [TestMethod]
+        public void TSqlAggregates()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+            sql2FetchXml.TSqlEndpointAvailable = true;
+
+            var query = "SELECT COUNT(*) FROM account WHERE name IS NULL";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            Assert.AreEqual("SELECT COUNT(*) FROM account AS account WHERE name IS NULL; ", Regex.Replace(queries[0].Sql, "\\s+", " "));
         }
 
         [TestMethod]

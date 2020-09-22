@@ -219,6 +219,17 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 foreach (var statement in batch.Statements)
                 {
+                    string sqlStatement = null;
+
+                    if (TSqlEndpointAvailable)
+                    {
+                        var statementFragment = dom.Parse(new StringReader(statement.ToSql()), out _);
+                        var statementScript = (TSqlScript)statementFragment;
+                        statementScript.Accept(new AddDefaultTableAliasesVisitor());
+                        statementScript.ScriptTokenStream = null;
+                        sqlStatement = statementScript.ToSql();
+                    }
+
                     Query query;
 
                     if (statement is SelectStatement select)
@@ -232,10 +243,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     else
                         throw new NotSupportedQueryFragmentException("Unsupported statement", statement);
 
-                    statement.Accept(new AddDefaultTableAliasesVisitor());
-                    statement.ScriptTokenStream = null;
-
-                    query.Sql = statement.ToSql();
+                    query.Sql = sqlStatement;
                     queries.Add(query);
                 }
             }
@@ -802,43 +810,50 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (rhsValue.Type.IsGenericType && rhsValue.Type.GetGenericTypeDefinition() == typeof(Nullable<>))
                     rhsValue = Expression.Property(rhsValue, rhsValue.Type.GetProperty("Value"));
 
+                // If one value is a decimal and another isn't, convert them
+                if (lhsValue.Type == typeof(decimal) && (rhsValue.Type == typeof(int) || rhsValue.Type == typeof(double)))
+                    rhsValue = Expression.Convert(rhsValue, typeof(decimal));
+
+                if (rhsValue.Type == typeof(decimal) && (lhsValue.Type == typeof(int) || lhsValue.Type == typeof(double)))
+                    lhsValue = Expression.Convert(lhsValue, typeof(decimal));
+
                 Expression coreOperator;
 
                 switch (binary.BinaryExpressionType)
                 {
                     case BinaryExpressionType.Add:
                         if (lhs.Type == typeof(string))
-                            coreOperator = Expression.Add(lhs, rhs, typeof(string).GetMethod("Concat", new[] { typeof(object), typeof(object) }));
+                            coreOperator = Expression.Add(lhsValue, rhsValue, typeof(string).GetMethod("Concat", new[] { typeof(object), typeof(object) }));
                         else
-                            coreOperator = Expression.Add(lhs, rhs);
+                            coreOperator = Expression.Add(lhsValue, rhsValue);
                         break;
 
                     case BinaryExpressionType.BitwiseAnd:
-                        coreOperator = Expression.And(lhs, rhs);
+                        coreOperator = Expression.And(lhsValue, rhsValue);
                         break;
 
                     case BinaryExpressionType.BitwiseOr:
-                        coreOperator = Expression.Or(lhs, rhs);
+                        coreOperator = Expression.Or(lhsValue, rhsValue);
                         break;
 
                     case BinaryExpressionType.BitwiseXor:
-                        coreOperator = Expression.ExclusiveOr(lhs, rhs);
+                        coreOperator = Expression.ExclusiveOr(lhsValue, rhsValue);
                         break;
 
                     case BinaryExpressionType.Divide:
-                        coreOperator = Expression.Divide(lhs, rhs);
+                        coreOperator = Expression.Divide(lhsValue, rhsValue);
                         break;
 
                     case BinaryExpressionType.Modulo:
-                        coreOperator = Expression.Modulo(lhs, rhs);
+                        coreOperator = Expression.Modulo(lhsValue, rhsValue);
                         break;
 
                     case BinaryExpressionType.Multiply:
-                        coreOperator = Expression.Multiply(lhs, rhs);
+                        coreOperator = Expression.Multiply(lhsValue, rhsValue);
                         break;
 
                     case BinaryExpressionType.Subtract:
-                        coreOperator = Expression.Subtract(lhs, rhs);
+                        coreOperator = Expression.Subtract(lhsValue, rhsValue);
                         break;
 
                     default:

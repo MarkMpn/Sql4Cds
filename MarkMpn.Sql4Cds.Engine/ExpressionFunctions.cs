@@ -399,6 +399,87 @@ namespace MarkMpn.Sql4Cds.Engine
 
             return selected.Any(osv => values.Contains(osv.Value));
         }
+
+        /// <summary>
+        /// Returns the number of characters of the specified string expression, excluding trailing spaces
+        /// </summary>
+        /// <param name="s">The string expression to be evaluated</param>
+        /// <returns></returns>
+        public static int? Len(string s)
+        {
+            if (s == null)
+                return null;
+
+            return s.TrimEnd().Length;
+        }
+
+        /// <summary>
+        /// Returns part of a character expression
+        /// </summary>
+        /// <param name="expression">A character expression</param>
+        /// <param name="start">An integer that specifies where the returned characters start (the numbering is 1 based, meaning that the first character in the expression is 1)</param>
+        /// <param name="length">A positive integer that specifies how many characters of the expression will be returned</param>
+        /// <returns></returns>
+        public static string Substring(string expression, int? start, int? length)
+        {
+            if (length < 0)
+                throw new ArgumentOutOfRangeException(nameof(length));
+
+            if (expression == null || start == null || length == null)
+                return null;
+
+            if (start < 1)
+                start = 1;
+
+            if (start > expression.Length)
+                start = expression.Length;
+
+            start--;
+
+            if (start + length > expression.Length)
+                length = expression.Length - start;
+
+            return expression.Substring(start.Value, length.Value);
+        }
+
+        /// <summary>
+        /// Removes the space character from the start and end of a string
+        /// </summary>
+        /// <param name="expression">A character expression where characters should be removed</param>
+        /// <returns></returns>
+        public static string Trim(string expression)
+        {
+            if (expression == null)
+                return expression;
+
+            return expression.Trim(' ');
+        }
+
+        /// <summary>
+        /// Removes the space character from the start of a string
+        /// </summary>
+        /// <param name="expression">A character expression where characters should be removed</param>
+        /// <returns></returns>
+        public static string LTrim(string expression)
+        {
+            if (expression == null)
+                return expression;
+
+            return expression.TrimStart(' ');
+        }
+
+        /// <summary>
+        /// Removes the space character from the end of a string
+        /// </summary>
+        /// <param name="expression">A character expression where characters should be removed</param>
+        /// <returns></returns>
+        public static string RTrim(string expression)
+        {
+            if (expression == null)
+                return expression;
+
+            return expression.TrimEnd(' ');
+        }
     }
 
     /// <summary>

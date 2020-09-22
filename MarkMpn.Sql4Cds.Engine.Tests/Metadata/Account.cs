@@ -20,6 +20,12 @@ namespace MarkMpn.Sql4Cds.Engine.Tests.Metadata
         [AttributeLogicalName("createdon")]
         public DateTime? CreatedOn { get; set; }
 
+        [AttributeLogicalName("turnover")]
+        public Money Turnover { get; set; }
+
+        [AttributeLogicalName("employees")]
+        public int? Employees { get; set; }
+
         [RelationshipSchemaName("contact_account")]
         public IEnumerable<Contact> Contacts { get; }
 
