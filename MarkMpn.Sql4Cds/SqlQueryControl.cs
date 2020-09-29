@@ -8,6 +8,7 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
+using System.Xml.Serialization;
 using MarkMpn.Sql4Cds.Engine;
 using McTools.Xrm.Connection;
 using Microsoft.ApplicationInsights;
@@ -386,6 +387,8 @@ namespace MarkMpn.Sql4Cds
 
                     foreach (var query in queries.Reverse())
                     {
+                        var isMetadata = query.GetType().BaseType.IsGenericType && query.GetType().BaseType.GetGenericTypeDefinition() == typeof(MetadataQuery<,>);
+
                         if (execute)
                         {
                             Control display = null;
@@ -394,7 +397,6 @@ namespace MarkMpn.Sql4Cds
                             {
                                 var entityCollection = query.Result as EntityCollection;
                                 var dataTable = query.Result as DataTable;
-                                var isMetadata = query.GetType().BaseType.IsGenericType && query.GetType().BaseType.GetGenericTypeDefinition() == typeof(MetadataQuery<,>);
 
                                 var grid = entityCollection != null ? new CRMGridView() : new DataGridView();
 
@@ -524,13 +526,43 @@ namespace MarkMpn.Sql4Cds
                                 display = msgDisplay;
                             }
 
-                            if (query is FetchXmlQuery fxq && fxq.FetchXml != null)
+                            if (isMetadata)
+                            {
+                                var queryDisplay = CreateXmlEditor();
+                                queryDisplay.Text = SerializeRequest(query.GetType().GetProperty("Request").GetValue(query));
+                                queryDisplay.ReadOnly = true;
+
+                                var metadataInfo = CreatePostProcessingWarning(null, true);
+
+                                if (display == null)
+                                {
+                                    var panel = new Panel();
+                                    panel.Controls.Add(queryDisplay);
+                                    panel.Controls.Add(metadataInfo);
+                                    display = panel;
+                                }
+                                else
+                                {
+                                    var tab = new TabControl();
+                                    tab.TabPages.Add("Results");
+                                    tab.TabPages.Add("Request");
+                                    tab.TabPages[0].Controls.Add(display);
+                                    tab.TabPages[1].Controls.Add(queryDisplay);
+                                    tab.TabPages[1].Controls.Add(metadataInfo);
+
+                                    display.Dock = DockStyle.Fill;
+                                    queryDisplay.Dock = DockStyle.Fill;
+
+                                    display = tab;
+                                }
+                            }
+                            else if (query is FetchXmlQuery fxq && fxq.FetchXml != null)
                             {
                                 var xmlDisplay = CreateXmlEditor();
                                 xmlDisplay.Text = fxq.FetchXmlString;
                                 xmlDisplay.ReadOnly = true;
 
-                                var postWarning = CreatePostProcessingWarning(fxq);
+                                var postWarning = CreatePostProcessingWarning(fxq, false);
                                 var toolbar = CreateFXBToolbar(xmlDisplay);
 
                                 if (display == null)
@@ -566,13 +598,27 @@ namespace MarkMpn.Sql4Cds
 
                             AddResult(display, queries.Length > 1);
                         }
+                        else if (isMetadata)
+                        {
+                            query.GetType().GetMethod("FinalizeRequest").Invoke(query, new object[] { Service });
+                            var queryDisplay = CreateXmlEditor();
+                            queryDisplay.Text = SerializeRequest(query.GetType().GetProperty("Request").GetValue(query));
+                            queryDisplay.ReadOnly = true;
+                            queryDisplay.Dock = DockStyle.Fill;
+                            var metadataInfo = CreatePostProcessingWarning(null, true);
+                            var container = new Panel();
+                            container.Controls.Add(queryDisplay);
+                            container.Controls.Add(metadataInfo);
+
+                            AddResult(container, queries.Length > 1);
+                        }
                         else if (query is FetchXmlQuery fxq)
                         {
                             var xmlDisplay = CreateXmlEditor();
                             xmlDisplay.Text = fxq.FetchXmlString;
                             xmlDisplay.ReadOnly = true;
                             xmlDisplay.Dock = DockStyle.Fill;
-                            var postWarning = CreatePostProcessingWarning(fxq);
+                            var postWarning = CreatePostProcessingWarning(fxq, false);
                             var toolbar = CreateFXBToolbar(xmlDisplay);
                             var container = new Panel();
                             container.Controls.Add(xmlDisplay);
@@ -586,6 +632,17 @@ namespace MarkMpn.Sql4Cds
                     }
                 }
             });
+        }
+
+        private string SerializeRequest(object request)
+        {
+            using (var writer = new StringWriter())
+            {
+                var serializer = new XmlSerializer(request.GetType());
+                serializer.Serialize(writer, request);
+
+                return writer.ToString();
+            }
         }
 
         private void Grid_CellMouseUp(object sender, DataGridViewCellMouseEventArgs e)
@@ -659,9 +716,9 @@ namespace MarkMpn.Sql4Cds
             return toolbar;
         }
 
-        private Panel CreatePostProcessingWarning(FetchXmlQuery fxq)
+        private Panel CreatePostProcessingWarning(FetchXmlQuery fxq, bool metadata)
         {
-            if (fxq.Extensions.Count == 0)
+            if (!metadata && fxq.Extensions.Count == 0)
                 return null;
 
             var postWarning = new Panel
@@ -674,7 +731,7 @@ namespace MarkMpn.Sql4Cds
             };
             var link = new LinkLabel
             {
-                Text = "This query required additional processing. This FetchXML gives the required data, but will not give the final results when run outside SQL 4 CDS.",
+                Text = $"This query required additional processing. This {(metadata ? "metadata request" : "FetchXML")} gives the required data, but will not give the final results when run outside SQL 4 CDS.",
                 ForeColor = SystemColors.InfoText,
                 AutoSize = false,
                 Dock = DockStyle.Fill

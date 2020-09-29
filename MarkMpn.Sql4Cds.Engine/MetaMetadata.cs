@@ -289,7 +289,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (obj is MetadataBase mb && mb.MetadataId != null)
                 return mb.MetadataId.Value;
 
-            return Guid.Empty;
+            return Guid.NewGuid();
         }
 
         private static readonly Guid GuidNamespace = new Guid("{8F466553-A780-4FCB-8DA7-329EEB30416F}");

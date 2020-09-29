@@ -811,10 +811,19 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <returns>The data contained in the response, split y entity type</returns>
         protected abstract IDictionary<string, IDictionary<Guid, Entity>> GetData(TResponse response);
 
+        /// <summary>
+        /// Applies any final changes to the <see cref="Request"/> before it is executed
+        /// </summary>
+        /// <param name="org">The organization service that will execute the request</param>
+        public virtual void FinalizeRequest(IOrganizationService org)
+        {
+        }
+
         protected override object ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
             options.Progress($"Executing {Request.GetType().Name}...");
 
+            FinalizeRequest(org);
             var response = (TResponse) org.Execute(Request);
 
             // Convert the response to entities and execute the FetchXML request over that data
@@ -841,6 +850,9 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     if (value is AliasedValue a)
                         value = a.Value;
+
+                    if (value is EntityReference er)
+                        value = er.Id;
 
                     type = value.GetType();
                 }
@@ -1258,9 +1270,8 @@ namespace MarkMpn.Sql4Cds.Engine
             }
         }
 
-        protected override object ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        public override void FinalizeRequest(IOrganizationService org)
         {
-            // TODO: Populate request based on FetchXML. Some properties may be required to pull in child objects, e.g. labels
             // Build a tree to identify what higher level objects are required to retrieve lower level ones
             var tree = new RequiredEntity("entity",
                 new RequiredEntity("attribute",
@@ -1327,12 +1338,13 @@ namespace MarkMpn.Sql4Cds.Engine
                 Request.Query.LabelQuery = new LabelQueryExpression();
                 Request.Query.LabelQuery.FilterLanguages.Add(localeId);
             }
-
-            return base.ExecuteInternal(org, metadata, options);
         }
 
         private MetadataFilterExpression GetFilter(IDictionary<string, List<object>> itemsByEntity, string entity)
         {
+            if (!IsFilterValid)
+                return null;
+
             if (!itemsByEntity.TryGetValue(entity, out var items))
                 return null;
 
@@ -1345,6 +1357,52 @@ namespace MarkMpn.Sql4Cds.Engine
                 return null;
 
             return filter;
+        }
+
+        private bool IsFilterValid
+        {
+            get
+            {
+                // We can only apply a filter on the metadata if it is used by the FetchXML query in the same heirarchy as it is returned
+                // by the metadata query
+                var entity = FetchXml.Items.OfType<FetchEntityType>().Single();
+
+                if (entity.name != "entity")
+                    return false;
+
+                foreach (var join in entity.Items.OfType<FetchLinkEntityType>())
+                {
+                    if (HasNonLabelJoin(join))
+                        return false;
+
+                    if (join.name == "label" || join.name == "localizedlabel")
+                        continue;
+
+                    if (join.name == "attribute" && join.from == "entitylogicalname" && join.to == "logicalname")
+                        continue;
+
+                    if (join.name == "relationship_1_n" && join.from == "referencedentity" && join.to == "logicalname")
+                        continue;
+
+                    if (join.name == "relationship_1_n" && join.from == "referencingentity" && join.to == "logicalname")
+                        continue;
+
+                    if (join.name == "relationship_n_n" && join.from == "entity1logicalname" && join.to == "logicalname")
+                        continue;
+
+                    if (join.name == "relationship_n_n" && join.from == "entity2logicalname" && join.to == "logicalname")
+                        continue;
+
+                    return false;
+                }
+
+                return true;
+            }
+        }
+
+        private bool HasNonLabelJoin(FetchLinkEntityType source)
+        {
+            return source.Items.OfType<FetchLinkEntityType>().Any(join => join.name != "label" && join.name != "localizedlabel");
         }
 
         private bool ConvertFilter(string entity, filter filter, out MetadataFilterExpression converted)
