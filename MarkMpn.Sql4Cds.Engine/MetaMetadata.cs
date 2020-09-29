@@ -371,6 +371,13 @@ namespace MarkMpn.Sql4Cds.Engine
             attributes.Add(new UniqueIdentifierAttributeMetadata("LabelId") { LogicalName = "labelid" });
             return attributes.ToArray();
         }
+
+        public override Entity GetEntity(object obj, Guid? id, Entity parent)
+        {
+            var entity = base.GetEntity(obj, id, parent);
+            entity["labelid"] = id;
+            return entity;
+        }
     }
 
     class LocalizedLabelMetadata : MetaMetadata

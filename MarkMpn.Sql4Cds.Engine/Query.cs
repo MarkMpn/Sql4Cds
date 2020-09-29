@@ -877,7 +877,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (value is EntityReference er)
                         value = er.Id;
 
-                    row[col] = value;
+                    row[col] = value ?? DBNull.Value;
                 }
 
                 table.Rows.Add(row);
@@ -927,6 +927,9 @@ namespace MarkMpn.Sql4Cds.Engine
 
         private List<Sort> GetSorts(string alias, object[] items)
         {
+            if (items == null)
+                return new List<Sort>();
+
             var sorts = items
                 .OfType<FetchOrderType>()
                 .Select(sort => new Sort { Attribute = sort.alias ?? ((alias == null ? "" : (alias + ".")) + sort.attribute), Descending = sort.descending })
@@ -955,7 +958,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (!data.ContainsKey(name))
                 return results;
 
-            var joins = items.OfType<FetchLinkEntityType>().ToList();
+            var joins = items == null ? new List<FetchLinkEntityType>() : items.OfType<FetchLinkEntityType>().ToList();
 
             if (joins.Count == 0)
             {
@@ -1016,8 +1019,11 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             // Apply filters
-            foreach (var filter in items.OfType<filter>())
-                results.RemoveAll(e => !IsMatch(e, filter, alias));
+            if (items != null)
+            {
+                foreach (var filter in items.OfType<filter>())
+                    results.RemoveAll(e => !IsMatch(e, filter, alias));
+            }
 
             return results;
         }
@@ -1103,14 +1109,17 @@ namespace MarkMpn.Sql4Cds.Engine
                 result[name] = value;
             }
 
-            foreach (var aliasedAttribute in items.OfType<FetchAttributeType>().Where(a => a.alias != null))
+            if (items != null)
             {
-                var value = result[aliasedAttribute.name];
+                foreach (var aliasedAttribute in items.OfType<FetchAttributeType>().Where(a => a.alias != null))
+                {
+                    var value = result[aliasedAttribute.name];
 
-                if (!(value is AliasedValue))
-                    value = new AliasedValue(entity.LogicalName, aliasedAttribute.name, value);
+                    if (!(value is AliasedValue))
+                        value = new AliasedValue(entity.LogicalName, aliasedAttribute.name, value);
 
-                result[aliasedAttribute.alias] = value;
+                    result[aliasedAttribute.alias] = value;
+                }
             }
 
             return result;
@@ -1153,28 +1162,31 @@ namespace MarkMpn.Sql4Cds.Engine
             else if (!String.IsNullOrEmpty(alias))
                 attribute = alias + "." + condition.attribute;
 
-            var attrValue = entity[attribute];
-            var value = (object) condition.value;
+            var actualValue = entity[attribute];
+            var expectedValue = (object) condition.value;
 
             if (!String.IsNullOrEmpty(condition.valueof))
-                value = entity[condition.valueof];
+                expectedValue = entity[condition.valueof];
 
-            if (attrValue is AliasedValue a1)
-                attrValue = a1.Value;
+            if (actualValue is AliasedValue a1)
+                actualValue = a1.Value;
 
-            if (value is AliasedValue a2)
-                value = a2.Value;
+            if (expectedValue is AliasedValue a2)
+                expectedValue = a2.Value;
 
-            if (attrValue == null)
+            if (actualValue == null)
                 return condition.@operator == @operator.@null;
 
-            if (attrValue != null && value != null)
-                value = Convert.ChangeType(value, attrValue.GetType());
+            if (actualValue != null && expectedValue != null)
+                expectedValue = Convert.ChangeType(expectedValue, actualValue.GetType());
 
             switch (condition.@operator)
             {
                 case @operator.eq:
-                    return IsEqual(attrValue, value);
+                    return IsEqual(actualValue, expectedValue);
+
+                case @operator.@null:
+                    return actualValue == null;
 
                 default:
                     throw new NotSupportedException();
@@ -1272,6 +1284,10 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public override void FinalizeRequest(IOrganizationService org)
         {
+            // If there are conditions in a root-level filter that can be promoted to an inner-joined link entity, do so now to
+            // generate a more efficient filter later on.
+            MoveConditionsToLinkEntity();
+
             // Build a tree to identify what higher level objects are required to retrieve lower level ones
             var tree = new RequiredEntity("entity",
                 new RequiredEntity("attribute",
@@ -1337,6 +1353,49 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 Request.Query.LabelQuery = new LabelQueryExpression();
                 Request.Query.LabelQuery.FilterLanguages.Add(localeId);
+            }
+        }
+
+        private void MoveConditionsToLinkEntity()
+        {
+            if (!IsFilterValid)
+                return;
+
+            var entity = FetchXml.Items.OfType<FetchEntityType>().Single();
+            var filter = entity.Items.OfType<filter>().SingleOrDefault();
+
+            if (filter == null || filter.type != filterType.and)
+                return;
+
+            var joinedConditions = filter.Items
+                .OfType<condition>()
+                .Where(c => !String.IsNullOrEmpty(c.entityname))
+                .ToList();
+
+            foreach (var condition in joinedConditions)
+            {
+                var join = entity.Items.OfType<FetchLinkEntityType>().SingleOrDefault(j => j.alias == condition.entityname);
+
+                if (join == null)
+                    continue;
+
+                if (join.linktype != "inner")
+                    continue;
+
+                condition.entityname = null;
+                filter.Items = filter.Items.Except(new[] { condition }).ToArray();
+
+                var joinFilter = join.Items.OfType<filter>().SingleOrDefault();
+
+                if (joinFilter == null)
+                {
+                    joinFilter = new filter();
+                    joinFilter.Items = Array.Empty<object>();
+                    joinFilter.type = filterType.and;
+                    join.Items = join.Items.Concat(new[] { joinFilter }).ToArray();
+                }
+
+                joinFilter.Items = joinFilter.Items.Concat(new[] { condition }).ToArray();
             }
         }
 
@@ -1434,6 +1493,14 @@ namespace MarkMpn.Sql4Cds.Engine
                 var attribute = metadata.Attributes.Single(a => a.LogicalName == condition.attribute);
                 var prop = type.GetProperty(attribute.SchemaName);
 
+                if (prop.PropertyType == typeof(Label))
+                {
+                    if (filter.type == filterType.or)
+                        return false;
+
+                    continue;
+                }
+
                 var convertedCondition = new MetadataConditionExpression();
                 convertedCondition.PropertyName = attribute.SchemaName;
 
@@ -1493,7 +1560,7 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 if (ConvertFilter(entity, subFilter, out var convertedSubFilter))
                     converted.Filters.Add(convertedSubFilter);
-                else
+                else if (filter.type == filterType.or)
                     return false;
             }
 
@@ -1515,6 +1582,9 @@ namespace MarkMpn.Sql4Cds.Engine
                 list = new List<object>();
                 itemsByEntity[entity] = list;
             }
+
+            if (items == null)
+                return;
 
             list.AddRange(items);
 
