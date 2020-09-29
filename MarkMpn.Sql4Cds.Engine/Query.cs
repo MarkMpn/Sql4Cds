@@ -972,7 +972,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         var join = joins[i];
                         var joinResult = joinData[i];
-                        var joinKey = GetJoinKey(entity, alias, join.to);
+                        var joinKey = GetJoinKey(entity, null, join.to);
 
                         if (joinKey == null)
                         {
