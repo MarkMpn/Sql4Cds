@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
+using Microsoft.Xrm.Sdk.Metadata;
 
 namespace MarkMpn.Sql4Cds.Engine.Visitors
 {
@@ -29,7 +30,8 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             else if (node.SchemaObject.BaseIdentifier.Value.Equals("entity", StringComparison.OrdinalIgnoreCase) ||
                 node.SchemaObject.BaseIdentifier.Value.Equals("attribute", StringComparison.OrdinalIgnoreCase) ||
                 node.SchemaObject.BaseIdentifier.Value.Equals("relationship_1_n", StringComparison.OrdinalIgnoreCase) ||
-                node.SchemaObject.BaseIdentifier.Value.Equals("relationship_n_n", StringComparison.OrdinalIgnoreCase))
+                node.SchemaObject.BaseIdentifier.Value.Equals("relationship_n_n", StringComparison.OrdinalIgnoreCase) ||
+                MetaMetadata.GetMetadata().Any(meta => meta.LogicalName.Equals(node.SchemaObject.BaseIdentifier.Value, StringComparison.OrdinalIgnoreCase) && typeof(AttributeMetadata).IsAssignableFrom(meta.Type)))
             {
                 IsEntityMetadata = true;
                 IsMetadata = true;

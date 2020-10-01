@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.Serialization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
@@ -30,9 +31,15 @@ namespace MarkMpn.Sql4Cds.Engine
                 [typeof(OptionMetadata)] = new OptionMetadataMetadata(),
                 [typeof(EntityMetadata)] = new MetaMetadata(typeof(EntityMetadata), "entity"),
                 [typeof(AttributeMetadata)] = new MetaMetadata(typeof(AttributeMetadata), "attribute"),
+                [typeof(StringAttributeMetadata)] = new MetaMetadata(typeof(StringAttributeMetadata), "stringattribute"),
                 [typeof(OneToManyRelationshipMetadata)] = new MetaMetadata(typeof(OneToManyRelationshipMetadata), "relationship_1_n"),
                 [typeof(ManyToManyRelationshipMetadata)] = new MetaMetadata(typeof(ManyToManyRelationshipMetadata), "relationship_n_n")
             };
+
+            var attributeTypes = typeof(AttributeMetadata).GetCustomAttributes<KnownTypeAttribute>().Select(attr => attr.Type);
+
+            foreach (var attributeType in attributeTypes)
+                _metaMetadata[attributeType] = new MetaMetadata(attributeType, attributeType.Name.Replace("Metadata", "").ToLower());
         }
 
         public static MetaMetadata GetMetadataProvider(Type type)
@@ -156,7 +163,62 @@ namespace MarkMpn.Sql4Cds.Engine
 
             SetSealedProperty(metadata, nameof(metadata.Attributes), GetAttributes());
 
-            // TODO: Populate relationship metadata
+            var manyToOneRelationships = metadata.Attributes
+                .OfType<LookupAttributeMetadata>()
+                .SelectMany(attr => attr.Targets.Select(target => new OneToManyRelationshipMetadata
+                {
+                    ReferencedEntity = target,
+                    ReferencedAttribute = target + "id",
+                    ReferencingEntity = LogicalName,
+                    ReferencingAttribute = attr.LogicalName,
+                    SchemaName = $"{LogicalName}_{attr.LogicalName}_{target}"
+                }))
+                .ToList();
+
+            if (typeof(AttributeMetadata).IsAssignableFrom(Type))
+            {
+                manyToOneRelationships.Add(new OneToManyRelationshipMetadata
+                {
+                    ReferencedEntity = "entity",
+                    ReferencedAttribute = "logicalname",
+                    ReferencingEntity = LogicalName,
+                    ReferencingAttribute = "entitylogicalname",
+                    SchemaName = $"{LogicalName}_entity"
+                });
+            }
+
+            SetSealedProperty(metadata, nameof(metadata.ManyToOneRelationships), manyToOneRelationships.ToArray());
+
+            var oneToManyRelationships = GetMetadata()
+                .SelectMany(meta => meta.GetAttributes().OfType<LookupAttributeMetadata>().Select(attr => new { Entity = meta, Attribute = attr }))
+                .Where(attr => attr.Attribute.Targets.Contains(LogicalName))
+                .Select(attr => new OneToManyRelationshipMetadata
+                {
+                    ReferencedEntity = LogicalName,
+                    ReferencedAttribute = LogicalName + "id",
+                    ReferencingEntity = attr.Entity.LogicalName,
+                    ReferencingAttribute = attr.Attribute.LogicalName,
+                    SchemaName = $"{attr.Entity.LogicalName}_{attr.Entity.LogicalName}_{LogicalName}"
+                })
+                .ToList();
+
+            if (Type == typeof(EntityMetadata))
+            {
+                oneToManyRelationships.AddRange(GetMetadata()
+                    .Where(meta => typeof(AttributeMetadata).IsAssignableFrom(meta.Type))
+                    .Select(meta => new OneToManyRelationshipMetadata
+                    {
+                        ReferencedEntity = "entity",
+                        ReferencedAttribute = "logicalname",
+                        ReferencingEntity = meta.LogicalName,
+                        ReferencingAttribute = "entitylogicalname",
+                        SchemaName = $"{meta.LogicalName}_entity"
+                    }));
+            }
+
+            SetSealedProperty(metadata, nameof(metadata.OneToManyRelationships), oneToManyRelationships.ToArray());
+
+            SetSealedProperty(metadata, nameof(metadata.ManyToManyRelationships), Array.Empty<ManyToManyRelationshipMetadata>());
 
             return metadata;
         }

@@ -1269,6 +1269,15 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (itemsByEntity.ContainsKey(LogicalName))
                     Required = true;
 
+                var meta = MetaMetadata.GetMetadata().Single(m => m.LogicalName == LogicalName);
+                var derivedTypes = MetaMetadata.GetMetadata().Where(m => meta.Type.IsAssignableFrom(m.Type)).Select(m => m.LogicalName);
+
+                foreach (var derivedType in derivedTypes)
+                {
+                    if (itemsByEntity.ContainsKey(derivedType))
+                        Required = true;
+                }
+
                 foreach (var child in Children)
                     child.SetRequired(itemsByEntity);
             }
@@ -1437,7 +1446,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (join.name == "label" || join.name == "localizedlabel")
                         continue;
 
-                    if (join.name == "attribute" && join.from == "entitylogicalname" && join.to == "logicalname")
+                    if (IsAttributeType(join.name) && join.from == "entitylogicalname" && join.to == "logicalname")
                         continue;
 
                     if (join.name == "relationship_1_n" && join.from == "referencedentity" && join.to == "logicalname")
@@ -1630,7 +1639,28 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
             }
 
+            if (entity == "attribute")
+            {
+                foreach (var attributeType in GetAttributeTypes())
+                    propNames.AddRange(GetPropertyNames(itemsByEntity, attributeType, tree));
+            }
+
             return propNames.ToArray();
+        }
+
+        private bool IsAttributeType(string logicalName)
+        {
+            if (logicalName == "attribute")
+                return true;
+
+            return GetAttributeTypes().Contains(logicalName);
+        }
+
+        private IEnumerable<string> GetAttributeTypes()
+        {
+            return MetaMetadata.GetMetadata()
+                .Where(meta => typeof(AttributeMetadata).IsAssignableFrom(meta.Type) && meta.Type != typeof(AttributeMetadata))
+                .Select(meta => meta.LogicalName);
         }
 
         protected override IDictionary<string, IDictionary<Guid, Entity>> GetData(RetrieveMetadataChangesResponse response) => MetaMetadata.GetData(response.EntityMetadata.ToArray());
