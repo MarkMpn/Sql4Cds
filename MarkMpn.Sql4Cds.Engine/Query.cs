@@ -1188,6 +1188,53 @@ namespace MarkMpn.Sql4Cds.Engine
                 case @operator.@null:
                     return actualValue == null;
 
+                case @operator.beginswith:
+                    return ((string)actualValue).StartsWith((string)expectedValue, StringComparison.OrdinalIgnoreCase);
+
+                case @operator.endswith:
+                    return ((string)actualValue).EndsWith((string)expectedValue, StringComparison.OrdinalIgnoreCase);
+
+                case @operator.ge:
+                    return Convert.ToDecimal(actualValue) >= Convert.ToDecimal(expectedValue);
+
+                case @operator.gt:
+                    return Convert.ToDecimal(actualValue) > Convert.ToDecimal(expectedValue);
+
+                case @operator.@in:
+                    return condition.Items
+                        .Select(i => Convert.ChangeType(i.Value, actualValue.GetType()))
+                        .Any(i => IsEqual(actualValue, i));
+
+                case @operator.le:
+                    return Convert.ToDecimal(actualValue) <= Convert.ToDecimal(expectedValue);
+
+                case @operator.lt:
+                    return Convert.ToDecimal(actualValue) < Convert.ToDecimal(expectedValue);
+
+                case @operator.like:
+                    return ExpressionFunctions.Like((string) actualValue, (string) expectedValue);
+
+                case @operator.ne:
+                case @operator.neq:
+                    return !IsEqual(actualValue, expectedValue);
+
+                case @operator.notbeginwith:
+                    return !((string)actualValue).StartsWith((string)expectedValue, StringComparison.OrdinalIgnoreCase);
+
+                case @operator.notendwith:
+                    return !((string)actualValue).EndsWith((string)expectedValue, StringComparison.OrdinalIgnoreCase);
+
+                case @operator.notin:
+                    return !condition.Items
+                        .Select(i => Convert.ChangeType(i.Value, actualValue.GetType()))
+                        .Any(i => IsEqual(actualValue, i));
+
+                case @operator.notlike:
+                    return !ExpressionFunctions.Like((string)actualValue, (string)expectedValue);
+
+                case @operator.notnull:
+                    return actualValue != null;
+
                 default:
                     throw new NotSupportedException();
             }
