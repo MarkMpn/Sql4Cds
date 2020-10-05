@@ -1178,7 +1178,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 return condition.@operator == @operator.@null;
 
             if (actualValue != null && expectedValue != null)
-                expectedValue = Convert.ChangeType(expectedValue, actualValue.GetType());
+                expectedValue = ChangeType(expectedValue, actualValue.GetType());
 
             switch (condition.@operator)
             {
@@ -1202,7 +1202,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 case @operator.@in:
                     return condition.Items
-                        .Select(i => Convert.ChangeType(i.Value, actualValue.GetType()))
+                        .Select(i => ChangeType(i.Value, actualValue.GetType()))
                         .Any(i => IsEqual(actualValue, i));
 
                 case @operator.le:
@@ -1226,7 +1226,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 case @operator.notin:
                     return !condition.Items
-                        .Select(i => Convert.ChangeType(i.Value, actualValue.GetType()))
+                        .Select(i => ChangeType(i.Value, actualValue.GetType()))
                         .Any(i => IsEqual(actualValue, i));
 
                 case @operator.notlike:
@@ -1249,6 +1249,17 @@ namespace MarkMpn.Sql4Cds.Engine
                 return xs.Equals(ys, StringComparison.OrdinalIgnoreCase);
 
             return x.Equals(y);
+        }
+
+        protected static object ChangeType(object value, Type type)
+        {
+            if (type == typeof(bool) && value is string boolStr && (boolStr == "1" || boolStr == "0"))
+                return boolStr == "1";
+
+            if (type.IsEnum && value is string enumStr)
+                return Enum.Parse(type, enumStr);
+
+            return Convert.ChangeType(value, type);
         }
 
         class FetchEqualityComparer : IEqualityComparer<object>
@@ -1461,7 +1472,29 @@ namespace MarkMpn.Sql4Cds.Engine
                 return null;
 
             if (!itemsByEntity.TryGetValue(entity, out var items))
-                return null;
+            {
+                if (entity == "attribute")
+                {
+                    foreach (var attributeType in GetAttributeTypes())
+                    {
+                        if (itemsByEntity.TryGetValue(attributeType, out var attributeItems))
+                        {
+                            if (items == null)
+                            {
+                                items = attributeItems;
+                                entity = attributeType;
+                            }
+                            else
+                            {
+                                return null;
+                            }
+                        }
+                    }
+                }
+
+                if (items == null)
+                    return null;
+            }
 
             var filters = items.OfType<filter>().ToList();
 
@@ -1482,14 +1515,16 @@ namespace MarkMpn.Sql4Cds.Engine
                 // by the metadata query
                 var entity = FetchXml.Items.OfType<FetchEntityType>().Single();
 
-                if (entity.name != "entity")
-                    return false;
+                return IsEntityFilterValid(entity.name, entity.Items);
+            }
+        }
 
-                foreach (var join in entity.Items.OfType<FetchLinkEntityType>())
+        private bool IsEntityFilterValid(string entity, object[] items)
+        {
+            if (entity == "entity")
+            {
+                foreach (var join in items.OfType<FetchLinkEntityType>())
                 {
-                    if (HasNonLabelJoin(join))
-                        return false;
-
                     if (join.name == "label" || join.name == "localizedlabel")
                         continue;
 
@@ -1510,14 +1545,60 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     return false;
                 }
-
-                return true;
             }
-        }
 
-        private bool HasNonLabelJoin(FetchLinkEntityType source)
-        {
-            return source.Items.OfType<FetchLinkEntityType>().Any(join => join.name != "label" && join.name != "localizedlabel");
+            if (IsAttributeType(entity))
+            {
+                foreach (var join in items.OfType<FetchLinkEntityType>())
+                {
+                    if (join.name == "label" || join.name == "localizedlabel")
+                        continue;
+
+                    if (IsAttributeType(join.name) && (join.from == "metadataid" || join.from == join.name + "id") && (join.to == "metadataid" || join.to == entity + "id"))
+                        continue;
+
+                    if (join.name == "entity" && join.from == "logicalname" && join.to == "entitylogicalname")
+                        continue;
+
+                    return false;
+                }
+            }
+
+            if (entity == "relationship_1_n")
+            {
+                foreach (var join in items.OfType<FetchLinkEntityType>())
+                {
+                    if (join.name == "label" || join.name == "localizedlabel")
+                        continue;
+
+                    if (join.name == "entity" && join.from == "logicalname" && (join.to == "referencedentity" || join.to == "referencingentity"))
+                        continue;
+
+                    return false;
+                }
+            }
+
+            if (entity == "relationship_n_n")
+            {
+                foreach (var join in items.OfType<FetchLinkEntityType>())
+                {
+                    if (join.name == "label" || join.name == "localizedlabel")
+                        continue;
+
+                    if (join.name == "entity" && join.from == "logicalname" && (join.to == "entity1logicalname" || join.to == "entity2logicalname"))
+                        continue;
+
+                    return false;
+                }
+            }
+
+            foreach (var join in items.OfType<FetchLinkEntityType>())
+            {
+                if (!IsEntityFilterValid(join.name, join.Items))
+                    return false;
+            }
+
+            return true;
         }
 
         private bool ConvertFilter(string entity, filter filter, out MetadataFilterExpression converted)
@@ -1527,6 +1608,19 @@ namespace MarkMpn.Sql4Cds.Engine
             var type = mmd.Type;
 
             converted = new MetadataFilterExpression(filter.type == filterType.and ? LogicalOperator.And : LogicalOperator.Or);
+
+            // If we're expecting a specific type of attribute, enforce this with a condition
+            if (typeof(AttributeMetadata).IsAssignableFrom(type) && type != typeof(AttributeMetadata))
+            {
+                var typeCondition = new MetadataConditionExpression
+                {
+                    PropertyName = nameof(AttributeMetadata.AttributeType),
+                    ConditionOperator = MetadataConditionOperator.Equals,
+                    Value = ((AttributeMetadata)Activator.CreateInstance(type)).AttributeType
+                };
+
+                converted.Conditions.Add(typeCondition);
+            }
 
             foreach (var condition in filter.Items.OfType<condition>())
             {
@@ -1548,6 +1642,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 var attribute = metadata.Attributes.Single(a => a.LogicalName == condition.attribute);
                 var prop = type.GetProperty(attribute.SchemaName);
+                var value = condition.value;
 
                 if (prop.PropertyType == typeof(Label))
                 {
@@ -1557,8 +1652,17 @@ namespace MarkMpn.Sql4Cds.Engine
                     continue;
                 }
 
+                if (typeof(AttributeMetadata).IsAssignableFrom(type) && prop.DeclaringType != typeof(AttributeMetadata))
+                {
+                    // Can only filter on properties of the base attribute type, not derived types.
+                    continue;
+                }
+
                 var convertedCondition = new MetadataConditionExpression();
                 convertedCondition.PropertyName = attribute.SchemaName;
+                var propType = prop.PropertyType;
+                if (propType.IsGenericType && propType.GetGenericTypeDefinition() == typeof(Nullable<>))
+                    propType = propType.GetGenericArguments()[0];
 
                 switch (condition.@operator)
                 {
@@ -1574,32 +1678,32 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     case @operator.eq:
                         convertedCondition.ConditionOperator = MetadataConditionOperator.Equals;
-                        convertedCondition.Value = Convert.ChangeType(condition.value, prop.PropertyType);
+                        convertedCondition.Value = ChangeType(condition.value, propType);
                         break;
 
                     case @operator.ne:
                         convertedCondition.ConditionOperator = MetadataConditionOperator.NotEquals;
-                        convertedCondition.Value = Convert.ChangeType(condition.value, prop.PropertyType);
+                        convertedCondition.Value = ChangeType(condition.value, propType);
                         break;
 
                     case @operator.lt:
                         convertedCondition.ConditionOperator = MetadataConditionOperator.LessThan;
-                        convertedCondition.Value = Convert.ChangeType(condition.value, prop.PropertyType);
+                        convertedCondition.Value = ChangeType(condition.value, propType);
                         break;
 
                     case @operator.gt:
                         convertedCondition.ConditionOperator = MetadataConditionOperator.GreaterThan;
-                        convertedCondition.Value = Convert.ChangeType(condition.value, prop.PropertyType);
+                        convertedCondition.Value = ChangeType(condition.value, propType);
                         break;
 
                     case @operator.@in:
                         convertedCondition.ConditionOperator = MetadataConditionOperator.In;
-                        convertedCondition.Value = condition.Items.Select(i => Convert.ChangeType(i.Value, prop.PropertyType)).ToArray();
+                        convertedCondition.Value = condition.Items.Select(i => ChangeType(i.Value, propType)).ToArray();
                         break;
 
                     case @operator.notin:
                         convertedCondition.ConditionOperator = MetadataConditionOperator.NotIn;
-                        convertedCondition.Value = condition.Items.Select(i => Convert.ChangeType(i.Value, prop.PropertyType)).ToArray();
+                        convertedCondition.Value = condition.Items.Select(i => ChangeType(i.Value, propType)).ToArray();
                         break;
 
                     default:
@@ -1656,33 +1760,33 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             var propNames = new List<string>();
 
-            if (itemsByEntity.TryGetValue(entity, out var items))
+            if (!itemsByEntity.TryGetValue(entity, out var items))
+                items = new List<object>();
+            
+            var allAttributes = items.OfType<allattributes>().Any();
+            var attributes = items.OfType<FetchAttributeType>().Select(a => a.name)
+                .Union(items.OfType<FetchOrderType>().Where(a => !String.IsNullOrEmpty(a.attribute)).Select(a => a.attribute))
+                .Union(GetConditions(items.OfType<filter>()).Where(c => String.IsNullOrEmpty(c.entityname)).Select(c => c.attribute))
+                .ToArray();
+
+            var metadata = MetaMetadata.GetMetadata().Single(md => md.LogicalName == entity);
+
+            foreach (var prop in metadata.Type.GetProperties())
             {
-                var allAttributes = items.OfType<allattributes>().Any();
-                var attributes = items.OfType<FetchAttributeType>().Select(a => a.name).ToArray();
+                if (!prop.CanRead)
+                    continue;
 
-                if (allAttributes || attributes.Length > 0)
+                if (allAttributes ||
+                    attributes.Contains(prop.Name.ToLower()) ||
+                    attributes.Contains(prop.Name.ToLower() + "id") ||
+                    (prop.Name == nameof(MetadataBase.MetadataId) && attributes.Contains(metadata.LogicalName + "id")) ||
+                    (entity == "entity" && prop.Name == nameof(EntityMetadata.Attributes) && tree.IsRequired("attribute")) ||
+                    (entity == "entity" && prop.Name == nameof(EntityMetadata.OneToManyRelationships) && tree.IsRequired("relationship_1_n")) ||
+                    (entity == "entity" && prop.Name == nameof(EntityMetadata.ManyToOneRelationships) && tree.IsRequired("relationship_1_n")) ||
+                    (entity == "entity" && prop.Name == nameof(EntityMetadata.ManyToManyRelationships) && tree.IsRequired("relationship_n_n")) ||
+                    (prop.PropertyType == typeof(Label) && tree.IsRequired("label")))
                 {
-                    var metadata = MetaMetadata.GetMetadata().Single(md => md.LogicalName == entity);
-
-                    foreach (var prop in metadata.Type.GetProperties())
-                    {
-                        if (!prop.CanRead)
-                            continue;
-
-                        if (allAttributes ||
-                            attributes.Contains(prop.Name.ToLower()) ||
-                            attributes.Contains(prop.Name.ToLower() + "id") ||
-                            (prop.Name == nameof(MetadataBase.MetadataId) && attributes.Contains(metadata.LogicalName + "id")) ||
-                            (entity == "entity" && prop.Name == nameof(EntityMetadata.Attributes) && tree.IsRequired("attribute")) ||
-                            (entity == "entity" && prop.Name == nameof(EntityMetadata.OneToManyRelationships) && tree.IsRequired("relationship_1_n")) ||
-                            (entity == "entity" && prop.Name == nameof(EntityMetadata.ManyToOneRelationships) && tree.IsRequired("relationship_1_n")) ||
-                            (entity == "entity" && prop.Name == nameof(EntityMetadata.ManyToManyRelationships) && tree.IsRequired("relationship_n_n")) ||
-                            (prop.PropertyType == typeof(Label) && tree.IsRequired("label")))
-                        {
-                            propNames.Add(prop.Name);
-                        }
-                    }
+                    propNames.Add(prop.Name);
                 }
             }
 
@@ -1693,6 +1797,21 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             return propNames.ToArray();
+        }
+
+        private IEnumerable<condition> GetConditions(IEnumerable<filter> filters)
+        {
+            foreach (var filter in filters)
+            {
+                if (filter.Items == null)
+                    continue;
+
+                foreach (var childCondition in GetConditions(filter.Items.OfType<filter>()))
+                    yield return childCondition;
+
+                foreach (var condition in filter.Items.OfType<condition>())
+                    yield return condition;
+            }
         }
 
         private bool IsAttributeType(string logicalName)
