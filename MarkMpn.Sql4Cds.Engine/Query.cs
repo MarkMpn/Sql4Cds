@@ -1776,6 +1776,9 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (!prop.CanRead)
                     continue;
 
+                if (prop.DeclaringType == typeof(MetadataBase) && prop.Name == nameof(MetadataBase.ExtensionData))
+                    continue;
+
                 if (allAttributes ||
                     attributes.Contains(prop.Name.ToLower()) ||
                     attributes.Contains(prop.Name.ToLower() + "id") ||

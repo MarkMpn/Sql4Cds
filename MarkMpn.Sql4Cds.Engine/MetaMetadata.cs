@@ -241,6 +241,9 @@ namespace MarkMpn.Sql4Cds.Engine
             if (!prop.CanRead)
                 yield break;
 
+            if (prop.DeclaringType == typeof(MetadataBase) && prop.Name == nameof(MetadataBase.ExtensionData))
+                yield break;
+
             var type = prop.PropertyType;
 
             if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))

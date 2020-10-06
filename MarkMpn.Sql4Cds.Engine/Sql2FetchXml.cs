@@ -1212,6 +1212,9 @@ namespace MarkMpn.Sql4Cds.Engine
             if (queryType.IsGlobalOptionSet && queryType.IsEntityMetadata)
                 throw new NotSupportedQueryFragmentException("Cannot combine entity metadata and global optionset metadata", querySpec.FromClause);
 
+            if (queryType.IsMetadata && !queryType.IsGlobalOptionSet && !queryType.IsEntityMetadata)
+                throw new NotSupportedQueryFragmentException("Cannot query label, localizedlabel or option entities directly. They must be combined with another metadata entity type", querySpec.FromClause);
+
             // Only regular data queries natively support aggregates. For any metadata queries, make sure we force
             // them to be done in memory.
             if (!queryType.IsData)
