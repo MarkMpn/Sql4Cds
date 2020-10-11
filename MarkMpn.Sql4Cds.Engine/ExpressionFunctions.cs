@@ -593,6 +593,12 @@ namespace MarkMpn.Sql4Cds.Engine
             if (expr.Type == typeof(string) && type == typeof(DateTime?))
                 return Expr.Call(() => ParseDateTime(Arg<string>()), expr);
 
+            // Convert integers to optionset values
+            if (expr.Type == typeof(int) && type == typeof(OptionSetValue))
+                return Expr.Call(() => CreateOptionSetValue(Arg<int>()), expr);
+            if (expr.Type == typeof(int?) && type == typeof(OptionSetValue))
+                return Expr.Call(() => CreateOptionSetValue(Arg<int?>()), expr);
+
             // Check for compatible class types
             if (expr.Type.IsClass && type.IsClass)
             {
@@ -616,6 +622,14 @@ namespace MarkMpn.Sql4Cds.Engine
                 return null;
 
             return DateTime.Parse(str);
+        }
+
+        private static OptionSetValue CreateOptionSetValue(int? i)
+        {
+            if (i == null)
+                return null;
+
+            return new OptionSetValue(i.Value);
         }
     }
 }

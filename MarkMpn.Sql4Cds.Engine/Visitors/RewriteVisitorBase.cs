@@ -116,5 +116,11 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             base.ExplicitVisit(node);
             ReplaceExpression(node, n => n.WhenExpression);
         }
+
+        public override void ExplicitVisit(AssignmentSetClause node)
+        {
+            base.ExplicitVisit(node);
+            ReplaceExpression(node, n => n.NewValue);
+        }
     }
 }

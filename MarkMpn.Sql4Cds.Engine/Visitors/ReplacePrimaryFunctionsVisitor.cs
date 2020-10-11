@@ -1,4 +1,5 @@
-﻿using Microsoft.SqlServer.TransactSql.ScriptDom;
+﻿using System;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 
 namespace MarkMpn.Sql4Cds.Engine.Visitors
 {
@@ -97,6 +98,16 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                     rightFunc.Parameters.Add(param);
 
                 return rightFunc;
+            }
+
+            if (expression is UnaryExpression unary && unary.Expression is IntegerLiteral integer && unary.UnaryExpressionType != UnaryExpressionType.BitwiseNot)
+            {
+                if (unary.UnaryExpressionType == UnaryExpressionType.Negative)
+                {
+                    var value = Int32.Parse(integer.Value);
+                    integer.Value = (-value).ToString();
+                    return integer;
+                }
             }
 
             return expression;

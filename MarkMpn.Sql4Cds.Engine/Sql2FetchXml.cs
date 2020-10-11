@@ -363,7 +363,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
                     else
                     {
-                        var attrType = GetAttributeType(attr.AttributeType.Value);
+                        var attrType = GetAttributeType(attr.AttributeType.Value, true);
                         var expr = CompileScalarExpression(row.ColumnValues[i], new List<EntityTable>(), null, attrType, out _);
                         values[columnName] = expr(null);
                     }
@@ -679,7 +679,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         // Handle updates to the value from another field
                         // Ensure the source field is included in the query
-                        var targetType = GetAttributeType(attr.AttributeType.Value);
+                        var targetType = GetAttributeType(attr.AttributeType.Value, true);
                         return new { Key = attrName, Value = CompileScalarExpression(assign.NewValue, tables, null, targetType, out _) };
                     }
                 })
@@ -922,7 +922,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (attrMetadata.AttributeType == null)
                         throw new NotSupportedQueryFragmentException("Unknown attribute type", expr);
 
-                    type = GetAttributeType(attrMetadata.AttributeType.Value);
+                    type = GetAttributeType(attrMetadata.AttributeType.Value, false);
 
                     if (type == null)
                         throw new NotSupportedQueryFragmentException("Unknown attribute type", expr);
@@ -1061,8 +1061,9 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Determines the type of value that is stored in an attribute
         /// </summary>
         /// <param name="type">The type of attribute</param>
+        /// <param name="set">Indicates if the type is to be used for insert/update operations</param>
         /// <returns>The type of values that can be stored in the attribute</returns>
-        private static Type GetAttributeType(AttributeTypeCode type)
+        private static Type GetAttributeType(AttributeTypeCode type, bool set)
         {
             switch (type)
             {
@@ -1105,7 +1106,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 case AttributeTypeCode.Picklist:
                 case AttributeTypeCode.State:
                 case AttributeTypeCode.Status:
-                    return typeof(int?);
+                    return set ? typeof(OptionSetValue) : typeof(int?);
 
                 case AttributeTypeCode.String:
                     return typeof(string);
@@ -1652,7 +1653,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     continue;
 
                 var metadata = table.Metadata.Attributes.Single(a => a.LogicalName == columnName);
-                var type = GetAttributeType(metadata.AttributeType.Value);
+                var type = GetAttributeType(metadata.AttributeType.Value, false);
 
                 // If the attribute isn't already included, add it to the appropriate table
                 var attr = new FetchAttributeType
@@ -1832,7 +1833,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     default:
                         var metadata = table.Metadata.Attributes.Single(a => a.LogicalName == attr.name);
-                        outputColumns[attr.alias] = GetAttributeType(metadata.AttributeType.Value);
+                        outputColumns[attr.alias] = GetAttributeType(metadata.AttributeType.Value, false);
                         break;
                 }
             }
