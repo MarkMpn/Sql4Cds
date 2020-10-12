@@ -1259,6 +1259,9 @@ namespace MarkMpn.Sql4Cds.Engine
             if (type.IsEnum && value is string enumStr)
                 return Enum.Parse(type, enumStr);
 
+            if (type == typeof(Guid) && value is string guidStr)
+                return new Guid(guidStr);
+
             return Convert.ChangeType(value, type);
         }
 
