@@ -26,6 +26,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         bool IQueryExecutionOptions.UseTSQLEndpoint => false;
 
+        bool IQueryExecutionOptions.UseRetrieveTotalRecordCount => true;
+
         [TestMethod]
         public void SimpleSelect()
         {

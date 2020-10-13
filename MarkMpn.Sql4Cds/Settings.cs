@@ -37,5 +37,7 @@ namespace MarkMpn.Sql4Cds
         public bool QuotedIdentifiers { get; set; } = true;
 
         public bool UseTSQLEndpoint { get; set; }
+
+        public bool UseRetrieveTotalRecordCount { get; set; } = true;
     }
 }

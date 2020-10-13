@@ -248,7 +248,7 @@ namespace MarkMpn.Sql4Cds.Engine
         protected override object ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
             // Shortcut getting the total number of records in an entity where possible
-            if (RetrieveTotalRecordCount(org, metadata, out var result))
+            if (options.UseRetrieveTotalRecordCount && RetrieveTotalRecordCount(org, metadata, out var result))
                 return result;
 
             // Run the raw SQL query against the T-SQL endpoint

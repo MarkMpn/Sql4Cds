@@ -29,6 +29,7 @@ namespace MarkMpn.Sql4Cds
             friendlyNamesComboBox.SelectedIndex = settings.ShowEntityReferenceNames ? 1 : 0;
             localTimesComboBox.SelectedIndex = settings.ShowLocalTimes ? 1 : 0;
             tsqlEndpointCheckBox.Checked = settings.UseTSQLEndpoint;
+            retrieveTotalRecordCountCheckbox.Checked = settings.UseRetrieveTotalRecordCount;
 
             _settings = settings;
         }
@@ -50,6 +51,7 @@ namespace MarkMpn.Sql4Cds
                 _settings.ShowEntityReferenceNames = friendlyNamesComboBox.SelectedIndex == 1;
                 _settings.ShowLocalTimes = localTimesComboBox.SelectedIndex == 1;
                 _settings.UseTSQLEndpoint = tsqlEndpointCheckBox.Checked;
+                _settings.UseRetrieveTotalRecordCount = retrieveTotalRecordCountCheckbox.Checked;
             }
         }
     }

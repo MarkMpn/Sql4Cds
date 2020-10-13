@@ -65,5 +65,10 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Indicates if the T-SQL Endpoint should be used for query execution where possible
         /// </summary>
         bool UseTSQLEndpoint { get; }
+
+        /// <summary>
+        /// Indicates if a <see cref="Microsoft.Crm.Sdk.Messages.RetrieveTotalRecordCountRequest"/> should be used for simple SELECT count(*) FROM table queries
+        /// </summary>
+        bool UseRetrieveTotalRecordCount { get; }
     }
 }

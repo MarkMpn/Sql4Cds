@@ -1774,6 +1774,11 @@ namespace MarkMpn.Sql4Cds.Engine
                         // Select the appropriate aggregate depending on whether we're doing count(*) or count(field)
                         attr.aggregate = col.ColumnType == ColumnType.Wildcard ? AggregateType.count : AggregateType.countcolumn;
                         attr.aggregateSpecified = true;
+
+                        // If the column is the primary ID column of the main table we can use count instead of countcolumn
+                        // and therefore use RetrieveTotalRecordCount message
+                        if (table == tables[0] && attr.aggregate == AggregateType.countcolumn && attrName == table.Metadata.PrimaryIdAttribute)
+                            attr.aggregate = AggregateType.count;
                         break;
 
                     case "avg":
