@@ -178,6 +178,40 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void BetweenFilter()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT accountid, name FROM account WHERE employees BETWEEN 1 AND 10 AND turnover NOT BETWEEN 2 AND 20";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                        <attribute name='name' />
+                        <filter>
+                            <filter>
+                                <condition attribute='employees' operator='ge' value='1' />
+                                <condition attribute='employees' operator='le' value='10' />
+                            </filter>
+                            <filter type='or'>
+                                <condition attribute='turnover' operator='lt' value='2' />
+                                <condition attribute='turnover' operator='gt' value='20' />
+                            </filter>
+                        </filter>
+                    </entity>
+                </fetch>
+            ");
+        }
+
+        [TestMethod]
         public void FetchFilter()
         {
             var context = new XrmFakedContext();

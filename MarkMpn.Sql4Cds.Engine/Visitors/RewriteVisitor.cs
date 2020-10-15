@@ -54,5 +54,10 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
             return expression;
         }
+
+        protected override BooleanExpression ReplaceExpression(BooleanExpression expression)
+        {
+            return expression;
+        }
     }
 }

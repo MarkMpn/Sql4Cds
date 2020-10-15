@@ -112,5 +112,53 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
             return expression;
         }
+
+        protected override BooleanExpression ReplaceExpression(BooleanExpression expression)
+        {
+            if (expression is BooleanTernaryExpression between)
+            {
+                // field BETWEEN x AND y is equivalent to (field >= x AND field <= y)
+                // field NOT BETWEEN x AND y is equivalent to (field < x OR field > y)
+                var converted = new BooleanParenthesisExpression
+                {
+                    Expression = new BooleanBinaryExpression
+                    {
+                        FirstExpression = new BooleanComparisonExpression
+                        {
+                            FirstExpression = between.FirstExpression,
+                            ComparisonType = between.TernaryExpressionType == BooleanTernaryExpressionType.Between ? BooleanComparisonType.GreaterThanOrEqualTo : BooleanComparisonType.LessThan,
+                            SecondExpression = between.SecondExpression,
+
+                            FirstTokenIndex = between.FirstTokenIndex,
+                            LastTokenIndex = between.LastTokenIndex,
+                            ScriptTokenStream = between.ScriptTokenStream
+                        },
+                        BinaryExpressionType = between.TernaryExpressionType == BooleanTernaryExpressionType.Between ? BooleanBinaryExpressionType.And : BooleanBinaryExpressionType.Or,
+                        SecondExpression = new BooleanComparisonExpression
+                        {
+                            FirstExpression = between.FirstExpression,
+                            ComparisonType = between.TernaryExpressionType == BooleanTernaryExpressionType.Between ? BooleanComparisonType.LessThanOrEqualTo : BooleanComparisonType.GreaterThan,
+                            SecondExpression = between.ThirdExpression,
+
+                            FirstTokenIndex = between.FirstTokenIndex,
+                            LastTokenIndex = between.LastTokenIndex,
+                            ScriptTokenStream = between.ScriptTokenStream
+                        },
+
+                        FirstTokenIndex = between.FirstTokenIndex,
+                        LastTokenIndex = between.LastTokenIndex,
+                        ScriptTokenStream = between.ScriptTokenStream
+                    },
+
+                    FirstTokenIndex = between.FirstTokenIndex,
+                    LastTokenIndex = between.LastTokenIndex,
+                    ScriptTokenStream = between.ScriptTokenStream
+                };
+
+                return converted;
+            }
+
+            return expression;
+        }
     }
 }

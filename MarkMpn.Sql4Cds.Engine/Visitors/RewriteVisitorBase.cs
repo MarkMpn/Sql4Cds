@@ -21,6 +21,15 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
         protected abstract ScalarExpression ReplaceExpression(ScalarExpression expression, out string name);
 
+        private void ReplaceExpression<T>(T target, Expression<Func<T, BooleanExpression>> selector)
+        {
+            var property = (PropertyInfo)((MemberExpression)selector.Body).Member;
+            var expression = (BooleanExpression)property.GetValue(target);
+            property.SetValue(target, ReplaceExpression(expression));
+        }
+
+        protected abstract BooleanExpression ReplaceExpression(BooleanExpression expression);
+
         public override void ExplicitVisit(SelectScalarExpression node)
         {
             base.ExplicitVisit(node);
@@ -121,6 +130,33 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
         {
             base.ExplicitVisit(node);
             ReplaceExpression(node, n => n.NewValue);
+        }
+
+        public override void ExplicitVisit(BooleanTernaryExpression node)
+        {
+            base.ExplicitVisit(node);
+            ReplaceExpression(node, n => n.FirstExpression);
+            ReplaceExpression(node, n => n.SecondExpression);
+            ReplaceExpression(node, n => n.ThirdExpression);
+        }
+
+        public override void ExplicitVisit(BooleanBinaryExpression node)
+        {
+            base.ExplicitVisit(node);
+            ReplaceExpression(node, n => n.FirstExpression);
+            ReplaceExpression(node, n => n.SecondExpression);
+        }
+
+        public override void ExplicitVisit(BooleanNotExpression node)
+        {
+            base.ExplicitVisit(node);
+            ReplaceExpression(node, n => n.Expression);
+        }
+
+        public override void ExplicitVisit(BooleanParenthesisExpression node)
+        {
+            base.ExplicitVisit(node);
+            ReplaceExpression(node, n => n.Expression);
         }
     }
 }
