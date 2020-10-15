@@ -410,5 +410,15 @@ INNER JOIN {manyToMany.Entity2LogicalName}
             var con = GetService(treeView.SelectedNode);
             _newQuery(con);
         }
+
+        private void disconnectToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var node = treeView.SelectedNode;
+
+            while (node.Parent != null)
+                node = node.Parent;
+
+            node.Remove();
+        }
     }
 }
