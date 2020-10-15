@@ -131,7 +131,7 @@ namespace MarkMpn.Sql4Cds
 
         private SqlQueryControl CreateQuery(ConnectionDetail con, string sql, string sourcePlugin)
         { 
-            var query = new SqlQueryControl(con, _metadata[con], _ai, WorkAsyncWithCancel, msg => SetWorkingMessage(msg), ExecuteMethod, SendOutgoingMessage, sourcePlugin);
+            var query = new SqlQueryControl(con, _metadata[con], _ai, WorkAsyncWithCancel, msg => SetWorkingMessage(msg), ExecuteMethod, SendOutgoingMessage, sourcePlugin, msg => LogError(msg));
             query.InsertText(sql);
 
             query.Show(dockPanel, WeifenLuo.WinFormsUI.Docking.DockState.Document);

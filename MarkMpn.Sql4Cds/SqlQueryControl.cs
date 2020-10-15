@@ -26,6 +26,7 @@ namespace MarkMpn.Sql4Cds
         private readonly TelemetryClient _ai;
         private readonly Scintilla _editor;
         private readonly string _sourcePlugin;
+        private readonly Action<string> _log;
         private string _displayName;
         private string _filename;
         private bool _modified;
@@ -42,7 +43,7 @@ namespace MarkMpn.Sql4Cds
             _sqlIcon = Icon.FromHandle(Properties.Resources.SQLFile_16x.GetHicon());
         }
 
-        public SqlQueryControl(ConnectionDetail con, IAttributeMetadataCache metadata, TelemetryClient ai, Action<WorkAsyncInfo> workAsync, Action<string> setWorkingMessage, Action<Action> executeMethod, Action<MessageBusEventArgs> outgoingMessageHandler, string sourcePlugin)
+        public SqlQueryControl(ConnectionDetail con, IAttributeMetadataCache metadata, TelemetryClient ai, Action<WorkAsyncInfo> workAsync, Action<string> setWorkingMessage, Action<Action> executeMethod, Action<MessageBusEventArgs> outgoingMessageHandler, string sourcePlugin, Action<string> log)
         {
             InitializeComponent();
             _displayName = $"Query {++_queryCounter}";
@@ -57,6 +58,7 @@ namespace MarkMpn.Sql4Cds
             _sourcePlugin = sourcePlugin;
             _ai = ai;
             _con = con;
+            _log = log;
             SyncTitle();
 
             splitContainer.Panel1.Controls.Add(_editor);
@@ -364,7 +366,10 @@ namespace MarkMpn.Sql4Cds
                         return;
 
                     if (args.Error != null)
+                    {
                         _ai.TrackException(args.Error, new Dictionary<string, string> { ["Sql"] = sql });
+                        _log(args.Error.ToString());
+                    }
 
                     if (args.Error is NotSupportedQueryFragmentException err)
                         _editor.IndicatorFillRange(offset + err.Fragment.StartOffset, err.Fragment.FragmentLength);
