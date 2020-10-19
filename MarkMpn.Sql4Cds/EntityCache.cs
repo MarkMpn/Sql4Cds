@@ -1,5 +1,7 @@
 ﻿using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
+using MarkMpn.Sql4Cds.Engine;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
@@ -18,7 +20,9 @@ namespace MarkMpn.Sql4Cds
                 entities = ((RetrieveAllEntitiesResponse) org.Execute(new RetrieveAllEntitiesRequest
                 {
                     EntityFilters = EntityFilters.Entity
-                })).EntityMetadata;
+                })).EntityMetadata
+                .Where(e => !MetaMetadata.GetMetadata().Any(md => e.LogicalName == md.LogicalName))
+                .ToArray();
 
                 _cache[org] = entities;
             }

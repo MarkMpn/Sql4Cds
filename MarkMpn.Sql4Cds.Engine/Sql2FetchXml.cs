@@ -164,7 +164,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="quotedIdentifiers">Indicates if the SQL should be parsed using quoted identifiers</param>
         public Sql2FetchXml(IAttributeMetadataCache metadata, bool quotedIdentifiers)
         {
-            Metadata = metadata;
+            Metadata = new MetaMetadataCache(metadata);
             QuotedIdentifiers = quotedIdentifiers;
         }
 
@@ -1177,33 +1177,52 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <returns>The equivalent query converted for execution against CDS</returns>
         private SelectQuery ConvertSelectStatement(SelectStatement select, bool forceAggregateExpression)
         {
+            // Check for any DOM elements that don't have an equivalent in CDS
+            if (!(select.QueryExpression is QuerySpecification querySpec))
+                throw new NotSupportedQueryFragmentException("Unhandled SELECT query expression", select.QueryExpression);
+
+            if (select.ComputeClauses.Count != 0)
+                throw new NotSupportedQueryFragmentException("Unhandled SELECT compute clause", select);
+
+            if (select.Into != null)
+                throw new NotSupportedQueryFragmentException("Unhandled SELECT INTO clause", select.Into);
+
+            if (select.On != null)
+                throw new NotSupportedQueryFragmentException("Unhandled SELECT ON clause", select.On);
+
+            if (select.OptimizerHints.Count != 0)
+                throw new NotSupportedQueryFragmentException("Unhandled SELECT optimizer hints", select);
+
+            if (select.WithCtesAndXmlNamespaces != null)
+                throw new NotSupportedQueryFragmentException("Unhandled SELECT WITH clause", select.WithCtesAndXmlNamespaces);
+
+            if (querySpec.ForClause != null)
+                throw new NotSupportedQueryFragmentException("Unhandled SELECT FOR clause", querySpec.ForClause);
+
+            if (querySpec.FromClause == null)
+                throw new NotSupportedQueryFragmentException("No source entity specified", querySpec);
+
+            // Check if this query is against regular data entities or metadata.
+            var queryType = new QueryTypeVisitor();
+            querySpec.FromClause.Accept(queryType);
+
+            // We can't combine different types of data - each query must have a single ultimate data source
+            if (queryType.IsData && queryType.IsMetadata)
+                throw new NotSupportedQueryFragmentException("Cannot combine metadata and data", querySpec.FromClause);
+
+            if (queryType.IsGlobalOptionSet && queryType.IsEntityMetadata)
+                throw new NotSupportedQueryFragmentException("Cannot combine entity metadata and global optionset metadata", querySpec.FromClause);
+
+            if (queryType.IsMetadata && !queryType.IsGlobalOptionSet && !queryType.IsEntityMetadata)
+                throw new NotSupportedQueryFragmentException("Cannot query label, localizedlabel or option entities directly. They must be combined with another metadata entity type", querySpec.FromClause);
+
+            // Only regular data queries natively support aggregates. For any metadata queries, make sure we force
+            // them to be done in memory.
+            if (!queryType.IsData)
+                forceAggregateExpression = true;
+
             try
             {
-                // Check for any DOM elements that don't have an equivalent in CDS
-                if (!(select.QueryExpression is QuerySpecification querySpec))
-                    throw new NotSupportedQueryFragmentException("Unhandled SELECT query expression", select.QueryExpression);
-
-                if (select.ComputeClauses.Count != 0)
-                    throw new NotSupportedQueryFragmentException("Unhandled SELECT compute clause", select);
-
-                if (select.Into != null)
-                    throw new NotSupportedQueryFragmentException("Unhandled SELECT INTO clause", select.Into);
-
-                if (select.On != null)
-                    throw new NotSupportedQueryFragmentException("Unhandled SELECT ON clause", select.On);
-
-                if (select.OptimizerHints.Count != 0)
-                    throw new NotSupportedQueryFragmentException("Unhandled SELECT optimizer hints", select);
-
-                if (select.WithCtesAndXmlNamespaces != null)
-                    throw new NotSupportedQueryFragmentException("Unhandled SELECT WITH clause", select.WithCtesAndXmlNamespaces);
-
-                if (querySpec.ForClause != null)
-                    throw new NotSupportedQueryFragmentException("Unhandled SELECT FOR clause", querySpec.ForClause);
-
-                if (querySpec.FromClause == null)
-                    throw new NotSupportedQueryFragmentException("No source entity specified", querySpec);
-
                 // Store the original SQL again now so we can re-parse it if required to generate an alternative query
                 // to handle aggregates via an expression rather than FetchXML.
                 var sql = select.ToSql();
@@ -1223,6 +1242,13 @@ namespace MarkMpn.Sql4Cds.Engine
                 // all later steps must use expressions only as the FetchXML results will be incomplete.
                 var extensions = new List<IQueryExtension>();
 
+                if (queryType.IsMetadata)
+                {
+                    // Only minimal FetchXML support is provided in the query implementation for metadata, so force as much as
+                    // possible into memory
+                    extensions.Add(new NoOp());
+                }
+
                 var fetch = new FetchXml.FetchType();
                 var tables = HandleFromClause(querySpec.FromClause, fetch);
                 HandleWhereClause(querySpec.WhereClause, tables, extensions);
@@ -1239,12 +1265,18 @@ namespace MarkMpn.Sql4Cds.Engine
                     table.Sort();
 
                 // Return the final query
-                var query = new SelectQuery
-                {
-                    FetchXml = fetch,
-                    ColumnSet = columns,
-                    AllPages = fetch.page == null && fetch.count == null
-                };
+                SelectQuery query;
+
+                if (queryType.IsGlobalOptionSet)
+                    query = new GlobalOptionSetQuery();
+                else if (queryType.IsEntityMetadata)
+                    query = new EntityMetadataQuery();
+                else
+                    query = new SelectQuery();
+
+                query.FetchXml = fetch;
+                query.ColumnSet = columns;
+                query.AllPages = fetch.page == null && fetch.count == null;
 
                 foreach (var extension in extensions)
                     query.Extensions.Add(extension);
@@ -1260,7 +1292,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     script.Accept(new ReplacePrimaryFunctionsVisitor());
                     var originalSelect = (SelectStatement)script.Batches.Single().Statements.Single();
 
-                    query.AggregateAlternative = ConvertSelectStatement((SelectStatement)originalSelect, true);
+                    query.AggregateAlternative = ConvertSelectStatement(originalSelect, true);
                 }
 
                 return query;
@@ -2063,6 +2095,9 @@ namespace MarkMpn.Sql4Cds.Engine
 
                         foreach (var part in colName.Split('.'))
                             col.MultiPartIdentifier.Identifiers.Add(new Identifier { Value = part });
+
+                        if (col.MultiPartIdentifier.Identifiers.Count == 1 && tables.Count > 1)
+                            col.MultiPartIdentifier.Identifiers.Insert(0, new Identifier { Value = tables[0].Alias ?? tables[0].EntityName });
                     }
                     else if (fetch.aggregateSpecified && fetch.aggregate && sort.Expression is FunctionCall)
                     {
@@ -3402,6 +3437,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (alias.Equals(tables[0].Alias ?? tables[0].EntityName, StringComparison.OrdinalIgnoreCase))
                 {
                     table = tables[0];
+                    ValidateAttributeName(table, col);
                     return null;
                 }
 
@@ -3412,6 +3448,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (table == null)
                     throw new NotSupportedQueryFragmentException("Unknown table " + col.MultiPartIdentifier.Identifiers[0].Value, col);
 
+                ValidateAttributeName(table, col);
                 return alias;
             }
 
@@ -3447,6 +3484,13 @@ namespace MarkMpn.Sql4Cds.Engine
                 return null;
 
             return possibleEntities[0].Alias ?? possibleEntities[0].EntityName;
+        }
+
+        private void ValidateAttributeName(EntityTable table, ColumnReferenceExpression col)
+        {
+            var attrName = GetColumnAttribute(col);
+            if (!table.Metadata.Attributes.Any(attr => attr.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase)))
+                throw new NotSupportedQueryFragmentException("Unknown attribute", col);
         }
 
         private string GetColumnAttribute(ColumnReferenceExpression col)

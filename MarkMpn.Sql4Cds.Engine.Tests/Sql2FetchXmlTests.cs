@@ -1,12 +1,16 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using System.Xml.Serialization;
 using FakeXrmEasy;
+using FakeXrmEasy.FakeMessageExecutors;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
 
 namespace MarkMpn.Sql4Cds.Engine.Tests
@@ -2069,6 +2073,196 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual("SELECT COUNT(*) FROM account AS account WHERE name IS NULL; ", Regex.Replace(queries[0].Sql, "\\s+", " "));
         }
 
+        [TestMethod]
+        public void GlobalOptionSet()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+            context.AddFakeMessageExecutor<RetrieveAllOptionSetsRequest>(new RetrieveAllOptionSetsHandler());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT displayname FROM globaloptionset WHERE name = 'test'";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            Assert.IsInstanceOfType(queries.Single(), typeof(GlobalOptionSetQuery));
+
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='globaloptionset'>
+                        <attribute name='displayname' />
+                        <filter>
+                            <condition attribute='name' operator='eq' value='test' />
+                        </filter>
+                    </entity>
+                </fetch>");
+
+            queries[0].Execute(org, metadata, this);
+
+            var result = (DataTable)queries[0].Result;
+
+            Assert.AreEqual(1, result.Rows.Count);
+        }
+
+        [TestMethod]
+        public void GlobalOptionSetValues()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+            context.AddFakeMessageExecutor<RetrieveAllOptionSetsRequest>(new RetrieveAllOptionSetsHandler());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT gos.displayname, o.label FROM globaloptionset gos LEFT OUTER JOIN [option] o ON gos.globaloptionsetid = o.optionsetid AND o.value = 2 WHERE gos.name = 'test'";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            Assert.IsInstanceOfType(queries.Single(), typeof(GlobalOptionSetQuery));
+
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='globaloptionset'>
+                        <attribute name='displayname' />
+                        <link-entity name='option' from='optionsetid' to='globaloptionsetid' alias='o' link-type='outer'>
+                            <attribute name='label' />
+                            <filter>
+                                <condition attribute='value' operator='eq' value='2' />
+                            </filter>
+                        </link-entity>
+                        <filter>
+                            <condition attribute='name' operator='eq' value='test' />
+                        </filter>
+                    </entity>
+                </fetch>");
+
+            queries[0].Execute(org, metadata, this);
+
+            var result = (DataTable)queries[0].Result;
+
+            Assert.AreEqual(1, result.Rows.Count);
+            Assert.AreEqual("TestGlobalOptionSet", result.Rows[0][0]);
+            Assert.AreEqual("Value2", result.Rows[0][1]);
+        }
+
+        [TestMethod]
+        public void GlobalOptionSetTranslations()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+            context.AddFakeMessageExecutor<RetrieveAllOptionSetsRequest>(new RetrieveAllOptionSetsHandler());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT gos.displayname, dn.label FROM globaloptionset AS gos INNER JOIN localizedlabel AS dn ON gos.displaynameid = dn.labelid WHERE gos.name = 'test'";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            Assert.IsInstanceOfType(queries.Single(), typeof(GlobalOptionSetQuery));
+
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='globaloptionset'>
+                        <attribute name='displayname' />
+                        <link-entity name='localizedlabel' from='labelid' to='displaynameid' link-type='inner' alias='dn'>
+                            <attribute name='label' />
+                        </link-entity>
+                        <filter>
+                            <condition attribute='name' operator='eq' value='test' />
+                        </filter>
+                    </entity>
+                </fetch>");
+
+            queries[0].Execute(org, metadata, this);
+
+            var result = (DataTable)queries[0].Result;
+
+            Assert.AreEqual(2, result.Rows.Count);
+        }
+
+        [TestMethod]
+        public void EntityDetails()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+            context.AddFakeMessageExecutor<RetrieveMetadataChangesRequest>(new RetrieveMetadataChangesHandler(metadata));
+
+            var query = "SELECT logicalname FROM entity ORDER BY 1";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            Assert.IsInstanceOfType(queries.Single(), typeof(EntityMetadataQuery));
+
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='entity'>
+                        <attribute name='logicalname' />
+                        <order attribute='logicalname' />
+                    </entity>
+                </fetch>");
+
+            queries[0].Execute(org, metadata, this);
+
+            var result = (DataTable)queries[0].Result;
+
+            Assert.AreEqual(3, result.Rows.Count);
+            Assert.AreEqual("account", result.Rows[0]["logicalname"]);
+            Assert.AreEqual("contact", result.Rows[1]["logicalname"]);
+            Assert.AreEqual("new_customentity", result.Rows[2]["logicalname"]);
+        }
+
+        [TestMethod]
+        public void AttributeDetails()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+            context.AddFakeMessageExecutor<RetrieveMetadataChangesRequest>(new RetrieveMetadataChangesHandler(metadata));
+
+            var query = "SELECT e.logicalname, a.logicalname FROM entity e INNER JOIN attribute a ON e.logicalname = a.entitylogicalname WHERE e.logicalname = 'new_customentity' ORDER BY 1, 2";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            Assert.IsInstanceOfType(queries.Single(), typeof(EntityMetadataQuery));
+
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='entity'>
+                        <attribute name='logicalname' />
+                        <link-entity name='attribute' from='entitylogicalname' to='logicalname' alias='a' link-type='inner'>
+                            <attribute name='logicalname' />
+                            <order attribute='logicalname' />
+                        </link-entity>
+                        <filter type='and'>
+                            <condition attribute='logicalname' operator='eq' value='new_customentity' />
+                        </filter>
+                        <order attribute='logicalname' />
+                    </entity>
+                </fetch>");
+
+            queries[0].Execute(org, metadata, this);
+
+            var result = (DataTable)queries[0].Result;
+
+            Assert.AreEqual(3, result.Rows.Count);
+            Assert.AreEqual("new_customentityid", result.Rows[0]["a.logicalname"]);
+            Assert.AreEqual("new_name", result.Rows[1]["a.logicalname"]);
+            Assert.AreEqual("new_parentid", result.Rows[2]["a.logicalname"]);
+        }
+
         private void AssertFetchXml(Query[] queries, string fetchXml)
         {
             Assert.AreEqual(1, queries.Length);
@@ -2099,6 +2293,144 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         bool IQueryExecutionOptions.ConfirmDelete(int count, EntityMetadata meta)
         {
             return true;
+        }
+
+        private class RetrieveMetadataChangesHandler : IFakeMessageExecutor
+        {
+            private readonly IAttributeMetadataCache _metadata;
+
+            public RetrieveMetadataChangesHandler(IAttributeMetadataCache metadata)
+            {
+                _metadata = metadata;
+            }
+
+            public bool CanExecute(OrganizationRequest request)
+            {
+                return request is RetrieveMetadataChangesRequest;
+            }
+
+            public OrganizationResponse Execute(OrganizationRequest request, XrmFakedContext ctx)
+            {
+                var metadata = new EntityMetadataCollection
+                {
+                    _metadata["account"],
+                    _metadata["contact"],
+                    _metadata["new_customentity"]
+                };
+
+                foreach (var entity in metadata)
+                {
+                    if (entity.MetadataId == null)
+                        entity.MetadataId = Guid.NewGuid();
+
+                    foreach (var attribute in entity.Attributes)
+                    {
+                        if (attribute.MetadataId == null)
+                            attribute.MetadataId = Guid.NewGuid();
+                    }
+                }
+
+                var response = new RetrieveMetadataChangesResponse
+                {
+                    Results = new ParameterCollection
+                    {
+                        ["EntityMetadata"] = metadata
+                    }
+                };
+
+                return response;
+            }
+
+            public Type GetResponsibleRequestType()
+            {
+                return typeof(RetrieveMetadataChangesRequest);
+            }
+        }
+
+        private class RetrieveAllOptionSetsHandler : IFakeMessageExecutor
+        {
+            public bool CanExecute(OrganizationRequest request)
+            {
+                return request is RetrieveAllOptionSetsRequest;
+            }
+
+            public OrganizationResponse Execute(OrganizationRequest request, XrmFakedContext ctx)
+            {
+                var labels = new[]
+                {
+                    new LocalizedLabel("TestGlobalOptionSet", 1033) { MetadataId = Guid.NewGuid() },
+                    new LocalizedLabel("TranslatedDisplayName-Test", 9999) { MetadataId = Guid.NewGuid() },
+                    new LocalizedLabel("FooGlobalOptionSet", 1033) { MetadataId = Guid.NewGuid() },
+                    new LocalizedLabel("TranslatedDisplayName-Foo", 9999) { MetadataId = Guid.NewGuid() },
+                    new LocalizedLabel("BarGlobalOptionSet", 1033) { MetadataId = Guid.NewGuid() },
+                    new LocalizedLabel("TranslatedDisplayName-Bar", 9999) { MetadataId = Guid.NewGuid() },
+                    new LocalizedLabel("Value1", 1033) { MetadataId = Guid.NewGuid() },
+                    new LocalizedLabel("Value2", 1033) { MetadataId = Guid.NewGuid() }
+                };
+
+                return new RetrieveAllOptionSetsResponse
+                {
+                    Results = new ParameterCollection
+                    {
+                        ["OptionSetMetadata"] = new OptionSetMetadataBase[]
+                        {
+                            new OptionSetMetadata(new OptionMetadataCollection(new[]
+                            {
+                                new OptionMetadata(1) { MetadataId = Guid.NewGuid(), Label = new Label { UserLocalizedLabel = labels[6] } },
+                                new OptionMetadata(2) { MetadataId = Guid.NewGuid(), Label = new Label { UserLocalizedLabel = labels[7] } }
+                            }))
+                            {
+                                MetadataId = Guid.NewGuid(),
+                                Name = "test",
+                                DisplayName = new Label(
+                                    labels[0],
+                                    new[]
+                                    {
+                                        labels[0],
+                                        labels[1]
+                                    })
+                            },
+                            new OptionSetMetadata(new OptionMetadataCollection(new[]
+                            {
+                                new OptionMetadata(1) { MetadataId = Guid.NewGuid(), Label = new Label { UserLocalizedLabel = labels[6] } },
+                                new OptionMetadata(2) { MetadataId = Guid.NewGuid(), Label = new Label { UserLocalizedLabel = labels[7] } }
+                            }))
+                            {
+                                MetadataId = Guid.NewGuid(),
+                                Name = "foo",
+                                DisplayName = new Label(
+                                    labels[2],
+                                    new[]
+                                    {
+                                        labels[2],
+                                        labels[3]
+                                    })
+                            },
+                            new OptionSetMetadata(new OptionMetadataCollection(new[]
+                            {
+                                new OptionMetadata(1) { MetadataId = Guid.NewGuid(), Label = new Label { UserLocalizedLabel = labels[6] } },
+                                new OptionMetadata(2) { MetadataId = Guid.NewGuid(), Label = new Label { UserLocalizedLabel = labels[7] } }
+                            }))
+                            {
+                                MetadataId = Guid.NewGuid(),
+                                Name = "bar",
+                                DisplayName = new Label(
+                                    labels[4],
+                                    new[]
+                                    {
+                                        labels[4],
+                                        labels[5]
+                                    })
+                            }
+                        }
+                    }
+                };
+            }
+
+            public Type GetResponsibleRequestType()
+            {
+                return typeof(RetrieveAllOptionSetsRequest);
+            }
         }
     }
 }

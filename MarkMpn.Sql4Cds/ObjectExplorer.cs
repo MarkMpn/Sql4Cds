@@ -89,6 +89,28 @@ namespace MarkMpn.Sql4Cds
                 .ToArray();
         }
 
+        private TreeNode[] LoadMetadata(TreeNode parent)
+        {
+            var metadata = MetaMetadata.GetMetadata().Select(md => md.GetEntityMetadata());
+
+            return metadata
+                .OrderBy(e => e.LogicalName)
+                .Select(e =>
+                {
+                    var node = new TreeNode(e.LogicalName);
+                    node.Tag = e;
+                    SetIcon(node, "Entity");
+                    var attrsNode = node.Nodes.Add("Attributes");
+                    SetIcon(attrsNode, "Folder");
+                    AddVirtualChildNodes(attrsNode, LoadAttributes);
+                    var relsNode = node.Nodes.Add("Relationships");
+                    SetIcon(relsNode, "Folder");
+                    AddVirtualChildNodes(relsNode, LoadRelationships);
+                    return node;
+                })
+                .ToArray();
+        }
+
         public void AddConnection(ConnectionDetail con)
         {
             var conNode = treeView.Nodes.Add(con.ConnectionName);
@@ -98,6 +120,9 @@ namespace MarkMpn.Sql4Cds
             var entitiesNode = conNode.Nodes.Add("Entities");
             SetIcon(entitiesNode, "Folder");
             AddVirtualChildNodes(entitiesNode, LoadEntities);
+            var metadataNode = conNode.Nodes.Add("Metadata");
+            SetIcon(metadataNode, "Folder");
+            AddVirtualChildNodes(metadataNode, LoadMetadata);
             treeView.SelectedNode = conNode;
 
             if (new Uri(con.OrganizationServiceUrl).Host.EndsWith(".dynamics.com") &&
@@ -136,7 +161,10 @@ namespace MarkMpn.Sql4Cds
         {
             var logicalName = parent.Parent.Text;
 
-            var metadata = _metadata[GetService(parent)][logicalName];
+            var metadata = (EntityMetadata)parent.Parent.Tag;
+            
+            if (metadata.Attributes == null)
+                metadata = _metadata[GetService(parent)][logicalName];
 
             return metadata.Attributes
                 .OrderBy(a => a.LogicalName)
@@ -154,27 +182,30 @@ namespace MarkMpn.Sql4Cds
         {
             var logicalName = parent.Parent.Text;
 
-            var metadata = (RetrieveEntityResponse)GetService(parent).ServiceClient.Execute(new RetrieveEntityRequest
-            {
-                LogicalName = logicalName,
-                EntityFilters = EntityFilters.Relationships
-            });
+            var metadata = (EntityMetadata)parent.Parent.Tag;
+            
+            if (metadata.OneToManyRelationships == null)
+                metadata = ((RetrieveEntityResponse)GetService(parent).ServiceClient.Execute(new RetrieveEntityRequest
+                    {
+                        LogicalName = logicalName,
+                        EntityFilters = EntityFilters.Relationships
+                    })).EntityMetadata;
 
-            return metadata.EntityMetadata.OneToManyRelationships.Select(r =>
-            {
-                var node = new TreeNode(r.SchemaName);
-                node.Tag = r;
-                SetIcon(node, "OneToMany");
-                return node;
-            })
-                .Union(metadata.EntityMetadata.ManyToOneRelationships.Select(r =>
+            return metadata.OneToManyRelationships.Select(r =>
+                {
+                    var node = new TreeNode(r.SchemaName);
+                    node.Tag = r;
+                    SetIcon(node, "OneToMany");
+                    return node;
+                })
+                .Union(metadata.ManyToOneRelationships.Select(r =>
                 {
                     var node = new TreeNode(r.SchemaName);
                     node.Tag = r;
                     SetIcon(node, "ManyToOne");
                     return node;
                 }))
-                .Union(metadata.EntityMetadata.ManyToManyRelationships.Select(r =>
+                .Union(metadata.ManyToManyRelationships.Select(r =>
                 {
                     var node = new TreeNode(r.SchemaName);
                     node.Tag = r;

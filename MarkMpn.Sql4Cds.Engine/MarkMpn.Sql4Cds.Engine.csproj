@@ -53,6 +53,9 @@
     <Compile Include="AttributeMetadataCache.cs" />
     <Compile Include="DisconnectedException.cs" />
     <Compile Include="EntityExtensions.cs" />
+    <Compile Include="MetaMetadataCache.cs" />
+    <Compile Include="MetaMetadata.cs" />
+    <Compile Include="QueryExtensions\NoOp.cs" />
     <Compile Include="TSqlEndpoint.cs" />
     <Compile Include="TSqlFragmentExtensions.cs" />
     <Compile Include="Visitors\AddDefaultTableAliasesVisitor.cs" />
@@ -86,6 +89,7 @@
     <Compile Include="QueryExtensions\Where.cs" />
     <Compile Include="QueryExtensions\IQueryExtension.cs" />
     <Compile Include="QueryParseException.cs" />
+    <Compile Include="Visitors\QueryTypeVisitor.cs" />
     <Compile Include="Visitors\ReplacePrimaryFunctionsVisitor.cs" />
     <Compile Include="Visitors\RewriteVisitorBase.cs" />
     <Compile Include="Visitors\RewriteVisitor.cs" />
