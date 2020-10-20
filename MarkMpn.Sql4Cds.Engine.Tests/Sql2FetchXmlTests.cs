@@ -2074,6 +2074,44 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void ImplicitTypeConversion()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT employees / 2.0 AS half FROM account";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            var account1 = Guid.NewGuid();
+            var account2 = Guid.NewGuid();
+
+            context.Data["account"] = new Dictionary<Guid, Entity>
+            {
+                [account1] = new Entity("account", account1)
+                {
+                    ["employees"] = null,
+                    ["accountid"] = account1
+                },
+                [account2] = new Entity("account", account2)
+                {
+                    ["employees"] = 2,
+                    ["accountid"] = account2
+                }
+            };
+
+            var select = queries[0];
+            select.Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            var result = (EntityCollection)select.Result;
+            Assert.AreEqual(null, result.Entities[0]["half"]);
+            Assert.AreEqual(1M, result.Entities[1]["half"]);
+        }
+
+        [TestMethod]
         public void GlobalOptionSet()
         {
             var context = new XrmFakedContext();

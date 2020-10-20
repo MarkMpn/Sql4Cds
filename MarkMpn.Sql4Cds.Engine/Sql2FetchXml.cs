@@ -884,7 +884,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 // so we can return a null value of the same type if either argument was actually null.
                 var targetType = coreOperator.Type;
 
-                if (targetType.IsPrimitive)
+                if (targetType.IsValueType)
                 {
                     targetType = typeof(Nullable<>).MakeGenericType(targetType);
                     coreOperator = Expression.Convert(coreOperator, targetType);
