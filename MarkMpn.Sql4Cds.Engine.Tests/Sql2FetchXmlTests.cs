@@ -2112,6 +2112,43 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void ImplicitTypeConversionComparison()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT * FROM account WHERE turnover / 2 > 10";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            var account1 = Guid.NewGuid();
+            var account2 = Guid.NewGuid();
+
+            context.Data["account"] = new Dictionary<Guid, Entity>
+            {
+                [account1] = new Entity("account", account1)
+                {
+                    ["turnover"] = null,
+                    ["accountid"] = account1
+                },
+                [account2] = new Entity("account", account2)
+                {
+                    ["turnover"] = new Money(21),
+                    ["accountid"] = account2
+                }
+            };
+
+            var select = queries[0];
+            select.Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            var result = (EntityCollection)select.Result;
+            Assert.AreEqual(account2, result.Entities[0].Id);
+        }
+
+        [TestMethod]
         public void GlobalOptionSet()
         {
             var context = new XrmFakedContext();
