@@ -2824,6 +2824,13 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (rhsValue.Type.IsGenericType && rhsValue.Type.GetGenericTypeDefinition() == typeof(Nullable<>))
                     rhsValue = Expression.Property(rhsValue, rhsValue.Type.GetProperty("Value"));
 
+                // If one value is a decimal and another isn't, convert them
+                if (lhsValue.Type == typeof(decimal) && (rhsValue.Type == typeof(int) || rhsValue.Type == typeof(double)))
+                    rhsValue = Expression.Convert(rhsValue, typeof(decimal));
+
+                if (rhsValue.Type == typeof(decimal) && (lhsValue.Type == typeof(int) || lhsValue.Type == typeof(double)))
+                    lhsValue = Expression.Convert(lhsValue, typeof(decimal));
+
                 Expression coreComparison;
 
                 switch (comparison.ComparisonType)
