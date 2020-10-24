@@ -32,6 +32,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         bool IQueryExecutionOptions.UseRetrieveTotalRecordCount => true;
 
+        int IQueryExecutionOptions.LocaleId => 1033;
+
         [TestMethod]
         public void SimpleSelect()
         {
@@ -2332,10 +2334,11 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var result = (DataTable)queries[0].Result;
 
-            Assert.AreEqual(3, result.Rows.Count);
+            Assert.AreEqual(4, result.Rows.Count);
             Assert.AreEqual("new_customentityid", result.Rows[0]["a.logicalname"]);
             Assert.AreEqual("new_name", result.Rows[1]["a.logicalname"]);
-            Assert.AreEqual("new_parentid", result.Rows[2]["a.logicalname"]);
+            Assert.AreEqual("new_optionsetvalue", result.Rows[2]["a.logicalname"]);
+            Assert.AreEqual("new_parentid", result.Rows[3]["a.logicalname"]);
         }
 
         private void AssertFetchXml(Query[] queries, string fetchXml)

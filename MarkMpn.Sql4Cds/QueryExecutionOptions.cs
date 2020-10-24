@@ -1,16 +1,22 @@
 ﻿using System.ComponentModel;
+using System.Linq;
 using System.Windows.Forms;
 using MarkMpn.Sql4Cds.Engine;
+using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
+using Microsoft.Xrm.Sdk.Query;
 
 namespace MarkMpn.Sql4Cds
 {
     class QueryExecutionOptions : IQueryExecutionOptions
     {
+        private readonly IOrganizationService _org;
         private readonly BackgroundWorker _worker;
+        private int _localeId;
 
-        public QueryExecutionOptions(BackgroundWorker worker)
+        public QueryExecutionOptions(IOrganizationService org, BackgroundWorker worker)
         {
+            _org = org;
             _worker = worker;
         }
 
@@ -63,5 +69,31 @@ namespace MarkMpn.Sql4Cds
         public bool UseTSQLEndpoint => Settings.Instance.UseTSQLEndpoint;
 
         public bool UseRetrieveTotalRecordCount => Settings.Instance.UseRetrieveTotalRecordCount;
+
+        public int LocaleId
+        {
+            get
+            {
+                if (_localeId != 0)
+                    return _localeId;
+
+                var qry = new QueryExpression("usersettings");
+                qry.TopCount = 1;
+                qry.ColumnSet = new ColumnSet("localeid");
+                qry.Criteria.AddCondition("systemuserid", ConditionOperator.EqualUserId);
+                var userLink = qry.AddLink("systemuser", "systemuserid", "systemuserid");
+                var orgLink = userLink.AddLink("organization", "organizationid", "organizationid");
+                orgLink.EntityAlias = "org";
+                orgLink.Columns = new ColumnSet("localeid");
+                var locale = _org.RetrieveMultiple(qry).Entities.Single();
+
+                if (locale.Contains("localeid"))
+                    _localeId = locale.GetAttributeValue<int>("localeid");
+                else
+                    _localeId = (int) locale.GetAttributeValue<AliasedValue>("org.localeid").Value;
+
+                return _localeId;
+            }
+        }
     }
 }

@@ -815,7 +815,8 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Applies any final changes to the <see cref="Request"/> before it is executed
         /// </summary>
         /// <param name="org">The organization service that will execute the request</param>
-        public virtual void FinalizeRequest(IOrganizationService org)
+        /// <param name="options">The options to control the execution of the query</param>
+        public virtual void FinalizeRequest(IOrganizationService org, IQueryExecutionOptions options)
         {
         }
 
@@ -823,7 +824,7 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             options.Progress($"Executing {Request.GetType().Name}...");
 
-            FinalizeRequest(org);
+            FinalizeRequest(org, options);
             var response = (TResponse) org.Execute(Request);
 
             // Convert the response to entities and execute the FetchXML request over that data
@@ -1352,7 +1353,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
         }
 
-        public override void FinalizeRequest(IOrganizationService org)
+        public override void FinalizeRequest(IOrganizationService org, IQueryExecutionOptions options)
         {
             // If there are conditions in a root-level filter that can be promoted to an inner-joined link entity, do so now to
             // generate a more efficient filter later on.
@@ -1404,25 +1405,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (!itemsByEntity.ContainsKey("localizedlabel"))
             {
-                var qry = new QueryExpression("usersettings");
-                qry.TopCount = 1;
-                qry.ColumnSet = new ColumnSet("localeid");
-                qry.Criteria.AddCondition("systemuserid", ConditionOperator.EqualUserId);
-                var userLink = qry.AddLink("systemuser", "systemuserid", "systemuserid");
-                var orgLink = userLink.AddLink("organization", "organizationid", "organizationid");
-                orgLink.EntityAlias = "org";
-                orgLink.Columns = new ColumnSet("localeid");
-                var locale = org.RetrieveMultiple(qry).Entities.Single();
-
-                int localeId;
-
-                if (locale.Contains("localeid"))
-                    localeId = locale.GetAttributeValue<int>("localeid");
-                else
-                    localeId = locale.GetAliasedAttributeValue<int>("org.localeid");
-
                 Request.Query.LabelQuery = new LabelQueryExpression();
-                Request.Query.LabelQuery.FilterLanguages.Add(localeId);
+                Request.Query.LabelQuery.FilterLanguages.Add(options.LocaleId);
             }
         }
 

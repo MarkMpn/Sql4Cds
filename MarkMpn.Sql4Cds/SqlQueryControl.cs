@@ -346,7 +346,7 @@ namespace MarkMpn.Sql4Cds
 
                     if (execute)
                     {
-                        var options = new QueryExecutionOptions(worker);
+                        var options = new QueryExecutionOptions(Service, worker);
 
                         foreach (var query in queries)
                         {

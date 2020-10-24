@@ -70,5 +70,10 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Indicates if a <see cref="Microsoft.Crm.Sdk.Messages.RetrieveTotalRecordCountRequest"/> should be used for simple SELECT count(*) FROM table queries
         /// </summary>
         bool UseRetrieveTotalRecordCount { get; }
+
+        /// <summary>
+        /// The language code to retrieve results in
+        /// </summary>
+        int LocaleId { get; }
     }
 }

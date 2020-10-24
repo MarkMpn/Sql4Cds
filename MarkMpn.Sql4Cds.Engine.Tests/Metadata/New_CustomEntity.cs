@@ -26,5 +26,15 @@ namespace MarkMpn.Sql4Cds.Engine.Tests.Metadata
 
         [RelationshipSchemaName("new_customentity_children")]
         public IEnumerable<New_CustomEntity> Children { get; }
+
+        [AttributeLogicalName("new_optionsetvalue")]
+        public New_OptionSet? New_OptionSetValue { get; set; }
+    }
+
+    enum New_OptionSet
+    {
+        Value1 = 100001,
+        Value2,
+        Value3
     }
 }
