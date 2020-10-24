@@ -189,7 +189,16 @@ namespace MarkMpn.Sql4Cds.Engine
             var res = org.RetrieveMultiple(new FetchExpression(Serialize(FetchXml)));
 
             foreach (var entity in res.Entities)
+            {
+                // Expose any formatted values for OptionSetValue and EntityReference values
+                foreach (var formatted in entity.FormattedValues)
+                {
+                    if (!entity.Contains(formatted.Key + "name"))
+                        entity[formatted.Key + "name"] = formatted.Value;
+                }
+
                 yield return entity;
+            }
 
             var count = res.Entities.Count;
 

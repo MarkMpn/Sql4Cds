@@ -2341,6 +2341,116 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual("new_parentid", result.Rows[3]["a.logicalname"]);
         }
 
+        [TestMethod]
+        public void OptionSetNameSelect()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            // Add metadata for new_optionsetvaluename virtual attribute
+            var attr = metadata["new_customentity"].Attributes.Single(a => a.LogicalName == "new_optionsetvaluename");
+            attr.GetType().GetProperty(nameof(AttributeMetadata.AttributeOf)).SetValue(attr, "new_optionsetvalue");
+
+            var query = "SELECT new_optionsetvalue, new_optionsetvaluename FROM new_customentity ORDER BY new_optionsetvalue";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            var record1 = Guid.NewGuid();
+            var record2 = Guid.NewGuid();
+
+            context.Data["new_customentity"] = new Dictionary<Guid, Entity>
+            {
+                [record1] = new Entity("new_customentity", record1)
+                {
+                    ["new_optionsetvalue"] = null,
+                    ["new_customentityid"] = record1
+                },
+                [record2] = new Entity("new_customentity", record2)
+                {
+                    ["new_optionsetvalue"] = Metadata.New_OptionSet.Value1,
+                    ["new_customentityid"] = record2
+                }
+            };
+
+            var select = (SelectQuery) queries[0];
+
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='new_customentity'>
+                        <attribute name='new_optionsetvalue' />
+                        <order attribute='new_optionsetvalue' />
+                    </entity>
+                </fetch>");
+
+            CollectionAssert.AreEqual(new[] { "new_optionsetvalue", "new_optionsetvalue" }, select.ColumnSet);
+
+            queries[0].Execute(org, metadata, this);
+
+            select.Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            var result = (EntityCollection)select.Result;
+            Assert.IsNull(result.Entities[0].GetAttributeValue<OptionSetValue>("new_optionsetvalue"));
+            Assert.IsNull(result.Entities[0].GetAttributeValue<string>("new_optionsetvaluename"));
+            Assert.AreEqual(Metadata.New_OptionSet.Value1, result.Entities[1].GetAttributeValue<Metadata.New_OptionSet>("new_optionsetvalue"));
+            Assert.AreEqual(Metadata.New_OptionSet.Value1.ToString(), result.Entities[1].GetAttributeValue<string>("new_optionsetvaluename"));
+        }
+
+        [TestMethod]
+        public void OptionSetNameFilter()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            // Add metadata for new_optionsetvaluename virtual attribute
+            var attr = metadata["new_customentity"].Attributes.Single(a => a.LogicalName == "new_optionsetvaluename");
+            attr.GetType().GetProperty(nameof(AttributeMetadata.AttributeOf)).SetValue(attr, "new_optionsetvalue");
+
+            var query = "SELECT new_customentityid FROM new_customentity WHERE new_optionsetvaluename = 'Value1'";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            var record1 = Guid.NewGuid();
+            var record2 = Guid.NewGuid();
+
+            context.Data["new_customentity"] = new Dictionary<Guid, Entity>
+            {
+                [record1] = new Entity("new_customentity", record1)
+                {
+                    ["new_optionsetvalue"] = null,
+                    ["new_customentityid"] = record1
+                },
+                [record2] = new Entity("new_customentity", record2)
+                {
+                    ["new_optionsetvalue"] = Metadata.New_OptionSet.Value1,
+                    ["new_customentityid"] = record2
+                }
+            };
+
+            var select = (SelectQuery)queries[0];
+
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='new_customentity'>
+                        <attribute name='new_customentityid' />
+                        <attribute name='new_optionsetvalue' />
+                    </entity>
+                </fetch>");
+
+            queries[0].Execute(org, metadata, this);
+
+            select.Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            var result = (EntityCollection)select.Result;
+            Assert.AreEqual(1, result.Entities.Count);
+            Assert.AreEqual(record2, result.Entities[0].Id);
+        }
+
         private void AssertFetchXml(Query[] queries, string fetchXml)
         {
             Assert.AreEqual(1, queries.Length);

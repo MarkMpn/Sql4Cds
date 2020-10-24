@@ -29,6 +29,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests.Metadata
 
         [AttributeLogicalName("new_optionsetvalue")]
         public New_OptionSet? New_OptionSetValue { get; set; }
+
+        [AttributeLogicalName("new_optionsetvaluename")]
+        public string New_OptionSetValueName { get; set; }
     }
 
     enum New_OptionSet

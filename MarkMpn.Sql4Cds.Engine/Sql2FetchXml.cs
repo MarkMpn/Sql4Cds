@@ -2524,7 +2524,6 @@ namespace MarkMpn.Sql4Cds.Engine
                         throw new PostProcessingRequiredException("Unsupported FetchXML function", func);
                 }
 
-
                 // Find the entity that the condition applies to, which may be different to the entity that the condition FetchXML element will be 
                 // added within
                 var entityName = GetColumnTableAlias(field, tables, out var entityTable);
@@ -2534,9 +2533,13 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (field2 == null)
                 {
-                    var attribute = GetColumnAttribute(field);
+                    var attrName = GetColumnAttribute(field);
+                    var attribute = entityTable.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase));
 
-                    if (!Int32.TryParse(value, out _) && entityTable.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attribute, StringComparison.OrdinalIgnoreCase))?.AttributeType == AttributeTypeCode.EntityName)
+                    if (!String.IsNullOrEmpty(attribute?.AttributeOf))
+                        throw new PostProcessingRequiredException("Cannot filter on virtual name attributes", field);
+
+                    if (!Int32.TryParse(value, out _) && attribute?.AttributeType == AttributeTypeCode.EntityName)
                     {
                         // Convert the entity name to the object type code
                         var targetMetadata = Metadata[value];
@@ -2547,7 +2550,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     var condition = new condition
                     {
                         entityname = entityName,
-                        attribute = attribute,
+                        attribute = attrName,
                         @operator = op,
                         value = value
                     };
@@ -3140,6 +3143,11 @@ namespace MarkMpn.Sql4Cds.Engine
                 attr = tables.SelectMany(t => t.GetItems()).OfType<FetchAttributeType>().First(a => a.alias == attrName);
                 return;
             }
+
+            // If this is a virtual attribute, use the underlying attribute instead
+            var attrMeta = table.Metadata.Attributes.Single(a => a.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase));
+            if (!String.IsNullOrEmpty(attrMeta.AttributeOf))
+                attrName = attrMeta.AttributeOf;
 
             var matchAnyAlias = alias == "";
             attr = new FetchAttributeType { name = attrName, alias = alias };
