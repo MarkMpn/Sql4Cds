@@ -1254,7 +1254,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 HandleWhereClause(querySpec.WhereClause, tables, extensions);
                 var computedColumns = HandleGroupByClause(querySpec, fetch, tables, extensions, forceAggregateExpression) ?? new Dictionary<string, Type>();
                 var columns = HandleSelectClause(querySpec, fetch, tables, computedColumns, extensions);
-                HandleDistinctClause(querySpec, fetch, extensions);
+                HandleDistinctClause(querySpec, fetch, columns, extensions);
                 HandleOrderByClause(querySpec, fetch, tables, columns, computedColumns, extensions);
                 HandleHavingClause(querySpec, computedColumns, extensions);
                 HandleOffsetClause(querySpec, fetch, extensions);
@@ -1958,7 +1958,9 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="querySpec">The SELECT query to convert the GROUP BY clause from</param>
         /// <param name="fetch">The FetchXML query converted so far</param>
-        private void HandleDistinctClause(QuerySpecification querySpec, FetchXml.FetchType fetch, IList<IQueryExtension> extensions)
+        /// <param name="columns">The columns that will be displayed in the results</param>
+        /// <param name="extensions">Any extension methods to be applied to the results of the query</param>
+        private void HandleDistinctClause(QuerySpecification querySpec, FetchXml.FetchType fetch, string[] columns, IList<IQueryExtension> extensions)
         {
             if (querySpec.UniqueRowFilter == UniqueRowFilter.Distinct)
             {
@@ -1969,7 +1971,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
                 else
                 {
-                    extensions.Add(new Distinct());
+                    extensions.Add(new Distinct(columns));
                 }
             }
         }

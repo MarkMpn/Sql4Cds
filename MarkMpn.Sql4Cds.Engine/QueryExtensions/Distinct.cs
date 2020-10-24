@@ -11,21 +11,23 @@ namespace MarkMpn.Sql4Cds.Engine.QueryExtensions
     {
         class EntityKey
         {
+            private readonly string[] _fields;
             private readonly Entity _entity;
             private readonly int _hashCode;
 
-            public EntityKey(Entity entity)
+            public EntityKey(Entity entity, string[] fields)
             {
                 _entity = entity;
+                _fields = fields;
 
                 _hashCode = 0;
 
-                foreach (var attr in _entity.Attributes)
+                foreach (var field in fields)
                 {
-                    _hashCode ^= attr.Key.GetHashCode();
+                    _hashCode ^= field.GetHashCode();
 
-                    if (attr.Value != null)
-                        _hashCode ^= attr.Value.GetHashCode();
+                    if (entity.Attributes.TryGetValue(field, out var value) && value != null)
+                        _hashCode ^= value.GetHashCode();
                 }
             }
 
@@ -33,16 +35,10 @@ namespace MarkMpn.Sql4Cds.Engine.QueryExtensions
             {
                 var other = (EntityKey)obj;
 
-                if (_entity.Attributes.Count != other._entity.Attributes.Count)
-                    return false;
-
-                foreach (var attr in _entity.Attributes)
+                foreach (var field in _fields)
                 {
-                    if (!other._entity.Contains(attr.Key))
-                        return false;
-
-                    var thisValue = attr.Value;
-                    var otherValue = other._entity[attr.Key];
+                    _entity.Attributes.TryGetValue(field, out var thisValue);
+                    other._entity.Attributes.TryGetValue(field, out var otherValue);
 
                     if (!Equals(thisValue, otherValue))
                         return false;
@@ -74,6 +70,13 @@ namespace MarkMpn.Sql4Cds.Engine.QueryExtensions
             }
         }
 
+        private readonly string[] _fields;
+
+        public Distinct(string[] fields)
+        {
+            _fields = fields;
+        }
+
         public IEnumerable<Entity> ApplyTo(IEnumerable<Entity> source, IQueryExecutionOptions options)
         {
             var unique = new HashSet<EntityKey>();
@@ -83,7 +86,7 @@ namespace MarkMpn.Sql4Cds.Engine.QueryExtensions
                 if (options.Cancelled)
                     throw new OperationCanceledException();
 
-                var key = new EntityKey(entity);
+                var key = new EntityKey(entity, _fields);
 
                 if (unique.Add(key))
                     yield return entity;
