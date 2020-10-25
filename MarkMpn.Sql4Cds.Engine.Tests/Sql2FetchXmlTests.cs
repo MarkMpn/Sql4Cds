@@ -2334,11 +2334,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var result = (DataTable)queries[0].Result;
 
-            Assert.AreEqual(4, result.Rows.Count);
-            Assert.AreEqual("new_customentityid", result.Rows[0]["a.logicalname"]);
-            Assert.AreEqual("new_name", result.Rows[1]["a.logicalname"]);
-            Assert.AreEqual("new_optionsetvalue", result.Rows[2]["a.logicalname"]);
-            Assert.AreEqual("new_parentid", result.Rows[3]["a.logicalname"]);
+            Assert.AreEqual(5, result.Rows.Count);
+            var row = 0;
+            Assert.AreEqual("new_customentityid", result.Rows[row++]["a.logicalname"]);
+            Assert.AreEqual("new_name", result.Rows[row++]["a.logicalname"]);
+            Assert.AreEqual("new_optionsetvalue", result.Rows[row++]["a.logicalname"]);
+            Assert.AreEqual("new_optionsetvaluename", result.Rows[row++]["a.logicalname"]);
+            Assert.AreEqual("new_parentid", result.Rows[row++]["a.logicalname"]);
         }
 
         [TestMethod]
@@ -2386,7 +2388,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     </entity>
                 </fetch>");
 
-            CollectionAssert.AreEqual(new[] { "new_optionsetvalue", "new_optionsetvalue" }, select.ColumnSet);
+            CollectionAssert.AreEqual(new[] { "new_optionsetvalue", "new_optionsetvaluename" }, select.ColumnSet);
 
             queries[0].Execute(org, metadata, this);
 
