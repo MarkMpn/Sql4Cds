@@ -2438,8 +2438,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             AssertFetchXml(queries, @"
                 <fetch>
                     <entity name='new_customentity'>
-                        <attribute name='new_customentityid' />
                         <attribute name='new_optionsetvalue' />
+                        <attribute name='new_customentityid' />
                     </entity>
                 </fetch>");
 

@@ -197,6 +197,13 @@ namespace MarkMpn.Sql4Cds.Engine
                         entity[formatted.Key + "name"] = formatted.Value;
                 }
 
+                // Expose the type of lookup values
+                foreach (var attribute in entity.Attributes.Where(attr => attr.Value is EntityReference).ToList())
+                {
+                    if (!entity.Contains(attribute.Key + "type"))
+                        entity[attribute.Key + "type"] = ((EntityReference)attribute.Value).LogicalName;
+                }
+
                 yield return entity;
             }
 

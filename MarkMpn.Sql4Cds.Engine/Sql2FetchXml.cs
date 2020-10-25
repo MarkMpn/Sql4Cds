@@ -363,7 +363,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
                     else
                     {
-                        var attrType = GetAttributeType(attr.AttributeType.Value, true);
+                        var attrType = GetAttributeType(attr, true);
                         var expr = CompileScalarExpression(row.ColumnValues[i], new List<EntityTable>(), null, attrType, out _);
                         values[columnName] = expr(null);
                     }
@@ -679,7 +679,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         // Handle updates to the value from another field
                         // Ensure the source field is included in the query
-                        var targetType = GetAttributeType(attr.AttributeType.Value, true);
+                        var targetType = GetAttributeType(attr, true);
                         return new { Key = attrName, Value = CompileScalarExpression(assign.NewValue, tables, null, targetType, out _) };
                     }
                 })
@@ -907,22 +907,28 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     // Check where this attribute should be taken from
                     var tableAlias = GetColumnTableAlias(col, tables, out var table);
-                    
-                    // Check if the attribute needs to be added to the query
-                    if (!table.GetItems().Any(i => i is allattributes) &&
-                        !table.GetItems().Any(i => i is FetchAttributeType attr && attr.name == attrName && attr.alias == null && !attr.aggregateSpecified && !attr.dategroupingSpecified))
-                    {
-                        table.AddItem(new FetchAttributeType { name = attrName });
-                    }
 
-                    var attrMetadata = Metadata[table.EntityName].Attributes.SingleOrDefault(a => a.LogicalName == attrName);
+                    var attrMetadata = table.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase));
+
                     if (attrMetadata == null)
                         throw new NotSupportedQueryFragmentException("Unknown attribute", expr);
 
                     if (attrMetadata.AttributeType == null)
                         throw new NotSupportedQueryFragmentException("Unknown attribute type", expr);
 
-                    type = GetAttributeType(attrMetadata.AttributeType.Value, false);
+                    var physicalAttrName = attrName;
+
+                    if (!String.IsNullOrEmpty(attrMetadata?.AttributeOf))
+                        physicalAttrName = attrMetadata.AttributeOf;
+                    
+                    // Check if the attribute needs to be added to the query
+                    if (!table.GetItems().Any(i => i is allattributes) &&
+                        !table.GetItems().Any(i => i is FetchAttributeType attr && attr.name == physicalAttrName && attr.alias == null && !attr.aggregateSpecified && !attr.dategroupingSpecified))
+                    {
+                        table.AddItem(new FetchAttributeType { name = physicalAttrName });
+                    }
+
+                    type = GetAttributeType(attrMetadata, false);
 
                     if (type == null)
                         throw new NotSupportedQueryFragmentException("Unknown attribute type", expr);
@@ -1060,12 +1066,12 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// Determines the type of value that is stored in an attribute
         /// </summary>
-        /// <param name="type">The type of attribute</param>
+        /// <param name="attribute">The details of the attribute</param>
         /// <param name="set">Indicates if the type is to be used for insert/update operations</param>
         /// <returns>The type of values that can be stored in the attribute</returns>
-        private static Type GetAttributeType(AttributeTypeCode type, bool set)
+        private static Type GetAttributeType(AttributeMetadata attribute, bool set)
         {
-            switch (type)
+            switch (attribute.AttributeType.Value)
             {
                 case AttributeTypeCode.BigInt:
                     return typeof(long?);
@@ -1113,6 +1119,11 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 case AttributeTypeCode.Uniqueidentifier:
                     return typeof(Guid?);
+
+                case AttributeTypeCode.Virtual:
+                    if (!String.IsNullOrEmpty(attribute.AttributeOf))
+                        return typeof(string);
+                    return null;
             }
 
             return null;
@@ -1685,7 +1696,11 @@ namespace MarkMpn.Sql4Cds.Engine
                     continue;
 
                 var metadata = table.Metadata.Attributes.Single(a => a.LogicalName == columnName);
-                var type = GetAttributeType(metadata.AttributeType.Value, false);
+
+                if (!String.IsNullOrEmpty(metadata.AttributeOf))
+                    throw new PostProcessingRequiredException("Cannot group by virtual attribute");
+
+                var type = GetAttributeType(metadata, false);
 
                 // If the attribute isn't already included, add it to the appropriate table
                 var attr = new FetchAttributeType
@@ -1870,7 +1885,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     default:
                         var metadata = table.Metadata.Attributes.Single(a => a.LogicalName == attr.name);
-                        outputColumns[attr.alias] = GetAttributeType(metadata.AttributeType.Value, false);
+                        outputColumns[attr.alias] = GetAttributeType(metadata, false);
                         break;
                 }
             }
@@ -2131,6 +2146,11 @@ namespace MarkMpn.Sql4Cds.Engine
                 // check there is no order already applied on a later entity.
                 if (LaterEntityHasOrder(tables, orderTable))
                     throw new PostProcessingRequiredException("Order already applied to later link-entity", sort.Expression);
+
+                var attrMetadata = orderTable.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase));
+
+                if (!String.IsNullOrEmpty(attrMetadata?.AttributeOf))
+                    throw new PostProcessingRequiredException("Cannot sort by virtual attribute");
                 
                 var order = new FetchOrderType
                 {
@@ -2569,6 +2589,15 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     if (entityTable != entityTable2)
                         throw new PostProcessingRequiredException("Unsupported comparison", comparison);
+
+                    var attr1 = entityTable.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(GetColumnAttribute(field), StringComparison.OrdinalIgnoreCase));
+                    var attr2 = entityTable.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(GetColumnAttribute(field2), StringComparison.OrdinalIgnoreCase));
+
+                    if (!String.IsNullOrEmpty(attr1?.AttributeOf))
+                        throw new PostProcessingRequiredException("Cannot filter on virtual attributes", field);
+
+                    if (!String.IsNullOrEmpty(attr2?.AttributeOf))
+                        throw new PostProcessingRequiredException("Cannot filter on virtual attributes", field2);
 
                     if (entityTable2 == targetTable)
                         entityName2 = null;
@@ -3051,7 +3080,7 @@ namespace MarkMpn.Sql4Cds.Engine
                             foreach (var attr in meta.Attributes.Where(a => a.IsValidForRead != false).OrderBy(a => a.LogicalName))
                             {
                                 var alias = "";
-                                AddAttribute(tables, new ColumnReferenceExpression
+                                var attrName = AddAttribute(tables, new ColumnReferenceExpression
                                 {
                                     MultiPartIdentifier = new MultiPartIdentifier
                                     {
@@ -3064,9 +3093,9 @@ namespace MarkMpn.Sql4Cds.Engine
                                 }, calculatedColumns, out _, out _, ref alias);
 
                                 if (starTable.LinkEntity == null)
-                                    cols.Add(attr.LogicalName);
+                                    cols.Add(attrName);
                                 else
-                                    cols.Add((starTable.Alias ?? starTable.EntityName) + "." + attr.LogicalName);
+                                    cols.Add((starTable.Alias ?? starTable.EntityName) + "." + attrName);
                             }
                         }
                         else
@@ -3095,13 +3124,13 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     try
                     {
-                        AddAttribute(tables, expr, calculatedColumns, out var table, out var attr, ref alias);
+                        var attrName = AddAttribute(tables, expr, calculatedColumns, out var table, out var attr, ref alias);
 
                         // Even if the attribute wasn't added to the entity because there's already an <all-attributes>, add it to the column list again
                         if (alias == null)
-                            cols.Add((table.LinkEntity == null ? "" : ((table.Alias ?? table.EntityName) + ".")) + attr.name);
+                            cols.Add((table.LinkEntity == null ? "" : ((table.Alias ?? table.EntityName) + ".")) + attrName);
                         else
-                            cols.Add(alias);
+                            cols.Add(attrName);
                     }
                     catch (NotSupportedQueryFragmentException)
                     {
@@ -3130,20 +3159,21 @@ namespace MarkMpn.Sql4Cds.Engine
             return cols.ToArray();
         }
 
-        private void AddAttribute(List<EntityTable> tables, ScalarExpression expr, IDictionary<string,Type> calculatedColumns, out EntityTable table, out FetchAttributeType attr, ref string alias)
+        private string AddAttribute(List<EntityTable> tables, ScalarExpression expr, IDictionary<string,Type> calculatedColumns, out EntityTable table, out FetchAttributeType attr, ref string alias)
         {
             if (!(expr is ColumnReferenceExpression col))
                 throw new NotSupportedQueryFragmentException("Unhandled SELECT clause", expr);
 
             // Find the appropriate table and add the attribute to the table
             var attrName = GetColumnAttribute(col);
+            var requestedAttrName = attrName;
             GetColumnTableAlias(col, tables, out table);
 
             // Check if this is a column that has already been generated by the GROUP BY clause
             if (col.MultiPartIdentifier.Identifiers.Count == 1 && calculatedColumns != null && calculatedColumns.ContainsKey(attrName))
             {
                 attr = tables.SelectMany(t => t.GetItems()).OfType<FetchAttributeType>().First(a => a.alias == attrName);
-                return;
+                return requestedAttrName;
             }
 
             // If this is a virtual attribute, use the underlying attribute instead
@@ -3189,6 +3219,11 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (addAttribute)
                 table.AddItem(attr);
+
+            if (!String.IsNullOrEmpty(alias))
+                return alias;
+
+            return requestedAttrName;
         }
 
         /// <summary>
