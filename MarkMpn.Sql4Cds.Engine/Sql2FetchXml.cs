@@ -2150,7 +2150,12 @@ namespace MarkMpn.Sql4Cds.Engine
                 var attrMetadata = orderTable.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase));
 
                 if (!String.IsNullOrEmpty(attrMetadata?.AttributeOf))
-                    throw new PostProcessingRequiredException("Cannot sort by virtual attribute");
+                {
+                    if (attrName == attrMetadata.AttributeOf + "name")
+                        attrName = attrMetadata.AttributeOf;
+                    else
+                        throw new PostProcessingRequiredException("Cannot sort by virtual attribute");
+                }
                 
                 var order = new FetchOrderType
                 {
@@ -2559,7 +2564,25 @@ namespace MarkMpn.Sql4Cds.Engine
                     var attribute = entityTable.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase));
 
                     if (!String.IsNullOrEmpty(attribute?.AttributeOf))
-                        throw new PostProcessingRequiredException("Cannot filter on virtual name attributes", field);
+                    {
+                        var baseAttribute = entityTable.Metadata.Attributes.Single(a => a.LogicalName == attribute.AttributeOf);
+                        var virtualAttributeHandled = false;
+
+                        if (baseAttribute is EnumAttributeMetadata enumAttr)
+                        {
+                            var matchingOptions = enumAttr.OptionSet.Options.Where(o => o.Label.UserLocalizedLabel.Label.Equals(value, StringComparison.OrdinalIgnoreCase)).ToList();
+
+                            if (matchingOptions.Count == 1)
+                            {
+                                attrName = baseAttribute.LogicalName;
+                                value = matchingOptions[0].Value.ToString();
+                                virtualAttributeHandled = true;
+                            }
+                        }
+
+                        if (!virtualAttributeHandled)
+                            throw new PostProcessingRequiredException("Cannot filter on virtual name attributes", field);
+                    }
 
                     if (!Int32.TryParse(value, out _) && attribute?.AttributeType == AttributeTypeCode.EntityName)
                     {

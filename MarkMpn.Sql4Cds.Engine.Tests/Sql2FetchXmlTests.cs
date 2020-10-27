@@ -2357,7 +2357,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var attr = metadata["new_customentity"].Attributes.Single(a => a.LogicalName == "new_optionsetvaluename");
             attr.GetType().GetProperty(nameof(AttributeMetadata.AttributeOf)).SetValue(attr, "new_optionsetvalue");
 
-            var query = "SELECT new_optionsetvalue, new_optionsetvaluename FROM new_customentity ORDER BY new_optionsetvalue";
+            var query = "SELECT new_optionsetvalue, new_optionsetvaluename FROM new_customentity ORDER BY new_optionsetvaluename";
 
             var queries = sql2FetchXml.Convert(query);
 
@@ -2411,8 +2411,18 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
 
             // Add metadata for new_optionsetvaluename virtual attribute
-            var attr = metadata["new_customentity"].Attributes.Single(a => a.LogicalName == "new_optionsetvaluename");
-            attr.GetType().GetProperty(nameof(AttributeMetadata.AttributeOf)).SetValue(attr, "new_optionsetvalue");
+            var nameAttr = metadata["new_customentity"].Attributes.Single(a => a.LogicalName == "new_optionsetvaluename");
+            nameAttr.GetType().GetProperty(nameof(AttributeMetadata.AttributeOf)).SetValue(nameAttr, "new_optionsetvalue");
+            var valueAttr = (EnumAttributeMetadata) metadata["new_customentity"].Attributes.Single(a => a.LogicalName == "new_optionsetvalue");
+            valueAttr.OptionSet = new OptionSetMetadata
+            {
+                Options =
+                {
+                    new OptionMetadata(new Label { UserLocalizedLabel = new LocalizedLabel(Metadata.New_OptionSet.Value1.ToString(), 1033) }, (int) Metadata.New_OptionSet.Value1),
+                    new OptionMetadata(new Label { UserLocalizedLabel = new LocalizedLabel(Metadata.New_OptionSet.Value2.ToString(), 1033) }, (int) Metadata.New_OptionSet.Value2),
+                    new OptionMetadata(new Label { UserLocalizedLabel = new LocalizedLabel(Metadata.New_OptionSet.Value3.ToString(), 1033) }, (int) Metadata.New_OptionSet.Value3)
+                }
+            };
 
             var query = "SELECT new_customentityid FROM new_customentity WHERE new_optionsetvaluename = 'Value1'";
 
@@ -2430,7 +2440,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 },
                 [record2] = new Entity("new_customentity", record2)
                 {
-                    ["new_optionsetvalue"] = Metadata.New_OptionSet.Value1,
+                    ["new_optionsetvalue"] = new OptionSetValue((int) Metadata.New_OptionSet.Value1),
                     ["new_customentityid"] = record2
                 }
             };
@@ -2440,17 +2450,12 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             AssertFetchXml(queries, @"
                 <fetch>
                     <entity name='new_customentity'>
-                        <attribute name='new_optionsetvalue' />
                         <attribute name='new_customentityid' />
+                        <filter>
+                            <condition attribute='new_optionsetvalue' operator='eq' value='100001' />
+                        </filter>
                     </entity>
                 </fetch>");
-
-            queries[0].Execute(org, metadata, this);
-
-            select.Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
-            var result = (EntityCollection)select.Result;
-            Assert.AreEqual(1, result.Entities.Count);
-            Assert.AreEqual(record2, result.Entities[0].Id);
         }
 
         private void AssertFetchXml(Query[] queries, string fetchXml)
