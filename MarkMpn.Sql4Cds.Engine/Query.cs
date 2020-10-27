@@ -807,11 +807,19 @@ namespace MarkMpn.Sql4Cds.Engine
     }
 
     /// <summary>
+    /// Indicates that the query requires some additional processing to generate the final query after the conversion from FetchXML
+    /// </summary>
+    public interface IQueryRequiresFinalization
+    {
+        void FinalizeRequest(IOrganizationService org, IQueryExecutionOptions options);
+    }
+
+    /// <summary>
     /// A SELECT request that retrieves metadata using a specialized request
     /// </summary>
     /// <typeparam name="TRequest"></typeparam>
     /// <typeparam name="TResponse"></typeparam>
-    public abstract class MetadataQuery<TRequest, TResponse> : SelectQuery
+    public abstract class MetadataQuery<TRequest, TResponse> : SelectQuery, IQueryRequiresFinalization
         where TRequest : OrganizationRequest
         where TResponse : OrganizationResponse
     {
@@ -1418,12 +1426,15 @@ namespace MarkMpn.Sql4Cds.Engine
                 Request.Query.RelationshipQuery.Properties = new MetadataPropertiesExpression(GetPropertyNames(itemsByEntity, "relationship_1_n", tree).Union(GetPropertyNames(itemsByEntity, "relationship_n_n", tree)).ToArray());
                 Request.Query.RelationshipQuery.Criteria = GetFilter(itemsByEntity, "relationship_1_n");
             }
-
+            
+            /*
+             * If user is en-GB (2057), labels are not returned as they are stored as en-US (1033)
             if (!itemsByEntity.ContainsKey("localizedlabel"))
             {
                 Request.Query.LabelQuery = new LabelQueryExpression();
                 Request.Query.LabelQuery.FilterLanguages.Add(options.LocaleId);
             }
+            */
         }
 
         private void MoveConditionsToLinkEntity()
@@ -1664,8 +1675,15 @@ namespace MarkMpn.Sql4Cds.Engine
                 var convertedCondition = new MetadataConditionExpression();
                 convertedCondition.PropertyName = attribute.SchemaName;
                 var propType = prop.PropertyType;
+
                 if (propType.IsGenericType && propType.GetGenericTypeDefinition() == typeof(Nullable<>))
                     propType = propType.GetGenericArguments()[0];
+
+                if (propType.IsGenericType && propType.GetGenericTypeDefinition() == typeof(ManagedProperty<>))
+                    propType = propType.GetGenericArguments()[0];
+
+                if (propType.BaseType != null && propType.BaseType.IsGenericType && propType.BaseType.GetGenericTypeDefinition() == typeof(ManagedProperty<>))
+                    propType = propType.BaseType.GetGenericArguments()[0];
 
                 switch (condition.@operator)
                 {
@@ -1700,13 +1718,14 @@ namespace MarkMpn.Sql4Cds.Engine
                         break;
 
                     case @operator.@in:
-                        convertedCondition.ConditionOperator = MetadataConditionOperator.In;
-                        convertedCondition.Value = condition.Items.Select(i => ChangeType(i.Value, propType)).ToArray();
-                        break;
-
                     case @operator.notin:
-                        convertedCondition.ConditionOperator = MetadataConditionOperator.NotIn;
-                        convertedCondition.Value = condition.Items.Select(i => ChangeType(i.Value, propType)).ToArray();
+                        var array = Array.CreateInstance(propType, condition.Items.Length);
+
+                        for (var i = 0; i < condition.Items.Length; i++)
+                            array.SetValue(ChangeType(condition.Items[i].Value, propType), i);
+
+                        convertedCondition.ConditionOperator = condition.@operator == @operator.@in ? MetadataConditionOperator.In : MetadataConditionOperator.NotIn;
+                        convertedCondition.Value = array;
                         break;
 
                     default:

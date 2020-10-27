@@ -252,8 +252,14 @@ namespace MarkMpn.Sql4Cds.Engine
             if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(ManagedProperty<>))
                 type = type.GetGenericArguments()[0];
 
+            if (type.BaseType != null && type.BaseType.IsGenericType && type.BaseType.GetGenericTypeDefinition() == typeof(ManagedProperty<>))
+                type = type.BaseType.GetGenericArguments()[0];
+
             if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(ConstantsBase<>))
                 type = type.GetGenericArguments()[0];
+
+            if (type.BaseType != null && type.BaseType.IsGenericType && type.BaseType.GetGenericTypeDefinition() == typeof(ConstantsBase<>))
+                type = type.BaseType.GetGenericArguments()[0];
 
             if (type == typeof(string) || type == typeof(Microsoft.Xrm.Sdk.Label) || type.IsEnum)
                 yield return new StringAttributeMetadata(prop.Name) { LogicalName = prop.Name.ToLower() };
@@ -302,9 +308,25 @@ namespace MarkMpn.Sql4Cds.Engine
                         value = value.GetType().GetProperty("Value").GetValue(value);
                 }
 
+                if (type.BaseType != null && type.BaseType.IsGenericType && type.BaseType.GetGenericTypeDefinition() == typeof(ManagedProperty<>))
+                {
+                    type = type.BaseType.GetGenericArguments()[0];
+
+                    if (value != null)
+                        value = value.GetType().GetProperty("Value").GetValue(value);
+                }
+
                 if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(ConstantsBase<>))
                 {
                     type = type.GetGenericArguments()[0];
+
+                    if (value != null)
+                        value = value.GetType().GetProperty("Value").GetValue(value);
+                }
+
+                if (type.BaseType != null && type.BaseType.IsGenericType && type.BaseType.GetGenericTypeDefinition() == typeof(ConstantsBase<>))
+                {
+                    type = type.BaseType.GetGenericArguments()[0];
 
                     if (value != null)
                         value = value.GetType().GetProperty("Value").GetValue(value);

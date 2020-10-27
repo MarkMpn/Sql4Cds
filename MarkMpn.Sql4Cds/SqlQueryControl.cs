@@ -6,8 +6,11 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Runtime.Serialization;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
+using System.Xml;
 using System.Xml.Serialization;
 using MarkMpn.Sql4Cds.Engine;
 using McTools.Xrm.Connection;
@@ -344,15 +347,20 @@ namespace MarkMpn.Sql4Cds
 
                     var queries = converter.Convert(sql);
 
+                    var options = new QueryExecutionOptions(Service, worker);
+
                     if (execute)
                     {
-                        var options = new QueryExecutionOptions(Service, worker);
-
                         foreach (var query in queries)
                         {
                             _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name });
                             query.Execute(Service, Metadata, options);
                         }
+                    }
+                    else
+                    {
+                        foreach (var query in queries.OfType<IQueryRequiresFinalization>())
+                            query.FinalizeRequest(Service, options);
                     }
 
                     args.Result = queries;
@@ -605,7 +613,6 @@ namespace MarkMpn.Sql4Cds
                         }
                         else if (isMetadata)
                         {
-                            query.GetType().GetMethod("FinalizeRequest").Invoke(query, new object[] { Service });
                             var queryDisplay = CreateXmlEditor();
                             queryDisplay.Text = SerializeRequest(query.GetType().GetProperty("Request").GetValue(query));
                             queryDisplay.ReadOnly = true;
@@ -641,12 +648,15 @@ namespace MarkMpn.Sql4Cds
 
         private string SerializeRequest(object request)
         {
-            using (var writer = new StringWriter())
+            using (var stream = new MemoryStream())
             {
-                var serializer = new XmlSerializer(request.GetType());
-                serializer.Serialize(writer, request);
+                using (var writer = XmlWriter.Create(stream, new XmlWriterSettings { Indent = true }))
+                {
+                    var serializer = new DataContractSerializer(request.GetType());
+                    serializer.WriteObject(writer, request);
+                }
 
-                return writer.ToString();
+                return Encoding.UTF8.GetString(stream.ToArray());
             }
         }
 
@@ -657,7 +667,7 @@ namespace MarkMpn.Sql4Cds
                 if (e.ColumnIndex < 0 || e.RowIndex < 0)
                     return;
 
-                var grid = (CRMGridView)sender;
+                var grid = (DataGridView)sender;
                 var cell = grid[e.ColumnIndex, e.RowIndex];
 
                 if (!cell.Selected)
@@ -775,31 +785,40 @@ namespace MarkMpn.Sql4Cds
 
         private void gridContextMenuStrip_Opening(object sender, CancelEventArgs e)
         {
-            var grid = (CRMGridView) gridContextMenuStrip.SourceControl;
-            var entity = grid.SelectedCells.Count == 1 ? grid.SelectedCellRecords.Entities[0] : null;
-            var isEntityReference = false;
+            var grid = gridContextMenuStrip.SourceControl as CRMGridView;
 
-            if (entity != null)
+            if (grid == null)
             {
-                var attr = grid.SelectedCells[0].OwningColumn.DataPropertyName;
-
-                if (entity.Contains(attr) && entity[attr] is EntityReference)
-                    isEntityReference = true;
+                openRecordToolStripMenuItem.Enabled = false;
+                createSELECTQueryToolStripMenuItem.Enabled = false;
             }
+            else
+            {
+                var entity = grid.SelectedCells.Count == 1 ? grid.SelectedCellRecords.Entities[0] : null;
+                var isEntityReference = false;
 
-            openRecordToolStripMenuItem.Enabled = isEntityReference;
-            createSELECTQueryToolStripMenuItem.Enabled = isEntityReference;
+                if (entity != null)
+                {
+                    var attr = grid.SelectedCells[0].OwningColumn.DataPropertyName;
+
+                    if (entity.Contains(attr) && entity[attr] is EntityReference)
+                        isEntityReference = true;
+                }
+
+                openRecordToolStripMenuItem.Enabled = isEntityReference;
+                createSELECTQueryToolStripMenuItem.Enabled = isEntityReference;
+            }
         }
 
         private void copyToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            var grid = (CRMGridView)gridContextMenuStrip.SourceControl;
+            var grid = (DataGridView)gridContextMenuStrip.SourceControl;
             Clipboard.SetDataObject(grid.GetClipboardContent());
         }
 
         private void copyWithHeadersToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            var grid = (CRMGridView)gridContextMenuStrip.SourceControl;
+            var grid = (DataGridView)gridContextMenuStrip.SourceControl;
             grid.ClipboardCopyMode = DataGridViewClipboardCopyMode.EnableAlwaysIncludeHeaderText;
             Clipboard.SetDataObject(grid.GetClipboardContent());
             grid.ClipboardCopyMode = DataGridViewClipboardCopyMode.EnableWithoutHeaderText;
