@@ -35,5 +35,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests.Metadata
         [AttributeLogicalName("primarycontactid")]
         [RelationshipSchemaName("account_primarycontact")]
         public Contact PrimaryContact { get; set; }
+
+        [AttributeLogicalName("primarycontactidname")]
+        public string PrimaryContactIdName { get; }
     }
 }

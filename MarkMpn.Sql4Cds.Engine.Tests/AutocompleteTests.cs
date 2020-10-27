@@ -1,5 +1,6 @@
 ﻿using FakeXrmEasy;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Microsoft.Xrm.Sdk.Metadata;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -24,6 +25,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var a = metadata["account"];
             var c = metadata["contact"];
             var n = metadata["new_customentity"];
+
+            typeof(AttributeMetadata).GetProperty(nameof(AttributeMetadata.IsValidForUpdate)).SetValue(a.Attributes.Single(attr => attr.LogicalName == "primarycontactidname"), false);
+            typeof(AttributeMetadata).GetProperty(nameof(AttributeMetadata.IsValidForUpdate)).SetValue(c.Attributes.Single(attr => attr.LogicalName == "fullname"), false);
 
             _autocomplete = new Autocomplete(new[] { a, c, n }, metadata);
         }
@@ -106,7 +110,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var sql = "SELECT * FROM account a left outer join contact c on a.accountid = c.parentcustomerid where ";
             var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).ToList();
 
-            CollectionAssert.AreEqual(new[] { "a?4", "accountid?14", "c?4", "contactid?14", "employees?8", "firstname?13", "lastname?13", "name?13", "parentcustomerid?9", "primarycontactid?9", "turnover?0" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "a?4", "accountid?14", "c?4", "contactid?14", "employees?8", "firstname?13", "fullname?13", "lastname?13", "name?13", "parentcustomerid?9", "primarycontactid?9", "primarycontactidname?13", "turnover?0" }, suggestions);
         }
 
         [TestMethod]
@@ -115,7 +119,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var sql = "SELECT * FROM account a left outer join contact c on a.accountid = c.parentcustomerid where a.";
             var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).ToList();
 
-            CollectionAssert.AreEqual(new[] { "accountid?14", "createdon?2", "employees?8", "name?13", "primarycontactid?9", "turnover?0" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "accountid?14", "createdon?2", "employees?8", "name?13", "primarycontactid?9", "primarycontactidname?13", "turnover?0" }, suggestions);
         }
 
         [TestMethod]
@@ -124,7 +128,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var sql = "SELECT a. FROM account a left outer join contact c on a.accountid = c.parentcustomerid";
             var suggestions = _autocomplete.GetSuggestions(sql, sql.IndexOf("."), out _).ToList();
 
-            CollectionAssert.AreEqual(new[] { "accountid?14", "createdon?2", "employees?8", "name?13", "primarycontactid?9", "turnover?0" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "accountid?14", "createdon?2", "employees?8", "name?13", "primarycontactid?9", "primarycontactidname?13", "turnover?0" }, suggestions);
         }
 
         [TestMethod]
@@ -135,7 +139,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var sql = sql1 + "\r\n" + sql2;
             var suggestions = _autocomplete.GetSuggestions(sql, sql1.Length + 2 + sql2.IndexOf(" ") + 1, out _).ToList();
 
-            CollectionAssert.AreEqual(new[] { "account?4", "accountid?14", "contact?4", "contactid?14", "employees?8", "firstname?13", "lastname?13", "name?13", "parentcustomerid?9", "primarycontactid?9", "turnover?0" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "account?4", "accountid?14", "contact?4", "contactid?14", "employees?8", "firstname?13", "fullname?13", "lastname?13", "name?13", "parentcustomerid?9", "primarycontactid?9", "primarycontactidname?13", "turnover?0" }, suggestions);
         }
 
         [TestMethod]
@@ -144,7 +148,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var sql = "SELECT count( FROM account";
             var suggestions = _autocomplete.GetSuggestions(sql, sql.IndexOf("("), out _).ToList();
 
-            CollectionAssert.AreEqual(new[] { "account?4", "accountid?14", "createdon?2", "employees?8", "name?13", "primarycontactid?9", "turnover?0" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "account?4", "accountid?14", "createdon?2", "employees?8", "name?13", "primarycontactid?9", "primarycontactidname?13", "turnover?0" }, suggestions);
         }
 
         [TestMethod]
@@ -198,7 +202,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var sql = "INSERT INTO account (";
             var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).ToList();
 
-            CollectionAssert.AreEqual(new[] { "accountid?14", "createdon?2", "employees?8", "name?13", "primarycontactid?9", "turnover?0" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "accountid?14", "createdon?2", "employees?8", "name?13", "primarycontactid?9", "primarycontactidname?13", "turnover?0" }, suggestions);
         }
 
         [TestMethod]

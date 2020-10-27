@@ -118,6 +118,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 "employees",
                 "name",
                 "primarycontactid",
+                "primarycontactidname",
                 "turnover"
             }, ((SelectQuery)queries[0]).ColumnSet);
         }
@@ -151,6 +152,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 "employees",
                 "name",
                 "primarycontactid",
+                "primarycontactidname",
                 "turnover",
                 "name"
             }, ((SelectQuery)queries[0]).ColumnSet);
@@ -2378,7 +2380,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var select = (SelectQuery) queries[0];
+            var select = (SelectQuery)queries[0];
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -2413,7 +2415,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             // Add metadata for new_optionsetvaluename virtual attribute
             var nameAttr = metadata["new_customentity"].Attributes.Single(a => a.LogicalName == "new_optionsetvaluename");
             nameAttr.GetType().GetProperty(nameof(AttributeMetadata.AttributeOf)).SetValue(nameAttr, "new_optionsetvalue");
-            var valueAttr = (EnumAttributeMetadata) metadata["new_customentity"].Attributes.Single(a => a.LogicalName == "new_optionsetvalue");
+            var valueAttr = (EnumAttributeMetadata)metadata["new_customentity"].Attributes.Single(a => a.LogicalName == "new_optionsetvalue");
             valueAttr.OptionSet = new OptionSetMetadata
             {
                 Options =
@@ -2440,7 +2442,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 },
                 [record2] = new Entity("new_customentity", record2)
                 {
-                    ["new_optionsetvalue"] = new OptionSetValue((int) Metadata.New_OptionSet.Value1),
+                    ["new_optionsetvalue"] = new OptionSetValue((int)Metadata.New_OptionSet.Value1),
                     ["new_customentityid"] = record2
                 }
             };
@@ -2453,6 +2455,74 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <attribute name='new_customentityid' />
                         <filter>
                             <condition attribute='new_optionsetvalue' operator='eq' value='100001' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void EntityReferenceNameSelect()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            // Add metadata for primarycontactidname virtual attribute
+            var attr = metadata["account"].Attributes.Single(a => a.LogicalName == "primarycontactidname");
+            attr.GetType().GetProperty(nameof(AttributeMetadata.AttributeOf)).SetValue(attr, "primarycontactid");
+
+            var query = "SELECT primarycontactid, primarycontactidname FROM account ORDER BY primarycontactidname";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='primarycontactid' />
+                        <order attribute='primarycontactid' />
+                    </entity>
+                </fetch>");
+
+            var select = (SelectQuery)queries[0];
+
+            CollectionAssert.AreEqual(new[] { "primarycontactid", "primarycontactidname" }, select.ColumnSet);
+        }
+
+        [TestMethod]
+        public void EntityReferenceNameFilter()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            // Add metadata for primarycontactidname virtual attribute
+            var nameAttr = metadata["account"].Attributes.Single(a => a.LogicalName == "primarycontactidname");
+            nameAttr.GetType().GetProperty(nameof(AttributeMetadata.AttributeOf)).SetValue(nameAttr, "primarycontactid");
+
+            var idAttr = (LookupAttributeMetadata) metadata["account"].Attributes.Single(a => a.LogicalName == "primarycontactid");
+            idAttr.Targets = new[] { "contact" };
+
+            // Set the primary name attribute on contact
+            typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.PrimaryNameAttribute)).SetValue(metadata["contact"], "fullname");
+
+            var query = "SELECT accountid FROM account WHERE primarycontactidname = 'Mark Carrington'";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                        <link-entity name='contact' from='contactid' to='primarycontactid' alias='account_primarycontactid' link-type='outer'>
+                        </link-entity>
+                        <filter>
+                            <condition entityname='account_primarycontactid' attribute='fullname' operator='eq' value='Mark Carrington' />
                         </filter>
                     </entity>
                 </fetch>");

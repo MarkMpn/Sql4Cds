@@ -19,6 +19,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests.Metadata
         [AttributeLogicalName("lastname")]
         public string LastName { get; set; }
 
+        [AttributeLogicalName("fullname")]
+        public string FullName { get; }
+
         [AttributeLogicalName("parentcustomerid")]
         public EntityReference ParentCustomerId { get; set; }
 

@@ -2568,7 +2568,9 @@ namespace MarkMpn.Sql4Cds.Engine
                         var baseAttribute = entityTable.Metadata.Attributes.Single(a => a.LogicalName == attribute.AttributeOf);
                         var virtualAttributeHandled = false;
 
-                        if (baseAttribute is EnumAttributeMetadata enumAttr)
+                        // If filtering on the display name of an optionset attribute, convert it to filtering on the underlying value field
+                        // instead where possible.
+                        if (attribute.LogicalName == baseAttribute.LogicalName + "name" && baseAttribute is EnumAttributeMetadata enumAttr)
                         {
                             var matchingOptions = enumAttr.OptionSet.Options.Where(o => o.Label.UserLocalizedLabel.Label.Equals(value, StringComparison.OrdinalIgnoreCase)).ToList();
 
@@ -2578,6 +2580,43 @@ namespace MarkMpn.Sql4Cds.Engine
                                 value = matchingOptions[0].Value.ToString();
                                 virtualAttributeHandled = true;
                             }
+                            else if (matchingOptions.Count == 0 && (op == @operator.eq || op == @operator.ne || op == @operator.neq))
+                            {
+                                throw new NotSupportedQueryFragmentException("Unknown optionset value. Supported values are " + String.Join(", ", enumAttr.OptionSet.Options.Select(o => o.Label.UserLocalizedLabel.Label)), literal);
+                            }
+                        }
+
+                        // If filtering on the display name of a lookup value, add a join to the target type and filter
+                        // on the primary name attribute instead.
+                        if (attribute.LogicalName == baseAttribute.LogicalName + "name" && baseAttribute is LookupAttributeMetadata lookupAttr && lookupAttr.Targets.Length == 1)
+                        {
+                            var targetMetadata = Metadata[lookupAttr.Targets[0]];
+                            var join = entityTable.GetItems().OfType<FetchLinkEntityType>().FirstOrDefault(link => link.name == targetMetadata.LogicalName && link.from == targetMetadata.PrimaryIdAttribute && link.to == baseAttribute.LogicalName && link.linktype == "outer");
+
+                            if (join == null)
+                            {
+                                join = new FetchLinkEntityType
+                                {
+                                    name = targetMetadata.LogicalName,
+                                    from = targetMetadata.PrimaryIdAttribute,
+                                    to = baseAttribute.LogicalName,
+                                    alias = $"{entityTable.EntityName}_{baseAttribute.LogicalName}",
+                                    linktype = "outer"
+                                };
+                                var joinTable = new EntityTable(Metadata, join);
+                                tables.Add(joinTable);
+
+                                entityTable.AddItem(join);
+                                entityTable = joinTable;
+                            }
+                            else
+                            {
+                                entityTable = tables.Single(t => t.LinkEntity == join);
+                            }
+
+                            entityName = entityTable.Alias;
+                            attrName = targetMetadata.PrimaryNameAttribute;
+                            virtualAttributeHandled = true;
                         }
 
                         if (!virtualAttributeHandled)
@@ -2708,10 +2747,63 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (entityTable == targetTable)
                     entityName = null;
 
+                var attrName = GetColumnAttribute(field);
+                var attr = entityTable.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase));
+
+                if (!String.IsNullOrEmpty(attr.AttributeOf))
+                {
+                    var virtualAttributeHandled = false;
+                    var baseAttribute = entityTable.Metadata.Attributes.Single(a => a.LogicalName == attr.AttributeOf);
+
+                    // If filtering on the name of an optionset value, filter on the underlying value instead as a null name implies a null
+                    // value and a non-null name implies a non-null value
+                    if (attr.LogicalName == baseAttribute.LogicalName + "name" && baseAttribute is EnumAttributeMetadata)
+                    {
+                        attrName = baseAttribute.LogicalName;
+                        virtualAttributeHandled = true;
+                    }
+
+                    // If filtering on the name of a lookup value, add a join to the target type and filter on the primary name
+                    // attribute instead. It's possible to have a non-null lookup value that refers to a null name.
+                    if (attr.LogicalName == baseAttribute.LogicalName + "name" && baseAttribute is LookupAttributeMetadata lookupAttr && lookupAttr.Targets.Length == 1)
+                    {
+                        var targetMetadata = Metadata[lookupAttr.Targets[0]];
+                        var join = entityTable.GetItems().OfType<FetchLinkEntityType>().FirstOrDefault(link => link.name == targetMetadata.LogicalName && link.from == targetMetadata.PrimaryIdAttribute && link.to == baseAttribute.LogicalName && link.linktype == "outer");
+
+                        if (join == null)
+                        {
+                            join = new FetchLinkEntityType
+                            {
+                                name = targetMetadata.LogicalName,
+                                from = targetMetadata.PrimaryIdAttribute,
+                                to = baseAttribute.LogicalName,
+                                alias = $"{entityTable.EntityName}_{baseAttribute.LogicalName}",
+                                linktype = "outer"
+                            };
+                            var joinTable = new EntityTable(Metadata, join);
+                            tables.Add(joinTable);
+
+                            entityTable.AddItem(join);
+                            entityTable = joinTable;
+                        }
+                        else
+                        {
+                            entityTable = tables.Single(t => t.LinkEntity == join);
+                        }
+
+                        entityName = entityTable.Alias;
+                        attrName = targetMetadata.PrimaryNameAttribute;
+                        virtualAttributeHandled = true;
+                    }
+
+                    if (!virtualAttributeHandled)
+                        throw new PostProcessingRequiredException("Cannot filter on virtual attribute", field);
+                }
+
                 criteria.Items = AddItem(criteria.Items, new condition
                 {
                     entityname = entityName,
-                    attribute = field.MultiPartIdentifier.Identifiers.Last().Value,
+                    attribute = attrName,
                     @operator = isNull.IsNot ? @operator.notnull : @operator.@null
                 });
             }
@@ -2729,10 +2821,55 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (entityTable == targetTable)
                     entityName = null;
 
+                var attrName = GetColumnAttribute(field);
+                var attr = entityTable.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase));
+
+                if (!String.IsNullOrEmpty(attr.AttributeOf))
+                {
+                    var virtualAttributeHandled = false;
+                    var baseAttribute = entityTable.Metadata.Attributes.Single(a => a.LogicalName == attr.AttributeOf);
+
+                    // If filtering on a lookup attribute, add a join to the target entity and filter on the primary name
+                    // attribute instead.
+                    if (attr.LogicalName == baseAttribute.LogicalName + "name" && baseAttribute is LookupAttributeMetadata lookupAttr && lookupAttr.Targets.Length == 1)
+                    {
+                        var targetMetadata = Metadata[lookupAttr.Targets[0]];
+                        var join = entityTable.GetItems().OfType<FetchLinkEntityType>().FirstOrDefault(link => link.name == targetMetadata.LogicalName && link.from == targetMetadata.PrimaryIdAttribute && link.to == baseAttribute.LogicalName && link.linktype == "outer");
+
+                        if (join == null)
+                        {
+                            join = new FetchLinkEntityType
+                            {
+                                name = targetMetadata.LogicalName,
+                                from = targetMetadata.PrimaryIdAttribute,
+                                to = baseAttribute.LogicalName,
+                                alias = $"{entityTable.EntityName}_{baseAttribute.LogicalName}",
+                                linktype = "outer"
+                            };
+                            var joinTable = new EntityTable(Metadata, join);
+                            tables.Add(joinTable);
+
+                            entityTable.AddItem(join);
+                            entityTable = joinTable;
+                        }
+                        else
+                        {
+                            entityTable = tables.Single(t => t.LinkEntity == join);
+                        }
+
+                        entityName = entityTable.Alias;
+                        attrName = targetMetadata.PrimaryNameAttribute;
+                        virtualAttributeHandled = true;
+                    }
+
+                    if (!virtualAttributeHandled)
+                        throw new PostProcessingRequiredException("Cannot filter on virtual attribute", field);
+                }
+
                 criteria.Items = AddItem(criteria.Items, new condition
                 {
                     entityname = entityName,
-                    attribute = GetColumnAttribute(field),
+                    attribute = attrName,
                     @operator = like.NotDefined ? @operator.notlike : @operator.like,
                     value = value.Value
                 });
@@ -2750,14 +2887,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (entityTable == targetTable)
                     entityName = null;
 
-                var condition = new condition
-                {
-                    entityname = entityName,
-                    attribute = field.MultiPartIdentifier.Identifiers.Last().Value,
-                    @operator = @in.NotDefined ? @operator.notin : @operator.@in
-                };
-                
-                condition.Items = @in.Values
+                var items = @in.Values
                     .Select(v =>
                     {
                         if (!(v is Literal literal))
@@ -2769,6 +2899,81 @@ namespace MarkMpn.Sql4Cds.Engine
                         };
                     })
                     .ToArray();
+
+                var attrName = GetColumnAttribute(field);
+                var attr = entityTable.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase));
+
+                if (!String.IsNullOrEmpty(attr.AttributeOf))
+                {
+                    var virtualAttributeHandled = false;
+                    var baseAttribute = entityTable.Metadata.Attributes.Single(a => a.LogicalName == attr.AttributeOf);
+
+                    // If filtering on the name of an optionset attribute, convert the names to values and filter on the underlying
+                    // value attribute instead. It's possible to have multiple values with the same name.
+                    if (attr.LogicalName == baseAttribute.LogicalName + "name" && baseAttribute is EnumAttributeMetadata enumAttribute)
+                    {
+                        attrName = baseAttribute.LogicalName;
+
+                        items = @in.Values
+                            .Cast<Literal>()
+                            .SelectMany(v =>
+                            {
+                                var options = enumAttribute.OptionSet.Options.Where(o => o.Label.UserLocalizedLabel.Label.Equals(v.Value, StringComparison.OrdinalIgnoreCase)).ToList();
+
+                                if (options.Count == 0)
+                                    throw new NotSupportedQueryFragmentException("Unknown optionset value. Supported values are " + String.Join(", ", enumAttribute.OptionSet.Options.Select(o => o.Label.UserLocalizedLabel.Label)), v);
+
+                                return options.Select(o => new conditionValue { Value = o.Value.ToString() });
+                            })
+                            .ToArray();
+
+                        virtualAttributeHandled = true;
+                    }
+
+                    // If filtering on the name of a lookup attribute, add a join to the target entity and filter on the primary
+                    // name attribute instead.
+                    if (attr.LogicalName == baseAttribute.LogicalName + "name" && baseAttribute is LookupAttributeMetadata lookupAttr && lookupAttr.Targets.Length == 1)
+                    {
+                        var targetMetadata = Metadata[lookupAttr.Targets[0]];
+                        var join = entityTable.GetItems().OfType<FetchLinkEntityType>().FirstOrDefault(link => link.name == targetMetadata.LogicalName && link.from == targetMetadata.PrimaryIdAttribute && link.to == baseAttribute.LogicalName && link.linktype == "outer");
+
+                        if (join == null)
+                        {
+                            join = new FetchLinkEntityType
+                            {
+                                name = targetMetadata.LogicalName,
+                                from = targetMetadata.PrimaryIdAttribute,
+                                to = baseAttribute.LogicalName,
+                                alias = $"{entityTable.EntityName}_{baseAttribute.LogicalName}",
+                                linktype = "outer"
+                            };
+                            var joinTable = new EntityTable(Metadata, join);
+                            tables.Add(joinTable);
+
+                            entityTable.AddItem(join);
+                            entityTable = joinTable;
+                        }
+                        else
+                        {
+                            entityTable = tables.Single(t => t.LinkEntity == join);
+                        }
+
+                        entityName = entityTable.Alias;
+                        attrName = targetMetadata.PrimaryNameAttribute;
+                        virtualAttributeHandled = true;
+                    }
+
+                    if (!virtualAttributeHandled)
+                        throw new PostProcessingRequiredException("Cannot filter on virtual attribute", field);
+                }
+
+                var condition = new condition
+                {
+                    entityname = entityName,
+                    attribute = attrName,
+                    @operator = @in.NotDefined ? @operator.notin : @operator.@in,
+                    Items = items
+                };
 
                 criteria.Items = AddItem(criteria.Items, condition);
             }
