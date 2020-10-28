@@ -527,6 +527,21 @@ namespace MarkMpn.Sql4Cds.Engine
             HandleTopClause(update.UpdateSpecification.TopRowFilter, fetch, extensions);
 
             var table = FindTable(target, tables);
+
+            if (table == null)
+            {
+                // Invalid table name. See how helpful we can make the error message
+                var tableName = target.SchemaObject.BaseIdentifier.Value;
+
+                foreach (var entityTable in tables)
+                {
+                    if (entityTable.EntityName.Equals(tableName, StringComparison.OrdinalIgnoreCase) && !String.IsNullOrEmpty(entityTable.Alias))
+                        throw new NotSupportedQueryFragmentException($"Invalid table name. Did you mean '{entityTable.Alias}'?", target);
+                }
+
+                throw new NotSupportedQueryFragmentException("Invalid table name", target);
+            }
+
             var meta = Metadata[table.EntityName];
 
             // Get the details of what fields should be updated to what

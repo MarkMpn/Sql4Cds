@@ -2528,6 +2528,29 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 </fetch>");
         }
 
+        [TestMethod]
+        public void UpdateMissingAliasError()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "UPDATE account SET primarycontactid = c.contactid FROM account AS a INNER JOIN contact AS c ON a.name = c.fullname";
+
+            try
+            {
+                sql2FetchXml.Convert(query);
+                Assert.Fail("Expected error converting query");
+            }
+            catch (NotSupportedQueryFragmentException ex)
+            {
+                Assert.AreEqual("Invalid table name. Did you mean 'a'?", ex.Error);
+            }
+        }
+
         private void AssertFetchXml(Query[] queries, string fetchXml)
         {
             Assert.AreEqual(1, queries.Length);
