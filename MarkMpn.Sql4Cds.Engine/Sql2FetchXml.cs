@@ -532,14 +532,15 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 // Invalid table name. See how helpful we can make the error message
                 var tableName = target.SchemaObject.BaseIdentifier.Value;
+                var matchingTables = tables.Where(t => t.EntityName.Equals(tableName, StringComparison.OrdinalIgnoreCase)).ToList();
 
-                foreach (var entityTable in tables)
-                {
-                    if (entityTable.EntityName.Equals(tableName, StringComparison.OrdinalIgnoreCase) && !String.IsNullOrEmpty(entityTable.Alias))
-                        throw new NotSupportedQueryFragmentException($"Invalid table name. Did you mean '{entityTable.Alias}'?", target);
-                }
+                if (matchingTables.Count == 0)
+                    throw new NotSupportedQueryFragmentException("Table does not appear in FROM clause", target);
 
-                throw new NotSupportedQueryFragmentException("Invalid table name", target);
+                if (matchingTables.Count > 1)
+                    throw new NotSupportedQueryFragmentException("Ambiguous table name", target);
+
+                table = matchingTables[0];
             }
 
             var meta = Metadata[table.EntityName];

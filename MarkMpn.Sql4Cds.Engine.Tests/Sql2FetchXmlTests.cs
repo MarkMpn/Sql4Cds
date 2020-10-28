@@ -2529,7 +2529,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
-        public void UpdateMissingAliasError()
+        public void UpdateMissingAlias()
         {
             var context = new XrmFakedContext();
             context.InitializeMetadata(Assembly.GetExecutingAssembly());
@@ -2540,14 +2540,29 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "UPDATE account SET primarycontactid = c.contactid FROM account AS a INNER JOIN contact AS c ON a.name = c.fullname";
 
+            sql2FetchXml.Convert(query);
+        }
+
+        [TestMethod]
+        public void UpdateMissingAliasAmbiguous()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "UPDATE account SET primarycontactid = other.primarycontactid FROM account AS main INNER JOIN account AS other on main.name = other.name";
+
             try
             {
                 sql2FetchXml.Convert(query);
-                Assert.Fail("Expected error converting query");
+                Assert.Fail("Expected exception");
             }
             catch (NotSupportedQueryFragmentException ex)
             {
-                Assert.AreEqual("Invalid table name. Did you mean 'a'?", ex.Error);
+                Assert.AreEqual("Ambiguous table name", ex.Error);
             }
         }
 
