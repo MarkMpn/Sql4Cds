@@ -436,7 +436,12 @@ namespace MarkMpn.Sql4Cds.Engine.QueryExtensions
             var d = Convert.ToDecimal(value);
             _sumDecimal += d;
 
-            Value = Convert.ChangeType(_sumDecimal, Expression.Type);
+            var targetType = Expression.Type;
+
+            if (targetType.IsGenericType && targetType.GetGenericTypeDefinition() == typeof(Nullable<>))
+                targetType = targetType.GetGenericArguments()[0];
+
+            Value = Convert.ChangeType(_sumDecimal, targetType);
         }
 
         public override Type Type => Expression.Type;
