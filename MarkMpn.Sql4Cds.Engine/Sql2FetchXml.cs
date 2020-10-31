@@ -638,6 +638,9 @@ namespace MarkMpn.Sql4Cds.Engine
                 case AttributeTypeCode.Status:
                     return new OptionSetValue(Int32.Parse(value, CultureInfo.InvariantCulture));
 
+                case AttributeTypeCode.Uniqueidentifier:
+                    return Guid.Parse(value);
+
                 default:
                     throw new NotSupportedException($"Unsupport attribute type {attr.AttributeType} for attribute {attrName}");
             }
@@ -1691,13 +1694,14 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (expr is FunctionCall func)
                 {
                     if (!TryParseDatePart(func, out var g, out var dateCol))
-                        throw new NotSupportedQueryFragmentException("Unhandled GROUP BY clause", expr);
+                        throw new PostProcessingRequiredException("Unhandled GROUP BY clause - column name or DATEPART function expected", expr);
 
                     dateGrouping = g;
                     expr = dateCol;
                 }
 
-                var col = (ColumnReferenceExpression)expr;
+                if (!(expr is ColumnReferenceExpression col))
+                    throw new PostProcessingRequiredException("Unhandled GROUP BY clause - column name or DATEPART function expected", expr);
 
                 // Find the table in the query that the grouping attribute is from
                 GetColumnTableAlias(col, tables, out var table);
