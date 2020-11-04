@@ -76,6 +76,11 @@ namespace MarkMpn.Sql4Cds.Engine
             public EntityMetadata Metadata { get; }
 
             /// <summary>
+            /// Indicates if this table has been added by the engine and shouldn't be used for column name resolution
+            /// </summary>
+            public bool Hidden { get; set; }
+
+            /// <summary>
             /// Adds a child to the entity or link-entity
             /// </summary>
             /// <param name="item">The item to add to the entity or link-entity</param>
@@ -2623,7 +2628,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                     alias = $"{entityTable.EntityName}_{baseAttribute.LogicalName}",
                                     linktype = "outer"
                                 };
-                                var joinTable = new EntityTable(Metadata, join);
+                                var joinTable = new EntityTable(Metadata, join) { Hidden = true };
                                 tables.Add(joinTable);
 
                                 entityTable.AddItem(join);
@@ -2800,7 +2805,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                 alias = $"{entityTable.EntityName}_{baseAttribute.LogicalName}",
                                 linktype = "outer"
                             };
-                            var joinTable = new EntityTable(Metadata, join);
+                            var joinTable = new EntityTable(Metadata, join) { Hidden = true };
                             tables.Add(joinTable);
 
                             entityTable.AddItem(join);
@@ -2866,7 +2871,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                 alias = $"{entityTable.EntityName}_{baseAttribute.LogicalName}",
                                 linktype = "outer"
                             };
-                            var joinTable = new EntityTable(Metadata, join);
+                            var joinTable = new EntityTable(Metadata, join) { Hidden = true };
                             tables.Add(joinTable);
 
                             entityTable.AddItem(join);
@@ -2967,7 +2972,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                 alias = $"{entityTable.EntityName}_{baseAttribute.LogicalName}",
                                 linktype = "outer"
                             };
-                            var joinTable = new EntityTable(Metadata, join);
+                            var joinTable = new EntityTable(Metadata, join) { Hidden = true };
                             tables.Add(joinTable);
 
                             entityTable.AddItem(join);
@@ -3760,7 +3765,7 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 // If no table is explicitly specified, check in the metadata for each available table
                 possibleEntities = tables
-                    .Where(t => t.Metadata.Attributes.Any(attr => attr.LogicalName.Equals(col.MultiPartIdentifier.Identifiers[0].Value, StringComparison.OrdinalIgnoreCase)))
+                    .Where(t => !t.Hidden && t.Metadata.Attributes.Any(attr => attr.LogicalName.Equals(col.MultiPartIdentifier.Identifiers[0].Value, StringComparison.OrdinalIgnoreCase)))
                     .ToArray();
             }
 
