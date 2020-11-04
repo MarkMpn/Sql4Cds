@@ -286,7 +286,12 @@ namespace MarkMpn.Sql4Cds
             var text = _editor.Text;
             EntityCache.TryGetEntities(_con.ServiceClient, out var entities);
 
-            entities = entities.Concat(MetaMetadata.GetMetadata().Select(m => m.GetEntityMetadata())).ToArray();
+            var metaEntities = MetaMetadata.GetMetadata().Select(m => m.GetEntityMetadata());
+
+            if (entities == null)
+                entities = metaEntities.ToArray();
+            else
+                entities = entities.Concat(metaEntities).ToArray();
 
             var suggestions = new Autocomplete(entities, Metadata).GetSuggestions(text, pos, out var currentLength).ToList();
 
