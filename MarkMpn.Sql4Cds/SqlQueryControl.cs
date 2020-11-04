@@ -682,7 +682,7 @@ namespace MarkMpn.Sql4Cds
         {
             // Store the details of what's been clicked
             // Show context menu with Open & Create SELECT options enabled
-            if (e.Entity.Contains(e.Attribute) && e.Entity[e.Attribute] is EntityReference)
+            if (e.Entity != null && e.Entity.Contains(e.Attribute) && e.Entity[e.Attribute] is EntityReference)
             {
                 var grid = (Control)sender;
                 gridContextMenuStrip.Show(grid, grid.PointToClient(Cursor.Position));
