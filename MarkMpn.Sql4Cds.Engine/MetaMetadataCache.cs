@@ -54,5 +54,14 @@ namespace MarkMpn.Sql4Cds.Engine
 
             return _inner.TryGetValue(logicalName, out metadata);
         }
+
+        /// <inheritdoc/>
+        public bool TryGetMinimalData(string logicalName, out EntityMetadata metadata)
+        {
+            if (_customMetadata.TryGetValue(logicalName, out metadata))
+                return true;
+
+            return _inner.TryGetMinimalData(logicalName, out metadata);
+        }
     }
 }

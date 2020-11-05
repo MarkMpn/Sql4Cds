@@ -5,6 +5,7 @@ using MarkMpn.Sql4Cds.Engine;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
+using Microsoft.Xrm.Sdk.Metadata.Query;
 
 namespace MarkMpn.Sql4Cds
 {
@@ -17,9 +18,18 @@ namespace MarkMpn.Sql4Cds
         {
             if (!_cache.TryGetValue(org, out var entities))
             {
-                entities = ((RetrieveAllEntitiesResponse) org.Execute(new RetrieveAllEntitiesRequest
+                entities = ((RetrieveMetadataChangesResponse) org.Execute(new RetrieveMetadataChangesRequest
                 {
-                    EntityFilters = EntityFilters.Entity
+                    Query = new EntityQueryExpression
+                    {
+                        Properties = new MetadataPropertiesExpression
+                        {
+                            PropertyNames =
+                            {
+                                nameof(EntityMetadata.LogicalName)
+                            }
+                        }
+                    }
                 })).EntityMetadata
                 .Where(e => !MetaMetadata.GetMetadata().Any(md => e.LogicalName == md.LogicalName))
                 .ToArray();

@@ -9,6 +9,7 @@ using McTools.Xrm.Connection;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
 using XrmToolBox.Extensibility;
+using Microsoft.Xrm.Sdk.Metadata.Query;
 
 namespace MarkMpn.Sql4Cds
 {
@@ -185,11 +186,49 @@ namespace MarkMpn.Sql4Cds
             var metadata = (EntityMetadata)parent.Parent.Tag;
             
             if (metadata.OneToManyRelationships == null)
-                metadata = ((RetrieveEntityResponse)GetService(parent).ServiceClient.Execute(new RetrieveEntityRequest
+            {
+                metadata = ((RetrieveMetadataChangesResponse)GetService(parent).ServiceClient.Execute(new RetrieveMetadataChangesRequest
+                {
+                    Query = new EntityQueryExpression
                     {
-                        LogicalName = logicalName,
-                        EntityFilters = EntityFilters.Relationships
-                    })).EntityMetadata;
+                        Criteria = new MetadataFilterExpression
+                        {
+                            Conditions =
+                            {
+                                new MetadataConditionExpression(nameof(EntityMetadata.LogicalName), MetadataConditionOperator.Equals, metadata.LogicalName)
+                            }
+                        },
+                        Properties = new MetadataPropertiesExpression
+                        {
+                            PropertyNames =
+                            {
+                                nameof(EntityMetadata.OneToManyRelationships),
+                                nameof(EntityMetadata.ManyToOneRelationships),
+                                nameof(EntityMetadata.ManyToManyRelationships)
+                            }
+                        },
+                        RelationshipQuery = new RelationshipQueryExpression
+                        {
+                            Properties = new MetadataPropertiesExpression
+                            {
+                                PropertyNames =
+                                {
+                                    nameof(OneToManyRelationshipMetadata.SchemaName),
+                                    nameof(OneToManyRelationshipMetadata.ReferencingEntity),
+                                    nameof(OneToManyRelationshipMetadata.ReferencingAttribute),
+                                    nameof(OneToManyRelationshipMetadata.ReferencedEntity),
+                                    nameof(OneToManyRelationshipMetadata.ReferencedAttribute),
+                                    nameof(ManyToManyRelationshipMetadata.Entity1LogicalName),
+                                    nameof(ManyToManyRelationshipMetadata.Entity2LogicalName),
+                                    nameof(ManyToManyRelationshipMetadata.IntersectEntityName),
+                                    nameof(ManyToManyRelationshipMetadata.Entity1IntersectAttribute),
+                                    nameof(ManyToManyRelationshipMetadata.Entity2IntersectAttribute)
+                                }
+                            }
+                        }
+                    }
+                })).EntityMetadata[0];
+            }
 
             return metadata.OneToManyRelationships.Select(r =>
                 {
@@ -335,23 +374,36 @@ INNER JOIN {oneToMany.ReferencedEntity}
             else if (e.Node.Tag is ManyToManyRelationshipMetadata manyToMany)
             {
                 var con = GetService(e.Node);
-                var entity1 = (RetrieveEntityResponse)con.ServiceClient.Execute(new RetrieveEntityRequest
+                var entities = ((RetrieveMetadataChangesResponse)con.ServiceClient.Execute(new RetrieveMetadataChangesRequest
                 {
-                    LogicalName = manyToMany.Entity1LogicalName,
-                    EntityFilters = EntityFilters.Entity
-                });
-                var entity2 = (RetrieveEntityResponse)con.ServiceClient.Execute(new RetrieveEntityRequest
-                {
-                    LogicalName = manyToMany.Entity2LogicalName,
-                    EntityFilters = EntityFilters.Entity
-                });
+                    Query = new EntityQueryExpression
+                    {
+                        Criteria = new MetadataFilterExpression
+                        {
+                            Conditions =
+                            {
+                                new MetadataConditionExpression(nameof(EntityMetadata.LogicalName), MetadataConditionOperator.In, new[] { manyToMany.Entity1LogicalName, manyToMany.Entity2LogicalName })
+                            }
+                        },
+                        Properties = new MetadataPropertiesExpression
+                        {
+                            PropertyNames =
+                            {
+                                nameof(EntityMetadata.LogicalName),
+                                nameof(EntityMetadata.PrimaryIdAttribute)
+                            }
+                        }
+                    }
+                })).EntityMetadata;
+                var entity1 = entities.Single(entity => entity.LogicalName == manyToMany.Entity1LogicalName);
+                var entity2 = entities.Single(entity => entity.LogicalName == manyToMany.Entity2LogicalName);
 
                 var join = $@"
 {manyToMany.Entity1LogicalName}
 INNER JOIN {manyToMany.IntersectEntityName}
-    ON {manyToMany.Entity1LogicalName}.{entity1.EntityMetadata.PrimaryIdAttribute} = {manyToMany.IntersectEntityName}.{manyToMany.Entity1IntersectAttribute}
+    ON {manyToMany.Entity1LogicalName}.{entity1.PrimaryIdAttribute} = {manyToMany.IntersectEntityName}.{manyToMany.Entity1IntersectAttribute}
 INNER JOIN {manyToMany.Entity2LogicalName}
-    ON {manyToMany.Entity2LogicalName}.{entity2.EntityMetadata.PrimaryIdAttribute} = {manyToMany.IntersectEntityName}.{manyToMany.Entity2IntersectAttribute}";
+    ON {manyToMany.Entity2LogicalName}.{entity2.PrimaryIdAttribute} = {manyToMany.IntersectEntityName}.{manyToMany.Entity2IntersectAttribute}";
 
                 query.InsertText(join);
             }

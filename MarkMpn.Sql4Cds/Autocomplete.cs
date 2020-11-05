@@ -211,7 +211,7 @@ namespace MarkMpn.Sql4Cds
                         foreach (var table in tables.Values)
                         {
                             if (_entities.Any(e => e.LogicalName.Equals(table, StringComparison.OrdinalIgnoreCase)))
-                                _metadata.TryGetValue(table, out _);
+                                _metadata.TryGetMinimalData(table, out _);
                         }
                     }
 
@@ -255,7 +255,7 @@ namespace MarkMpn.Sql4Cds
 
                             foreach (var table in tables)
                             {
-                                if (_metadata.TryGetValue(table.Value, out var metadata))
+                                if (_metadata.TryGetMinimalData(table.Value, out var metadata))
                                 {
                                     if (metadata.OneToManyRelationships != null)
                                         joinSuggestions.AddRange(metadata.OneToManyRelationships.Select(rel => $"{rel.ReferencingEntity}{GetUniqueTableAlias(rel.ReferencingEntity, tables)} ON {table.Key}.{rel.ReferencedAttribute} = {GetUniqueTableName(rel.ReferencingEntity, tables)}.{rel.ReferencingAttribute}?19"));
@@ -273,7 +273,7 @@ namespace MarkMpn.Sql4Cds
 
                         var additionalSuggestions = (IEnumerable<string>) Array.Empty<string>();
 
-                        if (prevWord.Equals("on", StringComparison.OrdinalIgnoreCase) && _metadata.TryGetValue(tables[prevPrevWord], out var newTableMetadata))
+                        if (prevWord.Equals("on", StringComparison.OrdinalIgnoreCase) && _metadata.TryGetMinimalData(tables[prevPrevWord], out var newTableMetadata))
                         {
                             // Suggest known relationships from the other entities in the FROM clause, followed by the normal list of attributes
                             additionalSuggestions = new List<string>();
@@ -303,7 +303,7 @@ namespace MarkMpn.Sql4Cds
                                 targetTable = word;
                             }
 
-                            if (tables.TryGetValue(targetTable, out var tableName) && _metadata.TryGetValue(tableName, out var metadata))
+                            if (tables.TryGetValue(targetTable, out var tableName) && _metadata.TryGetMinimalData(tableName, out var metadata))
                                 return metadata.Attributes.Where(a => a.IsValidForUpdate != false && a.LogicalName.StartsWith(currentWord, StringComparison.OrdinalIgnoreCase)).Select(a => a.LogicalName + GetIconIndex(a)).OrderBy(a => a);
                         }
 
@@ -316,7 +316,7 @@ namespace MarkMpn.Sql4Cds
 
                             if (tables.TryGetValue(alias, out var tableName))
                             {
-                                if (_metadata.TryGetValue(tableName, out var metadata))
+                                if (_metadata.TryGetMinimalData(tableName, out var metadata))
                                     return metadata.Attributes.Select(x => x.LogicalName + GetIconIndex(x)).Where(x => x.StartsWith(currentWord)).OrderBy(x => x);
                             }
                         }
@@ -339,7 +339,7 @@ namespace MarkMpn.Sql4Cds
 
                             foreach (var table in tables)
                             {
-                                if (_metadata.TryGetValue(table.Value, out var metadata))
+                                if (_metadata.TryGetMinimalData(table.Value, out var metadata))
                                     attributes.AddRange(metadata.Attributes);
                             }
 
