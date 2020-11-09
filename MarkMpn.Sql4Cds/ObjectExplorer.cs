@@ -114,6 +114,8 @@ namespace MarkMpn.Sql4Cds
 
         public void AddConnection(ConnectionDetail con)
         {
+            EntityCache.TryGetEntities(con.ServiceClient, out _);
+
             var conNode = treeView.Nodes.Add(con.ConnectionName);
             conNode.Tag = con;
             conNode.ContextMenuStrip = serverContextMenuStrip;
