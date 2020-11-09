@@ -268,6 +268,12 @@ namespace MarkMpn.Sql4Cds
             for (var i = 0; i < _images.Length; i++)
                 scintilla.RegisterRgbaImage(i, _images[i]);
 
+            // Rectangular selections
+            scintilla.MultipleSelection = true;
+            scintilla.MouseSelectionRectangularSwitch = true;
+            scintilla.AdditionalSelectionTyping = true;
+            scintilla.VirtualSpaceOptions = VirtualSpace.RectangularSelection;
+
             return scintilla;
         }
 
