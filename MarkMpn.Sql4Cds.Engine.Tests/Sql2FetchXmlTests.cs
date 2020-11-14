@@ -2336,8 +2336,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var result = (DataTable)queries[0].Result;
 
-            Assert.AreEqual(5, result.Rows.Count);
+            Assert.AreEqual(6, result.Rows.Count);
             var row = 0;
+            Assert.AreEqual("new_boolprop", result.Rows[row++]["a.logicalname"]);
             Assert.AreEqual("new_customentityid", result.Rows[row++]["a.logicalname"]);
             Assert.AreEqual("new_name", result.Rows[row++]["a.logicalname"]);
             Assert.AreEqual("new_optionsetvalue", result.Rows[row++]["a.logicalname"]);
@@ -2564,6 +2565,21 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 Assert.AreEqual("Ambiguous table name", ex.Error);
             }
+        }
+
+        [TestMethod]
+        public void ConvertIntToBool()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "UPDATE new_customentity SET new_boolprop = CASE WHEN new_name = 'True' THEN 1 ELSE 0 END";
+
+            sql2FetchXml.Convert(query);
         }
 
         private void AssertFetchXml(Query[] queries, string fetchXml)

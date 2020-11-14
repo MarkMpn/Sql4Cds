@@ -585,6 +585,20 @@ namespace MarkMpn.Sql4Cds.Engine
             if (expr.Type.IsValueType && type == typeof(object))
                 return Expression.Convert(expr, type);
 
+            // WIP: Implicit type conversions to match SQL
+            if (type == typeof(bool?))
+            {
+                // https://docs.microsoft.com/en-us/sql/t-sql/data-types/bit-transact-sql
+                if (expr.Type == typeof(string))
+                    return Expr.Call(() => StringToBool(Arg<string>()), expr);
+
+                if (expr.Type == typeof(int))
+                    expr = Expression.Convert(expr, typeof(int?));
+
+                if (expr.Type == typeof(int?))
+                    return Expr.Call(() => IntToBool(Arg<int?>()), expr);
+            }
+
             // In-built conversions between value types
             if (expr.Type.IsValueType && type.IsValueType)
                 return Expression.Convert(expr, type);
@@ -614,6 +628,31 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             throw new NotSupportedException($"Cannot convert from {expr.Type} to {type}");
+        }
+
+        private static bool? StringToBool(string str)
+        {
+            if (str == null)
+                return null;
+
+            if (str.Equals("TRUE", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (str.Equals("FALSE", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            throw new ArgumentOutOfRangeException($"Cannot convert string value '{str}' to boolean");
+        }
+
+        private static bool? IntToBool(int? value)
+        {
+            if (value == null)
+                return null;
+
+            if (value == 0)
+                return false;
+
+            return true;
         }
 
         private static DateTime? ParseDateTime(string str)
