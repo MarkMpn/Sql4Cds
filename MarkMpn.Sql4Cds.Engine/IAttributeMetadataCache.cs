@@ -49,7 +49,10 @@ namespace MarkMpn.Sql4Cds.Engine
         ///         Attributes
         ///         <ul>
         ///             <li>LogicalName</li>
+        ///             <li>AttributeOf</li>
         ///             <li>AttributeType</li>
+        ///             <li>DisplayName</li>
+        ///             <li>Description</li>
         ///             <li>IsValidForUpdate</li>
         ///         </ul>
         ///     </li>

@@ -36,37 +36,37 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void FromClause()
         {
             var sql = "SELECT * FROM a";
-            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out var currentLength).ToList();
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out var currentLength).Select(s => s.Text).ToList();
 
             Assert.AreEqual(1, currentLength);
-            CollectionAssert.AreEqual(new[] { "account?4" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "account" }, suggestions);
         }
 
         [TestMethod]
         public void Insert()
         {
             var sql = "INSERT ";
-            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out var currentLength).ToList();
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out var currentLength).Select(s => s.Text).ToList();
 
             Assert.AreEqual(0, currentLength);
-            CollectionAssert.AreEqual(new[] { "account?4", "contact?4", "new_customentity?4" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "account", "contact", "new_customentity" }, suggestions);
         }
 
         [TestMethod]
         public void InsertInto()
         {
             var sql = "INSERT INTO ";
-            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out var currentLength).ToList();
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out var currentLength).Select(s => s.Text).ToList();
 
             Assert.AreEqual(0, currentLength);
-            CollectionAssert.AreEqual(new[] { "account?4", "contact?4", "new_customentity?4" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "account", "contact", "new_customentity" }, suggestions);
         }
 
         [TestMethod]
         public void Join()
         {
             var sql = "SELECT * FROM account le";
-            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).ToList();
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).Select(s => s.Text).ToList();
 
             CollectionAssert.AreEqual(Array.Empty<string>(), suggestions);
         }
@@ -80,7 +80,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var sql = "SELECT * FROM account left outer join ";
             var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).ToList();
 
-            CollectionAssert.AreEqual(new[] { "contact ON account.accountid = contact.parentcustomerid?19", "account?4", "contact?4" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "contact ON account.accountid = contact.parentcustomerid", "account", "contact" }, suggestions);
         }
 
         [TestMethod]
@@ -90,7 +90,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out var currentLength).ToList();
 
             Assert.AreEqual(0, currentLength);
-            Assert.AreEqual("a.accountid = c.parentcustomerid?19", suggestions.First());
+            Assert.AreEqual("a.accountid = c.parentcustomerid", suggestions.First());
         }
         */
 
@@ -98,37 +98,37 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void OnClause()
         {
             var sql = "SELECT * FROM account a left outer join contact c on a.accountid = c.p";
-            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out var currentLength).ToList();
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out var currentLength).Select(s => s.Text).ToList();
 
             Assert.AreEqual(1, currentLength);
-            CollectionAssert.AreEqual(new[] { "parentcustomerid?9" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "parentcustomerid" }, suggestions);
         }
 
         [TestMethod]
         public void UniqueAttributeName()
         {
             var sql = "SELECT * FROM account a left outer join contact c on a.accountid = c.parentcustomerid where ";
-            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).ToList();
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).Select(s => s.Text).ToList();
 
-            CollectionAssert.AreEqual(new[] { "a?4", "accountid?14", "c?4", "contactid?14", "employees?8", "firstname?13", "fullname?13", "lastname?13", "name?13", "parentcustomerid?9", "primarycontactid?9", "primarycontactidname?13", "turnover?0" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "a", "accountid", "c", "contactid", "employees", "firstname", "fullname", "lastname", "name", "parentcustomerid", "primarycontactid", "primarycontactidname", "turnover" }, suggestions);
         }
 
         [TestMethod]
         public void AllAttributesInEntity()
         {
             var sql = "SELECT * FROM account a left outer join contact c on a.accountid = c.parentcustomerid where a.";
-            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).ToList();
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).Select(s => s.Text).ToList();
 
-            CollectionAssert.AreEqual(new[] { "accountid?14", "createdon?2", "employees?8", "name?13", "primarycontactid?9", "primarycontactidname?13", "turnover?0" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "accountid", "createdon", "employees", "name", "primarycontactid", "primarycontactidname", "turnover" }, suggestions);
         }
 
         [TestMethod]
         public void SelectClause()
         {
             var sql = "SELECT a. FROM account a left outer join contact c on a.accountid = c.parentcustomerid";
-            var suggestions = _autocomplete.GetSuggestions(sql, sql.IndexOf("."), out _).ToList();
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.IndexOf("."), out _).Select(s => s.Text).ToList();
 
-            CollectionAssert.AreEqual(new[] { "accountid?14", "createdon?2", "employees?8", "name?13", "primarycontactid?9", "primarycontactidname?13", "turnover?0" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "accountid", "createdon", "employees", "name", "primarycontactid", "primarycontactidname", "turnover" }, suggestions);
         }
 
         [TestMethod]
@@ -137,75 +137,75 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var sql1 = "SELECT * FROM account a left outer join contact c on a.accountid = c.parentcustomerid";
             var sql2 = "SELECT  FROM account left outer join contact on account.accountid = contact.parentcustomerid";
             var sql = sql1 + "\r\n" + sql2;
-            var suggestions = _autocomplete.GetSuggestions(sql, sql1.Length + 2 + sql2.IndexOf(" ") + 1, out _).ToList();
+            var suggestions = _autocomplete.GetSuggestions(sql, sql1.Length + 2 + sql2.IndexOf(" ") + 1, out _).Select(s => s.Text).ToList();
 
-            CollectionAssert.AreEqual(new[] { "account?4", "accountid?14", "contact?4", "contactid?14", "employees?8", "firstname?13", "fullname?13", "lastname?13", "name?13", "parentcustomerid?9", "primarycontactid?9", "primarycontactidname?13", "turnover?0" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "account", "accountid", "contact", "contactid", "employees", "firstname", "fullname", "lastname", "name", "parentcustomerid", "primarycontactid", "primarycontactidname", "turnover" }, suggestions);
         }
 
         [TestMethod]
         public void Function()
         {
             var sql = "SELECT count( FROM account";
-            var suggestions = _autocomplete.GetSuggestions(sql, sql.IndexOf("("), out _).ToList();
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.IndexOf("("), out _).Select(s => s.Text).ToList();
 
-            CollectionAssert.AreEqual(new[] { "account?4", "accountid?14", "createdon?2", "employees?8", "name?13", "primarycontactid?9", "primarycontactidname?13", "turnover?0" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "account", "accountid", "createdon", "employees", "name", "primarycontactid", "primarycontactidname", "turnover" }, suggestions);
         }
 
         [TestMethod]
         public void Update()
         {
             var sql = "UPDATE ";
-            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).ToList();
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).Select(s => s.Text).ToList();
 
-            CollectionAssert.AreEqual(new[] { "account?4", "contact?4", "new_customentity?4" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "account", "contact", "new_customentity" }, suggestions);
         }
 
         [TestMethod]
         public void UpdateFrom()
         {
             var sql = "UPDATE  FROM account a";
-            var suggestions = _autocomplete.GetSuggestions(sql, sql.IndexOf(" ") + 1, out _).ToList();
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.IndexOf(" ") + 1, out _).Select(s => s.Text).ToList();
 
-            CollectionAssert.AreEqual(new[] { "a?4" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "a" }, suggestions);
         }
 
         [TestMethod]
         public void Set()
         {
             var sql = "UPDATE account SET ";
-            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).ToList();
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).Select(s => s.Text).ToList();
 
-            CollectionAssert.AreEqual(new[] { "accountid?14", "createdon?2", "employees?8", "name?13", "primarycontactid?9", "turnover?0" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "accountid", "createdon", "employees", "name", "primarycontactid", "turnover" }, suggestions);
         }
 
         [TestMethod]
         public void Set2()
         {
             var sql = "UPDATE account SET name = 'test', ";
-            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).ToList();
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).Select(s => s.Text).ToList();
 
-            CollectionAssert.AreEqual(new[] { "accountid?14", "createdon?2", "employees?8", "name?13", "primarycontactid?9", "turnover?0" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "accountid", "createdon", "employees", "name", "primarycontactid", "turnover" }, suggestions);
         }
 
         [TestMethod]
         public void Top()
         {
             var sql = "SELECT TOP 10 n FROM account";
-            var suggestions = _autocomplete.GetSuggestions(sql, sql.IndexOf("n"), out _).ToList();
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.IndexOf("n"), out _).Select(s => s.Text).ToList();
 
-            CollectionAssert.AreEqual(new[] { "name?13" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "name" }, suggestions);
         }
 
         [TestMethod]
         public void InsertColumns()
         {
             var sql = "INSERT INTO account (";
-            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).ToList();
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).Select(s => s.Text).ToList();
 
-            CollectionAssert.AreEqual(new[] { "accountid?14", "createdon?2", "employees?8", "name?13", "primarycontactid?9", "primarycontactidname?13", "turnover?0" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "accountid", "createdon", "employees", "name", "primarycontactid", "primarycontactidname", "turnover" }, suggestions);
         }
 
-        [TestMethod]
+        //[TestMethod]
         public void Custom()
         {
             var sql = @"
@@ -213,11 +213,11 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 from
                     new_customentity n
                     inner join new_customentity p on n";
-            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).ToList();
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).Select(s => s.Text).ToList();
 
             // FakeXrmEasy seems to miss the referencing attribute from the metadata, so these aren't what we'd actually like to
             // see but it's what's currently available.
-            CollectionAssert.AreEqual(new[] { "n. = p.new_parentid?18", "n.new_parentid = p.?19", "n?4" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "n. = p.new_parentid", "n.new_parentid = p.", "n" }, suggestions);
         }
     }
 }

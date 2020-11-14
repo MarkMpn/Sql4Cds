@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -12,6 +13,7 @@ using System.Text.RegularExpressions;
 using System.Windows.Forms;
 using System.Xml;
 using System.Xml.Serialization;
+using AutocompleteMenuNS;
 using MarkMpn.Sql4Cds.Engine;
 using McTools.Xrm.Connection;
 using Microsoft.ApplicationInsights;
@@ -35,14 +37,14 @@ namespace MarkMpn.Sql4Cds
         private string _filename;
         private bool _modified;
         private static int _queryCounter;
-        private static Bitmap[] _images;
+        private static ImageList _images;
         private static Icon _sqlIcon;
+        private readonly AutocompleteMenu _autocomplete;
 
         static SqlQueryControl()
         {
-            _images = new ObjectExplorer(null, null, null).GetImages()
-                .Select(i => i is Bitmap b ? b : new Bitmap(i))
-                .ToArray();
+            _images = new ImageList();
+            _images.Images.AddRange(new ObjectExplorer(null, null, null).GetImages().ToArray());
 
             _sqlIcon = Icon.FromHandle(Properties.Resources.SQLFile_16x.GetHicon());
         }
@@ -59,6 +61,7 @@ namespace MarkMpn.Sql4Cds
             ExecuteMethod = executeMethod;
             OutgoingMessageHandler = outgoingMessageHandler;
             _editor = CreateSqlEditor();
+            _autocomplete = CreateAutocomplete();
             _sourcePlugin = sourcePlugin;
             _ai = ai;
             _con = con;
@@ -223,7 +226,7 @@ namespace MarkMpn.Sql4Cds
                 }
                 if (e.KeyCode == Keys.Space && e.Control)
                 {
-                    ShowIntellisense(true);
+                    _autocomplete.Show(_editor, true);
                     e.Handled = true;
                     e.SuppressKeyPress = true;
                 }
@@ -260,14 +263,6 @@ namespace MarkMpn.Sql4Cds
                 }
             };
 
-            // Intellisense
-            scintilla.AutoCSeparator = ':';
-            scintilla.CharAdded += ShowIntellisense;
-            scintilla.AutoCIgnoreCase = true;
-
-            for (var i = 0; i < _images.Length; i++)
-                scintilla.RegisterRgbaImage(i, _images[i]);
-
             // Rectangular selections
             scintilla.MultipleSelection = true;
             scintilla.MouseSelectionRectangularSwitch = true;
@@ -277,35 +272,61 @@ namespace MarkMpn.Sql4Cds
             return scintilla;
         }
 
-        private void ShowIntellisense(object sender, EventArgs e)
+        private AutocompleteMenu CreateAutocomplete()
         {
-            ShowIntellisense(false);
+            var menu = new AutocompleteMenu();
+            menu.MinFragmentLength = 1;
+            menu.AllowsTabKey = true;
+            menu.AppearInterval = 100;
+            menu.TargetControlWrapper = new ScintillaWrapper(_editor);
+            menu.Font = new Font(_editor.Styles[Style.Default].Font, _editor.Styles[Style.Default].SizeF);
+            menu.ImageList = _images;
+            menu.MaximumSize = new Size(1000, menu.MaximumSize.Height);
+
+            menu.SetAutocompleteItems(new AutocompleteMenuItems(this));
+
+            return menu;
         }
 
-        private void ShowIntellisense(bool force)
+        class AutocompleteMenuItems : IEnumerable<AutocompleteItem>
         {
-            var pos = _editor.CurrentPosition - 1;
+            private readonly SqlQueryControl _control;
 
-            if (pos == 0)
-                return;
+            public AutocompleteMenuItems(SqlQueryControl control)
+            {
+                _control = control;
+            }
 
-            var text = _editor.Text;
-            EntityCache.TryGetEntities(_con.ServiceClient, out var entities);
+            public IEnumerator<AutocompleteItem> GetEnumerator()
+            {
+                var pos = _control._editor.CurrentPosition - 1;
 
-            var metaEntities = MetaMetadata.GetMetadata().Select(m => m.GetEntityMetadata());
+                if (pos == 0)
+                    yield break;
 
-            if (entities == null)
-                entities = metaEntities.ToArray();
-            else
-                entities = entities.Concat(metaEntities).ToArray();
+                var text = _control._editor.Text;
+                EntityCache.TryGetEntities(_control._con.ServiceClient, out var entities);
 
-            var suggestions = new Autocomplete(entities, Metadata).GetSuggestions(text, pos, out var currentLength).ToList();
+                var metaEntities = MetaMetadata.GetMetadata().Select(m => m.GetEntityMetadata());
 
-            if (suggestions.Count == 0)
-                return;
+                if (entities == null)
+                    entities = metaEntities.ToArray();
+                else
+                    entities = entities.Concat(metaEntities).ToArray();
 
-            if (force || currentLength > 0 || text[pos] == '.')
-                _editor.AutoCShow(currentLength, String.Join(_editor.AutoCSeparator.ToString(), suggestions));
+                var suggestions = new Autocomplete(entities, _control.Metadata).GetSuggestions(text, pos, out var currentLength).ToList();
+
+                if (suggestions.Count == 0)
+                    yield break;
+
+                foreach (var suggestion in suggestions)
+                    yield return suggestion;
+            }
+
+            IEnumerator IEnumerable.GetEnumerator()
+            {
+                return this.GetEnumerator();
+            }
         }
 
         private Scintilla CreateXmlEditor()

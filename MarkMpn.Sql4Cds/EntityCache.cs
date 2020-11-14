@@ -26,7 +26,9 @@ namespace MarkMpn.Sql4Cds
                         {
                             PropertyNames =
                             {
-                                nameof(EntityMetadata.LogicalName)
+                                nameof(EntityMetadata.LogicalName),
+                                nameof(EntityMetadata.DisplayName),
+                                nameof(EntityMetadata.Description)
                             }
                         }
                     }

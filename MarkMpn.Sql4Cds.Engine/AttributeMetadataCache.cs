@@ -94,6 +94,8 @@ namespace MarkMpn.Sql4Cds.Engine
                                 PropertyNames =
                                 {
                                     nameof(EntityMetadata.LogicalName),
+                                    nameof(EntityMetadata.DisplayName),
+                                    nameof(EntityMetadata.Description),
                                     nameof(EntityMetadata.Attributes),
                                     nameof(EntityMetadata.ManyToOneRelationships),
                                     nameof(EntityMetadata.OneToManyRelationships),
@@ -106,6 +108,9 @@ namespace MarkMpn.Sql4Cds.Engine
                                     PropertyNames =
                                     {
                                         nameof(AttributeMetadata.LogicalName),
+                                        nameof(AttributeMetadata.AttributeOf),
+                                        nameof(AttributeMetadata.DisplayName),
+                                        nameof(AttributeMetadata.Description),
                                         nameof(AttributeMetadata.AttributeType),
                                         nameof(AttributeMetadata.IsValidForUpdate)
                                     }
@@ -126,7 +131,12 @@ namespace MarkMpn.Sql4Cds.Engine
                             }
                         }
                     });
+
                     _minimalMetadata[logicalName] = metadataChanges.EntityMetadata[0];
+
+                    var entityLogicalNameProp = typeof(AttributeMetadata).GetProperty(nameof(AttributeMetadata.EntityLogicalName));
+                    foreach (var attr in metadataChanges.EntityMetadata[0].Attributes)
+                        entityLogicalNameProp.SetValue(attr, logicalName, null);
                 });
                 OnMetadataLoading(new MetadataLoadingEventArgs(logicalName, task));
             }
