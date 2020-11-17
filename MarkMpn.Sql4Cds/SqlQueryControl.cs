@@ -40,6 +40,7 @@ namespace MarkMpn.Sql4Cds
         private static ImageList _images;
         private static Icon _sqlIcon;
         private readonly AutocompleteMenu _autocomplete;
+        private ToolTip _tooltip;
 
         static SqlQueryControl()
         {
@@ -268,6 +269,52 @@ namespace MarkMpn.Sql4Cds
             scintilla.MouseSelectionRectangularSwitch = true;
             scintilla.AdditionalSelectionTyping = true;
             scintilla.VirtualSpaceOptions = VirtualSpace.RectangularSelection;
+
+            // Tooltips
+            _tooltip = new ToolTip();
+            scintilla.DwellStart += (s, e) =>
+            {
+                _tooltip.Hide(scintilla);
+
+                var pos = scintilla.CharPositionFromPoint(e.X, e.Y);
+                var text = scintilla.Text;
+                var wordEnd = new Regex("\\b").Match(text, pos);
+
+                if (!wordEnd.Success)
+                    return;
+
+                EntityCache.TryGetEntities(_con.ServiceClient, out var entities);
+
+                var metaEntities = MetaMetadata.GetMetadata().Select(m => m.GetEntityMetadata());
+
+                if (entities == null)
+                    entities = metaEntities.ToArray();
+                else
+                    entities = entities.Concat(metaEntities).ToArray();
+
+                var suggestions = new Autocomplete(entities, Metadata).GetSuggestions(text, wordEnd.Index - 1, out var currentLength).ToList();
+                var exactSuggestions = suggestions.Where(suggestion => suggestion.Text.Length <= wordEnd.Index && text.Substring(wordEnd.Index - suggestion.Text.Length, suggestion.Text.Length) == suggestion.Text).ToList();
+
+                if (exactSuggestions.Count == 1)
+                {
+                    if (!String.IsNullOrEmpty(exactSuggestions[0].ToolTipTitle) && !String.IsNullOrEmpty(exactSuggestions[0].ToolTipText))
+                    {
+                        _tooltip.ToolTipTitle = exactSuggestions[0].ToolTipTitle;
+                        _tooltip.Show(exactSuggestions[0].ToolTipText, scintilla);
+                    }
+                    else if (!String.IsNullOrEmpty(exactSuggestions[0].ToolTipTitle))
+                    {
+                        _tooltip.ToolTipTitle = "";
+                        _tooltip.Show(exactSuggestions[0].ToolTipTitle, scintilla);
+                    }
+                    else if (!String.IsNullOrEmpty(exactSuggestions[0].ToolTipText))
+                    {
+                        _tooltip.ToolTipTitle = "";
+                        _tooltip.Show(exactSuggestions[0].ToolTipText, scintilla);
+                    }
+                }
+            };
+            scintilla.MouseDwellTime = (int) TimeSpan.FromSeconds(1).TotalMilliseconds;
 
             return scintilla;
         }
