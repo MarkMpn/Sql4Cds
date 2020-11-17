@@ -562,6 +562,7 @@ namespace MarkMpn.Sql4Cds
         {
             private readonly EntityMetadata _rhs;
             private readonly AttributeMetadata _attribute;
+            private readonly IAttributeMetadataCache _metadata;
 
             public JoinAutocompleteItem(OneToManyRelationshipMetadata relationship, string join, bool oneToMany, EntityMetadata[] entities, IAttributeMetadataCache metadata) : base(join, oneToMany ? 19 : 18)
             {
@@ -569,6 +570,8 @@ namespace MarkMpn.Sql4Cds
 
                 if (!oneToMany && metadata.TryGetMinimalData(relationship.ReferencingEntity, out _rhs))
                     _attribute = _rhs.Attributes.Single(a => a.LogicalName == relationship.ReferencingAttribute);
+
+                _metadata = metadata;
             }
 
             public override string ToolTipTitle
@@ -593,6 +596,12 @@ namespace MarkMpn.Sql4Cds
                     return _rhs?.Description?.UserLocalizedLabel?.Label;
                 }
                 set => base.ToolTipText = value;
+            }
+
+            public override string GetTextForReplace()
+            {
+                _metadata.TryGetMinimalData(_rhs.LogicalName, out _);
+                return base.GetTextForReplace();
             }
         }
 
