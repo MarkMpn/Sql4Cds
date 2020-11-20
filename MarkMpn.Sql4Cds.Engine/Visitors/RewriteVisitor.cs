@@ -24,7 +24,9 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
         public RewriteVisitor(IDictionary<ScalarExpression,string> rewrites)
         {
-            _mappings = rewrites.ToDictionary(kvp => kvp.Key.ToSql(), kvp => kvp.Value);
+            _mappings = rewrites
+                .GroupBy(kvp => kvp.Key.ToSql())
+                .ToDictionary(g => g.Key, g => g.First().Value);
         }
 
         protected override ScalarExpression ReplaceExpression(ScalarExpression expression, out string name)
