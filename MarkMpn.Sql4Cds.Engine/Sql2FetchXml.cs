@@ -320,8 +320,20 @@ namespace MarkMpn.Sql4Cds.Engine
                 Mappings = new Dictionary<string, string>(),
             };
 
+            var meta = Metadata[target];
+
             for (var i = 0; i < columns.Count; i++)
-                query.Mappings[selectQuery.ColumnSet[i]] = columns[i].MultiPartIdentifier.Identifiers.Last().Value;
+            {
+                var attr = meta.Attributes.SingleOrDefault(a => a.LogicalName.Equals(columns[i].MultiPartIdentifier.Identifiers.Last().Value, StringComparison.OrdinalIgnoreCase));
+
+                if (attr == null)
+                    throw new NotSupportedQueryFragmentException("Unknown attribute name", columns[i]);
+
+                if (attr.IsValidForCreate == false)
+                    throw new NotSupportedQueryFragmentException("Column cannot be set on INSERT", columns[i]);
+
+                query.Mappings[selectQuery.ColumnSet[i]] = attr.LogicalName;
+            }
 
             return query;
         }
@@ -354,6 +366,9 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     if (attr == null)
                         throw new NotSupportedQueryFragmentException("Unknown attribute name", columns[i]);
+
+                    if (attr.IsValidForCreate == false)
+                        throw new NotSupportedQueryFragmentException("Column cannot be set on INSERT", columns[i]);
 
                     if (row.ColumnValues[i] is Literal literal)
                     {
@@ -677,6 +692,9 @@ namespace MarkMpn.Sql4Cds.Engine
                     var attr = metadata.Attributes.SingleOrDefault(a => a.LogicalName == attrName);
                     if (attr == null)
                         throw new NotSupportedQueryFragmentException("Unknown column name", assign.Column);
+
+                    if (attr.IsValidForUpdate == false)
+                        throw new NotSupportedQueryFragmentException("Column is not updateable", assign.Column);
 
                     if (assign.NewValue is Literal literal)
                     {
@@ -3316,7 +3334,14 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     // Handle SELECT table.*
                     if (star.Qualifier != null)
-                        starTables = new List<EntityTable> { FindTable(star.Qualifier.Identifiers.Last().Value, tables, field) };
+                    {
+                        var starTable = FindTable(star.Qualifier.Identifiers.Last().Value, tables, field);
+
+                        if (starTable == null)
+                            throw new NotSupportedQueryFragmentException("The column prefix does not match with a table name or alias name used in the query", star.Qualifier);
+
+                        starTables = new List<EntityTable> { starTable };
+                    }
 
                     foreach (var starTable in starTables)
                     {

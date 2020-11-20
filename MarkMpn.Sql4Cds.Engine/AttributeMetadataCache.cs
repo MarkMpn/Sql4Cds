@@ -112,7 +112,8 @@ namespace MarkMpn.Sql4Cds.Engine
                                         nameof(AttributeMetadata.DisplayName),
                                         nameof(AttributeMetadata.Description),
                                         nameof(AttributeMetadata.AttributeType),
-                                        nameof(AttributeMetadata.IsValidForUpdate)
+                                        nameof(AttributeMetadata.IsValidForUpdate),
+                                        nameof(AttributeMetadata.IsValidForCreate)
                                     }
                                 }
                             },
