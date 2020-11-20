@@ -219,5 +219,27 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             // see but it's what's currently available.
             CollectionAssert.AreEqual(new[] { "n. = p.new_parentid", "n.new_parentid = p.", "n" }, suggestions);
         }
+
+        [TestMethod]
+        public void DateFilterOperator()
+        {
+            var sql = "SELECT * FROM account WHERE account.createdon = ";
+
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).Select(s => s.Text).ToList();
+
+            CollectionAssert.Contains(suggestions, "today()");
+            CollectionAssert.DoesNotContain(suggestions, "under(id)");
+        }
+
+        [TestMethod]
+        public void GuidFilterOperator()
+        {
+            var sql = "SELECT * FROM account WHERE accountid = ";
+
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).Select(s => s.Text).ToList();
+
+            CollectionAssert.DoesNotContain(suggestions, "today()");
+            CollectionAssert.Contains(suggestions, "under(id)");
+        }
     }
 }

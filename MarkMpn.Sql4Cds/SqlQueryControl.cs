@@ -293,7 +293,7 @@ namespace MarkMpn.Sql4Cds
                     entities = entities.Concat(metaEntities).ToArray();
 
                 var suggestions = new Autocomplete(entities, Metadata).GetSuggestions(text, wordEnd.Index - 1, out var currentLength).ToList();
-                var exactSuggestions = suggestions.Where(suggestion => suggestion.Text.Length <= wordEnd.Index && text.Substring(wordEnd.Index - suggestion.Text.Length, suggestion.Text.Length) == suggestion.Text).ToList();
+                var exactSuggestions = suggestions.Where(suggestion => suggestion.Text.Length <= wordEnd.Index && text.Substring(wordEnd.Index - suggestion.CompareText.Length, suggestion.CompareText.Length).Equals(suggestion.CompareText, StringComparison.OrdinalIgnoreCase)).ToList();
 
                 if (exactSuggestions.Count == 1)
                 {

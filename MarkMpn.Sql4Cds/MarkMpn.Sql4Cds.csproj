@@ -227,6 +227,7 @@
   <ItemGroup>
     <Compile Include="Autocomplete.cs" />
     <Compile Include="EntityCache.cs" />
+    <Compile Include="FunctionMetadata.cs" />
     <Compile Include="ObjectExplorer.cs">
       <SubType>Form</SubType>
     </Compile>

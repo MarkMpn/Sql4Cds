@@ -1,9 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
+using System.Reflection;
+using System.Text;
 using AutocompleteMenuNS;
 using MarkMpn.Sql4Cds.Engine;
+using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
+using static MarkMpn.Sql4Cds.FunctionMetadata;
 
 namespace MarkMpn.Sql4Cds
 {
@@ -33,7 +38,7 @@ namespace MarkMpn.Sql4Cds
         /// <param name="pos">The index of the character in the <paramref name="text"/> that has just been entered</param>
         /// <param name="currentLength">The length of the current word that is being auto-completed</param>
         /// <returns>A sequence of suggestions to be shown to the user</returns>
-        public IEnumerable<AutocompleteItem> GetSuggestions(string text, int pos, out int currentLength)
+        public IEnumerable<SqlAutocompleteItem> GetSuggestions(string text, int pos, out int currentLength)
         {
             // If we're in the first word after a FROM or JOIN, show a list of table names
             string currentWord = null;
@@ -60,7 +65,7 @@ namespace MarkMpn.Sql4Cds
             currentLength = currentWord.Length;
 
             if (prevWord == null)
-                return Array.Empty<AutocompleteItem>();
+                return Array.Empty<SqlAutocompleteItem>();
 
             switch (prevWord.ToLower())
             {
@@ -110,6 +115,10 @@ namespace MarkMpn.Sql4Cds
                                 break;
 
                             case "where":
+                                words.Clear();
+                                clause = clause ?? "where";
+                                break;
+
                             case "(":
                                 words.Clear();
                                 break;
@@ -243,7 +252,7 @@ namespace MarkMpn.Sql4Cds
                         !prevWord.Equals("set", StringComparison.OrdinalIgnoreCase) &&
                         !prevWord.Equals("join", StringComparison.OrdinalIgnoreCase) &&
                         (prevPrevWord == null || !prevPrevWord.Equals("top", StringComparison.OrdinalIgnoreCase)))
-                        return Array.Empty<AutocompleteItem>();
+                        return Array.Empty<SqlAutocompleteItem>();
 
                     if (tables != null)
                     {
@@ -252,7 +261,7 @@ namespace MarkMpn.Sql4Cds
                             // Suggest known relationships from the entities already in the FROM clause, followed by a list of all entities
                             // Exclude the table that's currently being entered from the suggestion sources
                             tables.Remove(currentWord);
-                            var joinSuggestions = new List<AutocompleteItem>();
+                            var joinSuggestions = new List<SqlAutocompleteItem>();
 
                             foreach (var table in tables)
                             {
@@ -272,20 +281,20 @@ namespace MarkMpn.Sql4Cds
                             return FilterList(joinSuggestions, currentWord);
                         }
 
-                        var additionalSuggestions = (IEnumerable<AutocompleteItem>) Array.Empty<AutocompleteItem>();
+                        var additionalSuggestions = (IEnumerable<SqlAutocompleteItem>) Array.Empty<SqlAutocompleteItem>();
 
                         if (prevWord.Equals("on", StringComparison.OrdinalIgnoreCase) && _metadata.TryGetMinimalData(tables[prevPrevWord], out var newTableMetadata))
                         {
                             // Suggest known relationships from the other entities in the FROM clause, followed by the normal list of attributes
-                            additionalSuggestions = new List<AutocompleteItem>();
+                            additionalSuggestions = new List<SqlAutocompleteItem>();
 
                             if (newTableMetadata.OneToManyRelationships != null)
-                                ((List<AutocompleteItem>)additionalSuggestions).AddRange(newTableMetadata.OneToManyRelationships.SelectMany(rel => tables.Where(table => table.Key != prevPrevWord && table.Value == rel.ReferencingEntity).Select(table => new JoinAutocompleteItem(rel, $"{table.Key}.{rel.ReferencingAttribute} = {prevPrevWord}.{rel.ReferencedAttribute}", false, _entities, _metadata))));
+                                ((List<SqlAutocompleteItem>)additionalSuggestions).AddRange(newTableMetadata.OneToManyRelationships.SelectMany(rel => tables.Where(table => table.Key != prevPrevWord && table.Value == rel.ReferencingEntity).Select(table => new JoinAutocompleteItem(rel, $"{table.Key}.{rel.ReferencingAttribute} = {prevPrevWord}.{rel.ReferencedAttribute}", false, _entities, _metadata))));
 
                             if (newTableMetadata.ManyToOneRelationships != null)
-                                ((List<AutocompleteItem>)additionalSuggestions).AddRange(newTableMetadata.ManyToOneRelationships.SelectMany(rel => tables.Where(table => table.Key != prevPrevWord && table.Value == rel.ReferencedEntity).Select(table => new JoinAutocompleteItem(rel, $"{table.Key}.{rel.ReferencedAttribute} = {prevPrevWord}.{rel.ReferencingAttribute}", true, _entities, _metadata))));
+                                ((List<SqlAutocompleteItem>)additionalSuggestions).AddRange(newTableMetadata.ManyToOneRelationships.SelectMany(rel => tables.Where(table => table.Key != prevPrevWord && table.Value == rel.ReferencedEntity).Select(table => new JoinAutocompleteItem(rel, $"{table.Key}.{rel.ReferencedAttribute} = {prevPrevWord}.{rel.ReferencingAttribute}", true, _entities, _metadata))));
 
-                            ((List<AutocompleteItem>)additionalSuggestions).Sort();
+                            ((List<SqlAutocompleteItem>)additionalSuggestions).Sort();
                         }
 
                         if (prevWord.Equals("update", StringComparison.OrdinalIgnoreCase) ||
@@ -331,7 +340,7 @@ namespace MarkMpn.Sql4Cds
                             // * table/alias names
                             // * attribute names unique across tables
                             // * functions
-                            var items = new List<AutocompleteItem>();
+                            var items = new List<SqlAutocompleteItem>();
 
                             if (clause != "insert")
                                 items.AddRange(tables.Select(kvp => new { Entity = _entities.SingleOrDefault(e => e.LogicalName == kvp.Value), Alias = kvp.Key }).Where(x => x.Entity != null).Select(x => new EntityAutocompleteItem(x.Entity, x.Alias, _metadata)));
@@ -345,6 +354,65 @@ namespace MarkMpn.Sql4Cds
                             }
 
                             items.AddRange(attributes.GroupBy(x => x.LogicalName).Where(g => g.Count() == 1).Select(g => new AttributeAutocompleteItem(g.Single(), _metadata)));
+
+                            items.AddRange(typeof(FunctionMetadata.SqlFunctions).GetMethods(BindingFlags.DeclaredOnly | BindingFlags.Instance | BindingFlags.Public).Select(m => new FunctionAutocompleteItem(m)));
+
+                            if (clause == "where" && prevWord == "=")
+                            {
+                                // Check if there are any applicable filter operator functions that match the type of the current attribute
+                                var identifiers = prevPrevWord.Split('.');
+                                var attribute = default(AttributeMetadata);
+                                
+                                if (identifiers.Length == 2)
+                                {
+                                    if (tables.TryGetValue(identifiers[0], out var tableName) &&
+                                        _metadata.TryGetMinimalData(tableName, out var entity))
+                                    {
+                                        attribute = entity.Attributes.SingleOrDefault(a => a.LogicalName.Equals(identifiers[1], StringComparison.OrdinalIgnoreCase));
+                                    }
+                                }
+                                else
+                                {
+                                    foreach (var tableName in tables.Values)
+                                    {
+                                        if (_metadata.TryGetMinimalData(tableName, out var entity))
+                                        {
+                                            var tableAttribute = entity.Attributes.SingleOrDefault(a => a.LogicalName.Equals(identifiers[0], StringComparison.OrdinalIgnoreCase));
+
+                                            if (tableAttribute != null)
+                                            {
+                                                if (attribute == null)
+                                                {
+                                                    attribute = tableAttribute;
+                                                }
+                                                else
+                                                {
+                                                    attribute = null;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (attribute != null)
+                                {
+                                    var expectedType = default(Type);
+
+                                    if (attribute.AttributeType == AttributeTypeCode.String || attribute.AttributeType == AttributeTypeCode.Memo)
+                                        expectedType = typeof(string);
+                                    else if (attribute.AttributeType == AttributeTypeCode.DateTime)
+                                        expectedType = typeof(DateTime);
+                                    else if (attribute.AttributeType == AttributeTypeCode.Uniqueidentifier || attribute.AttributeType == AttributeTypeCode.Lookup || attribute.AttributeType == AttributeTypeCode.Owner || attribute.AttributeType == AttributeTypeCode.Customer)
+                                        expectedType = typeof(EntityReference);
+                                    else if (attribute.AttributeTypeName == "MultiSelectPicklistType")
+                                        expectedType = typeof(OptionSetValueCollection);
+
+                                    if (expectedType != null)
+                                        items.AddRange(typeof(FunctionMetadata.FetchXmlOperators).GetMethods(BindingFlags.DeclaredOnly | BindingFlags.Instance | BindingFlags.Public).Where(m => m.ReturnType == expectedType).Select(m => new FunctionAutocompleteItem(m)));
+                                }
+                            }
+
                             items.Sort();
 
                             return additionalSuggestions.Concat(FilterList(items, currentWord)).OrderBy(x => x);
@@ -358,10 +426,10 @@ namespace MarkMpn.Sql4Cds
                     break;
             }
 
-            return Array.Empty<AutocompleteItem>();
+            return Array.Empty<SqlAutocompleteItem>();
         }
 
-        private IEnumerable<AutocompleteItem> FilterList(IEnumerable<AutocompleteItem> list, string currentWord)
+        private IEnumerable<SqlAutocompleteItem> FilterList(IEnumerable<SqlAutocompleteItem> list, string currentWord)
         {
             var startsWith = list.Where(obj => obj.Text.StartsWith(currentWord, StringComparison.OrdinalIgnoreCase)).ToList();
 
@@ -505,7 +573,7 @@ namespace MarkMpn.Sql4Cds
             return name + suffix;
         }
 
-        class SqlAutocompleteItem : AutocompleteItem, IComparable
+        public class SqlAutocompleteItem : AutocompleteItem, IComparable
         {
             public SqlAutocompleteItem(string text, int imageIndex) : base(text, imageIndex)
             {
@@ -516,11 +584,13 @@ namespace MarkMpn.Sql4Cds
                 return CompareResult.VisibleAndSelected;
             }
 
+            public virtual string CompareText => Text;
+
             public int CompareTo(object obj)
             {
-                var other = (AutocompleteItem)obj;
+                var other = (SqlAutocompleteItem) obj;
 
-                return Text.CompareTo(other.Text);
+                return CompareText.CompareTo(other.CompareText);
             }
         }
 
@@ -645,6 +715,69 @@ namespace MarkMpn.Sql4Cds
                 }
                 set => base.ToolTipText = value;
             }
+        }
+
+        class FunctionAutocompleteItem : SqlAutocompleteItem
+        {
+            private readonly MethodInfo _method;
+
+            public FunctionAutocompleteItem(MethodInfo method) : base(method.Name + "(" + (method.GetParameters().Length == 0 ? ")" : ""), GetIconIndex(method))
+            {
+                _method = method;
+                MenuText = GetSignature(method);
+            }
+
+            private static int GetIconIndex(MethodInfo method)
+            {
+                var aggregate = method.GetCustomAttribute<AggregateAttribute>();
+
+                if (aggregate != null)
+                    return 24;
+
+                return 23;
+            }
+
+            private static string GetSignature(MethodInfo method)
+            {
+                var sig = new StringBuilder();
+                sig.Append(method.Name);
+                sig.Append("(");
+
+                var firstParam = true;
+                foreach (var param in method.GetParameters())
+                {
+                    if (firstParam)
+                        firstParam = false;
+                    else
+                        sig.Append(", ");
+
+                    sig.Append(param.Name);
+                }
+
+                sig.Append(")");
+                return sig.ToString();
+            }
+
+            public override string ToolTipTitle
+            {
+                get => MenuText;
+                set => base.ToolTipTitle = value;
+            }
+
+            public override string ToolTipText
+            {
+                get
+                {
+                    var description = _method.GetCustomAttribute<DescriptionAttribute>();
+                    return description?.Description ?? "";
+                }
+                set
+                {
+                    base.ToolTipText = value;
+                }
+            }
+
+            public override string CompareText => _method.Name;
         }
     }
 }
