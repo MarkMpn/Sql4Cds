@@ -1084,12 +1084,17 @@ namespace MarkMpn.Sql4Cds.Engine
                 // field = 1 ? 'Big' : field = 2 ? 'Small' : 'Unknown'
                 // Build the expression up from the end and work backwards
                 var value = ConvertScalarExpression(simpleCase.InputExpression, tables, calculatedFields, param, ref constantValue);
-                var converted = simpleCase.ElseExpression == null ? Expression.Constant(null) : ConvertScalarExpression(simpleCase.ElseExpression, tables, calculatedFields, param, ref constantValue);
+                var convertedType = ConvertScalarExpression(simpleCase.WhenClauses[0].ThenExpression, tables, calculatedFields, param, ref constantValue).Type;
+
+                if (convertedType.IsValueType)
+                    convertedType = typeof(Nullable<>).MakeGenericType(convertedType);
+
+                var converted = simpleCase.ElseExpression == null ? Expression.Constant(null, convertedType) : ConvertScalarExpression(simpleCase.ElseExpression, tables, calculatedFields, param, ref constantValue);
 
                 foreach (var when in simpleCase.WhenClauses.Reverse())
                 {
                     converted = Expression.Condition(
-                        test: Expression.Equal(value, ConvertScalarExpression(when.WhenExpression, tables, calculatedFields, param, ref constantValue)),
+                        test: ConvertBooleanComparison(value, ConvertScalarExpression(when.WhenExpression, tables, calculatedFields, param, ref constantValue), BooleanComparisonType.Equals, when.WhenExpression),
                         ifTrue: ConvertScalarExpression(when.ThenExpression, tables, calculatedFields, param, ref constantValue),
                         ifFalse: converted);
                 }
@@ -3114,102 +3119,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 var lhs = ConvertScalarExpression(comparison.FirstExpression, tables, computedColumns, param);
                 var rhs = ConvertScalarExpression(comparison.SecondExpression, tables, computedColumns, param);
 
-                // Type conversions for DateTime vs. string
-                if (lhs.Type == typeof(DateTime?) && rhs.Type == typeof(string))
-                    rhs = Expr.Convert<DateTime?>(rhs);
-                else if (lhs.Type == typeof(string) && rhs.Type == typeof(DateTime?))
-                    lhs = Expr.Convert<DateTime?>(lhs);
-
-                var lhsValue = lhs;
-                var rhsValue = rhs;
-
-                if (lhsValue.Type.IsGenericType && lhsValue.Type.GetGenericTypeDefinition() == typeof(Nullable<>))
-                    lhsValue = Expression.Property(lhsValue, lhsValue.Type.GetProperty("Value"));
-
-                if (rhsValue.Type.IsGenericType && rhsValue.Type.GetGenericTypeDefinition() == typeof(Nullable<>))
-                    rhsValue = Expression.Property(rhsValue, rhsValue.Type.GetProperty("Value"));
-
-                // If one value is a decimal and another isn't, convert them
-                if (lhsValue.Type == typeof(decimal) && (rhsValue.Type == typeof(int) || rhsValue.Type == typeof(double)))
-                    rhsValue = Expression.Convert(rhsValue, typeof(decimal));
-
-                if (rhsValue.Type == typeof(decimal) && (lhsValue.Type == typeof(int) || lhsValue.Type == typeof(double)))
-                    lhsValue = Expression.Convert(lhsValue, typeof(decimal));
-
-                Expression coreComparison;
-
-                switch (comparison.ComparisonType)
-                {
-                    case BooleanComparisonType.Equals:
-                        if (lhsValue.Type == typeof(string) && rhsValue.Type == typeof(string))
-                            coreComparison = Expression.Equal(lhsValue, rhsValue, false, Expr.GetMethodInfo(() => ExpressionFunctions.CaseInsensitiveEquals(Expr.Arg<string>(), Expr.Arg<string>())));
-                        else if (lhsValue.Type == typeof(EntityReference) && rhsValue.Type == typeof(Guid))
-                            coreComparison = Expression.Equal(lhsValue, rhsValue, false, Expr.GetMethodInfo(() => ExpressionFunctions.Equal(Expr.Arg<EntityReference>(), Expr.Arg<Guid>())));
-                        else if (lhsValue.Type == typeof(Guid) && rhsValue.Type == typeof(EntityReference))
-                            coreComparison = Expression.Equal(lhsValue, rhsValue, false, Expr.GetMethodInfo(() => ExpressionFunctions.Equal(Expr.Arg<Guid>(), Expr.Arg<EntityReference>())));
-                        else if (lhsValue.Type == typeof(EntityReference) && rhsValue.Type == typeof(EntityReference))
-                            coreComparison = Expression.Equal(lhsValue, rhsValue, false, Expr.GetMethodInfo(() => ExpressionFunctions.Equal(Expr.Arg<EntityReference>(), Expr.Arg<EntityReference>())));
-                        else
-                            coreComparison = Expression.Equal(lhsValue, rhsValue);
-                        break;
-
-                    case BooleanComparisonType.GreaterThan:
-                        coreComparison = Expression.GreaterThan(lhsValue, rhsValue);
-                        break;
-
-                    case BooleanComparisonType.GreaterThanOrEqualTo:
-                        coreComparison = Expression.GreaterThanOrEqual(lhsValue, rhsValue);
-                        break;
-
-                    case BooleanComparisonType.LessThan:
-                        coreComparison = Expression.LessThan(lhsValue, rhsValue);
-                        break;
-
-                    case BooleanComparisonType.LessThanOrEqualTo:
-                        coreComparison = Expression.LessThanOrEqual(lhsValue, rhsValue);
-                        break;
-
-                    case BooleanComparisonType.NotEqualToBrackets:
-                    case BooleanComparisonType.NotEqualToExclamation:
-                        if (lhsValue.Type == typeof(string) && rhsValue.Type == typeof(string))
-                            coreComparison = Expression.NotEqual(lhsValue, rhsValue, false, Expr.GetMethodInfo(() => ExpressionFunctions.CaseInsensitiveNotEquals(Expr.Arg<string>(), Expr.Arg<string>())));
-                        else if (lhsValue.Type == typeof(EntityReference) && rhsValue.Type == typeof(Guid))
-                            coreComparison = Expression.NotEqual(lhsValue, rhsValue, false, Expr.GetMethodInfo(() => ExpressionFunctions.NotEqual(Expr.Arg<EntityReference>(), Expr.Arg<Guid>())));
-                        else if (lhsValue.Type == typeof(Guid) && rhsValue.Type == typeof(EntityReference))
-                            coreComparison = Expression.NotEqual(lhsValue, rhsValue, false, Expr.GetMethodInfo(() => ExpressionFunctions.NotEqual(Expr.Arg<Guid>(), Expr.Arg<EntityReference>())));
-                        else if (lhsValue.Type == typeof(EntityReference) && rhsValue.Type == typeof(EntityReference))
-                            coreComparison = Expression.NotEqual(lhsValue, rhsValue, false, Expr.GetMethodInfo(() => ExpressionFunctions.NotEqual(Expr.Arg<EntityReference>(), Expr.Arg<EntityReference>())));
-                        else
-                            coreComparison = Expression.NotEqual(lhsValue, rhsValue);
-                        break;
-
-                    default:
-                        throw new NotSupportedQueryFragmentException("Unsupported comparison type", comparison);
-                }
-
-                // Add null checking for all comparison types
-                Expression nullCheck = null;
-
-                if (lhs.Type.IsClass || lhs.Type.IsGenericType && lhs.Type.GetGenericTypeDefinition() == typeof(Nullable<>))
-                    nullCheck = Expression.Equal(lhs, Expression.Constant(null));
-
-                if (rhs.Type.IsClass || rhs.Type.IsGenericType && rhs.Type.GetGenericTypeDefinition() == typeof(Nullable<>))
-                {
-                    var rhsNullCheck = Expression.Equal(rhs, Expression.Constant(null));
-
-                    if (nullCheck == null)
-                        nullCheck = rhsNullCheck;
-                    else
-                        nullCheck = Expression.OrElse(nullCheck, rhsNullCheck);
-                }
-
-                if (nullCheck == null)
-                    return coreComparison;
-
-                return Expression.Condition(
-                    test: nullCheck,
-                    ifTrue: Expression.Constant(false),
-                    ifFalse: coreComparison);
+                return ConvertBooleanComparison(lhs, rhs, comparison.ComparisonType, comparison);
             }
             else if (searchCondition is BooleanBinaryExpression binary)
             {
@@ -3308,6 +3218,106 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 throw new PostProcessingRequiredException("Unhandled WHERE clause", searchCondition);
             }
+        }
+
+        private Expression ConvertBooleanComparison(Expression lhs, Expression rhs, BooleanComparisonType comparisonType, TSqlFragment fragment)
+        {
+            // Type conversions for DateTime vs. string
+            if (lhs.Type == typeof(DateTime?) && rhs.Type == typeof(string))
+                rhs = Expr.Convert<DateTime?>(rhs);
+            else if (lhs.Type == typeof(string) && rhs.Type == typeof(DateTime?))
+                lhs = Expr.Convert<DateTime?>(lhs);
+
+            var lhsValue = lhs;
+            var rhsValue = rhs;
+
+            if (lhsValue.Type.IsGenericType && lhsValue.Type.GetGenericTypeDefinition() == typeof(Nullable<>))
+                lhsValue = Expression.Property(lhsValue, lhsValue.Type.GetProperty("Value"));
+
+            if (rhsValue.Type.IsGenericType && rhsValue.Type.GetGenericTypeDefinition() == typeof(Nullable<>))
+                rhsValue = Expression.Property(rhsValue, rhsValue.Type.GetProperty("Value"));
+
+            // If one value is a decimal and another isn't, convert them
+            if (lhsValue.Type == typeof(decimal) && (rhsValue.Type == typeof(int) || rhsValue.Type == typeof(double)))
+                rhsValue = Expression.Convert(rhsValue, typeof(decimal));
+
+            if (rhsValue.Type == typeof(decimal) && (lhsValue.Type == typeof(int) || lhsValue.Type == typeof(double)))
+                lhsValue = Expression.Convert(lhsValue, typeof(decimal));
+
+            Expression coreComparison;
+
+            switch (comparisonType)
+            {
+                case BooleanComparisonType.Equals:
+                    if (lhsValue.Type == typeof(string) && rhsValue.Type == typeof(string))
+                        coreComparison = Expression.Equal(lhsValue, rhsValue, false, Expr.GetMethodInfo(() => ExpressionFunctions.CaseInsensitiveEquals(Expr.Arg<string>(), Expr.Arg<string>())));
+                    else if (lhsValue.Type == typeof(EntityReference) && rhsValue.Type == typeof(Guid))
+                        coreComparison = Expression.Equal(lhsValue, rhsValue, false, Expr.GetMethodInfo(() => ExpressionFunctions.Equal(Expr.Arg<EntityReference>(), Expr.Arg<Guid>())));
+                    else if (lhsValue.Type == typeof(Guid) && rhsValue.Type == typeof(EntityReference))
+                        coreComparison = Expression.Equal(lhsValue, rhsValue, false, Expr.GetMethodInfo(() => ExpressionFunctions.Equal(Expr.Arg<Guid>(), Expr.Arg<EntityReference>())));
+                    else if (lhsValue.Type == typeof(EntityReference) && rhsValue.Type == typeof(EntityReference))
+                        coreComparison = Expression.Equal(lhsValue, rhsValue, false, Expr.GetMethodInfo(() => ExpressionFunctions.Equal(Expr.Arg<EntityReference>(), Expr.Arg<EntityReference>())));
+                    else
+                        coreComparison = Expression.Equal(lhsValue, rhsValue);
+                    break;
+
+                case BooleanComparisonType.GreaterThan:
+                    coreComparison = Expression.GreaterThan(lhsValue, rhsValue);
+                    break;
+
+                case BooleanComparisonType.GreaterThanOrEqualTo:
+                    coreComparison = Expression.GreaterThanOrEqual(lhsValue, rhsValue);
+                    break;
+
+                case BooleanComparisonType.LessThan:
+                    coreComparison = Expression.LessThan(lhsValue, rhsValue);
+                    break;
+
+                case BooleanComparisonType.LessThanOrEqualTo:
+                    coreComparison = Expression.LessThanOrEqual(lhsValue, rhsValue);
+                    break;
+
+                case BooleanComparisonType.NotEqualToBrackets:
+                case BooleanComparisonType.NotEqualToExclamation:
+                    if (lhsValue.Type == typeof(string) && rhsValue.Type == typeof(string))
+                        coreComparison = Expression.NotEqual(lhsValue, rhsValue, false, Expr.GetMethodInfo(() => ExpressionFunctions.CaseInsensitiveNotEquals(Expr.Arg<string>(), Expr.Arg<string>())));
+                    else if (lhsValue.Type == typeof(EntityReference) && rhsValue.Type == typeof(Guid))
+                        coreComparison = Expression.NotEqual(lhsValue, rhsValue, false, Expr.GetMethodInfo(() => ExpressionFunctions.NotEqual(Expr.Arg<EntityReference>(), Expr.Arg<Guid>())));
+                    else if (lhsValue.Type == typeof(Guid) && rhsValue.Type == typeof(EntityReference))
+                        coreComparison = Expression.NotEqual(lhsValue, rhsValue, false, Expr.GetMethodInfo(() => ExpressionFunctions.NotEqual(Expr.Arg<Guid>(), Expr.Arg<EntityReference>())));
+                    else if (lhsValue.Type == typeof(EntityReference) && rhsValue.Type == typeof(EntityReference))
+                        coreComparison = Expression.NotEqual(lhsValue, rhsValue, false, Expr.GetMethodInfo(() => ExpressionFunctions.NotEqual(Expr.Arg<EntityReference>(), Expr.Arg<EntityReference>())));
+                    else
+                        coreComparison = Expression.NotEqual(lhsValue, rhsValue);
+                    break;
+
+                default:
+                    throw new NotSupportedQueryFragmentException("Unsupported comparison type", fragment);
+            }
+
+            // Add null checking for all comparison types
+            Expression nullCheck = null;
+
+            if (lhs.Type.IsClass || lhs.Type.IsGenericType && lhs.Type.GetGenericTypeDefinition() == typeof(Nullable<>))
+                nullCheck = Expression.Equal(lhs, Expression.Constant(null));
+
+            if (rhs.Type.IsClass || rhs.Type.IsGenericType && rhs.Type.GetGenericTypeDefinition() == typeof(Nullable<>))
+            {
+                var rhsNullCheck = Expression.Equal(rhs, Expression.Constant(null));
+
+                if (nullCheck == null)
+                    nullCheck = rhsNullCheck;
+                else
+                    nullCheck = Expression.OrElse(nullCheck, rhsNullCheck);
+            }
+
+            if (nullCheck == null)
+                return coreComparison;
+
+            return Expression.Condition(
+                test: nullCheck,
+                ifTrue: Expression.Constant(false),
+                ifFalse: coreComparison);
         }
 
         /// <summary>
