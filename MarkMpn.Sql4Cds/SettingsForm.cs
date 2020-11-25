@@ -30,6 +30,7 @@ namespace MarkMpn.Sql4Cds
             localTimesComboBox.SelectedIndex = settings.ShowLocalTimes ? 1 : 0;
             tsqlEndpointCheckBox.Checked = settings.UseTSQLEndpoint;
             retrieveTotalRecordCountCheckbox.Checked = settings.UseRetrieveTotalRecordCount;
+            showTooltipsCheckbox.Checked = settings.ShowIntellisenseTooltips;
 
             _settings = settings;
         }
@@ -52,6 +53,7 @@ namespace MarkMpn.Sql4Cds
                 _settings.ShowLocalTimes = localTimesComboBox.SelectedIndex == 1;
                 _settings.UseTSQLEndpoint = tsqlEndpointCheckBox.Checked;
                 _settings.UseRetrieveTotalRecordCount = retrieveTotalRecordCountCheckbox.Checked;
+                _settings.ShowIntellisenseTooltips = showTooltipsCheckbox.Checked;
             }
         }
     }

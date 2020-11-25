@@ -51,6 +51,7 @@
             this.batchSizeUpDown = new System.Windows.Forms.NumericUpDown();
             this.label9 = new System.Windows.Forms.Label();
             this.groupBox1 = new System.Windows.Forms.GroupBox();
+            this.retrieveTotalRecordCountCheckbox = new System.Windows.Forms.CheckBox();
             this.tsqlEndpointCheckBox = new System.Windows.Forms.CheckBox();
             this.groupBox2 = new System.Windows.Forms.GroupBox();
             this.localTimesComboBox = new System.Windows.Forms.ComboBox();
@@ -59,7 +60,8 @@
             this.label10 = new System.Windows.Forms.Label();
             this.groupBox3 = new System.Windows.Forms.GroupBox();
             this.quotedIdentifiersCheckbox = new System.Windows.Forms.CheckBox();
-            this.retrieveTotalRecordCountCheckbox = new System.Windows.Forms.CheckBox();
+            this.groupBox4 = new System.Windows.Forms.GroupBox();
+            this.showTooltipsCheckbox = new System.Windows.Forms.CheckBox();
             this.topPanel.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox)).BeginInit();
             this.panel2.SuspendLayout();
@@ -70,6 +72,7 @@
             this.groupBox1.SuspendLayout();
             this.groupBox2.SuspendLayout();
             this.groupBox3.SuspendLayout();
+            this.groupBox4.SuspendLayout();
             this.SuspendLayout();
             // 
             // topPanel
@@ -113,7 +116,7 @@
             this.panel2.Controls.Add(this.cancelButton);
             this.panel2.Controls.Add(this.okButton);
             this.panel2.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.panel2.Location = new System.Drawing.Point(0, 464);
+            this.panel2.Location = new System.Drawing.Point(0, 499);
             this.panel2.Margin = new System.Windows.Forms.Padding(2);
             this.panel2.Name = "panel2";
             this.panel2.Size = new System.Drawing.Size(400, 45);
@@ -318,7 +321,7 @@
             this.groupBox1.Controls.Add(this.label7);
             this.groupBox1.Controls.Add(this.label6);
             this.groupBox1.Controls.Add(this.deleteWarnThresholdUpDown);
-            this.groupBox1.Location = new System.Drawing.Point(11, 134);
+            this.groupBox1.Location = new System.Drawing.Point(11, 125);
             this.groupBox1.Margin = new System.Windows.Forms.Padding(2);
             this.groupBox1.Name = "groupBox1";
             this.groupBox1.Padding = new System.Windows.Forms.Padding(2);
@@ -326,6 +329,16 @@
             this.groupBox1.TabIndex = 16;
             this.groupBox1.TabStop = false;
             this.groupBox1.Text = "Query Execution";
+            // 
+            // retrieveTotalRecordCountCheckbox
+            // 
+            this.retrieveTotalRecordCountCheckbox.AutoSize = true;
+            this.retrieveTotalRecordCountCheckbox.Location = new System.Drawing.Point(12, 216);
+            this.retrieveTotalRecordCountCheckbox.Name = "retrieveTotalRecordCountCheckbox";
+            this.retrieveTotalRecordCountCheckbox.Size = new System.Drawing.Size(286, 17);
+            this.retrieveTotalRecordCountCheckbox.TabIndex = 17;
+            this.retrieveTotalRecordCountCheckbox.Text = "Use RetrieveTotalRecordCount request where possible";
+            this.retrieveTotalRecordCountCheckbox.UseVisualStyleBackColor = true;
             // 
             // tsqlEndpointCheckBox
             // 
@@ -343,7 +356,7 @@
             this.groupBox2.Controls.Add(this.label11);
             this.groupBox2.Controls.Add(this.friendlyNamesComboBox);
             this.groupBox2.Controls.Add(this.label10);
-            this.groupBox2.Location = new System.Drawing.Point(11, 384);
+            this.groupBox2.Location = new System.Drawing.Point(11, 375);
             this.groupBox2.Margin = new System.Windows.Forms.Padding(2);
             this.groupBox2.Name = "groupBox2";
             this.groupBox2.Padding = new System.Windows.Forms.Padding(2);
@@ -418,15 +431,25 @@
             this.quotedIdentifiersCheckbox.Text = "Quoted Identifiers";
             this.quotedIdentifiersCheckbox.UseVisualStyleBackColor = true;
             // 
-            // retrieveTotalRecordCountCheckbox
+            // groupBox4
             // 
-            this.retrieveTotalRecordCountCheckbox.AutoSize = true;
-            this.retrieveTotalRecordCountCheckbox.Location = new System.Drawing.Point(12, 216);
-            this.retrieveTotalRecordCountCheckbox.Name = "retrieveTotalRecordCountCheckbox";
-            this.retrieveTotalRecordCountCheckbox.Size = new System.Drawing.Size(286, 17);
-            this.retrieveTotalRecordCountCheckbox.TabIndex = 17;
-            this.retrieveTotalRecordCountCheckbox.Text = "Use RetrieveTotalRecordCount request where possible";
-            this.retrieveTotalRecordCountCheckbox.UseVisualStyleBackColor = true;
+            this.groupBox4.Controls.Add(this.showTooltipsCheckbox);
+            this.groupBox4.Location = new System.Drawing.Point(11, 456);
+            this.groupBox4.Name = "groupBox4";
+            this.groupBox4.Size = new System.Drawing.Size(382, 43);
+            this.groupBox4.TabIndex = 19;
+            this.groupBox4.TabStop = false;
+            this.groupBox4.Text = "Intellisense";
+            // 
+            // showTooltipsCheckbox
+            // 
+            this.showTooltipsCheckbox.AutoSize = true;
+            this.showTooltipsCheckbox.Location = new System.Drawing.Point(12, 19);
+            this.showTooltipsCheckbox.Name = "showTooltipsCheckbox";
+            this.showTooltipsCheckbox.Size = new System.Drawing.Size(89, 17);
+            this.showTooltipsCheckbox.TabIndex = 0;
+            this.showTooltipsCheckbox.Text = "Show tooltips";
+            this.showTooltipsCheckbox.UseVisualStyleBackColor = true;
             // 
             // SettingsForm
             // 
@@ -434,7 +457,8 @@
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.CancelButton = this.cancelButton;
-            this.ClientSize = new System.Drawing.Size(400, 509);
+            this.ClientSize = new System.Drawing.Size(400, 544);
+            this.Controls.Add(this.groupBox4);
             this.Controls.Add(this.groupBox3);
             this.Controls.Add(this.groupBox2);
             this.Controls.Add(this.groupBox1);
@@ -463,6 +487,8 @@
             this.groupBox2.PerformLayout();
             this.groupBox3.ResumeLayout(false);
             this.groupBox3.PerformLayout();
+            this.groupBox4.ResumeLayout(false);
+            this.groupBox4.PerformLayout();
             this.ResumeLayout(false);
 
         }
@@ -500,5 +526,7 @@
         private System.Windows.Forms.CheckBox quotedIdentifiersCheckbox;
         private System.Windows.Forms.CheckBox tsqlEndpointCheckBox;
         private System.Windows.Forms.CheckBox retrieveTotalRecordCountCheckbox;
+        private System.Windows.Forms.GroupBox groupBox4;
+        private System.Windows.Forms.CheckBox showTooltipsCheckbox;
     }
 }

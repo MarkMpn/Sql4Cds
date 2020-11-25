@@ -276,6 +276,9 @@ namespace MarkMpn.Sql4Cds
             {
                 _tooltip.Hide(scintilla);
 
+                if (!Settings.Instance.ShowIntellisenseTooltips)
+                    return;
+
                 var pos = scintilla.CharPositionFromPoint(e.X, e.Y);
                 var text = scintilla.Text;
                 var wordEnd = new Regex("\\b").Match(text, pos);
@@ -314,7 +317,7 @@ namespace MarkMpn.Sql4Cds
                     }
                 }
             };
-            scintilla.MouseDwellTime = (int) TimeSpan.FromSeconds(1).TotalMilliseconds;
+            scintilla.MouseDwellTime = (int)TimeSpan.FromSeconds(1).TotalMilliseconds;
 
             return scintilla;
         }
