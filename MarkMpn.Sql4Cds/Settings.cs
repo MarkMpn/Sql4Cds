@@ -41,5 +41,7 @@ namespace MarkMpn.Sql4Cds
         public bool UseRetrieveTotalRecordCount { get; set; } = true;
 
         public bool ShowIntellisenseTooltips { get; set; } = true;
+
+        public int MaxDegreeOfPaallelism { get; set; } = 10;
     }
 }

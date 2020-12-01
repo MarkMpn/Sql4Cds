@@ -31,6 +31,7 @@ namespace MarkMpn.Sql4Cds
             tsqlEndpointCheckBox.Checked = settings.UseTSQLEndpoint;
             retrieveTotalRecordCountCheckbox.Checked = settings.UseRetrieveTotalRecordCount;
             showTooltipsCheckbox.Checked = settings.ShowIntellisenseTooltips;
+            maxDopUpDown.Value = settings.MaxDegreeOfPaallelism;
 
             _settings = settings;
         }
@@ -54,6 +55,7 @@ namespace MarkMpn.Sql4Cds
                 _settings.UseTSQLEndpoint = tsqlEndpointCheckBox.Checked;
                 _settings.UseRetrieveTotalRecordCount = retrieveTotalRecordCountCheckbox.Checked;
                 _settings.ShowIntellisenseTooltips = showTooltipsCheckbox.Checked;
+                _settings.MaxDegreeOfPaallelism = (int) maxDopUpDown.Value;
             }
         }
     }

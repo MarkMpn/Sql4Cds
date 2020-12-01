@@ -303,6 +303,21 @@
   <ItemGroup>
     <None Include="Images\SQLFile_16x.png" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\StatusOK_16x.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\StatusCriticalError_16x.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\StatusStop_16x.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\StatusWarning_16x.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\timeline_lock_on_16x.png" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>

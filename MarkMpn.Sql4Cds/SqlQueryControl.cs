@@ -455,15 +455,6 @@ namespace MarkMpn.Sql4Cds
                 {
                     splitContainer.Panel2.Controls.Clear();
 
-                    if (args.Cancelled)
-                        return;
-
-                    if (args.Error != null)
-                    {
-                        _ai.TrackException(args.Error, new Dictionary<string, string> { ["Sql"] = sql });
-                        _log(args.Error.ToString());
-                    }
-
                     if (args.Error is NotSupportedQueryFragmentException err)
                         _editor.IndicatorFillRange(offset + err.Fragment.StartOffset, err.Fragment.FragmentLength);
                     else if (args.Error is QueryParseException parseErr)
@@ -471,10 +462,13 @@ namespace MarkMpn.Sql4Cds
 
                     if (args.Error != null)
                     {
+                        _ai.TrackException(args.Error, new Dictionary<string, string> { ["Sql"] = sql });
+                        _log(args.Error.ToString());
+
                         var error = CreateTextEditor(true);
                         error.Text = args.Error.Message;
                         error.ReadOnly = true;
-                        AddResult(error, false);
+                        AddResult(error, false, "Query completed with errors", null, TimeSpan.Zero, null, args.Error);
                         return;
                     }
 
@@ -487,6 +481,9 @@ namespace MarkMpn.Sql4Cds
                         if (execute)
                         {
                             Control display = null;
+                            var statusText = "Query executed successfully";
+                            var method = "SDK";
+                            int? rowCount = null;
 
                             if (query.Result is EntityCollection || query.Result is DataTable)
                             {
@@ -505,7 +502,6 @@ namespace MarkMpn.Sql4Cds
                                 grid.CellBorderStyle = DataGridViewCellBorderStyle.None;
                                 grid.ClipboardCopyMode = DataGridViewClipboardCopyMode.EnableWithoutHeaderText;
                                 grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
-                                grid.Dock = DockStyle.Fill;
                                 grid.EnableHeadersVisualStyles = false;
                                 grid.ReadOnly = true;
                                 grid.RowHeadersWidth = 24;
@@ -525,7 +521,6 @@ namespace MarkMpn.Sql4Cds
                                     crmGrid.RecordClick += Grid_RecordClick;
                                     crmGrid.CellMouseUp += Grid_CellMouseUp;
                                 }
-
 
                                 if (query is SelectQuery select && (entityCollection != null || isMetadata))
                                 {
@@ -590,21 +585,22 @@ namespace MarkMpn.Sql4Cds
                                     e.Graphics.DrawString(rowIdx, this.Font, SystemBrushes.ControlText, headerBounds, centerFormat);
                                 };
 
-                                var panel = new Panel();
-                                panel.Controls.Add(grid);
-
-                                var statusBar = new StatusBar();
+                                display = grid;
 
                                 if (entityCollection != null)
-                                    statusBar.Text = $"{entityCollection.Entities.Count:N0} record(s) returned";
+                                {
+                                    rowCount = entityCollection.Entities.Count;
+                                }
                                 else if (isMetadata)
-                                    statusBar.Text = $"{dataTable.Rows.Count:N0} record(s) returned (using metadata)";
+                                {
+                                    rowCount = dataTable.Rows.Count;
+                                    method = "Metadata";
+                                }
                                 else
-                                    statusBar.Text = $"{dataTable.Rows.Count:N0} record(s) returned (using T-SQL Endpoint)";
-
-                                statusBar.SizingGrip = false;
-                                panel.Controls.Add(statusBar);
-                                display = panel;
+                                {
+                                    rowCount = dataTable.Rows.Count;
+                                    method = "TDS";
+                                }
                             }
                             else if (query.Result is string msg)
                             {
@@ -616,9 +612,19 @@ namespace MarkMpn.Sql4Cds
                             else if (query.Result is Exception ex)
                             {
                                 var msgDisplay = CreateTextEditor(true);
-                                msgDisplay.Text = ex.Message;
+
+                                if (ex is AggregateException aggregateException)
+                                    msgDisplay.Text = String.Join("\r\n", aggregateException.InnerExceptions.Select(e => e.Message));
+                                else
+                                    msgDisplay.Text = ex.Message;
+
                                 msgDisplay.ReadOnly = true;
                                 display = msgDisplay;
+                                statusText = "Query completed with errors";
+                            }
+                            else if (query.Result == null)
+                            {
+                                statusText = "Query execution cancelled";
                             }
 
                             if (isMetadata)
@@ -691,7 +697,7 @@ namespace MarkMpn.Sql4Cds
                                 }
                             }
 
-                            AddResult(display, queries.Length > 1);
+                            AddResult(display, queries.Length > 1, statusText, method, query.Duration, rowCount, query.Result);
                         }
                         else if (isMetadata)
                         {
@@ -704,7 +710,7 @@ namespace MarkMpn.Sql4Cds
                             container.Controls.Add(queryDisplay);
                             container.Controls.Add(metadataInfo);
 
-                            AddResult(container, queries.Length > 1);
+                            AddResult(container, queries.Length > 1, "Query converted successfully", "Metadata", TimeSpan.Zero, null, queryDisplay.Text);
                         }
                         else if (query is FetchXmlQuery fxq)
                         {
@@ -721,7 +727,7 @@ namespace MarkMpn.Sql4Cds
                                 container.Controls.Add(postWarning);
 
                             container.Controls.Add(toolbar);
-                            AddResult(container, queries.Length > 1);
+                            AddResult(container, queries.Length > 1, "Query converted successfully", "FetchXML", TimeSpan.Zero, null, xmlDisplay.Text);
                         }
                     }
                 }
@@ -858,11 +864,41 @@ namespace MarkMpn.Sql4Cds
             return postWarning;
         }
 
-        private void AddResult(Control control, bool multi)
+        private void AddResult(Control control, bool multi, string statusText, string method, TimeSpan duration, int? rowCount, object result)
         {
-            control.Height = splitContainer.Panel2.Height * 2 / 3;
-            control.Dock = multi ? DockStyle.Top : DockStyle.Fill;
-            splitContainer.Panel2.Controls.Add(control);
+            var panel = new Panel();
+            panel.Controls.Add(control);
+            control.Dock = DockStyle.Fill;
+
+            var statusBar = new StatusStrip();
+            statusBar.SizingGrip = false;
+            statusBar.BackColor = Color.FromArgb(240, 230, 140);
+            statusBar.Items.Add(new ToolStripStatusLabel(statusText) { Alignment = ToolStripItemAlignment.Left, Spring = true, TextAlign = ContentAlignment.MiddleLeft, Image = result == null ? Properties.Resources.StatusStop_16x : result is Exception ? Properties.Resources.StatusWarning_16x : Properties.Resources.StatusOK_16x, ImageAlign = ContentAlignment.MiddleLeft });
+            statusBar.Items.Add(new ToolStripSeparator() { Alignment = ToolStripItemAlignment.Right });
+            statusBar.Items.Add(new ToolStripLabel(new Uri(_con.OrganizationServiceUrl).Host) { Alignment = ToolStripItemAlignment.Right, Image = _con.UseSsl ? Properties.Resources.timeline_lock_on_16x : null, ImageAlign = ContentAlignment.MiddleLeft });
+            statusBar.Items.Add(new ToolStripSeparator() { Alignment = ToolStripItemAlignment.Right });
+            statusBar.Items.Add(new ToolStripLabel(_con.UserName) { Alignment = ToolStripItemAlignment.Right });
+
+            if (method != null)
+            {
+                statusBar.Items.Add(new ToolStripSeparator() { Alignment = ToolStripItemAlignment.Right });
+                statusBar.Items.Add(new ToolStripLabel(method) { Alignment = ToolStripItemAlignment.Right });
+            }
+
+            statusBar.Items.Add(new ToolStripSeparator() { Alignment = ToolStripItemAlignment.Right });
+            statusBar.Items.Add(new ToolStripLabel(duration.ToString("hh\\:mm\\:ss")) { Alignment = ToolStripItemAlignment.Right });
+
+            if (rowCount != null)
+            {
+                statusBar.Items.Add(new ToolStripSeparator() { Alignment = ToolStripItemAlignment.Right });
+                statusBar.Items.Add(new ToolStripLabel($"{rowCount:N0} {(rowCount == 1 ? "row" : "rows")}") { Alignment = ToolStripItemAlignment.Right });
+            }
+
+            panel.Controls.Add(statusBar);
+
+            panel.Height = splitContainer.Panel2.Height * 2 / 3;
+            panel.Dock = multi ? DockStyle.Top : DockStyle.Fill;
+            splitContainer.Panel2.Controls.Add(panel);
         }
 
         private void gridContextMenuStrip_Opening(object sender, CancelEventArgs e)

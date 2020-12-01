@@ -95,5 +95,7 @@ namespace MarkMpn.Sql4Cds
                 return _localeId;
             }
         }
+
+        public int MaxDegreeOfParallelism => Settings.Instance.MaxDegreeOfPaallelism;
     }
 }

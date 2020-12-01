@@ -34,6 +34,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         int IQueryExecutionOptions.LocaleId => 1033;
 
+        int IQueryExecutionOptions.MaxDegreeOfParallelism => 10;
+
         [TestMethod]
         public void SimpleSelect()
         {
