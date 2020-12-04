@@ -318,6 +318,21 @@
   <ItemGroup>
     <None Include="Resources\timeline_lock_on_16x.png" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\ConnectFilled_grey_16x.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\ExecutionPlan_16x.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\ConnectToDatabase_16x.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\Settings_16x.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\progress.gif" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>

@@ -91,11 +91,8 @@ namespace MarkMpn.Sql4Cds
                 settings = new Settings();
 
             Settings.Instance = settings;
-        }
 
-        private void tsbClose_Click(object sender, EventArgs e)
-        {
-            CloseTool();
+            tsbIncludeFetchXml.Checked = settings.IncludeFetchXml;
         }
 
         private void tsbExecute_Click(object sender, EventArgs e)
@@ -104,7 +101,7 @@ namespace MarkMpn.Sql4Cds
                 return;
 
             var query = (SqlQueryControl)dockPanel.ActiveDocument;
-            query.Execute(true);
+            query.Execute(true, tsbIncludeFetchXml.Checked);
         }
 
         private void tsbPreviewFetchXml_Click(object sender, EventArgs e)
@@ -113,7 +110,7 @@ namespace MarkMpn.Sql4Cds
                 return;
 
             var query = (SqlQueryControl)dockPanel.ActiveDocument;
-            query.Execute(false);
+            query.Execute(false, true);
         }
 
         private void tsbConnect_Click(object sender, EventArgs e)
@@ -131,45 +128,15 @@ namespace MarkMpn.Sql4Cds
 
         private SqlQueryControl CreateQuery(ConnectionDetail con, string sql, string sourcePlugin)
         { 
-            var query = new SqlQueryControl(con, _metadata[con], _ai, WorkAsyncWithCancel, msg => SetWorkingMessage(msg), ExecuteMethod, SendOutgoingMessage, sourcePlugin, msg => LogError(msg));
+            var query = new SqlQueryControl(con, _metadata[con], _ai, SendOutgoingMessage, sourcePlugin, msg => LogError(msg));
             query.InsertText(sql);
+            query.CancellableChanged += SyncStopButton;
+            query.BusyChanged += SyncExecuteButton;
 
             query.Show(dockPanel, WeifenLuo.WinFormsUI.Docking.DockState.Document);
             query.SetFocus();
 
             return query;
-        }
-
-        private void WorkAsyncWithCancel(WorkAsyncInfo info)
-        {
-            WorkAsync(new WorkAsyncInfo
-            {
-                AsyncArgument = info.AsyncArgument,
-                Host = info.Host,
-                IsCancelable = info.IsCancelable,
-                Message = info.Message,
-                MessageHeight = info.MessageHeight,
-                MessageWidth = info.MessageWidth,
-                PostWorkCallBack = (args) =>
-                {
-                    if (InvokeRequired)
-                        Invoke((Action) (() => { tsbStop.Enabled = false; }));
-                    else
-                        tsbStop.Enabled = false;
-
-                    info.PostWorkCallBack(args);
-                },
-                ProgressChanged = info.ProgressChanged,
-                Work = (worker, args) =>
-                {
-                    if (InvokeRequired)
-                        Invoke((Action)(() => { tsbStop.Enabled = true; }));
-                    else
-                        tsbStop.Enabled = true;
-
-                    info.Work(worker, args);
-                }
-            });
         }
 
         private void tsbFormat_Click(object sender, EventArgs e)
@@ -280,6 +247,8 @@ namespace MarkMpn.Sql4Cds
         private void dockPanel_ActiveDocumentChanged(object sender, EventArgs e)
         {
             tsbSave.Enabled = dockPanel.ActiveDocument != null;
+            SyncStopButton(sender, e);
+            SyncExecuteButton(sender, e);
         }
 
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
@@ -296,9 +265,34 @@ namespace MarkMpn.Sql4Cds
             return true;
         }
 
+        private void SyncStopButton(object sender, EventArgs e)
+        {
+            if (dockPanel.ActiveDocument == null)
+            {
+                tsbStop.Enabled = false;
+                return;
+            }
+
+            tsbStop.Enabled = ((SqlQueryControl)dockPanel.ActiveDocument).Cancellable;
+        }
+
+        private void SyncExecuteButton(object sender, EventArgs e)
+        {
+            if (dockPanel.ActiveDocument == null)
+            {
+                tsbExecute.Enabled = false;
+                return;
+            }
+
+            tsbExecute.Enabled = !((SqlQueryControl)dockPanel.ActiveDocument).Busy;
+        }
+
         private void tsbStop_Click(object sender, EventArgs e)
         {
-            CancelWorker();
+            if (dockPanel.ActiveDocument == null)
+                return;
+
+            ((SqlQueryControl)dockPanel.ActiveDocument).Cancel();
         }
 
         string IGitHubPlugin.UserName => "MarkMpn";
@@ -306,5 +300,11 @@ namespace MarkMpn.Sql4Cds
         string IGitHubPlugin.RepositoryName => "Sql4Cds";
 
         string IHelpPlugin.HelpUrl => "https://markcarrington.dev/sql-4-cds/";
+
+        private void tsbIncludeFetchXml_Click(object sender, EventArgs e)
+        {
+            Settings.Instance.IncludeFetchXml = tsbIncludeFetchXml.Checked;
+            SettingsManager.Instance.Save(GetType(), Settings.Instance);
+        }
     }
 }

@@ -43,5 +43,7 @@ namespace MarkMpn.Sql4Cds
         public bool ShowIntellisenseTooltips { get; set; } = true;
 
         public int MaxDegreeOfPaallelism { get; set; } = 10;
+
+        public bool IncludeFetchXml { get; set; }
     }
 }

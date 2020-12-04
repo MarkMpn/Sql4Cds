@@ -28,6 +28,14 @@ namespace MarkMpn.Sql4Cds
 {
     public partial class SqlQueryControl : WeifenLuo.WinFormsUI.Docking.DockContent
     {
+        class ExecuteParams
+        {
+            public string Sql { get; set; }
+            public bool Execute { get; set; }
+            public bool IncludeFetchXml { get; set; }
+            public int Offset { get; set; }
+        }
+
         private readonly ConnectionDetail _con;
         private readonly TelemetryClient _ai;
         private readonly Scintilla _editor;
@@ -41,6 +49,11 @@ namespace MarkMpn.Sql4Cds
         private static Icon _sqlIcon;
         private readonly AutocompleteMenu _autocomplete;
         private ToolTip _tooltip;
+        private bool _cancellable;
+        private Stopwatch _stopwatch;
+        private ExecuteParams _params;
+        private int _rowCount;
+        private ToolStripControlHost _progressHost;
 
         static SqlQueryControl()
         {
@@ -50,16 +63,13 @@ namespace MarkMpn.Sql4Cds
             _sqlIcon = Icon.FromHandle(Properties.Resources.SQLFile_16x.GetHicon());
         }
 
-        public SqlQueryControl(ConnectionDetail con, IAttributeMetadataCache metadata, TelemetryClient ai, Action<WorkAsyncInfo> workAsync, Action<string> setWorkingMessage, Action<Action> executeMethod, Action<MessageBusEventArgs> outgoingMessageHandler, string sourcePlugin, Action<string> log)
+        public SqlQueryControl(ConnectionDetail con, IAttributeMetadataCache metadata, TelemetryClient ai, Action<MessageBusEventArgs> outgoingMessageHandler, string sourcePlugin, Action<string> log)
         {
             InitializeComponent();
             _displayName = $"Query {++_queryCounter}";
             _modified = true;
             Service = con.ServiceClient;
             Metadata = new MetaMetadataCache(metadata);
-            WorkAsync = workAsync;
-            SetWorkingMessage = setWorkingMessage;
-            ExecuteMethod = executeMethod;
             OutgoingMessageHandler = outgoingMessageHandler;
             _editor = CreateSqlEditor();
             _autocomplete = CreateAutocomplete();
@@ -67,7 +77,19 @@ namespace MarkMpn.Sql4Cds
             _ai = ai;
             _con = con;
             _log = log;
+            _stopwatch = new Stopwatch();
             SyncTitle();
+
+            // Populate the status bar and add separators between each field
+            hostLabel.Text = new Uri(_con.OrganizationServiceUrl).Host;
+            usernameLabel.Text = _con.UserName;
+            orgNameLabel.Text = _con.Organization;
+            for (var i = statusStrip.Items.Count - 1; i > 1; i--)
+                statusStrip.Items.Insert(i, new ToolStripSeparator());
+
+            var progressImage = new PictureBox { Image = Properties.Resources.progress, Height = 16, Width = 16 };
+            _progressHost = new ToolStripControlHost(progressImage) { Visible = false };
+            statusStrip.Items.Insert(0, _progressHost);
 
             splitContainer.Panel1.Controls.Add(_editor);
             Icon = _sqlIcon;
@@ -75,9 +97,6 @@ namespace MarkMpn.Sql4Cds
 
         public IOrganizationService Service { get; }
         public IAttributeMetadataCache Metadata { get; }
-        public Action<WorkAsyncInfo> WorkAsync { get; }
-        public Action<string> SetWorkingMessage { get; }
-        public Action<Action> ExecuteMethod { get; }
         public Action<MessageBusEventArgs> OutgoingMessageHandler { get; }
         public string Filename
         {
@@ -157,16 +176,14 @@ namespace MarkMpn.Sql4Cds
             return scintilla;
         }
 
-        private Scintilla CreateTextEditor(bool error)
+        private Scintilla CreateMessageEditor()
         {
             var scintilla = CreateEditor();
 
             scintilla.Lexer = Lexer.Null;
-            
-            if (error)
-                scintilla.Styles[Style.Default].ForeColor = Color.Red;
-            
             scintilla.StyleClearAll();
+            scintilla.Styles[1].ForeColor = Color.Red;
+            scintilla.Styles[2].ForeColor = Color.Black;
 
             return scintilla;
         }
@@ -211,7 +228,7 @@ namespace MarkMpn.Sql4Cds
             scintilla.KeyDown += (s, e) =>
             {
                 if (e.KeyCode == Keys.F5)
-                    Execute(true);
+                    Execute(true, Settings.Instance.IncludeFetchXml);
 
                 if (e.KeyCode == Keys.Back && scintilla.SelectedText == String.Empty)
                 {
@@ -401,8 +418,11 @@ namespace MarkMpn.Sql4Cds
             return scintilla;
         }
 
-        public void Execute(bool execute)
+        public void Execute(bool execute, bool includeFetchXml)
         {
+            if (backgroundWorker.IsBusy)
+                return;
+
             var offset = String.IsNullOrEmpty(_editor.SelectedText) ? 0 : _editor.SelectionStart;
 
             _editor.IndicatorClearRange(0, _editor.TextLength);
@@ -412,326 +432,33 @@ namespace MarkMpn.Sql4Cds
             if (String.IsNullOrEmpty(sql))
                 sql = _editor.Text;
 
-            WorkAsync(new WorkAsyncInfo
+            _params = new ExecuteParams { Sql = sql, Execute = execute, IncludeFetchXml = includeFetchXml, Offset = offset };
+            backgroundWorker.RunWorkerAsync(_params);
+        }
+
+        public bool Busy => backgroundWorker.IsBusy;
+
+        public event EventHandler BusyChanged;
+
+        public bool Cancellable
+        {
+            get { return _cancellable; }
+            set
             {
-                Message = "Executing...",
-                IsCancelable = execute,
-                Work = (worker, args) =>
-                {
-                    var converter = new Sql2FetchXml(Metadata, Settings.Instance.QuotedIdentifiers);
+                if (_cancellable == value)
+                    return;
 
-                    if (Settings.Instance.UseTSQLEndpoint &&
-                        execute &&
-                        !String.IsNullOrEmpty(((CrmServiceClient)Service).CurrentAccessToken))
-                        converter.TSqlEndpointAvailable = true;
+                _cancellable = value;
+                CancellableChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
 
-                    converter.ColumnComparisonAvailable = new Version(_con.OrganizationVersion) >= new Version("9.1.0.19251");
+        public event EventHandler CancellableChanged;
 
-                    var queries = converter.Convert(sql);
-
-                    var options = new QueryExecutionOptions(Service, worker);
-
-                    if (execute)
-                    {
-                        foreach (var query in queries)
-                        {
-                            _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name });
-                            query.Execute(Service, Metadata, options);
-                        }
-                    }
-                    else
-                    {
-                        foreach (var query in queries.OfType<IQueryRequiresFinalization>())
-                            query.FinalizeRequest(Service, options);
-                    }
-
-                    args.Result = queries;
-                },
-                ProgressChanged = e =>
-                {
-                    SetWorkingMessage(e.UserState.ToString());
-                },
-                PostWorkCallBack = (args) =>
-                {
-                    splitContainer.Panel2.Controls.Clear();
-
-                    if (args.Error is NotSupportedQueryFragmentException err)
-                        _editor.IndicatorFillRange(offset + err.Fragment.StartOffset, err.Fragment.FragmentLength);
-                    else if (args.Error is QueryParseException parseErr)
-                        _editor.IndicatorFillRange(offset + parseErr.Error.Offset, 1);
-
-                    if (args.Error != null)
-                    {
-                        _ai.TrackException(args.Error, new Dictionary<string, string> { ["Sql"] = sql });
-                        _log(args.Error.ToString());
-
-                        var error = CreateTextEditor(true);
-                        error.Text = args.Error.Message;
-                        error.ReadOnly = true;
-                        AddResult(error, false, "Query completed with errors", null, TimeSpan.Zero, null, args.Error);
-                        return;
-                    }
-
-                    var queries = (Query[])args.Result;
-
-                    foreach (var query in queries.Reverse())
-                    {
-                        var isMetadata = query.GetType().BaseType.IsGenericType && query.GetType().BaseType.GetGenericTypeDefinition() == typeof(MetadataQuery<,>);
-
-                        if (execute)
-                        {
-                            Control display = null;
-                            var statusText = "Query executed successfully";
-                            var method = "SDK";
-                            int? rowCount = null;
-
-                            if (query.Result is EntityCollection || query.Result is DataTable)
-                            {
-                                var entityCollection = query.Result as EntityCollection;
-                                var dataTable = query.Result as DataTable;
-
-                                var grid = entityCollection != null ? new CRMGridView() : new DataGridView();
-
-                                grid.AllowUserToAddRows = false;
-                                grid.AllowUserToDeleteRows = false;
-                                grid.AllowUserToOrderColumns = true;
-                                grid.AllowUserToResizeRows = false;
-                                grid.AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.WhiteSmoke };
-                                grid.BackgroundColor = SystemColors.Window;
-                                grid.BorderStyle = BorderStyle.None;
-                                grid.CellBorderStyle = DataGridViewCellBorderStyle.None;
-                                grid.ClipboardCopyMode = DataGridViewClipboardCopyMode.EnableWithoutHeaderText;
-                                grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
-                                grid.EnableHeadersVisualStyles = false;
-                                grid.ReadOnly = true;
-                                grid.RowHeadersWidth = 24;
-                                grid.ShowEditingIcon = false;
-                                grid.ContextMenuStrip = gridContextMenuStrip;
-
-                                if (entityCollection != null)
-                                {
-                                    var crmGrid = (CRMGridView) grid;
-
-                                    crmGrid.EntityReferenceClickable = true;
-                                    crmGrid.OrganizationService = Service;
-                                    crmGrid.ShowFriendlyNames = Settings.Instance.ShowEntityReferenceNames;
-                                    crmGrid.ShowIdColumn = false;
-                                    crmGrid.ShowIndexColumn = false;
-                                    crmGrid.ShowLocalTimes = Settings.Instance.ShowLocalTimes;
-                                    crmGrid.RecordClick += Grid_RecordClick;
-                                    crmGrid.CellMouseUp += Grid_CellMouseUp;
-                                }
-
-                                if (query is SelectQuery select && (entityCollection != null || isMetadata))
-                                {
-                                    foreach (var col in select.ColumnSet)
-                                    {
-                                        var colName = col;
-
-                                        if (grid.Columns.Contains(col))
-                                        {
-                                            var suffix = 1;
-                                            while (grid.Columns.Contains($"{col}_{suffix}"))
-                                                suffix++;
-
-                                            var newCol = $"{col}_{suffix}";
-
-                                            if (entityCollection != null)
-                                            {
-                                                foreach (var entity in entityCollection.Entities)
-                                                {
-                                                    if (entity.Contains(col))
-                                                        entity[newCol] = entity[col];
-                                                }
-                                            }
-
-                                            colName = newCol;
-                                        }
-
-                                        grid.Columns.Add(colName, colName);
-                                        grid.Columns[colName].FillWeight = 1;
-
-                                        if (entityCollection == null)
-                                            grid.Columns[colName].DataPropertyName = col;
-                                    }
-
-                                    if (isMetadata)
-                                        grid.AutoGenerateColumns = false;
-                                }
-
-                                grid.HandleCreated += (s, e) =>
-                                {
-                                    if (grid is CRMGridView crmGrid)
-                                        crmGrid.DataSource = query.Result;
-                                    else
-                                        grid.DataSource = query.Result;
-
-                                    grid.AutoResizeColumns();
-                                };
-
-                                grid.RowPostPaint += (s, e) =>
-                                {
-                                    var rowIdx = (e.RowIndex + 1).ToString();
-
-                                    var centerFormat = new System.Drawing.StringFormat()
-                                    {
-                                        Alignment = StringAlignment.Far,
-                                        LineAlignment = StringAlignment.Center,
-                                        FormatFlags = StringFormatFlags.NoWrap | StringFormatFlags.NoClip,
-                                        Trimming = StringTrimming.EllipsisCharacter
-                                    };
-
-                                    var headerBounds = new Rectangle(e.RowBounds.Left, e.RowBounds.Top, grid.RowHeadersWidth - 2, e.RowBounds.Height);
-                                    e.Graphics.DrawString(rowIdx, this.Font, SystemBrushes.ControlText, headerBounds, centerFormat);
-                                };
-
-                                display = grid;
-
-                                if (entityCollection != null)
-                                {
-                                    rowCount = entityCollection.Entities.Count;
-                                }
-                                else if (isMetadata)
-                                {
-                                    rowCount = dataTable.Rows.Count;
-                                    method = "Metadata";
-                                }
-                                else
-                                {
-                                    rowCount = dataTable.Rows.Count;
-                                    method = "TDS";
-                                }
-                            }
-                            else if (query.Result is string msg)
-                            {
-                                var msgDisplay = CreateTextEditor(false);
-                                msgDisplay.Text = msg;
-                                msgDisplay.ReadOnly = true;
-                                display = msgDisplay;
-                            }
-                            else if (query.Result is Exception ex)
-                            {
-                                var msgDisplay = CreateTextEditor(true);
-
-                                if (ex is AggregateException aggregateException)
-                                    msgDisplay.Text = String.Join("\r\n", aggregateException.InnerExceptions.Select(e => e.Message));
-                                else
-                                    msgDisplay.Text = ex.Message;
-
-                                msgDisplay.ReadOnly = true;
-                                display = msgDisplay;
-                                statusText = "Query completed with errors";
-                            }
-                            else if (query.Result == null)
-                            {
-                                statusText = "Query execution cancelled";
-                            }
-
-                            if (isMetadata)
-                            {
-                                var queryDisplay = CreateXmlEditor();
-                                queryDisplay.Text = SerializeRequest(query.GetType().GetProperty("Request").GetValue(query));
-                                queryDisplay.ReadOnly = true;
-
-                                var metadataInfo = CreatePostProcessingWarning(null, true);
-
-                                if (display == null)
-                                {
-                                    var panel = new Panel();
-                                    panel.Controls.Add(queryDisplay);
-                                    panel.Controls.Add(metadataInfo);
-                                    display = panel;
-                                }
-                                else
-                                {
-                                    var tab = new TabControl();
-                                    tab.TabPages.Add("Results");
-                                    tab.TabPages.Add("Request");
-                                    tab.TabPages[0].Controls.Add(display);
-                                    tab.TabPages[1].Controls.Add(queryDisplay);
-                                    tab.TabPages[1].Controls.Add(metadataInfo);
-
-                                    display.Dock = DockStyle.Fill;
-                                    queryDisplay.Dock = DockStyle.Fill;
-
-                                    display = tab;
-                                }
-                            }
-                            else if (query is FetchXmlQuery fxq && fxq.FetchXml != null)
-                            {
-                                var xmlDisplay = CreateXmlEditor();
-                                xmlDisplay.Text = fxq.FetchXmlString;
-                                xmlDisplay.ReadOnly = true;
-
-                                var postWarning = CreatePostProcessingWarning(fxq, false);
-                                var toolbar = CreateFXBToolbar(xmlDisplay);
-
-                                if (display == null)
-                                {
-                                    var panel = new Panel();
-                                    panel.Controls.Add(xmlDisplay);
-
-                                    if (postWarning != null)
-                                        panel.Controls.Add(postWarning);
-
-                                    panel.Controls.Add(toolbar);
-                                    display = panel;
-                                }
-                                else
-                                {
-                                    var tab = new TabControl();
-                                    tab.TabPages.Add("Results");
-                                    tab.TabPages.Add("FetchXML");
-                                    tab.TabPages[0].Controls.Add(display);
-                                    tab.TabPages[1].Controls.Add(xmlDisplay);
-
-                                    if (postWarning != null)
-                                        tab.TabPages[1].Controls.Add(postWarning);
-
-                                    tab.TabPages[1].Controls.Add(toolbar);
-
-                                    display.Dock = DockStyle.Fill;
-                                    xmlDisplay.Dock = DockStyle.Fill;
-
-                                    display = tab;
-                                }
-                            }
-
-                            AddResult(display, queries.Length > 1, statusText, method, query.Duration, rowCount, query.Result);
-                        }
-                        else if (isMetadata)
-                        {
-                            var queryDisplay = CreateXmlEditor();
-                            queryDisplay.Text = SerializeRequest(query.GetType().GetProperty("Request").GetValue(query));
-                            queryDisplay.ReadOnly = true;
-                            queryDisplay.Dock = DockStyle.Fill;
-                            var metadataInfo = CreatePostProcessingWarning(null, true);
-                            var container = new Panel();
-                            container.Controls.Add(queryDisplay);
-                            container.Controls.Add(metadataInfo);
-
-                            AddResult(container, queries.Length > 1, "Query converted successfully", "Metadata", TimeSpan.Zero, null, queryDisplay.Text);
-                        }
-                        else if (query is FetchXmlQuery fxq)
-                        {
-                            var xmlDisplay = CreateXmlEditor();
-                            xmlDisplay.Text = fxq.FetchXmlString;
-                            xmlDisplay.ReadOnly = true;
-                            xmlDisplay.Dock = DockStyle.Fill;
-                            var postWarning = CreatePostProcessingWarning(fxq, false);
-                            var toolbar = CreateFXBToolbar(xmlDisplay);
-                            var container = new Panel();
-                            container.Controls.Add(xmlDisplay);
-
-                            if (postWarning != null)
-                                container.Controls.Add(postWarning);
-
-                            container.Controls.Add(toolbar);
-                            AddResult(container, queries.Length > 1, "Query converted successfully", "FetchXML", TimeSpan.Zero, null, xmlDisplay.Text);
-                        }
-                    }
-                }
-            });
+        public void Cancel()
+        {
+            backgroundWorker.ReportProgress(0, "Cancelling query...");
+            backgroundWorker.CancelAsync();
         }
 
         private string SerializeRequest(object request)
@@ -864,41 +591,60 @@ namespace MarkMpn.Sql4Cds
             return postWarning;
         }
 
-        private void AddResult(Control control, bool multi, string statusText, string method, TimeSpan duration, int? rowCount, object result)
+        private void AddResult(Control results, Control fetchXml, int rowCount)
         {
-            var panel = new Panel();
-            panel.Controls.Add(control);
-            control.Dock = DockStyle.Fill;
-
-            var statusBar = new StatusStrip();
-            statusBar.SizingGrip = false;
-            statusBar.BackColor = Color.FromArgb(240, 230, 140);
-            statusBar.Items.Add(new ToolStripStatusLabel(statusText) { Alignment = ToolStripItemAlignment.Left, Spring = true, TextAlign = ContentAlignment.MiddleLeft, Image = result == null ? Properties.Resources.StatusStop_16x : result is Exception ? Properties.Resources.StatusWarning_16x : Properties.Resources.StatusOK_16x, ImageAlign = ContentAlignment.MiddleLeft });
-            statusBar.Items.Add(new ToolStripSeparator() { Alignment = ToolStripItemAlignment.Right });
-            statusBar.Items.Add(new ToolStripLabel(new Uri(_con.OrganizationServiceUrl).Host) { Alignment = ToolStripItemAlignment.Right, Image = _con.UseSsl ? Properties.Resources.timeline_lock_on_16x : null, ImageAlign = ContentAlignment.MiddleLeft });
-            statusBar.Items.Add(new ToolStripSeparator() { Alignment = ToolStripItemAlignment.Right });
-            statusBar.Items.Add(new ToolStripLabel(_con.UserName) { Alignment = ToolStripItemAlignment.Right });
-
-            if (method != null)
+            if (results != null)
             {
-                statusBar.Items.Add(new ToolStripSeparator() { Alignment = ToolStripItemAlignment.Right });
-                statusBar.Items.Add(new ToolStripLabel(method) { Alignment = ToolStripItemAlignment.Right });
+                if (!tabControl.TabPages.Contains(resultsTabPage))
+                {
+                    tabControl.TabPages.Insert(0, resultsTabPage);
+                    tabControl.SelectedTab = resultsTabPage;
+                }
+
+                AddControl(results, resultsTabPage);
             }
 
-            statusBar.Items.Add(new ToolStripSeparator() { Alignment = ToolStripItemAlignment.Right });
-            statusBar.Items.Add(new ToolStripLabel(duration.ToString("hh\\:mm\\:ss")) { Alignment = ToolStripItemAlignment.Right });
-
-            if (rowCount != null)
+            if (fetchXml != null)
             {
-                statusBar.Items.Add(new ToolStripSeparator() { Alignment = ToolStripItemAlignment.Right });
-                statusBar.Items.Add(new ToolStripLabel($"{rowCount:N0} {(rowCount == 1 ? "row" : "rows")}") { Alignment = ToolStripItemAlignment.Right });
+                if (!tabControl.TabPages.Contains(fetchXmlTabPage))
+                    tabControl.TabPages.Insert(tabControl.TabPages.Count - 1, fetchXmlTabPage);
+
+                AddControl(fetchXml, fetchXmlTabPage);
             }
 
-            panel.Controls.Add(statusBar);
+            _rowCount += rowCount;
 
-            panel.Height = splitContainer.Panel2.Height * 2 / 3;
-            panel.Dock = multi ? DockStyle.Top : DockStyle.Fill;
-            splitContainer.Panel2.Controls.Add(panel);
+            if (_rowCount == 1)
+                rowsLabel.Text = "1 row";
+            else
+                rowsLabel.Text = $"{_rowCount:N0} rows";
+        }
+
+        private void AddControl(Control control, TabPage tabPage)
+        {
+            var flp = (FlowLayoutPanel)tabPage.Controls[0];
+            flp.HorizontalScroll.Enabled = false;
+
+            if (flp.Controls.Count == 0)
+            {
+                control.Height = flp.Height;
+                control.Margin = Padding.Empty;
+            }
+            else
+            {
+                control.Height = flp.Height * 2 / 3;
+                control.Margin = new Padding(0, 0, 0, 3);
+
+                if (flp.Controls.Count == 1)
+                {
+                    flp.Controls[0].Height = control.Height;
+                    flp.Controls[0].Margin = control.Margin;
+                }
+            }
+
+            control.Width = flp.ClientSize.Width;
+
+            flp.Controls.Add(control);
         }
 
         private void gridContextMenuStrip_Opening(object sender, CancelEventArgs e)
@@ -967,6 +713,335 @@ namespace MarkMpn.Sql4Cds
             var end = _editor.TextLength;
             _editor.AppendText($"SELECT * FROM {entityReference.LogicalName} WHERE {metadata.PrimaryIdAttribute} = '{entityReference.Id}'");
             _editor.SetSelection(_editor.TextLength, end);
+        }
+
+        private void backgroundWorker_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
+        {
+            _progressHost.Visible = false;
+            _stopwatch.Stop();
+            timer.Enabled = false;
+            Cancellable = false;
+
+            if (e.Cancelled)
+            {
+                toolStripStatusLabel.Image = Properties.Resources.StatusStop_16x;
+                toolStripStatusLabel.Text = "Query cancelled";
+            }
+            else if (e.Error != null)
+            {
+                toolStripStatusLabel.Image = Properties.Resources.StatusWarning_16x;
+                toolStripStatusLabel.Text = "Query completed with errors";
+            }
+            else
+            {
+                toolStripStatusLabel.Image = Properties.Resources.StatusOK_16x;
+                toolStripStatusLabel.Text = "Query executed successfully";
+            }
+
+            if (e.Error != null)
+            {
+                if (e.Error is NotSupportedQueryFragmentException err)
+                    _editor.IndicatorFillRange(_params.Offset + err.Fragment.StartOffset, err.Fragment.FragmentLength);
+                else if (e.Error is QueryParseException parseErr)
+                    _editor.IndicatorFillRange(_params.Offset + parseErr.Error.Offset, 1);
+
+                _ai.TrackException(e.Error, new Dictionary<string, string> { ["Sql"] = _params.Sql });
+                _log(e.Error.ToString());
+
+
+                if (e.Error is AggregateException aggregateException)
+                    AddMessage(String.Join("\r\n", aggregateException.InnerExceptions.Select(ex => ex.Message)), true);
+                else
+                    AddMessage(e.Error.Message, true);
+
+                tabControl.SelectedTab = messagesTabPage;
+            }
+            else if (!_params.Execute)
+            {
+                tabControl.SelectedTab = fetchXmlTabPage;
+            }
+
+            BusyChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void AddMessage(string message, bool error)
+        {
+            var scintilla = (Scintilla)messagesTabPage.Controls[0];
+            scintilla.ReadOnly = false;
+            scintilla.Text += message + "\r\n\r\n";
+            scintilla.StartStyling(scintilla.Text.Length - message.Length - 4);
+            scintilla.SetStyling(message.Length, error ? 1 : 2);
+            scintilla.ReadOnly = true;
+        }
+
+        private void Execute(Action action)
+        {
+            if (InvokeRequired)
+                Invoke(action);
+            else
+                action();
+        }
+
+        private void backgroundWorker_DoWork(object sender, DoWorkEventArgs e)
+        {
+            BusyChanged?.Invoke(this, EventArgs.Empty);
+
+            var args = (ExecuteParams)e.Argument;
+
+            Execute(() =>
+            {
+                Cancellable = args.Execute;
+                _progressHost.Visible = true;
+                timerLabel.Text = "00:00:00";
+                _stopwatch.Restart();
+                timer.Enabled = true;
+                _rowCount = 0;
+                rowsLabel.Text = "0 rows";
+
+                tabControl.TabPages.Remove(resultsTabPage);
+                tabControl.TabPages.Remove(fetchXmlTabPage);
+
+                resultsFlowLayoutPanel.Controls.Clear();
+                fetchXMLFlowLayoutPanel.Controls.Clear();
+
+                if (messagesTabPage.Controls.Count == 0)
+                {
+                    messagesTabPage.Controls.Add(CreateMessageEditor());
+                    ((Scintilla)messagesTabPage.Controls[0]).Dock = DockStyle.Fill;
+                }
+
+                ((Scintilla)messagesTabPage.Controls[0]).ReadOnly = false;
+                ((Scintilla)messagesTabPage.Controls[0]).Text = "";
+                ((Scintilla)messagesTabPage.Controls[0]).StartStyling(0);
+                ((Scintilla)messagesTabPage.Controls[0]).ReadOnly = true;
+
+                splitContainer.Panel2Collapsed = false;
+            });
+
+            backgroundWorker.ReportProgress(0, "Executing query...");
+
+            var converter = new Sql2FetchXml(Metadata, Settings.Instance.QuotedIdentifiers);
+
+            if (Settings.Instance.UseTSQLEndpoint &&
+                args.Execute &&
+                !String.IsNullOrEmpty(((CrmServiceClient)Service).CurrentAccessToken))
+                converter.TSqlEndpointAvailable = true;
+
+            converter.ColumnComparisonAvailable = new Version(_con.OrganizationVersion) >= new Version("9.1.0.19251");
+
+            var queries = converter.Convert(args.Sql);
+
+            var options = new QueryExecutionOptions(Service, backgroundWorker);
+
+            if (args.Execute)
+            {
+                foreach (var query in queries)
+                {
+                    _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name });
+                    query.Execute(Service, Metadata, options);
+
+                    Execute(() => ShowResult(query, args));
+
+                    if (query.Result is Exception ex)
+                        throw ex;
+                }
+            }
+            else
+            {
+                foreach (var query in queries)
+                {
+                    _ai.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name });
+
+                    if (query is IQueryRequiresFinalization finalize)
+                        finalize.FinalizeRequest(Service, options);
+
+                    Execute(() => ShowResult((Query)query, args));
+                }
+            }
+
+            if (options.Cancelled)
+            {
+                e.Cancel = true;
+                AddMessage("Query was cancelled by user", true);
+            }
+        }
+
+        private void ShowResult(Query query, ExecuteParams args)
+        {
+            Control result = null;
+            Control fetchXml = null;
+            var rowCount = 0;
+
+            var isMetadata = query.GetType().BaseType.IsGenericType && query.GetType().BaseType.GetGenericTypeDefinition() == typeof(MetadataQuery<,>);
+
+            if (query.Result is EntityCollection || query.Result is DataTable)
+            {
+                var entityCollection = query.Result as EntityCollection;
+                var dataTable = query.Result as DataTable;
+
+                var grid = entityCollection != null ? new CRMGridView() : new DataGridView();
+
+                grid.AllowUserToAddRows = false;
+                grid.AllowUserToDeleteRows = false;
+                grid.AllowUserToOrderColumns = true;
+                grid.AllowUserToResizeRows = false;
+                grid.AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.WhiteSmoke };
+                grid.BackgroundColor = SystemColors.Window;
+                grid.BorderStyle = BorderStyle.None;
+                grid.CellBorderStyle = DataGridViewCellBorderStyle.None;
+                grid.ClipboardCopyMode = DataGridViewClipboardCopyMode.EnableWithoutHeaderText;
+                grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
+                grid.EnableHeadersVisualStyles = false;
+                grid.ReadOnly = true;
+                grid.RowHeadersWidth = 24;
+                grid.ShowEditingIcon = false;
+                grid.ContextMenuStrip = gridContextMenuStrip;
+
+                if (entityCollection != null)
+                {
+                    var crmGrid = (CRMGridView)grid;
+
+                    crmGrid.EntityReferenceClickable = true;
+                    crmGrid.OrganizationService = Service;
+                    crmGrid.ShowFriendlyNames = Settings.Instance.ShowEntityReferenceNames;
+                    crmGrid.ShowIdColumn = false;
+                    crmGrid.ShowIndexColumn = false;
+                    crmGrid.ShowLocalTimes = Settings.Instance.ShowLocalTimes;
+                    crmGrid.RecordClick += Grid_RecordClick;
+                    crmGrid.CellMouseUp += Grid_CellMouseUp;
+                }
+
+                if (query is SelectQuery select && (entityCollection != null || isMetadata))
+                {
+                    foreach (var col in select.ColumnSet)
+                    {
+                        var colName = col;
+
+                        if (grid.Columns.Contains(col))
+                        {
+                            var suffix = 1;
+                            while (grid.Columns.Contains($"{col}_{suffix}"))
+                                suffix++;
+
+                            var newCol = $"{col}_{suffix}";
+
+                            if (entityCollection != null)
+                            {
+                                foreach (var entity in entityCollection.Entities)
+                                {
+                                    if (entity.Contains(col))
+                                        entity[newCol] = entity[col];
+                                }
+                            }
+
+                            colName = newCol;
+                        }
+
+                        grid.Columns.Add(colName, colName);
+                        grid.Columns[colName].FillWeight = 1;
+
+                        if (entityCollection == null)
+                            grid.Columns[colName].DataPropertyName = col;
+                    }
+
+                    if (isMetadata)
+                        grid.AutoGenerateColumns = false;
+                }
+
+                grid.HandleCreated += (s, e) =>
+                {
+                    if (grid is CRMGridView crmGrid)
+                        crmGrid.DataSource = query.Result;
+                    else
+                        grid.DataSource = query.Result;
+
+                    grid.AutoResizeColumns();
+                };
+
+                grid.RowPostPaint += (s, e) =>
+                {
+                    var rowIdx = (e.RowIndex + 1).ToString();
+
+                    var centerFormat = new System.Drawing.StringFormat()
+                    {
+                        Alignment = StringAlignment.Far,
+                        LineAlignment = StringAlignment.Center,
+                        FormatFlags = StringFormatFlags.NoWrap | StringFormatFlags.NoClip,
+                        Trimming = StringTrimming.EllipsisCharacter
+                    };
+
+                    var headerBounds = new Rectangle(e.RowBounds.Left, e.RowBounds.Top, grid.RowHeadersWidth - 2, e.RowBounds.Height);
+                    e.Graphics.DrawString(rowIdx, this.Font, SystemBrushes.ControlText, headerBounds, centerFormat);
+                };
+
+                result = grid;
+
+                if (entityCollection != null)
+                    rowCount = entityCollection.Entities.Count;
+                else
+                    rowCount = dataTable.Rows.Count;
+
+                AddMessage($"({rowCount} row{(rowCount == 1 ? "" : "s")} affected)", false);
+            }
+            else if (query.Result is string msg)
+            {
+                AddMessage(msg, false);
+            }
+
+            if (args.IncludeFetchXml)
+            {
+                if (isMetadata)
+                {
+                    var queryDisplay = CreateXmlEditor();
+                    queryDisplay.Text = SerializeRequest(query.GetType().GetProperty("Request").GetValue(query));
+                    queryDisplay.ReadOnly = true;
+
+                    var metadataInfo = CreatePostProcessingWarning(null, true);
+
+                    fetchXml = new Panel();
+                    fetchXml.Controls.Add(queryDisplay);
+                    fetchXml.Controls.Add(metadataInfo);
+                }
+                else if (query is FetchXmlQuery fxq && fxq.FetchXml != null)
+                {
+                    var xmlDisplay = CreateXmlEditor();
+                    xmlDisplay.Text = fxq.FetchXmlString;
+                    xmlDisplay.ReadOnly = true;
+                    xmlDisplay.Dock = DockStyle.Fill;
+
+                    var postWarning = CreatePostProcessingWarning(fxq, false);
+                    var toolbar = CreateFXBToolbar(xmlDisplay);
+
+                    fetchXml = new Panel();
+                    fetchXml.Controls.Add(xmlDisplay);
+
+                    if (postWarning != null)
+                        fetchXml.Controls.Add(postWarning);
+
+                    fetchXml.Controls.Add(toolbar);
+                }
+            }
+
+            AddResult(result, fetchXml, rowCount);
+        }
+
+        private void backgroundWorker_ProgressChanged(object sender, ProgressChangedEventArgs e)
+        {
+            toolStripStatusLabel.Image = null;
+            toolStripStatusLabel.Text = (string) e.UserState;
+        }
+
+        private void timer_Tick(object sender, EventArgs e)
+        {
+            timerLabel.Text = _stopwatch.Elapsed.ToString(@"hh\:mm\:ss");
+        }
+
+        private void ResizeLayoutPanel(object sender, EventArgs e)
+        {
+            var flp = (FlowLayoutPanel)sender;
+
+            foreach (Control control in flp.Controls)
+                control.Width = flp.ClientSize.Width;
         }
     }
 }
