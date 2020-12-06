@@ -632,11 +632,13 @@ namespace MarkMpn.Sql4Cds
         {
             private readonly EntityMetadata _rhs;
             private readonly AttributeMetadata _attribute;
+            private readonly string _lhs;
             private readonly IAttributeMetadataCache _metadata;
 
             public JoinAutocompleteItem(OneToManyRelationshipMetadata relationship, string join, bool oneToMany, EntityMetadata[] entities, IAttributeMetadataCache metadata) : base(join, oneToMany ? 19 : 18)
             {
                 _rhs = entities.SingleOrDefault(e => e.LogicalName == relationship.ReferencingEntity);
+                _lhs = relationship.ReferencedEntity;
 
                 if (!oneToMany && metadata.TryGetMinimalData(relationship.ReferencingEntity, out _rhs))
                     _attribute = _rhs.Attributes.Single(a => a.LogicalName == relationship.ReferencingAttribute);
@@ -671,6 +673,7 @@ namespace MarkMpn.Sql4Cds
             public override string GetTextForReplace()
             {
                 _metadata.TryGetMinimalData(_rhs.LogicalName, out _);
+                _metadata.TryGetMinimalData(_lhs, out _);
                 return base.GetTextForReplace();
             }
         }

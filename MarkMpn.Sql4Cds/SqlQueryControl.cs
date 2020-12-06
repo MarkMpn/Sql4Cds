@@ -10,6 +10,7 @@ using System.Linq;
 using System.Runtime.Serialization;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Windows.Forms;
 using System.Xml;
 using System.Xml.Serialization;
@@ -54,6 +55,9 @@ namespace MarkMpn.Sql4Cds
         private ExecuteParams _params;
         private int _rowCount;
         private ToolStripControlHost _progressHost;
+        private int _metadataLoadingTasks;
+        private string _preMetadataLoadingStatus;
+        private Image _preMetadataLoadingImage;
 
         static SqlQueryControl()
         {
@@ -63,7 +67,7 @@ namespace MarkMpn.Sql4Cds
             _sqlIcon = Icon.FromHandle(Properties.Resources.SQLFile_16x.GetHicon());
         }
 
-        public SqlQueryControl(ConnectionDetail con, IAttributeMetadataCache metadata, TelemetryClient ai, Action<MessageBusEventArgs> outgoingMessageHandler, string sourcePlugin, Action<string> log)
+        public SqlQueryControl(ConnectionDetail con, AttributeMetadataCache metadata, TelemetryClient ai, Action<MessageBusEventArgs> outgoingMessageHandler, string sourcePlugin, Action<string> log)
         {
             InitializeComponent();
             _displayName = $"Query {++_queryCounter}";
@@ -90,6 +94,8 @@ namespace MarkMpn.Sql4Cds
             var progressImage = new PictureBox { Image = Properties.Resources.progress, Height = 16, Width = 16 };
             _progressHost = new ToolStripControlHost(progressImage) { Visible = false };
             statusStrip.Items.Insert(0, _progressHost);
+
+            metadata.MetadataLoading += MetadataLoading;
 
             splitContainer.Panel1.Controls.Add(_editor);
             Icon = _sqlIcon;
@@ -1042,6 +1048,37 @@ namespace MarkMpn.Sql4Cds
 
             foreach (Control control in flp.Controls)
                 control.Width = flp.ClientSize.Width;
+        }
+
+        private void MetadataLoading(object sender, MetadataLoadingEventArgs e)
+        {
+            if (!Busy)
+            {
+                if (Interlocked.Increment(ref _metadataLoadingTasks) == 1)
+                {
+                    Execute(() =>
+                    {
+                        _preMetadataLoadingStatus = toolStripStatusLabel.Text;
+                        _preMetadataLoadingImage = toolStripStatusLabel.Image;
+                        toolStripStatusLabel.Text = "Loading metadata for " + e.LogicalName;
+                        toolStripStatusLabel.Image = null;
+                        _progressHost.Visible = true;
+                    });
+                }
+
+                e.Task.ContinueWith(t =>
+                {
+                    if (Interlocked.Decrement(ref _metadataLoadingTasks) == 0 && !Busy)
+                    {
+                        Execute(() =>
+                        {
+                            toolStripStatusLabel.Text = _preMetadataLoadingStatus;
+                            toolStripStatusLabel.Image = _preMetadataLoadingImage;
+                            _progressHost.Visible = false;
+                        });
+                    }
+                });
+            }
         }
     }
 }

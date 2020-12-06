@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Diagnostics;
 using System.IO;
-using System.Threading;
 using System.Windows.Forms;
 using System.Xml.Serialization;
 using MarkMpn.Sql4Cds.Engine;
@@ -20,7 +19,6 @@ namespace MarkMpn.Sql4Cds
         private readonly IDictionary<ConnectionDetail, AttributeMetadataCache> _metadata;
         private readonly TelemetryClient _ai;
         private readonly ObjectExplorer _objectExplorer;
-        private int _metadataLoadingTasks;
 
         public PluginControl()
         {
@@ -62,26 +60,6 @@ namespace MarkMpn.Sql4Cds
 
             // Start loading the entity list in the background
             EntityCache.TryGetEntities(con.ServiceClient, out _);
-
-            _metadata[con].MetadataLoading += MetadataLoading;
-            //_metadata[con].LoadAllAsync();
-        }
-
-        private void MetadataLoading(object sender, MetadataLoadingEventArgs e)
-        {
-            if (Interlocked.Increment(ref _metadataLoadingTasks) == 1)
-                progressBar.Style = ProgressBarStyle.Marquee;
-
-            e.Task.ContinueWith(t =>
-            {
-                if (Interlocked.Decrement(ref _metadataLoadingTasks) == 0)
-                {
-                    if (InvokeRequired)
-                        Invoke((Action)(() => { progressBar.Style = ProgressBarStyle.Blocks; }));
-                    else
-                        progressBar.Style = ProgressBarStyle.Blocks;
-                }
-            });
         }
 
         private void PluginControl_Load(object sender, EventArgs e)

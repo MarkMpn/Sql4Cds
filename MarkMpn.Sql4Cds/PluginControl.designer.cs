@@ -46,7 +46,6 @@
             this.tsbSettings = new System.Windows.Forms.ToolStripButton();
             this.tslAboutLink = new System.Windows.Forms.ToolStripLabel();
             this.dockPanel = new WeifenLuo.WinFormsUI.Docking.DockPanel();
-            this.progressBar = new System.Windows.Forms.ProgressBar();
             this.toolStripMenu.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -221,22 +220,10 @@
             this.dockPanel.TabIndex = 5;
             this.dockPanel.ActiveDocumentChanged += new System.EventHandler(this.dockPanel_ActiveDocumentChanged);
             // 
-            // progressBar
-            // 
-            this.progressBar.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.progressBar.Enabled = false;
-            this.progressBar.ForeColor = System.Drawing.Color.Lime;
-            this.progressBar.Location = new System.Drawing.Point(0, 493);
-            this.progressBar.MarqueeAnimationSpeed = 10;
-            this.progressBar.Name = "progressBar";
-            this.progressBar.Size = new System.Drawing.Size(861, 10);
-            this.progressBar.TabIndex = 6;
-            // 
             // PluginControl
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.Controls.Add(this.progressBar);
             this.Controls.Add(this.dockPanel);
             this.Controls.Add(this.toolStripMenu);
             this.Margin = new System.Windows.Forms.Padding(2, 3, 2, 3);
@@ -266,7 +253,6 @@
         private System.Windows.Forms.ToolStripButton tsbSave;
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator2;
         private System.Windows.Forms.ToolStripButton tsbStop;
-        private System.Windows.Forms.ProgressBar progressBar;
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator3;
         private System.Windows.Forms.ToolStripButton tsbIncludeFetchXml;
     }
