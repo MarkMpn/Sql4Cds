@@ -20,9 +20,11 @@ using McTools.Xrm.Connection;
 using Microsoft.ApplicationInsights;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Query;
 using Microsoft.Xrm.Tooling.Connector;
 using ScintillaNET;
 using xrmtb.XrmToolBox.Controls;
+using xrmtb.XrmToolBox.Controls.Controls;
 using XrmToolBox.Extensibility;
 
 namespace MarkMpn.Sql4Cds
@@ -86,7 +88,7 @@ namespace MarkMpn.Sql4Cds
 
             // Populate the status bar and add separators between each field
             hostLabel.Text = new Uri(_con.OrganizationServiceUrl).Host;
-            usernameLabel.Text = _con.UserName;
+            SyncUsername();
             orgNameLabel.Text = _con.Organization;
             for (var i = statusStrip.Items.Count - 1; i > 1; i--)
                 statusStrip.Items.Insert(i, new ToolStripSeparator());
@@ -1079,6 +1081,48 @@ namespace MarkMpn.Sql4Cds
                     }
                 });
             }
+        }
+
+        private void SyncUsername()
+        {
+            if (_con.ServiceClient.CallerId == Guid.Empty)
+            {
+                usernameDropDownButton.Text = _con.UserName;
+                usernameDropDownButton.Image = null;
+                impersonateMenuItem.Enabled = true;
+                revertToolStripMenuItem.Enabled = false;
+            }
+            else
+            {
+                var user = Service.Retrieve("systemuser", _con.ServiceClient.CallerId, new ColumnSet("domainname"));
+
+                usernameDropDownButton.Text = user.GetAttributeValue<string>("domainname");
+                usernameDropDownButton.Image = Properties.Resources.StatusWarning_16x;
+                impersonateMenuItem.Enabled = false;
+                revertToolStripMenuItem.Enabled = true;
+            }
+        }
+
+        private void impersonateMenuItem_Click(object sender, EventArgs e)
+        {
+            /*using (var dlg = new CDSLookupDialog())
+            {
+                dlg.Service = Service;
+                dlg.LogicalName = "systemuser";
+                dlg.Multiselect = false;
+
+                if (dlg.ShowDialog(this) == DialogResult.OK)
+                {
+                    _con.ServiceClient.CallerId = dlg.Entity.Id;
+                    SyncUsername();
+                }
+            }*/
+        }
+
+        private void revertToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            _con.ServiceClient.CallerId = Guid.Empty;
+            SyncUsername();
         }
     }
 }

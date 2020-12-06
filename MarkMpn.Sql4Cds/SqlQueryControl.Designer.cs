@@ -46,12 +46,14 @@
             this.statusStrip = new System.Windows.Forms.StatusStrip();
             this.toolStripStatusLabel = new System.Windows.Forms.ToolStripStatusLabel();
             this.hostLabel = new System.Windows.Forms.ToolStripStatusLabel();
-            this.usernameLabel = new System.Windows.Forms.ToolStripStatusLabel();
             this.orgNameLabel = new System.Windows.Forms.ToolStripStatusLabel();
             this.timerLabel = new System.Windows.Forms.ToolStripStatusLabel();
             this.rowsLabel = new System.Windows.Forms.ToolStripStatusLabel();
             this.backgroundWorker = new System.ComponentModel.BackgroundWorker();
             this.timer = new System.Windows.Forms.Timer(this.components);
+            this.usernameDropDownButton = new System.Windows.Forms.ToolStripDropDownButton();
+            this.impersonateMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.revertToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             ((System.ComponentModel.ISupportInitialize)(this.splitContainer)).BeginInit();
             this.splitContainer.Panel2.SuspendLayout();
             this.splitContainer.SuspendLayout();
@@ -205,7 +207,7 @@
             this.statusStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.toolStripStatusLabel,
             this.hostLabel,
-            this.usernameLabel,
+            this.usernameDropDownButton,
             this.orgNameLabel,
             this.timerLabel,
             this.rowsLabel});
@@ -221,7 +223,7 @@
             this.toolStripStatusLabel.Image = global::MarkMpn.Sql4Cds.Properties.Resources.ConnectFilled_grey_16x;
             this.toolStripStatusLabel.ImageAlign = System.Drawing.ContentAlignment.MiddleLeft;
             this.toolStripStatusLabel.Name = "toolStripStatusLabel";
-            this.toolStripStatusLabel.Size = new System.Drawing.Size(143, 17);
+            this.toolStripStatusLabel.Size = new System.Drawing.Size(99, 17);
             this.toolStripStatusLabel.Spring = true;
             this.toolStripStatusLabel.Text = "Connected";
             this.toolStripStatusLabel.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
@@ -232,12 +234,6 @@
             this.hostLabel.Name = "hostLabel";
             this.hostLabel.Size = new System.Drawing.Size(164, 17);
             this.hostLabel.Text = "orgxxx.crm.dynamics.com";
-            // 
-            // usernameLabel
-            // 
-            this.usernameLabel.Name = "usernameLabel";
-            this.usernameLabel.Size = new System.Drawing.Size(140, 17);
-            this.usernameLabel.Text = "username@contoso.com";
             // 
             // orgNameLabel
             // 
@@ -269,6 +265,31 @@
             // 
             this.timer.Interval = 1000;
             this.timer.Tick += new System.EventHandler(this.timer_Tick);
+            // 
+            // usernameDropDownButton
+            // 
+            this.usernameDropDownButton.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.impersonateMenuItem,
+            this.revertToolStripMenuItem});
+            this.usernameDropDownButton.ImageTransparentColor = System.Drawing.Color.Magenta;
+            this.usernameDropDownButton.Name = "usernameDropDownButton";
+            this.usernameDropDownButton.Size = new System.Drawing.Size(153, 20);
+            this.usernameDropDownButton.Text = "username@contoso.com";
+            // 
+            // impersonateMenuItem
+            // 
+            this.impersonateMenuItem.Name = "impersonateMenuItem";
+            this.impersonateMenuItem.Size = new System.Drawing.Size(180, 22);
+            this.impersonateMenuItem.Text = "Impersonate";
+            this.impersonateMenuItem.Click += new System.EventHandler(this.impersonateMenuItem_Click);
+            // 
+            // revertToolStripMenuItem
+            // 
+            this.revertToolStripMenuItem.Enabled = false;
+            this.revertToolStripMenuItem.Name = "revertToolStripMenuItem";
+            this.revertToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
+            this.revertToolStripMenuItem.Text = "Revert";
+            this.revertToolStripMenuItem.Click += new System.EventHandler(this.revertToolStripMenuItem_Click);
             // 
             // SqlQueryControl
             // 
@@ -304,7 +325,6 @@
         private System.Windows.Forms.StatusStrip statusStrip;
         private System.Windows.Forms.ToolStripStatusLabel toolStripStatusLabel;
         private System.Windows.Forms.ToolStripStatusLabel hostLabel;
-        private System.Windows.Forms.ToolStripStatusLabel usernameLabel;
         private System.Windows.Forms.ToolStripStatusLabel timerLabel;
         private System.Windows.Forms.ToolStripStatusLabel rowsLabel;
         private System.Windows.Forms.ToolStripStatusLabel orgNameLabel;
@@ -317,5 +337,8 @@
         private System.Windows.Forms.Timer timer;
         private System.Windows.Forms.FlowLayoutPanel fetchXMLFlowLayoutPanel;
         private System.Windows.Forms.FlowLayoutPanel resultsFlowLayoutPanel;
+        private System.Windows.Forms.ToolStripDropDownButton usernameDropDownButton;
+        private System.Windows.Forms.ToolStripMenuItem impersonateMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem revertToolStripMenuItem;
     }
 }
