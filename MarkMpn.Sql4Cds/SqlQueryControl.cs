@@ -666,7 +666,7 @@ namespace MarkMpn.Sql4Cds
             }
             else
             {
-                var entity = grid.SelectedCells.Count == 1 ? grid.SelectedCellRecords.Entities[0] : null;
+                var entity = grid.SelectedCells.Count == 1 ? grid.SelectedCellRecords.Single() : null;
                 var isEntityReference = false;
 
                 if (entity != null)
@@ -699,7 +699,7 @@ namespace MarkMpn.Sql4Cds
         private void openRecordToolStripMenuItem_Click(object sender, EventArgs e)
         {
             var grid = (CRMGridView)gridContextMenuStrip.SourceControl;
-            var entity = grid.SelectedCells.Count == 1 ? grid.SelectedCellRecords.Entities[0] : null;
+            var entity = grid.SelectedCells.Count == 1 ? grid.SelectedCellRecords.Single() : null;
             var attr = grid.SelectedCells[0].OwningColumn.DataPropertyName;
             var entityReference = entity.GetAttributeValue<EntityReference>(attr);
 
@@ -711,7 +711,7 @@ namespace MarkMpn.Sql4Cds
         private void createSELECTQueryToolStripMenuItem_Click(object sender, EventArgs e)
         {
             var grid = (CRMGridView)gridContextMenuStrip.SourceControl;
-            var entity = grid.SelectedCells.Count == 1 ? grid.SelectedCellRecords.Entities[0] : null;
+            var entity = grid.SelectedCells.Count == 1 ? grid.SelectedCellRecords.Single() : null;
             var attr = grid.SelectedCells[0].OwningColumn.DataPropertyName;
             var entityReference = entity.GetAttributeValue<EntityReference>(attr);
 
@@ -1105,7 +1105,7 @@ namespace MarkMpn.Sql4Cds
 
         private void impersonateMenuItem_Click(object sender, EventArgs e)
         {
-            /*using (var dlg = new CDSLookupDialog())
+            using (var dlg = new CDSLookupDialog())
             {
                 dlg.Service = Service;
                 dlg.LogicalName = "systemuser";
@@ -1116,7 +1116,7 @@ namespace MarkMpn.Sql4Cds
                     _con.ServiceClient.CallerId = dlg.Entity.Id;
                     SyncUsername();
                 }
-            }*/
+            }
         }
 
         private void revertToolStripMenuItem_Click(object sender, EventArgs e)
