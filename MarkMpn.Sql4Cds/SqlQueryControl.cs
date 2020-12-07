@@ -1089,7 +1089,6 @@ namespace MarkMpn.Sql4Cds
             {
                 usernameDropDownButton.Text = _con.UserName;
                 usernameDropDownButton.Image = null;
-                impersonateMenuItem.Enabled = true;
                 revertToolStripMenuItem.Enabled = false;
             }
             else
@@ -1098,7 +1097,6 @@ namespace MarkMpn.Sql4Cds
 
                 usernameDropDownButton.Text = user.GetAttributeValue<string>("domainname");
                 usernameDropDownButton.Image = Properties.Resources.StatusWarning_16x;
-                impersonateMenuItem.Enabled = false;
                 revertToolStripMenuItem.Enabled = true;
             }
         }
