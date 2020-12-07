@@ -108,7 +108,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void UniqueAttributeName()
         {
             var sql = "SELECT * FROM account a left outer join contact c on a.accountid = c.parentcustomerid where ";
-            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).Select(s => s.Text).ToList();
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).Select(s => s.Text).Where(s => !s.Contains("(")).ToList();
 
             CollectionAssert.AreEqual(new[] { "a", "accountid", "c", "contactid", "employees", "firstname", "fullname", "lastname", "name", "parentcustomerid", "primarycontactid", "primarycontactidname", "turnover" }, suggestions);
         }
@@ -137,7 +137,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var sql1 = "SELECT * FROM account a left outer join contact c on a.accountid = c.parentcustomerid";
             var sql2 = "SELECT  FROM account left outer join contact on account.accountid = contact.parentcustomerid";
             var sql = sql1 + "\r\n" + sql2;
-            var suggestions = _autocomplete.GetSuggestions(sql, sql1.Length + 2 + sql2.IndexOf(" ") + 1, out _).Select(s => s.Text).ToList();
+            var suggestions = _autocomplete.GetSuggestions(sql, sql1.Length + 2 + sql2.IndexOf(" ") + 1, out _).Select(s => s.Text).Where(s => !s.Contains("(")).ToList();
 
             CollectionAssert.AreEqual(new[] { "account", "accountid", "contact", "contactid", "employees", "firstname", "fullname", "lastname", "name", "parentcustomerid", "primarycontactid", "primarycontactidname", "turnover" }, suggestions);
         }
@@ -146,7 +146,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void Function()
         {
             var sql = "SELECT count( FROM account";
-            var suggestions = _autocomplete.GetSuggestions(sql, sql.IndexOf("("), out _).Select(s => s.Text).ToList();
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.IndexOf("("), out _).Select(s => s.Text).Where(s => !s.Contains("(")).ToList();
 
             CollectionAssert.AreEqual(new[] { "account", "accountid", "createdon", "employees", "name", "primarycontactid", "primarycontactidname", "turnover" }, suggestions);
         }
@@ -200,7 +200,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void InsertColumns()
         {
             var sql = "INSERT INTO account (";
-            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).Select(s => s.Text).ToList();
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).Select(s => s.Text).Where(s => !s.Contains("(")).ToList();
 
             CollectionAssert.AreEqual(new[] { "accountid", "createdon", "employees", "name", "primarycontactid", "primarycontactidname", "turnover" }, suggestions);
         }
@@ -236,7 +236,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var sql = "SELECT * FROM account WHERE accountid = ";
 
-            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).Select(s => s.Text).ToList();
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1, out _).Select(s => s.MenuText).ToList();
 
             CollectionAssert.DoesNotContain(suggestions, "today()");
             CollectionAssert.Contains(suggestions, "under(id)");
