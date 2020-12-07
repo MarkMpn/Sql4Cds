@@ -245,6 +245,10 @@ namespace MarkMpn.Sql4Cds.Engine
                         query = ConvertDeleteStatement(delete);
                     else if (statement is InsertStatement insert)
                         query = ConvertInsertStatement(insert);
+                    else if (statement is ExecuteAsStatement impersonate)
+                        query = ConvertExecuteAsStatement(impersonate);
+                    else if (statement is RevertStatement revert)
+                        query = ConvertRevertStatement(revert);
                     else
                         throw new NotSupportedQueryFragmentException("Unsupported statement", statement);
 
@@ -254,6 +258,46 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             return queries.ToArray();
+        }
+
+        /// <summary>
+        /// Converts a REVERT statement from SQL
+        /// </summary>
+        /// <param name="revert">The parsed REVERT statement</param>
+        /// <returns>The equivalent query converted for execution against CDS</returns>
+        private Query ConvertRevertStatement(RevertStatement revert)
+        {
+            // Check for any DOM elements we don't support converting
+            if (revert.Cookie != null)
+                throw new NotSupportedQueryFragmentException("Unhandled impersonation cookie", revert.Cookie);
+
+            return new RevertQuery();
+        }
+
+        /// <summary>
+        /// Converts an EXECUTE AS [USER | LOGIN] statement from SQL
+        /// </summary>
+        /// <param name="impersonate">The parsed EXECUTE AS statement</param>
+        /// <returns>The equivalent query converted for execution against CDS</returns>
+        private Query ConvertExecuteAsStatement(ExecuteAsStatement impersonate)
+        {
+            // Check for any DOM elements we don't support converting
+            if (impersonate.Cookie != null)
+                throw new NotSupportedQueryFragmentException("Unhandled impersonation cookie", impersonate.Cookie);
+
+            if (impersonate.WithNoRevert)
+                throw new NotSupportedQueryFragmentException("Unhandled WITH NO REVERT option", impersonate);
+
+            if (impersonate.ExecuteContext.Kind != ExecuteAsOption.Login &&
+                impersonate.ExecuteContext.Kind != ExecuteAsOption.User)
+                throw new NotSupportedQueryFragmentException("Unhandled impersonation type", impersonate.ExecuteContext);
+
+            if (!(impersonate.ExecuteContext.Principal is StringLiteral user))
+                throw new NotSupportedQueryFragmentException("Unhandled username variable", impersonate.ExecuteContext.Principal);
+
+            var username = user.Value;
+
+            return new ImpersonateQuery(username);
         }
 
         /// <summary>

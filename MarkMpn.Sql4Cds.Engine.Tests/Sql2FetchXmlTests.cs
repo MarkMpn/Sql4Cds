@@ -2584,6 +2584,35 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             sql2FetchXml.Convert(query);
         }
 
+        [TestMethod]
+        public void ImpersonateRevert()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = @"
+                EXECUTE AS USER = 'test1'
+                REVERT";
+
+            var queries = sql2FetchXml.Convert(query);
+            Assert.IsInstanceOfType(queries[0], typeof(ImpersonateQuery));
+            Assert.IsInstanceOfType(queries[1], typeof(RevertQuery));
+
+            AssertFetchXml(new[] { queries[0] }, @"
+                <fetch>
+                    <entity name='systemuser'>
+                        <attribute name='systemuserid' />
+                        <filter>
+                            <condition attribute='domainname' operator='eq' value='test1' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
         private void AssertFetchXml(Query[] queries, string fetchXml)
         {
             Assert.AreEqual(1, queries.Length);

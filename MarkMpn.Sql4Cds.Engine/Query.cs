@@ -1977,4 +1977,77 @@ namespace MarkMpn.Sql4Cds.Engine
 
         protected override IDictionary<string, IDictionary<Guid, Entity>> GetData(RetrieveMetadataChangesResponse response) => MetaMetadata.GetData(response.EntityMetadata.ToArray());
     }
+
+    /// <summary>
+    /// EXECUTE AS [USER | LOGIN] query
+    /// </summary>
+    public class ImpersonateQuery : FetchXmlQuery
+    {
+        public ImpersonateQuery(string username)
+        {
+            Username = username;
+            FetchXml = new FetchType
+            {
+                Items = new object[]
+                {
+                    new FetchEntityType
+                    {
+                        name = "systemuser",
+                        Items = new object[]
+                        {
+                            new FetchAttributeType { name = "systemuserid" },
+                            new filter
+                            {
+                                Items = new object[]
+                                {
+                                    new condition { attribute = "domainname", @operator = @operator.eq, value = username }
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+        }
+
+        public string Username { get; }
+
+        protected override object ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        {
+            var users = RetrieveAll(org, metadata, options);
+
+            if (users.Entities.Count == 0)
+                throw new ApplicationException("Cannot find user to impersonate: " + Username);
+
+            if (org is Microsoft.Xrm.Sdk.Client.OrganizationServiceProxy svcProxy)
+                svcProxy.CallerId = users.Entities[0].Id;
+            else if (org is Microsoft.Xrm.Sdk.WebServiceClient.OrganizationWebProxyClient webProxy)
+                webProxy.CallerId = users.Entities[0].Id;
+            else if (org is CrmServiceClient svc)
+                svc.CallerId = users.Entities[0].Id;
+            else
+                throw new ArgumentOutOfRangeException(nameof(org), "Unexpected organization service type");
+
+            return "Impersonated " + Username;
+        }
+    }
+
+    /// <summary>
+    /// REVERT query
+    /// </summary>
+    public class RevertQuery : Query
+    {
+        protected override object ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        {
+            if (org is Microsoft.Xrm.Sdk.Client.OrganizationServiceProxy svcProxy)
+                svcProxy.CallerId = Guid.Empty;
+            else if (org is Microsoft.Xrm.Sdk.WebServiceClient.OrganizationWebProxyClient webProxy)
+                webProxy.CallerId = Guid.Empty;
+            else if (org is CrmServiceClient svc)
+                svc.CallerId = Guid.Empty;
+            else
+                throw new ArgumentOutOfRangeException(nameof(org), "Unexpected organization service type");
+
+            return "Reverted impersonation";
+        }
+    }
 }

@@ -852,6 +852,9 @@ namespace MarkMpn.Sql4Cds
 
                     if (query.Result is Exception ex)
                         throw ex;
+
+                    if (query is ImpersonateQuery || query is RevertQuery)
+                        Execute(() => SyncUsername());
                 }
             }
             else
@@ -863,7 +866,7 @@ namespace MarkMpn.Sql4Cds
                     if (query is IQueryRequiresFinalization finalize)
                         finalize.FinalizeRequest(Service, options);
 
-                    Execute(() => ShowResult((Query)query, args));
+                    Execute(() => ShowResult(query, args));
                 }
             }
 
@@ -1111,6 +1114,7 @@ namespace MarkMpn.Sql4Cds
 
                 if (dlg.ShowDialog(this) == DialogResult.OK)
                 {
+                    _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = typeof(ImpersonateQuery).Name });
                     _con.ServiceClient.CallerId = dlg.Entity.Id;
                     SyncUsername();
                 }
@@ -1119,6 +1123,7 @@ namespace MarkMpn.Sql4Cds
 
         private void revertToolStripMenuItem_Click(object sender, EventArgs e)
         {
+            _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = typeof(RevertQuery).Name });
             _con.ServiceClient.CallerId = Guid.Empty;
             SyncUsername();
         }
