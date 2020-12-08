@@ -672,9 +672,9 @@ namespace MarkMpn.Sql4Cds
                     flp.Controls[0].Margin = control.Margin;
 
                 if (flp.Controls.Count > 0)
-                    flp.Controls[flp.Controls.Count - 1].Height = GetMinHeight(flp.Controls[flp.Controls.Count - 1]);
+                    flp.Controls[flp.Controls.Count - 1].Height = GetMinHeight(flp.Controls[flp.Controls.Count - 1], flp.ClientSize.Height * 2 / 3);
 
-                control.Height = GetMinHeight(control);
+                control.Height = GetMinHeight(control, flp.ClientSize.Height * 2 / 3);
 
                 var prevHeight = flp.Controls.OfType<Control>().Sum(c => c.Height + c.Margin.Top + c.Margin.Bottom);
                 if (prevHeight + control.Height < flp.ClientSize.Height)
@@ -1141,7 +1141,7 @@ namespace MarkMpn.Sql4Cds
             {
                 var lastControl = flp.Controls[flp.Controls.Count - 1];
                 prevHeight -= lastControl.Height;
-                var minHeight = GetMinHeight(lastControl);
+                var minHeight = GetMinHeight(lastControl, flp.ClientSize.Height * 2 / 3);
                 if (prevHeight + minHeight > flp.ClientSize.Height)
                     lastControl.Height = minHeight;
                 else
@@ -1149,7 +1149,7 @@ namespace MarkMpn.Sql4Cds
             }
         }
 
-        private int GetMinHeight(Control control)
+        private int GetMinHeight(Control control, int max)
         {
             if (control is DataGridView grid)
             {
@@ -1160,16 +1160,19 @@ namespace MarkMpn.Sql4Cds
                 else if (rowCount == 0 && grid.DataSource is DataTable table)
                     rowCount = table.Rows.Count;
                 else if (rowCount == 0 && grid.DataSource == null)
-                    grid.DataBindingComplete += (sender, args) => grid.Height = Math.Max(grid.Height, GetMinHeight(grid));
+                    grid.DataBindingComplete += (sender, args) => grid.Height = Math.Min(Math.Max(grid.Height, GetMinHeight(grid, max)), max);
 
-                return (rowCount + 1) * grid.ColumnHeadersHeight;
+                if (rowCount == 0)
+                    return 2 * grid.ColumnHeadersHeight;
+
+                return Math.Min(rowCount * grid.GetRowDisplayRectangle(0, false).Height + grid.ColumnHeadersHeight, max);
             }
 
             if (control is Scintilla scintilla)
                 return (int) ((scintilla.Lines.Count + 1) * scintilla.Styles[Style.Default].Size * 1.6) + 20;
 
             if (control is Panel panel)
-                return panel.Controls.OfType<Control>().Sum(child => GetMinHeight(child));
+                return panel.Controls.OfType<Control>().Sum(child => GetMinHeight(child, max));
 
             return control.Height;
         }
