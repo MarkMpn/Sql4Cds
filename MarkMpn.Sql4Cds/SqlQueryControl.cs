@@ -39,6 +39,28 @@ namespace MarkMpn.Sql4Cds
             public int Offset { get; set; }
         }
 
+        class QueryException : ApplicationException
+        {
+            public QueryException(Query query, Exception innerException) : base(innerException.Message, innerException)
+            {
+                Query = query;
+            }
+
+            public Query Query { get; }
+        }
+
+        class TextRange
+        {
+            public TextRange(int index, int length)
+            {
+                Index = index;
+                Length = length;
+            }
+
+            public int Index { get; }
+            public int Length { get; }
+        }
+
         private readonly ConnectionDetail _con;
         private readonly TelemetryClient _ai;
         private readonly Scintilla _editor;
@@ -61,6 +83,7 @@ namespace MarkMpn.Sql4Cds
         private string _preMetadataLoadingStatus;
         private Image _preMetadataLoadingImage;
         private bool _addingResult;
+        private IDictionary<int, TextRange> _messageLocations;
 
         static SqlQueryControl()
         {
@@ -764,19 +787,37 @@ namespace MarkMpn.Sql4Cds
 
             if (e.Error != null)
             {
-                if (e.Error is NotSupportedQueryFragmentException err)
+                var error = e.Error;
+                var index = -1;
+                var length = 0;
+
+                if (e.Error is QueryException queryException)
+                {
+                    index = _params.Offset + queryException.Query.Index;
+                    length = queryException.Query.Length;
+                    error = queryException.InnerException;
+                }
+
+                if (error is NotSupportedQueryFragmentException err)
+                {
                     _editor.IndicatorFillRange(_params.Offset + err.Fragment.StartOffset, err.Fragment.FragmentLength);
-                else if (e.Error is QueryParseException parseErr)
+                    index = _params.Offset + err.Fragment.StartOffset;
+                    length = err.Fragment.FragmentLength;
+                }
+                else if (error is QueryParseException parseErr)
+                {
                     _editor.IndicatorFillRange(_params.Offset + parseErr.Error.Offset, 1);
+                    index = _params.Offset + parseErr.Error.Offset;
+                    length = 0;
+                }
 
                 _ai.TrackException(e.Error, new Dictionary<string, string> { ["Sql"] = _params.Sql });
                 _log(e.Error.ToString());
 
-
-                if (e.Error is AggregateException aggregateException)
-                    AddMessage(String.Join("\r\n", aggregateException.InnerExceptions.Select(ex => ex.Message)), true);
+                if (error is AggregateException aggregateException)
+                    AddMessage(index, length, String.Join("\r\n", aggregateException.InnerExceptions.Select(ex => ex.Message)), true);
                 else
-                    AddMessage(e.Error.Message, true);
+                    AddMessage(index, length, error.Message, true);
 
                 tabControl.SelectedTab = messagesTabPage;
             }
@@ -788,14 +829,31 @@ namespace MarkMpn.Sql4Cds
             BusyChanged?.Invoke(this, EventArgs.Empty);
         }
 
-        private void AddMessage(string message, bool error)
+        private void AddMessage(int index, int length, string message, bool error)
         {
             var scintilla = (Scintilla)messagesTabPage.Controls[0];
+            var line = scintilla.Lines.Count - 1;
             scintilla.ReadOnly = false;
             scintilla.Text += message + "\r\n\r\n";
             scintilla.StartStyling(scintilla.Text.Length - message.Length - 4);
             scintilla.SetStyling(message.Length, error ? 1 : 2);
             scintilla.ReadOnly = true;
+
+            if (index != -1)
+            {
+                foreach (var l in message.Split('\n'))
+                    _messageLocations[line++] = new TextRange(index, length);
+            }
+        }
+
+        private void NavigateToMessage(object sender, DoubleClickEventArgs e)
+        {
+            if (_messageLocations.TryGetValue(e.Line, out var textRange))
+            {
+                _editor.SelectionStart = textRange.Index;
+                _editor.SelectionEnd = textRange.Index + textRange.Length;
+                _editor.Focus();
+            }
         }
 
         private void Execute(Action action)
@@ -832,12 +890,14 @@ namespace MarkMpn.Sql4Cds
                 {
                     messagesTabPage.Controls.Add(CreateMessageEditor());
                     ((Scintilla)messagesTabPage.Controls[0]).Dock = DockStyle.Fill;
+                    ((Scintilla)messagesTabPage.Controls[0]).DoubleClick += NavigateToMessage;
                 }
 
                 ((Scintilla)messagesTabPage.Controls[0]).ReadOnly = false;
                 ((Scintilla)messagesTabPage.Controls[0]).Text = "";
                 ((Scintilla)messagesTabPage.Controls[0]).StartStyling(0);
                 ((Scintilla)messagesTabPage.Controls[0]).ReadOnly = true;
+                _messageLocations = new Dictionary<int, TextRange>();
 
                 splitContainer.Panel2Collapsed = false;
             });
@@ -867,7 +927,7 @@ namespace MarkMpn.Sql4Cds
                     Execute(() => ShowResult(query, args));
 
                     if (query.Result is Exception ex)
-                        throw ex;
+                        throw new QueryException(query, ex);
 
                     if (query is ImpersonateQuery || query is RevertQuery)
                         Execute(() => SyncUsername());
@@ -889,7 +949,7 @@ namespace MarkMpn.Sql4Cds
             if (options.Cancelled)
             {
                 e.Cancel = true;
-                AddMessage("Query was cancelled by user", true);
+                AddMessage(-1, 0, "Query was cancelled by user", true);
             }
         }
 
@@ -1008,11 +1068,11 @@ namespace MarkMpn.Sql4Cds
                 else
                     rowCount = dataTable.Rows.Count;
 
-                AddMessage($"({rowCount} row{(rowCount == 1 ? "" : "s")} affected)", false);
+                AddMessage(query.Index, query.Length, $"({rowCount} row{(rowCount == 1 ? "" : "s")} affected)", false);
             }
             else if (query.Result is string msg)
             {
-                AddMessage(msg, false);
+                AddMessage(query.Index, query.Length, msg, false);
             }
 
             if (args.IncludeFetchXml)

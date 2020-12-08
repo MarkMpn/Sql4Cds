@@ -224,6 +224,8 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 foreach (var statement in batch.Statements)
                 {
+                    var index = statement.StartOffset;
+                    var length = statement.ScriptTokenStream[statement.LastTokenIndex].Offset + statement.ScriptTokenStream[statement.LastTokenIndex].Text.Length - index;
                     string sqlStatement = null;
 
                     if (TSqlEndpointAvailable)
@@ -253,6 +255,8 @@ namespace MarkMpn.Sql4Cds.Engine
                         throw new NotSupportedQueryFragmentException("Unsupported statement", statement);
 
                     query.Sql = sqlStatement;
+                    query.Index = index;
+                    query.Length = length;
                     queries.Add(query);
                 }
             }

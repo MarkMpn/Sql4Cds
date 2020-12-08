@@ -63,7 +63,17 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// The original SQL that the query was created from
         /// </summary>
-        public string Sql { get; set; }
+        public string Sql { get; internal set; }
+
+        /// <summary>
+        /// The location in the original parsed string that the query started at
+        /// </summary>
+        public int Index { get; internal set; }
+
+        /// <summary>
+        /// The length of the original SQL command
+        /// </summary>
+        public int Length { get; internal set; }
 
         /// <summary>
         /// Executes the query
