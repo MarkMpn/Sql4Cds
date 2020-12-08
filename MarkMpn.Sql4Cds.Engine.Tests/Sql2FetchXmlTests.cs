@@ -406,6 +406,34 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void Top10KUsesExtension()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT TOP 10000 accountid, name FROM account";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                        <attribute name='name' />
+                    </entity>
+                </fetch>
+            ");
+
+            var converted = (SelectQuery)queries[0];
+
+            Assert.AreEqual(1, converted.Extensions.Count);
+        }
+
+        [TestMethod]
         public void NoLock()
         {
             var context = new XrmFakedContext();

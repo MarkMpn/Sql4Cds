@@ -2139,10 +2139,15 @@ namespace MarkMpn.Sql4Cds.Engine
             if (!(expr is IntegerLiteral topLiteral))
                 throw new NotSupportedQueryFragmentException("Unhandled TOP expression", top.Expression);
 
-            if (extensions.Count == 0)
+            var topCount = Int32.Parse(topLiteral.Value, CultureInfo.InvariantCulture);
+
+            if (topCount < 1)
+                throw new NotSupportedQueryFragmentException("TOP must be at least 1", topLiteral);
+
+            if (extensions.Count == 0 && topCount <= 5000)
                 fetch.top = topLiteral.Value;
             else
-                extensions.Add(new Top(Int32.Parse(topLiteral.Value, CultureInfo.InvariantCulture)));
+                extensions.Add(new Top(topCount));
         }
 
         /// <summary>
