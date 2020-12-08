@@ -265,6 +265,11 @@ namespace MarkMpn.Sql4Cds.Engine
             if (AllPages && FetchXml.aggregateSpecified && FetchXml.aggregate && count == 5000 && FetchXml.top != "5000" && !res.MoreRecords)
                 throw new ApplicationException("AggregateQueryRecordLimit");
 
+            // Distinct queries without a sort order can't be reliably paged. Throw an exception to get the user
+            // to apply a useful sort order
+            if (AllPages && FetchXml.distinctSpecified && FetchXml.distinct && !ContainsSort(FetchXml.Items))
+                throw new ApplicationException("DISTINCT queries must have an ORDER BY applied to retrieve multiple pages\r\nSee https://docs.microsoft.com/powerapps/developer/common-data-service/org-service/paging-behaviors-and-ordering#ordering-with-a-paging-cookie");
+
             // Move on to subsequent pages
             while (AllPages && res.MoreRecords && !options.Cancelled && options.ContinueRetrieve(count))
             {
@@ -285,6 +290,23 @@ namespace MarkMpn.Sql4Cds.Engine
                 count += nextPage.Entities.Count;
                 res = nextPage;
             }
+        }
+
+        private bool ContainsSort(object[] items)
+        {
+            if (items == null)
+                return false;
+
+            if (items.OfType<FetchOrderType>().Any())
+                return true;
+
+            if (items.OfType<FetchEntityType>().Any(entity => ContainsSort(entity.Items)))
+                return true;
+
+            if (items.OfType<FetchLinkEntityType>().Any(linkEntity => ContainsSort(linkEntity.Items)))
+                return true;
+
+            return false;
         }
 
         /// <summary>
