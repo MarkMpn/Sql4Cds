@@ -60,6 +60,7 @@ namespace MarkMpn.Sql4Cds
         private int _metadataLoadingTasks;
         private string _preMetadataLoadingStatus;
         private Image _preMetadataLoadingImage;
+        private bool _addingResult;
 
         static SqlQueryControl()
         {
@@ -630,6 +631,8 @@ namespace MarkMpn.Sql4Cds
 
         private void AddControl(Control control, TabPage tabPage)
         {
+            _addingResult = true;
+
             var flp = (FlowLayoutPanel)tabPage.Controls[0];
             flp.HorizontalScroll.Enabled = false;
 
@@ -640,19 +643,32 @@ namespace MarkMpn.Sql4Cds
             }
             else
             {
-                control.Height = flp.Height * 2 / 3;
                 control.Margin = new Padding(0, 0, 0, 3);
 
                 if (flp.Controls.Count == 1)
-                {
-                    flp.Controls[0].Height = control.Height;
                     flp.Controls[0].Margin = control.Margin;
-                }
+
+                if (flp.Controls.Count > 0)
+                    flp.Controls[flp.Controls.Count - 1].Height = GetMinHeight(flp.Controls[flp.Controls.Count - 1]);
+
+                control.Height = GetMinHeight(control);
+
+                var prevHeight = flp.Controls.OfType<Control>().Sum(c => c.Height + c.Margin.Top + c.Margin.Bottom);
+                if (prevHeight + control.Height < flp.ClientSize.Height)
+                    control.Height = flp.ClientSize.Height - prevHeight;
             }
 
             control.Width = flp.ClientSize.Width;
 
             flp.Controls.Add(control);
+
+            if (control.Width > flp.ClientSize.Width)
+            {
+                foreach (Control child in flp.Controls)
+                    child.Width = flp.ClientSize.Width;
+            }
+
+            _addingResult = false;
         }
 
         private void gridContextMenuStrip_Opening(object sender, CancelEventArgs e)
@@ -1049,10 +1065,53 @@ namespace MarkMpn.Sql4Cds
 
         private void ResizeLayoutPanel(object sender, EventArgs e)
         {
+            if (_addingResult)
+                return;
+
             var flp = (FlowLayoutPanel)sender;
+            var prevHeight = 0;
 
             foreach (Control control in flp.Controls)
+            {
                 control.Width = flp.ClientSize.Width;
+                prevHeight += control.Height + control.Margin.Top + control.Margin.Bottom;
+            }
+
+            if (flp.Controls.Count > 0)
+            {
+                var lastControl = flp.Controls[flp.Controls.Count - 1];
+                prevHeight -= lastControl.Height;
+                var minHeight = GetMinHeight(lastControl);
+                if (prevHeight + minHeight > flp.ClientSize.Height)
+                    lastControl.Height = minHeight;
+                else
+                    lastControl.Height = flp.ClientSize.Height - prevHeight;
+            }
+        }
+
+        private int GetMinHeight(Control control)
+        {
+            if (control is DataGridView grid)
+            {
+                var rowCount = grid.Rows.Count;
+
+                if (rowCount == 0 && grid.DataSource is EntityCollection entities)
+                    rowCount = entities.Entities.Count;
+                else if (rowCount == 0 && grid.DataSource is DataTable table)
+                    rowCount = table.Rows.Count;
+                else if (rowCount == 0 && grid.DataSource == null)
+                    grid.DataBindingComplete += (sender, args) => grid.Height = Math.Max(grid.Height, GetMinHeight(grid));
+
+                return (rowCount + 1) * grid.ColumnHeadersHeight;
+            }
+
+            if (control is Scintilla scintilla)
+                return (int) ((scintilla.Lines.Count + 1) * scintilla.Styles[Style.Default].Size * 1.6) + 20;
+
+            if (control is Panel panel)
+                return panel.Controls.OfType<Control>().Sum(child => GetMinHeight(child));
+
+            return control.Height;
         }
 
         private void MetadataLoading(object sender, MetadataLoadingEventArgs e)
