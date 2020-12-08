@@ -51,6 +51,9 @@
             this.batchSizeUpDown = new System.Windows.Forms.NumericUpDown();
             this.label9 = new System.Windows.Forms.Label();
             this.groupBox1 = new System.Windows.Forms.GroupBox();
+            this.label12 = new System.Windows.Forms.Label();
+            this.maxDopUpDown = new System.Windows.Forms.NumericUpDown();
+            this.label13 = new System.Windows.Forms.Label();
             this.retrieveTotalRecordCountCheckbox = new System.Windows.Forms.CheckBox();
             this.tsqlEndpointCheckBox = new System.Windows.Forms.CheckBox();
             this.groupBox2 = new System.Windows.Forms.GroupBox();
@@ -62,9 +65,7 @@
             this.quotedIdentifiersCheckbox = new System.Windows.Forms.CheckBox();
             this.groupBox4 = new System.Windows.Forms.GroupBox();
             this.showTooltipsCheckbox = new System.Windows.Forms.CheckBox();
-            this.label12 = new System.Windows.Forms.Label();
-            this.maxDopUpDown = new System.Windows.Forms.NumericUpDown();
-            this.label13 = new System.Windows.Forms.Label();
+            this.autoSizeColumnsCheckBox = new System.Windows.Forms.CheckBox();
             this.topPanel.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox)).BeginInit();
             this.panel2.SuspendLayout();
@@ -73,10 +74,10 @@
             ((System.ComponentModel.ISupportInitialize)(this.deleteWarnThresholdUpDown)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.batchSizeUpDown)).BeginInit();
             this.groupBox1.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.maxDopUpDown)).BeginInit();
             this.groupBox2.SuspendLayout();
             this.groupBox3.SuspendLayout();
             this.groupBox4.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.maxDopUpDown)).BeginInit();
             this.SuspendLayout();
             // 
             // topPanel
@@ -120,7 +121,7 @@
             this.panel2.Controls.Add(this.cancelButton);
             this.panel2.Controls.Add(this.okButton);
             this.panel2.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.panel2.Location = new System.Drawing.Point(0, 516);
+            this.panel2.Location = new System.Drawing.Point(0, 540);
             this.panel2.Margin = new System.Windows.Forms.Padding(2);
             this.panel2.Name = "panel2";
             this.panel2.Size = new System.Drawing.Size(400, 45);
@@ -337,6 +338,41 @@
             this.groupBox1.TabStop = false;
             this.groupBox1.Text = "Query Execution";
             // 
+            // label12
+            // 
+            this.label12.AutoSize = true;
+            this.label12.Location = new System.Drawing.Point(177, 170);
+            this.label12.Name = "label12";
+            this.label12.Size = new System.Drawing.Size(155, 13);
+            this.label12.TabIndex = 20;
+            this.label12.Text = "worker threads for DML queries";
+            // 
+            // maxDopUpDown
+            // 
+            this.maxDopUpDown.Location = new System.Drawing.Point(69, 168);
+            this.maxDopUpDown.Minimum = new decimal(new int[] {
+            1,
+            0,
+            0,
+            0});
+            this.maxDopUpDown.Name = "maxDopUpDown";
+            this.maxDopUpDown.Size = new System.Drawing.Size(102, 20);
+            this.maxDopUpDown.TabIndex = 19;
+            this.maxDopUpDown.Value = new decimal(new int[] {
+            10,
+            0,
+            0,
+            0});
+            // 
+            // label13
+            // 
+            this.label13.AutoSize = true;
+            this.label13.Location = new System.Drawing.Point(10, 170);
+            this.label13.Name = "label13";
+            this.label13.Size = new System.Drawing.Size(53, 13);
+            this.label13.TabIndex = 18;
+            this.label13.Text = "Use up to";
+            // 
             // retrieveTotalRecordCountCheckbox
             // 
             this.retrieveTotalRecordCountCheckbox.AutoSize = true;
@@ -359,6 +395,7 @@
             // 
             // groupBox2
             // 
+            this.groupBox2.Controls.Add(this.autoSizeColumnsCheckBox);
             this.groupBox2.Controls.Add(this.localTimesComboBox);
             this.groupBox2.Controls.Add(this.label11);
             this.groupBox2.Controls.Add(this.friendlyNamesComboBox);
@@ -367,7 +404,7 @@
             this.groupBox2.Margin = new System.Windows.Forms.Padding(2);
             this.groupBox2.Name = "groupBox2";
             this.groupBox2.Padding = new System.Windows.Forms.Padding(2);
-            this.groupBox2.Size = new System.Drawing.Size(382, 76);
+            this.groupBox2.Size = new System.Drawing.Size(382, 95);
             this.groupBox2.TabIndex = 17;
             this.groupBox2.TabStop = false;
             this.groupBox2.Text = "Results";
@@ -441,7 +478,7 @@
             // groupBox4
             // 
             this.groupBox4.Controls.Add(this.showTooltipsCheckbox);
-            this.groupBox4.Location = new System.Drawing.Point(12, 473);
+            this.groupBox4.Location = new System.Drawing.Point(11, 492);
             this.groupBox4.Name = "groupBox4";
             this.groupBox4.Size = new System.Drawing.Size(382, 43);
             this.groupBox4.TabIndex = 19;
@@ -458,40 +495,15 @@
             this.showTooltipsCheckbox.Text = "Show tooltips";
             this.showTooltipsCheckbox.UseVisualStyleBackColor = true;
             // 
-            // label12
+            // autoSizeColumnsCheckBox
             // 
-            this.label12.AutoSize = true;
-            this.label12.Location = new System.Drawing.Point(177, 170);
-            this.label12.Name = "label12";
-            this.label12.Size = new System.Drawing.Size(155, 13);
-            this.label12.TabIndex = 20;
-            this.label12.Text = "worker threads for DML queries";
-            // 
-            // maxDopUpDown
-            // 
-            this.maxDopUpDown.Location = new System.Drawing.Point(69, 168);
-            this.maxDopUpDown.Minimum = new decimal(new int[] {
-            1,
-            0,
-            0,
-            0});
-            this.maxDopUpDown.Name = "maxDopUpDown";
-            this.maxDopUpDown.Size = new System.Drawing.Size(102, 20);
-            this.maxDopUpDown.TabIndex = 19;
-            this.maxDopUpDown.Value = new decimal(new int[] {
-            10,
-            0,
-            0,
-            0});
-            // 
-            // label13
-            // 
-            this.label13.AutoSize = true;
-            this.label13.Location = new System.Drawing.Point(10, 170);
-            this.label13.Name = "label13";
-            this.label13.Size = new System.Drawing.Size(53, 13);
-            this.label13.TabIndex = 18;
-            this.label13.Text = "Use up to";
+            this.autoSizeColumnsCheckBox.AutoSize = true;
+            this.autoSizeColumnsCheckBox.Location = new System.Drawing.Point(13, 69);
+            this.autoSizeColumnsCheckBox.Name = "autoSizeColumnsCheckBox";
+            this.autoSizeColumnsCheckBox.Size = new System.Drawing.Size(158, 17);
+            this.autoSizeColumnsCheckBox.TabIndex = 18;
+            this.autoSizeColumnsCheckBox.Text = "Auto-size columns to fit data";
+            this.autoSizeColumnsCheckBox.UseVisualStyleBackColor = true;
             // 
             // SettingsForm
             // 
@@ -499,7 +511,7 @@
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.CancelButton = this.cancelButton;
-            this.ClientSize = new System.Drawing.Size(400, 561);
+            this.ClientSize = new System.Drawing.Size(400, 585);
             this.Controls.Add(this.groupBox4);
             this.Controls.Add(this.groupBox3);
             this.Controls.Add(this.groupBox2);
@@ -525,13 +537,13 @@
             ((System.ComponentModel.ISupportInitialize)(this.batchSizeUpDown)).EndInit();
             this.groupBox1.ResumeLayout(false);
             this.groupBox1.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.maxDopUpDown)).EndInit();
             this.groupBox2.ResumeLayout(false);
             this.groupBox2.PerformLayout();
             this.groupBox3.ResumeLayout(false);
             this.groupBox3.PerformLayout();
             this.groupBox4.ResumeLayout(false);
             this.groupBox4.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.maxDopUpDown)).EndInit();
             this.ResumeLayout(false);
 
         }
@@ -574,5 +586,6 @@
         private System.Windows.Forms.Label label12;
         private System.Windows.Forms.NumericUpDown maxDopUpDown;
         private System.Windows.Forms.Label label13;
+        private System.Windows.Forms.CheckBox autoSizeColumnsCheckBox;
     }
 }

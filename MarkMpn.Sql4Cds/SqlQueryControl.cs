@@ -1042,7 +1042,8 @@ namespace MarkMpn.Sql4Cds
                     else
                         grid.DataSource = query.Result;
 
-                    grid.AutoResizeColumns();
+                    if (Settings.Instance.AutoSizeColumns)
+                        grid.AutoResizeColumns();
                 };
 
                 grid.RowPostPaint += (s, e) =>

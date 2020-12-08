@@ -32,6 +32,7 @@ namespace MarkMpn.Sql4Cds
             retrieveTotalRecordCountCheckbox.Checked = settings.UseRetrieveTotalRecordCount;
             showTooltipsCheckbox.Checked = settings.ShowIntellisenseTooltips;
             maxDopUpDown.Value = settings.MaxDegreeOfPaallelism;
+            autoSizeColumnsCheckBox.Checked = settings.AutoSizeColumns;
 
             _settings = settings;
         }
@@ -56,6 +57,7 @@ namespace MarkMpn.Sql4Cds
                 _settings.UseRetrieveTotalRecordCount = retrieveTotalRecordCountCheckbox.Checked;
                 _settings.ShowIntellisenseTooltips = showTooltipsCheckbox.Checked;
                 _settings.MaxDegreeOfPaallelism = (int) maxDopUpDown.Value;
+                _settings.AutoSizeColumns = autoSizeColumnsCheckBox.Checked;
             }
         }
     }
