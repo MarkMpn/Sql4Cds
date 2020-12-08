@@ -136,6 +136,11 @@ namespace AutocompleteMenuNS
         }
     }
 
+    public interface IAutoCompleteMenuItemCustomReplace
+    {
+        int ReplaceLength { get; }
+    }
+
     public enum CompareResult
     {
         /// <summary>

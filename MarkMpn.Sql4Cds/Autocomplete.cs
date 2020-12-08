@@ -36,9 +36,8 @@ namespace MarkMpn.Sql4Cds
         /// </summary>
         /// <param name="text">The current query text</param>
         /// <param name="pos">The index of the character in the <paramref name="text"/> that has just been entered</param>
-        /// <param name="currentLength">The length of the current word that is being auto-completed</param>
         /// <returns>A sequence of suggestions to be shown to the user</returns>
-        public IEnumerable<SqlAutocompleteItem> GetSuggestions(string text, int pos, out int currentLength)
+        public IEnumerable<SqlAutocompleteItem> GetSuggestions(string text, int pos)
         {
             // If we're in the first word after a FROM or JOIN, show a list of table names
             string currentWord = null;
@@ -62,7 +61,7 @@ namespace MarkMpn.Sql4Cds
                 }
             }
 
-            currentLength = currentWord.Length;
+            var currentLength = currentWord.Length;
 
             if (prevWord == null)
                 return Array.Empty<SqlAutocompleteItem>();
@@ -74,7 +73,7 @@ namespace MarkMpn.Sql4Cds
                 case "into":
                     // Show table list
                     if (_entities != null)
-                        return FilterList(_entities.Select(x => new EntityAutocompleteItem(x, _metadata)).OrderBy(x => x), currentWord);
+                        return FilterList(_entities.Select(x => new EntityAutocompleteItem(x, _metadata, currentLength)).OrderBy(x => x), currentWord);
                     break;
 
                 default:
@@ -268,16 +267,16 @@ namespace MarkMpn.Sql4Cds
                                 if (_metadata.TryGetMinimalData(table.Value, out var metadata))
                                 {
                                     if (metadata.OneToManyRelationships != null)
-                                        joinSuggestions.AddRange(metadata.OneToManyRelationships.Select(rel => new JoinAutocompleteItem(rel, $"{rel.ReferencingEntity}{GetUniqueTableAlias(rel.ReferencingEntity, tables)} ON {table.Key}.{rel.ReferencedAttribute} = {GetUniqueTableName(rel.ReferencingEntity, tables)}.{rel.ReferencingAttribute}", true, _entities, _metadata)));
+                                        joinSuggestions.AddRange(metadata.OneToManyRelationships.Select(rel => new JoinAutocompleteItem(rel, $"{rel.ReferencingEntity}{GetUniqueTableAlias(rel.ReferencingEntity, tables)} ON {table.Key}.{rel.ReferencedAttribute} = {GetUniqueTableName(rel.ReferencingEntity, tables)}.{rel.ReferencingAttribute}", true, _entities, _metadata, currentLength)));
                                     
                                     if (metadata.ManyToOneRelationships != null)
-                                        joinSuggestions.AddRange(metadata.ManyToOneRelationships.Select(rel => new JoinAutocompleteItem(rel, $"{rel.ReferencedEntity}{GetUniqueTableAlias(rel.ReferencedEntity, tables)} ON {table.Key}.{rel.ReferencingAttribute} = {GetUniqueTableName(rel.ReferencedEntity, tables)}.{rel.ReferencedAttribute}", false, _entities, _metadata)));
+                                        joinSuggestions.AddRange(metadata.ManyToOneRelationships.Select(rel => new JoinAutocompleteItem(rel, $"{rel.ReferencedEntity}{GetUniqueTableAlias(rel.ReferencedEntity, tables)} ON {table.Key}.{rel.ReferencingAttribute} = {GetUniqueTableName(rel.ReferencedEntity, tables)}.{rel.ReferencedAttribute}", false, _entities, _metadata, currentLength)));
                                 }
                             }
 
                             joinSuggestions.Sort();
 
-                            joinSuggestions.AddRange(_entities.Select(e => new EntityAutocompleteItem(e, _metadata)).OrderBy(name => name));
+                            joinSuggestions.AddRange(_entities.Select(e => new EntityAutocompleteItem(e, _metadata, currentLength)).OrderBy(name => name));
                             return FilterList(joinSuggestions, currentWord);
                         }
 
@@ -289,17 +288,17 @@ namespace MarkMpn.Sql4Cds
                             additionalSuggestions = new List<SqlAutocompleteItem>();
 
                             if (newTableMetadata.OneToManyRelationships != null)
-                                ((List<SqlAutocompleteItem>)additionalSuggestions).AddRange(newTableMetadata.OneToManyRelationships.SelectMany(rel => tables.Where(table => table.Key != prevPrevWord && table.Value == rel.ReferencingEntity).Select(table => new JoinAutocompleteItem(rel, $"{table.Key}.{rel.ReferencingAttribute} = {prevPrevWord}.{rel.ReferencedAttribute}", false, _entities, _metadata))));
+                                ((List<SqlAutocompleteItem>)additionalSuggestions).AddRange(newTableMetadata.OneToManyRelationships.SelectMany(rel => tables.Where(table => table.Key != prevPrevWord && table.Value == rel.ReferencingEntity).Select(table => new JoinAutocompleteItem(rel, $"{table.Key}.{rel.ReferencingAttribute} = {prevPrevWord}.{rel.ReferencedAttribute}", false, _entities, _metadata, currentLength))));
 
                             if (newTableMetadata.ManyToOneRelationships != null)
-                                ((List<SqlAutocompleteItem>)additionalSuggestions).AddRange(newTableMetadata.ManyToOneRelationships.SelectMany(rel => tables.Where(table => table.Key != prevPrevWord && table.Value == rel.ReferencedEntity).Select(table => new JoinAutocompleteItem(rel, $"{table.Key}.{rel.ReferencedAttribute} = {prevPrevWord}.{rel.ReferencingAttribute}", true, _entities, _metadata))));
+                                ((List<SqlAutocompleteItem>)additionalSuggestions).AddRange(newTableMetadata.ManyToOneRelationships.SelectMany(rel => tables.Where(table => table.Key != prevPrevWord && table.Value == rel.ReferencedEntity).Select(table => new JoinAutocompleteItem(rel, $"{table.Key}.{rel.ReferencedAttribute} = {prevPrevWord}.{rel.ReferencingAttribute}", true, _entities, _metadata, currentLength))));
 
                             ((List<SqlAutocompleteItem>)additionalSuggestions).Sort();
                         }
 
                         if (prevWord.Equals("update", StringComparison.OrdinalIgnoreCase) ||
                             prevWord.Equals("delete", StringComparison.OrdinalIgnoreCase))
-                            return FilterList(tables.Select(kvp => new { Entity = _entities.SingleOrDefault(e => e.LogicalName == kvp.Value), Alias = kvp.Key }).Where(e => e.Entity != null).Select(x => new EntityAutocompleteItem(x.Entity, x.Alias, _metadata)).OrderBy(x => x), currentWord);
+                            return FilterList(tables.Select(kvp => new { Entity = _entities.SingleOrDefault(e => e.LogicalName == kvp.Value), Alias = kvp.Key }).Where(e => e.Entity != null).Select(x => new EntityAutocompleteItem(x.Entity, x.Alias, _metadata, currentLength)).OrderBy(x => x), currentWord);
 
                         if (clause == "set" && (prevWord.Equals("set", StringComparison.OrdinalIgnoreCase) || prevWord == ","))
                         {
@@ -314,7 +313,7 @@ namespace MarkMpn.Sql4Cds
                             }
 
                             if (tables.TryGetValue(targetTable, out var tableName) && _metadata.TryGetMinimalData(tableName, out var metadata))
-                                return FilterList(metadata.Attributes.Where(a => a.IsValidForUpdate != false).Select(a => new AttributeAutocompleteItem(a, _metadata)).OrderBy(a => a), currentWord);
+                                return FilterList(metadata.Attributes.Where(a => a.IsValidForUpdate != false).Select(a => new AttributeAutocompleteItem(a, _metadata, currentLength)).OrderBy(a => a), currentWord);
                         }
 
                         if (currentWord.Contains("."))
@@ -327,7 +326,7 @@ namespace MarkMpn.Sql4Cds
                             if (tables.TryGetValue(alias, out var tableName))
                             {
                                 if (_metadata.TryGetMinimalData(tableName, out var metadata))
-                                    return FilterList(metadata.Attributes.Select(a => new AttributeAutocompleteItem(a, _metadata)).OrderBy(a => a), currentWord);
+                                    return FilterList(metadata.Attributes.Select(a => new AttributeAutocompleteItem(a, _metadata, currentLength)).OrderBy(a => a), currentWord);
                             }
                         }
                         else if (clause == "join")
@@ -343,7 +342,7 @@ namespace MarkMpn.Sql4Cds
                             var items = new List<SqlAutocompleteItem>();
 
                             if (clause != "insert")
-                                items.AddRange(tables.Select(kvp => new { Entity = _entities.SingleOrDefault(e => e.LogicalName == kvp.Value), Alias = kvp.Key }).Where(x => x.Entity != null).Select(x => new EntityAutocompleteItem(x.Entity, x.Alias, _metadata)));
+                                items.AddRange(tables.Select(kvp => new { Entity = _entities.SingleOrDefault(e => e.LogicalName == kvp.Value), Alias = kvp.Key }).Where(x => x.Entity != null).Select(x => new EntityAutocompleteItem(x.Entity, x.Alias, _metadata, currentLength)));
 
                             var attributes = new List<AttributeMetadata>();
 
@@ -353,9 +352,9 @@ namespace MarkMpn.Sql4Cds
                                     attributes.AddRange(metadata.Attributes);
                             }
 
-                            items.AddRange(attributes.GroupBy(x => x.LogicalName).Where(g => g.Count() == 1).Select(g => new AttributeAutocompleteItem(g.Single(), _metadata)));
+                            items.AddRange(attributes.GroupBy(x => x.LogicalName).Where(g => g.Count() == 1).Select(g => new AttributeAutocompleteItem(g.Single(), _metadata, currentLength)));
 
-                            items.AddRange(typeof(FunctionMetadata.SqlFunctions).GetMethods(BindingFlags.DeclaredOnly | BindingFlags.Instance | BindingFlags.Public).Select(m => new FunctionAutocompleteItem(m)));
+                            items.AddRange(typeof(FunctionMetadata.SqlFunctions).GetMethods(BindingFlags.DeclaredOnly | BindingFlags.Instance | BindingFlags.Public).Select(m => new FunctionAutocompleteItem(m, currentLength)));
 
                             if (clause == "where" && prevWord == "=")
                             {
@@ -409,7 +408,7 @@ namespace MarkMpn.Sql4Cds
                                         expectedType = typeof(OptionSetValueCollection);
 
                                     if (expectedType != null)
-                                        items.AddRange(typeof(FunctionMetadata.FetchXmlOperators).GetMethods(BindingFlags.DeclaredOnly | BindingFlags.Instance | BindingFlags.Public).Where(m => m.ReturnType == expectedType).Select(m => new FunctionAutocompleteItem(m)));
+                                        items.AddRange(typeof(FunctionMetadata.FetchXmlOperators).GetMethods(BindingFlags.DeclaredOnly | BindingFlags.Instance | BindingFlags.Public).Where(m => m.ReturnType == expectedType).Select(m => new FunctionAutocompleteItem(m, currentLength)));
                                 }
                             }
 
@@ -420,7 +419,7 @@ namespace MarkMpn.Sql4Cds
                     }
                     else if (prevWord.Equals("update", StringComparison.OrdinalIgnoreCase))
                     {
-                        return FilterList(_entities.Select(e => new EntityAutocompleteItem(e, _metadata)), currentWord).OrderBy(x => x);
+                        return FilterList(_entities.Select(e => new EntityAutocompleteItem(e, _metadata, currentLength)), currentWord).OrderBy(x => x);
                     }
 
                     break;
@@ -573,10 +572,11 @@ namespace MarkMpn.Sql4Cds
             return name + suffix;
         }
 
-        public class SqlAutocompleteItem : AutocompleteItem, IComparable
+        public class SqlAutocompleteItem : AutocompleteItem, IComparable, IAutoCompleteMenuItemCustomReplace
         {
-            public SqlAutocompleteItem(string text, int imageIndex) : base(text, imageIndex)
+            public SqlAutocompleteItem(string text, int replaceLength, int imageIndex) : base(text, imageIndex)
             {
+                ReplaceLength = replaceLength;
             }
 
             public override CompareResult Compare(string fragmentText)
@@ -585,6 +585,8 @@ namespace MarkMpn.Sql4Cds
             }
 
             public virtual string CompareText => Text;
+
+            public int ReplaceLength { get; }
 
             public int CompareTo(object obj)
             {
@@ -599,11 +601,11 @@ namespace MarkMpn.Sql4Cds
             private readonly EntityMetadata _entity;
             private readonly IAttributeMetadataCache _metadata;
 
-            public EntityAutocompleteItem(EntityMetadata entity, IAttributeMetadataCache metadata) : this(entity, entity.LogicalName, metadata)
+            public EntityAutocompleteItem(EntityMetadata entity, IAttributeMetadataCache metadata, int replaceLength) : this(entity, entity.LogicalName, metadata, replaceLength)
             {
             }
 
-            public EntityAutocompleteItem(EntityMetadata entity, string alias, IAttributeMetadataCache metadata) : base(alias, 4)
+            public EntityAutocompleteItem(EntityMetadata entity, string alias, IAttributeMetadataCache metadata, int replaceLength) : base(alias, replaceLength, 4)
             {
                 _entity = entity;
                 _metadata = metadata;
@@ -635,7 +637,7 @@ namespace MarkMpn.Sql4Cds
             private readonly string _lhs;
             private readonly IAttributeMetadataCache _metadata;
 
-            public JoinAutocompleteItem(OneToManyRelationshipMetadata relationship, string join, bool oneToMany, EntityMetadata[] entities, IAttributeMetadataCache metadata) : base(join, oneToMany ? 19 : 18)
+            public JoinAutocompleteItem(OneToManyRelationshipMetadata relationship, string join, bool oneToMany, EntityMetadata[] entities, IAttributeMetadataCache metadata, int replaceLength) : base(join, replaceLength, oneToMany ? 19 : 18)
             {
                 _rhs = entities.SingleOrDefault(e => e.LogicalName == relationship.ReferencingEntity);
                 _lhs = relationship.ReferencedEntity;
@@ -683,7 +685,7 @@ namespace MarkMpn.Sql4Cds
             private readonly AttributeMetadata _attribute;
             private readonly AttributeMetadata _attributeOf;
 
-            public AttributeAutocompleteItem(AttributeMetadata attribute, IAttributeMetadataCache metadata) : base(attribute.LogicalName, GetIconIndex(attribute))
+            public AttributeAutocompleteItem(AttributeMetadata attribute, IAttributeMetadataCache metadata, int replaceLength) : base(attribute.LogicalName, replaceLength, GetIconIndex(attribute))
             {
                 _attribute = attribute;
 
@@ -724,7 +726,7 @@ namespace MarkMpn.Sql4Cds
         {
             private readonly MethodInfo _method;
 
-            public FunctionAutocompleteItem(MethodInfo method) : base(method.Name + "(" + (method.GetParameters().Length == 0 ? ")" : ""), GetIconIndex(method))
+            public FunctionAutocompleteItem(MethodInfo method, int replaceLength) : base(method.Name + "(" + (method.GetParameters().Length == 0 ? ")" : ""), replaceLength, GetIconIndex(method))
             {
                 _method = method;
                 MenuText = GetSignature(method);

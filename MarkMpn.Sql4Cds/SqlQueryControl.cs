@@ -321,7 +321,7 @@ namespace MarkMpn.Sql4Cds
                 else
                     entities = entities.Concat(metaEntities).ToArray();
 
-                var suggestions = new Autocomplete(entities, Metadata).GetSuggestions(text, wordEnd.Index - 1, out var currentLength).ToList();
+                var suggestions = new Autocomplete(entities, Metadata).GetSuggestions(text, wordEnd.Index - 1).ToList();
                 var exactSuggestions = suggestions.Where(suggestion => suggestion.Text.Length <= wordEnd.Index && text.Substring(wordEnd.Index - suggestion.CompareText.Length, suggestion.CompareText.Length).Equals(suggestion.CompareText, StringComparison.OrdinalIgnoreCase)).ToList();
 
                 if (exactSuggestions.Count == 1)
@@ -390,7 +390,7 @@ namespace MarkMpn.Sql4Cds
                 else
                     entities = entities.Concat(metaEntities).ToArray();
 
-                var suggestions = new Autocomplete(entities, _control.Metadata).GetSuggestions(text, pos, out var currentLength).ToList();
+                var suggestions = new Autocomplete(entities, _control.Metadata).GetSuggestions(text, pos).ToList();
 
                 if (suggestions.Count == 0)
                     yield break;

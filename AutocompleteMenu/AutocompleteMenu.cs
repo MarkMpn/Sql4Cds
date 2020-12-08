@@ -810,6 +810,14 @@ namespace AutocompleteMenuNS
             if (!args.Handled)
             {
                 Range fragment = Fragment;
+
+                if (item is IAutoCompleteMenuItemCustomReplace customReplace)
+                {
+                    fragment = new Range(TargetControlWrapper);
+                    fragment.Start = TargetControlWrapper.SelectionStart + TargetControlWrapper.SelectionLength - customReplace.ReplaceLength;
+                    fragment.End = fragment.Start + customReplace.ReplaceLength;
+                }
+
                 ApplyAutocomplete(item, fragment);
             }
 
