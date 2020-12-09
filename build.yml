@@ -2,6 +2,9 @@ trigger:
   branches:
     include:
     - master
+    
+pool:
+  vmImage: 'windows-latest'
 
 variables:
   solution: '**/*.sln'
