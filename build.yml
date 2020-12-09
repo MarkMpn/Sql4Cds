@@ -38,6 +38,11 @@ steps:
     configuration: '$(buildConfiguration)'
     msbuildArgs: '/p:Version=$(GitVersion.NuGetVersion)'
 
+- task: VSTest@2
+  inputs:
+    platform: '$(buildPlatform)'
+    configuration: '$(buildConfiguration)'
+
 - task: NuGetCommand@2
   displayName: Pack
   inputs:
