@@ -23,12 +23,12 @@ steps:
 
 - script: $(Build.BinariesDirectory)/tools/GitVersion.CommandLine/tools/GitVersion.exe /output buildserver /nofetch
   displayName: Determine Version
-
-- task: DotNetCoreCLI@2
-  displayName: Restore
+  
+- task: NuGetCommand@2
+  displayName: NuGet Restore
   inputs:
     command: restore
-    projects: '$(solution)'
+    restoreSolution: '**/*.sln'
 
 - task: VSBuild@1
   displayName: Build
