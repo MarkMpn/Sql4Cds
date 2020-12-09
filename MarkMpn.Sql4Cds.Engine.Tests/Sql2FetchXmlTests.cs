@@ -816,6 +816,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 <fetch distinct='true'>
                     <entity name='contact'>
                         <attribute name='contactid' />
+                        <order attribute='contactid' />
                     </entity>
                 </fetch>
             ");
@@ -1026,6 +1027,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     <entity name='contact'>
                         <attribute name='lastname' />
                         <attribute name='contactid' />
+                        <order attribute='contactid' />
                     </entity>
                 </fetch>
             ");
@@ -1064,6 +1066,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     <entity name='contact'>
                         <attribute name='lastname' />
                         <attribute name='contactid' />
+                        <order attribute='contactid' />
                     </entity>
                 </fetch>
             ");
@@ -1105,6 +1108,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <filter>
                             <condition attribute='lastname' operator='eq' value='Carrington' />
                         </filter>
+                        <order attribute='contactid' />
                     </entity>
                 </fetch>
             ");

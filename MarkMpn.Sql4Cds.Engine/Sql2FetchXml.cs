@@ -506,16 +506,24 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 table.AddItem(new FetchAttributeType { name = "listid" });
                 table.AddItem(new FetchAttributeType { name = "entityid" });
+
+                table.AddItem(new FetchOrderType { attribute = "listid" });
+                table.AddItem(new FetchOrderType { attribute = "entityid" });
             }
             else if (meta.IsIntersect == true)
             {
                 var relationship = meta.ManyToManyRelationships.Single();
                 table.AddItem(new FetchAttributeType { name = relationship.Entity1IntersectAttribute });
                 table.AddItem(new FetchAttributeType { name = relationship.Entity2IntersectAttribute });
+
+                table.AddItem(new FetchOrderType { attribute = relationship.Entity1IntersectAttribute });
+                table.AddItem(new FetchOrderType { attribute = relationship.Entity2IntersectAttribute });
             }
             else
             {
                 table.AddItem(new FetchAttributeType { name = meta.PrimaryIdAttribute });
+
+                table.AddItem(new FetchOrderType { attribute = meta.PrimaryIdAttribute });
             }
 
             var cols = table.GetItems().OfType<FetchAttributeType>().Select(a => a.name).ToArray();
@@ -621,6 +629,9 @@ namespace MarkMpn.Sql4Cds.Engine
             var cols = new[] { meta.PrimaryIdAttribute };
             if (table.Entity == null)
                 cols[0] = (table.Alias ?? table.EntityName) + "." + cols[0];
+
+            // Sort by this column to avoid problems with DISTINCT
+            table.AddItem(new FetchOrderType { attribute = meta.PrimaryIdAttribute });
 
             // Sort the elements in the query so they're in the order users expect based on online samples
             foreach (var t in tables)
