@@ -605,21 +605,52 @@ namespace MarkMpn.Sql4Cds
 
             postWarning.Controls.Add(link);
 
-            var image = new Bitmap(16, 16);
-
-            using (var g = Graphics.FromImage(image))
-            {
-                g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-                g.DrawImage(SystemIcons.Warning.ToBitmap(), new Rectangle(Point.Empty, image.Size));
-            }
             postWarning.Controls.Add(new PictureBox
             {
-                Image = image,
+                Image = Properties.Resources.StatusWarning_16x,
                 Height = 16,
                 Width = 16,
                 Dock = DockStyle.Left
             });
             
+            return postWarning;
+        }
+
+        private Panel CreateDistinctWithoutSortWarning(FetchXmlQuery fxq)
+        {
+            if (!fxq.DistinctWithoutSort)
+                return null;
+
+            var postWarning = new Panel
+            {
+                BackColor = SystemColors.Info,
+                BorderStyle = BorderStyle.None,
+                Dock = DockStyle.Top,
+                Padding = new Padding(4),
+                Height = 24
+            };
+            var link = new LinkLabel
+            {
+                Text = "This DISTINCT query does not have a sort order applied. Unexpected results may be returned when the results are split over multiple pages. Add a sort order to retrieve the correct results.",
+                ForeColor = SystemColors.InfoText,
+                AutoSize = false,
+                Dock = DockStyle.Fill
+            };
+            var linkText = "Learn more";
+            link.Text += " " + linkText;
+            link.LinkArea = new LinkArea(link.Text.Length - linkText.Length, linkText.Length);
+            link.LinkClicked += (s, e) => Process.Start("https://docs.microsoft.com/powerapps/developer/common-data-service/org-service/paging-behaviors-and-ordering#ordering-with-a-paging-cookie");
+
+            postWarning.Controls.Add(link);
+
+            postWarning.Controls.Add(new PictureBox
+            {
+                Image = Properties.Resources.StatusWarning_16x,
+                Height = 16,
+                Width = 16,
+                Dock = DockStyle.Left
+            });
+
             return postWarning;
         }
 
@@ -1098,6 +1129,7 @@ namespace MarkMpn.Sql4Cds
                     xmlDisplay.Dock = DockStyle.Fill;
 
                     var postWarning = CreatePostProcessingWarning(fxq, false);
+                    var distinctWithoutSortWarning = CreateDistinctWithoutSortWarning(fxq);
                     var toolbar = CreateFXBToolbar(xmlDisplay);
 
                     fetchXml = new Panel();
@@ -1105,6 +1137,9 @@ namespace MarkMpn.Sql4Cds
 
                     if (postWarning != null)
                         fetchXml.Controls.Add(postWarning);
+
+                    if (distinctWithoutSortWarning != null)
+                        fetchXml.Controls.Add(distinctWithoutSortWarning);
 
                     fetchXml.Controls.Add(toolbar);
                 }

@@ -150,6 +150,7 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 _fetch = value;
                 FetchXmlString = Serialize(_fetch);
+                DistinctWithoutSort = value.distinctSpecified && value.distinct && !ContainsSort(value.Items);
             }
         }
 
@@ -177,6 +178,11 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Returns an alternative query that can be used if the main aggregate query results in an AggregateQueryRecordLimit error
         /// </summary>
         public FetchXmlQuery AggregateAlternative { get; set; }
+
+        /// <summary>
+        /// Indicates if this query uses the <see cref="FetchType.distinct"/> option without having a sort order specified
+        /// </summary>
+        public bool DistinctWithoutSort { get; private set; }
 
         /// <summary>
         /// Retrieves all the data matched by the <see cref="FetchXml"/>
@@ -277,7 +283,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             // Distinct queries without a sort order can't be reliably paged. Throw an exception to get the user
             // to apply a useful sort order
-            if (AllPages && FetchXml.distinctSpecified && FetchXml.distinct && !ContainsSort(FetchXml.Items))
+            if (AllPages && DistinctWithoutSort)
                 throw new ApplicationException("DISTINCT queries must have an ORDER BY applied to retrieve multiple pages\r\nSee https://docs.microsoft.com/powerapps/developer/common-data-service/org-service/paging-behaviors-and-ordering#ordering-with-a-paging-cookie");
 
             // Move on to subsequent pages
