@@ -583,37 +583,10 @@ namespace MarkMpn.Sql4Cds
             if (!metadata && fxq.Extensions.Count == 0)
                 return null;
 
-            var postWarning = new Panel
-            {
-                BackColor = SystemColors.Info,
-                BorderStyle = BorderStyle.None,
-                Dock = DockStyle.Top,
-                Padding = new Padding(4),
-                Height = 24
-            };
-            var link = new LinkLabel
-            {
-                Text = $"This query required additional processing. This {(metadata ? "metadata request" : "FetchXML")} gives the required data, but will not give the final results when run outside SQL 4 CDS.",
-                ForeColor = SystemColors.InfoText,
-                AutoSize = false,
-                Dock = DockStyle.Fill
-            };
-            var linkText = "Learn more";
-            link.Text += " " + linkText;
-            link.LinkArea = new LinkArea(link.Text.Length - linkText.Length, linkText.Length);
-            link.LinkClicked += (s, e) => Process.Start("https://markcarrington.dev/sql-4-cds/additional-processing/");
-
-            postWarning.Controls.Add(link);
-
-            postWarning.Controls.Add(new PictureBox
-            {
-                Image = Properties.Resources.StatusWarning_16x,
-                Height = 16,
-                Width = 16,
-                Dock = DockStyle.Left
-            });
-            
-            return postWarning;
+            return CreateWarning(
+                $"This query required additional processing. This {(metadata ? "metadata request" : "FetchXML")} gives the required data, but will not give the final results when run outside SQL 4 CDS.",
+                "Learn more",
+                "https://markcarrington.dev/sql-4-cds/additional-processing/");
         }
 
         private Panel CreateDistinctWithoutSortWarning(FetchXmlQuery fxq)
@@ -621,7 +594,15 @@ namespace MarkMpn.Sql4Cds
             if (!fxq.DistinctWithoutSort)
                 return null;
 
-            var postWarning = new Panel
+            return CreateWarning(
+                "This DISTINCT query does not have a sort order applied. Unexpected results may be returned when the results are split over multiple pages. Add a sort order to retrieve the correct results.",
+                "Learn more",
+                "https://docs.microsoft.com/powerapps/developer/common-data-service/org-service/paging-behaviors-and-ordering#ordering-with-a-paging-cookie");
+        }
+
+        private Panel CreateWarning(string message, string link, string url)
+        {
+            var panel = new Panel
             {
                 BackColor = SystemColors.Info,
                 BorderStyle = BorderStyle.None,
@@ -629,21 +610,23 @@ namespace MarkMpn.Sql4Cds
                 Padding = new Padding(4),
                 Height = 24
             };
-            var link = new LinkLabel
+            var label = new LinkLabel
             {
-                Text = "This DISTINCT query does not have a sort order applied. Unexpected results may be returned when the results are split over multiple pages. Add a sort order to retrieve the correct results.",
+                Text = message,
                 ForeColor = SystemColors.InfoText,
                 AutoSize = false,
                 Dock = DockStyle.Fill
             };
-            var linkText = "Learn more";
-            link.Text += " " + linkText;
-            link.LinkArea = new LinkArea(link.Text.Length - linkText.Length, linkText.Length);
-            link.LinkClicked += (s, e) => Process.Start("https://docs.microsoft.com/powerapps/developer/common-data-service/org-service/paging-behaviors-and-ordering#ordering-with-a-paging-cookie");
 
-            postWarning.Controls.Add(link);
+            if (!String.IsNullOrEmpty(link))
+            {
+                label.Text += " " + link;
+                label.LinkArea = new LinkArea(label.Text.Length - link.Length, link.Length);
+                label.LinkClicked += (s, e) => Process.Start(url);
+            }
 
-            postWarning.Controls.Add(new PictureBox
+            panel.Controls.Add(label);
+            panel.Controls.Add(new PictureBox
             {
                 Image = Properties.Resources.StatusWarning_16x,
                 Height = 16,
@@ -651,7 +634,7 @@ namespace MarkMpn.Sql4Cds
                 Dock = DockStyle.Left
             });
 
-            return postWarning;
+            return panel;
         }
 
         private void AddResult(Control results, Control fetchXml, int rowCount)
