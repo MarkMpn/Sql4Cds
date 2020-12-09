@@ -1,0 +1,60 @@
+trigger:
+  branches:
+    include:
+    - master
+
+variables:
+  solution: '**/*.sln'
+  buildPlatform: 'Any CPU'
+  buildConfiguration: 'Release'
+
+steps:
+- checkout: self
+  persistCredentials: true
+
+- task: NuGetCommand@2
+  displayName: Install GitVersion
+  inputs:
+    command: custom
+    arguments: install GitVersion.CommandLine -Version 4.0.0 -OutputDirectory $(Build.BinariesDirectory)/tools -ExcludeVersion
+
+- script: $(Build.BinariesDirectory)/tools/GitVersion.CommandLine/tools/GitVersion.exe /output buildserver /nofetch
+  displayName: Determine Version
+
+- task: DotNetCoreCLI@2
+  displayName: Restore
+  inputs:
+    command: restore
+    projects: '$(solution)'
+
+- task: VSBuild@1
+  displayName: Build
+  inputs:
+    solution: '$(solution)'
+    platform: '$(buildPlatform)'
+    configuration: '$(buildConfiguration)'
+    msbuildArgs: '/p:Version=$(GitVersion.NuGetVersion)'
+
+- task: NuGetCommand@2
+  displayName: Pack
+  inputs:
+    command: pack
+    packagesToPack: '**/*.nuspec'
+    packDestination: '$(Build.ArtifactStagingDirectory)'
+    versioningScheme: byEnvVar
+    versionEnvVar: GITVERSION_NUGETVERSION
+
+- task: PublishPipelineArtifact@1
+  displayName: Publish NuGet package to pipeline
+  inputs:
+    targetPath: '$(Build.ArtifactStagingDirectory)/*.nupkg'
+    artifact: 'NuGetPackages'
+    publishLocation: 'pipeline'
+
+- task: GitTag@5
+  displayName: Label Source
+  inputs:
+    workingdir: '$(Build.SourcesDirectory)'
+    tag: 'v$(GitVersion.NuGetVersion)'
+  env:
+    SYSTEM_ACCESSTOKEN: '$(System.AccessToken)'
