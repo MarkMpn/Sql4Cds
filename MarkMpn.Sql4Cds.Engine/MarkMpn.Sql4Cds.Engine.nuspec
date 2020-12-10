@@ -1,0 +1,28 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd">
+  <metadata>
+    <id>MarkMpn.Sql4Cds.Engine</id>
+    <version>3.0.0</version>
+    <title>SQL 4 CDS Engine</title>
+    <authors>Mark Carrington</authors>
+    <owners></owners>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <projectUrl>https://markcarrington.dev/sql-4-cds/</projectUrl>
+    <iconUrl>https://markcarrington.dev/sql4cds-icon/</iconUrl>
+    <description>Convert SQL queries to FetchXml and execute them against CDS</description>
+    <summary>Convert SQL queries to FetchXml and execute them against CDS</summary>
+    <releaseNotes>Improved performance of bulk update &amp; delete queries
+Option to impersonate other users when running queries
+SQL language support improvements</releaseNotes>
+    <copyright>Copyright © 2020 Mark Carrington</copyright>
+    <language>en-GB</language>
+    <tags>SQL CDS</tags>
+    <dependencies>
+      <dependency id="Microsoft.CrmSdk.CoreAssemblies" version="9.0.2.17" />
+      <dependency id="Microsoft.SqlServer.TransactSql.ScriptDom" version="15.0.4200.1" />
+    </dependencies>
+  </metadata>
+  <files>
+    <file src="bin\Release\MarkMpn.Sql4Cds.Engine.dll" target="lib\net462\MarkMpn.Sql4Cds.Engine.dll" />
+  </files>
+</package>

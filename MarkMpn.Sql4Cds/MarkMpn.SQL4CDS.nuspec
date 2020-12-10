@@ -1,0 +1,40 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd">
+  <metadata>
+    <id>MarkMpn.SQL4CDS</id>
+    <version>3.0.0</version>
+    <title>SQL 4 CDS</title>
+    <authors>Mark Carrington</authors>
+    <owners>MarkMpn</owners>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <projectUrl>https://markcarrington.dev/sql-4-cds/</projectUrl>
+    <iconUrl>http://markcarrington.dev/sql4cds-icon/</iconUrl>
+    <description>SQL 4 CDS allows you to use standard SQL syntax to query and manipulate your data and metadata in CDS / D365.
+
+Supports
+- SELECT
+- INSERT
+- UPDATE
+- DELETE
+
+Where possible the queries are converted to FetchXML, allowing you to generate FetchXML queries for
+plugins or integrations by writing familiar SQL and converting it.
+
+Using the preview T-SQL endpoint, SELECT queries can also be run that aren't convertible to FetchXML.</description>
+    <summary>Convert SQL queries to FetchXML and execute them against CDS</summary>
+    <releaseNotes>Improved UI for displaying results from multiple queries
+Improved performance of bulk update &amp; delete queries
+Intellisense UI and performance improvements
+Option to impersonate other users when running queries
+SQL language support improvements</releaseNotes>
+    <copyright>Copyright © 2019 Mark Carrington</copyright>
+    <language>en-GB</language>
+    <tags>XrmToolBox SQL CDS</tags>
+    <dependencies>
+      <dependency id="XrmToolBox" version="1.2018.1.20" />
+    </dependencies>
+  </metadata>
+  <files>
+    <file src="bin\Release\ILMerge\MarkMpn.Sql4Cds.dll" target="lib\net452\Plugins\MarkMpn.Sql4Cds.dll" />
+  </files>
+</package>
