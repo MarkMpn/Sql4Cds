@@ -822,8 +822,8 @@ namespace MarkMpn.Sql4Cds.Engine
                                 return threadLocalState;
                             }
 
-                        // Special cases for intersect entities
-                        if (LogicalName == "listmember")
+                            // Special cases for intersect entities
+                            if (LogicalName == "listmember")
                             {
                                 var listId = entity.GetAttributeValue<EntityReference>("listid");
                                 var entityId = entity.GetAttributeValue<EntityReference>("entityid");
@@ -842,9 +842,9 @@ namespace MarkMpn.Sql4Cds.Engine
                             }
                             else if (meta.IsIntersect == true)
                             {
-                            // For generic intersect entities we expect a single many-to-many relationship in the metadata which describes
-                            // the relationship that this is the intersect entity for
-                            var relationship = meta.ManyToManyRelationships.Single();
+                                // For generic intersect entities we expect a single many-to-many relationship in the metadata which describes
+                                // the relationship that this is the intersect entity for
+                                var relationship = meta.ManyToManyRelationships.Single();
 
                                 var entity1 = entity.GetAttributeValue<EntityReference>(relationship.Entity1IntersectAttribute);
                                 var entity2 = entity.GetAttributeValue<EntityReference>(relationship.Entity2IntersectAttribute);

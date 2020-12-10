@@ -2645,6 +2645,39 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 </fetch>");
         }
 
+        [TestMethod]
+        public void OrderByOuterEntityWithLinkEntityWithNoAttributes()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = @"
+                SELECT contact.fullname
+                FROM contact INNER JOIN account ON contact.parentcustomerid = account.accountid INNER JOIN new_customentity ON contact.parentcustomerid = new_customentity.new_parentid
+                ORDER BY account.employees, contact.fullname";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(new[] { queries[0] }, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='fullname' />
+                        <link-entity name='account' from='accountid' to='parentcustomerid' alias='account' link-type='inner'>
+                            <attribute name='employees' />
+                            <order attribute='employees' />
+                        </link-entity>
+                        <link-entity name='new_customentity' from='new_parentid' to='parentcustomerid' alias='new_customentity' link-type='inner'>
+                        </link-entity>
+                    </entity>
+                </fetch>");
+
+            Assert.AreEqual(1, ((SelectQuery)queries[0]).Extensions.Count);
+        }
+
         private void AssertFetchXml(Query[] queries, string fetchXml)
         {
             Assert.AreEqual(1, queries.Length);

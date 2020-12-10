@@ -2278,13 +2278,13 @@ namespace MarkMpn.Sql4Cds.Engine
                 // For aggregate queries, ordering must be done on aliases not attributes
                 if (fetch.aggregate)
                 {
-                    var attr = (orderTable.Entity?.Items ?? orderTable.LinkEntity?.Items)
+                    var attr = orderTable.GetItems()
                         .OfType<FetchAttributeType>()
                         .SingleOrDefault(a => a.alias == order.attribute);
 
                     if (attr == null)
                     {
-                        attr = (orderTable.Entity?.Items ?? orderTable.LinkEntity?.Items)
+                        attr = orderTable.GetItems()
                             .OfType<FetchAttributeType>()
                             .SingleOrDefault(a => a.alias == null && a.name == order.attribute);
                     }
@@ -2325,7 +2325,7 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             // Check how many sorts were already converted to native FetchXML - we can use these results to only sort partial sequences
             // of results rather than having to sort the entire result set in memory.
-            var fetchXmlSorts = useFetchSorts ? tables.SelectMany(t => (t.Entity?.Items ?? t.LinkEntity?.Items).OfType<FetchOrderType>()).Count() : 0;
+            var fetchXmlSorts = useFetchSorts ? tables.SelectMany(t => t.GetItems().OfType<FetchOrderType>()).Count() : 0;
 
             // Convert each ORDER BY expression in turn
             var sortNumber = 0;
@@ -2378,9 +2378,9 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <returns></returns>
         private bool LaterEntityHasOrder(List<EntityTable> tables, EntityTable entityTable, EntityTable orderTable, ref bool passedOrderTable)
         {
-            var items = (entityTable.Entity?.Items ?? entityTable.LinkEntity?.Items);
+            var items = entityTable.GetItems();
 
-            if (items == null)
+            if (items.Length == 0)
                 return false;
 
             if (passedOrderTable && items.OfType<FetchOrderType>().Any())
@@ -3551,7 +3551,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
             // Don't add the attribute if we've already got it
             var newAttr = attr;
-            var existingAttr = (table.Entity?.Items ?? table.LinkEntity?.Items ?? Array.Empty<object>()).OfType<FetchAttributeType>()
+            var existingAttr = table.GetItems()
+                .OfType<FetchAttributeType>()
                 .FirstOrDefault(existing =>
                     existing.name == newAttr.name &&
                     existing.aggregate == newAttr.aggregate &&
