@@ -3530,6 +3530,10 @@ namespace MarkMpn.Sql4Cds.Engine
 
             // If this is a virtual attribute, use the underlying attribute instead
             var attrMeta = table.Metadata.Attributes.Single(a => a.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase));
+
+            if (attrMeta == null)
+                throw new NotSupportedQueryFragmentException("Unknown attribute", expr);
+
             if (!String.IsNullOrEmpty(attrMeta.AttributeOf))
                 attrName = attrMeta.AttributeOf;
 
