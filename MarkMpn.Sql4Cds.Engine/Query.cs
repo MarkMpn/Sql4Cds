@@ -131,6 +131,16 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <returns>An object to dispose of to reset the settings to their original values</returns>
         protected IDisposable UseParallelConnections() => new ParallelConnectionSettings();
+
+        protected string GetDisplayName(int count, EntityMetadata meta)
+        {
+            if (count == 1)
+                return meta.DisplayName.UserLocalizedLabel?.Label ?? meta.LogicalName;
+
+            return meta.DisplayCollectionName.UserLocalizedLabel?.Label ??
+                meta.LogicalCollectionName ??
+                meta.LogicalName;
+        }
     }
 
     /// <summary>
@@ -250,7 +260,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var mainEntity = FetchXml.Items.OfType<FetchEntityType>().Single();
             var name = mainEntity.name;
             var meta = metadata[name];
-            options.Progress($"Retrieving {meta.DisplayCollectionName?.UserLocalizedLabel?.Label}...");
+            options.Progress($"Retrieving {GetDisplayName(0, meta)}...");
 
             // Get the first page of results
             var res = org.RetrieveMultiple(new FetchExpression(Serialize(FetchXml)));
@@ -289,7 +299,7 @@ namespace MarkMpn.Sql4Cds.Engine
             // Move on to subsequent pages
             while (AllPages && res.MoreRecords && !options.Cancelled && options.ContinueRetrieve(count))
             {
-                options.Progress($"Retrieved {count:N0} {meta.DisplayCollectionName?.UserLocalizedLabel?.Label}...");
+                options.Progress($"Retrieved {count:N0} {GetDisplayName(count, meta)}...");
 
                 if (FetchXml.page == null)
                     FetchXml.page = "2";
@@ -574,10 +584,10 @@ namespace MarkMpn.Sql4Cds.Engine
                             {
                                 var newCount = Interlocked.Add(ref count, threadLocalState.EMR.Requests.Count);
 
-                                options.Progress($"Updating {meta.DisplayCollectionName.UserLocalizedLabel.Label} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
+                                options.Progress($"Updating {GetDisplayName(0, meta)} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
                                 var resp = (ExecuteMultipleResponse)threadLocalState.Service.Execute(threadLocalState.EMR);
                                 if (resp.IsFaulted)
-                                    throw new ApplicationException($"Error updating {meta.DisplayCollectionName.UserLocalizedLabel.Label} - " + resp.Responses.First(r => r.Fault != null).Fault.Message);
+                                    throw new ApplicationException($"Error updating {GetDisplayName(0, meta)} - " + resp.Responses.First(r => r.Fault != null).Fault.Message);
 
                                 threadLocalState = new { threadLocalState.Service, EMR = default(ExecuteMultipleRequest) };
                             }
@@ -591,10 +601,10 @@ namespace MarkMpn.Sql4Cds.Engine
                         {
                             var newCount = Interlocked.Add(ref count, threadLocalState.EMR.Requests.Count);
 
-                            options.Progress($"Updating {meta.DisplayCollectionName.UserLocalizedLabel.Label} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
+                            options.Progress($"Updating {GetDisplayName(0, meta)} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
                             var resp = (ExecuteMultipleResponse)threadLocalState.Service.Execute(threadLocalState.EMR);
                             if (resp.IsFaulted)
-                                throw new ApplicationException($"Error update {meta.DisplayCollectionName.UserLocalizedLabel.Label} - " + resp.Responses.First(r => r.Fault != null).Fault.Message);
+                                throw new ApplicationException($"Error updating {GetDisplayName(0, meta)} - " + resp.Responses.First(r => r.Fault != null).Fault.Message);
                         }
 
                         if (threadLocalState.Service != org)
@@ -602,7 +612,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     });
             }
 
-            return $"{count:N0} {meta.DisplayCollectionName?.UserLocalizedLabel?.Label} updated";
+            return $"{count:N0} {GetDisplayName(count, meta)} updated";
         }
     }
 
@@ -640,7 +650,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 var bulkDelete = new BulkDeleteRequest
                 {
-                    JobName = $"SQL 4 CDS {meta.DisplayCollectionName.UserLocalizedLabel.Label} Bulk Delete Job",
+                    JobName = $"SQL 4 CDS {GetDisplayName(0, meta)} Bulk Delete Job",
                     QuerySet = new[] { query },
                     StartDateTime = DateTime.Now,
                     RunNow = true,
@@ -717,10 +727,10 @@ namespace MarkMpn.Sql4Cds.Engine
                             {
                                 var newCount = Interlocked.Add(ref count, threadLocalState.EMR.Requests.Count);
 
-                                options.Progress($"Deleting {meta.DisplayCollectionName.UserLocalizedLabel.Label} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
+                                options.Progress($"Deleting {GetDisplayName(0, meta)} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
                                 var resp = (ExecuteMultipleResponse)threadLocalState.Service.Execute(threadLocalState.EMR);
                                 if (resp.IsFaulted)
-                                    throw new ApplicationException($"Error deleting {meta.DisplayCollectionName.UserLocalizedLabel.Label} - " + resp.Responses.First(r => r.Fault != null).Fault.Message);
+                                    throw new ApplicationException($"Error deleting {GetDisplayName(0, meta)} - " + resp.Responses.First(r => r.Fault != null).Fault.Message);
 
                                 threadLocalState = new { threadLocalState.Service, EMR = default(ExecuteMultipleRequest) };
                             }
@@ -734,10 +744,10 @@ namespace MarkMpn.Sql4Cds.Engine
                         {
                             var newCount = Interlocked.Add(ref count, threadLocalState.EMR.Requests.Count);
 
-                            options.Progress($"Deleting {meta.DisplayCollectionName.UserLocalizedLabel.Label} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
+                            options.Progress($"Deleting {GetDisplayName(0, meta)} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
                             var resp = (ExecuteMultipleResponse)threadLocalState.Service.Execute(threadLocalState.EMR);
                             if (resp.IsFaulted)
-                                throw new ApplicationException($"Error deleting {meta.DisplayCollectionName.UserLocalizedLabel.Label} - " + resp.Responses.First(r => r.Fault != null).Fault.Message);
+                                throw new ApplicationException($"Error deleting {GetDisplayName(0, meta)} - " + resp.Responses.First(r => r.Fault != null).Fault.Message);
                         }
 
                         if (threadLocalState.Service != org)
@@ -745,7 +755,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     });
             }
 
-            return $"{count:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label} deleted";
+            return $"{count:N0} {GetDisplayName(count, meta)} deleted";
         }
 
         private OrganizationRequest CreateDeleteRequest(EntityMetadata meta, Entity entity)
@@ -760,14 +770,14 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             else if (meta.IsIntersect == true)
             {
-                var entity1Id = entity.GetAliasedAttributeValue<EntityReference>(IdColumns[0]);
-                var entity2Id = entity.GetAliasedAttributeValue<EntityReference>(IdColumns[1]);
+                var entity1Id = entity.GetAliasedAttributeValue<Guid>(IdColumns[0]);
+                var entity2Id = entity.GetAliasedAttributeValue<Guid>(IdColumns[1]);
                 var relationship = meta.ManyToManyRelationships.Single();
 
                 return new DisassociateRequest
                 {
-                    Target = entity1Id,
-                    RelatedEntities = new EntityReferenceCollection(new[] { entity2Id }),
+                    Target = new EntityReference(relationship.Entity1LogicalName, entity1Id),
+                    RelatedEntities = new EntityReferenceCollection(new[] { new EntityReference(relationship.Entity2LogicalName, entity2Id) }),
                     Relationship = new Relationship(relationship.SchemaName) { PrimaryEntityRole = EntityRole.Referencing }
                 };
             }
@@ -869,7 +879,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                             var inserted = Interlocked.Increment(ref count);
 
-                            options.Progress($"Inserted {inserted:N0} of {entities.Length:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label} ({(float)count / entities.Length:P0})");
+                            options.Progress($"Inserted {inserted:N0} of {entities.Length:N0} {GetDisplayName(0, meta)} ({(float)count / entities.Length:P0})");
 
                             return threadLocalState;
                         },
@@ -881,7 +891,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
             }
 
-            return $"{entities.Length:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label} inserted";
+            return $"{entities.Length:N0} {GetDisplayName(entities.Length, meta)} inserted";
         }
     }
 
@@ -954,6 +964,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     if (value is Guid g)
                         value = new EntityReference(entity.LogicalName, g);
+
+                    value = Sql2FetchXml.ConvertAttributeValueType(metadata[LogicalName], attr.Value, value);
 
                     newEntity[attr.Value] = value;
                 }

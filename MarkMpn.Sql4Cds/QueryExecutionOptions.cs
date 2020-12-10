@@ -32,7 +32,7 @@ namespace MarkMpn.Sql4Cds
         {
             if (count > Settings.Instance.UpdateWarnThreshold)
             {
-                var result = MessageBox.Show($"Update will affect {count:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label}. Do you want to proceed?", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+                var result = MessageBox.Show($"Update will affect {count:N0} {GetDisplayName(count, meta)}. Do you want to proceed?", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
 
                 if (result == DialogResult.No)
                     return false;
@@ -45,13 +45,23 @@ namespace MarkMpn.Sql4Cds
         {
             if (count > Settings.Instance.DeleteWarnThreshold)
             {
-                var result = MessageBox.Show($"Delete will affect {count:N0} {meta.DisplayCollectionName.UserLocalizedLabel.Label}. Do you want to proceed?", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+                var result = MessageBox.Show($"Delete will affect {count:N0} {GetDisplayName(count, meta)}. Do you want to proceed?", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
 
                 if (result == DialogResult.No)
                     return false;
             }
 
             return true;
+        }
+
+        private string GetDisplayName(int count, EntityMetadata meta)
+        {
+            if (count == 1)
+                return meta.DisplayName.UserLocalizedLabel?.Label ?? meta.LogicalName;
+
+            return meta.DisplayCollectionName.UserLocalizedLabel?.Label ??
+                meta.LogicalCollectionName ??
+                meta.LogicalName;
         }
 
         public bool ContinueRetrieve(int count)

@@ -377,7 +377,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (attr == null)
                     throw new NotSupportedQueryFragmentException("Unknown attribute name", columns[i]);
 
-                if (attr.IsValidForCreate == false)
+                if (meta.IsIntersect != true && attr.IsValidForCreate == false)
                     throw new NotSupportedQueryFragmentException("Column cannot be set on INSERT", columns[i]);
 
                 query.Mappings[selectQuery.ColumnSet[i]] = attr.LogicalName;
@@ -660,7 +660,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="attrName">The name of the attribute</param>
         /// <param name="value">The value for the attribute</param>
         /// <returns>The <paramref name="value"/> converted to the type appropriate for the <paramref name="attrName"/></returns>
-        private object ConvertAttributeValueType(EntityMetadata metadata, string attrName, string value)
+        internal static object ConvertAttributeValueType(EntityMetadata metadata, string attrName, object value)
         {
             // Don't care about types for nulls
             if (value == null)
@@ -672,53 +672,167 @@ namespace MarkMpn.Sql4Cds.Engine
             if (attr == null)
                 throw new NotSupportedException("Unknown attribute " + attrName);
 
+            var str = value as string;
+            var b = value as bool?;
+            var i = value as int?;
+            var l = value as long?;
+            var dec = value as decimal?;
+            var dbl = value as double?;
+            var g = value as Guid?;
+            var dt = value as DateTime?;
+            var er = value as EntityReference;
+            var m = value as Money;
+            var osv = value as OptionSetValue;
+
             // Handle the conversion for each attribute type
             switch (attr.AttributeType)
             {
                 case AttributeTypeCode.BigInt:
-                    return Int64.Parse(value, CultureInfo.InvariantCulture);
+                    if (str != null)
+                        return Int64.Parse(str, CultureInfo.InvariantCulture);
+                    if (b != null)
+                        return b.Value ? 1L : 0L;
+                    if (i != null)
+                        return (long)i.Value;
+                    if (l != null)
+                        return l.Value;
+                    if (m != null)
+                        return (long)m.Value;
+                    if (osv != null)
+                        return (long)osv.Value;
+                    throw new InvalidOperationException($"Cannot convert value '{value}' of type '{value.GetType()}' to '{attr.AttributeType}' for attribute {attrName}");
 
                 case AttributeTypeCode.Boolean:
-                    if (value == "0")
+                    if (str == "0")
                         return false;
-                    if (value == "1")
+                    if (str == "1")
                         return true;
-                    throw new FormatException($"Cannot convert value {value} to boolean for attribute {attrName}");
+                    if (b != null)
+                        return b.Value;
+                    if (i != null)
+                        return i.Value != 0;
+                    if (l != null)
+                        return l.Value != 0;
+                    if (m != null)
+                        return m.Value != 0;
+                    if (osv != null)
+                        return osv.Value != 0;
+                    throw new InvalidOperationException($"Cannot convert value '{value}' of type '{value.GetType()}' to '{attr.AttributeType}' for attribute {attrName}");
 
                 case AttributeTypeCode.DateTime:
-                    return DateTime.Parse(value, CultureInfo.InvariantCulture);
+                    if (str != null)
+                        return DateTime.Parse(str, CultureInfo.InvariantCulture);
+                    if (dt != null)
+                        return dt.Value;
+                    throw new InvalidOperationException($"Cannot convert value '{value}' of type '{value.GetType()}' to '{attr.AttributeType}' for attribute {attrName}");
 
                 case AttributeTypeCode.Decimal:
-                    return Decimal.Parse(value, CultureInfo.InvariantCulture);
+                    if (str != null)
+                        return Decimal.Parse(str, CultureInfo.InvariantCulture);
+                    if (i != null)
+                        return (decimal)i.Value;
+                    if (l != null)
+                        return (decimal)l.Value;
+                    if (dec != null)
+                        return dec.Value;
+                    if (dbl != null)
+                        return (decimal)dbl.Value;
+                    if (m != null)
+                        return (decimal)m.Value;
+                    if (osv != null)
+                        return (decimal)osv.Value;
+                    throw new InvalidOperationException($"Cannot convert value '{value}' of type '{value.GetType()}' to '{attr.AttributeType}' for attribute {attrName}");
 
                 case AttributeTypeCode.Double:
-                    return Double.Parse(value, CultureInfo.InvariantCulture);
+                    if (str != null)
+                        return Double.Parse(str, CultureInfo.InvariantCulture);
+                    if (i != null)
+                        return (double)i.Value;
+                    if (l != null)
+                        return (double)l.Value;
+                    if (dec != null)
+                        return (double)dec.Value;
+                    if (dbl != null)
+                        return dbl.Value;
+                    if (m != null)
+                        return (double)m.Value;
+                    if (osv != null)
+                        return (double)osv.Value;
+                    throw new InvalidOperationException($"Cannot convert value '{value}' of type '{value.GetType()}' to '{attr.AttributeType}' for attribute {attrName}");
 
                 case AttributeTypeCode.Integer:
-                    return Int32.Parse(value, CultureInfo.InvariantCulture);
+                    if (str != null)
+                        return Int32.Parse(str, CultureInfo.InvariantCulture);
+                    if (i != null)
+                        return i.Value;
+                    if (l != null)
+                        return (int)l.Value;
+                    if (dec != null)
+                        return (int)dec.Value;
+                    if (dbl != null)
+                        return (int)dbl.Value;
+                    if (m != null)
+                        return (int)m.Value;
+                    if (osv != null)
+                        return osv.Value;
+                    throw new InvalidOperationException($"Cannot convert value '{value}' of type '{value.GetType()}' to '{attr.AttributeType}' for attribute {attrName}");
 
                 case AttributeTypeCode.Lookup:
                 case AttributeTypeCode.Customer:
                 case AttributeTypeCode.Owner:
+                    if (er != null)
+                        return er;
+                    if (str != null)
+                        g = Guid.Parse(str);
+                    if (g == null)
+                        throw new InvalidOperationException($"Cannot convert value '{value}' of type '{value.GetType()}' to '{attr.AttributeType}' for attribute {attrName}");
                     var targets = ((LookupAttributeMetadata)attr).Targets;
                     if (targets.Length != 1)
                         throw new NotSupportedException($"Cannot use guid value for polymorphic lookup attribute {attrName}. Use CREATELOOKUP(logicalname, guid) function instead");
-                    return new EntityReference(targets[0], Guid.Parse(value));
+                    return new EntityReference(targets[0], g.Value);
 
                 case AttributeTypeCode.Memo:
                 case AttributeTypeCode.String:
-                    return value;
+                    return value.ToString();
 
                 case AttributeTypeCode.Money:
-                    return new Money(Decimal.Parse(value, CultureInfo.InvariantCulture));
+                    if (str != null)
+                        return new Money(Decimal.Parse(str, CultureInfo.InvariantCulture));
+                    if (i != null)
+                        return new Money(i.Value);
+                    if (l != null)
+                        return new Money(l.Value);
+                    if (dec != null)
+                        return new Money(dec.Value);
+                    if (dbl != null)
+                        return new Money((decimal)dbl.Value);
+                    if (m != null)
+                        return m;
+                    if (osv != null)
+                        return new Money(osv.Value);
+                    throw new InvalidOperationException($"Cannot convert value '{value}' of type '{value.GetType()}' to '{attr.AttributeType}' for attribute {attrName}");
 
                 case AttributeTypeCode.Picklist:
                 case AttributeTypeCode.State:
                 case AttributeTypeCode.Status:
-                    return new OptionSetValue(Int32.Parse(value, CultureInfo.InvariantCulture));
+                    if (str != null)
+                        return new OptionSetValue(Int32.Parse(str, CultureInfo.InvariantCulture));
+                    if (i != null)
+                        return new OptionSetValue(i.Value);
+                    if (l != null)
+                        return new OptionSetValue((int)l.Value);
+                    if (osv != null)
+                        return osv;
+                    throw new InvalidOperationException($"Cannot convert value '{value}' of type '{value.GetType()}' to '{attr.AttributeType}' for attribute {attrName}");
 
                 case AttributeTypeCode.Uniqueidentifier:
-                    return Guid.Parse(value);
+                    if (str != null)
+                        return Guid.Parse(str);
+                    if (g != null)
+                        return g.Value;
+                    if (er != null)
+                        return er.Id;
+                    throw new InvalidOperationException($"Cannot convert value '{value}' of type '{value.GetType()}' to '{attr.AttributeType}' for attribute {attrName}");
 
                 default:
                     throw new NotSupportedException($"Unsupport attribute type {attr.AttributeType} for attribute {attrName}");
