@@ -64,5 +64,6 @@ steps:
   inputs:
     workingdir: '$(Build.SourcesDirectory)'
     tag: 'v$(GitVersion.NuGetVersion)'
+  enabled: false
   env:
     SYSTEM_ACCESSTOKEN: '$(System.AccessToken)'
