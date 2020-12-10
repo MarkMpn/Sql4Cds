@@ -53,9 +53,9 @@ steps:
     versionEnvVar: GITVERSION_NUGETVERSION
 
 - task: PublishPipelineArtifact@1
-  displayName: Publish NuGet package to pipeline
+  displayName: Publish NuGet packages to pipeline
   inputs:
-    targetPath: '$(Build.ArtifactStagingDirectory)/*.nupkg'
+    targetPath: '$(Build.ArtifactStagingDirectory)'
     artifact: 'NuGetPackages'
     publishLocation: 'pipeline'
 
