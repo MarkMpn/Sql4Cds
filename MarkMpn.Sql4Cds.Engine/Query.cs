@@ -135,9 +135,9 @@ namespace MarkMpn.Sql4Cds.Engine
         protected string GetDisplayName(int count, EntityMetadata meta)
         {
             if (count == 1)
-                return meta.DisplayName.UserLocalizedLabel?.Label ?? meta.LogicalName;
+                return meta.DisplayName?.UserLocalizedLabel?.Label ?? meta.LogicalName;
 
-            return meta.DisplayCollectionName.UserLocalizedLabel?.Label ??
+            return meta.DisplayCollectionName?.UserLocalizedLabel?.Label ??
                 meta.LogicalCollectionName ??
                 meta.LogicalName;
         }
