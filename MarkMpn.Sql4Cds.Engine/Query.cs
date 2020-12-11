@@ -855,17 +855,45 @@ namespace MarkMpn.Sql4Cds.Engine
                                 // For generic intersect entities we expect a single many-to-many relationship in the metadata which describes
                                 // the relationship that this is the intersect entity for
                                 var relationship = meta.ManyToManyRelationships.Single();
+                                    // Depending on the source of the data the values being inserted might be of various different types, so we need
+                                    // to do some manual conversion
+                                    entity.Attributes.TryGetValue(relationship.Entity1IntersectAttribute, out var e1);
+                                    entity.Attributes.TryGetValue(relationship.Entity2IntersectAttribute, out var e2);
 
-                                var entity1 = entity.GetAttributeValue<EntityReference>(relationship.Entity1IntersectAttribute);
-                                var entity2 = entity.GetAttributeValue<EntityReference>(relationship.Entity2IntersectAttribute);
+                                    if (e1 is AliasedValue a1)
+                                        e1 = a1.Value;
 
-                                if (entity1 == null)
-                                    throw new ApplicationException($"{relationship.Entity1IntersectAttribute} is required");
+                                    if (e2 is AliasedValue a2)
+                                        e2 = a2.Value;
 
-                                if (entity2 == null)
-                                    throw new ApplicationException($"{relationship.Entity2IntersectAttribute} is required");
+                                    if (e1 == null)
+                                        throw new ApplicationException($"{relationship.Entity1IntersectAttribute} is required");
 
-                                threadLocalState.Service.Execute(new AssociateRequest
+                                    if (e2 == null)
+                                        throw new ApplicationException($"{relationship.Entity2IntersectAttribute} is required");
+
+                                    var entity1 = e1 as EntityReference;
+                                    var entity2 = e2 as EntityReference;
+
+                                    if (entity1 == null)
+                                    {
+                                        if (e1 is Guid g1)
+                                            entity1 = new EntityReference(relationship.Entity1LogicalName, g1);
+                                        else if (e1 is string s1)
+                                            entity1 = new EntityReference(relationship.Entity1LogicalName, new Guid(s1));
+                                        else
+                                            throw new InvalidOperationException($"Cannot convert value '{e1}' of type '{e1.GetType()}' to '{typeof(EntityReference)}' for attribute {relationship.Entity1IntersectAttribute}");
+                                    }
+
+                                    if (entity2 == null)
+                                    {
+                                        if (e2 is Guid g2)
+                                            entity2 = new EntityReference(relationship.Entity2LogicalName, g2);
+                                        else if (e2 is string s2)
+                                            entity2 = new EntityReference(relationship.Entity2LogicalName, new Guid(s2));
+                                        else
+                                            throw new InvalidOperationException($"Cannot convert value '{e2}' of type '{e2.GetType()}' to '{typeof(EntityReference)}' for attribute {relationship.Entity2IntersectAttribute}");
+                                    }
                                 {
                                     Target = entity1,
                                     Relationship = new Relationship(relationship.SchemaName) { PrimaryEntityRole = EntityRole.Referencing },
