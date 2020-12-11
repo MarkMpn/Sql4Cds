@@ -824,8 +824,15 @@ namespace MarkMpn.Sql4Cds
                     index = _params.Offset + parseErr.Error.Offset;
                     length = 0;
                 }
+                else if (error is PartialSuccessException partialSuccess)
+                {
+                    if (partialSuccess.Result is string msg)
+                        AddMessage(index, length, msg, false);
 
-                _ai.TrackException(e.Error, new Dictionary<string, string> { ["Sql"] = _params.Sql });
+                    error = partialSuccess.InnerException;
+                }
+
+                _ai.TrackException(error, new Dictionary<string, string> { ["Sql"] = _params.Sql });
                 _log(e.Error.ToString());
 
                 if (error is AggregateException aggregateException)

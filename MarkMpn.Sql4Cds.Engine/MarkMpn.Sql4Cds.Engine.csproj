@@ -55,6 +55,7 @@
     <Compile Include="EntityExtensions.cs" />
     <Compile Include="MetaMetadataCache.cs" />
     <Compile Include="MetaMetadata.cs" />
+    <Compile Include="PartialSuccessException.cs" />
     <Compile Include="QueryExtensions\NoOp.cs" />
     <Compile Include="TSqlEndpoint.cs" />
     <Compile Include="TSqlFragmentExtensions.cs" />
@@ -136,9 +137,7 @@
       </AssemblyAttributes>
     </ItemGroup>
     <MakeDir Directories="$(IntermediateOutputPath)" />
-    <WriteCodeFragment Language="C#"
-                       OutputFile="$(IntermediateOutputPath)Version.cs"
-                       AssemblyAttributes="@(AssemblyAttributes)" />
+    <WriteCodeFragment Language="C#" OutputFile="$(IntermediateOutputPath)Version.cs" AssemblyAttributes="@(AssemblyAttributes)" />
     <ItemGroup>
       <Compile Include="$(IntermediateOutputPath)Version.cs" />
     </ItemGroup>

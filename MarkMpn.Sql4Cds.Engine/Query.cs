@@ -511,6 +511,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 throw new InvalidOperationException("UPDATE without WHERE is blocked by your settings");
 
             // Get the records to update
+            var inProgressCount = 0;
             var count = 0;
             var entities = RetrieveAll(org, metadata, options).Entities;
 
@@ -523,93 +524,121 @@ namespace MarkMpn.Sql4Cds.Engine
             if (!options.ConfirmUpdate(entities.Count, meta))
                 throw new OperationCanceledException("UPDATE cancelled by user");
 
-
             var maxDop = options.MaxDegreeOfParallelism;
             var svc = org as CrmServiceClient;
 
             if (maxDop < 1 || svc == null)
                 maxDop = 1;
 
-            using (UseParallelConnections())
+            try
             {
-                Parallel.ForEach(entities,
-                    new ParallelOptions { MaxDegreeOfParallelism = maxDop },
-                    () => new { Service = svc?.Clone() ?? org, EMR = default(ExecuteMultipleRequest) },
-                    (entity, loopState, index, threadLocalState) =>
-                    {
-                        if (options.Cancelled)
+                using (UseParallelConnections())
+                {
+                    Parallel.ForEach(entities,
+                        new ParallelOptions { MaxDegreeOfParallelism = maxDop },
+                        () => new { Service = svc?.Clone() ?? org, EMR = default(ExecuteMultipleRequest) },
+                        (entity, loopState, index, threadLocalState) =>
                         {
-                            loopState.Stop();
-                            return threadLocalState;
-                        }
-
-                        var id = entity[IdColumn];
-                        if (id is AliasedValue alias)
-                            id = alias.Value;
-
-                        var update = new Entity(EntityName);
-                        update.Id = (Guid)id;
-
-                        foreach (var attr in Updates)
-                            update[attr.Key] = attr.Value(entity);
-
-                        if (options.BatchSize == 1)
-                        {
-                            var newCount = Interlocked.Increment(ref count);
-                            options.Progress($"Updating {meta.DisplayName?.UserLocalizedLabel?.Label} {newCount:N0} of {entities.Count:N0}...");
-                            threadLocalState.Service.Update(update);
-                        }
-                        else
-                        {
-                            if (threadLocalState.EMR == null)
+                            if (options.Cancelled)
                             {
-                                threadLocalState = new
-                                {
-                                    threadLocalState.Service,
-                                    EMR = new ExecuteMultipleRequest
-                                    {
-                                        Requests = new OrganizationRequestCollection(),
-                                        Settings = new ExecuteMultipleSettings
-                                        {
-                                            ContinueOnError = false,
-                                            ReturnResponses = false
-                                        }
-                                    }
-                                };
+                                loopState.Stop();
+                                return threadLocalState;
                             }
 
-                            threadLocalState.EMR.Requests.Add(new UpdateRequest { Target = update });
+                            var id = entity[IdColumn];
+                            if (id is AliasedValue alias)
+                                id = alias.Value;
 
-                            if (threadLocalState.EMR.Requests.Count == options.BatchSize)
+                            var update = new Entity(EntityName);
+                            update.Id = (Guid)id;
+
+                            foreach (var attr in Updates)
+                                update[attr.Key] = attr.Value(entity);
+
+                            if (options.BatchSize == 1)
                             {
-                                var newCount = Interlocked.Add(ref count, threadLocalState.EMR.Requests.Count);
+                                var newCount = Interlocked.Increment(ref inProgressCount);
+                                options.Progress($"Updating {meta.DisplayName?.UserLocalizedLabel?.Label} {newCount:N0} of {entities.Count:N0}...");
+                                threadLocalState.Service.Update(update);
+                                Interlocked.Increment(ref count);
+                            }
+                            else
+                            {
+                                if (threadLocalState.EMR == null)
+                                {
+                                    threadLocalState = new
+                                    {
+                                        threadLocalState.Service,
+                                        EMR = new ExecuteMultipleRequest
+                                        {
+                                            Requests = new OrganizationRequestCollection(),
+                                            Settings = new ExecuteMultipleSettings
+                                            {
+                                                ContinueOnError = false,
+                                                ReturnResponses = false
+                                            }
+                                        }
+                                    };
+                                }
+
+                                threadLocalState.EMR.Requests.Add(new UpdateRequest { Target = update });
+
+                                if (threadLocalState.EMR.Requests.Count == options.BatchSize)
+                                {
+                                    var newCount = Interlocked.Add(ref inProgressCount, threadLocalState.EMR.Requests.Count);
+
+                                    options.Progress($"Updating {GetDisplayName(0, meta)} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
+                                    var resp = (ExecuteMultipleResponse)threadLocalState.Service.Execute(threadLocalState.EMR);
+
+                                    if (resp.IsFaulted)
+                                    {
+                                        var error = resp.Responses[0];
+                                        Interlocked.Add(ref count, error.RequestIndex);
+                                        throw new ApplicationException($"Error updating {GetDisplayName(0, meta)} - " + error.Fault.Message);
+                                    }
+                                    else
+                                    {
+                                        Interlocked.Add(ref count, threadLocalState.EMR.Requests.Count);
+                                    }
+
+                                    threadLocalState = new { threadLocalState.Service, EMR = default(ExecuteMultipleRequest) };
+                                }
+                            }
+
+                            return threadLocalState;
+                        },
+                        (threadLocalState) =>
+                        {
+                            if (threadLocalState.EMR != null)
+                            {
+                                var newCount = Interlocked.Add(ref inProgressCount, threadLocalState.EMR.Requests.Count);
 
                                 options.Progress($"Updating {GetDisplayName(0, meta)} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
                                 var resp = (ExecuteMultipleResponse)threadLocalState.Service.Execute(threadLocalState.EMR);
+
                                 if (resp.IsFaulted)
-                                    throw new ApplicationException($"Error updating {GetDisplayName(0, meta)} - " + resp.Responses.First(r => r.Fault != null).Fault.Message);
-
-                                threadLocalState = new { threadLocalState.Service, EMR = default(ExecuteMultipleRequest) };
+                                {
+                                    var error = resp.Responses[0];
+                                    Interlocked.Add(ref count, error.RequestIndex);
+                                    throw new ApplicationException($"Error updating {GetDisplayName(0, meta)} - " + error.Fault.Message);
+                                }
+                                else
+                                {
+                                    Interlocked.Add(ref count, threadLocalState.EMR.Requests.Count);
+                                }
                             }
-                        }
 
-                        return threadLocalState;
-                    },
-                    (threadLocalState) =>
-                    {
-                        if (threadLocalState.EMR != null)
-                        {
-                            var newCount = Interlocked.Add(ref count, threadLocalState.EMR.Requests.Count);
+                            if (threadLocalState.Service != org)
+                                ((CrmServiceClient)threadLocalState.Service)?.Dispose();
+                        });
+                }
+            }
+            catch (Exception ex)
+            {
+                if (count == 0)
+                    throw;
 
-                            options.Progress($"Updating {GetDisplayName(0, meta)} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
-                            var resp = (ExecuteMultipleResponse)threadLocalState.Service.Execute(threadLocalState.EMR);
-                            if (resp.IsFaulted)
-                                throw new ApplicationException($"Error updating {GetDisplayName(0, meta)} - " + resp.Responses.First(r => r.Fault != null).Fault.Message);
-                        }
-
-                        if (threadLocalState.Service != org)
-                            ((CrmServiceClient)threadLocalState.Service)?.Dispose();
-                    });
+                throw new PartialSuccessException($"{count:N0} {GetDisplayName(count, meta)} updated", ex);
             }
 
             return $"{count:N0} {GetDisplayName(count, meta)} updated";
@@ -666,6 +695,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             // Otherwise, get the records to delete
+            var inProgressCount = 0;
             var count = 0;
             var entities = RetrieveAll(org, metadata, options).Entities;
 
@@ -682,77 +712,107 @@ namespace MarkMpn.Sql4Cds.Engine
             if (maxDop < 1 || svc == null)
                 maxDop = 1;
 
-            using (UseParallelConnections())
+            try
             {
-                Parallel.ForEach(entities,
-                    new ParallelOptions { MaxDegreeOfParallelism = maxDop },
-                    () => new { Service = svc?.Clone() ?? org, EMR = default(ExecuteMultipleRequest) },
-                    (entity, loopState, index, threadLocalState) =>
-                    {
-                        if (options.Cancelled)
+                using (UseParallelConnections())
+                {
+                    Parallel.ForEach(entities,
+                        new ParallelOptions { MaxDegreeOfParallelism = maxDop },
+                        () => new { Service = svc?.Clone() ?? org, EMR = default(ExecuteMultipleRequest) },
+                        (entity, loopState, index, threadLocalState) =>
                         {
-                            loopState.Stop();
-                            return threadLocalState;
-                        }
-
-                        if (options.BatchSize == 1)
-                        {
-                            var newCount = Interlocked.Increment(ref count);
-
-                            options.Progress($"Deleting {meta.DisplayName.UserLocalizedLabel.Label} {newCount:N0} of {entities.Count:N0}...");
-                            threadLocalState.Service.Execute(CreateDeleteRequest(meta, entity));
-                        }
-                        else
-                        {
-                            if (threadLocalState.EMR == null)
+                            if (options.Cancelled)
                             {
-                                threadLocalState = new
-                                {
-                                    threadLocalState.Service,
-                                    EMR = new ExecuteMultipleRequest
-                                    {
-                                        Requests = new OrganizationRequestCollection(),
-                                        Settings = new ExecuteMultipleSettings
-                                        {
-                                            ContinueOnError = false,
-                                            ReturnResponses = false
-                                        }
-                                    }
-                                };
+                                loopState.Stop();
+                                return threadLocalState;
                             }
 
-                            threadLocalState.EMR.Requests.Add(CreateDeleteRequest(meta, entity));
-
-                            if (threadLocalState.EMR.Requests.Count == options.BatchSize)
+                            if (options.BatchSize == 1)
                             {
-                                var newCount = Interlocked.Add(ref count, threadLocalState.EMR.Requests.Count);
+                                var newCount = Interlocked.Increment(ref inProgressCount);
+
+                                options.Progress($"Deleting {meta.DisplayName.UserLocalizedLabel.Label} {newCount:N0} of {entities.Count:N0}...");
+                                threadLocalState.Service.Execute(CreateDeleteRequest(meta, entity));
+
+                                Interlocked.Increment(ref count);
+                            }
+                            else
+                            {
+                                if (threadLocalState.EMR == null)
+                                {
+                                    threadLocalState = new
+                                    {
+                                        threadLocalState.Service,
+                                        EMR = new ExecuteMultipleRequest
+                                        {
+                                            Requests = new OrganizationRequestCollection(),
+                                            Settings = new ExecuteMultipleSettings
+                                            {
+                                                ContinueOnError = false,
+                                                ReturnResponses = false
+                                            }
+                                        }
+                                    };
+                                }
+
+                                threadLocalState.EMR.Requests.Add(CreateDeleteRequest(meta, entity));
+
+                                if (threadLocalState.EMR.Requests.Count == options.BatchSize)
+                                {
+                                    var newCount = Interlocked.Add(ref inProgressCount, threadLocalState.EMR.Requests.Count);
+
+                                    options.Progress($"Deleting {GetDisplayName(0, meta)} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
+                                    var resp = (ExecuteMultipleResponse)threadLocalState.Service.Execute(threadLocalState.EMR);
+
+                                    if (resp.IsFaulted)
+                                    {
+                                        var error = resp.Responses[0];
+                                        Interlocked.Add(ref count, error.RequestIndex);
+                                        throw new ApplicationException($"Error deleting {GetDisplayName(0, meta)} - " + error.Fault.Message);
+                                    }
+                                    else
+                                    {
+                                        Interlocked.Add(ref count, threadLocalState.EMR.Requests.Count);
+                                    }
+
+                                    threadLocalState = new { threadLocalState.Service, EMR = default(ExecuteMultipleRequest) };
+                                }
+                            }
+
+                            return threadLocalState;
+                        },
+                        (threadLocalState) =>
+                        {
+                            if (threadLocalState.EMR != null)
+                            {
+                                var newCount = Interlocked.Add(ref inProgressCount, threadLocalState.EMR.Requests.Count);
 
                                 options.Progress($"Deleting {GetDisplayName(0, meta)} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
                                 var resp = (ExecuteMultipleResponse)threadLocalState.Service.Execute(threadLocalState.EMR);
+
                                 if (resp.IsFaulted)
-                                    throw new ApplicationException($"Error deleting {GetDisplayName(0, meta)} - " + resp.Responses.First(r => r.Fault != null).Fault.Message);
-
-                                threadLocalState = new { threadLocalState.Service, EMR = default(ExecuteMultipleRequest) };
+                                {
+                                    var error = resp.Responses[0];
+                                    Interlocked.Add(ref count, error.RequestIndex);
+                                    throw new ApplicationException($"Error deleting {GetDisplayName(0, meta)} - " + error.Fault.Message);
+                                }
+                                else
+                                {
+                                    Interlocked.Add(ref count, threadLocalState.EMR.Requests.Count);
+                                }
                             }
-                        }
 
-                        return threadLocalState;
-                    },
-                    (threadLocalState) =>
-                    {
-                        if (threadLocalState.EMR != null)
-                        {
-                            var newCount = Interlocked.Add(ref count, threadLocalState.EMR.Requests.Count);
+                            if (threadLocalState.Service != org)
+                                ((CrmServiceClient)threadLocalState.Service)?.Dispose();
+                        });
+                }
+            }
+            catch (Exception ex)
+            {
+                if (count == 0)
+                    throw;
 
-                            options.Progress($"Deleting {GetDisplayName(0, meta)} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
-                            var resp = (ExecuteMultipleResponse)threadLocalState.Service.Execute(threadLocalState.EMR);
-                            if (resp.IsFaulted)
-                                throw new ApplicationException($"Error deleting {GetDisplayName(0, meta)} - " + resp.Responses.First(r => r.Fault != null).Fault.Message);
-                        }
-
-                        if (threadLocalState.Service != org)
-                            ((CrmServiceClient)threadLocalState.Service)?.Dispose();
-                    });
+                throw new PartialSuccessException($"{count:N0} {GetDisplayName(count, meta)} deleted", ex);
             }
 
             return $"{count:N0} {GetDisplayName(count, meta)} deleted";
@@ -819,42 +879,45 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (maxDop < 1 || svc == null)
                     maxDop = 1;
 
-                using (UseParallelConnections())
+                try
                 {
-                    Parallel.ForEach(entities,
-                        new ParallelOptions { MaxDegreeOfParallelism = maxDop },
-                        () => new { Service = svc?.Clone() ?? org },
-                        (entity, loopState, index, threadLocalState) =>
-                        {
-                            if (options.Cancelled)
+                    using (UseParallelConnections())
+                    {
+                        Parallel.ForEach(entities,
+                            new ParallelOptions { MaxDegreeOfParallelism = maxDop },
+                            () => new { Service = svc?.Clone() ?? org },
+                            (entity, loopState, index, threadLocalState) =>
                             {
-                                loopState.Stop();
-                                return threadLocalState;
-                            }
-
-                            // Special cases for intersect entities
-                            if (LogicalName == "listmember")
-                            {
-                                var listId = entity.GetAttributeValue<EntityReference>("listid");
-                                var entityId = entity.GetAttributeValue<EntityReference>("entityid");
-
-                                if (listId == null)
-                                    throw new ApplicationException("listid is required");
-
-                                if (entityId == null)
-                                    throw new ApplicationException("entityid is required");
-
-                                threadLocalState.Service.Execute(new AddMemberListRequest
+                                if (options.Cancelled)
                                 {
-                                    ListId = listId.Id,
-                                    EntityId = entityId.Id
-                                });
-                            }
-                            else if (meta.IsIntersect == true)
-                            {
-                                // For generic intersect entities we expect a single many-to-many relationship in the metadata which describes
-                                // the relationship that this is the intersect entity for
-                                var relationship = meta.ManyToManyRelationships.Single();
+                                    loopState.Stop();
+                                    return threadLocalState;
+                                }
+
+                                // Special cases for intersect entities
+                                if (LogicalName == "listmember")
+                                {
+                                    var listId = entity.GetAttributeValue<EntityReference>("listid");
+                                    var entityId = entity.GetAttributeValue<EntityReference>("entityid");
+
+                                    if (listId == null)
+                                        throw new ApplicationException("listid is required");
+
+                                    if (entityId == null)
+                                        throw new ApplicationException("entityid is required");
+
+                                    threadLocalState.Service.Execute(new AddMemberListRequest
+                                    {
+                                        ListId = listId.Id,
+                                        EntityId = entityId.Id
+                                    });
+                                }
+                                else if (meta.IsIntersect == true)
+                                {
+                                    // For generic intersect entities we expect a single many-to-many relationship in the metadata which describes
+                                    // the relationship that this is the intersect entity for
+                                    var relationship = meta.ManyToManyRelationships.Single();
+
                                     // Depending on the source of the data the values being inserted might be of various different types, so we need
                                     // to do some manual conversion
                                     entity.Attributes.TryGetValue(relationship.Entity1IntersectAttribute, out var e1);
@@ -894,32 +957,42 @@ namespace MarkMpn.Sql4Cds.Engine
                                         else
                                             throw new InvalidOperationException($"Cannot convert value '{e2}' of type '{e2.GetType()}' to '{typeof(EntityReference)}' for attribute {relationship.Entity2IntersectAttribute}");
                                     }
+
+                                    threadLocalState.Service.Execute(new AssociateRequest
+                                    {
+                                        Target = entity1,
+                                        Relationship = new Relationship(relationship.SchemaName) { PrimaryEntityRole = EntityRole.Referencing },
+                                        RelatedEntities = new EntityReferenceCollection(new[] { entity2 })
+                                    });
+                                }
+                                else
                                 {
-                                    Target = entity1,
-                                    Relationship = new Relationship(relationship.SchemaName) { PrimaryEntityRole = EntityRole.Referencing },
-                                    RelatedEntities = new EntityReferenceCollection(new[] { entity2 })
-                                });
-                            }
-                            else
+                                    threadLocalState.Service.Create(entity);
+                                }
+
+                                var inserted = Interlocked.Increment(ref count);
+
+                                options.Progress($"Inserted {inserted:N0} of {entities.Length:N0} {GetDisplayName(0, meta)} ({(float)count / entities.Length:P0})");
+
+                                return threadLocalState;
+                            },
+                            (threadLocalState) =>
                             {
-                                threadLocalState.Service.Create(entity);
-                            }
+                                if (threadLocalState.Service != org)
+                                    ((CrmServiceClient)threadLocalState.Service)?.Dispose();
+                            });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    if (count == 0)
+                        throw;
 
-                            var inserted = Interlocked.Increment(ref count);
-
-                            options.Progress($"Inserted {inserted:N0} of {entities.Length:N0} {GetDisplayName(0, meta)} ({(float)count / entities.Length:P0})");
-
-                            return threadLocalState;
-                        },
-                        (threadLocalState) =>
-                        {
-                            if (threadLocalState.Service != org)
-                                ((CrmServiceClient)threadLocalState.Service)?.Dispose();
-                        });
+                    throw new PartialSuccessException($"{count:N0} {GetDisplayName(count, meta)} inserted", ex);
                 }
             }
 
-            return $"{entities.Length:N0} {GetDisplayName(entities.Length, meta)} inserted";
+            return $"{count:N0} {GetDisplayName(count, meta)} inserted";
         }
     }
 
