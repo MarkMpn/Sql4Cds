@@ -262,9 +262,6 @@ namespace MarkMpn.Sql4Cds
 
             scintilla.KeyDown += (s, e) =>
             {
-                if (e.KeyCode == Keys.F5)
-                    Execute(true, Settings.Instance.IncludeFetchXml);
-
                 if (e.KeyCode == Keys.Back && scintilla.SelectedText == String.Empty)
                 {
                     var lineIndex = scintilla.LineFromPosition(scintilla.SelectionStart);
