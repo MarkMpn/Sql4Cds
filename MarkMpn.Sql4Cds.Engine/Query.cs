@@ -558,7 +558,7 @@ namespace MarkMpn.Sql4Cds.Engine
                             if (options.BatchSize == 1)
                             {
                                 var newCount = Interlocked.Increment(ref inProgressCount);
-                                options.Progress($"Updating {meta.DisplayName?.UserLocalizedLabel?.Label} {newCount:N0} of {entities.Count:N0}...");
+                                options.Progress($"Updating {newCount:N0} of {entities.Count:N0} {GetDisplayName(0, meta)} ({(float)newCount / entities.Count:P0})...");
                                 threadLocalState.Service.Update(update);
                                 Interlocked.Increment(ref count);
                             }
@@ -731,7 +731,7 @@ namespace MarkMpn.Sql4Cds.Engine
                             {
                                 var newCount = Interlocked.Increment(ref inProgressCount);
 
-                                options.Progress($"Deleting {meta.DisplayName.UserLocalizedLabel.Label} {newCount:N0} of {entities.Count:N0}...");
+                                options.Progress($"Deleting {newCount:N0} of {entities.Count:N0} {GetDisplayName(0, meta)} ({(float)newCount / entities.Count:P0})...");
                                 threadLocalState.Service.Execute(CreateDeleteRequest(meta, entity));
 
                                 Interlocked.Increment(ref count);
@@ -868,6 +868,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var meta = metadata[LogicalName];
 
             // Add each record in turn
+            var inProgressCount = 0;
             var count = 0;
             var entities = GetValues(org, metadata, options);
 
@@ -885,7 +886,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         Parallel.ForEach(entities,
                             new ParallelOptions { MaxDegreeOfParallelism = maxDop },
-                            () => new { Service = svc?.Clone() ?? org },
+                            () => new { Service = svc?.Clone() ?? org, EMR = default(ExecuteMultipleRequest) },
                             (entity, loopState, index, threadLocalState) =>
                             {
                                 if (options.Cancelled)
@@ -894,90 +895,81 @@ namespace MarkMpn.Sql4Cds.Engine
                                     return threadLocalState;
                                 }
 
-                                // Special cases for intersect entities
-                                if (LogicalName == "listmember")
+                                if (options.BatchSize == 1)
                                 {
-                                    var listId = entity.GetAttributeValue<EntityReference>("listid");
-                                    var entityId = entity.GetAttributeValue<EntityReference>("entityid");
+                                    var newCount = Interlocked.Increment(ref inProgressCount);
 
-                                    if (listId == null)
-                                        throw new ApplicationException("listid is required");
+                                    options.Progress($"Inserting {newCount:N0} of {entities.Length:N0} {GetDisplayName(0, meta)} ({(float)newCount / entities.Length:P0})...");
+                                    threadLocalState.Service.Execute(CreateInsertRequest(meta, entity));
 
-                                    if (entityId == null)
-                                        throw new ApplicationException("entityid is required");
-
-                                    threadLocalState.Service.Execute(new AddMemberListRequest
-                                    {
-                                        ListId = listId.Id,
-                                        EntityId = entityId.Id
-                                    });
-                                }
-                                else if (meta.IsIntersect == true)
-                                {
-                                    // For generic intersect entities we expect a single many-to-many relationship in the metadata which describes
-                                    // the relationship that this is the intersect entity for
-                                    var relationship = meta.ManyToManyRelationships.Single();
-
-                                    // Depending on the source of the data the values being inserted might be of various different types, so we need
-                                    // to do some manual conversion
-                                    entity.Attributes.TryGetValue(relationship.Entity1IntersectAttribute, out var e1);
-                                    entity.Attributes.TryGetValue(relationship.Entity2IntersectAttribute, out var e2);
-
-                                    if (e1 is AliasedValue a1)
-                                        e1 = a1.Value;
-
-                                    if (e2 is AliasedValue a2)
-                                        e2 = a2.Value;
-
-                                    if (e1 == null)
-                                        throw new ApplicationException($"{relationship.Entity1IntersectAttribute} is required");
-
-                                    if (e2 == null)
-                                        throw new ApplicationException($"{relationship.Entity2IntersectAttribute} is required");
-
-                                    var entity1 = e1 as EntityReference;
-                                    var entity2 = e2 as EntityReference;
-
-                                    if (entity1 == null)
-                                    {
-                                        if (e1 is Guid g1)
-                                            entity1 = new EntityReference(relationship.Entity1LogicalName, g1);
-                                        else if (e1 is string s1)
-                                            entity1 = new EntityReference(relationship.Entity1LogicalName, new Guid(s1));
-                                        else
-                                            throw new InvalidOperationException($"Cannot convert value '{e1}' of type '{e1.GetType()}' to '{typeof(EntityReference)}' for attribute {relationship.Entity1IntersectAttribute}");
-                                    }
-
-                                    if (entity2 == null)
-                                    {
-                                        if (e2 is Guid g2)
-                                            entity2 = new EntityReference(relationship.Entity2LogicalName, g2);
-                                        else if (e2 is string s2)
-                                            entity2 = new EntityReference(relationship.Entity2LogicalName, new Guid(s2));
-                                        else
-                                            throw new InvalidOperationException($"Cannot convert value '{e2}' of type '{e2.GetType()}' to '{typeof(EntityReference)}' for attribute {relationship.Entity2IntersectAttribute}");
-                                    }
-
-                                    threadLocalState.Service.Execute(new AssociateRequest
-                                    {
-                                        Target = entity1,
-                                        Relationship = new Relationship(relationship.SchemaName) { PrimaryEntityRole = EntityRole.Referencing },
-                                        RelatedEntities = new EntityReferenceCollection(new[] { entity2 })
-                                    });
+                                    Interlocked.Increment(ref count);
                                 }
                                 else
                                 {
-                                    threadLocalState.Service.Create(entity);
+                                    if (threadLocalState.EMR == null)
+                                    {
+                                        threadLocalState = new
+                                        {
+                                            threadLocalState.Service,
+                                            EMR = new ExecuteMultipleRequest
+                                            {
+                                                Requests = new OrganizationRequestCollection(),
+                                                Settings = new ExecuteMultipleSettings
+                                                {
+                                                    ContinueOnError = false,
+                                                    ReturnResponses = false
+                                                }
+                                            }
+                                        };
+                                    }
+
+                                    threadLocalState.EMR.Requests.Add(CreateInsertRequest(meta, entity));
+
+                                    if (threadLocalState.EMR.Requests.Count == options.BatchSize)
+                                    {
+                                        var newCount = Interlocked.Add(ref inProgressCount, threadLocalState.EMR.Requests.Count);
+
+                                        options.Progress($"Inserting {GetDisplayName(0, meta)} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Length:N0}...");
+                                        var resp = (ExecuteMultipleResponse)threadLocalState.Service.Execute(threadLocalState.EMR);
+
+                                        if (resp.IsFaulted)
+                                        {
+                                            var error = resp.Responses[0];
+                                            Interlocked.Add(ref count, error.RequestIndex);
+                                            throw new ApplicationException($"Error inserting {GetDisplayName(0, meta)} - " + error.Fault.Message);
+                                        }
+                                        else
+                                        {
+                                            Interlocked.Add(ref count, threadLocalState.EMR.Requests.Count);
+                                        }
+
+                                        threadLocalState = new { threadLocalState.Service, EMR = default(ExecuteMultipleRequest) };
+                                    }
                                 }
-
-                                var inserted = Interlocked.Increment(ref count);
-
-                                options.Progress($"Inserted {inserted:N0} of {entities.Length:N0} {GetDisplayName(0, meta)} ({(float)count / entities.Length:P0})");
 
                                 return threadLocalState;
                             },
                             (threadLocalState) =>
                             {
+                                if (threadLocalState.EMR != null)
+                                {
+                                    var newCount = Interlocked.Add(ref inProgressCount, threadLocalState.EMR.Requests.Count);
+
+                                    options.Progress($"Inserting {GetDisplayName(0, meta)} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Length:N0}...");
+                                    var resp = (ExecuteMultipleResponse)threadLocalState.Service.Execute(threadLocalState.EMR);
+
+                                    if (resp.IsFaulted)
+                                    {
+                                        var error = resp.Responses[0];
+                                        Interlocked.Add(ref count, error.RequestIndex);
+                                        throw new ApplicationException($"Error inserting {GetDisplayName(0, meta)} - " + error.Fault.Message);
+                                    }
+                                    else
+                                    {
+                                        Interlocked.Add(ref count, threadLocalState.EMR.Requests.Count);
+                                    }
+                                }
+
                                 if (threadLocalState.Service != org)
                                     ((CrmServiceClient)threadLocalState.Service)?.Dispose();
                             });
@@ -993,6 +985,85 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             return $"{count:N0} {GetDisplayName(count, meta)} inserted";
+        }
+
+        private OrganizationRequest CreateInsertRequest(EntityMetadata meta, Entity entity)
+        {
+            // Special cases for intersect entities
+            if (LogicalName == "listmember")
+            {
+                var listId = entity.GetAttributeValue<EntityReference>("listid");
+                var entityId = entity.GetAttributeValue<EntityReference>("entityid");
+
+                if (listId == null)
+                    throw new ApplicationException("listid is required");
+
+                if (entityId == null)
+                    throw new ApplicationException("entityid is required");
+
+                return new AddMemberListRequest
+                {
+                    ListId = listId.Id,
+                    EntityId = entityId.Id
+                };
+            }
+            else if (meta.IsIntersect == true)
+            {
+                // For generic intersect entities we expect a single many-to-many relationship in the metadata which describes
+                // the relationship that this is the intersect entity for
+                var relationship = meta.ManyToManyRelationships.Single();
+
+                // Depending on the source of the data the values being inserted might be of various different types, so we need
+                // to do some manual conversion
+                entity.Attributes.TryGetValue(relationship.Entity1IntersectAttribute, out var e1);
+                entity.Attributes.TryGetValue(relationship.Entity2IntersectAttribute, out var e2);
+
+                if (e1 is AliasedValue a1)
+                    e1 = a1.Value;
+
+                if (e2 is AliasedValue a2)
+                    e2 = a2.Value;
+
+                if (e1 == null)
+                    throw new ApplicationException($"{relationship.Entity1IntersectAttribute} is required");
+
+                if (e2 == null)
+                    throw new ApplicationException($"{relationship.Entity2IntersectAttribute} is required");
+
+                var entity1 = e1 as EntityReference;
+                var entity2 = e2 as EntityReference;
+
+                if (entity1 == null)
+                {
+                    if (e1 is Guid g1)
+                        entity1 = new EntityReference(relationship.Entity1LogicalName, g1);
+                    else if (e1 is string s1)
+                        entity1 = new EntityReference(relationship.Entity1LogicalName, new Guid(s1));
+                    else
+                        throw new InvalidOperationException($"Cannot convert value '{e1}' of type '{e1.GetType()}' to '{typeof(EntityReference)}' for attribute {relationship.Entity1IntersectAttribute}");
+                }
+
+                if (entity2 == null)
+                {
+                    if (e2 is Guid g2)
+                        entity2 = new EntityReference(relationship.Entity2LogicalName, g2);
+                    else if (e2 is string s2)
+                        entity2 = new EntityReference(relationship.Entity2LogicalName, new Guid(s2));
+                    else
+                        throw new InvalidOperationException($"Cannot convert value '{e2}' of type '{e2.GetType()}' to '{typeof(EntityReference)}' for attribute {relationship.Entity2IntersectAttribute}");
+                }
+
+                return new AssociateRequest
+                {
+                    Target = entity1,
+                    Relationship = new Relationship(relationship.SchemaName) { PrimaryEntityRole = EntityRole.Referencing },
+                    RelatedEntities = new EntityReferenceCollection(new[] { entity2 })
+                };
+            }
+            else
+            {
+                return new CreateRequest { Target = entity };
+            }
         }
     }
 

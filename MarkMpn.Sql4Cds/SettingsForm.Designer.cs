@@ -57,6 +57,7 @@
             this.retrieveTotalRecordCountCheckbox = new System.Windows.Forms.CheckBox();
             this.tsqlEndpointCheckBox = new System.Windows.Forms.CheckBox();
             this.groupBox2 = new System.Windows.Forms.GroupBox();
+            this.autoSizeColumnsCheckBox = new System.Windows.Forms.CheckBox();
             this.localTimesComboBox = new System.Windows.Forms.ComboBox();
             this.label11 = new System.Windows.Forms.Label();
             this.friendlyNamesComboBox = new System.Windows.Forms.ComboBox();
@@ -65,7 +66,6 @@
             this.quotedIdentifiersCheckbox = new System.Windows.Forms.CheckBox();
             this.groupBox4 = new System.Windows.Forms.GroupBox();
             this.showTooltipsCheckbox = new System.Windows.Forms.CheckBox();
-            this.autoSizeColumnsCheckBox = new System.Windows.Forms.CheckBox();
             this.topPanel.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox)).BeginInit();
             this.panel2.SuspendLayout();
@@ -270,7 +270,7 @@
             // label8
             // 
             this.label8.AutoSize = true;
-            this.label8.Location = new System.Drawing.Point(320, 144);
+            this.label8.Location = new System.Drawing.Point(335, 144);
             this.label8.Name = "label8";
             this.label8.Size = new System.Drawing.Size(42, 13);
             this.label8.TabIndex = 15;
@@ -278,7 +278,7 @@
             // 
             // batchSizeUpDown
             // 
-            this.batchSizeUpDown.Location = new System.Drawing.Point(212, 142);
+            this.batchSizeUpDown.Location = new System.Drawing.Point(227, 142);
             this.batchSizeUpDown.Maximum = new decimal(new int[] {
             1000,
             0,
@@ -303,9 +303,9 @@
             this.label9.AutoSize = true;
             this.label9.Location = new System.Drawing.Point(10, 144);
             this.label9.Name = "label9";
-            this.label9.Size = new System.Drawing.Size(197, 13);
+            this.label9.Size = new System.Drawing.Size(211, 13);
             this.label9.TabIndex = 13;
-            this.label9.Text = "Update and delete records in batches of";
+            this.label9.Text = "Insert/Update/Delete records in batches of";
             // 
             // groupBox1
             // 
@@ -409,6 +409,16 @@
             this.groupBox2.TabStop = false;
             this.groupBox2.Text = "Results";
             // 
+            // autoSizeColumnsCheckBox
+            // 
+            this.autoSizeColumnsCheckBox.AutoSize = true;
+            this.autoSizeColumnsCheckBox.Location = new System.Drawing.Point(13, 69);
+            this.autoSizeColumnsCheckBox.Name = "autoSizeColumnsCheckBox";
+            this.autoSizeColumnsCheckBox.Size = new System.Drawing.Size(158, 17);
+            this.autoSizeColumnsCheckBox.TabIndex = 18;
+            this.autoSizeColumnsCheckBox.Text = "Auto-size columns to fit data";
+            this.autoSizeColumnsCheckBox.UseVisualStyleBackColor = true;
+            // 
             // localTimesComboBox
             // 
             this.localTimesComboBox.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
@@ -494,16 +504,6 @@
             this.showTooltipsCheckbox.TabIndex = 0;
             this.showTooltipsCheckbox.Text = "Show tooltips";
             this.showTooltipsCheckbox.UseVisualStyleBackColor = true;
-            // 
-            // autoSizeColumnsCheckBox
-            // 
-            this.autoSizeColumnsCheckBox.AutoSize = true;
-            this.autoSizeColumnsCheckBox.Location = new System.Drawing.Point(13, 69);
-            this.autoSizeColumnsCheckBox.Name = "autoSizeColumnsCheckBox";
-            this.autoSizeColumnsCheckBox.Size = new System.Drawing.Size(158, 17);
-            this.autoSizeColumnsCheckBox.TabIndex = 18;
-            this.autoSizeColumnsCheckBox.Text = "Auto-size columns to fit data";
-            this.autoSizeColumnsCheckBox.UseVisualStyleBackColor = true;
             // 
             // SettingsForm
             // 
