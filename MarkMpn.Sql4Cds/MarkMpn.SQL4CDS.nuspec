@@ -23,7 +23,7 @@ plugins or integrations by writing familiar SQL and converting it.
 Using the preview T-SQL endpoint, SELECT queries can also be run that aren't convertible to FetchXML.</description>
     <summary>Convert SQL queries to FetchXML and execute them against CDS</summary>
     <releaseNotes>Improved UI for displaying results from multiple queries
-Improved performance of bulk update &amp; delete queries
+Improved performance of bulk insert, update &amp; delete queries
 Intellisense UI and performance improvements
 Option to impersonate other users when running queries
 SQL language support improvements</releaseNotes>
