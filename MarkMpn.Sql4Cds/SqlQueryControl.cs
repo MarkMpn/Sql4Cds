@@ -936,7 +936,7 @@ namespace MarkMpn.Sql4Cds
 
             var queries = converter.Convert(args.Sql);
 
-            var options = new QueryExecutionOptions(Service, backgroundWorker);
+            var options = new QueryExecutionOptions(Service, backgroundWorker, this);
 
             if (args.Execute)
             {

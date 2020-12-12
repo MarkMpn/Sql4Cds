@@ -12,12 +12,14 @@ namespace MarkMpn.Sql4Cds
     {
         private readonly IOrganizationService _org;
         private readonly BackgroundWorker _worker;
+        private readonly Control _host;
         private int _localeId;
 
-        public QueryExecutionOptions(IOrganizationService org, BackgroundWorker worker)
+        public QueryExecutionOptions(IOrganizationService org, BackgroundWorker worker, Control host)
         {
             _org = org;
             _worker = worker;
+            _host = host;
         }
 
         public bool Cancelled => _worker.CancellationPending;
@@ -32,7 +34,7 @@ namespace MarkMpn.Sql4Cds
         {
             if (count > Settings.Instance.UpdateWarnThreshold)
             {
-                var result = MessageBox.Show($"Update will affect {count:N0} {GetDisplayName(count, meta)}. Do you want to proceed?", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+                var result = MessageBox.Show(_host, $"Update will affect {count:N0} {GetDisplayName(count, meta)}. Do you want to proceed?", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
 
                 if (result == DialogResult.No)
                     return false;
@@ -45,7 +47,7 @@ namespace MarkMpn.Sql4Cds
         {
             if (count > Settings.Instance.DeleteWarnThreshold)
             {
-                var result = MessageBox.Show($"Delete will affect {count:N0} {GetDisplayName(count, meta)}. Do you want to proceed?", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+                var result = MessageBox.Show(_host, $"Delete will affect {count:N0} {GetDisplayName(count, meta)}. Do you want to proceed?", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
 
                 if (result == DialogResult.No)
                     return false;
