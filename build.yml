@@ -21,7 +21,7 @@ steps:
     command: custom
     arguments: install GitVersion.CommandLine -Version 4.0.0 -OutputDirectory $(Build.BinariesDirectory)/tools -ExcludeVersion
 
-- script: $(Build.BinariesDirectory)/tools/GitVersion.CommandLine/tools/GitVersion.exe /output buildserver /nofetch
+- script: $(Build.BinariesDirectory)/tools/GitVersion.CommandLine/tools/GitVersion.exe /output buildserver /nofetch /updateassemblyinfo
   displayName: Determine Version
   
 - task: NuGetCommand@2
@@ -36,7 +36,6 @@ steps:
     solution: '$(solution)'
     platform: '$(buildPlatform)'
     configuration: '$(buildConfiguration)'
-    msbuildArgs: '/p:Version=$(GitVersion.NuGetVersion)'
 
 - task: VSTest@2
   inputs:
