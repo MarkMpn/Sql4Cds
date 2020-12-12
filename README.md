@@ -57,3 +57,9 @@ FROM   entity
        ON entity.logicalname = attribute.entitylogicalname
 WHERE  attribute.description IS NULL
 ```
+
+## FetchXML Builder Integration
+
+As well as writing and executing queries as SQL, the generated FetchXML can be sent to [FetchXML Builder](https://fetchxmlbuilder.com/)
+for further editing or converting to another syntax such as OData. You can also start building a query in FetchXML Builder and then edit
+it in SQL 4 CDS.
