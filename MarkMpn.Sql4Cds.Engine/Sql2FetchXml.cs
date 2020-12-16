@@ -683,6 +683,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var er = value as EntityReference;
             var m = value as Money;
             var osv = value as OptionSetValue;
+            var osvc = value as OptionSetValueCollection;
 
             // Handle the conversion for each attribute type
             switch (attr.AttributeType)
@@ -832,6 +833,30 @@ namespace MarkMpn.Sql4Cds.Engine
                         return g.Value;
                     if (er != null)
                         return er.Id;
+                    throw new InvalidOperationException($"Cannot convert value '{value}' of type '{value.GetType()}' to '{attr.AttributeType}' for attribute {attrName}");
+
+                case AttributeTypeCode.Virtual:
+                    if (attr.AttributeTypeName.Value == "MultiSelectPicklistType")
+                    {
+                        if (osvc != null)
+                            return osvc;
+                        if (osv != null)
+                            return new OptionSetValueCollection(new[] { osv });
+                        if (i != null)
+                            return new OptionSetValueCollection(new[] { new OptionSetValue(i.Value) });
+                        if (str != null)
+                        {
+                            var parts = str.Split(',');
+                            osvc = new OptionSetValueCollection();
+                            foreach(var part in parts)
+                            {
+                                if (!Int32.TryParse(part.Trim(), out var val))
+                                    throw new InvalidOperationException($"Cannot convert value '{part}' of type '{part.GetType()}' to '{attr.AttributeType}' for attribute {attrName}");
+                                osvc.Add(new OptionSetValue(val));
+                            }
+                            return osvc;
+                        }
+                    }
                     throw new InvalidOperationException($"Cannot convert value '{value}' of type '{value.GetType()}' to '{attr.AttributeType}' for attribute {attrName}");
 
                 default:
