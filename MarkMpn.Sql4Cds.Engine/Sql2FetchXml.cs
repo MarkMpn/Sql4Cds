@@ -184,7 +184,7 @@ namespace MarkMpn.Sql4Cds.Engine
         public bool QuotedIdentifiers { get; set; }
 
         /// <summary>
-        /// Indicates if the CDS T-SQL endpoint can be used as a fallback if a query cannot be converted to FetchXML
+        /// Indicates if the CDS TDS endpoint can be used as a fallback if a query cannot be converted to FetchXML
         /// </summary>
         public bool TSqlEndpointAvailable { get; set; }
 
@@ -1555,7 +1555,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             catch (NotSupportedQueryFragmentException)
             {
-                // Check if we can still execute the raw query using the T-SQL endpoint instead
+                // Check if we can still execute the raw query using the TDS endpoint instead
                 if (!TSqlEndpointAvailable)
                     throw;
 
