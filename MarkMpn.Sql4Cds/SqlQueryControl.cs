@@ -109,6 +109,7 @@ namespace MarkMpn.Sql4Cds
             _log = log;
             _stopwatch = new Stopwatch();
             SyncTitle();
+            BusyChanged += (s, e) => SyncTitle();
 
             // Populate the status bar and add separators between each field
             hostLabel.Text = new Uri(_con.OrganizationServiceUrl).Host;
@@ -144,10 +145,12 @@ namespace MarkMpn.Sql4Cds
 
         private void SyncTitle()
         {
+            var busySuffix = Busy ? " Executing..." : "";
+
             if (_modified)
-                Text = $"{_displayName} * ({_con.ConnectionName})";
+                Text = $"{_displayName}{busySuffix} * ({_con.ConnectionName})";
             else
-                Text = $"{_displayName} ({_con.ConnectionName})";
+                Text = $"{_displayName}{busySuffix} ({_con.ConnectionName})";
         }
 
         public void SetFocus()
@@ -259,9 +262,6 @@ namespace MarkMpn.Sql4Cds
 
             scintilla.KeyDown += (s, e) =>
             {
-                if (e.KeyCode == Keys.F5)
-                    Execute(true, Settings.Instance.IncludeFetchXml);
-
                 if (e.KeyCode == Keys.Back && scintilla.SelectedText == String.Empty)
                 {
                     var lineIndex = scintilla.LineFromPosition(scintilla.SelectionStart);

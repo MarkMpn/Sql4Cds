@@ -213,6 +213,7 @@
             this.rowsLabel});
             this.statusStrip.Location = new System.Drawing.Point(0, 452);
             this.statusStrip.Name = "statusStrip";
+            this.statusStrip.ShowItemToolTips = true;
             this.statusStrip.Size = new System.Drawing.Size(595, 22);
             this.statusStrip.SizingGrip = false;
             this.statusStrip.TabIndex = 1;
@@ -227,6 +228,7 @@
             this.toolStripStatusLabel.Spring = true;
             this.toolStripStatusLabel.Text = "Connected";
             this.toolStripStatusLabel.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            this.toolStripStatusLabel.ToolTipText = "Connection status";
             // 
             // hostLabel
             // 
@@ -234,24 +236,28 @@
             this.hostLabel.Name = "hostLabel";
             this.hostLabel.Size = new System.Drawing.Size(164, 17);
             this.hostLabel.Text = "orgxxx.crm.dynamics.com";
+            this.hostLabel.ToolTipText = "Server URL";
             // 
             // orgNameLabel
             // 
             this.orgNameLabel.Name = "orgNameLabel";
             this.orgNameLabel.Size = new System.Drawing.Size(43, 17);
             this.orgNameLabel.Text = "orgxxx";
+            this.orgNameLabel.ToolTipText = "Organization Name";
             // 
             // timerLabel
             // 
             this.timerLabel.Name = "timerLabel";
             this.timerLabel.Size = new System.Drawing.Size(49, 17);
             this.timerLabel.Text = "00:00:00";
+            this.timerLabel.ToolTipText = "Query execution time";
             // 
             // rowsLabel
             // 
             this.rowsLabel.Name = "rowsLabel";
             this.rowsLabel.Size = new System.Drawing.Size(41, 17);
             this.rowsLabel.Text = "0 rows";
+            this.rowsLabel.ToolTipText = "Number of rows returned";
             // 
             // backgroundWorker
             // 
@@ -275,6 +281,7 @@
             this.usernameDropDownButton.Name = "usernameDropDownButton";
             this.usernameDropDownButton.Size = new System.Drawing.Size(153, 20);
             this.usernameDropDownButton.Text = "username@contoso.com";
+            this.usernameDropDownButton.ToolTipText = "Impersonate other user";
             // 
             // impersonateMenuItem
             // 
