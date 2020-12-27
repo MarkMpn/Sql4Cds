@@ -39,6 +39,10 @@ namespace MarkMpn.Sql4Cds
         /// <returns>A sequence of suggestions to be shown to the user</returns>
         public IEnumerable<SqlAutocompleteItem> GetSuggestions(string text, int pos)
         {
+            // Don't try to auto-complete inside string literals
+            if (InStringLiteral(text, pos))
+                return Array.Empty<SqlAutocompleteItem>();
+
             // If we're in the first word after a FROM or JOIN, show a list of table names
             string currentWord = null;
             string prevWord = null;
@@ -60,6 +64,10 @@ namespace MarkMpn.Sql4Cds
                     break;
                 }
             }
+
+            // Don't try to auto-complete numbers
+            if (Decimal.TryParse(currentWord, out _))
+                return Array.Empty<SqlAutocompleteItem>();
 
             var currentLength = currentWord.Length;
 
@@ -426,6 +434,22 @@ namespace MarkMpn.Sql4Cds
             }
 
             return Array.Empty<SqlAutocompleteItem>();
+        }
+
+        private bool InStringLiteral(string text, int pos)
+        {
+            var i = -1;
+            var quotes = 0;
+
+            while ((i = text.IndexOf('\'', i + 1)) != -1)
+            {
+                if (i > pos)
+                    break;
+
+                quotes++;
+            }
+
+            return (quotes % 2) == 1;
         }
 
         private IEnumerable<SqlAutocompleteItem> FilterList(IEnumerable<SqlAutocompleteItem> list, string currentWord)
