@@ -930,7 +930,7 @@ namespace MarkMpn.Sql4Cds
             if (Settings.Instance.UseTSQLEndpoint &&
                 args.Execute &&
                 !String.IsNullOrEmpty(((CrmServiceClient)Service).CurrentAccessToken))
-                converter.TSqlEndpointAvailable = true;
+                converter.TDSEndpointAvailable = true;
 
             converter.ColumnComparisonAvailable = new Version(_con.OrganizationVersion) >= new Version("9.1.0.19251");
 

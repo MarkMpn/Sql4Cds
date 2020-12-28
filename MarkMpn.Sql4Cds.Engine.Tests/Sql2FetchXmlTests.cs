@@ -28,7 +28,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         int IQueryExecutionOptions.BatchSize => 1;
 
-        bool IQueryExecutionOptions.UseTSQLEndpoint => false;
+        bool IQueryExecutionOptions.UseTDSEndpoint => false;
 
         bool IQueryExecutionOptions.UseRetrieveTotalRecordCount => true;
 
@@ -2102,7 +2102,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
-            sql2FetchXml.TSqlEndpointAvailable = true;
+            sql2FetchXml.TDSEndpointAvailable = true;
 
             var query = "SELECT COUNT(*) FROM account WHERE name IS NULL";
 
@@ -2691,7 +2691,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var parentcustomeridtype = new StringAttributeMetadata { LogicalName = "parentcustomeridtype" };
             typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.Attributes)).SetValue(metadata["contact"], metadata["contact"].Attributes.Concat(new[] { parentcustomeridtype }).ToArray());
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
-            sql2FetchXml.TSqlEndpointAvailable = true;
+            sql2FetchXml.TDSEndpointAvailable = true;
 
             var query = @"
                 UPDATE c

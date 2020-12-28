@@ -78,7 +78,7 @@ namespace MarkMpn.Sql4Cds
 
         public int BatchSize => Settings.Instance.BatchSize;
 
-        public bool UseTSQLEndpoint => Settings.Instance.UseTSQLEndpoint;
+        public bool UseTDSEndpoint => Settings.Instance.UseTSQLEndpoint;
 
         public bool UseRetrieveTotalRecordCount => Settings.Instance.UseRetrieveTotalRecordCount;
 

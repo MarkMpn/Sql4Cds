@@ -91,9 +91,6 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </remarks>
         public void Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
-            var stopwatch = new Stopwatch();
-            stopwatch.Start();
-
             try
             {
                 Result = ExecuteInternal(org, metadata, options);
@@ -102,9 +99,6 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 Result = ex;
             }
-
-            stopwatch.Stop();
-            Duration = stopwatch.Elapsed;
         }
 
         /// <summary>
@@ -124,13 +118,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// an exception if the query failed, or a <see cref="String"/> value containing a human-readable description of the query status.
         /// </remarks>
         public object Result { get; private set; }
-
-        /// <summary>
-        /// The time taken to <see cref="Execute(IOrganizationService, IAttributeMetadataCache, IQueryExecutionOptions)"/>
-        /// the query
-        /// </summary>
-        public TimeSpan Duration { get; private set; }
-
+        
         /// <summary>
         /// Changes system settings to optimise for parallel connections
         /// </summary>
@@ -145,6 +133,28 @@ namespace MarkMpn.Sql4Cds.Engine
             return meta.DisplayCollectionName?.UserLocalizedLabel?.Label ??
                 meta.LogicalCollectionName ??
                 meta.LogicalName;
+        }
+
+        protected ICollection<Entity> DataTableToEntityCollection(DataTable dataTable, string entityLogicalName, string primaryIdAttribute)
+        {
+            return dataTable.Rows
+                .OfType<DataRow>()
+                .Select(r =>
+                {
+                    var entity = new Entity();
+
+                    if (!String.IsNullOrEmpty(entityLogicalName))
+                        entity.LogicalName = entityLogicalName;
+
+                    if (!String.IsNullOrEmpty(primaryIdAttribute))
+                        entity.Id = (Guid)r[primaryIdAttribute];
+
+                    foreach (DataColumn col in dataTable.Columns)
+                        entity[col.ColumnName] = r[col];
+
+                    return entity;
+                })
+                .ToList();
         }
     }
 
@@ -354,7 +364,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (String.IsNullOrEmpty(TSql))
                 return false;
 
-            if (!options.UseTSQLEndpoint)
+            if (!options.UseTDSEndpoint)
                 return false;
 
             if (!(org is CrmServiceClient svc))
@@ -384,28 +394,6 @@ namespace MarkMpn.Sql4Cds.Engine
                     return true;
                 }
             }
-        }
-
-        protected ICollection<Entity> DataTableToEntityCollection(DataTable dataTable, string entityLogicalName, string primaryIdAttribute)
-        {
-            return dataTable.Rows
-                .OfType<DataRow>()
-                .Select(r =>
-                {
-                    var entity = new Entity();
-
-                    if (!String.IsNullOrEmpty(entityLogicalName))
-                        entity.LogicalName = entityLogicalName;
-
-                    if (!String.IsNullOrEmpty(primaryIdAttribute))
-                        entity.Id = (Guid) r[primaryIdAttribute];
-
-                    foreach (DataColumn col in dataTable.Columns)
-                        entity[col.ColumnName] = r[col];
-
-                    return entity;
-                })
-                .ToList();
         }
 
         /// <summary>
@@ -729,7 +717,12 @@ namespace MarkMpn.Sql4Cds.Engine
             // Otherwise, get the records to delete
             var inProgressCount = 0;
             var count = 0;
-            var entities = RetrieveAll(org, metadata, options).Entities;
+            ICollection<Entity> entities;
+
+            if (ExecuteTSQL(org, options, out var datatable))
+                entities = DataTableToEntityCollection(datatable, EntityName, null);
+            else
+                entities = RetrieveAll(org, metadata, options).Entities;
 
             if (entities == null)
                 return null;
@@ -1148,7 +1141,12 @@ namespace MarkMpn.Sql4Cds.Engine
                 throw ex;
 
             if (!(Source.Result is EntityCollection entities))
-                return null;
+            {
+                if (Source.Result is DataTable dataTable)
+                    entities = new EntityCollection(DataTableToEntityCollection(dataTable, LogicalName, null).ToList());
+                else
+                    return null;
+            }
 
             var converted = new List<Entity>(entities.Entities.Count);
 

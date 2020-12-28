@@ -64,7 +64,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// Indicates if the TDS Endpoint should be used for query execution where possible
         /// </summary>
-        bool UseTSQLEndpoint { get; }
+        bool UseTDSEndpoint { get; }
 
         /// <summary>
         /// Indicates if a <see cref="Microsoft.Crm.Sdk.Messages.RetrieveTotalRecordCountRequest"/> should be used for simple SELECT count(*) FROM table queries

@@ -15,7 +15,7 @@ namespace MarkMpn.Sql4Cds.SSMS
 
         public int BatchSize => 100;
 
-        public bool UseTSQLEndpoint => true;
+        public bool UseTDSEndpoint => true;
 
         public bool UseRetrieveTotalRecordCount => false;
 

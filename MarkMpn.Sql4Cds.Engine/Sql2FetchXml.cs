@@ -186,7 +186,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// Indicates if the CDS TDS endpoint can be used as a fallback if a query cannot be converted to FetchXML
         /// </summary>
-        public bool TSqlEndpointAvailable { get; set; }
+        public bool TDSEndpointAvailable { get; set; }
 
         /// <summary>
         /// Indicates if the CDS TDS endpoint should be used wherever possible
@@ -234,7 +234,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     var originalSql = statement.ToSql();
                     string sqlStatement = null;
 
-                    if (TSqlEndpointAvailable)
+                    if (TDSEndpointAvailable)
                     {
                         var statementFragment = dom.Parse(new StringReader(statement.ToSql()), out _);
                         var statementScript = (TSqlScript)statementFragment;
@@ -259,9 +259,6 @@ namespace MarkMpn.Sql4Cds.Engine
                         query = ConvertRevertStatement(revert);
                     else
                         throw new NotSupportedQueryFragmentException("Unsupported statement", statement);
-
-                    if (String.IsNullOrEmpty(query.TSql))
-                        query.TSql = sqlStatement;
 
                     query.Sql = originalSql;
                     query.Index = index;
@@ -464,7 +461,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="delete">The SQL query to convert</param>
         /// <returns>The equivalent query converted for execution against CDS</returns>
-        private Query ConvertDeleteStatement(DeleteStatement delete)
+        private DeleteQuery ConvertDeleteStatement(DeleteStatement delete)
         {
             // Check for any DOM elements that don't have an equivalent in CDS
             if (delete.OptimizerHints.Count != 0)
@@ -494,6 +491,24 @@ namespace MarkMpn.Sql4Cds.Engine
                 };
             }
 
+            if (ForceTDSEndpoint)
+                return ConvertDeleteStatementTDS(delete, target);
+
+            try
+            {
+                return ConvertDeleteStatementFetchXml(delete, target);
+            }
+            catch (NotSupportedQueryFragmentException)
+            {
+                if (!TDSEndpointAvailable)
+                    throw;
+
+                return ConvertDeleteStatementTDS(delete, target);
+            }
+        }
+
+        private DeleteQuery ConvertDeleteStatementFetchXml(DeleteStatement delete, NamedTableReference target)
+        {
             // Convert the FROM, TOP and WHERE clauses from the query to identify the records to delete.
             // Each record can only be deleted once, so apply the DISTINCT option as well
             var fetch = new FetchXml.FetchType
@@ -505,7 +520,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var tables = HandleFromClause(delete.DeleteSpecification.FromClause, fetch);
             HandleWhereClause(delete.DeleteSpecification.WhereClause, tables, extensions);
             HandleTopClause(delete.DeleteSpecification.TopRowFilter, fetch, extensions);
-            
+
             // To delete a record we need the primary key field of the target entity
             // For intersect entities we need the two foreign key fields instead
             var table = FindTable(target, tables);
@@ -564,6 +579,74 @@ namespace MarkMpn.Sql4Cds.Engine
             return query;
         }
 
+        private DeleteQuery ConvertDeleteStatementTDS(DeleteStatement delete, NamedTableReference target)
+        {
+            // We need to select the unique identifier of the entity being deleted. Target of update might be
+            // an alias for a table in the FROM clause.
+            var visitor = new UpdateTargetVisitor(target.SchemaObject.BaseIdentifier.Value);
+            delete.DeleteSpecification.FromClause.Accept(visitor);
+            var metadata = Metadata[visitor.TargetEntityName];
+
+            var select = new SelectStatement
+            {
+                QueryExpression = new QuerySpecification
+                {
+                    FromClause = delete.DeleteSpecification.FromClause,
+                    TopRowFilter = delete.DeleteSpecification.TopRowFilter
+                },
+                ScriptTokenStream = null
+            };
+
+            var idColumns = new List<string>();
+
+            if (metadata.LogicalName == "listmember")
+            {
+                idColumns.Add("entityid");
+                idColumns.Add("listid");
+            }
+            else if (metadata.IsIntersect == true)
+            {
+                var relationship = metadata.ManyToManyRelationships.Single();
+                idColumns.Add(relationship.Entity1IntersectAttribute);
+                idColumns.Add(relationship.Entity2IntersectAttribute);
+            }
+            else
+            {
+                idColumns.Add(metadata.PrimaryIdAttribute);
+            }
+
+            foreach (var idColumn in idColumns)
+            {
+                ((QuerySpecification)select.QueryExpression).SelectElements.Add(new SelectScalarExpression
+                {
+                    Expression = new ColumnReferenceExpression
+                    {
+                        MultiPartIdentifier = new MultiPartIdentifier
+                        {
+                            Identifiers =
+                            {
+                                new Identifier { Value = visitor.TargetAliasName },
+                                new Identifier { Value = idColumn }
+                            }
+                        }
+                    },
+                    ColumnName = new IdentifierOrValueExpression
+                    {
+                        Identifier = new Identifier { Value = idColumn }
+                    }
+                });
+            }
+
+            var query = new DeleteQuery
+            {
+                EntityName = metadata.LogicalName,
+                IdColumns = idColumns.ToArray(),
+                TSql = select.ToSql()
+            };
+
+            return query;
+        }
+
         /// <summary>
         /// Converts an UPDATE query
         /// </summary>
@@ -609,7 +692,7 @@ namespace MarkMpn.Sql4Cds.Engine
             catch (NotSupportedQueryFragmentException)
             {
                 // If we can use the TSQL endpoint, rewrite the query as a SELECT to get the required values
-                if (!TSqlEndpointAvailable)
+                if (!TDSEndpointAvailable)
                     throw;
 
                 return ConvertUpdateStatementTDS(update, target);
@@ -1672,6 +1755,17 @@ namespace MarkMpn.Sql4Cds.Engine
             if (!queryType.IsData)
                 forceAggregateExpression = true;
 
+            if (queryType.IsData && ForceTDSEndpoint)
+            {
+                select.Accept(new AddDefaultTableAliasesVisitor());
+                select.ScriptTokenStream = null;
+
+                return new SelectQuery
+                {
+                    TSql = select.ToSql()
+                };
+            }
+
             try
             {
                 // Store the original SQL again now so we can re-parse it if required to generate an alternative query
@@ -1751,7 +1845,7 @@ namespace MarkMpn.Sql4Cds.Engine
             catch (NotSupportedQueryFragmentException)
             {
                 // Check if we can still execute the raw query using the TDS endpoint instead
-                if (!TSqlEndpointAvailable)
+                if (!TDSEndpointAvailable || !queryType.IsData)
                     throw;
 
                 select.Accept(new AddDefaultTableAliasesVisitor());

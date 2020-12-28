@@ -107,7 +107,7 @@ namespace MarkMpn.Sql4Cds.SSMS
 
             var sql2FetchXml = new Sql2FetchXml(GetMetadataCache(), false);
             sql2FetchXml.ColumnComparisonAvailable = true;
-            sql2FetchXml.TSqlEndpointAvailable = true;
+            sql2FetchXml.TDSEndpointAvailable = true;
 
             try
             {
