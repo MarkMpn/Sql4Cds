@@ -66,6 +66,9 @@ namespace MarkMpn.Sql4Cds.SSMS
 
             // We need to execute the DML statements directly
             CancelDefault = true;
+
+            foreach (var query in queries)
+                query.Execute(ConnectCDS(), GetMetadataCache(), new QueryExecutionOptions());
         }
     }
 }

@@ -63,6 +63,7 @@
     <Compile Include="CommandBase.cs" />
     <Compile Include="DmlExecute.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="QueryExecutionOptions.cs" />
     <Compile Include="Sql2FetchXmlCommand.cs" />
     <Compile Include="Sql2FetchXmlCommandPackage.cs" />
   </ItemGroup>
