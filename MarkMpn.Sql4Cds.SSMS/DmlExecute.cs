@@ -8,12 +8,13 @@ using EnvDTE80;
 using MarkMpn.Sql4Cds.Engine;
 using Microsoft.SqlServer.Management.UI.VSIntegration.ObjectExplorer;
 using Microsoft.VisualStudio.Shell;
+using Microsoft.VisualStudio.Shell.Interop;
 
 namespace MarkMpn.Sql4Cds.SSMS
 {
     class DmlExecute : CommandBase
     {
-        public DmlExecute(DTE2 dte, IObjectExplorerService objExp) : base(dte, objExp)
+        public DmlExecute(AsyncPackage package, DTE2 dte, IObjectExplorerService objExp) : base(package, dte, objExp)
         {
             var execute = dte.Commands.Item("Query.Execute");
             QueryExecuteEvent = dte.Events.CommandEvents[execute.Guid, execute.ID];
@@ -33,7 +34,7 @@ namespace MarkMpn.Sql4Cds.SSMS
 
         public static void Initialize(AsyncPackage package, DTE2 dte, IObjectExplorerService objExp)
         {
-            Instance = new DmlExecute(dte, objExp);
+            Instance = new DmlExecute(package, dte, objExp);
         }
 
         private void OnExecuteQuery(string Guid, int ID, object CustomIn, object CustomOut, ref bool CancelDefault)
@@ -58,6 +59,8 @@ namespace MarkMpn.Sql4Cds.SSMS
             {
                 // Can't mix SELECT and DML queries as we can't show results in the grid and SSMS can't execute the DML queries
                 CancelDefault = true;
+
+                VsShellUtilities.ShowMessageBox(Package, "Cannot mix SELECT queries with DML queries. Execute SELECT statements in a separate batch to INSERT/UPDATE/DELETE", "Unsupported Query Mix", OLEMSGICON.OLEMSGICON_CRITICAL, OLEMSGBUTTON.OLEMSGBUTTON_OK, OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
                 return;
             }
 

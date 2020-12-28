@@ -10,6 +10,7 @@ using EnvDTE80;
 using MarkMpn.Sql4Cds.Engine;
 using Microsoft.SqlServer.Management.Common;
 using Microsoft.SqlServer.Management.UI.VSIntegration.ObjectExplorer;
+using Microsoft.VisualStudio.Shell;
 using Microsoft.Xrm.Tooling.Connector;
 
 namespace MarkMpn.Sql4Cds.SSMS
@@ -21,11 +22,17 @@ namespace MarkMpn.Sql4Cds.SSMS
         private static readonly IDictionary<string, CrmServiceClient> _clientCache = new Dictionary<string,CrmServiceClient>();
         private static readonly IDictionary<string, AttributeMetadataCache> _metadataCache = new Dictionary<string, AttributeMetadataCache>();
 
-        protected CommandBase(DTE2 dte, IObjectExplorerService objExp)
+        protected CommandBase(AsyncPackage package, DTE2 dte, IObjectExplorerService objExp)
         {
+            Package = package;
             Dte = dte;
             _objExp = objExp;
         }
+
+        /// <summary>
+        /// The package that this command was loaded from
+        /// </summary>
+        protected AsyncPackage Package { get; }
 
         /// <summary>
         /// Returns the currently active text document

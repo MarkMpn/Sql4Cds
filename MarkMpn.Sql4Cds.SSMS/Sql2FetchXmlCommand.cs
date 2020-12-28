@@ -35,19 +35,13 @@ namespace MarkMpn.Sql4Cds.SSMS
         public static readonly Guid CommandSet = new Guid("fd809e45-c5a9-40cc-9f78-501dd3f71817");
 
         /// <summary>
-        /// VS Package that provides this command, not null.
-        /// </summary>
-        private readonly AsyncPackage package;
-        
-        /// <summary>
         /// Initializes a new instance of the <see cref="Sql2FetchXmlCommand"/> class.
         /// Adds our command handlers for menu (commands must exist in the command table file)
         /// </summary>
         /// <param name="package">Owner package, not null.</param>
         /// <param name="commandService">Command service to add command to, not null.</param>
-        private Sql2FetchXmlCommand(AsyncPackage package, OleMenuCommandService commandService, DTE2 dte, IObjectExplorerService objExp) : base(dte, objExp)
+        private Sql2FetchXmlCommand(AsyncPackage package, OleMenuCommandService commandService, DTE2 dte, IObjectExplorerService objExp) : base(package, dte, objExp)
         {
-            this.package = package ?? throw new ArgumentNullException(nameof(package));
             commandService = commandService ?? throw new ArgumentNullException(nameof(commandService));
 
             var menuCommandID = new CommandID(CommandSet, CommandId);
@@ -82,17 +76,6 @@ namespace MarkMpn.Sql4Cds.SSMS
         {
             get;
             private set;
-        }
-
-        /// <summary>
-        /// Gets the service provider from the owner package.
-        /// </summary>
-        private Microsoft.VisualStudio.Shell.IAsyncServiceProvider ServiceProvider
-        {
-            get
-            {
-                return this.package;
-            }
         }
 
         /// <summary>
@@ -158,11 +141,11 @@ namespace MarkMpn.Sql4Cds.SSMS
             }
             catch (NotSupportedQueryFragmentException ex)
             {
-                VsShellUtilities.ShowMessageBox(package, "The query could not be converted to FetchXML: " + ex.Message, "Query Not Supported", OLEMSGICON.OLEMSGICON_CRITICAL, OLEMSGBUTTON.OLEMSGBUTTON_OK, OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
+                VsShellUtilities.ShowMessageBox(Package, "The query could not be converted to FetchXML: " + ex.Message, "Query Not Supported", OLEMSGICON.OLEMSGICON_CRITICAL, OLEMSGBUTTON.OLEMSGBUTTON_OK, OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
             }
             catch (QueryParseException ex)
             {
-                VsShellUtilities.ShowMessageBox(package, "The query could not be parsed: " + ex.Message, "Query Parsing Error", OLEMSGICON.OLEMSGICON_CRITICAL, OLEMSGBUTTON.OLEMSGBUTTON_OK, OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
+                VsShellUtilities.ShowMessageBox(Package, "The query could not be parsed: " + ex.Message, "Query Parsing Error", OLEMSGICON.OLEMSGICON_CRITICAL, OLEMSGBUTTON.OLEMSGBUTTON_OK, OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
             }
         }
     }
