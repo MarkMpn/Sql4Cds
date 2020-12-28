@@ -592,7 +592,9 @@ namespace MarkMpn.Sql4Cds.Engine
                 QueryExpression = new QuerySpecification
                 {
                     FromClause = delete.DeleteSpecification.FromClause,
-                    TopRowFilter = delete.DeleteSpecification.TopRowFilter
+                    TopRowFilter = delete.DeleteSpecification.TopRowFilter,
+                    WhereClause = delete.DeleteSpecification.WhereClause,
+                    UniqueRowFilter = UniqueRowFilter.Distinct
                 },
                 ScriptTokenStream = null
             };
@@ -1756,91 +1758,11 @@ namespace MarkMpn.Sql4Cds.Engine
                 forceAggregateExpression = true;
 
             if (queryType.IsData && ForceTDSEndpoint)
-            {
-                select.Accept(new AddDefaultTableAliasesVisitor());
-                select.ScriptTokenStream = null;
-
-                return new SelectQuery
-                {
-                    TSql = select.ToSql()
-                };
-            }
+                return ConvertSelectStatementTDS(select, forceAggregateExpression, queryType, querySpec);
 
             try
             {
-                // Store the original SQL again now so we can re-parse it if required to generate an alternative query
-                // to handle aggregates via an expression rather than FetchXML.
-                var sql = select.ToSql();
-
-                // Convert the query from the "inside out":
-                // 1. FROM clause gives the data source for everything else
-                // 2. WHERE clause filters the initial result set
-                // 3. GROUP BY changes the schema of the data source after filtering
-                // 4. HAVING clause filters the result set after grouping
-                // 5. SELECT clause defines the final columns to include in the results
-                // 6. DISTINCT clause checks for unique-ness across the columns in the SELECT clause
-                // 7. ORDER BY clause sequences the results
-                // 8. OFFSET / TOP clauses skips rows in the final results
-
-                // At each point, convert as much of the query as possible to FetchXML. Anything that can't be converted
-                // directly should be handled in-memory using an expression. If any previous step has generated an expression,
-                // all later steps must use expressions only as the FetchXML results will be incomplete.
-                var extensions = new List<IQueryExtension>();
-
-                if (queryType.IsMetadata)
-                {
-                    // Only minimal FetchXML support is provided in the query implementation for metadata, so force as much as
-                    // possible into memory
-                    extensions.Add(new NoOp());
-                }
-
-                var fetch = new FetchXml.FetchType();
-                var tables = HandleFromClause(querySpec.FromClause, fetch);
-                HandleWhereClause(querySpec.WhereClause, tables, extensions);
-                var computedColumns = HandleGroupByClause(querySpec, fetch, tables, extensions, forceAggregateExpression) ?? new Dictionary<string, Type>();
-                var columns = HandleSelectClause(querySpec, fetch, tables, computedColumns, extensions);
-                HandleDistinctClause(querySpec, fetch, columns, extensions);
-                HandleOrderByClause(querySpec, fetch, tables, columns, computedColumns, extensions);
-                HandleHavingClause(querySpec, computedColumns, extensions);
-                HandleOffsetClause(querySpec, fetch, extensions);
-                HandleTopClause(querySpec.TopRowFilter, fetch, extensions);
-
-                // Sort the elements in the query so they're in the order users expect based on online samples
-                foreach (var table in tables)
-                    table.Sort();
-
-                // Return the final query
-                SelectQuery query;
-
-                if (queryType.IsGlobalOptionSet)
-                    query = new GlobalOptionSetQuery();
-                else if (queryType.IsEntityMetadata)
-                    query = new EntityMetadataQuery();
-                else
-                    query = new SelectQuery();
-
-                query.FetchXml = fetch;
-                query.ColumnSet = columns;
-                query.AllPages = fetch.page == null && fetch.count == null;
-
-                foreach (var extension in extensions)
-                    query.Extensions.Add(extension);
-
-                if (fetch.aggregateSpecified && fetch.aggregate)
-                {
-                    // We've generated a FetchXML aggregate query. These can generate errors when there are a lot of source records involved in the query,
-                    // so convert the query again, this time processing the aggregates via expressions.
-                    // We'll have changed the SQL DOM during the conversion to FetchXML, so recreate it by parsing the original SQL again
-                    var dom = new TSql150Parser(QuotedIdentifiers);
-                    var fragment = dom.Parse(new StringReader(sql), out _);
-                    var script = (TSqlScript)fragment;
-                    script.Accept(new ReplacePrimaryFunctionsVisitor());
-                    var originalSelect = (SelectStatement)script.Batches.Single().Statements.Single();
-
-                    query.AggregateAlternative = ConvertSelectStatement(originalSelect, true);
-                }
-
-                return query;
+                return ConvertSelectStatementFetchXml(select, forceAggregateExpression, queryType, querySpec);
             }
             catch (NotSupportedQueryFragmentException)
             {
@@ -1848,14 +1770,98 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (!TDSEndpointAvailable || !queryType.IsData)
                     throw;
 
-                select.Accept(new AddDefaultTableAliasesVisitor());
-                select.ScriptTokenStream = null;
-
-                return new SelectQuery
-                {
-                    TSql = select.ToSql()
-                };
+                return ConvertSelectStatementTDS(select, forceAggregateExpression, queryType, querySpec);
             }
+        }
+
+        private SelectQuery ConvertSelectStatementFetchXml(SelectStatement select, bool forceAggregateExpression, QueryTypeVisitor queryType, QuerySpecification querySpec)
+        {
+            // Store the original SQL again now so we can re-parse it if required to generate an alternative query
+            // to handle aggregates via an expression rather than FetchXML.
+            var sql = select.ToSql();
+
+            // Convert the query from the "inside out":
+            // 1. FROM clause gives the data source for everything else
+            // 2. WHERE clause filters the initial result set
+            // 3. GROUP BY changes the schema of the data source after filtering
+            // 4. HAVING clause filters the result set after grouping
+            // 5. SELECT clause defines the final columns to include in the results
+            // 6. DISTINCT clause checks for unique-ness across the columns in the SELECT clause
+            // 7. ORDER BY clause sequences the results
+            // 8. OFFSET / TOP clauses skips rows in the final results
+
+            // At each point, convert as much of the query as possible to FetchXML. Anything that can't be converted
+            // directly should be handled in-memory using an expression. If any previous step has generated an expression,
+            // all later steps must use expressions only as the FetchXML results will be incomplete.
+            var extensions = new List<IQueryExtension>();
+
+            if (queryType.IsMetadata)
+            {
+                // Only minimal FetchXML support is provided in the query implementation for metadata, so force as much as
+                // possible into memory
+                extensions.Add(new NoOp());
+            }
+
+            var fetch = new FetchXml.FetchType();
+            var tables = HandleFromClause(querySpec.FromClause, fetch);
+            HandleWhereClause(querySpec.WhereClause, tables, extensions);
+            var computedColumns = HandleGroupByClause(querySpec, fetch, tables, extensions, forceAggregateExpression) ?? new Dictionary<string, Type>();
+            var columns = HandleSelectClause(querySpec, fetch, tables, computedColumns, extensions);
+            HandleDistinctClause(querySpec, fetch, columns, extensions);
+            HandleOrderByClause(querySpec, fetch, tables, columns, computedColumns, extensions);
+            HandleHavingClause(querySpec, computedColumns, extensions);
+            HandleOffsetClause(querySpec, fetch, extensions);
+            HandleTopClause(querySpec.TopRowFilter, fetch, extensions);
+
+            // Sort the elements in the query so they're in the order users expect based on online samples
+            foreach (var table in tables)
+                table.Sort();
+
+            // Return the final query
+            SelectQuery query;
+
+            if (queryType.IsGlobalOptionSet)
+                query = new GlobalOptionSetQuery();
+            else if (queryType.IsEntityMetadata)
+                query = new EntityMetadataQuery();
+            else
+                query = new SelectQuery();
+
+            query.FetchXml = fetch;
+            query.ColumnSet = columns;
+            query.AllPages = fetch.page == null && fetch.count == null;
+
+            foreach (var extension in extensions)
+                query.Extensions.Add(extension);
+
+            if (fetch.aggregateSpecified && fetch.aggregate)
+            {
+                // We've generated a FetchXML aggregate query. These can generate errors when there are a lot of source records involved in the query,
+                // so convert the query again, this time processing the aggregates via expressions.
+                // We'll have changed the SQL DOM during the conversion to FetchXML, so recreate it by parsing the original SQL again
+                var dom = new TSql150Parser(QuotedIdentifiers);
+                var fragment = dom.Parse(new StringReader(sql), out _);
+                var script = (TSqlScript)fragment;
+                script.Accept(new ReplacePrimaryFunctionsVisitor());
+                var originalSelect = (SelectStatement)script.Batches.Single().Statements.Single();
+
+                query.AggregateAlternative = ConvertSelectStatement(originalSelect, true);
+            }
+
+            return query;
+        }
+
+        private SelectQuery ConvertSelectStatementTDS(SelectStatement select, bool forceAggregateExpression, QueryTypeVisitor queryType, QuerySpecification querySpec)
+        {
+            select.Accept(new AddDefaultTableAliasesVisitor());
+            select.Accept(new AddDefaultColumnAliasesVisitor());
+            select.ScriptTokenStream = null;
+
+            return new SelectQuery
+            {
+                TSql = select.ToSql(),
+                ColumnSet = querySpec.SelectElements.OfType<SelectScalarExpression>().Select(col => col.ColumnName.Value).ToArray()
+            };
         }
 
         /// <summary>

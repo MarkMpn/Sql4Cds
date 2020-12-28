@@ -51,7 +51,18 @@ namespace MarkMpn.Sql4Cds.SSMS
             sql2FetchXml.ColumnComparisonAvailable = true;
             sql2FetchXml.TDSEndpointAvailable = true;
             sql2FetchXml.ForceTDSEndpoint = true;
-            var queries = sql2FetchXml.Convert(sql);
+            Query[] queries;
+
+            try
+            {
+                queries = sql2FetchXml.Convert(sql);
+            }
+            catch (Exception ex)
+            {
+                var execute = VsShellUtilities.PromptYesNo(ex.Message, "Error Converting Query. Execute normally?", OLEMSGICON.OLEMSGICON_WARNING, (IVsUIShell) Package.GetServiceAsync(typeof(IVsUIShell)).ConfigureAwait(false).GetAwaiter().GetResult());
+                CancelDefault = !execute;
+                return;
+            }
 
             var hasSelect = queries.OfType<SelectQuery>().Count();
             var hasDml = queries.Length - hasSelect;
@@ -71,8 +82,18 @@ namespace MarkMpn.Sql4Cds.SSMS
             // We need to execute the DML statements directly
             CancelDefault = true;
 
-            foreach (var query in queries)
-                query.Execute(ConnectCDS(), GetMetadataCache(), new QueryExecutionOptions());
+            try
+            {
+                foreach (var query in queries)
+                {
+                    query.Execute(ConnectCDS(), GetMetadataCache(), new QueryExecutionOptions());
+                    VsShellUtilities.ShowMessageBox(Package, query.Result as string, "Query Executed Successfully", OLEMSGICON.OLEMSGICON_INFO, OLEMSGBUTTON.OLEMSGBUTTON_OK, OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
+                }
+            }
+            catch (Exception ex)
+            {
+                VsShellUtilities.ShowMessageBox(Package, ex.Message, "Error Executing Query", OLEMSGICON.OLEMSGICON_CRITICAL, OLEMSGBUTTON.OLEMSGBUTTON_OK, OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
+            }
         }
     }
 }

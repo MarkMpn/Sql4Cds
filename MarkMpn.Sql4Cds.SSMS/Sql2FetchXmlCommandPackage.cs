@@ -40,7 +40,7 @@ namespace MarkMpn.Sql4Cds.SSMS
     [ProvideMenuResource("Menus.ctmenu", 1)]
     [Guid(Sql2FetchXmlCommandPackage.PackageGuidString)]
     [SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1650:ElementDocumentationMustBeSpelledCorrectly", Justification = "pkgdef, VS and vsixmanifest are valid VS terms")]
-    [ProvideAutoLoad(UIContextGuids.NoSolution, PackageAutoLoadFlags.None)]
+    [ProvideAutoLoad(UIContextGuids.NoSolution, PackageAutoLoadFlags.BackgroundLoad)]
     public sealed class Sql2FetchXmlCommandPackage : AsyncPackage
     {
         /// <summary>

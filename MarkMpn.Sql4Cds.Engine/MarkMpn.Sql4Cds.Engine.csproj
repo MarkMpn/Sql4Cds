@@ -65,6 +65,7 @@
     <Compile Include="QueryExtensions\NoOp.cs" />
     <Compile Include="TSqlEndpoint.cs" />
     <Compile Include="TSqlFragmentExtensions.cs" />
+    <Compile Include="Visitors\AddDefaultColumnAliasesVisitor.cs" />
     <Compile Include="Visitors\AddDefaultTableAliasesVisitor.cs" />
     <Compile Include="Visitors\AggregateCollectingVisitor.cs" />
     <Compile Include="ExpressionFunctions.cs" />
