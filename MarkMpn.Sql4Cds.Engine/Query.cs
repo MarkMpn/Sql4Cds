@@ -341,10 +341,10 @@ namespace MarkMpn.Sql4Cds.Engine
         }
 
         /// <summary>
-        /// Run the raw SQL query against the T-SQL endpoint
+        /// Run the raw SQL query against the TDS endpoint
         /// </summary>
         /// <param name="org">The <see cref="IOrganizationService"/> to execute the query against</param>
-        /// <param name="options">The options that indicate if the T-SQL endpoint should be used</param>
+        /// <param name="options">The options that indicate if the TDS endpoint should be used</param>
         /// <param name="result">The results of running the query</param>
         /// <returns><c>true</c> if this method has executed the query, or <c>false otherwise</c></returns>
         protected bool ExecuteTSQL(IOrganizationService org, IQueryExecutionOptions options, out DataTable result)
