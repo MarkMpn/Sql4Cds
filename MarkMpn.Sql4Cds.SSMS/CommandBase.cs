@@ -37,7 +37,7 @@ namespace MarkMpn.Sql4Cds.SSMS
         /// <summary>
         /// Returns the currently active text document
         /// </summary>
-        protected TextDocument ActiveDocument => (TextDocument)Dte.ActiveDocument.Object("TextDocument");
+        protected TextDocument ActiveDocument => (TextDocument)Dte.ActiveDocument?.Object("TextDocument");
 
         protected DTE2 Dte { get; }
 

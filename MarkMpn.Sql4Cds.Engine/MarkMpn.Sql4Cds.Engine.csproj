@@ -96,6 +96,7 @@
     <Compile Include="QueryExtensions\Where.cs" />
     <Compile Include="QueryExtensions\IQueryExtension.cs" />
     <Compile Include="QueryParseException.cs" />
+    <Compile Include="Visitors\UpdateTargetVisitor.cs" />
     <Compile Include="Visitors\QueryTypeVisitor.cs" />
     <Compile Include="Visitors\ReplacePrimaryFunctionsVisitor.cs" />
     <Compile Include="Visitors\RewriteVisitorBase.cs" />

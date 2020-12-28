@@ -19,6 +19,13 @@ namespace MarkMpn.Sql4Cds.Engine
         EntityMetadata this[string name] { get; }
 
         /// <summary>
+        /// Retrieves the metadata for an entity
+        /// </summary>
+        /// <param name="otc">The object type code of the entity to get the metadata for</param>
+        /// <returns>The metadata for the requested entity</returns>
+        EntityMetadata this[int otc] { get; }
+
+        /// <summary>
         /// Gets the metadata for an entity if it's already available in the cache
         /// </summary>
         /// <param name="logicalName">The logical name of the entity to get the metadata for</param>

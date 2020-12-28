@@ -341,6 +341,74 @@ namespace MarkMpn.Sql4Cds.Engine
         }
 
         /// <summary>
+        /// Run the raw SQL query against the T-SQL endpoint
+        /// </summary>
+        /// <param name="org">The <see cref="IOrganizationService"/> to execute the query against</param>
+        /// <param name="options">The options that indicate if the T-SQL endpoint should be used</param>
+        /// <param name="result">The results of running the query</param>
+        /// <returns><c>true</c> if this method has executed the query, or <c>false otherwise</c></returns>
+        protected bool ExecuteTSQL(IOrganizationService org, IQueryExecutionOptions options, out DataTable result)
+        {
+            result = null;
+
+            if (String.IsNullOrEmpty(TSql))
+                return false;
+
+            if (!options.UseTSQLEndpoint)
+                return false;
+
+            if (!(org is CrmServiceClient svc))
+                return false;
+
+            if (String.IsNullOrEmpty(svc.CurrentAccessToken))
+                return false;
+
+            if (!TSqlEndpoint.IsEnabled(svc))
+                return false;
+
+            using (var con = new SqlConnection("server=" + svc.CrmConnectOrgUriActual.Host + ",5558"))
+            {
+                con.AccessToken = svc.CurrentAccessToken;
+                con.Open();
+
+                using (var cmd = con.CreateCommand())
+                {
+                    cmd.CommandText = TSql;
+                    result = new DataTable();
+
+                    using (var adapter = new SqlDataAdapter(cmd))
+                    {
+                        adapter.Fill(result);
+                    }
+
+                    return true;
+                }
+            }
+        }
+
+        protected ICollection<Entity> DataTableToEntityCollection(DataTable dataTable, string entityLogicalName, string primaryIdAttribute)
+        {
+            return dataTable.Rows
+                .OfType<DataRow>()
+                .Select(r =>
+                {
+                    var entity = new Entity();
+
+                    if (!String.IsNullOrEmpty(entityLogicalName))
+                        entity.LogicalName = entityLogicalName;
+
+                    if (!String.IsNullOrEmpty(primaryIdAttribute))
+                        entity.Id = (Guid) r[primaryIdAttribute];
+
+                    foreach (DataColumn col in dataTable.Columns)
+                        entity[col.ColumnName] = r[col];
+
+                    return entity;
+                })
+                .ToList();
+        }
+
+        /// <summary>
         /// Convert the FetchXML query object to a string
         /// </summary>
         /// <param name="fetch">The FetchXML query object to convert</param>
@@ -384,52 +452,6 @@ namespace MarkMpn.Sql4Cds.Engine
 
             // Execute the FetchXML
             return RetrieveAll(org, metadata, options);
-        }
-
-        /// <summary>
-        /// Run the raw SQL query against the T-SQL endpoint
-        /// </summary>
-        /// <param name="org">The <see cref="IOrganizationService"/> to execute the query against</param>
-        /// <param name="options">The options that indicate if the T-SQL endpoint should be used</param>
-        /// <param name="result">The results of running the query</param>
-        /// <returns><c>true</c> if this method has executed the query, or <c>false otherwise</c></returns>
-        private bool ExecuteTSQL(IOrganizationService org, IQueryExecutionOptions options, out DataTable result)
-        {
-            result = null;
-
-            if (String.IsNullOrEmpty(TSql))
-                return false;
-
-            if (!options.UseTSQLEndpoint)
-                return false;
-
-            if (!(org is CrmServiceClient svc))
-                return false;
-
-            if (String.IsNullOrEmpty(svc.CurrentAccessToken))
-                return false;
-
-            if (!TSqlEndpoint.IsEnabled(svc))
-                return false;
-
-            using (var con = new SqlConnection("server=" + svc.CrmConnectOrgUriActual.Host + ",5558"))
-            {
-                con.AccessToken = svc.CurrentAccessToken;
-                con.Open();
-
-                using (var cmd = con.CreateCommand())
-                {
-                    cmd.CommandText = TSql;
-                    result = new DataTable();
-
-                    using (var adapter = new SqlDataAdapter(cmd))
-                    {
-                        adapter.Fill(result);
-                    }
-
-                    return true;
-                }
-            }
         }
 
         /// <summary>
@@ -518,7 +540,12 @@ namespace MarkMpn.Sql4Cds.Engine
             // Get the records to update
             var inProgressCount = 0;
             var count = 0;
-            var entities = RetrieveAll(org, metadata, options).Entities;
+            ICollection<Entity> entities;
+
+            if (ExecuteTSQL(org, options, out var datatable))
+                entities = DataTableToEntityCollection(datatable, EntityName, IdColumn);
+            else
+                entities = RetrieveAll(org, metadata, options).Entities;
 
             if (entities == null)
                 return null;

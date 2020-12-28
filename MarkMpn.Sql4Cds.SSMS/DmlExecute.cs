@@ -50,6 +50,7 @@ namespace MarkMpn.Sql4Cds.SSMS
             var sql2FetchXml = new Sql2FetchXml(GetMetadataCache(), false);
             sql2FetchXml.ColumnComparisonAvailable = true;
             sql2FetchXml.TSqlEndpointAvailable = true;
+            sql2FetchXml.ForceTDSEndpoint = true;
             var queries = sql2FetchXml.Convert(sql);
 
             var hasSelect = queries.OfType<SelectQuery>().Count();

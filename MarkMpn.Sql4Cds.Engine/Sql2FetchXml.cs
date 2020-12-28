@@ -189,6 +189,11 @@ namespace MarkMpn.Sql4Cds.Engine
         public bool TSqlEndpointAvailable { get; set; }
 
         /// <summary>
+        /// Indicates if the CDS TDS endpoint should be used wherever possible
+        /// </summary>
+        public bool ForceTDSEndpoint { get; set; }
+
+        /// <summary>
         /// Indicates if column comparison conditions are supported
         /// </summary>
         public bool ColumnComparisonAvailable { get; set; }
@@ -255,8 +260,10 @@ namespace MarkMpn.Sql4Cds.Engine
                     else
                         throw new NotSupportedQueryFragmentException("Unsupported statement", statement);
 
+                    if (String.IsNullOrEmpty(query.TSql))
+                        query.TSql = sqlStatement;
+
                     query.Sql = originalSql;
-                    query.TSql = sqlStatement;
                     query.Index = index;
                     query.Length = length;
                     queries.Add(query);
@@ -592,6 +599,31 @@ namespace MarkMpn.Sql4Cds.Engine
                 };
             }
 
+            if (ForceTDSEndpoint)
+                return ConvertUpdateStatementTDS(update, target);
+
+            try
+            {
+                return ConvertUpdateStatementFetchXml(update, target);
+            }
+            catch (NotSupportedQueryFragmentException)
+            {
+                // If we can use the TSQL endpoint, rewrite the query as a SELECT to get the required values
+                if (!TSqlEndpointAvailable)
+                    throw;
+
+                return ConvertUpdateStatementTDS(update, target);
+            }
+        }
+
+        /// <summary>
+        /// Converts an UPDATE query to FetchXML
+        /// </summary>
+        /// <param name="update">The SQL query to convert</param>
+        /// <param name="target">The name of the entity to be updated</param>
+        /// <returns>The equivalent query converted for execution against CDS</returns>
+        private UpdateQuery ConvertUpdateStatementFetchXml(UpdateStatement update, NamedTableReference target)
+        {
             // Convert the FROM, TOP and WHERE clauses from the query to identify the records to update.
             // Each record can only be updated once, so apply the DISTINCT option as well
             var fetch = new FetchXml.FetchType
@@ -651,6 +683,167 @@ namespace MarkMpn.Sql4Cds.Engine
 
             foreach (var extension in extensions)
                 query.Extensions.Add(extension);
+
+            return query;
+        }
+
+        /// <summary>
+        /// Converts an UPDATE query using the TDS endpoint
+        /// </summary>
+        /// <param name="update">The SQL query to convert</param>
+        /// <param name="target">The name of the entity to be updated</param>
+        /// <returns>The equivalent query converted for execution against CDS</returns>
+        private UpdateQuery ConvertUpdateStatementTDS(UpdateStatement update, NamedTableReference target)
+        {
+            // We need to select the unique identifier of the entity being updated. Target of update might be
+            // an alias for a table in the FROM clause.
+            var visitor = new UpdateTargetVisitor(target.SchemaObject.BaseIdentifier.Value);
+            update.UpdateSpecification.FromClause.Accept(visitor);
+            var metadata = Metadata[visitor.TargetEntityName];
+
+            var select = new SelectStatement
+            {
+                QueryExpression = new QuerySpecification
+                {
+                    SelectElements =
+                        {
+                            new SelectScalarExpression
+                            {
+                                Expression = new ColumnReferenceExpression
+                                {
+                                    MultiPartIdentifier = new MultiPartIdentifier
+                                    {
+                                        Identifiers =
+                                        {
+                                            new Identifier{ Value = visitor.TargetAliasName },
+                                            new Identifier{ Value = metadata.PrimaryIdAttribute }
+                                        }
+                                    }
+                                },
+                                ColumnName = new IdentifierOrValueExpression
+                                {
+                                    Identifier = new Identifier { Value = metadata.PrimaryIdAttribute }
+                                }
+                            }
+                        },
+                    FromClause = update.UpdateSpecification.FromClause,
+                    WhereClause = update.UpdateSpecification.WhereClause,
+                    TopRowFilter = update.UpdateSpecification.TopRowFilter
+                },
+                ScriptTokenStream = null
+            };
+
+            // Add each column being set to the SELECT statement
+            var columns = new Dictionary<string, AssignmentSetClause>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var set in update.UpdateSpecification.SetClauses)
+            {
+                // Check for unsupported SQL DOM elements
+                if (!(set is AssignmentSetClause assign))
+                    throw new NotSupportedQueryFragmentException("Unsupported UPDATE SET clause", set);
+
+                if (assign.Column == null)
+                    throw new NotSupportedQueryFragmentException("Unsupported UPDATE SET clause", assign);
+
+                if (assign.Column.MultiPartIdentifier.Identifiers.Count > 1)
+                    throw new NotSupportedQueryFragmentException("Unsupported UPDATE SET clause", assign.Column);
+
+                var attrName = assign.Column.MultiPartIdentifier.Identifiers[0].Value.ToLower();
+                var attr = metadata.Attributes.SingleOrDefault(a => a.LogicalName == attrName);
+                if (attr == null)
+                    throw new NotSupportedQueryFragmentException("Unknown column name", assign.Column);
+
+                if (attr.IsValidForUpdate == false)
+                    throw new NotSupportedQueryFragmentException("Column is not updateable", assign.Column);
+
+                ((QuerySpecification)select.QueryExpression).SelectElements.Add(new SelectScalarExpression
+                {
+                    Expression = assign.NewValue,
+                    ColumnName = new IdentifierOrValueExpression
+                    {
+                        Identifier = assign.Column.MultiPartIdentifier.Identifiers[0]
+                    }
+                });
+
+                columns.Add(attr.LogicalName, assign);
+            }
+
+            // Most columns map to a single attribute, but polymorphic lookup attributes are formed from two columns. Merge
+            // the two values into a single attribute value.
+            var updates = new Dictionary<string, Func<Entity, object>>();
+
+            foreach (var attr in metadata.Attributes)
+            {
+                if (attr.AttributeOf != null)
+                    continue;
+
+                if (!columns.ContainsKey(attr.LogicalName))
+                    continue;
+
+                if (attr is LookupAttributeMetadata lookup)
+                {
+                    updates[attr.LogicalName] = e =>
+                    {
+                        if (!e.Contains(attr.LogicalName))
+                            return null;
+
+                        var id = e[attr.LogicalName];
+
+                        if (id == null)
+                            return null;
+
+                        if (id is string s)
+                            id = new Guid(s);
+                        else if (!(id is Guid))
+                            throw new NotSupportedQueryFragmentException($"Cannot convert value '{id}' of type '{id.GetType()}' to '{attr.AttributeType}' for attribute {attr.LogicalName}", columns[attr.LogicalName]);
+
+                        string logicalName;
+
+                        if (e.Contains(attr.LogicalName + "type"))
+                        {
+                            var logicalNameValue = e[attr.LogicalName + "type"];
+
+                            if (logicalNameValue is string)
+                                logicalName = (string)logicalNameValue;
+                            else if (logicalNameValue is int otc)
+                                logicalName = Metadata[otc].LogicalName;
+                            else
+                                throw new NotSupportedQueryFragmentException($"Cannot convert value '{logicalNameValue}' of type '{logicalNameValue.GetType()}' to 'string' for attribute {attr.LogicalName}", columns[attr.LogicalName + "type"]);
+                        }
+                        else if (lookup.Targets.Length == 1)
+                        {
+                            logicalName = lookup.Targets[0];
+                        }
+                        else
+                        {
+                            throw new NotSupportedQueryFragmentException("Polymorphic lookup columns must have the corresponding type column set as well", columns[attr.LogicalName]);
+                        }
+
+                        return new EntityReference(logicalName, (Guid)id);
+                    };
+                }
+                else
+                {
+                    updates[attr.LogicalName] = e =>
+                    {
+                        if (!e.Contains(attr.LogicalName))
+                            return null;
+
+                        var value = e[attr.LogicalName];
+                        value = ConvertAttributeValueType(metadata, attr.LogicalName, value);
+
+                        return value;
+                    };
+                }
+            }
+
+            var query = new UpdateQuery
+            {
+                EntityName = visitor.TargetEntityName,
+                IdColumn = metadata.PrimaryIdAttribute,
+                Updates = updates,
+                TSql = select.ToSql()
+            };
 
             return query;
         }
