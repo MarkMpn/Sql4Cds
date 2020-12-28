@@ -76,6 +76,11 @@ namespace MarkMpn.Sql4Cds.Engine
         public int Length { get; internal set; }
 
         /// <summary>
+        /// The T-SQL that can be executed against the TDS endpoint, if available
+        /// </summary>
+        public string TSql { get; internal set; }
+
+        /// <summary>
         /// Executes the query
         /// </summary>
         /// <param name="org">The <see cref="IOrganizationService"/> to execute the query against</param>
@@ -392,7 +397,7 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             result = null;
 
-            if (String.IsNullOrEmpty(Sql))
+            if (String.IsNullOrEmpty(TSql))
                 return false;
 
             if (!options.UseTSQLEndpoint)
@@ -414,7 +419,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 using (var cmd = con.CreateCommand())
                 {
-                    cmd.CommandText = Sql;
+                    cmd.CommandText = TSql;
                     result = new DataTable();
 
                     using (var adapter = new SqlDataAdapter(cmd))
