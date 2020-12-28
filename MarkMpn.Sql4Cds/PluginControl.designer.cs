@@ -96,7 +96,7 @@
             this.tsbNewQuery.Name = "tsbNewQuery";
             this.tsbNewQuery.Size = new System.Drawing.Size(86, 22);
             this.tsbNewQuery.Text = "New Query";
-            this.tsbNewQuery.ToolTipText = "Create New Query Tab";
+            this.tsbNewQuery.ToolTipText = "Create New Query Tab (Ctrl+N)";
             this.tsbNewQuery.Click += new System.EventHandler(this.tsbNewQuery_Click);
             // 
             // tsbOpen
@@ -107,7 +107,7 @@
             this.tsbOpen.Name = "tsbOpen";
             this.tsbOpen.Size = new System.Drawing.Size(23, 22);
             this.tsbOpen.Text = "Open";
-            this.tsbOpen.ToolTipText = "Open File";
+            this.tsbOpen.ToolTipText = "Open File (Ctrl+O)";
             this.tsbOpen.Click += new System.EventHandler(this.tsbOpen_Click);
             // 
             // tsbSave
@@ -119,7 +119,7 @@
             this.tsbSave.Name = "tsbSave";
             this.tsbSave.Size = new System.Drawing.Size(23, 22);
             this.tsbSave.Text = "Save";
-            this.tsbSave.ToolTipText = "Save File";
+            this.tsbSave.ToolTipText = "Save File (Ctrl+S)";
             this.tsbSave.Click += new System.EventHandler(this.tsbSave_Click);
             // 
             // toolStripSeparator2
@@ -134,7 +134,7 @@
             this.tsbExecute.Name = "tsbExecute";
             this.tsbExecute.Size = new System.Drawing.Size(68, 22);
             this.tsbExecute.Text = "Execute";
-            this.tsbExecute.ToolTipText = "Execute Selected Query";
+            this.tsbExecute.ToolTipText = "Execute Selected Query (F5)";
             this.tsbExecute.Click += new System.EventHandler(this.tsbExecute_Click);
             // 
             // tsbStop
@@ -156,7 +156,7 @@
             this.tsbPreviewFetchXml.Name = "tsbPreviewFetchXml";
             this.tsbPreviewFetchXml.Size = new System.Drawing.Size(23, 22);
             this.tsbPreviewFetchXml.Text = "Preview FetchXML";
-            this.tsbPreviewFetchXml.ToolTipText = "Display FetchXML Without Executing Query";
+            this.tsbPreviewFetchXml.ToolTipText = "Display FetchXML Without Executing Query (Ctrl+L)";
             this.tsbPreviewFetchXml.Click += new System.EventHandler(this.tsbPreviewFetchXml_Click);
             // 
             // toolStripSeparator3
@@ -173,7 +173,7 @@
             this.tsbIncludeFetchXml.Name = "tsbIncludeFetchXml";
             this.tsbIncludeFetchXml.Size = new System.Drawing.Size(23, 22);
             this.tsbIncludeFetchXml.Text = "Include FetchXML";
-            this.tsbIncludeFetchXml.ToolTipText = "Display FetchXML when executing query";
+            this.tsbIncludeFetchXml.ToolTipText = "Display FetchXML when executing query (Ctrl+M)";
             this.tsbIncludeFetchXml.Click += new System.EventHandler(this.tsbIncludeFetchXml_Click);
             // 
             // tssSeparator1
@@ -208,6 +208,7 @@
             this.tslAboutLink.Name = "tslAboutLink";
             this.tslAboutLink.Size = new System.Drawing.Size(184, 22);
             this.tslAboutLink.Text = "SQL 4 CDS by Mark Carrington";
+            this.tslAboutLink.ToolTipText = "Documentation";
             this.tslAboutLink.Click += new System.EventHandler(this.tslAboutLink_Click);
             // 
             // dockPanel

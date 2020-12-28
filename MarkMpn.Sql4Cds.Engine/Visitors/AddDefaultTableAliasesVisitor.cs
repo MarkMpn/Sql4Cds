@@ -8,7 +8,7 @@ using Microsoft.SqlServer.TransactSql.ScriptDom;
 namespace MarkMpn.Sql4Cds.Engine.Visitors
 {
     /// <summary>
-    /// Works around a bug in the preview T-SQL endpoint by applying an alias to all table references that
+    /// Works around a bug in the preview TDS endpoint by applying an alias to all table references that
     /// don't already have one, so that the alias matches the original table name after the query has been
     /// rewritten by CDS
     /// </summary>

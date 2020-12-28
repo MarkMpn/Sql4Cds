@@ -131,7 +131,7 @@ namespace MarkMpn.Sql4Cds
             if (new Uri(con.OrganizationServiceUrl).Host.EndsWith(".dynamics.com") &&
                 new Version(con.OrganizationVersion) >= new Version("9.1.0.17437"))
             {
-                var tsqlNode = conNode.Nodes.Add("T-SQL Endpoint");
+                var tsqlNode = conNode.Nodes.Add("TDS Endpoint");
 
                 if (TSqlEndpoint.IsEnabled(con.ServiceClient))
                 {
@@ -437,11 +437,11 @@ INNER JOIN {manyToMany.Entity2LogicalName}
                 {
                     if (args.Error != null)
                     {
-                        MessageBox.Show("Error enabling T-SQL Endpoint:\r\n\r\n" + args.Error.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        MessageBox.Show("Error enabling TDS Endpoint:\r\n\r\n" + args.Error.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                         return;
                     }
 
-                    node.Text = "T-SQL Endpoint";
+                    node.Text = "TDS Endpoint";
 
                     if (!String.IsNullOrEmpty(con.ServiceClient.CurrentAccessToken))
                     {
@@ -474,11 +474,11 @@ INNER JOIN {manyToMany.Entity2LogicalName}
                 {
                     if (args.Error != null)
                     {
-                        MessageBox.Show("Error disabling T-SQL Endpoint:\r\n\r\n" + args.Error.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        MessageBox.Show("Error disabling TDS Endpoint:\r\n\r\n" + args.Error.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                         return;
                     }
 
-                    node.Text = "T-SQL Endpoint (Disabled)";
+                    node.Text = "TDS Endpoint (Disabled)";
                     node.ImageIndex = 20;
                     node.SelectedImageIndex = 20;
                 }

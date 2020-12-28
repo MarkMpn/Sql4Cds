@@ -62,7 +62,7 @@ namespace MarkMpn.Sql4Cds.Engine
         int BatchSize { get; }
 
         /// <summary>
-        /// Indicates if the T-SQL Endpoint should be used for query execution where possible
+        /// Indicates if the TDS Endpoint should be used for query execution where possible
         /// </summary>
         bool UseTSQLEndpoint { get; }
 

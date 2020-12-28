@@ -446,7 +446,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (options.UseRetrieveTotalRecordCount && RetrieveTotalRecordCount(org, metadata, out var result))
                 return result;
 
-            // Run the raw SQL query against the T-SQL endpoint
+            // Run the raw SQL query against the TDS endpoint
             if (ExecuteTSQL(org, options, out var dataTable))
                 return dataTable;
 

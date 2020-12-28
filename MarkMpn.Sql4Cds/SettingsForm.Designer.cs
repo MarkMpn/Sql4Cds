@@ -390,7 +390,7 @@
             this.tsqlEndpointCheckBox.Name = "tsqlEndpointCheckBox";
             this.tsqlEndpointCheckBox.Size = new System.Drawing.Size(244, 17);
             this.tsqlEndpointCheckBox.TabIndex = 16;
-            this.tsqlEndpointCheckBox.Text = "Use T-SQL Endpoint where possible (Preview)";
+            this.tsqlEndpointCheckBox.Text = "Use TDS Endpoint where possible (Preview)";
             this.tsqlEndpointCheckBox.UseVisualStyleBackColor = true;
             // 
             // groupBox2

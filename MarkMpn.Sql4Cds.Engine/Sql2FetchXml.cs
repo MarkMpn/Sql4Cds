@@ -184,7 +184,7 @@ namespace MarkMpn.Sql4Cds.Engine
         public bool QuotedIdentifiers { get; set; }
 
         /// <summary>
-        /// Indicates if the CDS T-SQL endpoint can be used as a fallback if a query cannot be converted to FetchXML
+        /// Indicates if the CDS TDS endpoint can be used as a fallback if a query cannot be converted to FetchXML
         /// </summary>
         public bool TSqlEndpointAvailable { get; set; }
 
@@ -878,6 +878,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var er = value as EntityReference;
             var m = value as Money;
             var osv = value as OptionSetValue;
+            var osvc = value as OptionSetValueCollection;
 
             // Handle the conversion for each attribute type
             switch (attr.AttributeType)
@@ -1027,6 +1028,30 @@ namespace MarkMpn.Sql4Cds.Engine
                         return g.Value;
                     if (er != null)
                         return er.Id;
+                    throw new InvalidOperationException($"Cannot convert value '{value}' of type '{value.GetType()}' to '{attr.AttributeType}' for attribute {attrName}");
+
+                case AttributeTypeCode.Virtual:
+                    if (attr.AttributeTypeName.Value == "MultiSelectPicklistType")
+                    {
+                        if (osvc != null)
+                            return osvc;
+                        if (osv != null)
+                            return new OptionSetValueCollection(new[] { osv });
+                        if (i != null)
+                            return new OptionSetValueCollection(new[] { new OptionSetValue(i.Value) });
+                        if (str != null)
+                        {
+                            var parts = str.Split(',');
+                            osvc = new OptionSetValueCollection();
+                            foreach(var part in parts)
+                            {
+                                if (!Int32.TryParse(part.Trim(), out var val))
+                                    throw new InvalidOperationException($"Cannot convert value '{part}' of type '{part.GetType()}' to '{attr.AttributeType}' for attribute {attrName}");
+                                osvc.Add(new OptionSetValue(val));
+                            }
+                            return osvc;
+                        }
+                    }
                     throw new InvalidOperationException($"Cannot convert value '{value}' of type '{value.GetType()}' to '{attr.AttributeType}' for attribute {attrName}");
 
                 default:
@@ -1725,7 +1750,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             catch (NotSupportedQueryFragmentException)
             {
-                // Check if we can still execute the raw query using the T-SQL endpoint instead
+                // Check if we can still execute the raw query using the TDS endpoint instead
                 if (!TSqlEndpointAvailable)
                     throw;
 
