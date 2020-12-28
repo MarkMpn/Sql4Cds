@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.ComponentModel.Design;
 using System.Data.SqlClient;
 using System.Globalization;
@@ -23,7 +22,7 @@ namespace MarkMpn.Sql4Cds.SSMS
     /// <summary>
     /// Command handler
     /// </summary>
-    internal sealed class Sql2FetchXmlCommand
+    internal sealed class Sql2FetchXmlCommand : CommandBase
     {
         /// <summary>
         /// Command ID.
@@ -39,17 +38,14 @@ namespace MarkMpn.Sql4Cds.SSMS
         /// VS Package that provides this command, not null.
         /// </summary>
         private readonly AsyncPackage package;
-
-        private readonly DTE2 _dte;
-        private readonly IObjectExplorerService _objEx;
-
+        
         /// <summary>
         /// Initializes a new instance of the <see cref="Sql2FetchXmlCommand"/> class.
         /// Adds our command handlers for menu (commands must exist in the command table file)
         /// </summary>
         /// <param name="package">Owner package, not null.</param>
         /// <param name="commandService">Command service to add command to, not null.</param>
-        private Sql2FetchXmlCommand(AsyncPackage package, OleMenuCommandService commandService, DTE2 dte, IObjectExplorerService objEx)
+        private Sql2FetchXmlCommand(AsyncPackage package, OleMenuCommandService commandService, DTE2 dte, IObjectExplorerService objExp) : base(dte, objExp)
         {
             this.package = package ?? throw new ArgumentNullException(nameof(package));
             commandService = commandService ?? throw new ArgumentNullException(nameof(commandService));
@@ -58,24 +54,19 @@ namespace MarkMpn.Sql4Cds.SSMS
             var menuItem = new OleMenuCommand(this.Execute, menuCommandID);
             menuItem.BeforeQueryStatus += QueryStatus;
             commandService.AddCommand(menuItem);
-
-            _dte = dte;
-            _objEx = objEx;
         }
 
         private void QueryStatus(object sender, EventArgs e)
         {
             var menuItem = (OleMenuCommand)sender;
 
-            if (_dte.ActiveDocument == null)
+            if (ActiveDocument == null || !IsDataverse())
             {
                 menuItem.Enabled = false;
                 return;
             }
 
-            var textDoc = (TextDocument)_dte.ActiveDocument.Object("TextDocument");
-
-            if (textDoc == null)
+            if (ActiveDocument.Language != "SQL")
             {
                 menuItem.Enabled = false;
                 return;
@@ -129,46 +120,11 @@ namespace MarkMpn.Sql4Cds.SSMS
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
-            var textDoc = (TextDocument) _dte.ActiveDocument.Object("TextDocument");
+            var sql = GetQuery();
 
-            _objEx.GetSelectedNodes(out var size, out var nodes);
-            if (size == 0)
-                return;
-
-            var node = nodes[0];
-
-            while (node.UrnPath != "Server/Database" && node.UrnPath != "Server")
-                node = node.Parent;
-
-            if (node == null)
-                return;
-
-            var sql = textDoc.Selection.Text;
-
-            if (String.IsNullOrEmpty(sql))
-            {
-                var startPoint = textDoc.StartPoint.CreateEditPoint();
-                sql = startPoint.GetText(textDoc.EndPoint);
-            }
-
-            var conStr = new SqlConnectionStringBuilder(node.Connection.ConnectionString);
-            var server = conStr.DataSource.Split(',')[0];
-            var resource = $"https://{server}/";
-            var req = WebRequest.CreateHttp(resource);
-            req.AllowAutoRedirect = false;
-            var resp = req.GetResponse();
-            var authority = new UriBuilder(resp.Headers[HttpResponseHeader.Location]);
-            authority.Query = "";
-            authority.Port = -1;
-            var authParams = new AuthParams(conStr.Authentication, server, conStr.InitialCatalog, resource, authority.ToString(), conStr.UserID, "", Guid.Empty);
-            AuthOverrideHook.Instance.AddAuth(authParams);
-            
-            CrmServiceClient.AuthOverrideHook = AuthOverrideHook.Instance;
-            var con = new CrmServiceClient(new Uri(resource), true);
-
-            var sql2FetchXml = new Sql2FetchXml(new AttributeMetadataCache(con), false);
+            var sql2FetchXml = new Sql2FetchXml(GetMetadataCache(), false);
             sql2FetchXml.ColumnComparisonAvailable = true;
-            sql2FetchXml.TSqlEndpointAvailable = false;
+            sql2FetchXml.TSqlEndpointAvailable = true;
 
             try
             {
@@ -176,10 +132,9 @@ namespace MarkMpn.Sql4Cds.SSMS
 
                 foreach (var query in queries.OfType<FetchXmlQuery>())
                 {
-                    var window = _dte.ItemOperations.NewFile("General\\XML File");
-                    var doc = (TextDocument)window.Document.Object("TextDocument");
+                    var window = Dte.ItemOperations.NewFile("General\\XML File");
 
-                    var editPoint = doc.EndPoint.CreateEditPoint();
+                    var editPoint = ActiveDocument.EndPoint.CreateEditPoint();
                     editPoint.Insert("<!-- Created from query:\r\n\r\n");
                     editPoint.Insert(query.Sql);
 
@@ -208,35 +163,6 @@ namespace MarkMpn.Sql4Cds.SSMS
             catch (QueryParseException ex)
             {
                 VsShellUtilities.ShowMessageBox(package, "The query could not be parsed: " + ex.Message, "Query Parsing Error", OLEMSGICON.OLEMSGICON_CRITICAL, OLEMSGBUTTON.OLEMSGBUTTON_OK, OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
-            }
-        }
-
-        class AuthParams : SqlAuthenticationParameters
-        {
-            public AuthParams(SqlAuthenticationMethod authenticationMethod, string serverName, string databaseName, string resource, string authority, string userId, string password, Guid connectionId) : base(authenticationMethod, serverName, databaseName, resource, authority, userId, password, connectionId)
-            {
-            }
-        }
-
-        class AuthOverrideHook : IOverrideAuthHookWrapper
-        {
-            private IDictionary<string, AuthParams> _authParams = new Dictionary<string, AuthParams>();
-
-            public static AuthOverrideHook Instance { get; } = new AuthOverrideHook();
-
-            public void AddAuth(AuthParams authParams)
-            {
-                _authParams[authParams.Resource] = authParams;
-            }
-
-            public string GetAuthToken(Uri connectedUri)
-            {
-                var uri = new Uri(connectedUri, "/");
-                var authParams = _authParams[uri.ToString()];
-                var authProv = SqlAuthenticationProvider.GetProvider(authParams.AuthenticationMethod);
-                var token = Task.Run(() => authProv.AcquireTokenAsync(authParams)).ConfigureAwait(false).GetAwaiter().GetResult();
-
-                return token.AccessToken;
             }
         }
     }

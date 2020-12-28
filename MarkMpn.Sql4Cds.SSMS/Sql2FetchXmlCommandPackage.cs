@@ -13,6 +13,7 @@ using Microsoft.VisualStudio.OLE.Interop;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using Microsoft.Win32;
+using Microsoft.Xrm.Tooling.Connector;
 using Task = System.Threading.Tasks.Task;
 
 namespace MarkMpn.Sql4Cds.SSMS
@@ -39,6 +40,7 @@ namespace MarkMpn.Sql4Cds.SSMS
     [ProvideMenuResource("Menus.ctmenu", 1)]
     [Guid(Sql2FetchXmlCommandPackage.PackageGuidString)]
     [SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1650:ElementDocumentationMustBeSpelledCorrectly", Justification = "pkgdef, VS and vsixmanifest are valid VS terms")]
+    [ProvideAutoLoad(UIContextGuids.NoSolution, PackageAutoLoadFlags.None)]
     public sealed class Sql2FetchXmlCommandPackage : AsyncPackage
     {
         /// <summary>
@@ -71,9 +73,16 @@ namespace MarkMpn.Sql4Cds.SSMS
             // When initialized asynchronously, the current thread may be a background thread at this point.
             // Do any initialization that requires the UI thread after switching to the UI thread.
             await this.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+
+            // Add the command to convert SQL to FetchXML
             var dte = (DTE2)await GetServiceAsync(typeof(EnvDTE.DTE));
             var objEx = (IObjectExplorerService)await GetServiceAsync(typeof(IObjectExplorerService));
             await Sql2FetchXmlCommand.InitializeAsync(this, dte, objEx);
+
+            // Intercept query execution
+            DmlExecute.Initialize(this, dte, objEx);
+
+            CrmServiceClient.AuthOverrideHook = AuthOverrideHook.Instance;
         }
 
         #endregion

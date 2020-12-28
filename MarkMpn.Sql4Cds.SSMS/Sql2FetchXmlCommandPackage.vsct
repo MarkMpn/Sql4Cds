@@ -66,6 +66,7 @@
         <Icon guid="guidImages" id="bmpPic1" />
         <CommandFlag>IconAndText</CommandFlag>
         <CommandFlag>DontCache</CommandFlag>
+        <CommandFlag>DefaultDisabled</CommandFlag>
         <Strings>
           <ButtonText>FetchXML</ButtonText>
           <ToolTipText>Convert to FetchXML</ToolTipText>
