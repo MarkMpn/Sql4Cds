@@ -2760,7 +2760,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             }
         }
 
-        void IQueryExecutionOptions.Progress(string message)
+        void IQueryExecutionOptions.Progress(double? progress, string message)
         {
         }
 

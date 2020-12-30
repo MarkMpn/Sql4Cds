@@ -15,8 +15,9 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// Allows the query execution to report progress
         /// </summary>
+        /// <param name="progress">The progress (0-1) to report back to the caller</param>
         /// <param name="message">The message to report back to the caller</param>
-        void Progress(string message);
+        void Progress(double? progress, string message);
 
         /// <summary>
         /// Checks if the query should continue to retrieve more records

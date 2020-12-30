@@ -1,11 +1,22 @@
-﻿using MarkMpn.Sql4Cds.Engine;
+﻿using System;
+using System.Reflection;
+using MarkMpn.Sql4Cds.Engine;
 using Microsoft.Xrm.Sdk.Metadata;
 
 namespace MarkMpn.Sql4Cds.SSMS
 {
     internal class QueryExecutionOptions : IQueryExecutionOptions
     {
-        public bool Cancelled => false;
+        private readonly object _sqlScriptEditorControl;
+        private readonly object _sqlResultsControl;
+
+        public QueryExecutionOptions(object sqlScriptEditorControl, object sqlResultsControl)
+        {
+            _sqlScriptEditorControl = sqlScriptEditorControl;
+            _sqlResultsControl = sqlResultsControl;
+        }
+
+        public bool Cancelled { get; private set; }
 
         public bool BlockUpdateWithoutWhere => false;
 
@@ -13,7 +24,7 @@ namespace MarkMpn.Sql4Cds.SSMS
 
         public bool UseBulkDelete => false;
 
-        public int BatchSize => 100;
+        public int BatchSize => 1;
 
         public bool UseTDSEndpoint => true;
 
@@ -21,7 +32,7 @@ namespace MarkMpn.Sql4Cds.SSMS
 
         public int LocaleId => 1033;
 
-        public int MaxDegreeOfParallelism => 10;
+        public int MaxDegreeOfParallelism => 1;
 
         public bool ConfirmDelete(int count, EntityMetadata meta)
         {
@@ -38,9 +49,17 @@ namespace MarkMpn.Sql4Cds.SSMS
             return true;
         }
 
-        public void Progress(string message)
+        public void Progress(double? progress, string message)
         {
-            // TODO
+            if (progress != null)
+                _sqlResultsControl.InvokeMethod("OnQueryProgressUpdateEstimate", progress.Value);
+        }
+
+        public void Cancel()
+        {
+            _sqlScriptEditorControl.InvokeMethod("DoCancelExec");
+            _sqlResultsControl.InvokeMethod("AddStringToErrors", "Query cancelled by user", true);
+            Cancelled = true;
         }
     }
 }

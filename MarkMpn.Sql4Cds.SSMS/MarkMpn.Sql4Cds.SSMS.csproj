@@ -64,6 +64,7 @@
     <Compile Include="DmlExecute.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="QueryExecutionOptions.cs" />
+    <Compile Include="ReflectionHelpers.cs" />
     <Compile Include="Sql2FetchXmlCommand.cs" />
     <Compile Include="Sql2FetchXmlCommandPackage.cs" />
   </ItemGroup>
@@ -113,6 +114,7 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\..\..\..\..\Program Files (x86)\Microsoft SQL Server Management Studio 18\Common7\IDE\Microsoft.SqlServer.RegSvrEnum.dll</HintPath>
     </Reference>
+    <Reference Include="Microsoft.SqlServer.TransactSql.ScriptDom, Version=15.0.0.0, Culture=neutral, PublicKeyToken=89845dcd8080cc91" />
     <Reference Include="Microsoft.VisualStudio.CommandBars, Version=8.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
       <EmbedInteropTypes>False</EmbedInteropTypes>
     </Reference>
