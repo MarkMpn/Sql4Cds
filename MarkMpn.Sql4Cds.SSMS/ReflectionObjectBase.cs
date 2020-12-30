@@ -7,33 +7,40 @@ using System.Threading.Tasks;
 
 namespace MarkMpn.Sql4Cds.SSMS
 {
-    static class ReflectionHelpers
+    abstract class ReflectionObjectBase
     {
-        public static object GetField(this object target, string fieldName)
+        protected ReflectionObjectBase(object obj)
+        {
+            Target = obj;
+        }
+
+        protected object Target { get; }
+
+        protected object GetField(object target, string fieldName)
         {
             var field = target.GetType().GetField(fieldName, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
             return field.GetValue(target);
         }
 
-        public static void SetField(this object target, string fieldName, object value)
+        protected void SetField(object target, string fieldName, object value)
         {
             var field = target.GetType().GetField(fieldName, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
             field.SetValue(target, value);
         }
 
-        public static object GetProperty(this object target, string propName)
+        protected object GetProperty(object target, string propName)
         {
             var prop = target.GetType().GetProperty(propName, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
             return prop.GetValue(target);
         }
 
-        public static void SetProperty(this object target, string propName, object value)
+        protected void SetProperty(object target, string propName, object value)
         {
             var prop = target.GetType().GetProperty(propName, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
             prop.SetValue(target, value);
         }
 
-        public static object InvokeMethod(this object target, string methodName, params object[] args)
+        protected object InvokeMethod(object target, string methodName, params object[] args)
         {
             var type = target.GetType();
 

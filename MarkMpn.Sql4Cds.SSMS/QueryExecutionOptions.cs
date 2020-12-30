@@ -7,13 +7,11 @@ namespace MarkMpn.Sql4Cds.SSMS
 {
     internal class QueryExecutionOptions : IQueryExecutionOptions
     {
-        private readonly object _sqlScriptEditorControl;
-        private readonly object _sqlResultsControl;
+        private readonly SqlScriptEditorControlWrapper _sqlScriptEditorControl;
 
-        public QueryExecutionOptions(object sqlScriptEditorControl, object sqlResultsControl)
+        public QueryExecutionOptions(SqlScriptEditorControlWrapper sqlScriptEditorControl)
         {
             _sqlScriptEditorControl = sqlScriptEditorControl;
-            _sqlResultsControl = sqlResultsControl;
         }
 
         public bool Cancelled { get; private set; }
@@ -52,13 +50,13 @@ namespace MarkMpn.Sql4Cds.SSMS
         public void Progress(double? progress, string message)
         {
             if (progress != null)
-                _sqlResultsControl.InvokeMethod("OnQueryProgressUpdateEstimate", progress.Value);
+                _sqlScriptEditorControl.Results.OnQueryProgressUpdateEstimate(progress.Value);
         }
 
         public void Cancel()
         {
-            _sqlScriptEditorControl.InvokeMethod("DoCancelExec");
-            _sqlResultsControl.InvokeMethod("AddStringToErrors", "Query cancelled by user", true);
+            _sqlScriptEditorControl.DoCancelExec();
+            _sqlScriptEditorControl.Results.AddStringToErrors("Query cancelled by user", true);
             Cancelled = true;
         }
     }

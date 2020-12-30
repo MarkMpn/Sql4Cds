@@ -64,9 +64,12 @@
     <Compile Include="DmlExecute.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="QueryExecutionOptions.cs" />
-    <Compile Include="ReflectionHelpers.cs" />
+    <Compile Include="ReflectionObjectBase.cs" />
+    <Compile Include="ScriptFactoryWrapper.cs" />
     <Compile Include="Sql2FetchXmlCommand.cs" />
     <Compile Include="Sql2FetchXmlCommandPackage.cs" />
+    <Compile Include="DisplaySQLResultsControlWrapper.cs" />
+    <Compile Include="SqlScriptEditorControlWrapper.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="app.config" />

@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using EnvDTE;
 using EnvDTE80;
 using MarkMpn.Sql4Cds.Engine;
+using Microsoft.SqlServer.Management.QueryExecution;
 using Microsoft.SqlServer.Management.UI.VSIntegration;
 using Microsoft.SqlServer.Management.UI.VSIntegration.ObjectExplorer;
 using Microsoft.VisualStudio.Shell;
@@ -17,20 +18,7 @@ namespace MarkMpn.Sql4Cds.SSMS
     class DmlExecute : CommandBase
     {
         private readonly IDictionary<TextDocument, QueryExecutionOptions> _options;
-
-        private const string Banner =
-        @"
-  ___  ___  _      _ _     ___ ___  ___ 
- / __|/ _ \| |    | | |   / __|   \/ __|
- \__ \ (_) | |__  |_  _| | (__| |) \__ \
- |___/\__\_\____|   |_|   \___|___/|___/
-
- INSERT/UPDATE/DELETE commands are implemented by SQL 4 CDS
- and not supported by Microsoft
- https://markcarrington.dev/sql-4-cds/
-
-";
-
+        
         public DmlExecute(AsyncPackage package, DTE2 dte, IObjectExplorerService objExp) : base(package, dte, objExp)
         {
             _options = new Dictionary<TextDocument, QueryExecutionOptions>();
@@ -75,9 +63,10 @@ namespace MarkMpn.Sql4Cds.SSMS
             // We are running a query against the Dataverse TDS endpoint, so check if there are any DML statements in the query
 
             // Get the SQL editor object
-            var sqlScriptEditorControl = ServiceCache.ScriptFactory.InvokeMethod("GetCurrentlyActiveFrameDocView", ServiceCache.VSMonitorSelection, false, null);
-            var textSpan = sqlScriptEditorControl.InvokeMethod("GetSelectedTextSpan");
-            var sql = (string) textSpan.GetProperty("Text");
+            var scriptFactory = new ScriptFactoryWrapper(ServiceCache.ScriptFactory);
+            var sqlScriptEditorControl = scriptFactory.GetCurrentlyActiveFrameDocView(ServiceCache.VSMonitorSelection, false, out _);
+            var textSpan = sqlScriptEditorControl.GetSelectedTextSpan();
+            var sql = textSpan.Text;
 
             // Quick check first so we don't spend a long time connecting to CDS just to find there's a simple SELECT query
             if (sql.IndexOf("INSERT", StringComparison.OrdinalIgnoreCase) == -1 &&
@@ -91,8 +80,8 @@ namespace MarkMpn.Sql4Cds.SSMS
                 return;
 
             // We've possibly got a DML statement, so parse the query properly to get the details
-            var quotedIdentifiers = sqlScriptEditorControl.GetProperty("MyOptions").GetProperty("ExecutionSettings").GetProperty("SetQuotedIdentifier");
-            var sql2FetchXml = new Sql2FetchXml(GetMetadataCache(), (bool) quotedIdentifiers);
+            var quotedIdentifiers = sqlScriptEditorControl.QuotedIdentifiers;
+            var sql2FetchXml = new Sql2FetchXml(GetMetadataCache(), quotedIdentifiers);
             sql2FetchXml.TDSEndpointAvailable = true;
             sql2FetchXml.ForceTDSEndpoint = true;
             Query[] queries;
@@ -128,24 +117,13 @@ namespace MarkMpn.Sql4Cds.SSMS
             var metadata = GetMetadataCache();
 
             // Show the queries starting to run
-            sqlScriptEditorControl.SetProperty("IsExecuting", true);
-            sqlScriptEditorControl.InvokeMethod("OnExecutionStarted", sqlScriptEditorControl, EventArgs.Empty);
-            sqlScriptEditorControl.InvokeMethod("ToggleResultsControl", true);
-            var sqlResultsControl = sqlScriptEditorControl.GetField("m_sqlResultsControl");
-            sqlResultsControl.InvokeMethod("PrepareForExecution", true);
-
-            // Cancel method expects execution options to have been set at the start - create some default ones now
-            var m_sqlExec = sqlResultsControl.GetField("m_sqlExec");
-            var execOptions = Activator.CreateInstance(Type.GetType("Microsoft.SqlServer.Management.QueryExecution.QESQLExecutionOptions, SQLEditors"));
-            m_sqlExec.SetField("m_execOptions", execOptions);
-            var batch = Activator.CreateInstance(Type.GetType("Microsoft.SqlServer.Management.QueryExecution.QESQLBatch, SQLEditors"));
-            m_sqlExec.SetField("m_curBatch", batch);
-            m_sqlExec.SetField("m_batchConsumer", sqlResultsControl.GetField("m_batchConsumer"));
-
-            sqlResultsControl.InvokeMethod("AddStringToMessages", Banner, true);
+            sqlScriptEditorControl.StandardPrepareBeforeExecute();
+            sqlScriptEditorControl.OnExecutionStarted(sqlScriptEditorControl, EventArgs.Empty);
+            sqlScriptEditorControl.ToggleResultsControl(true);
+            sqlScriptEditorControl.Results.StartExecution();
 
             // Store the options being used for these queries so we can cancel them later
-            var options = new QueryExecutionOptions(sqlScriptEditorControl, sqlResultsControl);
+            var options = new QueryExecutionOptions(sqlScriptEditorControl);
             _options[ActiveDocument] = options;
             var doc = ActiveDocument;
 
@@ -164,7 +142,7 @@ namespace MarkMpn.Sql4Cds.SSMS
                         query.Execute(org, metadata, options);
 
                         if (query.Result is string msg)
-                            sqlResultsControl.InvokeMethod("AddStringToMessages", msg + "\r\n\r\n", true);
+                            sqlScriptEditorControl.Results.AddStringToMessages(msg + "\r\n\r\n");
 
                         resultFlag |= 1; // Success
                     }
@@ -178,12 +156,12 @@ namespace MarkMpn.Sql4Cds.SSMS
 
                             if (partial.Result is string msg)
                             {
-                                sqlResultsControl.InvokeMethod("AddStringToMessages", msg + "\r\n\r\n", true);
+                                sqlScriptEditorControl.Results.AddStringToMessages(msg + "\r\n\r\n");
                                 resultFlag |= 1; // Success
                             }
                         }
 
-                        AddException(sqlScriptEditorControl, sqlResultsControl, textSpan, error);
+                        AddException(sqlScriptEditorControl, textSpan, error);
                         resultFlag |= 2; // Failure
                     }
                 }
@@ -191,15 +169,10 @@ namespace MarkMpn.Sql4Cds.SSMS
                 if (options.Cancelled)
                     resultFlag = 4; // Cancel
 
-                sqlResultsControl.InvokeMethod("AddStringToMessages", $"Completion time: {DateTime.Now:o}");
-
                 await Package.JoinableTaskFactory.SwitchToMainThreadAsync();
 
-                var result = Enum.ToObject(Type.GetType("Microsoft.SqlServer.Management.QueryExecution.ScriptExecutionResult, SQLEditors"), resultFlag);
-                var resultsArg = Activator.CreateInstance(Type.GetType("Microsoft.SqlServer.Management.QueryExecution.ScriptExecutionCompletedEventArgs, SQLEditors"), BindingFlags.CreateInstance | BindingFlags.NonPublic | BindingFlags.Instance, null, new[] { result }, null);
-                sqlResultsControl.InvokeMethod("OnSqlExecutionCompletedInt", sqlResultsControl, resultsArg);
-                sqlScriptEditorControl.InvokeMethod("DoExecutionCompletedProcessing", result);
-
+                sqlScriptEditorControl.Results.OnSqlExecutionCompletedInt(resultFlag);
+                
                 _options.Remove(doc);
             });
         }
@@ -213,53 +186,42 @@ namespace MarkMpn.Sql4Cds.SSMS
             CancelDefault = true;
         }
 
-        private void ShowError(object sqlScriptEditorControl, object textSpan, Exception ex)
+        private void ShowError(SqlScriptEditorControlWrapper sqlScriptEditorControl, ITextSpan textSpan, Exception ex)
         {
             // Show the results pane
-            sqlScriptEditorControl.SetProperty("IsExecuting", true);
-            sqlScriptEditorControl.InvokeMethod("OnExecutionStarted", sqlScriptEditorControl, EventArgs.Empty);
-            sqlScriptEditorControl.InvokeMethod("ToggleResultsControl", true);
-            var sqlResultsControl = sqlScriptEditorControl.GetField("m_sqlResultsControl");
-            sqlResultsControl.InvokeMethod("PrepareForExecution", true);
+            sqlScriptEditorControl.StandardPrepareBeforeExecute();
+            sqlScriptEditorControl.OnExecutionStarted(sqlScriptEditorControl, EventArgs.Empty);
+            sqlScriptEditorControl.ToggleResultsControl(true);
+            sqlScriptEditorControl.Results.StartExecution();
 
             // Add the messages
-            sqlResultsControl.InvokeMethod("AddStringToMessages", Banner, true);
-            AddException(sqlScriptEditorControl, sqlResultsControl, textSpan, ex);
+            AddException(sqlScriptEditorControl, textSpan, ex);
 
             // Show that the query failed
-            var failure = Enum.ToObject(Type.GetType("Microsoft.SqlServer.Management.QueryExecution.ScriptExecutionResult, SQLEditors"), 2);
-            var resultsArg = Activator.CreateInstance(Type.GetType("Microsoft.SqlServer.Management.QueryExecution.ScriptExecutionCompletedEventArgs, SQLEditors"), BindingFlags.CreateInstance | BindingFlags.NonPublic | BindingFlags.Instance, null, new[] { failure }, null);
-            sqlResultsControl.InvokeMethod("OnSqlExecutionCompletedInt", sqlResultsControl, resultsArg);
-            sqlScriptEditorControl.InvokeMethod("DoExecutionCompletedProcessing", failure);
+            sqlScriptEditorControl.Results.OnSqlExecutionCompletedInt(2);
         }
 
-        private void AddException(object sqlScriptEditorControl, object sqlResultsControl, object textSpan, Exception ex)
+        private void AddException(SqlScriptEditorControlWrapper sqlScriptEditorControl, ITextSpan textSpan, Exception ex)
         {
             if (ex is AggregateException aggregate)
             {
                 foreach (var error in aggregate.InnerExceptions)
-                    AddException(sqlScriptEditorControl, sqlResultsControl, textSpan, error);
+                    AddException(sqlScriptEditorControl, textSpan, error);
 
                 return;
             }
 
             var line = 0;
-            var msg = ex.Message;
 
             if (ex is NotSupportedQueryFragmentException err)
-            {
                 line = err.Fragment.StartLine;
-                msg = err.Error;
-            }
             else if (ex is QueryParseException parse)
-            {
                 line = parse.Error.Line;
-            }
 
             if (line != 0)
-                sqlResultsControl.InvokeMethod("AddStringToErrors", ex.Message, line - 1, textSpan, true);
+                sqlScriptEditorControl.Results.AddStringToErrors(ex.Message, line, textSpan, true);
             else
-                sqlResultsControl.InvokeMethod("AddStringToErrors", ex.Message, true);
+                sqlScriptEditorControl.Results.AddStringToErrors(ex.Message, true);
         }
     }
 }
