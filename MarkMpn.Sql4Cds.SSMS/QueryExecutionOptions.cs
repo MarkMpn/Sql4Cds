@@ -40,6 +40,7 @@ namespace MarkMpn.Sql4Cds.SSMS
 
         public void Progress(string message)
         {
+            // TODO
         }
     }
 }
