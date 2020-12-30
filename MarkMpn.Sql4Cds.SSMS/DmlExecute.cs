@@ -19,7 +19,7 @@ namespace MarkMpn.Sql4Cds.SSMS
     {
         private readonly IDictionary<TextDocument, QueryExecutionOptions> _options;
         
-        public DmlExecute(AsyncPackage package, DTE2 dte) : base(package, dte)
+        public DmlExecute(Sql4CdsPackage package, DTE2 dte) : base(package, dte)
         {
             _options = new Dictionary<TextDocument, QueryExecutionOptions>();
 
@@ -45,7 +45,7 @@ namespace MarkMpn.Sql4Cds.SSMS
             private set;
         }
 
-        public static void Initialize(AsyncPackage package, DTE2 dte)
+        public static void Initialize(Sql4CdsPackage package, DTE2 dte)
         {
             Instance = new DmlExecute(package, dte);
         }
@@ -123,7 +123,7 @@ namespace MarkMpn.Sql4Cds.SSMS
             sqlScriptEditorControl.Results.StartExecution();
 
             // Store the options being used for these queries so we can cancel them later
-            var options = new QueryExecutionOptions(sqlScriptEditorControl);
+            var options = new QueryExecutionOptions(sqlScriptEditorControl, Package.Settings);
             _options[ActiveDocument] = options;
             var doc = ActiveDocument;
 
@@ -143,6 +143,8 @@ namespace MarkMpn.Sql4Cds.SSMS
 
                         if (query.Result is string msg)
                             sqlScriptEditorControl.Results.AddStringToMessages(msg + "\r\n\r\n");
+                        else if (query.Result is Exception ex)
+                            throw ex;
 
                         resultFlag |= 1; // Success
                     }

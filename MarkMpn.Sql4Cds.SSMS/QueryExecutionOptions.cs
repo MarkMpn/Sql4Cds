@@ -9,21 +9,23 @@ namespace MarkMpn.Sql4Cds.SSMS
     internal class QueryExecutionOptions : IQueryExecutionOptions
     {
         private readonly SqlScriptEditorControlWrapper _sqlScriptEditorControl;
+        private readonly OptionsPage _options;
 
-        public QueryExecutionOptions(SqlScriptEditorControlWrapper sqlScriptEditorControl)
+        public QueryExecutionOptions(SqlScriptEditorControlWrapper sqlScriptEditorControl, OptionsPage options)
         {
             _sqlScriptEditorControl = sqlScriptEditorControl;
+            _options = options;
         }
 
         public bool Cancelled { get; private set; }
 
-        public bool BlockUpdateWithoutWhere => false;
+        public bool BlockUpdateWithoutWhere => _options.BlockUpdateWithoutWhere;
 
-        public bool BlockDeleteWithoutWhere => false;
+        public bool BlockDeleteWithoutWhere => _options.BlockDeleteWithoutWhere;
 
         public bool UseBulkDelete => false;
 
-        public int BatchSize => 1;
+        public int BatchSize => _options.BatchSize;
 
         public bool UseTDSEndpoint => true;
 
@@ -31,7 +33,7 @@ namespace MarkMpn.Sql4Cds.SSMS
 
         public int LocaleId => 1033;
 
-        public int MaxDegreeOfParallelism => 1;
+        public int MaxDegreeOfParallelism => _options.MaxDegreeOfParallelism;
 
         public bool ConfirmDelete(int count, EntityMetadata meta)
         {

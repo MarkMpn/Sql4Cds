@@ -21,7 +21,7 @@ namespace MarkMpn.Sql4Cds.SSMS
         private static readonly IDictionary<string, CrmServiceClient> _clientCache = new Dictionary<string,CrmServiceClient>();
         private static readonly IDictionary<string, AttributeMetadataCache> _metadataCache = new Dictionary<string, AttributeMetadataCache>();
 
-        protected CommandBase(AsyncPackage package, DTE2 dte)
+        protected CommandBase(Sql4CdsPackage package, DTE2 dte)
         {
             Package = package;
             Dte = dte;
@@ -30,7 +30,7 @@ namespace MarkMpn.Sql4Cds.SSMS
         /// <summary>
         /// The package that this command was loaded from
         /// </summary>
-        protected AsyncPackage Package { get; }
+        protected Sql4CdsPackage Package { get; }
 
         /// <summary>
         /// Returns the currently active text document

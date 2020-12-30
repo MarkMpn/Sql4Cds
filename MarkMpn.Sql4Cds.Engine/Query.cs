@@ -515,6 +515,11 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         public IDictionary<string,Func<Entity,object>> Updates { get; set; }
 
+        /// <summary>
+        /// Indicates if a WHERE clause was applied to the query
+        /// </summary>
+        public bool HasWhere { get; set; }
+
         /// <inheritdoc/>
         protected override object ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
@@ -522,7 +527,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 return null;
 
             // Check if the update is allowed
-            if (options.BlockUpdateWithoutWhere && !FetchXml.Items.OfType<FetchEntityType>().Single().Items.OfType<filter>().Any() && !Extensions.OfType<Where>().Any())
+            if (options.BlockUpdateWithoutWhere && !HasWhere)
                 throw new InvalidOperationException("UPDATE without WHERE is blocked by your settings");
 
             // Get the records to update
@@ -681,6 +686,11 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         public string[] IdColumns { get; set; }
 
+        /// <summary>
+        /// Indicates if a WHERE clause was applied to the query
+        /// </summary>
+        public bool HasWhere { get; set; }
+
         /// <inheritdoc/>
         protected override object ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
@@ -688,7 +698,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (options.Cancelled)
                 return null;
 
-            if (options.BlockDeleteWithoutWhere && !FetchXml.Items.OfType<FetchEntityType>().Single().Items.OfType<filter>().Any() && !Extensions.OfType<Where>().Any())
+            if (options.BlockDeleteWithoutWhere && !HasWhere)
                 throw new InvalidOperationException("DELETE without WHERE is blocked by your settings");
 
             var meta = metadata[EntityName];

@@ -570,7 +570,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 FetchXml = fetch,
                 EntityName = table.EntityName,
                 IdColumns = cols,
-                AllPages = fetch.page == null && fetch.top == null
+                AllPages = fetch.page == null && fetch.top == null,
+                HasWhere = delete.DeleteSpecification.WhereClause != null
             };
 
             foreach (var extension in extensions)
@@ -643,7 +644,8 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 EntityName = metadata.LogicalName,
                 IdColumns = idColumns.ToArray(),
-                TSql = select.ToSql()
+                TSql = select.ToSql(),
+                HasWhere = delete.DeleteSpecification.WhereClause != null
             };
 
             return query;
@@ -763,7 +765,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 EntityName = table.EntityName,
                 IdColumn = cols[0],
                 Updates = updates,
-                AllPages = fetch.page == null && fetch.top == null
+                AllPages = fetch.page == null && fetch.top == null,
+                HasWhere = update.UpdateSpecification.WhereClause != null
             };
 
             foreach (var extension in extensions)
@@ -927,7 +930,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 EntityName = visitor.TargetEntityName,
                 IdColumn = metadata.PrimaryIdAttribute,
                 Updates = updates,
-                TSql = select.ToSql()
+                TSql = select.ToSql(),
+                HasWhere = update.UpdateSpecification.WhereClause != null
             };
 
             return query;

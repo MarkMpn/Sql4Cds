@@ -40,7 +40,7 @@ namespace MarkMpn.Sql4Cds.SSMS
         /// </summary>
         /// <param name="package">Owner package, not null.</param>
         /// <param name="commandService">Command service to add command to, not null.</param>
-        private Sql2FetchXmlCommand(AsyncPackage package, OleMenuCommandService commandService, DTE2 dte) : base(package, dte)
+        private Sql2FetchXmlCommand(Sql4CdsPackage package, OleMenuCommandService commandService, DTE2 dte) : base(package, dte)
         {
             commandService = commandService ?? throw new ArgumentNullException(nameof(commandService));
 
@@ -82,7 +82,7 @@ namespace MarkMpn.Sql4Cds.SSMS
         /// Initializes the singleton instance of the command.
         /// </summary>
         /// <param name="package">Owner package, not null.</param>
-        public static async Task InitializeAsync(AsyncPackage package, DTE2 dte)
+        public static async Task InitializeAsync(Sql4CdsPackage package, DTE2 dte)
         {
             // Verify the current thread is the UI thread - the call to AddCommand in Sql2FetchXmlCommand's constructor requires
             // the UI thread.

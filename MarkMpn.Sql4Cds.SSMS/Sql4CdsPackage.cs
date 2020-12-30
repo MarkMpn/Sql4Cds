@@ -40,6 +40,7 @@ namespace MarkMpn.Sql4Cds.SSMS
     [Guid(Sql4CdsPackage.PackageGuidString)]
     [SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1650:ElementDocumentationMustBeSpelledCorrectly", Justification = "pkgdef, VS and vsixmanifest are valid VS terms")]
     [ProvideAutoLoad(UIContextGuids.NoSolution, PackageAutoLoadFlags.BackgroundLoad)]
+    [ProvideOptionPage(typeof(OptionsPage), "SQL 4 CDS", "General", 0, 0, true, 0)]
     public sealed class Sql4CdsPackage : AsyncPackage
     {
         /// <summary>
@@ -57,8 +58,6 @@ namespace MarkMpn.Sql4Cds.SSMS
             // not sited yet inside Visual Studio environment. The place to do all the other
             // initialization is the Initialize method.
         }
-
-        #region Package Members
 
         /// <summary>
         /// Initialization of the package; this method is called right after the package is sited, so this is the place
@@ -83,6 +82,13 @@ namespace MarkMpn.Sql4Cds.SSMS
             CrmServiceClient.AuthOverrideHook = AuthOverrideHook.Instance;
         }
 
-        #endregion
+        public OptionsPage Settings
+        {
+            get
+            {
+                var page = (OptionsPage)GetDialogPage(typeof(OptionsPage));
+                return page;
+            }
+        }
     }
 }
