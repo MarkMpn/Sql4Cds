@@ -64,12 +64,12 @@
     <Compile Include="DmlExecute.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="QueryExecutionOptions.cs" />
-    <Compile Include="ReflectionObjectBase.cs" />
-    <Compile Include="ScriptFactoryWrapper.cs" />
+    <Compile Include="Reflection\ReflectionObjectBase.cs" />
+    <Compile Include="Reflection\ScriptFactoryWrapper.cs" />
     <Compile Include="Sql2FetchXmlCommand.cs" />
     <Compile Include="Sql2FetchXmlCommandPackage.cs" />
-    <Compile Include="DisplaySQLResultsControlWrapper.cs" />
-    <Compile Include="SqlScriptEditorControlWrapper.cs" />
+    <Compile Include="Reflection\DisplaySQLResultsControlWrapper.cs" />
+    <Compile Include="Reflection\SqlScriptEditorControlWrapper.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="app.config" />
@@ -243,6 +243,7 @@
       <Name>MarkMpn.Sql4Cds.Engine</Name>
     </ProjectReference>
   </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Import Project="$(VSToolsPath)\VSSDK\Microsoft.VsSDK.targets" Condition="'$(VSToolsPath)' != ''" />
   <Import Project="..\packages\Microsoft.VisualStudio.SDK.EmbedInteropTypes.15.0.10\build\Microsoft.VisualStudio.SDK.EmbedInteropTypes.targets" Condition="Exists('..\packages\Microsoft.VisualStudio.SDK.EmbedInteropTypes.15.0.10\build\Microsoft.VisualStudio.SDK.EmbedInteropTypes.targets')" />
