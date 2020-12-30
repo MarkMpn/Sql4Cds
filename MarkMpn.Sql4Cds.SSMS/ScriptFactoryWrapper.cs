@@ -21,6 +21,9 @@ namespace MarkMpn.Sql4Cds.SSMS
             var obj = InvokeMethod(Target, "GetCurrentlyActiveFrameDocView", parameters);
             frame = (IVsWindowFrame) parameters[2];
 
+            if (obj == null)
+                return null;
+
             return new SqlScriptEditorControlWrapper(obj);
         }
     }

@@ -19,7 +19,7 @@ namespace MarkMpn.Sql4Cds.SSMS
     {
         private readonly IDictionary<TextDocument, QueryExecutionOptions> _options;
         
-        public DmlExecute(AsyncPackage package, DTE2 dte, IObjectExplorerService objExp) : base(package, dte, objExp)
+        public DmlExecute(AsyncPackage package, DTE2 dte) : base(package, dte)
         {
             _options = new Dictionary<TextDocument, QueryExecutionOptions>();
 
@@ -45,9 +45,9 @@ namespace MarkMpn.Sql4Cds.SSMS
             private set;
         }
 
-        public static void Initialize(AsyncPackage package, DTE2 dte, IObjectExplorerService objExp)
+        public static void Initialize(AsyncPackage package, DTE2 dte)
         {
-            Instance = new DmlExecute(package, dte, objExp);
+            Instance = new DmlExecute(package, dte);
         }
 
         private void OnExecuteQuery(string Guid, int ID, object CustomIn, object CustomOut, ref bool CancelDefault)
@@ -128,7 +128,7 @@ namespace MarkMpn.Sql4Cds.SSMS
             var doc = ActiveDocument;
 
             // Run the queries in a background thread
-            System.Threading.Tasks.Task.Run(async () =>
+            var task = new System.Threading.Tasks.Task(async () =>
             {
                 var resultFlag = 0;
 
@@ -175,6 +175,9 @@ namespace MarkMpn.Sql4Cds.SSMS
                 
                 _options.Remove(doc);
             });
+
+            options.Task = task;
+            task.Start();
         }
 
         private void OnCancelQuery(string Guid, int ID, object CustomIn, object CustomOut, ref bool CancelDefault)

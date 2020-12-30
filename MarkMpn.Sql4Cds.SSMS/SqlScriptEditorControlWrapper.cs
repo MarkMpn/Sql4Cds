@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.SqlServer.Management.QueryExecution;
+using Microsoft.SqlServer.Management.Smo.RegSvrEnum;
 
 namespace MarkMpn.Sql4Cds.SSMS
 {
@@ -47,9 +49,20 @@ namespace MarkMpn.Sql4Cds.SSMS
             InvokeMethod(Target, "ToggleResultsControl", show);
         }
 
+        public void Cancelling()
+        {
+            var cancelingExecution = Enum.ToObject(Type.GetType("Microsoft.SqlServer.Management.UI.VSIntegration.Editors.QEStatusBarKnownStates, SQLEditors"), 11);
+            InvokeMethod(Target, "OnWindowStatusTextChanged", cancelingExecution);
+        }
+
         public void DoCancelExec()
         {
             InvokeMethod(Target, "DoCancelExec");
+        }
+
+        public string ConnectionString
+        {
+            get => ((IDbConnection)GetField(Target, "m_connection"))?.ConnectionString;
         }
     }
 }

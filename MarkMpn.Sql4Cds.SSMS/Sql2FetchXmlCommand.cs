@@ -40,7 +40,7 @@ namespace MarkMpn.Sql4Cds.SSMS
         /// </summary>
         /// <param name="package">Owner package, not null.</param>
         /// <param name="commandService">Command service to add command to, not null.</param>
-        private Sql2FetchXmlCommand(AsyncPackage package, OleMenuCommandService commandService, DTE2 dte, IObjectExplorerService objExp) : base(package, dte, objExp)
+        private Sql2FetchXmlCommand(AsyncPackage package, OleMenuCommandService commandService, DTE2 dte) : base(package, dte)
         {
             commandService = commandService ?? throw new ArgumentNullException(nameof(commandService));
 
@@ -82,14 +82,14 @@ namespace MarkMpn.Sql4Cds.SSMS
         /// Initializes the singleton instance of the command.
         /// </summary>
         /// <param name="package">Owner package, not null.</param>
-        public static async Task InitializeAsync(AsyncPackage package, DTE2 dte, IObjectExplorerService objEx)
+        public static async Task InitializeAsync(AsyncPackage package, DTE2 dte)
         {
             // Verify the current thread is the UI thread - the call to AddCommand in Sql2FetchXmlCommand's constructor requires
             // the UI thread.
             ThreadHelper.ThrowIfNotOnUIThread();
             
             OleMenuCommandService commandService = await package.GetServiceAsync((typeof(IMenuCommandService))) as OleMenuCommandService;
-            Instance = new Sql2FetchXmlCommand(package, commandService, dte, objEx);
+            Instance = new Sql2FetchXmlCommand(package, commandService, dte);
         }
 
         /// <summary>
@@ -107,7 +107,6 @@ namespace MarkMpn.Sql4Cds.SSMS
 
             var sql2FetchXml = new Sql2FetchXml(GetMetadataCache(), false);
             sql2FetchXml.ColumnComparisonAvailable = true;
-            sql2FetchXml.TDSEndpointAvailable = true;
 
             try
             {
@@ -118,7 +117,7 @@ namespace MarkMpn.Sql4Cds.SSMS
                     var window = Dte.ItemOperations.NewFile("General\\XML File");
 
                     var editPoint = ActiveDocument.EndPoint.CreateEditPoint();
-                    editPoint.Insert("<!-- Created from query:\r\n\r\n");
+                    editPoint.Insert("<!--\r\nCreated from query:\r\n\r\n");
                     editPoint.Insert(query.Sql);
 
                     if (query.Extensions.Count > 0)
@@ -135,7 +134,7 @@ namespace MarkMpn.Sql4Cds.SSMS
                         editPoint.Insert("Learn more at https://docs.microsoft.com/powerapps/developer/common-data-service/org-service/paging-behaviors-and-ordering#ordering-with-a-paging-cookie\r\n\r\n");
                     }
 
-                    editPoint.Insert("-->\r\n\r\n");
+                    editPoint.Insert("\r\n\r\n-->\r\n\r\n");
                     editPoint.Insert(query.FetchXmlString);
                 }
             }

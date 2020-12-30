@@ -7,7 +7,6 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using EnvDTE80;
-using Microsoft.SqlServer.Management.UI.VSIntegration.ObjectExplorer;
 using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.OLE.Interop;
 using Microsoft.VisualStudio.Shell;
@@ -76,11 +75,10 @@ namespace MarkMpn.Sql4Cds.SSMS
 
             // Add the command to convert SQL to FetchXML
             var dte = (DTE2)await GetServiceAsync(typeof(EnvDTE.DTE));
-            var objEx = (IObjectExplorerService)await GetServiceAsync(typeof(IObjectExplorerService));
-            await Sql2FetchXmlCommand.InitializeAsync(this, dte, objEx);
+            await Sql2FetchXmlCommand.InitializeAsync(this, dte);
 
             // Intercept query execution
-            DmlExecute.Initialize(this, dte, objEx);
+            DmlExecute.Initialize(this, dte);
 
             CrmServiceClient.AuthOverrideHook = AuthOverrideHook.Instance;
         }
