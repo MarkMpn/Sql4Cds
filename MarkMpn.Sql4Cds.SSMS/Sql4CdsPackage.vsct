@@ -22,7 +22,7 @@
 
   <!--The Commands section is where commands, menus, and menu groups are defined.
       This section uses a Guid to identify the package that provides the command defined inside it. -->
-  <Commands package="guidSql2FetchXmlCommandPackage">
+  <Commands package="guidSql4CdsPackage">
     <!-- Inside this section we have different sub-sections: one for the menus, another
     for the menu groups, one for the buttons (the actual commands), one for the combos
     and the last one for the bitmaps used. Each element is identified by a command id that
@@ -31,7 +31,7 @@
     group; your package should define its own command set in order to avoid collisions
     with command ids defined by other packages. -->
     <Menus>
-      <Menu guid="guidSql2FetchXmlCommandPackageCmdSet" id="Toolbar" type="Toolbar">
+      <Menu guid="guidSql4CdsPackageCmdSet" id="Toolbar" type="Toolbar">
         <CommandFlag>DefaultDocked</CommandFlag>
         <Strings>
           <ButtonText>SQL 4 CDS</ButtonText>
@@ -45,8 +45,8 @@
          group as the part of a menu contained between two lines. The parent of a group
          must be a menu. -->
     <Groups>
-      <Group guid="guidSql2FetchXmlCommandPackageCmdSet" id="ToolbarGroup" priority="0x0000">
-        <Parent guid="guidSql2FetchXmlCommandPackageCmdSet" id="Toolbar" />
+      <Group guid="guidSql4CdsPackageCmdSet" id="ToolbarGroup" priority="0x0000">
+        <Parent guid="guidSql4CdsPackageCmdSet" id="Toolbar" />
       </Group>
     </Groups>
 
@@ -61,8 +61,8 @@
               <CommandFlag>DefaultInvisible</CommandFlag>
               <CommandFlag>DynamicVisibility</CommandFlag>
           If you do not want an image next to your command, remove the Icon node /> -->
-      <Button guid="guidSql2FetchXmlCommandPackageCmdSet" id="Sql2FetchXmlCommandId" priority="0x0100" type="Button">
-        <Parent guid="guidSql2FetchXmlCommandPackageCmdSet" id="ToolbarGroup" />
+      <Button guid="guidSql4CdsPackageCmdSet" id="Sql2FetchXmlCommandId" priority="0x0100" type="Button">
+        <Parent guid="guidSql4CdsPackageCmdSet" id="ToolbarGroup" />
         <Icon guid="guidImages" id="bmpPic1" />
         <CommandFlag>IconAndText</CommandFlag>
         <CommandFlag>DontCache</CommandFlag>
@@ -81,16 +81,16 @@
             bitmap strip containing the bitmaps and then there are the numeric ids of the elements used
             inside a button definition. An important aspect of this declaration is that the element id
             must be the actual index (1-based) of the bitmap inside the bitmap strip. -->
-      <Bitmap guid="guidImages" href="Resources\Sql2FetchXmlCommand.png" usedList="bmpPic1, bmpPic2, bmpPicSearch, bmpPicX, bmpPicArrows, bmpPicStrikethrough" />
+      <Bitmap guid="guidImages" href="Resources\Sql2FetchXmlCommand.png" usedList="bmpPic1" />
     </Bitmaps>
   </Commands>
 
   <Symbols>
     <!-- This is the package guid. -->
-    <GuidSymbol name="guidSql2FetchXmlCommandPackage" value="{edc4d3ea-c057-45cc-9517-a1c77b6822e4}" />
+    <GuidSymbol name="guidSql4CdsPackage" value="{edc4d3ea-c057-45cc-9517-a1c77b6822e4}" />
 
     <!-- This is the guid used to group the menu commands together -->
-    <GuidSymbol name="guidSql2FetchXmlCommandPackageCmdSet" value="{fd809e45-c5a9-40cc-9f78-501dd3f71817}">
+    <GuidSymbol name="guidSql4CdsPackageCmdSet" value="{fd809e45-c5a9-40cc-9f78-501dd3f71817}">
       <IDSymbol name="ToolbarGroup" value="0x1020" />
       <IDSymbol name="Toolbar" value="0x1010" />
       <IDSymbol name="Sql2FetchXmlCommandId" value="0x0100" />
@@ -98,11 +98,6 @@
 
     <GuidSymbol name="guidImages" value="{4134aa85-5a36-4ce6-98e8-2186a7482e8a}">
       <IDSymbol name="bmpPic1" value="1" />
-      <IDSymbol name="bmpPic2" value="2" />
-      <IDSymbol name="bmpPicSearch" value="3" />
-      <IDSymbol name="bmpPicX" value="4" />
-      <IDSymbol name="bmpPicArrows" value="5" />
-      <IDSymbol name="bmpPicStrikethrough" value="6" />
     </GuidSymbol>
   </Symbols>
 </CommandTable>

@@ -37,10 +37,10 @@ namespace MarkMpn.Sql4Cds.SSMS
     [PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
     [InstalledProductRegistration("#110", "#112", "1.0", IconResourceID = 400)] // Info on this package for Help/About
     [ProvideMenuResource("Menus.ctmenu", 1)]
-    [Guid(Sql2FetchXmlCommandPackage.PackageGuidString)]
+    [Guid(Sql4CdsPackage.PackageGuidString)]
     [SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1650:ElementDocumentationMustBeSpelledCorrectly", Justification = "pkgdef, VS and vsixmanifest are valid VS terms")]
     [ProvideAutoLoad(UIContextGuids.NoSolution, PackageAutoLoadFlags.BackgroundLoad)]
-    public sealed class Sql2FetchXmlCommandPackage : AsyncPackage
+    public sealed class Sql4CdsPackage : AsyncPackage
     {
         /// <summary>
         /// Sql2FetchXmlCommandPackage GUID string.
@@ -48,9 +48,9 @@ namespace MarkMpn.Sql4Cds.SSMS
         public const string PackageGuidString = "edc4d3ea-c057-45cc-9517-a1c77b6822e4";
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="Sql2FetchXmlCommand"/> class.
+        /// Initializes a new instance of the <see cref="Sql4CdsPackage"/> class.
         /// </summary>
-        public Sql2FetchXmlCommandPackage()
+        public Sql4CdsPackage()
         {
             // Inside this method you can place any initialization code that does not require
             // any Visual Studio service because at this point the package object is created but

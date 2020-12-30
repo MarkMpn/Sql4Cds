@@ -67,7 +67,7 @@
     <Compile Include="Reflection\ReflectionObjectBase.cs" />
     <Compile Include="Reflection\ScriptFactoryWrapper.cs" />
     <Compile Include="Sql2FetchXmlCommand.cs" />
-    <Compile Include="Sql2FetchXmlCommandPackage.cs" />
+    <Compile Include="Sql4CdsPackage.cs" />
     <Compile Include="Reflection\DisplaySQLResultsControlWrapper.cs" />
     <Compile Include="Reflection\SqlScriptEditorControlWrapper.cs" />
   </ItemGroup>
@@ -80,7 +80,7 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <VSCTCompile Include="Sql2FetchXmlCommandPackage.vsct">
+    <VSCTCompile Include="Sql4CdsPackage.vsct">
       <ResourceName>Menus.ctmenu</ResourceName>
     </VSCTCompile>
     <Content Include="Resources\Sql2FetchXmlCommand.png" />
