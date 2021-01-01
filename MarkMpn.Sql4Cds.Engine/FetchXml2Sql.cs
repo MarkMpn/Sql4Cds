@@ -47,9 +47,12 @@ namespace MarkMpn.Sql4Cds.Engine
         public static string Convert(IOrganizationService org, IAttributeMetadataCache metadata, FetchXml.FetchType fetch, FetchXml2SqlOptions options, out IDictionary<string,object> parameterValues)
         {
             var ctes = new Dictionary<string, CommonTableExpression>();
+            var batch = new TSqlBatch();
             var select = new SelectStatement();
             var query = new QuerySpecification();
             select.QueryExpression = query;
+            var requiresTimeZone = false;
+            var usesToday = false;
 
             if (fetch.top != null)
                 query.TopRowFilter = new TopRowFilter { Expression = new IntegerLiteral { Value = fetch.top } };
@@ -87,7 +90,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     ((NamedTableReference)query.FromClause.TableReferences[0]).TableHints.Add(new TableHint { HintKind = TableHintKind.NoLock });
 
                 // Recurse into link-entities to build joins
-                query.FromClause.TableReferences[0] = BuildJoins(org, metadata, query.FromClause.TableReferences[0], (NamedTableReference)query.FromClause.TableReferences[0], entity.Items, query, aliasToLogicalName, fetch.nolock, options, ctes);
+                query.FromClause.TableReferences[0] = BuildJoins(org, metadata, query.FromClause.TableReferences[0], (NamedTableReference)query.FromClause.TableReferences[0], entity.Items, query, aliasToLogicalName, fetch.nolock, options, ctes, ref requiresTimeZone, ref usesToday);
             }
 
             // OFFSET
@@ -104,7 +107,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             // WHERE
-            var filter = GetFilter(org, metadata, entity.Items, entity.name, aliasToLogicalName, options, ctes);
+            var filter = GetFilter(org, metadata, entity.Items, entity.name, aliasToLogicalName, options, ctes, ref requiresTimeZone, ref usesToday);
             if (filter != null)
             {
                 query.WhereClause = new WhereClause
@@ -141,7 +144,67 @@ namespace MarkMpn.Sql4Cds.Engine
                 select.Accept(new LiteralsToParametersVisitor(parameterValues));
             }
 
-            new Sql150ScriptGenerator().GenerateScript(select, out var sql);
+            if (requiresTimeZone && parameterValues == null)
+                parameterValues = new Dictionary<string, object>();
+
+            if (usesToday)
+            {
+                requiresTimeZone = true;
+
+                // Calculate the parameter to work out the calling user's "Today", optionally in UTC
+                // FLOOR(CONVERT(float, DATEADD(minute, -@time_zone, GETUTCDATE())))
+                var now = new FunctionCall
+                {
+                    FunctionName = new Identifier { Value = "GETUTCDATE" }
+                };
+
+                if (options.UseUtcDateTimeColumns)
+                {
+                    now = new FunctionCall
+                    {
+                        FunctionName = new Identifier { Value = "DATEADD" },
+                        Parameters =
+                        {
+                            new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier {  Value = "minute"} } } },
+                            new UnaryExpression { UnaryExpressionType = UnaryExpressionType.Negative, Expression = new VariableReference { Name = "@time_zone" } },
+                            now
+                        }
+                    };
+                }
+
+                var todayParam = new DeclareVariableStatement
+                {
+                    Declarations =
+                    {
+                        new DeclareVariableElement
+                        {
+                            VariableName = new Identifier { Value = "@today" },
+                            DataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.DateTime },
+                            Value = new FunctionCall
+                            {
+                                FunctionName = new Identifier { Value = "FLOOR" },
+                                Parameters =
+                                {
+                                    new ConvertCall
+                                    {
+                                        DataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Float },
+                                        Parameter = now
+                                    }
+                                }
+                            }
+                        }
+                    }
+                };
+
+                batch.Statements.Add(todayParam);
+            }
+
+            if (requiresTimeZone)
+                parameterValues["@time_zone"] = (int) (DateTime.Now - DateTime.UtcNow).TotalMinutes;
+
+            batch.Statements.Add(select);
+
+            new Sql150ScriptGenerator().GenerateScript(batch, out var sql);
 
             return sql;
         }
@@ -299,7 +362,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="aliasToLogicalName">A mapping of table aliases to the logical name</param>
         /// <param name="nolock">Indicates if the NOLOCK table hint should be applied</param>
         /// <returns>The data source including any required joins</returns>
-        private static TableReference BuildJoins(IOrganizationService org, IAttributeMetadataCache metadata, TableReference dataSource, NamedTableReference parentTable, object[] items, QuerySpecification query, IDictionary<string, string> aliasToLogicalName, bool nolock, FetchXml2SqlOptions options, IDictionary<string, CommonTableExpression> ctes)
+        private static TableReference BuildJoins(IOrganizationService org, IAttributeMetadataCache metadata, TableReference dataSource, NamedTableReference parentTable, object[] items, QuerySpecification query, IDictionary<string, string> aliasToLogicalName, bool nolock, FetchXml2SqlOptions options, IDictionary<string, CommonTableExpression> ctes, ref bool requiresTimeZone, ref bool usesToday)
         {
             if (items == null)
                 return dataSource;
@@ -368,7 +431,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 AddSelectElements(query, link.Items, link.alias ?? link.name);
 
                 // Handle any filters within the <link-entity> as additional join criteria
-                var filter = GetFilter(org, metadata, link.Items, link.alias ?? link.name, aliasToLogicalName, options, ctes);
+                var filter = GetFilter(org, metadata, link.Items, link.alias ?? link.name, aliasToLogicalName, options, ctes, ref requiresTimeZone, ref usesToday);
 
                 if (filter != null)
                 {
@@ -393,7 +456,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
 
                 // Recurse into any other links
-                dataSource = BuildJoins(org, metadata, join, (NamedTableReference)join.SecondTableReference, link.Items, query, aliasToLogicalName, nolock, options, ctes);
+                dataSource = BuildJoins(org, metadata, join, (NamedTableReference)join.SecondTableReference, link.Items, query, aliasToLogicalName, nolock, options, ctes, ref requiresTimeZone, ref usesToday);
             }
 
             return dataSource;
@@ -408,7 +471,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="prefix">The alias or name of the table that the &lt;filter&gt; applies to</param>
         /// <param name="aliasToLogicalName">The mapping of table alias to logical name</param>
         /// <returns>The SQL condition equivalent of the &lt;filter&gt; found in the <paramref name="items"/>, or <c>null</c> if no filter was found</returns>
-        private static BooleanExpression GetFilter(IOrganizationService org, IAttributeMetadataCache metadata, object[] items, string prefix, IDictionary<string, string> aliasToLogicalName, FetchXml2SqlOptions options, IDictionary<string, CommonTableExpression> ctes)
+        private static BooleanExpression GetFilter(IOrganizationService org, IAttributeMetadataCache metadata, object[] items, string prefix, IDictionary<string, string> aliasToLogicalName, FetchXml2SqlOptions options, IDictionary<string, CommonTableExpression> ctes, ref bool requiresTimeZone, ref bool usesToday)
         {
             if (items == null)
                 return null;
@@ -419,7 +482,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             foreach (var filter in filters)
             {
-                var newExpression = GetFilter(org, metadata, filter, prefix, aliasToLogicalName, options, ctes);
+                var newExpression = GetFilter(org, metadata, filter, prefix, aliasToLogicalName, options, ctes, ref requiresTimeZone, ref usesToday);
 
                 if (newExpression is BooleanBinaryExpression bbe && bbe.BinaryExpressionType != BooleanBinaryExpressionType.And)
                     newExpression = new BooleanParenthesisExpression { Expression = newExpression };
@@ -454,7 +517,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="prefix">The alias or name of the table that the <paramref name="filter"/> applies to</param>
         /// <param name="aliasToLogicalName">The mapping of table alias to logical name</param>
         /// <returns>The SQL condition equivalent of the <paramref name="filter"/></returns>
-        private static BooleanExpression GetFilter(IOrganizationService org, IAttributeMetadataCache metadata, filter filter, string prefix, IDictionary<string, string> aliasToLogicalName, FetchXml2SqlOptions options, IDictionary<string, CommonTableExpression> ctes)
+        private static BooleanExpression GetFilter(IOrganizationService org, IAttributeMetadataCache metadata, filter filter, string prefix, IDictionary<string, string> aliasToLogicalName, FetchXml2SqlOptions options, IDictionary<string, CommonTableExpression> ctes, ref bool requiresTimeZone, ref bool usesToday)
         {
             BooleanExpression expression = null;
             var type = filter.type == filterType.and ? BooleanBinaryExpressionType.And : BooleanBinaryExpressionType.Or;
@@ -462,7 +525,7 @@ namespace MarkMpn.Sql4Cds.Engine
             // Convert each <condition> within the filter
             foreach (var condition in filter.Items.OfType<condition>())
             {
-                var newExpression = GetCondition(org, metadata, condition, prefix, aliasToLogicalName, options, ctes);
+                var newExpression = GetCondition(org, metadata, condition, prefix, aliasToLogicalName, options, ctes, ref requiresTimeZone, ref usesToday);
 
                 if (newExpression is BooleanBinaryExpression bbe && bbe.BinaryExpressionType != type)
                     newExpression = new BooleanParenthesisExpression { Expression = newExpression };
@@ -488,7 +551,7 @@ namespace MarkMpn.Sql4Cds.Engine
             // Recurse into sub-<filter>s
             foreach (var subFilter in filter.Items.OfType<filter>())
             {
-                var newExpression = GetFilter(org, metadata, subFilter, prefix, aliasToLogicalName, options, ctes);
+                var newExpression = GetFilter(org, metadata, subFilter, prefix, aliasToLogicalName, options, ctes, ref requiresTimeZone, ref usesToday);
 
                 if (newExpression is BooleanBinaryExpression bbe && bbe.BinaryExpressionType != type)
                     newExpression = new BooleanParenthesisExpression { Expression = newExpression };
@@ -523,7 +586,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="prefix">The alias or name of the table that the <paramref name="condition"/> applies to</param>
         /// <param name="aliasToLogicalName">The mapping of table alias to logical name</param>
         /// <returns>The SQL condition equivalent of the <paramref name="condition"/></returns>
-        private static BooleanExpression GetCondition(IOrganizationService org, IAttributeMetadataCache metadata, condition condition, string prefix, IDictionary<string,string> aliasToLogicalName, FetchXml2SqlOptions options, IDictionary<string, CommonTableExpression> ctes)
+        private static BooleanExpression GetCondition(IOrganizationService org, IAttributeMetadataCache metadata, condition condition, string prefix, IDictionary<string,string> aliasToLogicalName, FetchXml2SqlOptions options, IDictionary<string, CommonTableExpression> ctes, ref bool requiresTimeZone, ref bool usesToday)
         {
             // Start with the field reference
             var field = new ColumnReferenceExpression
@@ -548,6 +611,14 @@ namespace MarkMpn.Sql4Cds.Engine
             var meta = metadata == null ? null : metadata[logicalName];
             var attr = meta == null ? null : meta.Attributes.SingleOrDefault(a => a.LogicalName == condition.attribute);
 
+            var useUtc = false;
+
+            if (options.UseUtcDateTimeColumns && attr is DateTimeAttributeMetadata dtAttr && dtAttr.DateTimeBehavior.Value != DateTimeBehavior.TimeZoneIndependent)
+            {
+                useUtc = true;
+                field.MultiPartIdentifier.Identifiers[1].Value += "utc";
+            }
+
             // Get the literal value to compare to
             if (!String.IsNullOrEmpty(condition.valueof))
                 value = new ColumnReferenceExpression
@@ -556,25 +627,25 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         Identifiers =
                         {
-                        new Identifier{Value = condition.entityname ?? prefix},
-                        new Identifier{Value = condition.attribute}
+                            new Identifier{Value = condition.entityname ?? prefix},
+                            new Identifier{Value = condition.attribute + (useUtc ? "utc" : "")}
                         }
                     }
                 };
             else if (attr == null)
                 value = new StringLiteral { Value = condition.value };
-            else if (attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.BigInt ||
-                attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.Integer ||
-                attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.Picklist ||
-                attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.State ||
-                attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.Status)
+            else if (attr.AttributeType == AttributeTypeCode.BigInt ||
+                attr.AttributeType == AttributeTypeCode.Integer ||
+                attr.AttributeType == AttributeTypeCode.Picklist ||
+                attr.AttributeType == AttributeTypeCode.State ||
+                attr.AttributeType == AttributeTypeCode.Status)
                 value = new IntegerLiteral { Value = condition.value };
-            else if (attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.Boolean)
+            else if (attr.AttributeType == AttributeTypeCode.Boolean)
                 value = new BinaryLiteral { Value = condition.value };
-            else if (attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.Decimal ||
-                attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.Double)
+            else if (attr.AttributeType == AttributeTypeCode.Decimal ||
+                attr.AttributeType == AttributeTypeCode.Double)
                 value = new NumericLiteral { Value = condition.value };
-            else if (attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.Money)
+            else if (attr.AttributeType == AttributeTypeCode.Money)
                 value = new MoneyLiteral { Value = condition.value };
             else
                 value = new StringLiteral { Value = condition.value };
@@ -647,7 +718,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 case @operator.under:
                 case @operator.yesterday:
 
-                    if (options.PreserveFetchXmlOperatorsAsFunctions)
+                    if (options.ConvertFetchXmlOperatorsTo == FetchXmlOperatorConversion.Functions)
                     {
                         // These FetchXML operators don't have a direct SQL equivalent, so convert to the format
                         // field = function(arg)
@@ -681,13 +752,28 @@ namespace MarkMpn.Sql4Cds.Engine
                         // This takes some more work to generate the dynamic values to use. Many of these are date/time related,
                         // so store some values for a date range for common reuse later.
                         DateTime? startTime = null;
+                        ScalarExpression startExpression = null;
                         DateTime? endTime = null;
-
+                        ScalarExpression endExpression = null;
+                        
                         switch (condition.@operator)
                         {
                             case @operator.lastsevendays:
                                 startTime = DateTime.Today.AddDays(-7);
                                 endTime = DateTime.Now;
+
+                                startExpression = new FunctionCall
+                                {
+                                    FunctionName = new Identifier { Value = "DATEADD" },
+                                    Parameters =
+                                    {
+                                        new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = "day" } } } },
+                                        new IntegerLiteral { Value = "-7" },
+                                        new VariableReference { Name = "@today" }
+                                    }
+                                };
+
+                                endExpression = new FunctionCall { FunctionName = new Identifier { Value = "GETUTCDATE" } };
                                 break;
 
                             case @operator.lastweek:
@@ -1284,22 +1370,36 @@ namespace MarkMpn.Sql4Cds.Engine
 
                         if (startTime != null)
                         {
+                            if (useUtc)
+                                startTime = startTime.Value.ToUniversalTime();
+
+                            var useExpression = options.ConvertFetchXmlOperatorsTo == FetchXmlOperatorConversion.SqlCalculations && startExpression != null;
+
                             expr = new BooleanComparisonExpression
                             {
                                 FirstExpression = field,
                                 ComparisonType = BooleanComparisonType.GreaterThanOrEqualTo,
-                                SecondExpression = new StringLiteral { Value = startTime.Value.ToString("s") }
+                                SecondExpression = useExpression ? startExpression : new StringLiteral { Value = startTime.Value.ToString("s") }
                             };
+
+                            usesToday |= useExpression;
                         }
 
                         if (endTime != null)
                         {
+                            if (useUtc)
+                                endTime = endTime.Value.ToUniversalTime();
+
+                            var useExpression = options.ConvertFetchXmlOperatorsTo == FetchXmlOperatorConversion.SqlCalculations && endExpression != null;
+
                             var endExpr = new BooleanComparisonExpression
                             {
                                 FirstExpression = field,
                                 ComparisonType = BooleanComparisonType.LessThan,
-                                SecondExpression = new StringLiteral { Value = endTime.Value.ToString("s") }
+                                SecondExpression = useExpression ? endExpression : new StringLiteral { Value = endTime.Value.ToString("s") }
                             };
+
+                            usesToday |= useExpression;
 
                             if (expr == null)
                             {
@@ -2205,8 +2305,17 @@ namespace MarkMpn.Sql4Cds.Engine
 
     public class FetchXml2SqlOptions
     {
-        public bool PreserveFetchXmlOperatorsAsFunctions { get; set; } = true;
+        public FetchXmlOperatorConversion ConvertFetchXmlOperatorsTo { get; set; } = FetchXmlOperatorConversion.Functions;
 
         public bool UseParametersForLiterals { get; set; } = false;
+
+        public bool UseUtcDateTimeColumns { get; set; } = false;
+    }
+
+    public enum FetchXmlOperatorConversion
+    {
+        Functions,
+        Literals,
+        SqlCalculations
     }
 }

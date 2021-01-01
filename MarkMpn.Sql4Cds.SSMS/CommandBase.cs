@@ -75,6 +75,16 @@ namespace MarkMpn.Sql4Cds.SSMS
         {
             var conStr = GetConnectionInfo();
 
+            return IsDataverse(conStr);
+        }
+
+        /// <summary>
+        /// Checks if the given connection is to a Dataverse instance
+        /// </summary>
+        /// <param name="conStr"></param>
+        /// <returns></returns>
+        protected bool IsDataverse(SqlConnectionStringBuilder conStr)
+        {
             if (conStr == null)
                 return false;
 
@@ -100,7 +110,15 @@ namespace MarkMpn.Sql4Cds.SSMS
         {
             // Get the server name based on the current SQL connection
             var conStr = GetConnectionInfo();
+            return ConnectCDS(conStr);
+        }
 
+        /// <summary>
+        /// Connects to the Dataverse API for the given SQL connection
+        /// </summary>
+        /// <returns></returns>
+        protected CrmServiceClient ConnectCDS(SqlConnectionStringBuilder conStr)
+        {
             if (conStr == null)
                 return null;
 
@@ -133,7 +151,16 @@ namespace MarkMpn.Sql4Cds.SSMS
         {
             // Get the server name based on the current SQL connection
             var conStr = GetConnectionInfo();
+            return GetMetadataCache(conStr);
+        }
 
+
+        /// <summary>
+        /// Gets metadata details for the given connection
+        /// </summary>
+        /// <returns></returns>
+        protected AttributeMetadataCache GetMetadataCache(SqlConnectionStringBuilder conStr)
+        {
             if (conStr == null)
                 return null;
 
@@ -142,7 +169,7 @@ namespace MarkMpn.Sql4Cds.SSMS
             if (_metadataCache.TryGetValue(server, out var metadata))
                 return metadata;
 
-            metadata = new AttributeMetadataCache(ConnectCDS());
+            metadata = new AttributeMetadataCache(ConnectCDS(conStr));
             _metadataCache[server] = metadata;
 
             return metadata;

@@ -75,6 +75,7 @@ namespace MarkMpn.Sql4Cds.SSMS
             // Add the command to convert SQL to FetchXML
             var dte = (DTE2)await GetServiceAsync(typeof(EnvDTE.DTE));
             await Sql2FetchXmlCommand.InitializeAsync(this, dte);
+            await FetchXml2SqlCommand.InitializeAsync(this, dte);
 
             // Intercept query execution
             DmlExecute.Initialize(this, dte);

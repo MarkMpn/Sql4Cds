@@ -62,6 +62,7 @@
     <Compile Include="AuthParams.cs" />
     <Compile Include="CommandBase.cs" />
     <Compile Include="DmlExecute.cs" />
+    <Compile Include="FetchXml2SqlCommand.cs" />
     <Compile Include="OptionsPage.cs">
       <SubType>Component</SubType>
     </Compile>
@@ -86,6 +87,7 @@
     <VSCTCompile Include="Sql4CdsPackage.vsct">
       <ResourceName>Menus.ctmenu</ResourceName>
     </VSCTCompile>
+    <Content Include="Resources\FetchXml2SqlCommand.png" />
     <Content Include="Resources\Sql2FetchXmlCommand.png" />
     <Content Include="Resources\Sql2FetchXmlCommandPackage.ico" />
   </ItemGroup>

@@ -69,7 +69,18 @@
         <CommandFlag>DefaultDisabled</CommandFlag>
         <Strings>
           <ButtonText>FetchXML</ButtonText>
-          <ToolTipText>Convert to FetchXML</ToolTipText>
+          <ToolTipText>Convert SQL to FetchXML</ToolTipText>
+        </Strings>
+      </Button>
+      <Button guid="guidSql4CdsPackageCmdSet" id="FetchXml2SqlCommandId" priority="0x0100" type="Button">
+        <Parent guid="guidSql4CdsPackageCmdSet" id="ToolbarGroup" />
+        <Icon guid="guidImages1" id="bmpPic1" />
+        <CommandFlag>IconAndText</CommandFlag>
+        <CommandFlag>DontCache</CommandFlag>
+        <CommandFlag>DefaultDisabled</CommandFlag>
+        <Strings>
+          <ButtonText>SQL</ButtonText>
+          <ToolTipText>Convert FetchXML to SQL</ToolTipText>
         </Strings>
       </Button>
     </Buttons>
@@ -82,6 +93,7 @@
             inside a button definition. An important aspect of this declaration is that the element id
             must be the actual index (1-based) of the bitmap inside the bitmap strip. -->
       <Bitmap guid="guidImages" href="Resources\Sql2FetchXmlCommand.png" usedList="bmpPic1" />
+      <Bitmap guid="guidImages1" href="Resources\FetchXml2SqlCommand.png" usedList="bmpPic1" />
     </Bitmaps>
   </Commands>
 
@@ -94,9 +106,14 @@
       <IDSymbol name="ToolbarGroup" value="0x1020" />
       <IDSymbol name="Toolbar" value="0x1010" />
       <IDSymbol name="Sql2FetchXmlCommandId" value="0x0100" />
+      <IDSymbol name="FetchXml2SqlCommandId" value="0x0200" />
     </GuidSymbol>
 
     <GuidSymbol name="guidImages" value="{4134aa85-5a36-4ce6-98e8-2186a7482e8a}">
+      <IDSymbol name="bmpPic1" value="1" />
+    </GuidSymbol>
+  
+    <GuidSymbol value="{eec144ec-cdab-4b5e-b7ac-1fcba8ecf93f}" name="guidImages1">
       <IDSymbol name="bmpPic1" value="1" />
     </GuidSymbol>
   </Symbols>
