@@ -153,50 +153,92 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 // Calculate the parameter to work out the calling user's "Today", optionally in UTC
                 // FLOOR(CONVERT(float, DATEADD(minute, -@time_zone, GETUTCDATE())))
-                var now = new FunctionCall
+
+                // DATEADD(minute, @time_zone, GETUTCDATE())
+                var utcNow = new FunctionCall
                 {
                     FunctionName = new Identifier { Value = "GETUTCDATE" }
                 };
 
-                if (options.UseUtcDateTimeColumns)
+                var localNow = new FunctionCall
                 {
-                    now = new FunctionCall
+                    FunctionName = new Identifier { Value = "DATEADD" },
+                    Parameters =
                     {
-                        FunctionName = new Identifier { Value = "DATEADD" },
-                        Parameters =
-                        {
-                            new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier {  Value = "minute"} } } },
-                            new UnaryExpression { UnaryExpressionType = UnaryExpressionType.Negative, Expression = new VariableReference { Name = "@time_zone" } },
-                            now
-                        }
-                    };
-                }
+                        new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = "minute" } } } },
+                        new VariableReference { Name = "@time_zone" },
+                        utcNow
+                    }
+                };
 
+                var localToday = new FunctionCall
+                {
+                    FunctionName = new Identifier { Value = "FLOOR" },
+                    Parameters =
+                    {
+                        new ConvertCall
+                        {
+                            DataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Float },
+                            Parameter = localNow
+                        }
+                    }
+                };
+
+                var utcToday = new FunctionCall
+                {
+                    FunctionName = new Identifier { Value = "DATEADD" },
+                    Parameters =
+                    {
+                        new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier {  Value = "minute"} } } },
+                        new UnaryExpression { UnaryExpressionType = UnaryExpressionType.Negative, Expression = new VariableReference { Name = "@time_zone" } },
+                        new VariableReference { Name = "@today" }
+                    }
+                };
+                
                 var todayParam = new DeclareVariableStatement
                 {
                     Declarations =
                     {
                         new DeclareVariableElement
                         {
+                            VariableName = new Identifier { Value = "@now" },
+                            DataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.DateTime },
+                            Value = localNow
+                        },
+                        new DeclareVariableElement
+                        {
                             VariableName = new Identifier { Value = "@today" },
                             DataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.DateTime },
-                            Value = new FunctionCall
-                            {
-                                FunctionName = new Identifier { Value = "FLOOR" },
-                                Parameters =
-                                {
-                                    new ConvertCall
-                                    {
-                                        DataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Float },
-                                        Parameter = now
-                                    }
-                                }
-                            }
+                            Value = localToday
                         }
                     }
                 };
 
                 batch.Statements.Add(todayParam);
+
+                if (options.UseUtcDateTimeColumns)
+                {
+                    todayParam.Declarations.Add(new DeclareVariableElement
+                    {
+                        VariableName = new Identifier { Value = "@utc_now" },
+                        DataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.DateTime },
+                        Value = utcNow
+                    });
+
+                    // Declare @utc_today variable in different statement as it refers to @today variable which needs to be defined first
+                    batch.Statements.Add(new DeclareVariableStatement
+                    {
+                        Declarations =
+                        {
+                            new DeclareVariableElement
+                            {
+                                VariableName = new Identifier { Value = "@utc_today" },
+                                DataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.DateTime },
+                                Value = utcToday
+                            }
+                        }
+                    });
+                }
             }
 
             if (requiresTimeZone)
@@ -762,33 +804,98 @@ namespace MarkMpn.Sql4Cds.Engine
                                 startTime = DateTime.Today.AddDays(-7);
                                 endTime = DateTime.Now;
 
-                                startExpression = new FunctionCall
-                                {
-                                    FunctionName = new Identifier { Value = "DATEADD" },
-                                    Parameters =
-                                    {
-                                        new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = "day" } } } },
-                                        new IntegerLiteral { Value = "-7" },
-                                        new VariableReference { Name = "@today" }
-                                    }
-                                };
-
-                                endExpression = new FunctionCall { FunctionName = new Identifier { Value = "GETUTCDATE" } };
+                                startExpression = DateAdd("day", new IntegerLiteral { Value = "-7" }, new VariableReference { Name = useUtc ? "@utc_today" : "@today" });
+                                endExpression = new FunctionCall { FunctionName = new Identifier { Value = useUtc ? "@utc_now" : "@now" } };
                                 break;
 
                             case @operator.lastweek:
                                 startTime = DateTime.Today.AddDays(-(int)DateTime.Today.DayOfWeek - 7);
                                 endTime = startTime.Value.AddDays(7);
+
+                                startExpression = DateAdd(
+                                    "day",
+                                    new BinaryExpression
+                                    {
+                                        BinaryExpressionType = BinaryExpressionType.Subtract,
+                                        FirstExpression = new UnaryExpression
+                                        {
+                                            UnaryExpressionType = UnaryExpressionType.Negative,
+                                            Expression = new FunctionCall
+                                            {
+                                                FunctionName = new Identifier { Value = "DATEPART" },
+                                                Parameters =
+                                                {
+                                                    new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = "weekday" } } } },
+                                                    new VariableReference { Name = "@today" }
+                                                }
+                                            }
+                                        },
+                                        SecondExpression = new IntegerLiteral { Value = "6" } // DATEPART(weekday, @today) is 1-based while DateTime.Today.DayOfWeek is 0 based, so use 6 here even though we use 7 above
+                                    },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" }
+                                );
+
+                                endExpression = DateAdd(
+                                    "day",
+                                    new BinaryExpression
+                                    {
+                                        BinaryExpressionType = BinaryExpressionType.Add,
+                                        FirstExpression = new UnaryExpression
+                                        {
+                                            UnaryExpressionType = UnaryExpressionType.Negative,
+                                            Expression = new FunctionCall
+                                            {
+                                                FunctionName = new Identifier { Value = "DATEPART" },
+                                                Parameters =
+                                                {
+                                                    new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = "weekday" } } } },
+                                                    new VariableReference { Name = "@today" }
+                                                }
+                                            }
+                                        },
+                                        SecondExpression = new IntegerLiteral { Value = "1" }
+                                    },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" }
+                                );
+
                                 break;
 
                             case @operator.lastmonth:
                                 startTime = DateTime.Today.AddDays(1 - DateTime.Today.Day).AddMonths(-1);
                                 endTime = startTime.Value.AddMonths(1);
+
+                                endExpression = DateAdd(
+                                        "day",
+                                        new BinaryExpression
+                                        {
+                                            BinaryExpressionType = BinaryExpressionType.Subtract,
+                                            FirstExpression = new IntegerLiteral { Value = "1" },
+                                            SecondExpression = new FunctionCall
+                                            {
+                                                FunctionName = new Identifier { Value = "DATEPART" },
+                                                Parameters =
+                                                {
+                                                    new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = "day" } } } },
+                                                    new VariableReference { Name = "@today" }
+                                                }
+                                            }
+                                        },
+                                        new VariableReference { Name = useUtc ? "@utc_today" : "@today" }
+                                    );
+
+                                startExpression = DateAdd(
+                                    "month",
+                                    new IntegerLiteral { Value = "-1" },
+                                    endExpression
+                                );
                                 break;
 
                             case @operator.lastxdays:
                                 startTime = DateTime.Today.AddDays(-Int32.Parse(condition.value));
                                 endTime = DateTime.Now;
+
+                                startExpression = DateAdd("day", new IntegerLiteral { Value = "-" + condition.value }, new VariableReference { Name = useUtc ? "@utc_today" : "@today" });
+                                endExpression = new VariableReference { Name = useUtc ? "@utc_now" : "@now" };
                                 break;
 
                             case @operator.lastxhours:
@@ -1487,6 +1594,20 @@ namespace MarkMpn.Sql4Cds.Engine
             };
 
             return expression;
+        }
+
+        private static FunctionCall DateAdd(string datePart, ScalarExpression number, ScalarExpression date)
+        {
+            return new FunctionCall
+            {
+                FunctionName = new Identifier { Value = "DATEADD" },
+                Parameters =
+                {
+                    new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = datePart } } } },
+                    number,
+                    date
+                }
+            };
         }
 
         /// <summary>
