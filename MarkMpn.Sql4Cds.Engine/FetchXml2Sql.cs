@@ -797,7 +797,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         ScalarExpression startExpression = null;
                         DateTime? endTime = null;
                         ScalarExpression endExpression = null;
-                        
+
                         switch (condition.@operator)
                         {
                             case @operator.lastsevendays:
@@ -901,66 +901,202 @@ namespace MarkMpn.Sql4Cds.Engine
                             case @operator.lastxhours:
                                 startTime = DateTime.Today.AddHours(DateTime.Now.Hour - Int32.Parse(condition.value));
                                 endTime = DateTime.Now;
+
+                                startExpression = DateAdd(
+                                    "hour",
+                                    new BinaryExpression
+                                    {
+                                        BinaryExpressionType = BinaryExpressionType.Subtract,
+                                        FirstExpression = DatePart("hour", new VariableReference { Name = "@now" }),
+                                        SecondExpression = new IntegerLiteral { Value = condition.value }
+                                    },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" });
+                                endExpression = new VariableReference { Name = useUtc ? "@utc_now" : "@now" };
                                 break;
 
                             case @operator.lastxmonths:
                                 startTime = DateTime.Today.AddMonths(-Int32.Parse(condition.value));
                                 endTime = DateTime.Now;
+
+                                startExpression = DateAdd("month", new IntegerLiteral { Value = "-" + condition.value }, new VariableReference { Name = useUtc ? "@utc_today" : "@today" });
+                                endExpression = new VariableReference { Name = useUtc ? "@utc_now" : "@now" };
                                 break;
 
                             case @operator.lastxweeks:
                                 startTime = DateTime.Today.AddDays(-Int32.Parse(condition.value) * 7);
                                 endTime = DateTime.Now;
+
+                                startExpression = DateAdd("day", new IntegerLiteral { Value = (-Int32.Parse(condition.value) * 7).ToString() }, new VariableReference { Name = useUtc ? "@utc_today" : "@today" });
+                                endExpression = new VariableReference { Name = useUtc ? "@utc_now" : "@now" };
                                 break;
 
                             case @operator.lastxyears:
                                 startTime = DateTime.Today.AddYears(-Int32.Parse(condition.value));
                                 endTime = DateTime.Now;
+
+                                startExpression = DateAdd("year", new IntegerLiteral { Value = "-" + condition.value }, new VariableReference { Name = useUtc ? "@utc_today" : "@today" });
+                                endExpression = new VariableReference { Name = useUtc ? "@utc_now" : "@now" };
                                 break;
 
                             case @operator.lastyear:
-                                startTime = new DateTime(DateTime.Today.Year, 1, 1);
+                                startTime = new DateTime(DateTime.Today.Year - 1, 1, 1);
                                 endTime = startTime.Value.AddYears(1);
+
+                                startExpression = new FunctionCall
+                                {
+                                    FunctionName = new Identifier { Value = "DATEFROMPARTS" },
+                                    Parameters =
+                                    {
+                                        new BinaryExpression
+                                        {
+                                            BinaryExpressionType = BinaryExpressionType.Subtract,
+                                            FirstExpression = DatePart("year", new VariableReference { Name = "@today" }),
+                                            SecondExpression = new IntegerLiteral { Value = "1" }
+                                        },
+                                        new IntegerLiteral { Value = "1" },
+                                        new IntegerLiteral { Value = "1" }
+                                    }
+                                };
+
+                                if (useUtc)
+                                {
+                                    startExpression = DateAdd(
+                                        "minute",
+                                        new UnaryExpression
+                                        {
+                                            UnaryExpressionType = UnaryExpressionType.Negative,
+                                            Expression = new VariableReference { Name = "@time_zone" }
+                                        },
+                                        new ConvertCall
+                                        {
+                                            DataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.DateTime },
+                                            Parameter = startExpression
+                                        });
+                                }
+
+                                endExpression = DateAdd("year", new IntegerLiteral { Value = "1" }, startExpression);
                                 break;
 
                             case @operator.nextmonth:
                                 startTime = DateTime.Today.AddDays(1 - DateTime.Today.Day).AddMonths(1);
                                 endTime = startTime.Value.AddMonths(1);
+
+                                var monthStart = DateAdd(
+                                    "day",
+                                    new BinaryExpression
+                                    {
+                                        BinaryExpressionType = BinaryExpressionType.Subtract,
+                                        FirstExpression = new IntegerLiteral { Value = "1" },
+                                        SecondExpression = DatePart("day", new VariableReference { Name = "@today" })
+                                    },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" }
+                                );
+                                startExpression = DateAdd("month", new IntegerLiteral { Value = "1" }, monthStart);
+                                endExpression = DateAdd("month", new IntegerLiteral { Value = "2" }, monthStart);
                                 break;
 
                             case @operator.nextsevendays:
                                 startTime = DateTime.Now;
                                 endTime = DateTime.Today.AddDays(8);
+
+                                startExpression = new VariableReference { Name = useUtc ? "@utc_now" : "@now" };
+                                endExpression = DateAdd("day", new IntegerLiteral { Value = "8" }, new VariableReference { Name = useUtc ? "@utc_today" : "@today" });
                                 break;
 
                             case @operator.nextweek:
                                 startTime = DateTime.Today.AddDays(7 - (int)DateTime.Today.DayOfWeek);
                                 endTime = startTime.Value.AddDays(7);
+
+                                startExpression = DateAdd(
+                                    "day",
+                                    new BinaryExpression
+                                    {
+                                        BinaryExpressionType = BinaryExpressionType.Subtract,
+                                        FirstExpression = new IntegerLiteral { Value = "8" },  // DATEPART(weekday, @today) is 1-based while DateTime.Today.DayOfWeek is 0 based, so use 8 here even though we use 7 above
+                                        SecondExpression = new UnaryExpression
+                                        {
+                                            UnaryExpressionType = UnaryExpressionType.Negative,
+                                            Expression = DatePart("weekday", new VariableReference { Name = "@today" })
+                                        }
+                                    },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" }
+                                );
+
+                                endExpression = DateAdd(
+                                    "day",
+                                    new BinaryExpression
+                                    {
+                                        BinaryExpressionType = BinaryExpressionType.Subtract,
+                                        FirstExpression = new IntegerLiteral { Value = "15" },
+                                        SecondExpression = new UnaryExpression
+                                        {
+                                            UnaryExpressionType = UnaryExpressionType.Negative,
+                                            Expression = DatePart("weekday", new VariableReference { Name = "@today" })
+                                        }
+                                    },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" }
+                                );
                                 break;
 
                             case @operator.nextxdays:
                                 startTime = DateTime.Now;
                                 endTime = DateTime.Today.AddDays(Int32.Parse(condition.value) + 1);
+
+                                startExpression = new VariableReference { Name = useUtc ? "@utc_now" : "@now" };
+                                endExpression = DateAdd("day", new IntegerLiteral { Value = (Int32.Parse(condition.value) + 1).ToString() }, new VariableReference { Name = useUtc ? "@utc_today" : "@today" });
                                 break;
 
                             case @operator.nextxhours:
                                 startTime = DateTime.Now;
                                 endTime = DateTime.Today.AddHours(DateTime.Now.Hour + Int32.Parse(condition.value) + 1);
+
+                                startExpression = new VariableReference { Name = useUtc ? "@utc_now" : "@now" };
+                                endExpression = DateAdd(
+                                    "hour",
+                                    new BinaryExpression
+                                    {
+                                        BinaryExpressionType = BinaryExpressionType.Add,
+                                        FirstExpression = DatePart("hour", new VariableReference { Name = useUtc ? "@utc_now" : "@now" }),
+                                        SecondExpression = new IntegerLiteral { Value = (Int32.Parse(condition.value) + 1).ToString() }
+                                    },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" }
+                                );
                                 break;
                                 
                             case @operator.nextxmonths:
                                 startTime = DateTime.Now;
                                 endTime = DateTime.Today.AddDays(1).AddMonths(Int32.Parse(condition.value));
+
+                                startExpression = new VariableReference { Name = useUtc ? "@utc_now" : "@now" };
+                                endExpression = DateAdd(
+                                    "month",
+                                    new IntegerLiteral { Value = condition.value },
+                                    DateAdd("day", new IntegerLiteral { Value = "1" }, new VariableReference { Name = useUtc ? "@utc_today" : "@today" })
+                                );
                                 break;
 
                             case @operator.nextxweeks:
                                 startTime = DateTime.Now;
                                 endTime = DateTime.Today.AddDays(Int32.Parse(condition.value) * 7 + 1);
+
+                                startExpression = new VariableReference { Name = useUtc ? "@utc_now" : "@now" };
+                                endExpression = DateAdd(
+                                    "day",
+                                    new IntegerLiteral { Value = (Int32.Parse(condition.value) * 7 + 1).ToString() },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" }
+                                );
                                 break;
 
                             case @operator.nextxyears:
                                 startTime = DateTime.Now;
                                 endTime = DateTime.Today.AddDays(1).AddYears(Int32.Parse(condition.value));
+
+                                startExpression = new VariableReference { Name = useUtc ? "@utc_now" : "@now" };
+                                endExpression = DateAdd(
+                                    "year",
+                                    new IntegerLiteral { Value = condition.value },
+                                    DateAdd("day", new IntegerLiteral { Value = "1" }, new VariableReference { Name = useUtc ? "@utc_today" : "@today" })
+                                );
                                 break;
 
                             case @operator.nextyear:
@@ -1605,6 +1741,19 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = datePart } } } },
                     number,
+                    date
+                }
+            };
+        }
+
+        private static FunctionCall DatePart(string datePart, ScalarExpression date)
+        {
+            return new FunctionCall
+            {
+                FunctionName = new Identifier { Value = "DATEPART" },
+                Parameters =
+                {
+                    new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = datePart } } } },
                     date
                 }
             };
