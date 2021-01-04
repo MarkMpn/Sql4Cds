@@ -1306,31 +1306,83 @@ namespace MarkMpn.Sql4Cds.Engine
                             case @operator.thismonth:
                                 startTime = DateTime.Today.AddDays(1 - DateTime.Today.Day);
                                 endTime = startTime.Value.AddMonths(1);
+
+                                startExpression = DateAdd(
+                                    "day",
+                                    new BinaryExpression
+                                    {
+                                        BinaryExpressionType = BinaryExpressionType.Subtract,
+                                        FirstExpression = new IntegerLiteral { Value = "1" },
+                                        SecondExpression = DatePart("day", new VariableReference { Name = "@today" })
+                                    },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" });
+
+                                endExpression = DateAdd("month", new IntegerLiteral { Value = "1" }, startExpression);
                                 break;
 
                             case @operator.thisweek:
                                 startTime = DateTime.Today.AddDays(- (int) DateTime.Today.DayOfWeek);
                                 endTime = startTime.Value.AddDays(7);
+
+                                startExpression = DateAdd(
+                                    "day",
+                                    new BinaryExpression
+                                    {
+                                        BinaryExpressionType = BinaryExpressionType.Subtract,
+                                        FirstExpression = new IntegerLiteral { Value = "1" },
+                                        SecondExpression = DatePart("weekday", new VariableReference { Name = "@today" })
+                                    },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" });
+
+                                endExpression = DateAdd(
+                                    "day",
+                                    new BinaryExpression
+                                    {
+                                        BinaryExpressionType = BinaryExpressionType.Subtract,
+                                        FirstExpression = new IntegerLiteral { Value = "8" },
+                                        SecondExpression = DatePart("weekday", new VariableReference { Name = "@today" })
+                                    },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" });
                                 break;
 
                             case @operator.thisyear:
                                 startTime = DateTime.Today.AddDays(1 - DateTime.Today.DayOfYear);
                                 endTime = startTime.Value.AddYears(1);
+
+                                startExpression = DateAdd(
+                                    "day",
+                                    new BinaryExpression
+                                    {
+                                        BinaryExpressionType = BinaryExpressionType.Subtract,
+                                        FirstExpression = new IntegerLiteral { Value = "1" },
+                                        SecondExpression = DatePart("dayofyear", new VariableReference { Name = "@today" })
+                                    },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" });
+                                endExpression = DateAdd("year", new IntegerLiteral { Value = "1" }, startExpression);
                                 break;
 
                             case @operator.today:
                                 startTime = DateTime.Today;
                                 endTime = startTime.Value.AddDays(1);
+
+                                startExpression = new VariableReference { Name = useUtc ? "@utc_today" : "@today" };
+                                endExpression = DateAdd("day", new IntegerLiteral { Value = "1" }, startExpression);
                                 break;
 
                             case @operator.tomorrow:
                                 startTime = DateTime.Today.AddDays(1);
                                 endTime = startTime.Value.AddDays(1);
+
+                                startExpression = DateAdd("day", new IntegerLiteral { Value = "1" }, new VariableReference { Name = useUtc ? "@utc_today" : "@today" });
+                                endExpression = DateAdd("day", new IntegerLiteral { Value = "2" }, new VariableReference { Name = useUtc ? "@utc_today" : "@today" });
                                 break;
 
                             case @operator.yesterday:
                                 startTime = DateTime.Today.AddDays(-1);
                                 endTime = startTime.Value.AddDays(1);
+
+                                startExpression = DateAdd("day", new IntegerLiteral { Value = "-1" }, new VariableReference { Name = useUtc ? "@utc_today" : "@today" });
+                                endExpression = new VariableReference { Name = useUtc ? "@utc_today" : "@today" };
                                 break;
 
                             case @operator.eqbusinessid:
