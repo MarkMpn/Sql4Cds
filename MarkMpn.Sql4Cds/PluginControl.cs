@@ -144,7 +144,7 @@ namespace MarkMpn.Sql4Cds
 
         public void OnIncomingMessage(MessageBusEventArgs message)
         {
-            _ai.TrackEvent("Incoming message", new Dictionary<string, string> { ["SourcePlugin"] = message.SourcePlugin });
+            _ai.TrackEvent("Incoming message", new Dictionary<string, string> { ["SourcePlugin"] = message.SourcePlugin, ["Source"] = "XrmToolBox" });
 
             var param = message.TargetArgument as IDictionary<string, object>;
 
@@ -166,7 +166,9 @@ namespace MarkMpn.Sql4Cds
             var options = new FetchXml2SqlOptions();
 
             if ((bool)param["ConvertOnly"])
-                options.PreserveFetchXmlOperatorsAsFunctions = false;
+                options.ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.SqlCalculations;
+
+            _ai.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = "FetchXML", ["Source"] = "XrmToolBox" });
 
             var sql = FetchXml2Sql.Convert(con.ServiceClient, metadata, fetch, options, out _);
 
@@ -193,7 +195,7 @@ namespace MarkMpn.Sql4Cds
 
         public void SendOutgoingMessage(MessageBusEventArgs args)
         {
-            _ai.TrackEvent("Outgoing message", new Dictionary<string, string> { ["TargetPlugin"] = args.TargetPlugin });
+            _ai.TrackEvent("Outgoing message", new Dictionary<string, string> { ["TargetPlugin"] = args.TargetPlugin, ["Source"] = "XrmToolBox" });
             OnOutgoingMessage(this, args);
         }
 

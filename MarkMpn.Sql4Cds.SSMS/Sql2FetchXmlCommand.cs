@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.ComponentModel.Design;
 using System.Data.SqlClient;
 using System.Globalization;
@@ -114,6 +115,8 @@ namespace MarkMpn.Sql4Cds.SSMS
 
                 foreach (var query in queries.OfType<FetchXmlQuery>())
                 {
+                    _ai.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name, ["Source"] = "SSMS" });
+
                     var window = Dte.ItemOperations.NewFile("General\\XML File");
 
                     var editPoint = ActiveDocument.EndPoint.CreateEditPoint();

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.ComponentModel.Design;
 using System.Data.SqlClient;
 using System.Globalization;
@@ -133,6 +134,8 @@ namespace MarkMpn.Sql4Cds.SSMS
 
             var start = ActiveDocument.StartPoint.CreateEditPoint();
             var fetch = start.GetText(ActiveDocument.EndPoint);
+
+            _ai.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = "FetchXML", ["Source"] = "SSMS" });
 
             var sql = FetchXml2Sql.Convert(ConnectCDS(conStr), GetMetadataCache(conStr), fetch, new FetchXml2SqlOptions
             {

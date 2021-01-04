@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using EnvDTE;
 using EnvDTE80;
 using MarkMpn.Sql4Cds.Engine;
+using Microsoft.ApplicationInsights;
 using Microsoft.SqlServer.Management.Common;
 using Microsoft.SqlServer.Management.UI.VSIntegration;
 using Microsoft.SqlServer.Management.UI.VSIntegration.ObjectExplorer;
@@ -20,6 +21,12 @@ namespace MarkMpn.Sql4Cds.SSMS
     {
         private static readonly IDictionary<string, CrmServiceClient> _clientCache = new Dictionary<string,CrmServiceClient>();
         private static readonly IDictionary<string, AttributeMetadataCache> _metadataCache = new Dictionary<string, AttributeMetadataCache>();
+        protected static readonly TelemetryClient _ai;
+
+        static CommandBase()
+        {
+            _ai = new TelemetryClient(new Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration("79761278-a908-4575-afbf-2f4d82560da6"));
+        }
 
         protected CommandBase(Sql4CdsPackage package, DTE2 dte)
         {

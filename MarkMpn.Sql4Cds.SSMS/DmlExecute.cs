@@ -139,6 +139,7 @@ namespace MarkMpn.Sql4Cds.SSMS
 
                     try
                     {
+                        _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name, ["Source"] = "SSMS" });
                         query.Execute(org, metadata, options);
 
                         if (query.Result is string msg)
@@ -162,6 +163,8 @@ namespace MarkMpn.Sql4Cds.SSMS
                                 resultFlag |= 1; // Success
                             }
                         }
+
+                        _ai.TrackException(error, new Dictionary<string, string> { ["Sql"] = sql, ["Source"] = "SSMS" });
 
                         AddException(sqlScriptEditorControl, textSpan, error);
                         resultFlag |= 2; // Failure
