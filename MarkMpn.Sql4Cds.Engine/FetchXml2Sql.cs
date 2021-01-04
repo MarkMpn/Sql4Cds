@@ -1207,26 +1207,87 @@ namespace MarkMpn.Sql4Cds.Engine
 
                             case @operator.olderthanxdays:
                                 endTime = DateTime.Today.AddDays(-Int32.Parse(condition.value));
+
+                                endExpression = DateAdd(
+                                    "day",
+                                    new UnaryExpression { UnaryExpressionType = UnaryExpressionType.Negative, Expression = value },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" }
+                                );
                                 break;
 
                             case @operator.olderthanxhours:
                                 endTime = DateTime.Today.AddHours(DateTime.Now.Hour - Int32.Parse(condition.value));
+
+                                endExpression = DateAdd(
+                                    "hour",
+                                    new BinaryExpression
+                                    {
+                                        BinaryExpressionType = BinaryExpressionType.Subtract,
+                                        FirstExpression = DatePart("hour", new VariableReference { Name = "@now" }),
+                                        SecondExpression = value
+                                    },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" }
+                                );
                                 break;
 
                             case @operator.olderthanxminutes:
                                 endTime = DateTime.Today.AddMinutes(Math.Truncate(DateTime.Now.TimeOfDay.TotalMinutes) - Int32.Parse(condition.value));
+
+                                endExpression = DateAdd(
+                                    "minute",
+                                    new BinaryExpression
+                                    {
+                                        BinaryExpressionType = BinaryExpressionType.Subtract,
+                                        FirstExpression = new BinaryExpression
+                                        {
+                                            BinaryExpressionType = BinaryExpressionType.Add,
+                                            FirstExpression = new BinaryExpression
+                                            {
+                                                BinaryExpressionType = BinaryExpressionType.Multiply,
+                                                FirstExpression = DatePart("hour", new VariableReference { Name = "@now" }),
+                                                SecondExpression = new IntegerLiteral { Value = "60" }
+                                            },
+                                            SecondExpression = DatePart("minute", new VariableReference { Name = "@now" })
+                                        },
+                                        SecondExpression = value
+                                    },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" }
+                                );
                                 break;
 
                             case @operator.olderthanxmonths:
                                 endTime = DateTime.Today.AddMonths(-Int32.Parse(condition.value));
+
+                                endExpression = DateAdd(
+                                    "month",
+                                    new UnaryExpression { UnaryExpressionType = UnaryExpressionType.Negative, Expression = value },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" }
+                                );
                                 break;
 
                             case @operator.olderthanxweeks:
                                 endTime = DateTime.Today.AddDays(-Int32.Parse(condition.value) * 7);
+
+                                endExpression = DateAdd(
+                                    "day",
+                                    new BinaryExpression
+                                    {
+                                        BinaryExpressionType = BinaryExpressionType.Multiply,
+                                        FirstExpression = new UnaryExpression { UnaryExpressionType = UnaryExpressionType.Negative, Expression = value },
+                                        SecondExpression = new IntegerLiteral { Value = "7" }
+                                    },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" }
+                                );
                                 break;
 
                             case @operator.olderthanxyears:
                                 endTime = DateTime.Today.AddYears(-Int32.Parse(condition.value));
+
+                                endExpression = DateAdd(
+                                    "year",
+                                    new UnaryExpression { UnaryExpressionType = UnaryExpressionType.Negative, Expression = value },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" }
+                                );
                                 break;
 
                             case @operator.on:
