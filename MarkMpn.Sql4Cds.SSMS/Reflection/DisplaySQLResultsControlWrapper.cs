@@ -15,7 +15,7 @@ namespace MarkMpn.Sql4Cds.SSMS
   ___  ___  _      _ _     ___ ___  ___ 
  / __|/ _ \| |    | | |   / __|   \/ __|
  \__ \ (_) | |__  |_  _| | (__| |) \__ \
- |___/\__\_\____|   |_|   \___|___/|___/
+ |___/\__\_\____|   |_|   \___|___/|___/  {version}
 
  INSERT/UPDATE/DELETE commands are implemented by SQL 4 CDS
  and not supported by Microsoft
@@ -40,7 +40,7 @@ namespace MarkMpn.Sql4Cds.SSMS
             SetField(m_sqlExec, "m_curBatch", batch);
             SetField(m_sqlExec, "m_batchConsumer", GetField(Target, "m_batchConsumer"));
 
-            AddStringToMessages(Banner);
+            AddStringToMessages(Banner.Replace("{version}", Assembly.GetExecutingAssembly().GetName().Version.ToString(3)));
         }
 
         private void PrepareForExecution(bool parse)
