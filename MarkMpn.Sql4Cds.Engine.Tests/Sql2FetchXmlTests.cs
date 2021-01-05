@@ -2102,13 +2102,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
-            sql2FetchXml.TDSEndpointAvailable = true;
+            sql2FetchXml.ForceTDSEndpoint = true;
 
-            var query = "SELECT COUNT(*) FROM account WHERE name IS NULL";
+            var query = "SELECT COUNT(*) AS count FROM account WHERE name IS NULL";
 
             var queries = sql2FetchXml.Convert(query);
 
-            Assert.AreEqual("SELECT COUNT(*) FROM account AS account WHERE name IS NULL; ", Regex.Replace(queries[0].TSql, "\\s+", " "));
+            Assert.AreEqual("SELECT COUNT(*) AS count FROM account AS account WHERE name IS NULL", Regex.Replace(queries[0].TSql, "\\s+", " "));
         }
 
         [TestMethod]
@@ -2745,6 +2745,33 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         ON c.parentcustomerid = new_customentity.new_parentid
                 WHERE
                     c.fullname IN (SELECT fullname FROM contact WHERE firstname = 'Mark')", @"\s+", " ").Trim(), Regex.Replace(queries[0].TSql, @"\s+", " ").Trim());
+        }
+
+        [TestMethod]
+        public void FilterOnUtcDateTimeColumn()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = @"
+                SELECT name FROM account WHERE createdonutc >= '2021-01-01'";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <filter>
+                            <condition attribute='createdon' operator='ge' value='2021-01-01 00:00:00Z' />
+                        </filter>
+                    </entity>
+                </fetch>
+            ");
         }
 
         private void AssertFetchXml(Query[] queries, string fetchXml)

@@ -1424,13 +1424,14 @@ namespace MarkMpn.Sql4Cds.Engine
             else if (expr is ColumnReferenceExpression col)
             {
                 // Check if this attribute is really a calculated field
-                var attrName = GetColumnAttribute(col);
+                var attrName = col.MultiPartIdentifier.Identifiers.Last().Value;
                 Type type;
                 
                 if (col.MultiPartIdentifier.Identifiers.Count != 1 || calculatedFields == null || !calculatedFields.TryGetValue(col.MultiPartIdentifier.Identifiers[0].Value, out type))
                 {
                     // Check where this attribute should be taken from
                     var tableAlias = GetColumnTableAlias(col, tables, out var table);
+                    attrName = GetColumnAttribute(table, col);
 
                     var attrMetadata = table.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase));
 
@@ -2108,8 +2109,8 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
                     else
                     {
-                        attrName = GetColumnAttribute(colRef);
                         GetColumnTableAlias(colRef, tables, out table);
+                        attrName = GetColumnAttribute(table, colRef);
                     }
 
                     var name = attrName;
@@ -2230,7 +2231,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 // Find the table in the query that the grouping attribute is from
                 GetColumnTableAlias(col, tables, out var table);
-                var columnName = GetColumnAttribute(col);
+                var columnName = GetColumnAttribute(table, col);
 
                 if (table == null)
                     throw new NotSupportedQueryFragmentException("Unknown table", col);
@@ -2279,10 +2280,10 @@ namespace MarkMpn.Sql4Cds.Engine
                         if (!(s.Expression is ColumnReferenceExpression selectCol))
                             return false;
 
-                        if (GetColumnAttribute(selectCol) != attr.name)
-                            return false;
-
                         GetColumnTableAlias(selectCol, tables, out var selectTable);
+
+                        if (GetColumnAttribute(selectTable, selectCol) != attr.name)
+                            return false;
 
                         if (selectTable != table)
                             return false;
@@ -2353,8 +2354,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
                 else
                 {
-                    attrName = GetColumnAttribute(col);
                     GetColumnTableAlias(col, tables, out table);
+                    attrName = GetColumnAttribute(table, col);
                 }
 
                 var attr = new FetchAttributeType { name = attrName };
@@ -2684,7 +2685,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 // Find the table from which the column is taken
                 GetColumnTableAlias(col, tables, out var orderTable, calculatedFields);
-                var attrName = GetColumnAttribute(col);
+                var attrName = GetColumnAttribute(orderTable, col);
 
                 if (!orderTable.GetItems().OfType<FetchAttributeType>().Any(a => a.alias?.Equals(attrName, StringComparison.OrdinalIgnoreCase) == true) &&
                     col.MultiPartIdentifier.Identifiers.Count == 1 && 
@@ -3110,7 +3111,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (field2 == null)
                 {
-                    var attrName = GetColumnAttribute(field);
+                    var attrName = GetColumnAttribute(entityTable, field);
                     var attribute = entityTable.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase));
 
                     if (!String.IsNullOrEmpty(attribute?.AttributeOf))
@@ -3181,6 +3182,21 @@ namespace MarkMpn.Sql4Cds.Engine
                         value = targetMetadata.ObjectTypeCode?.ToString();
                     }
 
+                    if (DateTime.TryParse(value, out var dt) &&
+                        dt.Kind != DateTimeKind.Utc &&
+                        attribute is DateTimeAttributeMetadata dtAttr &&
+                        dtAttr.DateTimeBehavior?.Value != DateTimeBehavior.TimeZoneIndependent &&
+                        field.MultiPartIdentifier.Identifiers.Last().Value.Equals(attrName + "utc", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Convert the value to UTC if we're filtering on a UTC column
+                        if (dt.Kind == DateTimeKind.Unspecified)
+                            dt = DateTime.SpecifyKind(dt, DateTimeKind.Utc);
+                        else
+                            dt = dt.ToUniversalTime();
+
+                        value = dt.ToString("u");
+                    }
+
                     var condition = new condition
                     {
                         entityname = entityName,
@@ -3202,8 +3218,8 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (entityTable != entityTable2)
                         throw new PostProcessingRequiredException("Unsupported comparison", comparison);
 
-                    var attr1 = entityTable.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(GetColumnAttribute(field), StringComparison.OrdinalIgnoreCase));
-                    var attr2 = entityTable.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(GetColumnAttribute(field2), StringComparison.OrdinalIgnoreCase));
+                    var attr1 = entityTable.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(GetColumnAttribute(entityTable, field), StringComparison.OrdinalIgnoreCase));
+                    var attr2 = entityTable.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(GetColumnAttribute(entityTable, field2), StringComparison.OrdinalIgnoreCase));
 
                     if (!String.IsNullOrEmpty(attr1?.AttributeOf))
                         throw new PostProcessingRequiredException("Cannot filter on virtual attributes", field);
@@ -3217,9 +3233,9 @@ namespace MarkMpn.Sql4Cds.Engine
                     criteria.Items = AddItem(criteria.Items, new condition
                     {
                         entityname = entityName,
-                        attribute = GetColumnAttribute(field),
+                        attribute = GetColumnAttribute(entityTable2, field),
                         @operator = op,
-                        valueof = GetColumnAttribute(field2)
+                        valueof = GetColumnAttribute(entityTable2, field2)
                     });
                 }
             }
@@ -3297,7 +3313,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (entityTable == targetTable)
                     entityName = null;
 
-                var attrName = GetColumnAttribute(field);
+                var attrName = GetColumnAttribute(entityTable, field);
                 var attr = entityTable.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase));
 
                 if (!String.IsNullOrEmpty(attr.AttributeOf))
@@ -3371,7 +3387,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (entityTable == targetTable)
                     entityName = null;
 
-                var attrName = GetColumnAttribute(field);
+                var attrName = GetColumnAttribute(entityTable, field);
                 var attr = entityTable.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase));
 
                 if (!String.IsNullOrEmpty(attr.AttributeOf))
@@ -3450,7 +3466,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     })
                     .ToArray();
 
-                var attrName = GetColumnAttribute(field);
+                var attrName = GetColumnAttribute(entityTable, field);
                 var attr = entityTable.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase));
 
                 if (!String.IsNullOrEmpty(attr.AttributeOf))
@@ -3955,9 +3971,9 @@ namespace MarkMpn.Sql4Cds.Engine
                 throw new NotSupportedQueryFragmentException("Unhandled SELECT clause", expr);
 
             // Find the appropriate table and add the attribute to the table
-            var attrName = GetColumnAttribute(col);
-            var requestedAttrName = attrName;
             GetColumnTableAlias(col, tables, out table);
+            var attrName = GetColumnAttribute(table, col);
+            var requestedAttrName = attrName;
 
             // Check if this is a column that has already been generated by the GROUP BY clause
             if (col.MultiPartIdentifier.Identifiers.Count == 1 && calculatedColumns != null && calculatedColumns.ContainsKey(attrName))
@@ -4299,21 +4315,33 @@ namespace MarkMpn.Sql4Cds.Engine
                 return alias;
             }
 
+            var colName = col.MultiPartIdentifier.Identifiers[0].Value;
+
             var possibleEntities = tables
-                .Where(t => t.GetItems().OfType<FetchAttributeType>().Any(attr => attr.alias?.Equals(col.MultiPartIdentifier.Identifiers[0].Value, StringComparison.OrdinalIgnoreCase) == true))
+                .Where(t => t.GetItems().OfType<FetchAttributeType>().Any(attr => attr.alias?.Equals(colName, StringComparison.OrdinalIgnoreCase) == true))
                 .ToArray();
 
             if (possibleEntities.Length == 0)
             {
                 // If no table is explicitly specified, check in the metadata for each available table
                 possibleEntities = tables
-                    .Where(t => !t.Hidden && t.Metadata.Attributes.Any(attr => attr.LogicalName.Equals(col.MultiPartIdentifier.Identifiers[0].Value, StringComparison.OrdinalIgnoreCase)))
+                    .Where(t => !t.Hidden && t.Metadata.Attributes.Any(attr => attr.LogicalName.Equals(colName, StringComparison.OrdinalIgnoreCase)))
+                    .ToArray();
+            }
+
+            if (possibleEntities.Length == 0 && colName.EndsWith("utc", StringComparison.OrdinalIgnoreCase))
+            {
+                // May be using the UTC version of a date/time column
+                var baseName = colName.Substring(0, colName.Length - 3);
+
+                possibleEntities = tables
+                    .Where(t => !t.Hidden && t.Metadata.Attributes.OfType<DateTimeAttributeMetadata>().Any(attr => attr.LogicalName.Equals(baseName, StringComparison.OrdinalIgnoreCase)))
                     .ToArray();
             }
 
             if (possibleEntities.Length == 0)
             {
-                if (col.MultiPartIdentifier.Identifiers.Count == 1 && calculatedFields != null && calculatedFields.ContainsKey(col.MultiPartIdentifier.Identifiers[0].Value))
+                if (col.MultiPartIdentifier.Identifiers.Count == 1 && calculatedFields != null && calculatedFields.ContainsKey(colName))
                     throw new PostProcessingRequiredException("Calculated field requires post processing", col);
 
                 if (col.MultiPartIdentifier.Identifiers.Last().QuoteType == QuoteType.DoubleQuote && QuotedIdentifiers)
@@ -4335,14 +4363,25 @@ namespace MarkMpn.Sql4Cds.Engine
 
         private void ValidateAttributeName(EntityTable table, ColumnReferenceExpression col)
         {
-            var attrName = GetColumnAttribute(col);
+            var attrName = GetColumnAttribute(table, col);
             if (!table.Metadata.Attributes.Any(attr => attr.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase)))
                 throw new NotSupportedQueryFragmentException("Unknown attribute", col);
         }
 
-        private string GetColumnAttribute(ColumnReferenceExpression col)
+        private string GetColumnAttribute(EntityTable table, ColumnReferenceExpression col)
         {
-            return col.MultiPartIdentifier.Identifiers.Last().Value.ToLower();
+            var attrName = col.MultiPartIdentifier.Identifiers.Last().Value.ToLower();
+
+            if (attrName.EndsWith("utc", StringComparison.OrdinalIgnoreCase))
+            {
+                var baseName = attrName.Substring(0, attrName.Length - 3);
+                var attr = table.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(baseName, StringComparison.OrdinalIgnoreCase));
+
+                if (attr != null)
+                    attrName = baseName;
+            }
+
+            return attrName;
         }
 
         private static object[] AddItem(object[] items, object item)
