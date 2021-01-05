@@ -383,6 +383,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 using (var cmd = con.CreateCommand())
                 {
+                    cmd.CommandTimeout = (int) TimeSpan.FromMinutes(2).TotalSeconds;
                     cmd.CommandText = TSql;
                     result = new DataTable();
 
