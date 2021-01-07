@@ -55,13 +55,7 @@ namespace MarkMpn.Sql4Cds.SSMS
         {
             var menuItem = (OleMenuCommand)sender;
 
-            if (ActiveDocument == null || !IsDataverse())
-            {
-                menuItem.Enabled = false;
-                return;
-            }
-
-            if (ActiveDocument.Language != "SQL")
+            if (ActiveDocument == null || ActiveDocument.Language != "SQL" || !IsDataverse())
             {
                 menuItem.Enabled = false;
                 return;
