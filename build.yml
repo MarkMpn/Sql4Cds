@@ -56,6 +56,13 @@ steps:
     artifact: 'NuGetPackages'
     publishLocation: 'pipeline'
 
+- task: PublishPipelineArtifact@1
+  displayName: Publish SSMS installer to pipeline
+  inputs:
+    targetPath: 'MarkMpn.Sql4Cds.SSMS.Setup\bin\$(buildConfiguration)\MarkMpn.Sql4Cds.SSMS.Setup.msi'
+    artifact: 'SSMSInstaller'
+    publishLocation: 'pipeline'
+
 - task: GitTag@5
   displayName: Label Source
   inputs:
