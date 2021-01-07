@@ -22,11 +22,8 @@ plugins or integrations by writing familiar SQL and converting it.
 
 Using the preview T-SQL endpoint, SELECT queries can also be run that aren't convertible to FetchXML.</description>
     <summary>Convert SQL queries to FetchXML and execute them against CDS</summary>
-    <releaseNotes>Improved UI for displaying results from multiple queries
-Improved performance of bulk insert, update &amp; delete queries
-Intellisense UI and performance improvements
-Option to impersonate other users when running queries
-SQL language support improvements</releaseNotes>
+    <releaseNotes>Extended TDS endpoint supoprt
+Fixed inserts into multi-select picklist attributes</releaseNotes>
     <copyright>Copyright © 2019 Mark Carrington</copyright>
     <language>en-GB</language>
     <tags>XrmToolBox SQL CDS</tags>
