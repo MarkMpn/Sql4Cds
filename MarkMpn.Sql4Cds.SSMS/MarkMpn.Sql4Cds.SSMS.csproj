@@ -129,7 +129,7 @@
     </Reference>
     <Reference Include="Microsoft.SqlServer.RegSvrEnum, Version=14.100.0.0, Culture=neutral, PublicKeyToken=89845dcd8080cc91, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\..\..\..\Program Files (x86)\Microsoft SQL Server Management Studio 18\Common7\IDE\Microsoft.SqlServer.RegSvrEnum.dll</HintPath>
+      <HintPath>References\Microsoft.SqlServer.RegSvrEnum.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Microsoft.SqlServer.TransactSql.ScriptDom, Version=15.0.0.0, Culture=neutral, PublicKeyToken=89845dcd8080cc91">
@@ -228,11 +228,11 @@
     </Reference>
     <Reference Include="PresentationFramework" />
     <Reference Include="SqlPackageBase">
-      <HintPath>..\..\..\..\..\..\Program Files (x86)\Microsoft SQL Server Management Studio 18\Common7\IDE\SqlPackageBase.dll</HintPath>
+      <HintPath>References\SqlPackageBase.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="SqlWorkbench.Interfaces">
-      <HintPath>..\..\..\..\..\..\Program Files (x86)\Microsoft SQL Server Management Studio 18\Common7\IDE\SqlWorkbench.Interfaces.dll</HintPath>
+      <HintPath>References\SqlWorkbench.Interfaces.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="stdole, Version=7.0.3300.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
