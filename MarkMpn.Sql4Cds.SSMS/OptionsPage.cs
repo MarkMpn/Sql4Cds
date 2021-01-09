@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.VisualStudio.Shell;
@@ -33,5 +34,10 @@ namespace MarkMpn.Sql4Cds.SSMS
         [Description("The number of threads to use for simultaneous requests to the Dataverse API")]
         [DefaultValue(10)]
         public int MaxDegreeOfParallelism { get; set; } = 10;
+
+        [Category("Version")]
+        [DisplayName("Version")]
+        [Description("Installed version of SQL 4 CDS - SSMS Edition")]
+        public string Version { get; } = Assembly.GetExecutingAssembly().GetName().Version.ToString(3);
     }
 }
