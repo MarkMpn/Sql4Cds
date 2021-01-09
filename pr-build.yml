@@ -28,7 +28,7 @@ steps:
   displayName: Update version in the vsix manifest
   inputs:
     filePath: 'MarkMpn.Sql4Cds.SSMS\update-version.ps1'
-    arguments: '$(GitVersion.SemVer)'
+    arguments: '$(GitVersion.AssemblySemVer)'
     pwsh: true
   
 - task: NuGetCommand@2
