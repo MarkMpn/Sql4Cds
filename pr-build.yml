@@ -9,7 +9,6 @@ variables:
   solution: '**/*.sln'
   buildPlatform: 'Any CPU'
   buildConfiguration: 'Release'
-  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
 
 steps:
 - checkout: self
@@ -49,3 +48,10 @@ steps:
   inputs:
     platform: '$(buildPlatform)'
     configuration: '$(buildConfiguration)'
+
+- task: PublishPipelineArtifact@1
+  displayName: Publish SSMS installer to pipeline
+  inputs:
+    targetPath: 'MarkMpn.Sql4Cds.SSMS.Setup\bin\$(buildConfiguration)\MarkMpn.Sql4Cds.SSMS.Setup.msi'
+    artifact: 'SSMSInstaller'
+    publishLocation: 'pipeline'
