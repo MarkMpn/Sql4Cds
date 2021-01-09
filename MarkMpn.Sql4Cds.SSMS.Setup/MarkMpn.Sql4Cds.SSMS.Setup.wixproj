@@ -25,6 +25,12 @@
     <Compile Include="Product.wxs" />
     <Compile Include="HeatGeneratedFileList.wxs" />
   </ItemGroup>
+  <ItemGroup>
+    <WixExtension Include="WixUIExtension">
+      <HintPath>$(WixExtDir)\WixUIExtension.dll</HintPath>
+      <Name>WixUIExtension</Name>
+    </WixExtension>
+  </ItemGroup>
   <Import Project="$(WixTargetsPath)" Condition=" '$(WixTargetsPath)' != '' " />
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\WiX\v3.x\Wix.targets" Condition=" '$(WixTargetsPath)' == '' AND Exists('$(MSBuildExtensionsPath32)\Microsoft\WiX\v3.x\Wix.targets') " />
   <Target Name="EnsureWixToolsetInstalled" Condition=" '$(WixTargetsImported)' != 'true' ">
@@ -39,16 +45,6 @@
 	</Target>
 	-->
   <Target Name="BeforeBuild">
-    <HeatDirectory Directory="..\MarkMpn.Sql4Cds.SSMS\bin\$(Configuration)"
-      PreprocessorVariable="var.HarvestPath"
-      OutputFile="HeatGeneratedFileList.wxs"
-      ComponentGroupName="HeatGenerated"
-      DirectoryRefId="INSTALLFOLDER"
-      AutogenerateGuids="true"
-      ToolPath="$(WixToolPath)"
-      SuppressFragments="true"
-      SuppressRegistry="true"
-      SuppressRootDirectory="true"
-      SuppressUniqueIds="true"/>
+    <HeatDirectory Directory="..\MarkMpn.Sql4Cds.SSMS\bin\$(Configuration)" PreprocessorVariable="var.HarvestPath" OutputFile="HeatGeneratedFileList.wxs" ComponentGroupName="HeatGenerated" DirectoryRefId="INSTALLFOLDER" AutogenerateGuids="true" ToolPath="$(WixToolPath)" SuppressFragments="true" SuppressRegistry="true" SuppressRootDirectory="true" SuppressUniqueIds="true" />
   </Target>
 </Project>
