@@ -1,17 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
 using EnvDTE;
 using EnvDTE80;
 using MarkMpn.Sql4Cds.Engine;
 using Microsoft.SqlServer.Management.QueryExecution;
 using Microsoft.SqlServer.Management.UI.VSIntegration;
-using Microsoft.SqlServer.Management.UI.VSIntegration.ObjectExplorer;
 using Microsoft.VisualStudio.Shell;
-using Microsoft.VisualStudio.Shell.Interop;
 
 namespace MarkMpn.Sql4Cds.SSMS
 {

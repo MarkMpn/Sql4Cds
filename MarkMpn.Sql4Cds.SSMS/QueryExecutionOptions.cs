@@ -1,6 +1,4 @@
-﻿using System;
-using System.Reflection;
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine;
 using Microsoft.Xrm.Sdk.Metadata;
 

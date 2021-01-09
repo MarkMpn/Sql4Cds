@@ -126,6 +126,7 @@
     </Reference>
     <Reference Include="Microsoft.SqlServer.ConnectionInfo, Version=16.100.0.0, Culture=neutral, PublicKeyToken=89845dcd8080cc91">
       <Private>False</Private>
+      <HintPath>References\Microsoft.SqlServer.ConnectionInfo.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.SqlServer.RegSvrEnum, Version=14.100.0.0, Culture=neutral, PublicKeyToken=89845dcd8080cc91, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
@@ -133,7 +134,8 @@
       <Private>False</Private>
     </Reference>
     <Reference Include="Microsoft.SqlServer.TransactSql.ScriptDom, Version=15.0.0.0, Culture=neutral, PublicKeyToken=89845dcd8080cc91">
-      <Private>False</Private>
+      <Private>True</Private>
+      <HintPath>..\packages\Microsoft.SqlServer.TransactSql.ScriptDom.150.4897.1\lib\net46\Microsoft.SqlServer.TransactSql.ScriptDom.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.VisualStudio.CommandBars, Version=8.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
       <EmbedInteropTypes>False</EmbedInteropTypes>
