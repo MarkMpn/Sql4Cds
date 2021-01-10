@@ -7,4 +7,6 @@ Write-Host $FullPath
 $content.PackageManifest.Metadata.Identity.Version = $version
 $content.Save($FullPath)
 
-Out-File -FilePath sql4cds-version.txt -InputObject $version
+$VersionPath = Resolve-Path $PSScriptRoot\sql4cds-version.txt
+Write-Host $VersionPath
+Out-File -FilePath $VersionPath -InputObject $version

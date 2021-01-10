@@ -61,5 +61,5 @@ steps:
   inputs:
     serverEndpoint: 'markcarrington.dev'
     rootDirectory: 'MarkMpn.Sql4Cds.SSMS'
-    filePatterns: sql4cds-version.txt
+    filePatterns: 'sql4cds-version.txt'
     remoteDirectory: '/site/wwwroot'
