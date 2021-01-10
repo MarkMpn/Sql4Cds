@@ -55,11 +55,3 @@ steps:
     targetPath: 'MarkMpn.Sql4Cds.SSMS.Setup\bin\$(buildConfiguration)\MarkMpn.Sql4Cds.SSMS.Setup.msi'
     artifact: 'SSMSInstaller'
     publishLocation: 'pipeline'
-
-- task: FtpUpload@2
-  displayName: Advertise latest version
-  inputs:
-    serverEndpoint: 'markcarrington.dev'
-    rootDirectory: 'MarkMpn.Sql4Cds.SSMS'
-    filePatterns: 'sql4cds-version.txt'
-    remoteDirectory: '/site/wwwroot'
