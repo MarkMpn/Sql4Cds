@@ -15,7 +15,7 @@ namespace MarkMpn.Sql4Cds.SSMS
   ___  ___  _      _ _     ___ ___  ___ 
  / __|/ _ \| |    | | |   / __|   \/ __|
  \__ \ (_) | |__  |_  _| | (__| |) \__ \
- |___/\__\_\____|   |_|   \___|___/|___/  {version}
+ |___/\__\_\____|   |_|   \___|___/|___/  v{version}
 
  INSERT/UPDATE/DELETE commands are implemented by SQL 4 CDS
  and not supported by Microsoft
@@ -40,7 +40,15 @@ namespace MarkMpn.Sql4Cds.SSMS
             SetField(m_sqlExec, "m_curBatch", batch);
             SetField(m_sqlExec, "m_batchConsumer", GetField(Target, "m_batchConsumer"));
 
-            AddStringToMessages(Banner.Replace("{version}", Assembly.GetExecutingAssembly().GetName().Version.ToString(3)));
+            var currentVersion = Assembly.GetExecutingAssembly().GetName().Version;
+            AddStringToMessages(Banner.Replace("{version}", currentVersion.ToString(3)));
+
+            if (VersionChecker.Result.IsCompleted && !VersionChecker.Result.IsFaulted && VersionChecker.Result.Result > currentVersion)
+            {
+                AddStringToErrors(" An updated version of SQL 4 CDS is available", true);
+                AddStringToMessages($" Update to v{VersionChecker.Result.Result.ToString(3)} available from https://markcarrington.dev/sql-4-cds/");
+                AddStringToMessages("");
+            }
         }
 
         private void PrepareForExecution(bool parse)

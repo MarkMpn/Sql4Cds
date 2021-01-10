@@ -74,6 +74,9 @@ namespace MarkMpn.Sql4Cds.SSMS
             DmlExecute.Initialize(this, dte);
 
             CrmServiceClient.AuthOverrideHook = AuthOverrideHook.Instance;
+
+            // Check for an updated version
+            VersionChecker.Check();
         }
 
         public OptionsPage Settings

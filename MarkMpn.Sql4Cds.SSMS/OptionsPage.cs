@@ -36,8 +36,30 @@ namespace MarkMpn.Sql4Cds.SSMS
         public int MaxDegreeOfParallelism { get; set; } = 10;
 
         [Category("Version")]
-        [DisplayName("Version")]
+        [DisplayName("Installed")]
         [Description("Installed version of SQL 4 CDS - SSMS Edition")]
         public string Version { get; } = Assembly.GetExecutingAssembly().GetName().Version.ToString(3);
+
+        [Category("Version")]
+        [DisplayName("Latest")]
+        [Description("Latest version of SQL 4 CDS available for download")]
+        public string Latest
+        {
+            get
+            {
+                if (VersionChecker.Result.IsCompleted && !VersionChecker.Result.IsFaulted)
+                    return VersionChecker.Result.Result.ToString(3);
+
+                if (VersionChecker.Result.IsFaulted)
+                    return "Error loading latest version";
+
+                return "Loading...";
+            }
+        }
+
+        public bool ShouldSerializeLatest()
+        {
+            return VersionChecker.Result.IsCompleted && Latest != Version;
+        }
     }
 }
