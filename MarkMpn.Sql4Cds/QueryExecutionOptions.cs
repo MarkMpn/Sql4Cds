@@ -71,14 +71,14 @@ namespace MarkMpn.Sql4Cds
             return Settings.Instance.SelectLimit == 0 || Settings.Instance.SelectLimit > count;
         }
 
-        public void Progress(string message)
+        public void Progress(double? progress, string message)
         {
-            _worker.ReportProgress(-1, message);
+            _worker.ReportProgress(progress == null ? -1 : (int) (progress * 100), message);
         }
 
         public int BatchSize => Settings.Instance.BatchSize;
 
-        public bool UseTSQLEndpoint => Settings.Instance.UseTSQLEndpoint;
+        public bool UseTDSEndpoint => Settings.Instance.UseTSQLEndpoint;
 
         public bool UseRetrieveTotalRecordCount => Settings.Instance.UseRetrieveTotalRecordCount;
 

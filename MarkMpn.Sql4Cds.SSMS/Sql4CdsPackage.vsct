@@ -1,0 +1,120 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<CommandTable xmlns="http://schemas.microsoft.com/VisualStudio/2005-10-18/CommandTable" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+
+  <!--  This is the file that defines the actual layout and type of the commands.
+        It is divided in different sections (e.g. command definition, command
+        placement, ...), with each defining a specific set of properties.
+        See the comment before each section for more details about how to
+        use it. -->
+
+  <!--  The VSCT compiler (the tool that translates this file into the binary
+        format that VisualStudio will consume) has the ability to run a preprocessor
+        on the vsct file; this preprocessor is (usually) the C++ preprocessor, so
+        it is possible to define includes and macros with the same syntax used
+        in C++ files. Using this ability of the compiler here, we include some files
+        defining some of the constants that we will use inside the file. -->
+
+  <!--This is the file that defines the IDs for all the commands exposed by VisualStudio. -->
+  <Extern href="stdidcmd.h" />
+
+  <!--This header contains the command ids for the menus provided by the shell. -->
+  <Extern href="vsshlids.h" />
+
+  <!--The Commands section is where commands, menus, and menu groups are defined.
+      This section uses a Guid to identify the package that provides the command defined inside it. -->
+  <Commands package="guidSql4CdsPackage">
+    <!-- Inside this section we have different sub-sections: one for the menus, another
+    for the menu groups, one for the buttons (the actual commands), one for the combos
+    and the last one for the bitmaps used. Each element is identified by a command id that
+    is a unique pair of guid and numeric identifier; the guid part of the identifier is usually
+    called "command set" and is used to group different command inside a logically related
+    group; your package should define its own command set in order to avoid collisions
+    with command ids defined by other packages. -->
+    <Menus>
+      <Menu guid="guidSql4CdsPackageCmdSet" id="Toolbar" type="Toolbar">
+        <CommandFlag>DefaultDocked</CommandFlag>
+        <Strings>
+          <ButtonText>SQL 4 CDS</ButtonText>
+          <CommandName>SQL 4 CDS</CommandName>
+        </Strings>
+      </Menu>
+    </Menus>
+
+    <!-- In this section you can define new menu groups. A menu group is a container for
+         other menus or buttons (commands); from a visual point of view you can see the
+         group as the part of a menu contained between two lines. The parent of a group
+         must be a menu. -->
+    <Groups>
+      <Group guid="guidSql4CdsPackageCmdSet" id="ToolbarGroup" priority="0x0000">
+        <Parent guid="guidSql4CdsPackageCmdSet" id="Toolbar" />
+      </Group>
+    </Groups>
+
+    <!--Buttons section. -->
+    <!--This section defines the elements the user can interact with, like a menu command or a button
+        or combo box in a toolbar. -->
+    <Buttons>
+      <!--To define a menu group you have to specify its ID, the parent menu and its display priority.
+          The command is visible and enabled by default. If you need to change the visibility, status, etc, you can use
+          the CommandFlag node.
+          You can add more than one CommandFlag node e.g.:
+              <CommandFlag>DefaultInvisible</CommandFlag>
+              <CommandFlag>DynamicVisibility</CommandFlag>
+          If you do not want an image next to your command, remove the Icon node /> -->
+      <Button guid="guidSql4CdsPackageCmdSet" id="Sql2FetchXmlCommandId" priority="0x0100" type="Button">
+        <Parent guid="guidSql4CdsPackageCmdSet" id="ToolbarGroup" />
+        <Icon guid="guidImages" id="bmpPic1" />
+        <CommandFlag>IconAndText</CommandFlag>
+        <CommandFlag>DontCache</CommandFlag>
+        <CommandFlag>DefaultDisabled</CommandFlag>
+        <Strings>
+          <ButtonText>FetchXML</ButtonText>
+          <ToolTipText>Convert SQL to FetchXML</ToolTipText>
+        </Strings>
+      </Button>
+      <Button guid="guidSql4CdsPackageCmdSet" id="FetchXml2SqlCommandId" priority="0x0100" type="Button">
+        <Parent guid="guidSql4CdsPackageCmdSet" id="ToolbarGroup" />
+        <Icon guid="guidImages1" id="bmpPic1" />
+        <CommandFlag>IconAndText</CommandFlag>
+        <CommandFlag>DontCache</CommandFlag>
+        <CommandFlag>DefaultDisabled</CommandFlag>
+        <Strings>
+          <ButtonText>SQL</ButtonText>
+          <ToolTipText>Convert FetchXML to SQL</ToolTipText>
+        </Strings>
+      </Button>
+    </Buttons>
+
+    <!--The bitmaps section is used to define the bitmaps that are used for the commands.-->
+    <Bitmaps>
+      <!--  The bitmap id is defined in a way that is a little bit different from the others:
+            the declaration starts with a guid for the bitmap strip, then there is the resource id of the
+            bitmap strip containing the bitmaps and then there are the numeric ids of the elements used
+            inside a button definition. An important aspect of this declaration is that the element id
+            must be the actual index (1-based) of the bitmap inside the bitmap strip. -->
+      <Bitmap guid="guidImages" href="Resources\Sql2FetchXmlCommand.png" usedList="bmpPic1" />
+      <Bitmap guid="guidImages1" href="Resources\FetchXml2SqlCommand.png" usedList="bmpPic1" />
+    </Bitmaps>
+  </Commands>
+
+  <Symbols>
+    <!-- This is the package guid. -->
+    <GuidSymbol name="guidSql4CdsPackage" value="{edc4d3ea-c057-45cc-9517-a1c77b6822e4}" />
+
+    <!-- This is the guid used to group the menu commands together -->
+    <GuidSymbol name="guidSql4CdsPackageCmdSet" value="{fd809e45-c5a9-40cc-9f78-501dd3f71817}">
+      <IDSymbol name="ToolbarGroup" value="0x1020" />
+      <IDSymbol name="Toolbar" value="0x1010" />
+      <IDSymbol name="Sql2FetchXmlCommandId" value="0x0100" />
+      <IDSymbol name="FetchXml2SqlCommandId" value="0x0200" />
+    </GuidSymbol>
+
+    <GuidSymbol name="guidImages" value="{4134aa85-5a36-4ce6-98e8-2186a7482e8a}">
+      <IDSymbol name="bmpPic1" value="1" />
+    </GuidSymbol>
+  
+    <GuidSymbol value="{eec144ec-cdab-4b5e-b7ac-1fcba8ecf93f}" name="guidImages1">
+      <IDSymbol name="bmpPic1" value="1" />
+    </GuidSymbol>
+  </Symbols>
+</CommandTable>

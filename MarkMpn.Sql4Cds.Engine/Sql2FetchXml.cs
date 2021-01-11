@@ -186,7 +186,12 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// Indicates if the CDS TDS endpoint can be used as a fallback if a query cannot be converted to FetchXML
         /// </summary>
-        public bool TSqlEndpointAvailable { get; set; }
+        public bool TDSEndpointAvailable { get; set; }
+
+        /// <summary>
+        /// Indicates if the CDS TDS endpoint should be used wherever possible
+        /// </summary>
+        public bool ForceTDSEndpoint { get; set; }
 
         /// <summary>
         /// Indicates if column comparison conditions are supported
@@ -226,9 +231,10 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     var index = statement.StartOffset;
                     var length = statement.ScriptTokenStream[statement.LastTokenIndex].Offset + statement.ScriptTokenStream[statement.LastTokenIndex].Text.Length - index;
+                    var originalSql = statement.ToSql();
                     string sqlStatement = null;
 
-                    if (TSqlEndpointAvailable)
+                    if (TDSEndpointAvailable)
                     {
                         var statementFragment = dom.Parse(new StringReader(statement.ToSql()), out _);
                         var statementScript = (TSqlScript)statementFragment;
@@ -254,7 +260,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     else
                         throw new NotSupportedQueryFragmentException("Unsupported statement", statement);
 
-                    query.Sql = sqlStatement;
+                    query.Sql = originalSql;
                     query.Index = index;
                     query.Length = length;
                     queries.Add(query);
@@ -455,7 +461,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="delete">The SQL query to convert</param>
         /// <returns>The equivalent query converted for execution against CDS</returns>
-        private Query ConvertDeleteStatement(DeleteStatement delete)
+        private DeleteQuery ConvertDeleteStatement(DeleteStatement delete)
         {
             // Check for any DOM elements that don't have an equivalent in CDS
             if (delete.OptimizerHints.Count != 0)
@@ -485,6 +491,24 @@ namespace MarkMpn.Sql4Cds.Engine
                 };
             }
 
+            if (ForceTDSEndpoint)
+                return ConvertDeleteStatementTDS(delete, target);
+
+            try
+            {
+                return ConvertDeleteStatementFetchXml(delete, target);
+            }
+            catch (NotSupportedQueryFragmentException)
+            {
+                if (!TDSEndpointAvailable)
+                    throw;
+
+                return ConvertDeleteStatementTDS(delete, target);
+            }
+        }
+
+        private DeleteQuery ConvertDeleteStatementFetchXml(DeleteStatement delete, NamedTableReference target)
+        {
             // Convert the FROM, TOP and WHERE clauses from the query to identify the records to delete.
             // Each record can only be deleted once, so apply the DISTINCT option as well
             var fetch = new FetchXml.FetchType
@@ -496,7 +520,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var tables = HandleFromClause(delete.DeleteSpecification.FromClause, fetch);
             HandleWhereClause(delete.DeleteSpecification.WhereClause, tables, extensions);
             HandleTopClause(delete.DeleteSpecification.TopRowFilter, fetch, extensions);
-            
+
             // To delete a record we need the primary key field of the target entity
             // For intersect entities we need the two foreign key fields instead
             var table = FindTable(target, tables);
@@ -546,11 +570,83 @@ namespace MarkMpn.Sql4Cds.Engine
                 FetchXml = fetch,
                 EntityName = table.EntityName,
                 IdColumns = cols,
-                AllPages = fetch.page == null && fetch.top == null
+                AllPages = fetch.page == null && fetch.top == null,
+                HasWhere = delete.DeleteSpecification.WhereClause != null
             };
 
             foreach (var extension in extensions)
                 query.Extensions.Add(extension);
+
+            return query;
+        }
+
+        private DeleteQuery ConvertDeleteStatementTDS(DeleteStatement delete, NamedTableReference target)
+        {
+            // We need to select the unique identifier of the entity being deleted. Target of update might be
+            // an alias for a table in the FROM clause.
+            var visitor = new UpdateTargetVisitor(target.SchemaObject.BaseIdentifier.Value);
+            delete.DeleteSpecification.FromClause.Accept(visitor);
+            var metadata = Metadata[visitor.TargetEntityName];
+
+            var select = new SelectStatement
+            {
+                QueryExpression = new QuerySpecification
+                {
+                    FromClause = delete.DeleteSpecification.FromClause,
+                    TopRowFilter = delete.DeleteSpecification.TopRowFilter,
+                    WhereClause = delete.DeleteSpecification.WhereClause,
+                    UniqueRowFilter = UniqueRowFilter.Distinct
+                },
+                ScriptTokenStream = null
+            };
+
+            var idColumns = new List<string>();
+
+            if (metadata.LogicalName == "listmember")
+            {
+                idColumns.Add("entityid");
+                idColumns.Add("listid");
+            }
+            else if (metadata.IsIntersect == true)
+            {
+                var relationship = metadata.ManyToManyRelationships.Single();
+                idColumns.Add(relationship.Entity1IntersectAttribute);
+                idColumns.Add(relationship.Entity2IntersectAttribute);
+            }
+            else
+            {
+                idColumns.Add(metadata.PrimaryIdAttribute);
+            }
+
+            foreach (var idColumn in idColumns)
+            {
+                ((QuerySpecification)select.QueryExpression).SelectElements.Add(new SelectScalarExpression
+                {
+                    Expression = new ColumnReferenceExpression
+                    {
+                        MultiPartIdentifier = new MultiPartIdentifier
+                        {
+                            Identifiers =
+                            {
+                                new Identifier { Value = visitor.TargetAliasName },
+                                new Identifier { Value = idColumn }
+                            }
+                        }
+                    },
+                    ColumnName = new IdentifierOrValueExpression
+                    {
+                        Identifier = new Identifier { Value = idColumn }
+                    }
+                });
+            }
+
+            var query = new DeleteQuery
+            {
+                EntityName = metadata.LogicalName,
+                IdColumns = idColumns.ToArray(),
+                TSql = select.ToSql(),
+                HasWhere = delete.DeleteSpecification.WhereClause != null
+            };
 
             return query;
         }
@@ -590,6 +686,31 @@ namespace MarkMpn.Sql4Cds.Engine
                 };
             }
 
+            if (ForceTDSEndpoint)
+                return ConvertUpdateStatementTDS(update, target);
+
+            try
+            {
+                return ConvertUpdateStatementFetchXml(update, target);
+            }
+            catch (NotSupportedQueryFragmentException)
+            {
+                // If we can use the TSQL endpoint, rewrite the query as a SELECT to get the required values
+                if (!TDSEndpointAvailable)
+                    throw;
+
+                return ConvertUpdateStatementTDS(update, target);
+            }
+        }
+
+        /// <summary>
+        /// Converts an UPDATE query to FetchXML
+        /// </summary>
+        /// <param name="update">The SQL query to convert</param>
+        /// <param name="target">The name of the entity to be updated</param>
+        /// <returns>The equivalent query converted for execution against CDS</returns>
+        private UpdateQuery ConvertUpdateStatementFetchXml(UpdateStatement update, NamedTableReference target)
+        {
             // Convert the FROM, TOP and WHERE clauses from the query to identify the records to update.
             // Each record can only be updated once, so apply the DISTINCT option as well
             var fetch = new FetchXml.FetchType
@@ -644,11 +765,174 @@ namespace MarkMpn.Sql4Cds.Engine
                 EntityName = table.EntityName,
                 IdColumn = cols[0],
                 Updates = updates,
-                AllPages = fetch.page == null && fetch.top == null
+                AllPages = fetch.page == null && fetch.top == null,
+                HasWhere = update.UpdateSpecification.WhereClause != null
             };
 
             foreach (var extension in extensions)
                 query.Extensions.Add(extension);
+
+            return query;
+        }
+
+        /// <summary>
+        /// Converts an UPDATE query using the TDS endpoint
+        /// </summary>
+        /// <param name="update">The SQL query to convert</param>
+        /// <param name="target">The name of the entity to be updated</param>
+        /// <returns>The equivalent query converted for execution against CDS</returns>
+        private UpdateQuery ConvertUpdateStatementTDS(UpdateStatement update, NamedTableReference target)
+        {
+            // We need to select the unique identifier of the entity being updated. Target of update might be
+            // an alias for a table in the FROM clause.
+            var visitor = new UpdateTargetVisitor(target.SchemaObject.BaseIdentifier.Value);
+            update.UpdateSpecification.FromClause.Accept(visitor);
+            var metadata = Metadata[visitor.TargetEntityName];
+
+            var select = new SelectStatement
+            {
+                QueryExpression = new QuerySpecification
+                {
+                    SelectElements =
+                        {
+                            new SelectScalarExpression
+                            {
+                                Expression = new ColumnReferenceExpression
+                                {
+                                    MultiPartIdentifier = new MultiPartIdentifier
+                                    {
+                                        Identifiers =
+                                        {
+                                            new Identifier{ Value = visitor.TargetAliasName },
+                                            new Identifier{ Value = metadata.PrimaryIdAttribute }
+                                        }
+                                    }
+                                },
+                                ColumnName = new IdentifierOrValueExpression
+                                {
+                                    Identifier = new Identifier { Value = metadata.PrimaryIdAttribute }
+                                }
+                            }
+                        },
+                    FromClause = update.UpdateSpecification.FromClause,
+                    WhereClause = update.UpdateSpecification.WhereClause,
+                    TopRowFilter = update.UpdateSpecification.TopRowFilter
+                },
+                ScriptTokenStream = null
+            };
+
+            // Add each column being set to the SELECT statement
+            var columns = new Dictionary<string, AssignmentSetClause>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var set in update.UpdateSpecification.SetClauses)
+            {
+                // Check for unsupported SQL DOM elements
+                if (!(set is AssignmentSetClause assign))
+                    throw new NotSupportedQueryFragmentException("Unsupported UPDATE SET clause", set);
+
+                if (assign.Column == null)
+                    throw new NotSupportedQueryFragmentException("Unsupported UPDATE SET clause", assign);
+
+                if (assign.Column.MultiPartIdentifier.Identifiers.Count > 1)
+                    throw new NotSupportedQueryFragmentException("Unsupported UPDATE SET clause", assign.Column);
+
+                var attrName = assign.Column.MultiPartIdentifier.Identifiers[0].Value.ToLower();
+                var attr = metadata.Attributes.SingleOrDefault(a => a.LogicalName == attrName);
+                if (attr == null)
+                    throw new NotSupportedQueryFragmentException("Unknown column name", assign.Column);
+
+                if (attr.IsValidForUpdate == false)
+                    throw new NotSupportedQueryFragmentException("Column is not updateable", assign.Column);
+
+                ((QuerySpecification)select.QueryExpression).SelectElements.Add(new SelectScalarExpression
+                {
+                    Expression = assign.NewValue,
+                    ColumnName = new IdentifierOrValueExpression
+                    {
+                        Identifier = assign.Column.MultiPartIdentifier.Identifiers[0]
+                    }
+                });
+
+                columns.Add(attr.LogicalName, assign);
+            }
+
+            // Most columns map to a single attribute, but polymorphic lookup attributes are formed from two columns. Merge
+            // the two values into a single attribute value.
+            var updates = new Dictionary<string, Func<Entity, object>>();
+
+            foreach (var attr in metadata.Attributes)
+            {
+                if (attr.AttributeOf != null)
+                    continue;
+
+                if (!columns.ContainsKey(attr.LogicalName))
+                    continue;
+
+                if (attr is LookupAttributeMetadata lookup)
+                {
+                    updates[attr.LogicalName] = e =>
+                    {
+                        if (!e.Contains(attr.LogicalName))
+                            return null;
+
+                        var id = e[attr.LogicalName];
+
+                        if (id == null)
+                            return null;
+
+                        if (id is string s)
+                            id = new Guid(s);
+                        else if (!(id is Guid))
+                            throw new NotSupportedQueryFragmentException($"Cannot convert value '{id}' of type '{id.GetType()}' to '{attr.AttributeType}' for attribute {attr.LogicalName}", columns[attr.LogicalName]);
+
+                        string logicalName;
+
+                        if (e.Contains(attr.LogicalName + "type"))
+                        {
+                            var logicalNameValue = e[attr.LogicalName + "type"];
+
+                            if (logicalNameValue is string)
+                                logicalName = (string)logicalNameValue;
+                            else if (logicalNameValue is int otc)
+                                logicalName = Metadata[otc].LogicalName;
+                            else
+                                throw new NotSupportedQueryFragmentException($"Cannot convert value '{logicalNameValue}' of type '{logicalNameValue.GetType()}' to 'string' for attribute {attr.LogicalName}", columns[attr.LogicalName + "type"]);
+                        }
+                        else if (lookup.Targets.Length == 1)
+                        {
+                            logicalName = lookup.Targets[0];
+                        }
+                        else
+                        {
+                            throw new NotSupportedQueryFragmentException("Polymorphic lookup columns must have the corresponding type column set as well", columns[attr.LogicalName]);
+                        }
+
+                        return new EntityReference(logicalName, (Guid)id);
+                    };
+                }
+                else
+                {
+                    updates[attr.LogicalName] = e =>
+                    {
+                        if (!e.Contains(attr.LogicalName))
+                            return null;
+
+                        var value = e[attr.LogicalName];
+                        value = ConvertAttributeValueType(metadata, attr.LogicalName, value);
+
+                        return value;
+                    };
+                }
+            }
+
+            var query = new UpdateQuery
+            {
+                EntityName = visitor.TargetEntityName,
+                IdColumn = metadata.PrimaryIdAttribute,
+                Updates = updates,
+                TSql = select.ToSql(),
+                HasWhere = update.UpdateSpecification.WhereClause != null
+            };
 
             return query;
         }
@@ -1140,13 +1424,14 @@ namespace MarkMpn.Sql4Cds.Engine
             else if (expr is ColumnReferenceExpression col)
             {
                 // Check if this attribute is really a calculated field
-                var attrName = GetColumnAttribute(col);
+                var attrName = col.MultiPartIdentifier.Identifiers.Last().Value;
                 Type type;
                 
                 if (col.MultiPartIdentifier.Identifiers.Count != 1 || calculatedFields == null || !calculatedFields.TryGetValue(col.MultiPartIdentifier.Identifiers[0].Value, out type))
                 {
                     // Check where this attribute should be taken from
                     var tableAlias = GetColumnTableAlias(col, tables, out var table);
+                    attrName = GetColumnAttribute(table, col);
 
                     var attrMetadata = table.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase));
 
@@ -1477,96 +1762,111 @@ namespace MarkMpn.Sql4Cds.Engine
             if (!queryType.IsData)
                 forceAggregateExpression = true;
 
+            if (queryType.IsData && ForceTDSEndpoint)
+                return ConvertSelectStatementTDS(select, forceAggregateExpression, queryType, querySpec);
+
             try
             {
-                // Store the original SQL again now so we can re-parse it if required to generate an alternative query
-                // to handle aggregates via an expression rather than FetchXML.
-                var sql = select.ToSql();
-
-                // Convert the query from the "inside out":
-                // 1. FROM clause gives the data source for everything else
-                // 2. WHERE clause filters the initial result set
-                // 3. GROUP BY changes the schema of the data source after filtering
-                // 4. HAVING clause filters the result set after grouping
-                // 5. SELECT clause defines the final columns to include in the results
-                // 6. DISTINCT clause checks for unique-ness across the columns in the SELECT clause
-                // 7. ORDER BY clause sequences the results
-                // 8. OFFSET / TOP clauses skips rows in the final results
-
-                // At each point, convert as much of the query as possible to FetchXML. Anything that can't be converted
-                // directly should be handled in-memory using an expression. If any previous step has generated an expression,
-                // all later steps must use expressions only as the FetchXML results will be incomplete.
-                var extensions = new List<IQueryExtension>();
-
-                if (queryType.IsMetadata)
-                {
-                    // Only minimal FetchXML support is provided in the query implementation for metadata, so force as much as
-                    // possible into memory
-                    extensions.Add(new NoOp());
-                }
-
-                var fetch = new FetchXml.FetchType();
-                var tables = HandleFromClause(querySpec.FromClause, fetch);
-                HandleWhereClause(querySpec.WhereClause, tables, extensions);
-                var computedColumns = HandleGroupByClause(querySpec, fetch, tables, extensions, forceAggregateExpression) ?? new Dictionary<string, Type>();
-                var columns = HandleSelectClause(querySpec, fetch, tables, computedColumns, extensions);
-                HandleDistinctClause(querySpec, fetch, columns, extensions);
-                HandleOrderByClause(querySpec, fetch, tables, columns, computedColumns, extensions);
-                HandleHavingClause(querySpec, computedColumns, extensions);
-                HandleOffsetClause(querySpec, fetch, extensions);
-                HandleTopClause(querySpec.TopRowFilter, fetch, extensions);
-
-                // Sort the elements in the query so they're in the order users expect based on online samples
-                foreach (var table in tables)
-                    table.Sort();
-
-                // Return the final query
-                SelectQuery query;
-
-                if (queryType.IsGlobalOptionSet)
-                    query = new GlobalOptionSetQuery();
-                else if (queryType.IsEntityMetadata)
-                    query = new EntityMetadataQuery();
-                else
-                    query = new SelectQuery();
-
-                query.FetchXml = fetch;
-                query.ColumnSet = columns;
-                query.AllPages = fetch.page == null && fetch.count == null;
-
-                foreach (var extension in extensions)
-                    query.Extensions.Add(extension);
-
-                if (fetch.aggregateSpecified && fetch.aggregate)
-                {
-                    // We've generated a FetchXML aggregate query. These can generate errors when there are a lot of source records involved in the query,
-                    // so convert the query again, this time processing the aggregates via expressions.
-                    // We'll have changed the SQL DOM during the conversion to FetchXML, so recreate it by parsing the original SQL again
-                    var dom = new TSql150Parser(QuotedIdentifiers);
-                    var fragment = dom.Parse(new StringReader(sql), out _);
-                    var script = (TSqlScript)fragment;
-                    script.Accept(new ReplacePrimaryFunctionsVisitor());
-                    var originalSelect = (SelectStatement)script.Batches.Single().Statements.Single();
-
-                    query.AggregateAlternative = ConvertSelectStatement(originalSelect, true);
-                }
-
-                return query;
+                return ConvertSelectStatementFetchXml(select, forceAggregateExpression, queryType, querySpec);
             }
             catch (NotSupportedQueryFragmentException)
             {
                 // Check if we can still execute the raw query using the TDS endpoint instead
-                if (!TSqlEndpointAvailable)
+                if (!TDSEndpointAvailable || !queryType.IsData)
                     throw;
 
-                select.Accept(new AddDefaultTableAliasesVisitor());
-                select.ScriptTokenStream = null;
-
-                return new SelectQuery
-                {
-                    Sql = select.ToSql()
-                };
+                return ConvertSelectStatementTDS(select, forceAggregateExpression, queryType, querySpec);
             }
+        }
+
+        private SelectQuery ConvertSelectStatementFetchXml(SelectStatement select, bool forceAggregateExpression, QueryTypeVisitor queryType, QuerySpecification querySpec)
+        {
+            // Store the original SQL again now so we can re-parse it if required to generate an alternative query
+            // to handle aggregates via an expression rather than FetchXML.
+            var sql = select.ToSql();
+
+            // Convert the query from the "inside out":
+            // 1. FROM clause gives the data source for everything else
+            // 2. WHERE clause filters the initial result set
+            // 3. GROUP BY changes the schema of the data source after filtering
+            // 4. HAVING clause filters the result set after grouping
+            // 5. SELECT clause defines the final columns to include in the results
+            // 6. DISTINCT clause checks for unique-ness across the columns in the SELECT clause
+            // 7. ORDER BY clause sequences the results
+            // 8. OFFSET / TOP clauses skips rows in the final results
+
+            // At each point, convert as much of the query as possible to FetchXML. Anything that can't be converted
+            // directly should be handled in-memory using an expression. If any previous step has generated an expression,
+            // all later steps must use expressions only as the FetchXML results will be incomplete.
+            var extensions = new List<IQueryExtension>();
+
+            if (queryType.IsMetadata)
+            {
+                // Only minimal FetchXML support is provided in the query implementation for metadata, so force as much as
+                // possible into memory
+                extensions.Add(new NoOp());
+            }
+
+            var fetch = new FetchXml.FetchType();
+            var tables = HandleFromClause(querySpec.FromClause, fetch);
+            HandleWhereClause(querySpec.WhereClause, tables, extensions);
+            var computedColumns = HandleGroupByClause(querySpec, fetch, tables, extensions, forceAggregateExpression) ?? new Dictionary<string, Type>();
+            var columns = HandleSelectClause(querySpec, fetch, tables, computedColumns, extensions);
+            HandleDistinctClause(querySpec, fetch, columns, extensions);
+            HandleOrderByClause(querySpec, fetch, tables, columns, computedColumns, extensions);
+            HandleHavingClause(querySpec, computedColumns, extensions);
+            HandleOffsetClause(querySpec, fetch, extensions);
+            HandleTopClause(querySpec.TopRowFilter, fetch, extensions);
+
+            // Sort the elements in the query so they're in the order users expect based on online samples
+            foreach (var table in tables)
+                table.Sort();
+
+            // Return the final query
+            SelectQuery query;
+
+            if (queryType.IsGlobalOptionSet)
+                query = new GlobalOptionSetQuery();
+            else if (queryType.IsEntityMetadata)
+                query = new EntityMetadataQuery();
+            else
+                query = new SelectQuery();
+
+            query.FetchXml = fetch;
+            query.ColumnSet = columns;
+            query.AllPages = fetch.page == null && fetch.count == null;
+
+            foreach (var extension in extensions)
+                query.Extensions.Add(extension);
+
+            if (fetch.aggregateSpecified && fetch.aggregate)
+            {
+                // We've generated a FetchXML aggregate query. These can generate errors when there are a lot of source records involved in the query,
+                // so convert the query again, this time processing the aggregates via expressions.
+                // We'll have changed the SQL DOM during the conversion to FetchXML, so recreate it by parsing the original SQL again
+                var dom = new TSql150Parser(QuotedIdentifiers);
+                var fragment = dom.Parse(new StringReader(sql), out _);
+                var script = (TSqlScript)fragment;
+                script.Accept(new ReplacePrimaryFunctionsVisitor());
+                var originalSelect = (SelectStatement)script.Batches.Single().Statements.Single();
+
+                query.AggregateAlternative = ConvertSelectStatement(originalSelect, true);
+            }
+
+            return query;
+        }
+
+        private SelectQuery ConvertSelectStatementTDS(SelectStatement select, bool forceAggregateExpression, QueryTypeVisitor queryType, QuerySpecification querySpec)
+        {
+            select.Accept(new AddDefaultTableAliasesVisitor());
+            select.Accept(new AddDefaultColumnAliasesVisitor());
+            select.ScriptTokenStream = null;
+
+            return new SelectQuery
+            {
+                TSql = select.ToSql(),
+                ColumnSet = querySpec.SelectElements.OfType<SelectScalarExpression>().Select(col => col.ColumnName.Value).ToArray()
+            };
         }
 
         /// <summary>
@@ -1809,8 +2109,8 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
                     else
                     {
-                        attrName = GetColumnAttribute(colRef);
                         GetColumnTableAlias(colRef, tables, out table);
+                        attrName = GetColumnAttribute(table, colRef);
                     }
 
                     var name = attrName;
@@ -1931,7 +2231,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 // Find the table in the query that the grouping attribute is from
                 GetColumnTableAlias(col, tables, out var table);
-                var columnName = GetColumnAttribute(col);
+                var columnName = GetColumnAttribute(table, col);
 
                 if (table == null)
                     throw new NotSupportedQueryFragmentException("Unknown table", col);
@@ -1980,10 +2280,10 @@ namespace MarkMpn.Sql4Cds.Engine
                         if (!(s.Expression is ColumnReferenceExpression selectCol))
                             return false;
 
-                        if (GetColumnAttribute(selectCol) != attr.name)
-                            return false;
-
                         GetColumnTableAlias(selectCol, tables, out var selectTable);
+
+                        if (GetColumnAttribute(selectTable, selectCol) != attr.name)
+                            return false;
 
                         if (selectTable != table)
                             return false;
@@ -2054,8 +2354,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
                 else
                 {
-                    attrName = GetColumnAttribute(col);
                     GetColumnTableAlias(col, tables, out table);
+                    attrName = GetColumnAttribute(table, col);
                 }
 
                 var attr = new FetchAttributeType { name = attrName };
@@ -2385,7 +2685,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 // Find the table from which the column is taken
                 GetColumnTableAlias(col, tables, out var orderTable, calculatedFields);
-                var attrName = GetColumnAttribute(col);
+                var attrName = GetColumnAttribute(orderTable, col);
 
                 if (!orderTable.GetItems().OfType<FetchAttributeType>().Any(a => a.alias?.Equals(attrName, StringComparison.OrdinalIgnoreCase) == true) &&
                     col.MultiPartIdentifier.Identifiers.Count == 1 && 
@@ -2811,7 +3111,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (field2 == null)
                 {
-                    var attrName = GetColumnAttribute(field);
+                    var attrName = GetColumnAttribute(entityTable, field);
                     var attribute = entityTable.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase));
 
                     if (!String.IsNullOrEmpty(attribute?.AttributeOf))
@@ -2882,6 +3182,21 @@ namespace MarkMpn.Sql4Cds.Engine
                         value = targetMetadata.ObjectTypeCode?.ToString();
                     }
 
+                    if (DateTime.TryParse(value, out var dt) &&
+                        dt.Kind != DateTimeKind.Utc &&
+                        attribute is DateTimeAttributeMetadata dtAttr &&
+                        dtAttr.DateTimeBehavior?.Value != DateTimeBehavior.TimeZoneIndependent &&
+                        field.MultiPartIdentifier.Identifiers.Last().Value.Equals(attrName + "utc", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Convert the value to UTC if we're filtering on a UTC column
+                        if (dt.Kind == DateTimeKind.Unspecified)
+                            dt = DateTime.SpecifyKind(dt, DateTimeKind.Utc);
+                        else
+                            dt = dt.ToUniversalTime();
+
+                        value = dt.ToString("u");
+                    }
+
                     var condition = new condition
                     {
                         entityname = entityName,
@@ -2903,8 +3218,8 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (entityTable != entityTable2)
                         throw new PostProcessingRequiredException("Unsupported comparison", comparison);
 
-                    var attr1 = entityTable.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(GetColumnAttribute(field), StringComparison.OrdinalIgnoreCase));
-                    var attr2 = entityTable.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(GetColumnAttribute(field2), StringComparison.OrdinalIgnoreCase));
+                    var attr1 = entityTable.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(GetColumnAttribute(entityTable, field), StringComparison.OrdinalIgnoreCase));
+                    var attr2 = entityTable.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(GetColumnAttribute(entityTable, field2), StringComparison.OrdinalIgnoreCase));
 
                     if (!String.IsNullOrEmpty(attr1?.AttributeOf))
                         throw new PostProcessingRequiredException("Cannot filter on virtual attributes", field);
@@ -2918,9 +3233,9 @@ namespace MarkMpn.Sql4Cds.Engine
                     criteria.Items = AddItem(criteria.Items, new condition
                     {
                         entityname = entityName,
-                        attribute = GetColumnAttribute(field),
+                        attribute = GetColumnAttribute(entityTable2, field),
                         @operator = op,
-                        valueof = GetColumnAttribute(field2)
+                        valueof = GetColumnAttribute(entityTable2, field2)
                     });
                 }
             }
@@ -2998,7 +3313,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (entityTable == targetTable)
                     entityName = null;
 
-                var attrName = GetColumnAttribute(field);
+                var attrName = GetColumnAttribute(entityTable, field);
                 var attr = entityTable.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase));
 
                 if (!String.IsNullOrEmpty(attr.AttributeOf))
@@ -3072,7 +3387,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (entityTable == targetTable)
                     entityName = null;
 
-                var attrName = GetColumnAttribute(field);
+                var attrName = GetColumnAttribute(entityTable, field);
                 var attr = entityTable.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase));
 
                 if (!String.IsNullOrEmpty(attr.AttributeOf))
@@ -3151,7 +3466,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     })
                     .ToArray();
 
-                var attrName = GetColumnAttribute(field);
+                var attrName = GetColumnAttribute(entityTable, field);
                 var attr = entityTable.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase));
 
                 if (!String.IsNullOrEmpty(attr.AttributeOf))
@@ -3656,9 +3971,9 @@ namespace MarkMpn.Sql4Cds.Engine
                 throw new NotSupportedQueryFragmentException("Unhandled SELECT clause", expr);
 
             // Find the appropriate table and add the attribute to the table
-            var attrName = GetColumnAttribute(col);
-            var requestedAttrName = attrName;
             GetColumnTableAlias(col, tables, out table);
+            var attrName = GetColumnAttribute(table, col);
+            var requestedAttrName = attrName;
 
             // Check if this is a column that has already been generated by the GROUP BY clause
             if (col.MultiPartIdentifier.Identifiers.Count == 1 && calculatedColumns != null && calculatedColumns.ContainsKey(attrName))
@@ -4000,21 +4315,33 @@ namespace MarkMpn.Sql4Cds.Engine
                 return alias;
             }
 
+            var colName = col.MultiPartIdentifier.Identifiers[0].Value;
+
             var possibleEntities = tables
-                .Where(t => t.GetItems().OfType<FetchAttributeType>().Any(attr => attr.alias?.Equals(col.MultiPartIdentifier.Identifiers[0].Value, StringComparison.OrdinalIgnoreCase) == true))
+                .Where(t => t.GetItems().OfType<FetchAttributeType>().Any(attr => attr.alias?.Equals(colName, StringComparison.OrdinalIgnoreCase) == true))
                 .ToArray();
 
             if (possibleEntities.Length == 0)
             {
                 // If no table is explicitly specified, check in the metadata for each available table
                 possibleEntities = tables
-                    .Where(t => !t.Hidden && t.Metadata.Attributes.Any(attr => attr.LogicalName.Equals(col.MultiPartIdentifier.Identifiers[0].Value, StringComparison.OrdinalIgnoreCase)))
+                    .Where(t => !t.Hidden && t.Metadata.Attributes.Any(attr => attr.LogicalName.Equals(colName, StringComparison.OrdinalIgnoreCase)))
+                    .ToArray();
+            }
+
+            if (possibleEntities.Length == 0 && colName.EndsWith("utc", StringComparison.OrdinalIgnoreCase))
+            {
+                // May be using the UTC version of a date/time column
+                var baseName = colName.Substring(0, colName.Length - 3);
+
+                possibleEntities = tables
+                    .Where(t => !t.Hidden && t.Metadata.Attributes.OfType<DateTimeAttributeMetadata>().Any(attr => attr.LogicalName.Equals(baseName, StringComparison.OrdinalIgnoreCase)))
                     .ToArray();
             }
 
             if (possibleEntities.Length == 0)
             {
-                if (col.MultiPartIdentifier.Identifiers.Count == 1 && calculatedFields != null && calculatedFields.ContainsKey(col.MultiPartIdentifier.Identifiers[0].Value))
+                if (col.MultiPartIdentifier.Identifiers.Count == 1 && calculatedFields != null && calculatedFields.ContainsKey(colName))
                     throw new PostProcessingRequiredException("Calculated field requires post processing", col);
 
                 if (col.MultiPartIdentifier.Identifiers.Last().QuoteType == QuoteType.DoubleQuote && QuotedIdentifiers)
@@ -4036,14 +4363,25 @@ namespace MarkMpn.Sql4Cds.Engine
 
         private void ValidateAttributeName(EntityTable table, ColumnReferenceExpression col)
         {
-            var attrName = GetColumnAttribute(col);
+            var attrName = GetColumnAttribute(table, col);
             if (!table.Metadata.Attributes.Any(attr => attr.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase)))
                 throw new NotSupportedQueryFragmentException("Unknown attribute", col);
         }
 
-        private string GetColumnAttribute(ColumnReferenceExpression col)
+        private string GetColumnAttribute(EntityTable table, ColumnReferenceExpression col)
         {
-            return col.MultiPartIdentifier.Identifiers.Last().Value.ToLower();
+            var attrName = col.MultiPartIdentifier.Identifiers.Last().Value.ToLower();
+
+            if (attrName.EndsWith("utc", StringComparison.OrdinalIgnoreCase))
+            {
+                var baseName = attrName.Substring(0, attrName.Length - 3);
+                var attr = table.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(baseName, StringComparison.OrdinalIgnoreCase));
+
+                if (attr != null)
+                    attrName = baseName;
+            }
+
+            return attrName;
         }
 
         private static object[] AddItem(object[] items, object item)

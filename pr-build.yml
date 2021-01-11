@@ -6,9 +6,13 @@ pool:
   vmImage: 'windows-latest'
 
 variables:
-  solution: '**/*.sln'
-  buildPlatform: 'Any CPU'
-  buildConfiguration: 'Release'
+- group: CodeSigning
+- name: solution
+  value: '**/*.sln'
+- name: buildPlatform
+  value: 'x86'
+- name: buildConfiguration
+  value: 'Release'
 
 steps:
 - checkout: self
@@ -22,6 +26,13 @@ steps:
 
 - script: $(Build.BinariesDirectory)/tools/GitVersion.CommandLine/tools/GitVersion.exe /output buildserver /nofetch /updateassemblyinfo
   displayName: Determine Version
+
+- task: PowerShell@2
+  displayName: Update version in the vsix manifest
+  inputs:
+    filePath: 'MarkMpn.Sql4Cds.SSMS\update-version.ps1'
+    arguments: '$(GitVersion.AssemblySemVer)'
+    pwsh: true
   
 - task: NuGetCommand@2
   displayName: NuGet Restore
@@ -35,6 +46,7 @@ steps:
     solution: '$(solution)'
     platform: '$(buildPlatform)'
     configuration: '$(buildConfiguration)'
+    msbuildArgs: '/p:DeployExtension=false'
 
 - task: VSTest@2
   inputs:

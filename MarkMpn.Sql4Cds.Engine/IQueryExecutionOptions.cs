@@ -15,8 +15,9 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// Allows the query execution to report progress
         /// </summary>
+        /// <param name="progress">The progress (0-1) to report back to the caller</param>
         /// <param name="message">The message to report back to the caller</param>
-        void Progress(string message);
+        void Progress(double? progress, string message);
 
         /// <summary>
         /// Checks if the query should continue to retrieve more records
@@ -64,7 +65,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// Indicates if the TDS Endpoint should be used for query execution where possible
         /// </summary>
-        bool UseTSQLEndpoint { get; }
+        bool UseTDSEndpoint { get; }
 
         /// <summary>
         /// Indicates if a <see cref="Microsoft.Crm.Sdk.Messages.RetrieveTotalRecordCountRequest"/> should be used for simple SELECT count(*) FROM table queries

@@ -28,7 +28,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         int IQueryExecutionOptions.BatchSize => 1;
 
-        bool IQueryExecutionOptions.UseTSQLEndpoint => false;
+        bool IQueryExecutionOptions.UseTDSEndpoint => false;
 
         bool IQueryExecutionOptions.UseRetrieveTotalRecordCount => true;
 
@@ -2102,13 +2102,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
-            sql2FetchXml.TSqlEndpointAvailable = true;
+            sql2FetchXml.ForceTDSEndpoint = true;
 
-            var query = "SELECT COUNT(*) FROM account WHERE name IS NULL";
+            var query = "SELECT COUNT(*) AS count FROM account WHERE name IS NULL";
 
             var queries = sql2FetchXml.Convert(query);
 
-            Assert.AreEqual("SELECT COUNT(*) FROM account AS account WHERE name IS NULL; ", Regex.Replace(queries[0].Sql, "\\s+", " "));
+            Assert.AreEqual("SELECT COUNT(*) AS count FROM account AS account WHERE name IS NULL", Regex.Replace(queries[0].TSql, "\\s+", " "));
         }
 
         [TestMethod]
@@ -2678,6 +2678,102 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, ((SelectQuery)queries[0]).Extensions.Count);
         }
 
+        [TestMethod]
+        public void UpdateUsingTSql()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var lookup = (LookupAttributeMetadata)metadata["contact"].Attributes.Single(a => a.LogicalName == "parentcustomerid");
+            lookup.Targets = new[] { "contact", "account" };
+            var parentcustomeridtype = new StringAttributeMetadata { LogicalName = "parentcustomeridtype" };
+            typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.Attributes)).SetValue(metadata["contact"], metadata["contact"].Attributes.Concat(new[] { parentcustomeridtype }).ToArray());
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+            sql2FetchXml.TDSEndpointAvailable = true;
+
+            var query = @"
+                UPDATE c
+                SET parentcustomerid = account.accountid, parentcustomeridtype = 'account'
+                FROM contact AS c INNER JOIN account ON c.parentcustomerid = account.accountid INNER JOIN new_customentity ON c.parentcustomerid = new_customentity.new_parentid
+                WHERE c.fullname IN (SELECT fullname FROM contact WHERE firstname = 'Mark')";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            Assert.AreEqual(Regex.Replace(@"
+                SELECT
+                    c.contactid AS contactid,
+                    account.accountid AS parentcustomerid,
+                    'account' AS parentcustomeridtype
+                FROM
+                    contact AS c
+                    INNER JOIN account
+                        ON c.parentcustomerid = account.accountid
+                    INNER JOIN new_customentity
+                        ON c.parentcustomerid = new_customentity.new_parentid
+                WHERE
+                    c.fullname IN (SELECT fullname FROM contact WHERE firstname = 'Mark')", @"\s+", " ").Trim(), Regex.Replace(queries[0].TSql, @"\s+", " ").Trim());
+        }
+
+        [TestMethod]
+        public void DeleteUsingTSql()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+            sql2FetchXml.TDSEndpointAvailable = true;
+
+            var query = @"
+                DELETE c
+                FROM contact AS c INNER JOIN account ON c.parentcustomerid = account.accountid INNER JOIN new_customentity ON c.parentcustomerid = new_customentity.new_parentid
+                WHERE c.fullname IN (SELECT fullname FROM contact WHERE firstname = 'Mark')";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            Assert.AreEqual(Regex.Replace(@"
+                SELECT DISTINCT
+                    c.contactid AS contactid
+                FROM
+                    contact AS c
+                    INNER JOIN account
+                        ON c.parentcustomerid = account.accountid
+                    INNER JOIN new_customentity
+                        ON c.parentcustomerid = new_customentity.new_parentid
+                WHERE
+                    c.fullname IN (SELECT fullname FROM contact WHERE firstname = 'Mark')", @"\s+", " ").Trim(), Regex.Replace(queries[0].TSql, @"\s+", " ").Trim());
+        }
+
+        [TestMethod]
+        public void FilterOnUtcDateTimeColumn()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = @"
+                SELECT name FROM account WHERE createdonutc >= '2021-01-01'";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <filter>
+                            <condition attribute='createdon' operator='ge' value='2021-01-01 00:00:00Z' />
+                        </filter>
+                    </entity>
+                </fetch>
+            ");
+        }
+
         private void AssertFetchXml(Query[] queries, string fetchXml)
         {
             Assert.AreEqual(1, queries.Length);
@@ -2691,7 +2787,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             }
         }
 
-        void IQueryExecutionOptions.Progress(string message)
+        void IQueryExecutionOptions.Progress(double? progress, string message)
         {
         }
 

@@ -186,7 +186,7 @@ namespace MarkMpn.Sql4Cds
 
         public void Format()
         {
-            _ai.TrackEvent("Format SQL");
+            _ai.TrackEvent("Format SQL", new Dictionary<string, string> { ["Source"] = "XrmToolBox" });
 
             var dom = new TSql150Parser(true);
             var fragment = dom.Parse(new StringReader(_editor.Text), out var errors);
@@ -832,7 +832,7 @@ namespace MarkMpn.Sql4Cds
                     error = partialSuccess.InnerException;
                 }
 
-                _ai.TrackException(error, new Dictionary<string, string> { ["Sql"] = _params.Sql });
+                _ai.TrackException(error, new Dictionary<string, string> { ["Sql"] = _params.Sql, ["Source"] = "XrmToolBox" });
                 _log(e.Error.ToString());
 
                 if (error is AggregateException aggregateException)
@@ -930,7 +930,7 @@ namespace MarkMpn.Sql4Cds
             if (Settings.Instance.UseTSQLEndpoint &&
                 args.Execute &&
                 !String.IsNullOrEmpty(((CrmServiceClient)Service).CurrentAccessToken))
-                converter.TSqlEndpointAvailable = true;
+                converter.TDSEndpointAvailable = true;
 
             converter.ColumnComparisonAvailable = new Version(_con.OrganizationVersion) >= new Version("9.1.0.19251");
 
@@ -942,7 +942,7 @@ namespace MarkMpn.Sql4Cds
             {
                 foreach (var query in queries)
                 {
-                    _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name });
+                    _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name, ["Source"] = "XrmToolBox" });
                     query.Execute(Service, Metadata, options);
 
                     Execute(() => ShowResult(query, args));
@@ -958,7 +958,7 @@ namespace MarkMpn.Sql4Cds
             {
                 foreach (var query in queries)
                 {
-                    _ai.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name });
+                    _ai.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name, ["Source"] = "XrmToolBox" });
 
                     if (query is IQueryRequiresFinalization finalize)
                         finalize.FinalizeRequest(Service, options);
@@ -1262,7 +1262,7 @@ namespace MarkMpn.Sql4Cds
 
                 if (dlg.ShowDialog(this) == DialogResult.OK)
                 {
-                    _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = typeof(ImpersonateQuery).Name });
+                    _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = typeof(ImpersonateQuery).Name, ["Source"] = "XrmToolBox" });
                     _con.ServiceClient.CallerId = dlg.Entity.Id;
                     SyncUsername();
                 }
@@ -1271,7 +1271,7 @@ namespace MarkMpn.Sql4Cds
 
         private void revertToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = typeof(RevertQuery).Name });
+            _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = typeof(RevertQuery).Name, ["Source"] = "XrmToolBox" });
             _con.ServiceClient.CallerId = Guid.Empty;
             SyncUsername();
         }

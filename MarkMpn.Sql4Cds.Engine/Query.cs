@@ -76,6 +76,11 @@ namespace MarkMpn.Sql4Cds.Engine
         public int Length { get; internal set; }
 
         /// <summary>
+        /// The T-SQL that can be executed against the TDS endpoint, if available
+        /// </summary>
+        public string TSql { get; internal set; }
+
+        /// <summary>
         /// Executes the query
         /// </summary>
         /// <param name="org">The <see cref="IOrganizationService"/> to execute the query against</param>
@@ -86,9 +91,6 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </remarks>
         public void Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
-            var stopwatch = new Stopwatch();
-            stopwatch.Start();
-
             try
             {
                 Result = ExecuteInternal(org, metadata, options);
@@ -97,9 +99,6 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 Result = ex;
             }
-
-            stopwatch.Stop();
-            Duration = stopwatch.Elapsed;
         }
 
         /// <summary>
@@ -119,13 +118,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// an exception if the query failed, or a <see cref="String"/> value containing a human-readable description of the query status.
         /// </remarks>
         public object Result { get; private set; }
-
-        /// <summary>
-        /// The time taken to <see cref="Execute(IOrganizationService, IAttributeMetadataCache, IQueryExecutionOptions)"/>
-        /// the query
-        /// </summary>
-        public TimeSpan Duration { get; private set; }
-
+        
         /// <summary>
         /// Changes system settings to optimise for parallel connections
         /// </summary>
@@ -140,6 +133,28 @@ namespace MarkMpn.Sql4Cds.Engine
             return meta.DisplayCollectionName?.UserLocalizedLabel?.Label ??
                 meta.LogicalCollectionName ??
                 meta.LogicalName;
+        }
+
+        protected ICollection<Entity> DataTableToEntityCollection(DataTable dataTable, string entityLogicalName, string primaryIdAttribute)
+        {
+            return dataTable.Rows
+                .OfType<DataRow>()
+                .Select(r =>
+                {
+                    var entity = new Entity();
+
+                    if (!String.IsNullOrEmpty(entityLogicalName))
+                        entity.LogicalName = entityLogicalName;
+
+                    if (!String.IsNullOrEmpty(primaryIdAttribute))
+                        entity.Id = (Guid)r[primaryIdAttribute];
+
+                    foreach (DataColumn col in dataTable.Columns)
+                        entity[col.ColumnName] = r[col];
+
+                    return entity;
+                })
+                .ToList();
         }
     }
 
@@ -260,7 +275,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var mainEntity = FetchXml.Items.OfType<FetchEntityType>().Single();
             var name = mainEntity.name;
             var meta = metadata[name];
-            options.Progress($"Retrieving {GetDisplayName(0, meta)}...");
+            options.Progress(0, $"Retrieving {GetDisplayName(0, meta)}...");
 
             // Get the first page of results
             var res = org.RetrieveMultiple(new FetchExpression(Serialize(FetchXml)));
@@ -299,7 +314,7 @@ namespace MarkMpn.Sql4Cds.Engine
             // Move on to subsequent pages
             while (AllPages && res.MoreRecords && !options.Cancelled && options.ContinueRetrieve(count))
             {
-                options.Progress($"Retrieved {count:N0} {GetDisplayName(count, meta)}...");
+                options.Progress(0, $"Retrieved {count:N0} {GetDisplayName(count, meta)}...");
 
                 if (FetchXml.page == null)
                     FetchXml.page = "2";
@@ -333,6 +348,53 @@ namespace MarkMpn.Sql4Cds.Engine
                 return true;
 
             return false;
+        }
+
+        /// <summary>
+        /// Run the raw SQL query against the TDS endpoint
+        /// </summary>
+        /// <param name="org">The <see cref="IOrganizationService"/> to execute the query against</param>
+        /// <param name="options">The options that indicate if the TDS endpoint should be used</param>
+        /// <param name="result">The results of running the query</param>
+        /// <returns><c>true</c> if this method has executed the query, or <c>false otherwise</c></returns>
+        protected bool ExecuteTSQL(IOrganizationService org, IQueryExecutionOptions options, out DataTable result)
+        {
+            result = null;
+
+            if (String.IsNullOrEmpty(TSql))
+                return false;
+
+            if (!options.UseTDSEndpoint)
+                return false;
+
+            if (!(org is CrmServiceClient svc))
+                return false;
+
+            if (String.IsNullOrEmpty(svc.CurrentAccessToken))
+                return false;
+
+            if (!TSqlEndpoint.IsEnabled(svc))
+                return false;
+
+            using (var con = new SqlConnection("server=" + svc.CrmConnectOrgUriActual.Host + ",5558"))
+            {
+                con.AccessToken = svc.CurrentAccessToken;
+                con.Open();
+
+                using (var cmd = con.CreateCommand())
+                {
+                    cmd.CommandTimeout = (int) TimeSpan.FromMinutes(2).TotalSeconds;
+                    cmd.CommandText = TSql;
+                    result = new DataTable();
+
+                    using (var adapter = new SqlDataAdapter(cmd))
+                    {
+                        adapter.Fill(result);
+                    }
+
+                    return true;
+                }
+            }
         }
 
         /// <summary>
@@ -379,52 +441,6 @@ namespace MarkMpn.Sql4Cds.Engine
 
             // Execute the FetchXML
             return RetrieveAll(org, metadata, options);
-        }
-
-        /// <summary>
-        /// Run the raw SQL query against the TDS endpoint
-        /// </summary>
-        /// <param name="org">The <see cref="IOrganizationService"/> to execute the query against</param>
-        /// <param name="options">The options that indicate if the TDS endpoint should be used</param>
-        /// <param name="result">The results of running the query</param>
-        /// <returns><c>true</c> if this method has executed the query, or <c>false otherwise</c></returns>
-        private bool ExecuteTSQL(IOrganizationService org, IQueryExecutionOptions options, out DataTable result)
-        {
-            result = null;
-
-            if (String.IsNullOrEmpty(Sql))
-                return false;
-
-            if (!options.UseTSQLEndpoint)
-                return false;
-
-            if (!(org is CrmServiceClient svc))
-                return false;
-
-            if (String.IsNullOrEmpty(svc.CurrentAccessToken))
-                return false;
-
-            if (!TSqlEndpoint.IsEnabled(svc))
-                return false;
-
-            using (var con = new SqlConnection("server=" + svc.CrmConnectOrgUriActual.Host + ",5558"))
-            {
-                con.AccessToken = svc.CurrentAccessToken;
-                con.Open();
-
-                using (var cmd = con.CreateCommand())
-                {
-                    cmd.CommandText = Sql;
-                    result = new DataTable();
-
-                    using (var adapter = new SqlDataAdapter(cmd))
-                    {
-                        adapter.Fill(result);
-                    }
-
-                    return true;
-                }
-            }
         }
 
         /// <summary>
@@ -500,6 +516,11 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         public IDictionary<string,Func<Entity,object>> Updates { get; set; }
 
+        /// <summary>
+        /// Indicates if a WHERE clause was applied to the query
+        /// </summary>
+        public bool HasWhere { get; set; }
+
         /// <inheritdoc/>
         protected override object ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
@@ -507,13 +528,18 @@ namespace MarkMpn.Sql4Cds.Engine
                 return null;
 
             // Check if the update is allowed
-            if (options.BlockUpdateWithoutWhere && !FetchXml.Items.OfType<FetchEntityType>().Single().Items.OfType<filter>().Any() && !Extensions.OfType<Where>().Any())
+            if (options.BlockUpdateWithoutWhere && !HasWhere)
                 throw new InvalidOperationException("UPDATE without WHERE is blocked by your settings");
 
             // Get the records to update
             var inProgressCount = 0;
             var count = 0;
-            var entities = RetrieveAll(org, metadata, options).Entities;
+            ICollection<Entity> entities;
+
+            if (ExecuteTSQL(org, options, out var datatable))
+                entities = DataTableToEntityCollection(datatable, EntityName, IdColumn);
+            else
+                entities = RetrieveAll(org, metadata, options).Entities;
 
             if (entities == null)
                 return null;
@@ -558,7 +584,8 @@ namespace MarkMpn.Sql4Cds.Engine
                             if (options.BatchSize == 1)
                             {
                                 var newCount = Interlocked.Increment(ref inProgressCount);
-                                options.Progress($"Updating {newCount:N0} of {entities.Count:N0} {GetDisplayName(0, meta)} ({(float)newCount / entities.Count:P0})...");
+                                var progress = (double)newCount / entities.Count;
+                                options.Progress(progress, $"Updating {newCount:N0} of {entities.Count:N0} {GetDisplayName(0, meta)} ({progress:P0})...");
                                 threadLocalState.Service.Update(update);
                                 Interlocked.Increment(ref count);
                             }
@@ -586,8 +613,8 @@ namespace MarkMpn.Sql4Cds.Engine
                                 if (threadLocalState.EMR.Requests.Count == options.BatchSize)
                                 {
                                     var newCount = Interlocked.Add(ref inProgressCount, threadLocalState.EMR.Requests.Count);
-
-                                    options.Progress($"Updating {GetDisplayName(0, meta)} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
+                                    var progress = (double)newCount / entities.Count;
+                                    options.Progress(progress, $"Updating {GetDisplayName(0, meta)} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
                                     var resp = (ExecuteMultipleResponse)threadLocalState.Service.Execute(threadLocalState.EMR);
 
                                     if (resp.IsFaulted)
@@ -612,8 +639,8 @@ namespace MarkMpn.Sql4Cds.Engine
                             if (threadLocalState.EMR != null)
                             {
                                 var newCount = Interlocked.Add(ref inProgressCount, threadLocalState.EMR.Requests.Count);
-
-                                options.Progress($"Updating {GetDisplayName(0, meta)} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
+                                var progress = (double)newCount / entities.Count;
+                                options.Progress(progress, $"Updating {GetDisplayName(0, meta)} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
                                 var resp = (ExecuteMultipleResponse)threadLocalState.Service.Execute(threadLocalState.EMR);
 
                                 if (resp.IsFaulted)
@@ -660,6 +687,11 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         public string[] IdColumns { get; set; }
 
+        /// <summary>
+        /// Indicates if a WHERE clause was applied to the query
+        /// </summary>
+        public bool HasWhere { get; set; }
+
         /// <inheritdoc/>
         protected override object ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
@@ -667,7 +699,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (options.Cancelled)
                 return null;
 
-            if (options.BlockDeleteWithoutWhere && !FetchXml.Items.OfType<FetchEntityType>().Single().Items.OfType<filter>().Any() && !Extensions.OfType<Where>().Any())
+            if (options.BlockDeleteWithoutWhere && !HasWhere)
                 throw new InvalidOperationException("DELETE without WHERE is blocked by your settings");
 
             var meta = metadata[EntityName];
@@ -697,7 +729,12 @@ namespace MarkMpn.Sql4Cds.Engine
             // Otherwise, get the records to delete
             var inProgressCount = 0;
             var count = 0;
-            var entities = RetrieveAll(org, metadata, options).Entities;
+            ICollection<Entity> entities;
+
+            if (ExecuteTSQL(org, options, out var datatable))
+                entities = DataTableToEntityCollection(datatable, EntityName, null);
+            else
+                entities = RetrieveAll(org, metadata, options).Entities;
 
             if (entities == null)
                 return null;
@@ -730,8 +767,8 @@ namespace MarkMpn.Sql4Cds.Engine
                             if (options.BatchSize == 1)
                             {
                                 var newCount = Interlocked.Increment(ref inProgressCount);
-
-                                options.Progress($"Deleting {newCount:N0} of {entities.Count:N0} {GetDisplayName(0, meta)} ({(float)newCount / entities.Count:P0})...");
+                                var progress = (double)newCount / entities.Count;
+                                options.Progress(progress, $"Deleting {newCount:N0} of {entities.Count:N0} {GetDisplayName(0, meta)} ({progress:P0})...");
                                 threadLocalState.Service.Execute(CreateDeleteRequest(meta, entity));
 
                                 Interlocked.Increment(ref count);
@@ -760,8 +797,8 @@ namespace MarkMpn.Sql4Cds.Engine
                                 if (threadLocalState.EMR.Requests.Count == options.BatchSize)
                                 {
                                     var newCount = Interlocked.Add(ref inProgressCount, threadLocalState.EMR.Requests.Count);
-
-                                    options.Progress($"Deleting {GetDisplayName(0, meta)} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
+                                    var progress = (double)newCount / entities.Count;
+                                    options.Progress(progress, $"Deleting {GetDisplayName(0, meta)} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
                                     var resp = (ExecuteMultipleResponse)threadLocalState.Service.Execute(threadLocalState.EMR);
 
                                     if (resp.IsFaulted)
@@ -786,8 +823,8 @@ namespace MarkMpn.Sql4Cds.Engine
                             if (threadLocalState.EMR != null)
                             {
                                 var newCount = Interlocked.Add(ref inProgressCount, threadLocalState.EMR.Requests.Count);
-
-                                options.Progress($"Deleting {GetDisplayName(0, meta)} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
+                                var progress = (double)newCount / entities.Count;
+                                options.Progress(progress, $"Deleting {GetDisplayName(0, meta)} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
                                 var resp = (ExecuteMultipleResponse)threadLocalState.Service.Execute(threadLocalState.EMR);
 
                                 if (resp.IsFaulted)
@@ -898,8 +935,8 @@ namespace MarkMpn.Sql4Cds.Engine
                                 if (options.BatchSize == 1)
                                 {
                                     var newCount = Interlocked.Increment(ref inProgressCount);
-
-                                    options.Progress($"Inserting {newCount:N0} of {entities.Length:N0} {GetDisplayName(0, meta)} ({(float)newCount / entities.Length:P0})...");
+                                    var progress = (double)newCount / entities.Length;
+                                    options.Progress(progress, $"Inserting {newCount:N0} of {entities.Length:N0} {GetDisplayName(0, meta)} ({progress:P0})...");
                                     threadLocalState.Service.Execute(CreateInsertRequest(meta, entity));
 
                                     Interlocked.Increment(ref count);
@@ -928,8 +965,8 @@ namespace MarkMpn.Sql4Cds.Engine
                                     if (threadLocalState.EMR.Requests.Count == options.BatchSize)
                                     {
                                         var newCount = Interlocked.Add(ref inProgressCount, threadLocalState.EMR.Requests.Count);
-
-                                        options.Progress($"Inserting {GetDisplayName(0, meta)} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Length:N0}...");
+                                        var progress = newCount / entities.Length;
+                                        options.Progress(progress, $"Inserting {GetDisplayName(0, meta)} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Length:N0}...");
                                         var resp = (ExecuteMultipleResponse)threadLocalState.Service.Execute(threadLocalState.EMR);
 
                                         if (resp.IsFaulted)
@@ -954,8 +991,8 @@ namespace MarkMpn.Sql4Cds.Engine
                                 if (threadLocalState.EMR != null)
                                 {
                                     var newCount = Interlocked.Add(ref inProgressCount, threadLocalState.EMR.Requests.Count);
-
-                                    options.Progress($"Inserting {GetDisplayName(0, meta)} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Length:N0}...");
+                                    var progress = (double)newCount / entities.Length;
+                                    options.Progress(progress, $"Inserting {GetDisplayName(0, meta)} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Length:N0}...");
                                     var resp = (ExecuteMultipleResponse)threadLocalState.Service.Execute(threadLocalState.EMR);
 
                                     if (resp.IsFaulted)
@@ -1116,7 +1153,12 @@ namespace MarkMpn.Sql4Cds.Engine
                 throw ex;
 
             if (!(Source.Result is EntityCollection entities))
-                return null;
+            {
+                if (Source.Result is DataTable dataTable)
+                    entities = new EntityCollection(DataTableToEntityCollection(dataTable, LogicalName, null).ToList());
+                else
+                    return null;
+            }
 
             var converted = new List<Entity>(entities.Entities.Count);
 
@@ -1189,7 +1231,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         protected override object ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
-            options.Progress($"Executing {Request.GetType().Name}...");
+            options.Progress(0, $"Executing {Request.GetType().Name}...");
 
             FinalizeRequest(org, options);
             var response = (TResponse) org.Execute(Request);

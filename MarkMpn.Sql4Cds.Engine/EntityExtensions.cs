@@ -14,7 +14,7 @@ namespace MarkMpn.Sql4Cds.Engine
         public static T GetAliasedAttributeValue<T>(this Entity entity, string logicalName)
         {
             if (!entity.Attributes.TryGetValue(logicalName, out var value))
-                return default;
+                return default(T);
 
             if (value is AliasedValue alias)
                 value = alias.Value;

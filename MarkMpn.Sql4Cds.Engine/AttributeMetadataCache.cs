@@ -4,6 +4,7 @@ using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Metadata.Query;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace MarkMpn.Sql4Cds.Engine
@@ -48,6 +49,38 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 _metadata[name] = metadata.EntityMetadata;
                 return metadata.EntityMetadata;
+            }
+        }
+
+        /// <inheritdoc cref="IAttributeMetadataCache.this{int}"/>
+        public EntityMetadata this[int otc]
+        {
+            get
+            {
+                var metadata = _metadata.Values.SingleOrDefault(e => e.ObjectTypeCode == otc);
+
+                if (metadata != null)
+                    return metadata;
+
+                var qry = new RetrieveMetadataChangesRequest
+                {
+                    Query = new EntityQueryExpression
+                    {
+                        Criteria = new MetadataFilterExpression
+                        {
+                            Conditions =
+                            {
+                                new MetadataConditionExpression(nameof(EntityMetadata.ObjectTypeCode), MetadataConditionOperator.Equals, otc)
+                            }
+                        },
+                        Properties = new MetadataPropertiesExpression { AllProperties = true }
+                    }
+                };
+
+                var resp = (RetrieveMetadataChangesResponse) _org.Execute(qry);
+
+                _metadata[resp.EntityMetadata[0].LogicalName] = resp.EntityMetadata[0];
+                return resp.EntityMetadata[0];
             }
         }
 

@@ -47,6 +47,15 @@ namespace MarkMpn.Sql4Cds.Engine
         }
 
         /// <inheritdoc/>
+        public EntityMetadata this[int otc]
+        {
+            get
+            {
+                return _inner[otc];
+            }
+        }
+
+        /// <inheritdoc/>
         public bool TryGetValue(string logicalName, out EntityMetadata metadata)
         {
             if (_customMetadata.TryGetValue(logicalName, out metadata))

@@ -11,9 +11,8 @@
     <iconUrl>https://markcarrington.dev/sql4cds-icon/</iconUrl>
     <description>Convert SQL queries to FetchXml and execute them against CDS</description>
     <summary>Convert SQL queries to FetchXml and execute them against CDS</summary>
-    <releaseNotes>Improved performance of bulk insert, update &amp; delete queries
-Option to impersonate other users when running queries
-SQL language support improvements</releaseNotes>
+    <releaseNotes>Extended TDS endpoint supoprt
+Fixed inserts into multi-select picklist attributes</releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>
     <tags>SQL CDS</tags>

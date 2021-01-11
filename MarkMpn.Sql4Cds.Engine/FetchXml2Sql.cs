@@ -47,9 +47,13 @@ namespace MarkMpn.Sql4Cds.Engine
         public static string Convert(IOrganizationService org, IAttributeMetadataCache metadata, FetchXml.FetchType fetch, FetchXml2SqlOptions options, out IDictionary<string,object> parameterValues)
         {
             var ctes = new Dictionary<string, CommonTableExpression>();
+            parameterValues = new Dictionary<string, object>();
+            var batch = new TSqlBatch();
             var select = new SelectStatement();
             var query = new QuerySpecification();
             select.QueryExpression = query;
+            var requiresTimeZone = false;
+            var usesToday = false;
 
             if (fetch.top != null)
                 query.TopRowFilter = new TopRowFilter { Expression = new IntegerLiteral { Value = fetch.top } };
@@ -87,7 +91,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     ((NamedTableReference)query.FromClause.TableReferences[0]).TableHints.Add(new TableHint { HintKind = TableHintKind.NoLock });
 
                 // Recurse into link-entities to build joins
-                query.FromClause.TableReferences[0] = BuildJoins(org, metadata, query.FromClause.TableReferences[0], (NamedTableReference)query.FromClause.TableReferences[0], entity.Items, query, aliasToLogicalName, fetch.nolock, options, ctes);
+                query.FromClause.TableReferences[0] = BuildJoins(org, metadata, query.FromClause.TableReferences[0], (NamedTableReference)query.FromClause.TableReferences[0], entity.Items, query, aliasToLogicalName, fetch.nolock, options, ctes, parameterValues, ref requiresTimeZone, ref usesToday);
             }
 
             // OFFSET
@@ -104,7 +108,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             // WHERE
-            var filter = GetFilter(org, metadata, entity.Items, entity.name, aliasToLogicalName, options, ctes);
+            var filter = GetFilter(org, metadata, entity.Items, entity.name, aliasToLogicalName, options, ctes, parameterValues, ref requiresTimeZone, ref usesToday);
             if (filter != null)
             {
                 query.WhereClause = new WhereClause
@@ -131,17 +135,107 @@ namespace MarkMpn.Sql4Cds.Engine
 
             // Check whether each identifier needs to be quoted so we have minimal quoting to make the query easier to read
             select.Accept(new QuoteIdentifiersVisitor());
-
-            // Optionally convert literal values to parameters
-            parameterValues = null;
-
-            if (options.UseParametersForLiterals)
+            
+            if (usesToday)
             {
-                parameterValues = new Dictionary<string, object>();
-                select.Accept(new LiteralsToParametersVisitor(parameterValues));
+                requiresTimeZone = true;
+
+                // Calculate the parameter to work out the calling user's "Today", optionally in UTC
+                // FLOOR(CONVERT(float, DATEADD(minute, -@time_zone, GETUTCDATE())))
+
+                // DATEADD(minute, @time_zone, GETUTCDATE())
+                var utcNow = new FunctionCall
+                {
+                    FunctionName = new Identifier { Value = "GETUTCDATE" }
+                };
+
+                var localNow = new FunctionCall
+                {
+                    FunctionName = new Identifier { Value = "DATEADD" },
+                    Parameters =
+                    {
+                        new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = "minute" } } } },
+                        new VariableReference { Name = "@time_zone" },
+                        utcNow
+                    }
+                };
+
+                var localToday = new FunctionCall
+                {
+                    FunctionName = new Identifier { Value = "FLOOR" },
+                    Parameters =
+                    {
+                        new ConvertCall
+                        {
+                            DataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Float },
+                            Parameter = localNow
+                        }
+                    }
+                };
+
+                var utcToday = new FunctionCall
+                {
+                    FunctionName = new Identifier { Value = "DATEADD" },
+                    Parameters =
+                    {
+                        new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier {  Value = "minute"} } } },
+                        new UnaryExpression { UnaryExpressionType = UnaryExpressionType.Negative, Expression = new VariableReference { Name = "@time_zone" } },
+                        new VariableReference { Name = "@today" }
+                    }
+                };
+                
+                var todayParam = new DeclareVariableStatement
+                {
+                    Declarations =
+                    {
+                        new DeclareVariableElement
+                        {
+                            VariableName = new Identifier { Value = "@now" },
+                            DataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.DateTime },
+                            Value = localNow
+                        },
+                        new DeclareVariableElement
+                        {
+                            VariableName = new Identifier { Value = "@today" },
+                            DataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.DateTime },
+                            Value = localToday
+                        }
+                    }
+                };
+
+                batch.Statements.Add(todayParam);
+
+                if (options.UseUtcDateTimeColumns)
+                {
+                    todayParam.Declarations.Add(new DeclareVariableElement
+                    {
+                        VariableName = new Identifier { Value = "@utc_now" },
+                        DataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.DateTime },
+                        Value = utcNow
+                    });
+
+                    // Declare @utc_today variable in different statement as it refers to @today variable which needs to be defined first
+                    batch.Statements.Add(new DeclareVariableStatement
+                    {
+                        Declarations =
+                        {
+                            new DeclareVariableElement
+                            {
+                                VariableName = new Identifier { Value = "@utc_today" },
+                                DataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.DateTime },
+                                Value = utcToday
+                            }
+                        }
+                    });
+                }
             }
 
-            new Sql150ScriptGenerator().GenerateScript(select, out var sql);
+            if (requiresTimeZone)
+                parameterValues["@time_zone"] = (int) (DateTime.Now - DateTime.UtcNow).TotalMinutes;
+
+            batch.Statements.Add(select);
+
+            new Sql150ScriptGenerator().GenerateScript(batch, out var sql);
 
             return sql;
         }
@@ -299,7 +393,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="aliasToLogicalName">A mapping of table aliases to the logical name</param>
         /// <param name="nolock">Indicates if the NOLOCK table hint should be applied</param>
         /// <returns>The data source including any required joins</returns>
-        private static TableReference BuildJoins(IOrganizationService org, IAttributeMetadataCache metadata, TableReference dataSource, NamedTableReference parentTable, object[] items, QuerySpecification query, IDictionary<string, string> aliasToLogicalName, bool nolock, FetchXml2SqlOptions options, IDictionary<string, CommonTableExpression> ctes)
+        private static TableReference BuildJoins(IOrganizationService org, IAttributeMetadataCache metadata, TableReference dataSource, NamedTableReference parentTable, object[] items, QuerySpecification query, IDictionary<string, string> aliasToLogicalName, bool nolock, FetchXml2SqlOptions options, IDictionary<string, CommonTableExpression> ctes, IDictionary<string, object> parameters, ref bool requiresTimeZone, ref bool usesToday)
         {
             if (items == null)
                 return dataSource;
@@ -368,7 +462,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 AddSelectElements(query, link.Items, link.alias ?? link.name);
 
                 // Handle any filters within the <link-entity> as additional join criteria
-                var filter = GetFilter(org, metadata, link.Items, link.alias ?? link.name, aliasToLogicalName, options, ctes);
+                var filter = GetFilter(org, metadata, link.Items, link.alias ?? link.name, aliasToLogicalName, options, ctes, parameters, ref requiresTimeZone, ref usesToday);
 
                 if (filter != null)
                 {
@@ -393,7 +487,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
 
                 // Recurse into any other links
-                dataSource = BuildJoins(org, metadata, join, (NamedTableReference)join.SecondTableReference, link.Items, query, aliasToLogicalName, nolock, options, ctes);
+                dataSource = BuildJoins(org, metadata, join, (NamedTableReference)join.SecondTableReference, link.Items, query, aliasToLogicalName, nolock, options, ctes, parameters, ref requiresTimeZone, ref usesToday);
             }
 
             return dataSource;
@@ -408,7 +502,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="prefix">The alias or name of the table that the &lt;filter&gt; applies to</param>
         /// <param name="aliasToLogicalName">The mapping of table alias to logical name</param>
         /// <returns>The SQL condition equivalent of the &lt;filter&gt; found in the <paramref name="items"/>, or <c>null</c> if no filter was found</returns>
-        private static BooleanExpression GetFilter(IOrganizationService org, IAttributeMetadataCache metadata, object[] items, string prefix, IDictionary<string, string> aliasToLogicalName, FetchXml2SqlOptions options, IDictionary<string, CommonTableExpression> ctes)
+        private static BooleanExpression GetFilter(IOrganizationService org, IAttributeMetadataCache metadata, object[] items, string prefix, IDictionary<string, string> aliasToLogicalName, FetchXml2SqlOptions options, IDictionary<string, CommonTableExpression> ctes, IDictionary<string, object> parameters, ref bool requiresTimeZone, ref bool usesToday)
         {
             if (items == null)
                 return null;
@@ -419,7 +513,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             foreach (var filter in filters)
             {
-                var newExpression = GetFilter(org, metadata, filter, prefix, aliasToLogicalName, options, ctes);
+                var newExpression = GetFilter(org, metadata, filter, prefix, aliasToLogicalName, options, ctes, parameters, ref requiresTimeZone, ref usesToday);
 
                 if (newExpression is BooleanBinaryExpression bbe && bbe.BinaryExpressionType != BooleanBinaryExpressionType.And)
                     newExpression = new BooleanParenthesisExpression { Expression = newExpression };
@@ -454,7 +548,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="prefix">The alias or name of the table that the <paramref name="filter"/> applies to</param>
         /// <param name="aliasToLogicalName">The mapping of table alias to logical name</param>
         /// <returns>The SQL condition equivalent of the <paramref name="filter"/></returns>
-        private static BooleanExpression GetFilter(IOrganizationService org, IAttributeMetadataCache metadata, filter filter, string prefix, IDictionary<string, string> aliasToLogicalName, FetchXml2SqlOptions options, IDictionary<string, CommonTableExpression> ctes)
+        private static BooleanExpression GetFilter(IOrganizationService org, IAttributeMetadataCache metadata, filter filter, string prefix, IDictionary<string, string> aliasToLogicalName, FetchXml2SqlOptions options, IDictionary<string, CommonTableExpression> ctes, IDictionary<string, object> parameters, ref bool requiresTimeZone, ref bool usesToday)
         {
             BooleanExpression expression = null;
             var type = filter.type == filterType.and ? BooleanBinaryExpressionType.And : BooleanBinaryExpressionType.Or;
@@ -462,7 +556,7 @@ namespace MarkMpn.Sql4Cds.Engine
             // Convert each <condition> within the filter
             foreach (var condition in filter.Items.OfType<condition>())
             {
-                var newExpression = GetCondition(org, metadata, condition, prefix, aliasToLogicalName, options, ctes);
+                var newExpression = GetCondition(org, metadata, condition, prefix, aliasToLogicalName, options, ctes, parameters, ref requiresTimeZone, ref usesToday);
 
                 if (newExpression is BooleanBinaryExpression bbe && bbe.BinaryExpressionType != type)
                     newExpression = new BooleanParenthesisExpression { Expression = newExpression };
@@ -488,7 +582,7 @@ namespace MarkMpn.Sql4Cds.Engine
             // Recurse into sub-<filter>s
             foreach (var subFilter in filter.Items.OfType<filter>())
             {
-                var newExpression = GetFilter(org, metadata, subFilter, prefix, aliasToLogicalName, options, ctes);
+                var newExpression = GetFilter(org, metadata, subFilter, prefix, aliasToLogicalName, options, ctes, parameters, ref requiresTimeZone, ref usesToday);
 
                 if (newExpression is BooleanBinaryExpression bbe && bbe.BinaryExpressionType != type)
                     newExpression = new BooleanParenthesisExpression { Expression = newExpression };
@@ -523,7 +617,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="prefix">The alias or name of the table that the <paramref name="condition"/> applies to</param>
         /// <param name="aliasToLogicalName">The mapping of table alias to logical name</param>
         /// <returns>The SQL condition equivalent of the <paramref name="condition"/></returns>
-        private static BooleanExpression GetCondition(IOrganizationService org, IAttributeMetadataCache metadata, condition condition, string prefix, IDictionary<string,string> aliasToLogicalName, FetchXml2SqlOptions options, IDictionary<string, CommonTableExpression> ctes)
+        private static BooleanExpression GetCondition(IOrganizationService org, IAttributeMetadataCache metadata, condition condition, string prefix, IDictionary<string,string> aliasToLogicalName, FetchXml2SqlOptions options, IDictionary<string, CommonTableExpression> ctes, IDictionary<string, object> parameters, ref bool requiresTimeZone, ref bool usesToday)
         {
             // Start with the field reference
             var field = new ColumnReferenceExpression
@@ -548,36 +642,93 @@ namespace MarkMpn.Sql4Cds.Engine
             var meta = metadata == null ? null : metadata[logicalName];
             var attr = meta == null ? null : meta.Attributes.SingleOrDefault(a => a.LogicalName == condition.attribute);
 
+            var useUtc = false;
+
+            if (options.UseUtcDateTimeColumns && attr is DateTimeAttributeMetadata dtAttr && dtAttr.DateTimeBehavior.Value != DateTimeBehavior.TimeZoneIndependent)
+            {
+                useUtc = true;
+                field.MultiPartIdentifier.Identifiers[1].Value += "utc";
+            }
+
             // Get the literal value to compare to
+            object parameterValue = null;
             if (!String.IsNullOrEmpty(condition.valueof))
+            {
                 value = new ColumnReferenceExpression
                 {
                     MultiPartIdentifier = new MultiPartIdentifier
                     {
                         Identifiers =
                         {
-                        new Identifier{Value = condition.entityname ?? prefix},
-                        new Identifier{Value = condition.attribute}
+                            new Identifier{Value = condition.entityname ?? prefix},
+                            new Identifier{Value = condition.attribute + (useUtc ? "utc" : "")}
                         }
                     }
                 };
+            }
             else if (attr == null)
+            {
                 value = new StringLiteral { Value = condition.value };
-            else if (attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.BigInt ||
-                attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.Integer ||
-                attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.Picklist ||
-                attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.State ||
-                attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.Status)
+                parameterValue = condition.value;
+            }
+            else if (attr.AttributeType == AttributeTypeCode.BigInt ||
+                attr.AttributeType == AttributeTypeCode.Integer ||
+                attr.AttributeType == AttributeTypeCode.Picklist ||
+                attr.AttributeType == AttributeTypeCode.State ||
+                attr.AttributeType == AttributeTypeCode.Status)
+            {
                 value = new IntegerLiteral { Value = condition.value };
-            else if (attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.Boolean)
+                parameterValue = Int32.Parse(condition.value);
+            }
+            else if (attr.AttributeType == AttributeTypeCode.Boolean)
+            {
                 value = new BinaryLiteral { Value = condition.value };
-            else if (attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.Decimal ||
-                attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.Double)
+                parameterValue = condition.value == "1";
+            }
+            else if (attr.AttributeType == AttributeTypeCode.Decimal ||
+                attr.AttributeType == AttributeTypeCode.Double)
+            {
                 value = new NumericLiteral { Value = condition.value };
-            else if (attr.AttributeType == Microsoft.Xrm.Sdk.Metadata.AttributeTypeCode.Money)
+                parameterValue = Decimal.Parse(condition.value);
+            }
+            else if (attr.AttributeType == AttributeTypeCode.Money)
+            {
                 value = new MoneyLiteral { Value = condition.value };
+                parameterValue = Decimal.Parse(condition.value);
+            }
+            else if (attr.AttributeType == AttributeTypeCode.DateTime)
+            {
+                if (condition.@operator.ToString().Contains("x") && Int32.TryParse(condition.value, out var i))
+                {
+                    value = new IntegerLiteral { Value = condition.value };
+                    parameterValue = i;
+                }
+                else
+                {
+                    value = new StringLiteral { Value = condition.value };
+                    if (DateTime.TryParse(condition.value, out var dt))
+                        parameterValue = dt;
+                    else
+                        parameterValue = condition.value;
+                }
+            }
             else
+            {
                 value = new StringLiteral { Value = condition.value };
+                parameterValue = condition.value;
+            }
+
+            if (parameterValue != null && options.UseParametersForLiterals)
+            {
+                var paramName = $"@{attr.LogicalName}";
+                var counter = 0;
+
+                while (parameters.ContainsKey(paramName))
+                    paramName = $"@{attr.LogicalName}{++counter}";
+
+                parameters[paramName] = parameterValue;
+                value = new VariableReference { Name = paramName };
+            }
 
             // Apply the appropriate conversion for the type of operator
             switch (condition.@operator)
@@ -647,7 +798,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 case @operator.under:
                 case @operator.yesterday:
 
-                    if (options.PreserveFetchXmlOperatorsAsFunctions)
+                    if (options.ConvertFetchXmlOperatorsTo == FetchXmlOperatorConversion.Functions)
                     {
                         // These FetchXML operators don't have a direct SQL equivalent, so convert to the format
                         // field = function(arg)
@@ -681,122 +832,462 @@ namespace MarkMpn.Sql4Cds.Engine
                         // This takes some more work to generate the dynamic values to use. Many of these are date/time related,
                         // so store some values for a date range for common reuse later.
                         DateTime? startTime = null;
+                        ScalarExpression startExpression = null;
                         DateTime? endTime = null;
+                        ScalarExpression endExpression = null;
 
                         switch (condition.@operator)
                         {
                             case @operator.lastsevendays:
                                 startTime = DateTime.Today.AddDays(-7);
                                 endTime = DateTime.Now;
+
+                                startExpression = DateAdd("day", new IntegerLiteral { Value = "-7" }, new VariableReference { Name = useUtc ? "@utc_today" : "@today" });
+                                endExpression = new FunctionCall { FunctionName = new Identifier { Value = useUtc ? "@utc_now" : "@now" } };
                                 break;
 
                             case @operator.lastweek:
                                 startTime = DateTime.Today.AddDays(-(int)DateTime.Today.DayOfWeek - 7);
                                 endTime = startTime.Value.AddDays(7);
+
+                                startExpression = DateAdd(
+                                    "day",
+                                    new BinaryExpression
+                                    {
+                                        BinaryExpressionType = BinaryExpressionType.Subtract,
+                                        FirstExpression = new UnaryExpression
+                                        {
+                                            UnaryExpressionType = UnaryExpressionType.Negative,
+                                            Expression = new FunctionCall
+                                            {
+                                                FunctionName = new Identifier { Value = "DATEPART" },
+                                                Parameters =
+                                                {
+                                                    new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = "weekday" } } } },
+                                                    new VariableReference { Name = "@today" }
+                                                }
+                                            }
+                                        },
+                                        SecondExpression = new IntegerLiteral { Value = "6" } // DATEPART(weekday, @today) is 1-based while DateTime.Today.DayOfWeek is 0 based, so use 6 here even though we use 7 above
+                                    },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" }
+                                );
+
+                                endExpression = DateAdd(
+                                    "day",
+                                    new BinaryExpression
+                                    {
+                                        BinaryExpressionType = BinaryExpressionType.Add,
+                                        FirstExpression = new UnaryExpression
+                                        {
+                                            UnaryExpressionType = UnaryExpressionType.Negative,
+                                            Expression = new FunctionCall
+                                            {
+                                                FunctionName = new Identifier { Value = "DATEPART" },
+                                                Parameters =
+                                                {
+                                                    new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = "weekday" } } } },
+                                                    new VariableReference { Name = "@today" }
+                                                }
+                                            }
+                                        },
+                                        SecondExpression = new IntegerLiteral { Value = "1" }
+                                    },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" }
+                                );
+
                                 break;
 
                             case @operator.lastmonth:
                                 startTime = DateTime.Today.AddDays(1 - DateTime.Today.Day).AddMonths(-1);
                                 endTime = startTime.Value.AddMonths(1);
+
+                                endExpression = DateAdd(
+                                        "day",
+                                        new BinaryExpression
+                                        {
+                                            BinaryExpressionType = BinaryExpressionType.Subtract,
+                                            FirstExpression = new IntegerLiteral { Value = "1" },
+                                            SecondExpression = new FunctionCall
+                                            {
+                                                FunctionName = new Identifier { Value = "DATEPART" },
+                                                Parameters =
+                                                {
+                                                    new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = "day" } } } },
+                                                    new VariableReference { Name = "@today" }
+                                                }
+                                            }
+                                        },
+                                        new VariableReference { Name = useUtc ? "@utc_today" : "@today" }
+                                    );
+
+                                startExpression = DateAdd(
+                                    "month",
+                                    new IntegerLiteral { Value = "-1" },
+                                    endExpression
+                                );
                                 break;
 
                             case @operator.lastxdays:
                                 startTime = DateTime.Today.AddDays(-Int32.Parse(condition.value));
                                 endTime = DateTime.Now;
+
+                                startExpression = DateAdd("day", new UnaryExpression { UnaryExpressionType = UnaryExpressionType.Negative, Expression = value }, new VariableReference { Name = useUtc ? "@utc_today" : "@today" });
+                                endExpression = new VariableReference { Name = useUtc ? "@utc_now" : "@now" };
                                 break;
 
                             case @operator.lastxhours:
                                 startTime = DateTime.Today.AddHours(DateTime.Now.Hour - Int32.Parse(condition.value));
                                 endTime = DateTime.Now;
+
+                                startExpression = DateAdd(
+                                    "hour",
+                                    new BinaryExpression
+                                    {
+                                        BinaryExpressionType = BinaryExpressionType.Subtract,
+                                        FirstExpression = DatePart("hour", new VariableReference { Name = "@now" }),
+                                        SecondExpression = value
+                                    },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" });
+                                endExpression = new VariableReference { Name = useUtc ? "@utc_now" : "@now" };
                                 break;
 
                             case @operator.lastxmonths:
                                 startTime = DateTime.Today.AddMonths(-Int32.Parse(condition.value));
                                 endTime = DateTime.Now;
+
+                                startExpression = DateAdd("month", new UnaryExpression { UnaryExpressionType = UnaryExpressionType.Negative, Expression = value }, new VariableReference { Name = useUtc ? "@utc_today" : "@today" });
+                                endExpression = new VariableReference { Name = useUtc ? "@utc_now" : "@now" };
                                 break;
 
                             case @operator.lastxweeks:
                                 startTime = DateTime.Today.AddDays(-Int32.Parse(condition.value) * 7);
                                 endTime = DateTime.Now;
+
+                                startExpression = DateAdd(
+                                    "day",
+                                    new BinaryExpression
+                                    {
+                                        BinaryExpressionType = BinaryExpressionType.Multiply,
+                                        FirstExpression = new UnaryExpression { UnaryExpressionType = UnaryExpressionType.Negative, Expression = value },
+                                        SecondExpression = new IntegerLiteral { Value = "7" }
+                                    },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" });
+                                endExpression = new VariableReference { Name = useUtc ? "@utc_now" : "@now" };
                                 break;
 
                             case @operator.lastxyears:
                                 startTime = DateTime.Today.AddYears(-Int32.Parse(condition.value));
                                 endTime = DateTime.Now;
+
+                                startExpression = DateAdd("year", new UnaryExpression { UnaryExpressionType = UnaryExpressionType.Negative, Expression = value }, new VariableReference { Name = useUtc ? "@utc_today" : "@today" });
+                                endExpression = new VariableReference { Name = useUtc ? "@utc_now" : "@now" };
                                 break;
 
                             case @operator.lastyear:
-                                startTime = new DateTime(DateTime.Today.Year, 1, 1);
+                                startTime = new DateTime(DateTime.Today.Year - 1, 1, 1);
                                 endTime = startTime.Value.AddYears(1);
+
+                                startExpression = new FunctionCall
+                                {
+                                    FunctionName = new Identifier { Value = "DATEFROMPARTS" },
+                                    Parameters =
+                                    {
+                                        new BinaryExpression
+                                        {
+                                            BinaryExpressionType = BinaryExpressionType.Subtract,
+                                            FirstExpression = DatePart("year", new VariableReference { Name = "@today" }),
+                                            SecondExpression = new IntegerLiteral { Value = "1" }
+                                        },
+                                        new IntegerLiteral { Value = "1" },
+                                        new IntegerLiteral { Value = "1" }
+                                    }
+                                };
+
+                                if (useUtc)
+                                {
+                                    startExpression = DateAdd(
+                                        "minute",
+                                        new UnaryExpression
+                                        {
+                                            UnaryExpressionType = UnaryExpressionType.Negative,
+                                            Expression = new VariableReference { Name = "@time_zone" }
+                                        },
+                                        new ConvertCall
+                                        {
+                                            DataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.DateTime },
+                                            Parameter = startExpression
+                                        });
+                                }
+
+                                endExpression = DateAdd("year", new IntegerLiteral { Value = "1" }, startExpression);
                                 break;
 
                             case @operator.nextmonth:
                                 startTime = DateTime.Today.AddDays(1 - DateTime.Today.Day).AddMonths(1);
                                 endTime = startTime.Value.AddMonths(1);
+
+                                var monthStart = DateAdd(
+                                    "day",
+                                    new BinaryExpression
+                                    {
+                                        BinaryExpressionType = BinaryExpressionType.Subtract,
+                                        FirstExpression = new IntegerLiteral { Value = "1" },
+                                        SecondExpression = DatePart("day", new VariableReference { Name = "@today" })
+                                    },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" }
+                                );
+                                startExpression = DateAdd("month", new IntegerLiteral { Value = "1" }, monthStart);
+                                endExpression = DateAdd("month", new IntegerLiteral { Value = "2" }, monthStart);
                                 break;
 
                             case @operator.nextsevendays:
                                 startTime = DateTime.Now;
                                 endTime = DateTime.Today.AddDays(8);
+
+                                startExpression = new VariableReference { Name = useUtc ? "@utc_now" : "@now" };
+                                endExpression = DateAdd("day", new IntegerLiteral { Value = "8" }, new VariableReference { Name = useUtc ? "@utc_today" : "@today" });
                                 break;
 
                             case @operator.nextweek:
                                 startTime = DateTime.Today.AddDays(7 - (int)DateTime.Today.DayOfWeek);
                                 endTime = startTime.Value.AddDays(7);
+
+                                startExpression = DateAdd(
+                                    "day",
+                                    new BinaryExpression
+                                    {
+                                        BinaryExpressionType = BinaryExpressionType.Subtract,
+                                        FirstExpression = new IntegerLiteral { Value = "8" },  // DATEPART(weekday, @today) is 1-based while DateTime.Today.DayOfWeek is 0 based, so use 8 here even though we use 7 above
+                                        SecondExpression = new UnaryExpression
+                                        {
+                                            UnaryExpressionType = UnaryExpressionType.Negative,
+                                            Expression = DatePart("weekday", new VariableReference { Name = "@today" })
+                                        }
+                                    },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" }
+                                );
+
+                                endExpression = DateAdd(
+                                    "day",
+                                    new BinaryExpression
+                                    {
+                                        BinaryExpressionType = BinaryExpressionType.Subtract,
+                                        FirstExpression = new IntegerLiteral { Value = "15" },
+                                        SecondExpression = new UnaryExpression
+                                        {
+                                            UnaryExpressionType = UnaryExpressionType.Negative,
+                                            Expression = DatePart("weekday", new VariableReference { Name = "@today" })
+                                        }
+                                    },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" }
+                                );
                                 break;
 
                             case @operator.nextxdays:
                                 startTime = DateTime.Now;
                                 endTime = DateTime.Today.AddDays(Int32.Parse(condition.value) + 1);
+
+                                startExpression = new VariableReference { Name = useUtc ? "@utc_now" : "@now" };
+                                endExpression = DateAdd(
+                                    "day",
+                                    new BinaryExpression
+                                    {
+                                        BinaryExpressionType = BinaryExpressionType.Add,
+                                        FirstExpression = value,
+                                        SecondExpression = new IntegerLiteral { Value = "1" }
+                                    },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" });
                                 break;
 
                             case @operator.nextxhours:
                                 startTime = DateTime.Now;
                                 endTime = DateTime.Today.AddHours(DateTime.Now.Hour + Int32.Parse(condition.value) + 1);
+
+                                startExpression = new VariableReference { Name = useUtc ? "@utc_now" : "@now" };
+                                endExpression = DateAdd(
+                                    "hour",
+                                    new BinaryExpression
+                                    {
+                                        BinaryExpressionType = BinaryExpressionType.Add,
+                                        FirstExpression = DatePart("hour", new VariableReference { Name = useUtc ? "@utc_now" : "@now" }),
+                                        SecondExpression = new BinaryExpression
+                                        {
+                                            BinaryExpressionType = BinaryExpressionType.Add,
+                                            FirstExpression = value,
+                                            SecondExpression = new IntegerLiteral { Value = "1" }
+                                        }
+                                    },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" }
+                                );
                                 break;
                                 
                             case @operator.nextxmonths:
                                 startTime = DateTime.Now;
                                 endTime = DateTime.Today.AddDays(1).AddMonths(Int32.Parse(condition.value));
+
+                                startExpression = new VariableReference { Name = useUtc ? "@utc_now" : "@now" };
+                                endExpression = DateAdd(
+                                    "month",
+                                    value,
+                                    DateAdd("day", new IntegerLiteral { Value = "1" }, new VariableReference { Name = useUtc ? "@utc_today" : "@today" })
+                                );
                                 break;
 
                             case @operator.nextxweeks:
                                 startTime = DateTime.Now;
                                 endTime = DateTime.Today.AddDays(Int32.Parse(condition.value) * 7 + 1);
+
+                                startExpression = new VariableReference { Name = useUtc ? "@utc_now" : "@now" };
+                                endExpression = DateAdd(
+                                    "day",
+                                    new BinaryExpression
+                                    {
+                                        BinaryExpressionType = BinaryExpressionType.Add,
+                                        FirstExpression = new BinaryExpression
+                                        {
+                                            BinaryExpressionType = BinaryExpressionType.Multiply,
+                                            FirstExpression = value,
+                                            SecondExpression = new IntegerLiteral { Value = "7" }
+                                        },
+                                        SecondExpression = new IntegerLiteral { Value = "1" }
+                                    },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" }
+                                );
                                 break;
 
                             case @operator.nextxyears:
                                 startTime = DateTime.Now;
                                 endTime = DateTime.Today.AddDays(1).AddYears(Int32.Parse(condition.value));
+
+                                startExpression = new VariableReference { Name = useUtc ? "@utc_now" : "@now" };
+                                endExpression = DateAdd(
+                                    "year",
+                                    value,
+                                    DateAdd("day", new IntegerLiteral { Value = "1" }, new VariableReference { Name = useUtc ? "@utc_today" : "@today" })
+                                );
                                 break;
 
                             case @operator.nextyear:
                                 startTime = new DateTime(DateTime.Today.Year + 1, 1, 1);
                                 endTime = startTime.Value.AddYears(1);
+
+                                startExpression = new FunctionCall
+                                {
+                                    FunctionName = new Identifier { Value = "DATEFROMPARTS" },
+                                    Parameters =
+                                    {
+                                        new BinaryExpression
+                                        {
+                                            BinaryExpressionType = BinaryExpressionType.Add,
+                                            FirstExpression = DatePart("year", new VariableReference { Name = "@today" }),
+                                            SecondExpression = new IntegerLiteral { Value = "1" }
+                                        },
+                                        new IntegerLiteral { Value = "1" },
+                                        new IntegerLiteral { Value = "1" }
+                                    }
+                                };
+
+                                endExpression = new FunctionCall
+                                {
+                                    FunctionName = new Identifier { Value = "DATEFROMPARTS" },
+                                    Parameters =
+                                    {
+                                        new BinaryExpression
+                                        {
+                                            BinaryExpressionType = BinaryExpressionType.Add,
+                                            FirstExpression = DatePart("year", new VariableReference { Name = "@today" }),
+                                            SecondExpression = new IntegerLiteral { Value = "2" }
+                                        },
+                                        new IntegerLiteral { Value = "1" },
+                                        new IntegerLiteral { Value = "1" }
+                                    }
+                                };
                                 break;
 
                             case @operator.olderthanxdays:
                                 endTime = DateTime.Today.AddDays(-Int32.Parse(condition.value));
+
+                                endExpression = DateAdd(
+                                    "day",
+                                    new UnaryExpression { UnaryExpressionType = UnaryExpressionType.Negative, Expression = value },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" }
+                                );
                                 break;
 
                             case @operator.olderthanxhours:
                                 endTime = DateTime.Today.AddHours(DateTime.Now.Hour - Int32.Parse(condition.value));
+
+                                endExpression = DateAdd(
+                                    "hour",
+                                    new BinaryExpression
+                                    {
+                                        BinaryExpressionType = BinaryExpressionType.Subtract,
+                                        FirstExpression = DatePart("hour", new VariableReference { Name = "@now" }),
+                                        SecondExpression = value
+                                    },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" }
+                                );
                                 break;
 
                             case @operator.olderthanxminutes:
                                 endTime = DateTime.Today.AddMinutes(Math.Truncate(DateTime.Now.TimeOfDay.TotalMinutes) - Int32.Parse(condition.value));
+
+                                endExpression = DateAdd(
+                                    "minute",
+                                    new BinaryExpression
+                                    {
+                                        BinaryExpressionType = BinaryExpressionType.Subtract,
+                                        FirstExpression = new BinaryExpression
+                                        {
+                                            BinaryExpressionType = BinaryExpressionType.Add,
+                                            FirstExpression = new BinaryExpression
+                                            {
+                                                BinaryExpressionType = BinaryExpressionType.Multiply,
+                                                FirstExpression = DatePart("hour", new VariableReference { Name = "@now" }),
+                                                SecondExpression = new IntegerLiteral { Value = "60" }
+                                            },
+                                            SecondExpression = DatePart("minute", new VariableReference { Name = "@now" })
+                                        },
+                                        SecondExpression = value
+                                    },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" }
+                                );
                                 break;
 
                             case @operator.olderthanxmonths:
                                 endTime = DateTime.Today.AddMonths(-Int32.Parse(condition.value));
+
+                                endExpression = DateAdd(
+                                    "month",
+                                    new UnaryExpression { UnaryExpressionType = UnaryExpressionType.Negative, Expression = value },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" }
+                                );
                                 break;
 
                             case @operator.olderthanxweeks:
                                 endTime = DateTime.Today.AddDays(-Int32.Parse(condition.value) * 7);
+
+                                endExpression = DateAdd(
+                                    "day",
+                                    new BinaryExpression
+                                    {
+                                        BinaryExpressionType = BinaryExpressionType.Multiply,
+                                        FirstExpression = new UnaryExpression { UnaryExpressionType = UnaryExpressionType.Negative, Expression = value },
+                                        SecondExpression = new IntegerLiteral { Value = "7" }
+                                    },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" }
+                                );
                                 break;
 
                             case @operator.olderthanxyears:
                                 endTime = DateTime.Today.AddYears(-Int32.Parse(condition.value));
+
+                                endExpression = DateAdd(
+                                    "year",
+                                    new UnaryExpression { UnaryExpressionType = UnaryExpressionType.Negative, Expression = value },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" }
+                                );
                                 break;
 
                             case @operator.on:
@@ -815,31 +1306,83 @@ namespace MarkMpn.Sql4Cds.Engine
                             case @operator.thismonth:
                                 startTime = DateTime.Today.AddDays(1 - DateTime.Today.Day);
                                 endTime = startTime.Value.AddMonths(1);
+
+                                startExpression = DateAdd(
+                                    "day",
+                                    new BinaryExpression
+                                    {
+                                        BinaryExpressionType = BinaryExpressionType.Subtract,
+                                        FirstExpression = new IntegerLiteral { Value = "1" },
+                                        SecondExpression = DatePart("day", new VariableReference { Name = "@today" })
+                                    },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" });
+
+                                endExpression = DateAdd("month", new IntegerLiteral { Value = "1" }, startExpression);
                                 break;
 
                             case @operator.thisweek:
                                 startTime = DateTime.Today.AddDays(- (int) DateTime.Today.DayOfWeek);
                                 endTime = startTime.Value.AddDays(7);
+
+                                startExpression = DateAdd(
+                                    "day",
+                                    new BinaryExpression
+                                    {
+                                        BinaryExpressionType = BinaryExpressionType.Subtract,
+                                        FirstExpression = new IntegerLiteral { Value = "1" },
+                                        SecondExpression = DatePart("weekday", new VariableReference { Name = "@today" })
+                                    },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" });
+
+                                endExpression = DateAdd(
+                                    "day",
+                                    new BinaryExpression
+                                    {
+                                        BinaryExpressionType = BinaryExpressionType.Subtract,
+                                        FirstExpression = new IntegerLiteral { Value = "8" },
+                                        SecondExpression = DatePart("weekday", new VariableReference { Name = "@today" })
+                                    },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" });
                                 break;
 
                             case @operator.thisyear:
                                 startTime = DateTime.Today.AddDays(1 - DateTime.Today.DayOfYear);
                                 endTime = startTime.Value.AddYears(1);
+
+                                startExpression = DateAdd(
+                                    "day",
+                                    new BinaryExpression
+                                    {
+                                        BinaryExpressionType = BinaryExpressionType.Subtract,
+                                        FirstExpression = new IntegerLiteral { Value = "1" },
+                                        SecondExpression = DatePart("dayofyear", new VariableReference { Name = "@today" })
+                                    },
+                                    new VariableReference { Name = useUtc ? "@utc_today" : "@today" });
+                                endExpression = DateAdd("year", new IntegerLiteral { Value = "1" }, startExpression);
                                 break;
 
                             case @operator.today:
                                 startTime = DateTime.Today;
                                 endTime = startTime.Value.AddDays(1);
+
+                                startExpression = new VariableReference { Name = useUtc ? "@utc_today" : "@today" };
+                                endExpression = DateAdd("day", new IntegerLiteral { Value = "1" }, startExpression);
                                 break;
 
                             case @operator.tomorrow:
                                 startTime = DateTime.Today.AddDays(1);
                                 endTime = startTime.Value.AddDays(1);
+
+                                startExpression = DateAdd("day", new IntegerLiteral { Value = "1" }, new VariableReference { Name = useUtc ? "@utc_today" : "@today" });
+                                endExpression = DateAdd("day", new IntegerLiteral { Value = "2" }, new VariableReference { Name = useUtc ? "@utc_today" : "@today" });
                                 break;
 
                             case @operator.yesterday:
                                 startTime = DateTime.Today.AddDays(-1);
                                 endTime = startTime.Value.AddDays(1);
+
+                                startExpression = DateAdd("day", new IntegerLiteral { Value = "-1" }, new VariableReference { Name = useUtc ? "@utc_today" : "@today" });
+                                endExpression = new VariableReference { Name = useUtc ? "@utc_today" : "@today" };
                                 break;
 
                             case @operator.eqbusinessid:
@@ -1284,22 +1827,36 @@ namespace MarkMpn.Sql4Cds.Engine
 
                         if (startTime != null)
                         {
+                            if (useUtc)
+                                startTime = startTime.Value.ToUniversalTime();
+
+                            var useExpression = options.ConvertFetchXmlOperatorsTo == FetchXmlOperatorConversion.SqlCalculations && startExpression != null;
+
                             expr = new BooleanComparisonExpression
                             {
                                 FirstExpression = field,
                                 ComparisonType = BooleanComparisonType.GreaterThanOrEqualTo,
-                                SecondExpression = new StringLiteral { Value = startTime.Value.ToString("s") }
+                                SecondExpression = useExpression ? startExpression : new StringLiteral { Value = startTime.Value.ToString("s") }
                             };
+
+                            usesToday |= useExpression;
                         }
 
                         if (endTime != null)
                         {
+                            if (useUtc)
+                                endTime = endTime.Value.ToUniversalTime();
+
+                            var useExpression = options.ConvertFetchXmlOperatorsTo == FetchXmlOperatorConversion.SqlCalculations && endExpression != null;
+
                             var endExpr = new BooleanComparisonExpression
                             {
                                 FirstExpression = field,
                                 ComparisonType = BooleanComparisonType.LessThan,
-                                SecondExpression = new StringLiteral { Value = endTime.Value.ToString("s") }
+                                SecondExpression = useExpression ? endExpression : new StringLiteral { Value = endTime.Value.ToString("s") }
                             };
+
+                            usesToday |= useExpression;
 
                             if (expr == null)
                             {
@@ -1387,6 +1944,33 @@ namespace MarkMpn.Sql4Cds.Engine
             };
 
             return expression;
+        }
+
+        private static FunctionCall DateAdd(string datePart, ScalarExpression number, ScalarExpression date)
+        {
+            return new FunctionCall
+            {
+                FunctionName = new Identifier { Value = "DATEADD" },
+                Parameters =
+                {
+                    new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = datePart } } } },
+                    number,
+                    date
+                }
+            };
+        }
+
+        private static FunctionCall DatePart(string datePart, ScalarExpression date)
+        {
+            return new FunctionCall
+            {
+                FunctionName = new Identifier { Value = "DATEPART" },
+                Parameters =
+                {
+                    new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = datePart } } } },
+                    date
+                }
+            };
         }
 
         /// <summary>
@@ -2091,122 +2675,21 @@ namespace MarkMpn.Sql4Cds.Engine
                 return !permittedUnquoted;
             }
         }
-
-        private class LiteralsToParametersVisitor : TSqlFragmentVisitor
-        {
-            private readonly IDictionary<string, object> _parameters;
-
-            public LiteralsToParametersVisitor(IDictionary<string, object> parameters)
-            {
-                _parameters = parameters;
-            }
-
-            public override void ExplicitVisit(BooleanComparisonExpression node)
-            {
-                base.ExplicitVisit(node);
-
-                if (node.FirstExpression is ColumnReferenceExpression col &&
-                    node.SecondExpression is Literal literal)
-                {
-                    var parameterName = GetParameterName(col.MultiPartIdentifier.Identifiers.Last().Value);
-                    var param = new VariableReference { Name = parameterName };
-                    node.SecondExpression = param;
-                    _parameters[parameterName] = GetParameterValue(literal);
-                }
-            }
-
-            public override void ExplicitVisit(InPredicate node)
-            {
-                base.ExplicitVisit(node);
-
-                if (node.Expression is ColumnReferenceExpression col)
-                {
-                    for (var i = 0; i < node.Values.Count; i++)
-                    {
-                        if (node.Values[i] is Literal literal)
-                        {
-                            var parameterName = GetParameterName(col.MultiPartIdentifier.Identifiers.Last().Value);
-                            var param = new VariableReference { Name = parameterName };
-                            node.Values[i] = param;
-                            _parameters[parameterName] = GetParameterValue(literal);
-                        }
-                    }
-                }
-            }
-
-            public override void ExplicitVisit(BooleanTernaryExpression node)
-            {
-                base.ExplicitVisit(node);
-
-                if (node.FirstExpression is ColumnReferenceExpression col)
-                {
-                    if (node.SecondExpression is Literal lit1)
-                    {
-                        var parameterName = GetParameterName(col.MultiPartIdentifier.Identifiers.Last().Value);
-                        var param = new VariableReference { Name = parameterName };
-                        node.SecondExpression = param;
-                        _parameters[parameterName] = GetParameterValue(lit1);
-                    }
-
-                    if (node.ThirdExpression is Literal lit2)
-                    {
-                        var parameterName = GetParameterName(col.MultiPartIdentifier.Identifiers.Last().Value);
-                        var param = new VariableReference { Name = parameterName };
-                        node.ThirdExpression = param;
-                        _parameters[parameterName] = GetParameterValue(lit2);
-                    }
-                }
-            }
-
-            public override void ExplicitVisit(LikePredicate node)
-            {
-                base.ExplicitVisit(node);
-
-                if (node.FirstExpression is ColumnReferenceExpression col &&
-                    node.SecondExpression is Literal literal)
-                {
-                    var parameterName = GetParameterName(col.MultiPartIdentifier.Identifiers.Last().Value);
-                    var param = new VariableReference { Name = parameterName };
-                    node.SecondExpression = param;
-                    _parameters[parameterName] = GetParameterValue(literal);
-                }
-            }
-
-            private object GetParameterValue(Literal literal)
-            {
-                if (literal is IntegerLiteral i)
-                    return Int32.Parse(i.Value);
-
-                if (literal is MoneyLiteral m)
-                    return Decimal.Parse(m.Value);
-
-                if (literal is NumericLiteral n)
-                    return Decimal.Parse(n.Value);
-
-                return literal.Value;
-            }
-
-            private string GetParameterName(string column)
-            {
-                var baseName = "@" + column;
-
-                if (!_parameters.ContainsKey(baseName))
-                    return baseName;
-
-                var suffix = 1;
-
-                while (_parameters.ContainsKey(baseName + suffix))
-                    suffix++;
-
-                return baseName + suffix;
-            }
-        }
     }
 
     public class FetchXml2SqlOptions
     {
-        public bool PreserveFetchXmlOperatorsAsFunctions { get; set; } = true;
+        public FetchXmlOperatorConversion ConvertFetchXmlOperatorsTo { get; set; } = FetchXmlOperatorConversion.Functions;
 
         public bool UseParametersForLiterals { get; set; } = false;
+
+        public bool UseUtcDateTimeColumns { get; set; } = false;
+    }
+
+    public enum FetchXmlOperatorConversion
+    {
+        Functions,
+        Literals,
+        SqlCalculations
     }
 }

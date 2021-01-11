@@ -30,6 +30,12 @@
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
+  <PropertyGroup>
+    <SignAssembly>true</SignAssembly>
+  </PropertyGroup>
+  <PropertyGroup>
+    <AssemblyOriginatorKeyFile>Key.snk</AssemblyOriginatorKeyFile>
+  </PropertyGroup>
   <ItemGroup>
     <Reference Include="Microsoft.VisualBasic" />
     <Reference Include="System" />
@@ -59,6 +65,7 @@
     <Compile Include="QueryExtensions\NoOp.cs" />
     <Compile Include="TSqlEndpoint.cs" />
     <Compile Include="TSqlFragmentExtensions.cs" />
+    <Compile Include="Visitors\AddDefaultColumnAliasesVisitor.cs" />
     <Compile Include="Visitors\AddDefaultTableAliasesVisitor.cs" />
     <Compile Include="Visitors\AggregateCollectingVisitor.cs" />
     <Compile Include="ExpressionFunctions.cs" />
@@ -90,6 +97,7 @@
     <Compile Include="QueryExtensions\Where.cs" />
     <Compile Include="QueryExtensions\IQueryExtension.cs" />
     <Compile Include="QueryParseException.cs" />
+    <Compile Include="Visitors\UpdateTargetVisitor.cs" />
     <Compile Include="Visitors\QueryTypeVisitor.cs" />
     <Compile Include="Visitors\ReplacePrimaryFunctionsVisitor.cs" />
     <Compile Include="Visitors\RewriteVisitorBase.cs" />
@@ -100,6 +108,7 @@
     <None Include="FetchXml.xsd">
       <SubType>Designer</SubType>
     </None>
+    <None Include="Key.snk" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Properties\Resources.resx">

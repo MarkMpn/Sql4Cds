@@ -6,7 +6,7 @@ pool:
 
 variables:
   solution: '**/*.sln'
-  buildPlatform: 'Any CPU'
+  buildPlatform: 'x86'
   buildConfiguration: 'Release'
 
 steps:
@@ -21,6 +21,13 @@ steps:
 
 - script: $(Build.BinariesDirectory)/tools/GitVersion.CommandLine/tools/GitVersion.exe /output buildserver /nofetch /updateassemblyinfo
   displayName: Determine Version
+
+- task: PowerShell@2
+  displayName: Update version in the vsix manifest
+  inputs:
+    filePath: 'MarkMpn.Sql4Cds.SSMS\update-version.ps1'
+    arguments: '$(GitVersion.AssemblySemVer)'
+    pwsh: true
   
 - task: NuGetCommand@2
   displayName: NuGet Restore
@@ -34,6 +41,7 @@ steps:
     solution: '$(solution)'
     platform: '$(buildPlatform)'
     configuration: '$(buildConfiguration)'
+    msbuildArgs: '/p:DeployExtension=false'
 
 - task: VSTest@2
   inputs:
@@ -54,6 +62,35 @@ steps:
   inputs:
     targetPath: '$(Build.ArtifactStagingDirectory)'
     artifact: 'NuGetPackages'
+    publishLocation: 'pipeline'
+
+- task: DownloadSecureFile@1
+  name: CodeSigningCert
+  displayName: Download code signing certificate
+  inputs:
+    secureFile: 'Code Signing.pfx'
+
+- task: PowerShell@2
+  displayName: Sign MSI
+  inputs:
+    targetType: inline
+    script: |
+      $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2
+      $cert.Import("$(CodeSigningCert.secureFilePath)", "$(CodeSigningCertPassword)", [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::DefaultKeySet)
+      Set-AuthenticodeSignature -Certificate $cert -FilePath "MarkMpn.Sql4Cds.SSMS.Setup\bin\$(buildConfiguration)\MarkMpn.Sql4Cds.SSMS.Setup.msi" -TimestampServer "http://timestamp.digicert.com"
+
+- task: PublishPipelineArtifact@1
+  displayName: Publish SSMS installer to pipeline
+  inputs:
+    targetPath: 'MarkMpn.Sql4Cds.SSMS.Setup\bin\$(buildConfiguration)\MarkMpn.Sql4Cds.SSMS.Setup.msi'
+    artifact: 'SSMSInstaller'
+    publishLocation: 'pipeline'
+    
+- task: PublishPipelineArtifact@1
+  displayName: Publish version file to pipeline
+  inputs:
+    targetPath: 'MarkMpn.Sql4Cds.SSMS\sql4cds-version.txt'
+    artifact: 'SSMSVersion'
     publishLocation: 'pipeline'
 
 - task: GitTag@5
