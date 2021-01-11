@@ -714,7 +714,7 @@ namespace MarkMpn.Sql4Cds
                 _attribute = attribute;
 
                 if (!String.IsNullOrEmpty(_attribute.AttributeOf) && metadata.TryGetMinimalData(attribute.EntityLogicalName, out var entity))
-                    _attributeOf = entity.Attributes.Single(a => a.LogicalName == _attribute.AttributeOf);
+                    _attributeOf = entity.Attributes.SingleOrDefault(a => a.LogicalName == _attribute.AttributeOf);
             }
 
             public override string ToolTipTitle
