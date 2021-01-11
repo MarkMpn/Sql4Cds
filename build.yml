@@ -64,20 +64,34 @@ steps:
     artifact: 'NuGetPackages'
     publishLocation: 'pipeline'
 
+- task: DownloadSecureFile@1
+  name: CodeSigningCert
+  displayName: Download code signing certificate
+  inputs:
+    secureFile: 'Code Signing.pfx'
+
+- task: PowerShell@2
+  displayName: Sign MSI
+  inputs:
+    targetType: inline
+    script: |
+      $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2
+      $cert.Import("$(CodeSigningCert.secureFilePath)", "$(CodeSigningCertPassword)", [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::DefaultKeySet)
+      Set-AuthenticodeSignature -Certificate $cert -FilePath "MarkMpn.Sql4Cds.SSMS.Setup\bin\$(buildConfiguration)\MarkMpn.Sql4Cds.SSMS.Setup.msi" -TimestampServer "http://timestamp.digicert.com"
+
 - task: PublishPipelineArtifact@1
   displayName: Publish SSMS installer to pipeline
   inputs:
     targetPath: 'MarkMpn.Sql4Cds.SSMS.Setup\bin\$(buildConfiguration)\MarkMpn.Sql4Cds.SSMS.Setup.msi'
     artifact: 'SSMSInstaller'
     publishLocation: 'pipeline'
-
-- task: FtpUpload@2
-  displayName: Advertise latest version
+    
+- task: PublishPipelineArtifact@1
+  displayName: Publish version file to pipeline
   inputs:
-    serverEndpoint: 'markcarrington.dev'
-    rootDirectory: 'MarkMpn.Sql4Cds.SSMS'
-    filePatterns: 'sql4cds-version.txt'
-    remoteDirectory: '/site/wwwroot'
+    targetPath: 'MarkMpn.Sql4Cds.SSMS\sql4cds-version.txt'
+    artifact: 'SSMSVersion'
+    publishLocation: 'pipeline'
 
 - task: GitTag@5
   displayName: Label Source
