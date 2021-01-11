@@ -6,9 +6,13 @@ pool:
   vmImage: 'windows-latest'
 
 variables:
-  solution: '**/*.sln'
-  buildPlatform: 'x86'
-  buildConfiguration: 'Release'
+- group: CodeSigning
+- name: solution
+  value: '**/*.sln'
+- name: buildPlatform
+  value: 'x86'
+- name: buildConfiguration
+  value: 'Release'
 
 steps:
 - checkout: self
@@ -48,6 +52,20 @@ steps:
   inputs:
     platform: '$(buildPlatform)'
     configuration: '$(buildConfiguration)'
+
+- task: DownloadSecureFile@1
+  name: CodeSigningCert
+  displayName: Download code signing certificate
+  inputs:
+    secureFile: 'Code Signing.pfx'
+
+- task: PowerShell@2
+  displayName: Sign MSI
+  inputs:
+    script: >
+      $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2
+      $cert.Import("$(CodeSigningCert.secureFilePath)", "$(CodeSigningCertPassword)")
+      Set-AuthenticodeSignature -Certificate $cert -FilePath "MarkMpn.Sql4Cds.SSMS.Setup\bin\$(buildConfiguration)\MarkMpn.Sql4Cds.SSMS.Setup.msi" -TimestampServer "http://timestamp.comodoca.com/rfc3161"
 
 - task: PublishPipelineArtifact@1
   displayName: Publish SSMS installer to pipeline
