@@ -65,7 +65,7 @@ steps:
     targetType: inline
     script: >
       $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2
-      $cert.Import("$(CodeSigningCert.secureFilePath)", "$(CodeSigningCertPassword)")
+      $cert.Import("$(CodeSigningCert.secureFilePath)", "$(CodeSigningCertPassword)", [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::DefaultKeySet)
       Set-AuthenticodeSignature -Certificate $cert -FilePath "MarkMpn.Sql4Cds.SSMS.Setup\bin\$(buildConfiguration)\MarkMpn.Sql4Cds.SSMS.Setup.msi" -TimestampServer "http://timestamp.digicert.com"
 
 - task: PublishPipelineArtifact@1
