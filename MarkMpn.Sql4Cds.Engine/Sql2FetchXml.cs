@@ -3114,7 +3114,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     var attrName = GetColumnAttribute(entityTable, field);
                     var attribute = entityTable.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase));
 
-                    if (!String.IsNullOrEmpty(attribute?.AttributeOf))
+                    if (!String.IsNullOrEmpty(attribute?.AttributeOf) && entityTable.Metadata.Attributes.Any(a => a.LogicalName == attribute.AttributeOf))
                     {
                         var baseAttribute = entityTable.Metadata.Attributes.Single(a => a.LogicalName == attribute.AttributeOf);
                         var virtualAttributeHandled = false;
@@ -3316,7 +3316,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 var attrName = GetColumnAttribute(entityTable, field);
                 var attr = entityTable.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase));
 
-                if (!String.IsNullOrEmpty(attr.AttributeOf))
+                if (!String.IsNullOrEmpty(attr.AttributeOf) && entityTable.Metadata.Attributes.Any(a => a.LogicalName == attr.AttributeOf))
                 {
                     var virtualAttributeHandled = false;
                     var baseAttribute = entityTable.Metadata.Attributes.Single(a => a.LogicalName == attr.AttributeOf);
@@ -3390,7 +3390,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 var attrName = GetColumnAttribute(entityTable, field);
                 var attr = entityTable.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase));
 
-                if (!String.IsNullOrEmpty(attr.AttributeOf))
+                if (!String.IsNullOrEmpty(attr.AttributeOf) && entityTable.Metadata.Attributes.Any(a => a.LogicalName == attr.AttributeOf))
                 {
                     var virtualAttributeHandled = false;
                     var baseAttribute = entityTable.Metadata.Attributes.Single(a => a.LogicalName == attr.AttributeOf);
@@ -3469,7 +3469,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 var attrName = GetColumnAttribute(entityTable, field);
                 var attr = entityTable.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase));
 
-                if (!String.IsNullOrEmpty(attr.AttributeOf))
+                if (!String.IsNullOrEmpty(attr.AttributeOf) && entityTable.Metadata.Attributes.Any(a => a.LogicalName == attr.AttributeOf))
                 {
                     var virtualAttributeHandled = false;
                     var baseAttribute = entityTable.Metadata.Attributes.Single(a => a.LogicalName == attr.AttributeOf);
