@@ -5,9 +5,13 @@ pool:
   vmImage: 'windows-latest'
 
 variables:
-  solution: '**/*.sln'
-  buildPlatform: 'x86'
-  buildConfiguration: 'Release'
+- group: CodeSigning
+- name: solution
+  value: '**/*.sln'
+- name: buildPlatform
+  value: 'x86'
+- name: buildConfiguration
+  value: 'Release'
 
 steps:
 - checkout: self
