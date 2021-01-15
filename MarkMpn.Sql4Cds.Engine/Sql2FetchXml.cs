@@ -2657,7 +2657,12 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     if (sort.Expression is IntegerLiteral colIndex)
                     {
-                        var colName = columns[Int32.Parse(colIndex.Value, CultureInfo.InvariantCulture) - 1];
+                        var index = Int32.Parse(colIndex.Value, CultureInfo.InvariantCulture) - 1;
+
+                        if (index >= columns.Length)
+                            throw new NotSupportedQueryFragmentException("The ORDER BY position number is out of range of the number of items in the select list.", colIndex);
+
+                        var colName = columns[index];
 
                         col = new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier() };
 
