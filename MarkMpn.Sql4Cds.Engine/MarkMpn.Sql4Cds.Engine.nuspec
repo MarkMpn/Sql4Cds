@@ -11,8 +11,9 @@
     <iconUrl>https://markcarrington.dev/sql4cds-icon/</iconUrl>
     <description>Convert SQL queries to FetchXml and execute them against CDS</description>
     <summary>Convert SQL queries to FetchXml and execute them against CDS</summary>
-    <releaseNotes>Extended TDS endpoint supoprt
-Fixed inserts into multi-select picklist attributes</releaseNotes>
+    <releaseNotes>Fixed handling ORDER BY &lt;index&gt; clause when using GROUP BY and JOIN together
+Improved error reporting when using ORDER BY &lt;index&gt; with invalid column number
+Show correct error when alternative aggregate query fails</releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>
     <tags>SQL CDS</tags>
