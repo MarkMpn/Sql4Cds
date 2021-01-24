@@ -2774,6 +2774,58 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             ");
         }
 
+        [TestMethod]
+        public void OrderByAggregateByIndex()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT firstname, count(*) FROM contact GROUP BY firstname ORDER BY 2";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, @"
+                <fetch aggregate='true'>
+                    <entity name='contact'>
+                        <attribute name='firstname' groupby='true' alias='firstname' />
+                        <attribute name='contactid' aggregate='count' alias='contactid_count' />
+                        <order alias='contactid_count' />
+                    </entity>
+                </fetch>
+            ");
+        }
+
+        [TestMethod]
+        public void OrderByAggregateJoinByIndex()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT firstname, count(*) FROM contact INNER JOIN account ON contact.parentcustomerid = account.accountid GROUP BY firstname ORDER BY 2";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, @"
+                <fetch aggregate='true'>
+                    <entity name='contact'>
+                        <attribute name='firstname' groupby='true' alias='firstname' />
+                        <attribute name='contactid' aggregate='count' alias='contactid_count' />
+                        <link-entity name='account' from='accountid' to='parentcustomerid' link-type='inner' alias='account'>
+                        </link-entity>
+                        <order alias='contactid_count' />
+                    </entity>
+                </fetch>
+            ");
+        }
+
         private void AssertFetchXml(Query[] queries, string fetchXml)
         {
             Assert.AreEqual(1, queries.Length);

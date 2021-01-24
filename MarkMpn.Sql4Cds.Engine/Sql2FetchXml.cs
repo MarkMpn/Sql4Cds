@@ -3976,7 +3976,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 throw new NotSupportedQueryFragmentException("Unhandled SELECT clause", expr);
 
             // Find the appropriate table and add the attribute to the table
-            GetColumnTableAlias(col, tables, out table);
+            GetColumnTableAlias(col, tables, out table, calculatedColumns);
             var attrName = GetColumnAttribute(table, col);
             var requestedAttrName = attrName;
 
@@ -4369,7 +4369,7 @@ namespace MarkMpn.Sql4Cds.Engine
         private void ValidateAttributeName(EntityTable table, ColumnReferenceExpression col)
         {
             var attrName = GetColumnAttribute(table, col);
-            if (!table.Metadata.Attributes.Any(attr => attr.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase)))
+            if (!table.Metadata.Attributes.Any(attr => attr.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase)) && !table.GetItems().OfType<FetchAttributeType>().Any(a => (a.alias ?? "").Equals(attrName, StringComparison.OrdinalIgnoreCase)))
                 throw new NotSupportedQueryFragmentException("Unknown attribute", col);
         }
 
