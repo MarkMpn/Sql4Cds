@@ -10,17 +10,35 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Returns a constant data set
     /// </summary>
-    class ConstantScanNode : IExecutionPlanNode
+    public class ConstantScanNode : BaseNode
     {
         /// <summary>
         /// The list of values to be returned
         /// </summary>
         public List<Entity> Values { get; } = new List<Entity>();
 
-        public IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        /// <summary>
+        /// The types of values to be returned
+        /// </summary>
+        public Dictionary<string, Type> Schema { get; } = new Dictionary<string, Type>();
+
+        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
             foreach (var value in Values)
                 yield return value;
+        }
+
+        public override IEnumerable<IExecutionPlanNode> GetSources()
+        {
+            return Array.Empty<IExecutionPlanNode>();
+        }
+
+        public override NodeSchema GetSchema(IAttributeMetadataCache metadata)
+        {
+            return new NodeSchema
+            {
+                Schema = Schema
+            };
         }
     }
 }

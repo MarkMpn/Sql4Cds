@@ -22,5 +22,39 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             return (bool)GetValue((TSqlFragment)expr, entity);
         }
+
+        public static BooleanExpression RemoveCondition(this BooleanExpression expr, BooleanExpression remove)
+        {
+            if (expr == remove)
+                return null;
+
+            if (expr is BooleanBinaryExpression binary)
+            {
+                if (binary.FirstExpression == remove)
+                    return binary.SecondExpression;
+
+                if (binary.SecondExpression == remove)
+                    return binary.FirstExpression;
+
+                var clone = new BooleanBinaryExpression
+                {
+                    BinaryExpressionType = binary.BinaryExpressionType,
+                    FirstExpression = binary.FirstExpression.RemoveCondition(remove),
+                    SecondExpression = binary.SecondExpression.RemoveCondition(remove)
+                };
+
+                return clone;
+            }
+
+            if (expr is BooleanParenthesisExpression paren)
+            {
+                if (paren.Expression == remove)
+                    return null;
+
+                return new BooleanParenthesisExpression { Expression = paren.Expression.RemoveCondition(remove) };
+            }
+
+            return expr;
+        }
     }
 }

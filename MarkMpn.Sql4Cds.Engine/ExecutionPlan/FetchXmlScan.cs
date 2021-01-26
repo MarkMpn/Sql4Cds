@@ -10,9 +10,14 @@ using Microsoft.Xrm.Sdk.Query;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    class FetchXmlScan : IExecutionPlanNode
+    class FetchXmlScan : BaseNode
     {
         private FetchType _fetch;
+
+        public FetchXmlScan()
+        {
+            AllPages = true;
+        }
 
         /// <summary>
         /// The FetchXML query
@@ -29,6 +34,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         }
 
         /// <summary>
+        /// The alias to apply to the primary entity in the query
+        /// </summary>
+        public string Alias { get; set; }
+
+        /// <summary>
         /// The string representation of the <see cref="FetchXml"/>
         /// </summary>
         public string FetchXmlString { get; private set; }
@@ -43,7 +53,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         public bool DistinctWithoutSort { get; private set; }
 
-        public IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        /// <summary>
+        /// Indicates if all available attributes should be returned as part of the schema, used while the execution plan is being built
+        /// </summary>
+        public bool ReturnFullSchema { get; set; }
+
+        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
             if (options.Cancelled)
                 yield break;
@@ -159,6 +174,101 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return meta.DisplayCollectionName?.UserLocalizedLabel?.Label ??
                 meta.LogicalCollectionName ??
                 meta.LogicalName;
+        }
+
+        public override IEnumerable<IExecutionPlanNode> GetSources()
+        {
+            return Array.Empty<IExecutionPlanNode>();
+        }
+
+        public override NodeSchema GetSchema(IAttributeMetadataCache metadata)
+        {
+            var schema = new NodeSchema();
+
+            // Add each attribute from the main entity and recurse into link entities
+            var entity = FetchXml.Items.OfType<FetchEntityType>().Single();
+            var meta = metadata[entity.name];
+            schema.PrimaryKey = $"{Alias}.{meta.PrimaryIdAttribute}";
+            AddAttributes(schema, metadata, entity.name, Alias, entity.Items);
+            
+            return schema;
+        }
+
+        private void AddAttributes(NodeSchema schema, IAttributeMetadataCache metadata, string entityName, string alias, object[] items)
+        {
+            if (items == null && !ReturnFullSchema)
+                return;
+
+            var meta = metadata[entityName];
+
+            if (ReturnFullSchema)
+            {
+                foreach (var attrMetadata in meta.Attributes)
+                {
+                    var attrType = GetAttributeType(attrMetadata);
+                    var fullName = $"{alias}.{attrMetadata.LogicalName}";
+
+                    schema.Schema[fullName] = attrType;
+
+                    if (!schema.Aliases.TryGetValue(attrMetadata.LogicalName, out var simpleColumnNameAliases))
+                    {
+                        simpleColumnNameAliases = new List<string>();
+                        schema.Aliases[attrMetadata.LogicalName] = simpleColumnNameAliases;
+                    }
+
+                    simpleColumnNameAliases.Add(fullName);
+                }
+            }
+            else
+            {
+                foreach (var attribute in items.OfType<FetchAttributeType>())
+                {
+                    var attrMetadata = meta.Attributes.Single(a => a.LogicalName == attribute.name);
+                    var attrType = GetAttributeType(attrMetadata);
+
+                    if (attribute.aggregateSpecified && (attribute.aggregate == AggregateType.count || attribute.aggregate == AggregateType.countcolumn))
+                        attrType = typeof(int);
+
+                    var attrName = attribute.alias ?? attribute.name;
+                    var fullName = $"{alias}.{attrName}";
+
+                    schema.Schema[fullName] = attrType;
+
+                    if (!schema.Aliases.TryGetValue(attrName, out var simpleColumnNameAliases))
+                    {
+                        simpleColumnNameAliases = new List<string>();
+                        schema.Aliases[attrName] = simpleColumnNameAliases;
+                    }
+
+                    simpleColumnNameAliases.Add(fullName);
+                }
+            }
+
+            if (items != null)
+            {
+                foreach (var linkEntity in items.OfType<FetchLinkEntityType>())
+                {
+                    if (schema.PrimaryKey != null)
+                    {
+                        var childMeta = metadata[linkEntity.name];
+
+                        if (linkEntity.from != childMeta.PrimaryIdAttribute)
+                        {
+                            if (linkEntity.linktype == "inner")
+                                schema.PrimaryKey = $"{linkEntity.alias}.{childMeta.PrimaryIdAttribute}";
+                            else
+                                schema.PrimaryKey = null;
+                        }
+                    }
+
+                    AddAttributes(schema, metadata, linkEntity.name, linkEntity.alias, linkEntity.Items);
+                }
+            }
+        }
+
+        private Type GetAttributeType(AttributeMetadata attrMetadata)
+        {
+            return typeof(string);
         }
     }
 }

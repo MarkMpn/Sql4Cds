@@ -11,134 +11,106 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Merges two sorted data sets
     /// </summary>
-    class MergeJoinNode : IExecutionPlanNode
+    public class MergeJoinNode : BaseJoinNode
     {
-        /// <summary>
-        /// The first data source to merge
-        /// </summary>
-        public IExecutionPlanNode OuterSource { get; set; }
-
         /// <summary>
         /// The attribute in the <see cref="OuterSource"/> to join on
         /// </summary>
-        public ColumnReferenceExpression OuterAttribute { get; set; }
-
-        /// <summary>
-        /// The second data source to merge
-        /// </summary>
-        public IExecutionPlanNode InnerSource { get; set; }
+        public ColumnReferenceExpression LeftAttribute { get; set; }
 
         /// <summary>
         /// The attribute in the <see cref="InnerSource"/> to join on
         /// </summary>
-        public ColumnReferenceExpression InnerAttribute { get; set; }
+        public ColumnReferenceExpression RightAttribute { get; set; }
 
-        /// <summary>
-        /// The type of join to apply
-        /// </summary>
-        public QualifiedJoinType JoinType { get; set; }
-
-        public IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
             // https://sqlserverfast.com/epr/merge-join/
+            // Implemented inner, left outer, right outer and full outer variants
+            // Not implemented semi joins
+            // TODO: Handle many-to-many joins
 
-            var outer = OuterSource.Execute(org, metadata, options).GetEnumerator();
-            var inner = InnerSource.Execute(org, metadata, options).GetEnumerator();
+            // Left & Right: GetNext, mark as unmatched
+            var leftSchema = LeftSource.GetSchema(metadata);
+            var rightSchema = RightSource.GetSchema(metadata);
+            var left = LeftSource.Execute(org, metadata, options).GetEnumerator();
+            var right = RightSource.Execute(org, metadata, options).GetEnumerator();
 
-            var hasOuter = outer.MoveNext();
-            var hasInner = inner.MoveNext();
-            var outerMatched = false;
-            var innerMatched = false;
+            var hasLeft = left.MoveNext();
+            var hasRight = right.MoveNext();
+            var leftMatched = false;
+            var rightMatched = false;
 
             var lt = new BooleanComparisonExpression
             {
-                FirstExpression = OuterAttribute,
+                FirstExpression = LeftAttribute,
                 ComparisonType = BooleanComparisonType.LessThan,
-                SecondExpression = InnerAttribute
+                SecondExpression = RightAttribute
             };
 
             var eq = new BooleanComparisonExpression
             {
-                FirstExpression = OuterAttribute,
+                FirstExpression = LeftAttribute,
                 ComparisonType = BooleanComparisonType.Equals,
-                SecondExpression = InnerAttribute
+                SecondExpression = RightAttribute
             };
 
             var gt = new BooleanComparisonExpression
             {
-                FirstExpression = OuterAttribute,
+                FirstExpression = LeftAttribute,
                 ComparisonType = BooleanComparisonType.GreaterThan,
-                SecondExpression = InnerAttribute
+                SecondExpression = RightAttribute
             };
 
-            while (!Done(hasOuter, hasInner))
+            while (!Done(hasLeft, hasRight))
             {
-                var merged = Merge(outer.Current, inner.Current);
+                // Compare key values
+                var merged = Merge(hasLeft ? left.Current : null, leftSchema, hasRight ? right.Current : null, rightSchema);
 
                 var isLt = lt.GetValue(merged);
                 var isEq = eq.GetValue(merged);
                 var isGt = gt.GetValue(merged);
 
-                if (isLt)
+                if (isLt || (hasLeft && !hasRight))
                 {
-                    if (!outerMatched && JoinType == QualifiedJoinType.LeftOuter)
-                        yield return merged;
+                    if (!leftMatched && (JoinType == QualifiedJoinType.LeftOuter || JoinType == QualifiedJoinType.FullOuter))
+                        yield return Merge(left.Current, leftSchema, null, rightSchema);
 
-                    hasOuter = outer.MoveNext();
-                    outerMatched = false;
+                    hasLeft = left.MoveNext();
+                    leftMatched = false;
                 }
                 else if (isEq)
                 {
                     yield return merged;
 
-                    outerMatched = true;
-                    innerMatched = true;
+                    leftMatched = true;
 
-                    hasInner = inner.MoveNext();
-                    innerMatched = false;
+                    hasRight = right.MoveNext();
+                    rightMatched = false;
                 }
-                else if (isGt)
+                else if (isGt || (!hasLeft && hasRight))
                 {
-                    if (!innerMatched && JoinType == QualifiedJoinType.RightOuter)
-                        yield return merged;
+                    if (!rightMatched && (JoinType == QualifiedJoinType.RightOuter || JoinType == QualifiedJoinType.FullOuter))
+                        yield return Merge(null, leftSchema, right.Current, rightSchema);
 
-                    hasInner = inner.MoveNext();
-                    innerMatched = false;
+                    hasRight = right.MoveNext();
+                    rightMatched = false;
                 }
             }
         }
 
-        private Entity Merge(Entity outer, Entity inner)
-        {
-            var merged = new Entity();
-
-            if (outer != null)
-            {
-                foreach (var attr in outer.Attributes)
-                    merged[attr.Key] = attr.Value;
-            }
-
-            if (inner != null)
-            {
-                foreach (var attr in inner.Attributes)
-                    merged[attr.Key] = attr.Value;
-            }
-
-            return merged;
-        }
-
-        private bool Done(bool hasOuter, bool hasInner)
+        private bool Done(bool hasLeft, bool hasRight)
         {
             if (JoinType == QualifiedJoinType.Inner)
-                return !hasOuter || !hasInner;
+                return !hasLeft || !hasRight;
 
             if (JoinType == QualifiedJoinType.LeftOuter)
-                return !hasOuter;
+                return !hasLeft;
 
             if (JoinType == QualifiedJoinType.RightOuter)
-                return !hasInner;
+                return !hasRight;
 
-            throw new NotSupportedException();
+            return !hasLeft && !hasRight;
         }
     }
 }

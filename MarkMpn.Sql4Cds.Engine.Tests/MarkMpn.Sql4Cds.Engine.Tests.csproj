@@ -59,6 +59,7 @@
     <Reference Include="Microsoft.Rest.ClientRuntime, Version=2.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
       <HintPath>..\packages\Microsoft.CrmSdk.XrmTooling.CoreAssembly.9.1.0.26\lib\net462\Microsoft.Rest.ClientRuntime.dll</HintPath>
     </Reference>
+    <Reference Include="Microsoft.SqlServer.TransactSql.ScriptDom, Version=15.0.0.0, Culture=neutral, PublicKeyToken=89845dcd8080cc91" />
     <Reference Include="Microsoft.VisualStudio.TestPlatform.TestFramework, Version=14.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
       <HintPath>..\packages\MSTest.TestFramework.2.1.1\lib\net45\Microsoft.VisualStudio.TestPlatform.TestFramework.dll</HintPath>
     </Reference>
@@ -144,12 +145,15 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AutocompleteTests.cs" />
+    <Compile Include="ExecutionPlanNodeTests.cs" />
+    <Compile Include="ExecutionPlanTests.cs" />
     <Compile Include="Metadata\New_CustomEntity.cs" />
     <Compile Include="Metadata\Contact.cs" />
     <Compile Include="Metadata\Account.cs" />
     <Compile Include="PropertyEqualityComparer.cs" />
     <Compile Include="Sql2FetchXmlTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="StubOptions.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="app.config" />

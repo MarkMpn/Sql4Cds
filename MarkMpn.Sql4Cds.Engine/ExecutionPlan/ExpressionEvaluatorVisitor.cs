@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Linq;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
@@ -24,6 +25,41 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Value = value;
         }
 
+        public override void ExplicitVisit(IdentifierLiteral node)
+        {
+            Value = new Guid(node.Value);
+        }
+
+        public override void ExplicitVisit(IntegerLiteral node)
+        {
+            Value = Int32.Parse(node.Value);
+        }
+
+        public override void ExplicitVisit(MoneyLiteral node)
+        {
+            Value = Decimal.Parse(node.Value);
+        }
+
+        public override void ExplicitVisit(NullLiteral node)
+        {
+            Value = null;
+        }
+
+        public override void ExplicitVisit(NumericLiteral node)
+        {
+            Value = Decimal.Parse(node.Value);
+        }
+
+        public override void ExplicitVisit(RealLiteral node)
+        {
+            Value = Single.Parse(node.Value);
+        }
+
+        public override void ExplicitVisit(StringLiteral node)
+        {
+            Value = node.Value;
+        }
+
         public override void ExplicitVisit(BooleanComparisonExpression node)
         {
             var lhs = node.FirstExpression.GetValue(_entity);
@@ -37,13 +73,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             SqlTypeConverter.MakeConsistentTypes(ref lhs, ref rhs);
 
-            var comparableLhs = lhs as IComparable;
-            var comparableRhs = rhs as IComparable;
-
-            if (comparableLhs == null)
-                throw new QueryExecutionException(node, "Comparison expression cannot be evaluated");
-
-            var comparison = comparableLhs.CompareTo(comparableRhs);
+            var comparison = CaseInsensitiveComparer.Default.Compare(lhs, rhs);
 
             switch (node.ComparisonType)
             {

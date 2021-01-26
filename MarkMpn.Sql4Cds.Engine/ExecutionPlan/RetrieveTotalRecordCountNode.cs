@@ -11,23 +11,43 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Gets the total number of records in an entity using <see cref="RetrieveTotalRecordCountRequest"/>
     /// </summary>
-    class RetrieveTotalRecordCountNode : IExecutionPlanNode
+    class RetrieveTotalRecordCountNode : BaseNode
     {
         /// <summary>
         /// The logical name of the entity to get the record count for
         /// </summary>
         public string EntityName { get; set; }
 
-        public IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
             var count = ((RetrieveTotalRecordCountResponse)org.Execute(new RetrieveTotalRecordCountRequest { EntityNames = new[] { EntityName } })).EntityRecordCountCollection[EntityName];
 
             var resultEntity = new Entity(EntityName)
             {
-                ["count"] = new AliasedValue(EntityName, "count", count)
+                [$"{EntityName}_count"] = new AliasedValue(EntityName, $"{EntityName}_count", count)
             };
 
             yield return resultEntity;
+        }
+
+        public override IEnumerable<IExecutionPlanNode> GetSources()
+        {
+            return Array.Empty<IExecutionPlanNode>();
+        }
+
+        public override NodeSchema GetSchema(IAttributeMetadataCache metadata)
+        {
+            return new NodeSchema
+            {
+                Schema =
+                {
+                    [$"{EntityName}_count"] = typeof(long)
+                },
+                Aliases =
+                {
+                    [$"{EntityName}_count"] = new List<string> { $"{EntityName}_count" }
+                }
+            };
         }
     }
 }

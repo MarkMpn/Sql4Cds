@@ -59,6 +59,9 @@
     <Compile Include="AttributeMetadataCache.cs" />
     <Compile Include="DisconnectedException.cs" />
     <Compile Include="EntityExtensions.cs" />
+    <Compile Include="ExecutionPlanBuilder.cs" />
+    <Compile Include="ExecutionPlan\BaseJoinNode.cs" />
+    <Compile Include="ExecutionPlan\BaseNode.cs" />
     <Compile Include="ExecutionPlan\ConstantScanNode.cs" />
     <Compile Include="ExecutionPlan\ExpressionEvaluatorVisitor.cs" />
     <Compile Include="ExecutionPlan\ExpressionExtensions.cs" />
@@ -66,11 +69,15 @@
     <Compile Include="ExecutionPlan\FilterNode.cs" />
     <Compile Include="ExecutionPlan\IExecutionPlanNode.cs" />
     <Compile Include="ExecutionPlan\MergeJoinNode.cs" />
+    <Compile Include="ExecutionPlan\NestedLoopNode.cs" />
+    <Compile Include="ExecutionPlan\NodeSchema.cs" />
     <Compile Include="ExecutionPlan\QueryExecutionException.cs" />
     <Compile Include="ExecutionPlan\RetrieveTotalRecordCountNode.cs" />
     <Compile Include="ExecutionPlan\SelectNode.cs" />
     <Compile Include="ExecutionPlan\SortNode.cs" />
     <Compile Include="ExecutionPlan\SqlTypeConverter.cs" />
+    <Compile Include="ExecutionPlan\TableSpoolNode.cs" />
+    <Compile Include="JoinConditionVisitor.cs" />
     <Compile Include="MetaMetadataCache.cs" />
     <Compile Include="MetaMetadata.cs" />
     <Compile Include="PartialSuccessException.cs" />

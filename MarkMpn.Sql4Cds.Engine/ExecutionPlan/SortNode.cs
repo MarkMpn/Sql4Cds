@@ -11,7 +11,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Sorts the data in the data stream
     /// </summary>
-    class SortNode : IExecutionPlanNode
+    class SortNode : BaseNode
     {
         /// <summary>
         /// The sorts to apply
@@ -23,7 +23,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         public IExecutionPlanNode Source { get; set; }
 
-        public IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
             var source = Source.Execute(org, metadata, options);
             IOrderedEnumerable<Entity> sortedSource;
@@ -42,6 +42,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return sortedSource;
+        }
+
+        public override IEnumerable<IExecutionPlanNode> GetSources()
+        {
+            yield return Source;
+        }
+
+        public override NodeSchema GetSchema(IAttributeMetadataCache metadata)
+        {
+            return Source.GetSchema(metadata);
         }
     }
 }
