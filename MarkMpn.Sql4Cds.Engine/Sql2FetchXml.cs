@@ -422,7 +422,23 @@ namespace MarkMpn.Sql4Cds.Engine
                         throw new NotSupportedQueryFragmentException("Unknown attribute name", columns[i]);
 
                     if (attr.IsValidForCreate == false)
-                        throw new NotSupportedQueryFragmentException("Column cannot be set on INSERT", columns[i]);
+                    {
+                        if (meta.IsIntersect == false)
+                            throw new NotSupportedQueryFragmentException("Column cannot be set on INSERT", columns[i]);
+
+                        if (target == "listmember")
+                        {
+                            if (attr.LogicalName != "listid" && attr.LogicalName != "entityid")
+                                throw new NotSupportedQueryFragmentException("Column cannot be set on INSERT", columns[i]);
+                        }
+                        else
+                        {
+                            var relationship = meta.ManyToManyRelationships.Single();
+
+                            if (attr.LogicalName != relationship.Entity1IntersectAttribute && attr.LogicalName != relationship.Entity2IntersectAttribute)
+                                throw new NotSupportedQueryFragmentException("Column cannot be set on INSERT", columns[i]);
+                        }
+                    }
 
                     if (row.ColumnValues[i] is Literal literal)
                     {
@@ -1078,6 +1094,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 case AttributeTypeCode.Memo:
                 case AttributeTypeCode.String:
+                case AttributeTypeCode.EntityName:
                     return value.ToString();
 
                 case AttributeTypeCode.Money:
@@ -2657,7 +2674,12 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     if (sort.Expression is IntegerLiteral colIndex)
                     {
-                        var colName = columns[Int32.Parse(colIndex.Value, CultureInfo.InvariantCulture) - 1];
+                        var index = Int32.Parse(colIndex.Value, CultureInfo.InvariantCulture) - 1;
+
+                        if (index >= columns.Length)
+                            throw new NotSupportedQueryFragmentException("The ORDER BY position number is out of range of the number of items in the select list.", colIndex);
+
+                        var colName = columns[index];
 
                         col = new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier() };
 
@@ -3971,7 +3993,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 throw new NotSupportedQueryFragmentException("Unhandled SELECT clause", expr);
 
             // Find the appropriate table and add the attribute to the table
-            GetColumnTableAlias(col, tables, out table);
+            GetColumnTableAlias(col, tables, out table, calculatedColumns);
             var attrName = GetColumnAttribute(table, col);
             var requestedAttrName = attrName;
 
@@ -4364,7 +4386,7 @@ namespace MarkMpn.Sql4Cds.Engine
         private void ValidateAttributeName(EntityTable table, ColumnReferenceExpression col)
         {
             var attrName = GetColumnAttribute(table, col);
-            if (!table.Metadata.Attributes.Any(attr => attr.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase)))
+            if (!table.Metadata.Attributes.Any(attr => attr.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase)) && !table.GetItems().OfType<FetchAttributeType>().Any(a => (a.alias ?? "").Equals(attrName, StringComparison.OrdinalIgnoreCase)))
                 throw new NotSupportedQueryFragmentException("Unknown attribute", col);
         }
 
