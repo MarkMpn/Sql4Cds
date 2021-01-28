@@ -243,7 +243,7 @@ namespace MarkMpn.Sql4Cds
                 tsbPreviewFetchXml.PerformClick();
             else if (keyData == (Keys.Control | Keys.M))
                 tsbIncludeFetchXml.PerformClick();
-            else if (keyData == Keys.F5)
+            else if (keyData == Keys.F5 || keyData == (Keys.Control | Keys.E))
                 tsbExecute.PerformClick();
             else
                 return base.ProcessCmdKey(ref msg, keyData);

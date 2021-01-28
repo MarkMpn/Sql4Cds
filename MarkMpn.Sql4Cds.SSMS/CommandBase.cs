@@ -91,13 +91,13 @@ namespace MarkMpn.Sql4Cds.SSMS
 
             var serverParts = conStr.DataSource.Split(',');
 
-            if (serverParts.Length != 2)
+            if (serverParts.Length > 2)
                 return false;
 
             if (!serverParts[0].EndsWith(".dynamics.com"))
                 return false;
 
-            if (serverParts[1] != "5558")
+            if (serverParts.Length > 1 && serverParts[1] != "5558")
                 return false;
 
             return true;

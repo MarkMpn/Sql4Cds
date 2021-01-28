@@ -239,6 +239,10 @@ namespace MarkMpn.Sql4Cds.Engine
                     throw;
 
                 AggregateAlternative.Execute(org, metadata, options);
+
+                if (AggregateAlternative.Result is Exception altEx)
+                    throw altEx;
+
                 return (EntityCollection)AggregateAlternative.Result;
             }
         }
