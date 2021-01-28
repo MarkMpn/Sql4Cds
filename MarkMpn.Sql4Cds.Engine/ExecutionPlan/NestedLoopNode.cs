@@ -34,5 +34,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
         }
+
+        public override IEnumerable<string> GetRequiredColumns()
+        {
+            return JoinCondition.GetColumns();
+        }
     }
 }

@@ -40,5 +40,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Schema = Schema
             };
         }
+
+        public override IEnumerable<string> GetRequiredColumns()
+        {
+            return Array.Empty<string>();
+        }
     }
 }

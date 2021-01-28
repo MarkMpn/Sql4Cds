@@ -19,7 +19,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             private readonly List<T> _cache;
             private bool _eof;
 
-            class CachedEnumerator<T> : IEnumerator<T>
+            class CachedEnumerator : IEnumerator<T>
             {
                 private readonly CachedList<T> _source;
                 private int _index;
@@ -99,6 +99,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override NodeSchema GetSchema(IAttributeMetadataCache metadata)
         {
             return Source.GetSchema(metadata);
+        }
+
+        public override IEnumerable<string> GetRequiredColumns()
+        {
+            return Array.Empty<string>();
         }
     }
 }

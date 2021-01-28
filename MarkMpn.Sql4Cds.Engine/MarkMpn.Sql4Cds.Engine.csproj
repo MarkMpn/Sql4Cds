@@ -60,6 +60,7 @@
     <Compile Include="DisconnectedException.cs" />
     <Compile Include="EntityExtensions.cs" />
     <Compile Include="ExecutionPlanBuilder.cs" />
+    <Compile Include="ExecutionPlanOptimizer.cs" />
     <Compile Include="ExecutionPlan\BaseJoinNode.cs" />
     <Compile Include="ExecutionPlan\BaseNode.cs" />
     <Compile Include="ExecutionPlan\ConstantScanNode.cs" />

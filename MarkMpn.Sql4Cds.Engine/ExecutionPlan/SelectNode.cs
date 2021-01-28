@@ -7,12 +7,12 @@ using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    class SelectNode : BaseNode
+    public class SelectNode : BaseNode
     {
         /// <summary>
         /// The columns that should be included in the query results
         /// </summary>
-        public string[] ColumnSet { get; set; }
+        public List<SelectColumn> ColumnSet { get; } = new List<SelectColumn>();
 
         /// <summary>
         /// The data source to select from
@@ -34,5 +34,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             return Source.GetSchema(metadata);
         }
+
+        public override IEnumerable<string> GetRequiredColumns()
+        {
+            return ColumnSet
+                .Select(col => col.SourceColumn + (col.AllColumns ? ".*" : ""))
+                .Distinct();
+        }
+    }
+
+    public class SelectColumn
+    {
+        public string SourceColumn { get; set; }
+        public string OutputColumn { get; set; }
+        public bool AllColumns { get; set; }
     }
 }

@@ -52,5 +52,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         /// <returns></returns>
         NodeSchema GetSchema(IAttributeMetadataCache metadata);
+
+        /// <summary>
+        /// Gets the columns that are required as input for this node from its sources
+        /// </summary>
+        /// <returns></returns>
+        IEnumerable<string> GetRequiredColumns();
     }
 }

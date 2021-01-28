@@ -71,6 +71,8 @@ namespace MarkMpn.Sql4Cds.Engine
                     plan.Sql = originalSql;
                     plan.Index = index;
                     plan.Length = length;
+
+                    plan = ExecutionPlanOptimizer.Optimize(Metadata, plan);
                     queries.Add(plan);
                 }
             }
@@ -98,8 +100,52 @@ namespace MarkMpn.Sql4Cds.Engine
             // Add TOP
 
             // Add SELECT
+            node = ConvertSelectClause(querySpec.SelectElements, node);
 
             return node;
+        }
+
+        private IExecutionPlanNode ConvertSelectClause(IList<SelectElement> selectElements, IExecutionPlanNode node)
+        {
+            var select = new SelectNode
+            {
+                Source = node
+            };
+
+            foreach (var element in selectElements)
+            {   
+                if (element is SelectScalarExpression scalar)
+                {
+                    if (scalar.Expression is ColumnReferenceExpression col)
+                    {
+                        var colName = String.Join(".", col.MultiPartIdentifier.Identifiers.Select(id => id.Value));
+                        var alias = scalar.ColumnName?.Value ?? colName;
+
+                        select.ColumnSet.Add(new SelectColumn
+                        {
+                            SourceColumn = colName,
+                            OutputColumn = alias
+                        });
+                    }
+                    else
+                    {
+                        // TODO: Handle calculations in separate CalculateScalarNode
+                        throw new NotSupportedQueryFragmentException("Unsupported SELECT expression", scalar.Expression);
+                    }
+                }
+                else if (element is SelectStarExpression star)
+                {
+                    var colName = star.Qualifier == null ? null : String.Join(".", star.Qualifier.Identifiers.Select(id => id.Value));
+
+                    select.ColumnSet.Add(new SelectColumn
+                    {
+                        SourceColumn = colName,
+                        AllColumns = true
+                    });
+                }
+            }
+
+            return select;
         }
 
         private IExecutionPlanNode ConvertFromClause(IList<TableReference> tables)

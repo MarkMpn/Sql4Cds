@@ -112,5 +112,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             return !hasLeft && !hasRight;
         }
+
+        public override IEnumerable<string> GetRequiredColumns()
+        {
+            yield return LeftAttribute.GetColumnName();
+            yield return RightAttribute.GetColumnName();
+        }
     }
 }

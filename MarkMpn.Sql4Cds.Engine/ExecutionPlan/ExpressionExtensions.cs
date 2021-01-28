@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using MarkMpn.Sql4Cds.Engine.Visitors;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 
@@ -55,6 +56,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return expr;
+        }
+
+        public static string GetColumnName(this ColumnReferenceExpression col)
+        {
+            return String.Join(".", col.MultiPartIdentifier.Identifiers.Select(id => id.Value));
+        }
+
+        public static IEnumerable<string> GetColumns(this TSqlFragment fragment)
+        {
+            var visitor = new ColumnCollectingVisitor();
+            fragment.Accept(visitor);
+
+            return visitor.Columns
+                .Select(col => col.GetColumnName())
+                .Distinct();
         }
     }
 }

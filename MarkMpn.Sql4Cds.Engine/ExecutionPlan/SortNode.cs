@@ -53,5 +53,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             return Source.GetSchema(metadata);
         }
+
+        public override IEnumerable<string> GetRequiredColumns()
+        {
+            return Sorts
+                .SelectMany(s => s.GetColumns())
+                .Distinct();
+        }
     }
 }

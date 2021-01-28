@@ -10,10 +10,8 @@ using Microsoft.Xrm.Sdk.Query;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    class FetchXmlScan : BaseNode
+    public class FetchXmlScan : BaseNode
     {
-        private FetchType _fetch;
-
         public FetchXmlScan()
         {
             AllPages = true;
@@ -22,16 +20,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// The FetchXML query
         /// </summary>
-        public FetchType FetchXml
-        {
-            get { return _fetch; }
-            set
-            {
-                _fetch = value;
-                FetchXmlString = Serialize(_fetch);
-                DistinctWithoutSort = value.distinctSpecified && value.distinct && !ContainsSort(value.Items);
-            }
-        }
+        public FetchType FetchXml { get; set; }
 
         /// <summary>
         /// The alias to apply to the primary entity in the query
@@ -41,7 +30,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// The string representation of the <see cref="FetchXml"/>
         /// </summary>
-        public string FetchXmlString { get; private set; }
+        public string FetchXmlString => Serialize(FetchXml);
 
         /// <summary>
         /// Indicates if the query will page across all the available data
@@ -51,7 +40,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// Indicates if this query uses the <see cref="FetchType.distinct"/> option without having a sort order specified
         /// </summary>
-        public bool DistinctWithoutSort { get; private set; }
+        public bool DistinctWithoutSort => FetchXml.distinctSpecified && FetchXml.distinct && !ContainsSort(FetchXml.Items);
 
         /// <summary>
         /// Indicates if all available attributes should be returned as part of the schema, used while the execution plan is being built
@@ -269,6 +258,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private Type GetAttributeType(AttributeMetadata attrMetadata)
         {
             return typeof(string);
+        }
+
+        public override IEnumerable<string> GetRequiredColumns()
+        {
+            return Array.Empty<string>();
         }
     }
 }

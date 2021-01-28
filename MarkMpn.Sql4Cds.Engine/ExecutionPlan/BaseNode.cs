@@ -20,5 +20,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public abstract IEnumerable<IExecutionPlanNode> GetSources();
 
         public abstract NodeSchema GetSchema(IAttributeMetadataCache metadata);
+
+        public abstract IEnumerable<string> GetRequiredColumns();
     }
 }
