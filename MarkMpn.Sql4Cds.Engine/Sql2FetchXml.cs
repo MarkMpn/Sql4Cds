@@ -422,7 +422,23 @@ namespace MarkMpn.Sql4Cds.Engine
                         throw new NotSupportedQueryFragmentException("Unknown attribute name", columns[i]);
 
                     if (attr.IsValidForCreate == false)
-                        throw new NotSupportedQueryFragmentException("Column cannot be set on INSERT", columns[i]);
+                    {
+                        if (meta.IsIntersect == false)
+                            throw new NotSupportedQueryFragmentException("Column cannot be set on INSERT", columns[i]);
+
+                        if (target == "listmember")
+                        {
+                            if (attr.LogicalName != "listid" && attr.LogicalName != "entityid")
+                                throw new NotSupportedQueryFragmentException("Column cannot be set on INSERT", columns[i]);
+                        }
+                        else
+                        {
+                            var relationship = meta.ManyToManyRelationships.Single();
+
+                            if (attr.LogicalName != relationship.Entity1IntersectAttribute && attr.LogicalName != relationship.Entity2IntersectAttribute)
+                                throw new NotSupportedQueryFragmentException("Column cannot be set on INSERT", columns[i]);
+                        }
+                    }
 
                     if (row.ColumnValues[i] is Literal literal)
                     {
@@ -1078,6 +1094,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 case AttributeTypeCode.Memo:
                 case AttributeTypeCode.String:
+                case AttributeTypeCode.EntityName:
                     return value.ToString();
 
                 case AttributeTypeCode.Money:

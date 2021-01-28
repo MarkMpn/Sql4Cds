@@ -613,6 +613,10 @@ namespace MarkMpn.Sql4Cds.Engine
             if (expr.Type == typeof(int?) && type == typeof(OptionSetValue))
                 return Expr.Call(() => CreateOptionSetValue(Arg<int?>()), expr);
 
+            // Extract IDs from EntityReferences
+            if (expr.Type == typeof(EntityReference) && type == typeof(Guid?))
+                return Expr.Call(() => GetEntityReferenceId(Arg<EntityReference>()), expr);
+
             // Check for compatible class types
             if (expr.Type.IsClass && type.IsClass)
             {
@@ -628,6 +632,11 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             throw new NotSupportedException($"Cannot convert from {expr.Type} to {type}");
+        }
+
+        private static Guid? GetEntityReferenceId(EntityReference entityReference)
+        {
+            return entityReference.Id;
         }
 
         private static bool? StringToBool(string str)
