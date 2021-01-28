@@ -202,7 +202,6 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 // If the join involves the primary key of one table we can safely use a merge join.
                 // Otherwise use a nested loop join
-                // TODO: Add hash joins for better performance?
                 var lhs = ConvertTableReference(join.FirstTableReference);
                 var rhs = ConvertTableReference(join.SecondTableReference);
                 var lhsSchema = lhs.GetSchema(Metadata);
@@ -215,7 +214,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     BaseJoinNode joinNode;
 
-                    var lhsKey = String.Join(".", joinConditionVisitor.LhsKey.MultiPartIdentifier.Identifiers.Select(id => id.Value));
+                    var lhsKey = joinConditionVisitor.LhsKey.GetColumnName();
                     if (lhsSchema.ContainsColumn(lhsKey, out var lhsNormalizedKey) && lhsNormalizedKey.Equals(lhsSchema.PrimaryKey, StringComparison.OrdinalIgnoreCase))
                     {
                         // Sort by keys before merge join but ignore during FetchXML folding
@@ -249,10 +248,10 @@ namespace MarkMpn.Sql4Cds.Engine
 
                         joinNode = new MergeJoinNode
                         {
-                            RightSource = lhs,
-                            RightAttribute = joinConditionVisitor.LhsKey,
-                            LeftSource = rhs,
-                            LeftAttribute = joinConditionVisitor.RhsKey,
+                            LeftSource = lhs,
+                            LeftAttribute = joinConditionVisitor.LhsKey,
+                            RightSource = rhs,
+                            RightAttribute = joinConditionVisitor.RhsKey,
                             JoinType = join.QualifiedJoinType
                         };
                     }
@@ -289,10 +288,10 @@ namespace MarkMpn.Sql4Cds.Engine
 
                         joinNode = new MergeJoinNode
                         {
-                            RightSource = rhs,
-                            RightAttribute = joinConditionVisitor.RhsKey,
-                            LeftSource = lhs,
-                            LeftAttribute = joinConditionVisitor.LhsKey,
+                            LeftSource = rhs,
+                            LeftAttribute = joinConditionVisitor.RhsKey,
+                            RightSource = lhs,
+                            RightAttribute = joinConditionVisitor.LhsKey,
                             JoinType = join.QualifiedJoinType
                         };
                     }
