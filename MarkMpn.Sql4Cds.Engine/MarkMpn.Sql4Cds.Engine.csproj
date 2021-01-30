@@ -78,6 +78,7 @@
     <Compile Include="ExecutionPlan\SortNode.cs" />
     <Compile Include="ExecutionPlan\SqlTypeConverter.cs" />
     <Compile Include="ExecutionPlan\TableSpoolNode.cs" />
+    <Compile Include="ExecutionPlan\TopNode.cs" />
     <Compile Include="FetchXmlExtensions.cs" />
     <Compile Include="JoinConditionVisitor.cs" />
     <Compile Include="MetaMetadataCache.cs" />

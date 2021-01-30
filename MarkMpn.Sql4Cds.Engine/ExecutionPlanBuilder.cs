@@ -106,11 +106,33 @@ namespace MarkMpn.Sql4Cds.Engine
             node = ConvertOrderByClause(node, querySpec.OrderByClause);
 
             // Add TOP
+            node = ConvertTopClause(node, querySpec.TopRowFilter);
 
             // Add SELECT
             node = ConvertSelectClause(querySpec.SelectElements, node);
 
             return node;
+        }
+
+        private IExecutionPlanNode ConvertTopClause(IExecutionPlanNode source, TopRowFilter topRowFilter)
+        {
+            if (topRowFilter == null)
+                return source;
+
+            // TOP x PERCENT requires evaluating the source twice - once to get the total count and again to get the top
+            // records. Cache the results in a table spool node.
+            if (topRowFilter.Percent)
+                source = new TableSpoolNode { Source = source };
+
+            var topCount = topRowFilter.Expression.GetValue(null);
+
+            return new TopNode
+            {
+                Source = source,
+                Top = topRowFilter.Percent ? SqlTypeConverter.ChangeType<float>(topCount) : (float)SqlTypeConverter.ChangeType<int>(topCount),
+                Percent = topRowFilter.Percent,
+                WithTies = topRowFilter.WithTies
+            };
         }
 
         private IExecutionPlanNode ConvertOrderByClause(IExecutionPlanNode source, OrderByClause orderByClause)

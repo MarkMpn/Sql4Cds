@@ -289,6 +289,16 @@ namespace MarkMpn.Sql4Cds.Engine
                     return sort.Source;
                 }
             }
+            else if (node is TopNode top)
+            {
+                top.Source = MergeNodeDown(top.Source);
+
+                if (!top.Percent && !top.WithTies && top.Source is FetchXmlScan fetchXml)
+                {
+                    fetchXml.FetchXml.top = top.Top.ToString();
+                    return fetchXml;
+                }
+            }
 
             return node;
         }
