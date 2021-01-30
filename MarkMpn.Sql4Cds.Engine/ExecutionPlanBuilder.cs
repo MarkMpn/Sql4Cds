@@ -103,6 +103,7 @@ namespace MarkMpn.Sql4Cds.Engine
             // Add filters from HAVING
 
             // Add sorts from ORDER BY
+            node = ConvertOrderByClause(node, querySpec.OrderByClause);
 
             // Add TOP
 
@@ -110,6 +111,17 @@ namespace MarkMpn.Sql4Cds.Engine
             node = ConvertSelectClause(querySpec.SelectElements, node);
 
             return node;
+        }
+
+        private IExecutionPlanNode ConvertOrderByClause(IExecutionPlanNode source, OrderByClause orderByClause)
+        {
+            if (orderByClause == null)
+                return source;
+
+            var sort = new SortNode { Source = source };
+            sort.Sorts.AddRange(orderByClause.OrderByElements);
+
+            return sort;
         }
 
         private IExecutionPlanNode ConvertWhereClause(IExecutionPlanNode source, WhereClause whereClause)
