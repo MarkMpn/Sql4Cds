@@ -23,6 +23,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         public ColumnReferenceExpression RightAttribute { get; set; }
 
+        /// <summary>
+        /// Any additional criteria to apply to the join
+        /// </summary>
+        public BooleanExpression AdditionalJoinCriteria { get; set; }
+
         public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
             // https://sqlserverfast.com/epr/merge-join/
@@ -81,7 +86,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
                 else if (isEq)
                 {
-                    yield return merged;
+                    if (AdditionalJoinCriteria == null || AdditionalJoinCriteria.GetValue(merged) == true)
+                        yield return merged;
 
                     leftMatched = true;
 

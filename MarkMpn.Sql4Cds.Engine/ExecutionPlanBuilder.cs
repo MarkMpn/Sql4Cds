@@ -28,6 +28,11 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         public bool QuotedIdentifiers { get; set; }
 
+        /// <summary>
+        /// Indicates if column comparison conditions are supported
+        /// </summary>
+        public bool ColumnComparisonAvailable { get; set; }
+
         public IExecutionPlanNode[] Build(string sql)
         {
             var queries = new List<IExecutionPlanNode>();
@@ -41,6 +46,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 throw new QueryParseException(errors[0]);
 
             var script = (TSqlScript)fragment;
+            var optimizer = new ExecutionPlanOptimizer(Metadata, ColumnComparisonAvailable);
 
             // Convert each statement in turn to the appropriate query type
             foreach (var batch in script.Batches)
@@ -72,7 +78,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     plan.Index = index;
                     plan.Length = length;
 
-                    plan = ExecutionPlanOptimizer.Optimize(Metadata, plan);
+                    plan = optimizer.Optimize(plan);
                     queries.Add(plan);
                 }
             }
@@ -90,6 +96,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var node = ConvertFromClause(querySpec.FromClause.TableReferences);
 
             // Add filters from WHERE
+            node = ConvertWhereClause(node, querySpec.WhereClause);
 
             // Add aggregates from GROUP BY/SELECT/HAVING/ORDER BY
 
@@ -103,6 +110,21 @@ namespace MarkMpn.Sql4Cds.Engine
             node = ConvertSelectClause(querySpec.SelectElements, node);
 
             return node;
+        }
+
+        private IExecutionPlanNode ConvertWhereClause(IExecutionPlanNode source, WhereClause whereClause)
+        {
+            if (whereClause == null)
+                return source;
+
+            if (whereClause.Cursor != null)
+                throw new NotSupportedQueryFragmentException("Unsupported cursor", whereClause.Cursor);
+
+            return new FilterNode
+            {
+                Filter = whereClause.SearchCondition,
+                Source = source
+            };
         }
 
         private IExecutionPlanNode ConvertSelectClause(IList<SelectElement> selectElements, IExecutionPlanNode node)
@@ -252,7 +274,8 @@ namespace MarkMpn.Sql4Cds.Engine
                             LeftAttribute = joinConditionVisitor.LhsKey,
                             RightSource = rhs,
                             RightAttribute = joinConditionVisitor.RhsKey,
-                            JoinType = join.QualifiedJoinType
+                            JoinType = join.QualifiedJoinType,
+                            AdditionalJoinCriteria = join.SearchCondition.RemoveCondition(joinConditionVisitor.JoinCondition)
                         };
                     }
                     else if (rhsSchema.ContainsColumn(lhsKey, out var rhsNormalizedKey) && rhsNormalizedKey.Equals(rhsSchema.PrimaryKey, StringComparison.OrdinalIgnoreCase))
@@ -292,7 +315,8 @@ namespace MarkMpn.Sql4Cds.Engine
                             LeftAttribute = joinConditionVisitor.RhsKey,
                             RightSource = lhs,
                             RightAttribute = joinConditionVisitor.LhsKey,
-                            JoinType = join.QualifiedJoinType
+                            JoinType = join.QualifiedJoinType,
+                            AdditionalJoinCriteria = join.SearchCondition.RemoveCondition(joinConditionVisitor.JoinCondition)
                         };
                     }
                     else
@@ -302,20 +326,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         throw new NotImplementedException();
                     }
 
-                    var additionalFilter = join.SearchCondition.RemoveCondition(joinConditionVisitor.JoinCondition);
-
-                    if (additionalFilter != null)
-                    {
-                        return new FilterNode
-                        {
-                            Filter = additionalFilter,
-                            Source = joinNode
-                        };
-                    }
-                    else
-                    {
-                        return joinNode;
-                    }
+                    return joinNode;
                 }
                 else
                 {

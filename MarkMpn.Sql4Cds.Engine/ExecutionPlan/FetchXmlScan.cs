@@ -23,6 +23,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public FetchType FetchXml { get; set; }
 
         /// <summary>
+        /// The main &lt;entity&gt; node in the <see cref="FetchXml"/>
+        /// </summary>
+        public FetchEntityType Entity => FetchXml.Items.OfType<FetchEntityType>().Single();
+
+        /// <summary>
         /// The alias to apply to the primary entity in the query
         /// </summary>
         public string Alias { get; set; }
