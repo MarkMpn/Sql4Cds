@@ -271,7 +271,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         {
                             if (items != entity.Items)
                                 return sort;
-                            
+
                             entity.AddItem(fetchSort);
                             items = entity.Items;
                         }
@@ -297,6 +297,23 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     fetchXml.FetchXml.top = top.Top.ToString();
                     return fetchXml;
+                }
+            }
+            else if (node is OffsetFetchNode offset)
+            {
+                offset.Source = MergeNodeDown(offset.Source);
+
+                if (offset.Source is FetchXmlScan fetchXml)
+                {
+                    var count = offset.Fetch;
+                    var page = offset.Offset / count;
+
+                    if (page * count == offset.Offset)
+                    {
+                        fetchXml.FetchXml.count = count.ToString();
+                        fetchXml.FetchXml.page = (page + 1).ToString();
+                        return fetchXml;
+                    }
                 }
             }
 

@@ -105,13 +105,39 @@ namespace MarkMpn.Sql4Cds.Engine
             // Add sorts from ORDER BY
             node = ConvertOrderByClause(node, querySpec.OrderByClause);
 
-            // Add TOP
+            // Add TOP/OFFSET
+            if (querySpec.TopRowFilter != null && querySpec.OffsetClause != null)
+                throw new NotSupportedQueryFragmentException("A TOP can not be used in the same query or sub-query as a OFFSET.", querySpec.TopRowFilter);
+
             node = ConvertTopClause(node, querySpec.TopRowFilter);
+            node = ConvertOffsetClause(node, querySpec.OffsetClause);
 
             // Add SELECT
             node = ConvertSelectClause(querySpec.SelectElements, node);
 
             return node;
+        }
+
+        private IExecutionPlanNode ConvertOffsetClause(IExecutionPlanNode source, OffsetClause offsetClause)
+        {
+            if (offsetClause == null)
+                return source;
+
+            var offset = SqlTypeConverter.ChangeType<int>(offsetClause.OffsetExpression.GetValue(null));
+            var fetch = SqlTypeConverter.ChangeType<int>(offsetClause.FetchExpression.GetValue(null));
+
+            if (offset < 0)
+                throw new NotSupportedQueryFragmentException("The offset specified in a OFFSET clause may not be negative.", offsetClause.OffsetExpression);
+
+            if (fetch <= 0)
+                throw new NotSupportedQueryFragmentException("The number of rows provided for a FETCH clause must be greater then zero.", offsetClause.FetchExpression);
+
+            return new OffsetFetchNode
+            {
+                Source = source,
+                Offset = offset,
+                Fetch = fetch
+            };
         }
 
         private IExecutionPlanNode ConvertTopClause(IExecutionPlanNode source, TopRowFilter topRowFilter)
