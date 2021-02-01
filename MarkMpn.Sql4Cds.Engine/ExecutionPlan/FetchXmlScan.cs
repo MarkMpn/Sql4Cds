@@ -220,7 +220,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var attrMetadata = meta.Attributes.Single(a => a.LogicalName == attribute.name);
                     var attrType = GetAttributeType(attrMetadata);
 
-                    if (attribute.aggregateSpecified && (attribute.aggregate == AggregateType.count || attribute.aggregate == AggregateType.countcolumn))
+                    if (attribute.aggregateSpecified && (attribute.aggregate == Engine.FetchXml.AggregateType.count || attribute.aggregate == Engine.FetchXml.AggregateType.countcolumn))
                         attrType = typeof(int);
 
                     var attrName = attribute.alias ?? attribute.name;

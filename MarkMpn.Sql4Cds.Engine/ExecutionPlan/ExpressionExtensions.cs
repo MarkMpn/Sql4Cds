@@ -11,17 +11,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
     static class ExpressionExtensions
     {
-        public static object GetValue(this TSqlFragment expr, Entity entity)
+        public static object GetValue(this TSqlFragment expr, Entity entity, NodeSchema schema)
         {
-            var visitor = new ExpressionEvaluatorVisitor(entity);
+            var visitor = new ExpressionEvaluatorVisitor(entity, schema);
             expr.Accept(visitor);
 
             return visitor.Value;
         }
 
-        public static bool GetValue(this BooleanExpression expr, Entity entity)
+        public static bool GetValue(this BooleanExpression expr, Entity entity, NodeSchema schema)
         {
-            return (bool)GetValue((TSqlFragment)expr, entity);
+            return (bool)GetValue((TSqlFragment)expr, entity, schema);
+        }
+
+        public static Type GetType(this TSqlFragment expr, NodeSchema schema)
+        {
+            var visitor = new ExpressionEvaluatorVisitor(null, schema);
+            expr.Accept(visitor);
+
+            return visitor.Type;
         }
 
         public static BooleanExpression RemoveCondition(this BooleanExpression expr, BooleanExpression remove)

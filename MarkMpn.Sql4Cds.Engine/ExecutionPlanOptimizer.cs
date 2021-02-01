@@ -406,7 +406,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
 
                 // If we still couldn't find the column name and value, this isn't a pattern we can support in FetchXML
-                if (field == null || (literal == null && func == null && (field2 == null || !ColumnComparisonAvailable) && !IsConstantValueExpression(expr, out literal)))
+                if (field == null || (literal == null && func == null && (field2 == null || !ColumnComparisonAvailable) && !IsConstantValueExpression(expr, schema, out literal)))
                     return false;
 
                 // Select the correct FetchXML operator
@@ -506,7 +506,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
                 else if (func != null)
                 {
-                    if (IsConstantValueExpression(func, out literal))
+                    if (IsConstantValueExpression(func, schema, out literal))
                         value = literal.Value;
                     else
                         throw new PostProcessingRequiredException("Unsupported FetchXML function", func);
@@ -664,7 +664,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return false;
         }
 
-        private bool IsConstantValueExpression(ScalarExpression expr, out Literal literal)
+        private bool IsConstantValueExpression(ScalarExpression expr, NodeSchema schema, out Literal literal)
         {
             literal = null;
 
@@ -674,7 +674,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (visitor.Columns.Count > 0)
                 return false;
 
-            var value = expr.GetValue(null);
+            var value = expr.GetValue(null, schema);
 
             if (value is int i)
                 literal = new IntegerLiteral { Value = i.ToString() };

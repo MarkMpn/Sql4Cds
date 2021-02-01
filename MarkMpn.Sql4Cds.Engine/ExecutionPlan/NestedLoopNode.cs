@@ -22,6 +22,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var leftSchema = LeftSource.GetSchema(metadata);
             var rightSchema = RightSource.GetSchema(metadata);
+            var mergedSchema = GetSchema(metadata);
 
             foreach (var left in LeftSource.Execute(org, metadata, options))
             {
@@ -29,7 +30,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     var merged = Merge(left, leftSchema, right, rightSchema);
 
-                    if (JoinCondition == null || JoinCondition.GetValue(merged))
+                    if (JoinCondition == null || JoinCondition.GetValue(merged, mergedSchema))
                         yield return merged;
                 }
             }

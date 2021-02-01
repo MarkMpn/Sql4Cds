@@ -25,9 +25,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
+            var schema = Source.GetSchema(metadata);
+
             foreach (var entity in Source.Execute(org, metadata, options))
             {
-                if (Filter.GetValue(entity))
+                if (Filter.GetValue(entity, schema))
                     yield return entity;
             }
         }

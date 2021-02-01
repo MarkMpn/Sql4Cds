@@ -40,6 +40,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var rightSchema = RightSource.GetSchema(metadata);
             var left = LeftSource.Execute(org, metadata, options).GetEnumerator();
             var right = RightSource.Execute(org, metadata, options).GetEnumerator();
+            var mergedSchema = GetSchema(metadata);
 
             var hasLeft = left.MoveNext();
             var hasRight = right.MoveNext();
@@ -72,9 +73,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // Compare key values
                 var merged = Merge(hasLeft ? left.Current : null, leftSchema, hasRight ? right.Current : null, rightSchema);
 
-                var isLt = lt.GetValue(merged);
-                var isEq = eq.GetValue(merged);
-                var isGt = gt.GetValue(merged);
+                var isLt = lt.GetValue(merged, mergedSchema);
+                var isEq = eq.GetValue(merged, mergedSchema);
+                var isGt = gt.GetValue(merged, mergedSchema);
 
                 if (isLt || (hasLeft && !hasRight))
                 {
@@ -86,7 +87,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
                 else if (isEq)
                 {
-                    if (AdditionalJoinCriteria == null || AdditionalJoinCriteria.GetValue(merged) == true)
+                    if (AdditionalJoinCriteria == null || AdditionalJoinCriteria.GetValue(merged, mergedSchema) == true)
                         yield return merged;
 
                     leftMatched = true;

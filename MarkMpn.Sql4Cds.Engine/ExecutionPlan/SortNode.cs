@@ -26,19 +26,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
             var source = Source.Execute(org, metadata, options);
+            var schema = GetSchema(metadata);
             IOrderedEnumerable<Entity> sortedSource;
 
             if (Sorts[0].SortOrder == SortOrder.Descending)
-                sortedSource = source.OrderBy(e => Sorts[0].Expression.GetValue(e));
+                sortedSource = source.OrderBy(e => Sorts[0].Expression.GetValue(e, schema));
             else
-                sortedSource = source.OrderByDescending(e => Sorts[0].Expression.GetValue(e));
+                sortedSource = source.OrderByDescending(e => Sorts[0].Expression.GetValue(e, schema));
 
             for (var i = 1; i < Sorts.Count; i++)
             {
                 if (Sorts[i].SortOrder == SortOrder.Descending)
-                    sortedSource = sortedSource.ThenBy(e => Sorts[i].Expression.GetValue(e));
+                    sortedSource = sortedSource.ThenBy(e => Sorts[i].Expression.GetValue(e, schema));
                 else
-                    sortedSource = sortedSource.ThenByDescending(e => Sorts[i].Expression.GetValue(e));
+                    sortedSource = sortedSource.ThenByDescending(e => Sorts[i].Expression.GetValue(e, schema));
             }
 
             return sortedSource;

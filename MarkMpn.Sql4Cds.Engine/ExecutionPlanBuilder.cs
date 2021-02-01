@@ -6,12 +6,15 @@ using System.ServiceModel;
 using System.Text;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
+using MarkMpn.Sql4Cds.Engine.Visitors;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
     public class ExecutionPlanBuilder
     {
+        private int _colNameCounter;
+
         public ExecutionPlanBuilder(IAttributeMetadataCache metadata, bool quotedIdentifiers)
         {
             Metadata = metadata;
@@ -99,6 +102,7 @@ namespace MarkMpn.Sql4Cds.Engine
             node = ConvertWhereClause(node, querySpec.WhereClause);
 
             // Add aggregates from GROUP BY/SELECT/HAVING/ORDER BY
+            node = ConvertGroupByAggregates(node, querySpec);
 
             // Add filters from HAVING
 
@@ -118,13 +122,157 @@ namespace MarkMpn.Sql4Cds.Engine
             return node;
         }
 
+        private IExecutionPlanNode ConvertGroupByAggregates(IExecutionPlanNode source, QuerySpecification querySpec)
+        {
+            // Check if there is a GROUP BY clause or aggregate functions to convert
+            if (querySpec.GroupByClause == null)
+            {
+                var aggregates = new AggregateCollectingVisitor();
+                aggregates.GetAggregates(querySpec);
+                if (aggregates.SelectAggregates.Count == 0 && aggregates.Aggregates.Count == 0)
+                    return source;
+            }
+            else
+            {
+                if (querySpec.GroupByClause.All == true)
+                    throw new NotSupportedQueryFragmentException("Unhandled GROUP BY ALL clause", querySpec.GroupByClause);
+
+                if (querySpec.GroupByClause.GroupByOption != GroupByOption.None)
+                    throw new NotSupportedQueryFragmentException("Unhandled GROUP BY option", querySpec.GroupByClause);
+            }
+
+            // Create the grouping expressions. Grouping is done on single columns only - if a grouping is a more complex expression,
+            // create a new calculated column using a Compute Scalar node first.
+            var groupings = new Dictionary<ScalarExpression, ColumnReferenceExpression>();
+
+            if (querySpec.GroupByClause != null)
+            {
+                foreach (var grouping in querySpec.GroupByClause.GroupingSpecifications)
+                {
+                    if (!(grouping is ExpressionGroupingSpecification exprGroup))
+                        throw new NotSupportedQueryFragmentException("Unhandled GROUP BY expression", grouping);
+
+                    if (!(exprGroup.Expression is ColumnReferenceExpression col))
+                    {
+                        col = new ColumnReferenceExpression
+                        {
+                            MultiPartIdentifier = new MultiPartIdentifier
+                            {
+                                Identifiers =
+                                {
+                                    new Identifier { Value = $"Expr{++_colNameCounter}" }
+                                }
+                            }
+                        };
+                    }
+
+                    groupings[exprGroup.Expression] = col;
+                }
+            }
+
+            if (groupings.Any(kvp => kvp.Key != kvp.Value))
+            {
+                var computeScalar = new ComputeScalarNode { Source = source };
+                var rewrites = new Dictionary<ScalarExpression, string>();
+
+                foreach (var calc in groupings.Where(kvp => kvp.Key != kvp.Value))
+                {
+                    rewrites[calc.Key] = calc.Value.GetColumnName();
+                    computeScalar.Columns[calc.Value.GetColumnName()] = calc.Key;
+                }
+
+                source = computeScalar;
+
+                querySpec.Accept(new RewriteVisitor(rewrites));
+            }
+
+            var hashMatch = new HashMatchAggregateNode
+            {
+                Source = source
+            };
+
+            foreach (var grouping in groupings)
+                hashMatch.GroupBy.Add(grouping.Value);
+
+            // Create the aggregate functions
+            var aggregateCollector = new AggregateCollectingVisitor();
+            aggregateCollector.GetAggregates(querySpec);
+            var aggregateRewrites = new Dictionary<ScalarExpression, string>();
+
+            foreach (var aggregate in aggregateCollector.Aggregates.Concat(aggregateCollector.SelectAggregates.Select(s => (FunctionCall)s.Expression)))
+            {
+                var converted = new Aggregate
+                {
+                    Distinct = aggregate.UniqueRowFilter == UniqueRowFilter.Distinct
+                };
+
+                if (!(aggregate.Parameters[0] is ColumnReferenceExpression col) || col.ColumnType != ColumnType.Wildcard)
+                    converted.Expression = aggregate.Parameters[0];
+
+                switch (aggregate.FunctionName.Value.ToUpper())
+                {
+                    case "AVG":
+                        converted.AggregateType = AggregateType.Average;
+                        break;
+
+                    case "COUNT":
+                        if (converted.Expression == null)
+                            converted.AggregateType = AggregateType.CountStar;
+                        else
+                            converted.AggregateType = AggregateType.Count;
+                        break;
+
+                    case "MAX":
+                        converted.AggregateType = AggregateType.Max;
+                        break;
+
+                    case "MIN":
+                        converted.AggregateType = AggregateType.Min;
+                        break;
+
+                    case "SUM":
+                        converted.AggregateType = AggregateType.Sum;
+                        break;
+
+                    default:
+                        throw new NotSupportedQueryFragmentException("Unknown aggregate function", aggregate);
+                }
+
+                // Create a name for the column that holds the aggregate value in the result set.
+                string aggregateName;
+
+                if (aggregate.Parameters[0] is ColumnReferenceExpression colRef)
+                {
+                    if (colRef.ColumnType == ColumnType.Wildcard)
+                    {
+                        aggregateName = aggregate.FunctionName.Value.ToLower();
+                    }
+                    else
+                    {
+                        aggregateName = colRef.GetColumnName().Replace('.', '_') + "_" + aggregate.FunctionName.Value.ToLower();
+                    }
+                }
+                else
+                {
+                    aggregateName = $"Expr{++_colNameCounter}";
+                }
+
+                hashMatch.Aggregates[aggregateName] = converted;
+                aggregateRewrites[aggregate] = aggregateName;
+            }
+
+            querySpec.Accept(new RewriteVisitor(aggregateRewrites));
+            return hashMatch;
+        }
+
         private IExecutionPlanNode ConvertOffsetClause(IExecutionPlanNode source, OffsetClause offsetClause)
         {
             if (offsetClause == null)
                 return source;
 
-            var offset = SqlTypeConverter.ChangeType<int>(offsetClause.OffsetExpression.GetValue(null));
-            var fetch = SqlTypeConverter.ChangeType<int>(offsetClause.FetchExpression.GetValue(null));
+            var schema = source.GetSchema(Metadata);
+            var offset = SqlTypeConverter.ChangeType<int>(offsetClause.OffsetExpression.GetValue(null, schema));
+            var fetch = SqlTypeConverter.ChangeType<int>(offsetClause.FetchExpression.GetValue(null, schema));
 
             if (offset < 0)
                 throw new NotSupportedQueryFragmentException("The offset specified in a OFFSET clause may not be negative.", offsetClause.OffsetExpression);
@@ -150,7 +298,8 @@ namespace MarkMpn.Sql4Cds.Engine
             if (topRowFilter.Percent)
                 source = new TableSpoolNode { Source = source };
 
-            var topCount = topRowFilter.Expression.GetValue(null);
+            var schema = source.GetSchema(Metadata);
+            var topCount = topRowFilter.Expression.GetValue(null, schema);
 
             return new TopNode
             {

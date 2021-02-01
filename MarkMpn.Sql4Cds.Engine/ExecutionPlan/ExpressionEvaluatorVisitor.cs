@@ -9,61 +9,76 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     internal class ExpressionEvaluatorVisitor : TSqlConcreteFragmentVisitor
     {
         private readonly Entity _entity;
+        private readonly NodeSchema _schema;
 
-        public ExpressionEvaluatorVisitor(Entity entity)
+        public ExpressionEvaluatorVisitor(Entity entity, NodeSchema schema)
         {
             _entity = entity;
+            _schema = schema;
         }
 
         public object Value { get; private set; }
 
+        public Type Type { get; private set; }
+
         public override void ExplicitVisit(ColumnReferenceExpression node)
         {
-            var name = String.Join(".", node.MultiPartIdentifier.Identifiers.Select(id => id.Value));
+            var name = node.GetColumnName();
+
+            if (!_schema.ContainsColumn(name, out name))
+                return;
 
             _entity.Attributes.TryGetValue(name, out var value);
             Value = value;
+            Type = _schema.Schema[name];
         }
 
         public override void ExplicitVisit(IdentifierLiteral node)
         {
             Value = new Guid(node.Value);
+            Type = typeof(Guid);
         }
 
         public override void ExplicitVisit(IntegerLiteral node)
         {
             Value = Int32.Parse(node.Value);
+            Type = typeof(int);
         }
 
         public override void ExplicitVisit(MoneyLiteral node)
         {
             Value = Decimal.Parse(node.Value);
+            Type = typeof(decimal);
         }
 
         public override void ExplicitVisit(NullLiteral node)
         {
             Value = null;
+            Type = null;
         }
 
         public override void ExplicitVisit(NumericLiteral node)
         {
             Value = Decimal.Parse(node.Value);
+            Type = typeof(decimal);
         }
 
         public override void ExplicitVisit(RealLiteral node)
         {
             Value = Single.Parse(node.Value);
+            Type = typeof(float);
         }
 
         public override void ExplicitVisit(StringLiteral node)
         {
             Value = node.Value;
+            Type = typeof(string);
         }
 
         public override void ExplicitVisit(BooleanComparisonExpression node)
         {
-            var lhs = node.FirstExpression.GetValue(_entity);
-            var rhs = node.SecondExpression.GetValue(_entity);
+            var lhs = node.FirstExpression.GetValue(_entity, _schema);
+            var rhs = node.SecondExpression.GetValue(_entity, _schema);
 
             if (lhs == null || rhs == null)
             {

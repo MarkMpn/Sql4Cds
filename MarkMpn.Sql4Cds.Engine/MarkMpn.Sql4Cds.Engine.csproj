@@ -61,13 +61,16 @@
     <Compile Include="EntityExtensions.cs" />
     <Compile Include="ExecutionPlanBuilder.cs" />
     <Compile Include="ExecutionPlanOptimizer.cs" />
+    <Compile Include="ExecutionPlan\Aggregate.cs" />
     <Compile Include="ExecutionPlan\BaseJoinNode.cs" />
     <Compile Include="ExecutionPlan\BaseNode.cs" />
+    <Compile Include="ExecutionPlan\ComputeScalarNode.cs" />
     <Compile Include="ExecutionPlan\ConstantScanNode.cs" />
     <Compile Include="ExecutionPlan\ExpressionEvaluatorVisitor.cs" />
     <Compile Include="ExecutionPlan\ExpressionExtensions.cs" />
     <Compile Include="ExecutionPlan\FetchXmlScan.cs" />
     <Compile Include="ExecutionPlan\FilterNode.cs" />
+    <Compile Include="ExecutionPlan\HashMatchAggregateNode.cs" />
     <Compile Include="ExecutionPlan\IExecutionPlanNode.cs" />
     <Compile Include="ExecutionPlan\MergeJoinNode.cs" />
     <Compile Include="ExecutionPlan\NestedLoopNode.cs" />
