@@ -80,11 +80,11 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (entity.Items != null)
                     items.AddRange(entity.Items);
 
-                foreach (var col in columns.Where(c => c.StartsWith(fetchXmlNode.Alias + ".")).Select(c => c.Split('.')[1]))
+                foreach (var col in columns.Where(c => c.StartsWith(fetchXmlNode.Alias + ".")).Select(c => c.Split('.')[1]).Distinct())
                 {
                     if (col == "*")
                         items.Add(new allattributes());
-                    else
+                    else if (!items.OfType<FetchAttributeType>().Any(a => a.alias == col || (a.alias == null || a.name == col)))
                         items.Add(new FetchAttributeType { name = col });
                 }
 
@@ -316,8 +316,107 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
                 }
             }
+            else if (node is HashMatchAggregateNode aggregate)
+            {
+                aggregate.Source = MergeNodeDown(aggregate.Source);
+
+                if (aggregate.Source is FetchXmlScan fetchXml)
+                {
+                    // Check if all the aggregates & groupings can be done in FetchXML. Can only convert them if they can ALL
+                    // be handled - if any one needs to be calculated manually, we need to calculate them all
+                    foreach (var agg in aggregate.Aggregates)
+                    {
+                        if (agg.Value.Expression != null && !(agg.Value.Expression is ColumnReferenceExpression))
+                            return node;
+
+                        if (agg.Value.Distinct && agg.Value.AggregateType != ExecutionPlan.AggregateType.Count)
+                            return node;
+                    }
+
+                    fetchXml.FetchXml.aggregate = true;
+                    fetchXml.FetchXml.aggregateSpecified = true;
+                    fetchXml.FetchXml = fetchXml.FetchXml;
+
+                    var schema = aggregate.Source.GetSchema(Metadata);
+
+                    foreach (var grouping in aggregate.GroupBy)
+                    {
+                        var colName = grouping.GetColumnName();
+                        schema.ContainsColumn(colName, out colName);
+
+                        var attribute = AddAttribute(fetchXml, colName);
+                        attribute.groupby = FetchBoolType.@true;
+                        attribute.groupbySpecified = true;
+                        attribute.alias = attribute.name;
+                    }
+
+                    foreach (var agg in aggregate.Aggregates)
+                    {
+                        var col = (ColumnReferenceExpression)agg.Value.Expression;
+                        var colName = col == null ? schema.PrimaryKey : col.GetColumnName();
+                        schema.ContainsColumn(colName, out colName);
+
+                        var attribute = AddAttribute(fetchXml, colName);
+
+                        switch (agg.Value.AggregateType)
+                        {
+                            case ExecutionPlan.AggregateType.Average:
+                                attribute.aggregate = FetchXml.AggregateType.avg;
+                                break;
+
+                            case ExecutionPlan.AggregateType.Count:
+                                attribute.aggregate = FetchXml.AggregateType.countcolumn;
+                                break;
+
+                            case ExecutionPlan.AggregateType.CountStar:
+                                attribute.aggregate = FetchXml.AggregateType.count;
+                                break;
+
+                            case ExecutionPlan.AggregateType.Max:
+                                attribute.aggregate = FetchXml.AggregateType.max;
+                                break;
+
+                            case ExecutionPlan.AggregateType.Min:
+                                attribute.aggregate = FetchXml.AggregateType.min;
+                                break;
+
+                            case ExecutionPlan.AggregateType.Sum:
+                                attribute.aggregate = FetchXml.AggregateType.sum;
+                                break;
+                        }
+
+                        attribute.aggregateSpecified = true;
+                        attribute.alias = agg.Key;
+                    }
+
+                    return fetchXml;
+                }
+            }
 
             return node;
+        }
+
+        private FetchAttributeType AddAttribute(FetchXmlScan fetchXml, string colName)
+        {
+            var parts = colName.Split('.');
+            var entityName = parts[0];
+            var attr = new FetchAttributeType { name = parts[1] };
+
+            var entity = fetchXml.FetchXml.Items.OfType<FetchEntityType>().Single();
+
+            if (fetchXml.Alias == entityName)
+            {
+                entity.AddItem(attr);
+            }
+            else
+            {
+                var linkEntity = FindLinkEntity(entity.Items, entityName);
+                linkEntity.AddItem(attr);
+            }
+
+            fetchXml.FetchXml = fetchXml.FetchXml;
+
+            return attr;
         }
 
         private bool TranslateCriteria(BooleanExpression criteria, NodeSchema schema, string allowedPrefix, string targetEntityName, string targetEntityAlias, out filter filter)

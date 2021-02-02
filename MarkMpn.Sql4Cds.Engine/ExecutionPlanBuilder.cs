@@ -141,6 +141,8 @@ namespace MarkMpn.Sql4Cds.Engine
                     throw new NotSupportedQueryFragmentException("Unhandled GROUP BY option", querySpec.GroupByClause);
             }
 
+            var schema = source.GetSchema(Metadata);
+
             // Create the grouping expressions. Grouping is done on single columns only - if a grouping is a more complex expression,
             // create a new calculated column using a Compute Scalar node first.
             var groupings = new Dictionary<ScalarExpression, ColumnReferenceExpression>();
