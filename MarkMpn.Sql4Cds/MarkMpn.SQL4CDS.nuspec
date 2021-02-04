@@ -28,7 +28,7 @@ Show settings option in main Configuration menu</releaseNotes>
     <language>en-GB</language>
     <tags>XrmToolBox SQL CDS</tags>
     <dependencies>
-      <dependency id="XrmToolBox" version="1.2018.1.20" />
+      <dependency id="XrmToolBox" version="1.2020.12.43" />
     </dependencies>
   </metadata>
   <files>
