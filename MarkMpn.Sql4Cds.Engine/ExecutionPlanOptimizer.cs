@@ -84,7 +84,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     if (col == "*")
                         items.Add(new allattributes());
-                    else if (!items.OfType<FetchAttributeType>().Any(a => a.alias == col || (a.alias == null || a.name == col)))
+                    else if (!items.OfType<FetchAttributeType>().Any(a => a.alias == col || (a.alias == null && a.name == col)))
                         items.Add(new FetchAttributeType { name = col });
                 }
 
@@ -118,6 +118,32 @@ namespace MarkMpn.Sql4Cds.Engine
             if (node is SelectNode select)
             {
                 select.Source = MergeNodeDown(select.Source);
+
+                if (select.Source is FetchXmlScan fetchXml)
+                {
+                    // Check if there are any aliases we can apply to the source FetchXml
+                    var schema = fetchXml.GetSchema(Metadata);
+
+                    foreach (var col in select.ColumnSet)
+                    {
+                        var sourceCol = col.SourceColumn;
+                        schema.ContainsColumn(sourceCol, out sourceCol);
+                        var attr = AddAttribute(fetchXml, sourceCol, null, out var added);
+
+                        if (col.SourceColumn != col.OutputColumn)
+                        {
+                            if (added)
+                            {
+                                attr.alias = col.OutputColumn;
+                                col.SourceColumn = col.OutputColumn;
+                            }
+                            else
+                            {
+                                col.SourceColumn = attr.alias ?? (sourceCol.Split('.')[0] + "." + attr.name);
+                            }
+                        }
+                    }
+                }
             }
             else if (node is MergeJoinNode mergeJoin && (mergeJoin.JoinType == QualifiedJoinType.Inner || mergeJoin.JoinType == QualifiedJoinType.LeftOuter))
             {
@@ -344,7 +370,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         var colName = grouping.GetColumnName();
                         schema.ContainsColumn(colName, out colName);
 
-                        var attribute = AddAttribute(fetchXml, colName);
+                        var attribute = AddAttribute(fetchXml, colName, a => a.groupby == FetchBoolType.@true && a.alias == a.name, out _);
                         attribute.groupby = FetchBoolType.@true;
                         attribute.groupbySpecified = true;
                         attribute.alias = attribute.name;
@@ -356,34 +382,39 @@ namespace MarkMpn.Sql4Cds.Engine
                         var colName = col == null ? schema.PrimaryKey : col.GetColumnName();
                         schema.ContainsColumn(colName, out colName);
 
-                        var attribute = AddAttribute(fetchXml, colName);
+                        FetchXml.AggregateType aggregateType;
 
                         switch (agg.Value.AggregateType)
                         {
                             case ExecutionPlan.AggregateType.Average:
-                                attribute.aggregate = FetchXml.AggregateType.avg;
+                                aggregateType = FetchXml.AggregateType.avg;
                                 break;
 
                             case ExecutionPlan.AggregateType.Count:
-                                attribute.aggregate = FetchXml.AggregateType.countcolumn;
+                                aggregateType = FetchXml.AggregateType.countcolumn;
                                 break;
 
                             case ExecutionPlan.AggregateType.CountStar:
-                                attribute.aggregate = FetchXml.AggregateType.count;
+                                aggregateType = FetchXml.AggregateType.count;
                                 break;
 
                             case ExecutionPlan.AggregateType.Max:
-                                attribute.aggregate = FetchXml.AggregateType.max;
+                                aggregateType = FetchXml.AggregateType.max;
                                 break;
 
                             case ExecutionPlan.AggregateType.Min:
-                                attribute.aggregate = FetchXml.AggregateType.min;
+                                aggregateType = FetchXml.AggregateType.min;
                                 break;
 
                             case ExecutionPlan.AggregateType.Sum:
-                                attribute.aggregate = FetchXml.AggregateType.sum;
+                                aggregateType = FetchXml.AggregateType.sum;
                                 break;
+
+                            default:
+                                throw new ArgumentOutOfRangeException();
                         }
+
+                        var attribute = AddAttribute(fetchXml, colName, a => a.aggregate == aggregateType && a.alias == agg.Key, out _);
 
                         attribute.aggregateSpecified = true;
                         attribute.alias = agg.Key;
@@ -396,7 +427,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return node;
         }
 
-        private FetchAttributeType AddAttribute(FetchXmlScan fetchXml, string colName)
+        private FetchAttributeType AddAttribute(FetchXmlScan fetchXml, string colName, Func<FetchAttributeType,bool> predicate, out bool added)
         {
             var parts = colName.Split('.');
             var entityName = parts[0];
@@ -406,16 +437,38 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (fetchXml.Alias == entityName)
             {
+                if (entity.Items != null)
+                {
+                    var existing = entity.Items.OfType<FetchAttributeType>().FirstOrDefault(a => a.name == attr.name);
+                    if (existing != null && (predicate == null || predicate(existing)))
+                    {
+                        added = false;
+                        return existing;
+                    }
+                }
+
                 entity.AddItem(attr);
             }
             else
             {
                 var linkEntity = FindLinkEntity(entity.Items, entityName);
+
+                if (linkEntity.Items != null)
+                {
+                    var existing = linkEntity.Items.OfType<FetchAttributeType>().FirstOrDefault(a => a.name == attr.name);
+                    if (existing != null && (predicate == null || predicate(existing)))
+                    {
+                        added = false;
+                        return existing;
+                    }
+                }
+
                 linkEntity.AddItem(attr);
             }
 
             fetchXml.FetchXml = fetchXml.FetchXml;
 
+            added = true;
             return attr;
         }
 
