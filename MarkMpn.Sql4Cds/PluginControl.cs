@@ -14,7 +14,7 @@ using XrmToolBox.Extensibility.Interfaces;
 
 namespace MarkMpn.Sql4Cds
 {
-    public partial class PluginControl : MultipleConnectionsPluginControlBase, IMessageBusHost, IGitHubPlugin, IHelpPlugin
+    public partial class PluginControl : MultipleConnectionsPluginControlBase, IMessageBusHost, IGitHubPlugin, IHelpPlugin, ISettingsPlugin
     {
         private readonly IDictionary<ConnectionDetail, AttributeMetadataCache> _metadata;
         private readonly TelemetryClient _ai;
@@ -128,11 +128,7 @@ namespace MarkMpn.Sql4Cds
 
         private void tsbSettings_Click(object sender, EventArgs e)
         {
-            using (var form = new SettingsForm(Settings.Instance))
-            {
-                if (form.ShowDialog(this) == DialogResult.OK)
-                    SettingsManager.Instance.Save(GetType(), Settings.Instance);
-            }
+            ShowSettings();
         }
 
         private void tslAboutLink_Click(object sender, EventArgs e)
@@ -291,6 +287,15 @@ namespace MarkMpn.Sql4Cds
         {
             Settings.Instance.IncludeFetchXml = tsbIncludeFetchXml.Checked;
             SettingsManager.Instance.Save(GetType(), Settings.Instance);
+        }
+
+        public void ShowSettings()
+        {
+            using (var form = new SettingsForm(Settings.Instance))
+            {
+                if (form.ShowDialog(this) == DialogResult.OK)
+                    SettingsManager.Instance.Save(GetType(), Settings.Instance);
+            }
         }
     }
 }

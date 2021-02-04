@@ -286,20 +286,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             foreach (var entity in res.Entities)
             {
-                // Expose any formatted values for OptionSetValue and EntityReference values
-                foreach (var formatted in entity.FormattedValues)
-                {
-                    if (!entity.Contains(formatted.Key + "name"))
-                        entity[formatted.Key + "name"] = formatted.Value;
-                }
-
-                // Expose the type of lookup values
-                foreach (var attribute in entity.Attributes.Where(attr => attr.Value is EntityReference).ToList())
-                {
-                    if (!entity.Contains(attribute.Key + "type"))
-                        entity[attribute.Key + "type"] = ((EntityReference)attribute.Value).LogicalName;
-                }
-
+                OnRetrievedEntity(entity);
                 yield return entity;
             }
 
@@ -330,10 +317,30 @@ namespace MarkMpn.Sql4Cds.Engine
                 var nextPage = org.RetrieveMultiple(new FetchExpression(Serialize(FetchXml)));
 
                 foreach (var entity in nextPage.Entities)
+                {
+                    OnRetrievedEntity(entity);
                     yield return entity;
+                }
 
                 count += nextPage.Entities.Count;
                 res = nextPage;
+            }
+        }
+
+        private void OnRetrievedEntity(Entity entity)
+        {
+            // Expose any formatted values for OptionSetValue and EntityReference values
+            foreach (var formatted in entity.FormattedValues)
+            {
+                if (!entity.Contains(formatted.Key + "name"))
+                    entity[formatted.Key + "name"] = formatted.Value;
+            }
+
+            // Expose the type of lookup values
+            foreach (var attribute in entity.Attributes.Where(attr => attr.Value is EntityReference).ToList())
+            {
+                if (!entity.Contains(attribute.Key + "type"))
+                    entity[attribute.Key + "type"] = ((EntityReference)attribute.Value).LogicalName;
             }
         }
 
