@@ -123,6 +123,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     // Check if there are any aliases we can apply to the source FetchXml
                     var schema = fetchXml.GetSchema(Metadata);
+                    var processedSourceColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
                     foreach (var col in select.ColumnSet)
                     {
@@ -132,7 +133,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                         if (col.SourceColumn != col.OutputColumn)
                         {
-                            if (added)
+                            if (added || (!processedSourceColumns.Contains(col.SourceColumn) && !IsAliasReferenced(fetchXml, attr.alias)))
                             {
                                 attr.alias = col.OutputColumn;
                                 col.SourceColumn = col.OutputColumn;
@@ -142,6 +143,8 @@ namespace MarkMpn.Sql4Cds.Engine
                                 col.SourceColumn = attr.alias ?? (sourceCol.Split('.')[0] + "." + attr.name);
                             }
                         }
+
+                        processedSourceColumns.Add(col.SourceColumn);
                     }
                 }
             }
@@ -425,6 +428,42 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             return node;
+        }
+
+        private bool IsAliasReferenced(FetchXmlScan fetchXml, string alias)
+        {
+            var entity = fetchXml.FetchXml.Items.OfType<FetchEntityType>().Single();
+            return IsAliasReferenced(entity.Items, alias);
+        }
+
+        private bool IsAliasReferenced(object[] items, string alias)
+        {
+            if (items == null)
+                return false;
+
+            var hasSort = items.OfType<FetchOrderType>().Any(sort => sort.alias.Equals(alias, StringComparison.OrdinalIgnoreCase));
+
+            if (hasSort)
+                return true;
+
+            var hasCondition = items.OfType<condition>().Any(condition => condition.alias.Equals(alias, StringComparison.OrdinalIgnoreCase));
+
+            if (hasCondition)
+                return true;
+
+            foreach (var filter in items.OfType<filter>())
+            {
+                if (IsAliasReferenced(filter.Items, alias))
+                    return true;
+            }
+
+            foreach (var linkEntity in items.OfType<FetchLinkEntityType>())
+            {
+                if (IsAliasReferenced(linkEntity.Items, alias))
+                    return true;
+            }
+
+            return false;
         }
 
         private FetchAttributeType AddAttribute(FetchXmlScan fetchXml, string colName, Func<FetchAttributeType,bool> predicate, out bool added)
