@@ -205,7 +205,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                 ["day"] = FetchXml.DateGroupingType.day,
                                 ["dd"] = FetchXml.DateGroupingType.day,
                                 ["d"] = FetchXml.DateGroupingType.day,
-                                ["weekk"] = FetchXml.DateGroupingType.week,
+                                ["week"] = FetchXml.DateGroupingType.week,
                                 ["wk"] = FetchXml.DateGroupingType.week,
                                 ["ww"] = FetchXml.DateGroupingType.week
                             };

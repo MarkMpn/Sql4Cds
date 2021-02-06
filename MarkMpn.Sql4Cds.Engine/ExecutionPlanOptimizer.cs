@@ -349,7 +349,7 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 aggregate.Source = MergeNodeDown(aggregate.Source);
 
-                if (aggregate.Source is FetchXmlScan fetchXml)
+                if (aggregate.Source is FetchXmlScan || aggregate.Source is ComputeScalarNode computeScalar && computeScalar.Source is FetchXmlScan)
                 {
                     // Check if all the aggregates & groupings can be done in FetchXML. Can only convert them if they can ALL
                     // be handled - if any one needs to be calculated manually, we need to calculate them all
@@ -362,6 +362,51 @@ namespace MarkMpn.Sql4Cds.Engine
                             return node;
                     }
 
+                    var fetchXml = aggregate.Source as FetchXmlScan;
+                    computeScalar = aggregate.Source as ComputeScalarNode;
+
+                    var partnames = new Dictionary<string, FetchXml.DateGroupingType>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["year"] = DateGroupingType.year,
+                        ["yy"] = DateGroupingType.year,
+                        ["yyyy"] = DateGroupingType.year,
+                        ["quarter"] = DateGroupingType.quarter,
+                        ["qq"] = DateGroupingType.quarter,
+                        ["q"] = DateGroupingType.quarter,
+                        ["month"] = DateGroupingType.month,
+                        ["mm"] = DateGroupingType.month,
+                        ["m"] = DateGroupingType.month,
+                        ["day"] = DateGroupingType.day,
+                        ["dd"] = DateGroupingType.day,
+                        ["d"] = DateGroupingType.day,
+                        ["week"] = DateGroupingType.week,
+                        ["wk"] = DateGroupingType.week,
+                        ["ww"] = DateGroupingType.week
+                    };
+
+                    if (computeScalar != null)
+                    {
+                        fetchXml = (FetchXmlScan)computeScalar.Source;
+
+                        // Groupings may be on DATEPART function, which will have been split into separate Compute Scalar node. Check if all the scalar values
+                        // being computed are DATEPART functions that can be converted to FetchXML and are used as groupings
+                        foreach (var scalar in computeScalar.Columns)
+                        {
+                            if (!(scalar.Value is FunctionCall func) ||
+                                !func.FunctionName.Value.Equals("DATEPART", StringComparison.OrdinalIgnoreCase) ||
+                                func.Parameters.Count != 2 ||
+                                !(func.Parameters[0] is ColumnReferenceExpression datePartType) ||
+                                !(func.Parameters[1] is ColumnReferenceExpression datePartCol))
+                                return node;
+
+                            if (!aggregate.GroupBy.Any(g => g.MultiPartIdentifier.Identifiers.Count == 1 && g.MultiPartIdentifier.Identifiers[0].Value == scalar.Key))
+                                return node;
+
+                            if (!partnames.ContainsKey(datePartType.GetColumnName()))
+                                return node;
+                        }
+                    }
+
                     fetchXml.FetchXml.aggregate = true;
                     fetchXml.FetchXml.aggregateSpecified = true;
                     fetchXml.FetchXml = fetchXml.FetchXml;
@@ -371,12 +416,27 @@ namespace MarkMpn.Sql4Cds.Engine
                     foreach (var grouping in aggregate.GroupBy)
                     {
                         var colName = grouping.GetColumnName();
+                        var alias = colName;
+                        DateGroupingType? dateGrouping = null;
+
+                        if (computeScalar != null && computeScalar.Columns.TryGetValue(colName, out var datePart))
+                        {
+                            dateGrouping = partnames[((ColumnReferenceExpression)((FunctionCall)datePart).Parameters[0]).GetColumnName()];
+                            colName = ((ColumnReferenceExpression)((FunctionCall)datePart).Parameters[1]).GetColumnName();
+                        }
+
                         schema.ContainsColumn(colName, out colName);
 
-                        var attribute = AddAttribute(fetchXml, colName, a => a.groupby == FetchBoolType.@true && a.alias == a.name, out _);
+                        var attribute = AddAttribute(fetchXml, colName, a => a.groupby == FetchBoolType.@true && a.alias == alias, out _);
                         attribute.groupby = FetchBoolType.@true;
                         attribute.groupbySpecified = true;
-                        attribute.alias = attribute.name;
+                        attribute.alias = alias;
+
+                        if (dateGrouping != null)
+                        {
+                            attribute.dategrouping = dateGrouping.Value;
+                            attribute.dategroupingSpecified = true;
+                        }
                     }
 
                     foreach (var agg in aggregate.Aggregates)
