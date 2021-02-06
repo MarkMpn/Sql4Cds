@@ -28,8 +28,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!_schema.ContainsColumn(name, out name))
                 return;
 
-            _entity.Attributes.TryGetValue(name, out var value);
-            Value = value;
+            if (_entity != null)
+            {
+                _entity.Attributes.TryGetValue(name, out var value);
+                Value = value;
+            }
+
             Type = _schema.Schema[name];
         }
 

@@ -429,11 +429,17 @@ namespace MarkMpn.Sql4Cds.Engine
 
         private FetchAttributeType AddAttribute(FetchXmlScan fetchXml, string colName, Func<FetchAttributeType,bool> predicate, out bool added)
         {
+            var entity = fetchXml.FetchXml.Items.OfType<FetchEntityType>().Single();
             var parts = colName.Split('.');
+
+            if (parts.Length == 1)
+            {
+                added = false;
+                return FindAliasedAttribute(entity.Items, colName, predicate);
+            }
+
             var entityName = parts[0];
             var attr = new FetchAttributeType { name = parts[1] };
-
-            var entity = fetchXml.FetchXml.Items.OfType<FetchEntityType>().Single();
 
             if (fetchXml.Alias == entityName)
             {
@@ -470,6 +476,29 @@ namespace MarkMpn.Sql4Cds.Engine
 
             added = true;
             return attr;
+        }
+
+        private FetchAttributeType FindAliasedAttribute(object[] items, string colName, Func<FetchAttributeType, bool> predicate)
+        {
+            if (items == null)
+                return null;
+
+            var match = items.OfType<FetchAttributeType>()
+                .Where(a => a.alias == colName && (predicate == null || predicate(a)))
+                .FirstOrDefault();
+
+            if (match != null)
+                return match;
+
+            foreach (var linkEntity in items.OfType<FetchLinkEntityType>())
+            {
+                match = FindAliasedAttribute(linkEntity.Items, colName, predicate);
+
+                if (match != null)
+                    return match;
+            }
+
+            return null;
         }
 
         private bool TranslateCriteria(BooleanExpression criteria, NodeSchema schema, string allowedPrefix, string targetEntityName, string targetEntityAlias, out filter filter)

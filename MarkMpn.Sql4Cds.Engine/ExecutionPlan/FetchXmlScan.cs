@@ -213,7 +213,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     simpleColumnNameAliases.Add(fullName);
                 }
             }
-            else
+
+            if (items != null)
             {
                 foreach (var attribute in items.OfType<FetchAttributeType>())
                 {
@@ -224,7 +225,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         attrType = typeof(int);
 
                     var attrName = attribute.alias ?? attribute.name;
-                    var fullName = $"{alias}.{attrName}";
+                    var fullName = attribute.alias != null ? attribute.alias : $"{alias}.{attribute.name}";
 
                     schema.Schema[fullName] = attrType;
 
@@ -234,12 +235,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         schema.Aliases[attrName] = simpleColumnNameAliases;
                     }
 
-                    simpleColumnNameAliases.Add(fullName);
+                    if (!simpleColumnNameAliases.Contains(fullName))
+                        simpleColumnNameAliases.Add(fullName);
                 }
-            }
 
-            if (items != null)
-            {
                 foreach (var linkEntity in items.OfType<FetchLinkEntityType>())
                 {
                     if (schema.PrimaryKey != null)

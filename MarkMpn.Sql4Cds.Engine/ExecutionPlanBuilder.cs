@@ -169,13 +169,72 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     if (!(exprGroup.Expression is ColumnReferenceExpression col))
                     {
+                        // Use generic name for computed columns by default. Special case for DATEPART functions which
+                        // could be folded down to FetchXML directly, so make these nicer names
+                        string name = null;
+
+                        if (exprGroup.Expression is FunctionCall func &&
+                            func.FunctionName.Value.Equals("DATEPART", StringComparison.OrdinalIgnoreCase) &&
+                            func.Parameters.Count == 2 &&
+                            func.Parameters[0] is ColumnReferenceExpression datepart &&
+                            func.Parameters[1] is ColumnReferenceExpression datepartCol)
+                        {
+                            var partName = datepart.GetColumnName();
+
+                            // Not all DATEPART part types are supported in FetchXML. The supported ones in FetchXML are:
+                            // * day
+                            // * week
+                            // * month
+                            // * quarter
+                            // * year
+                            // * fiscal period
+                            // * fiscal year
+                            //
+                            // Fiscal period/year do not have a T-SQL equivalent
+                            var partnames = new Dictionary<string, FetchXml.DateGroupingType>(StringComparer.OrdinalIgnoreCase)
+                            {
+                                ["year"] = FetchXml.DateGroupingType.year,
+                                ["yy"] = FetchXml.DateGroupingType.year,
+                                ["yyyy"] = FetchXml.DateGroupingType.year,
+                                ["quarter"] = FetchXml.DateGroupingType.quarter,
+                                ["qq"] = FetchXml.DateGroupingType.quarter,
+                                ["q"] = FetchXml.DateGroupingType.quarter,
+                                ["month"] = FetchXml.DateGroupingType.month,
+                                ["mm"] = FetchXml.DateGroupingType.month,
+                                ["m"] = FetchXml.DateGroupingType.month,
+                                ["day"] = FetchXml.DateGroupingType.day,
+                                ["dd"] = FetchXml.DateGroupingType.day,
+                                ["d"] = FetchXml.DateGroupingType.day,
+                                ["weekk"] = FetchXml.DateGroupingType.week,
+                                ["wk"] = FetchXml.DateGroupingType.week,
+                                ["ww"] = FetchXml.DateGroupingType.week
+                            };
+
+                            if (partnames.TryGetValue(partName, out var dateGrouping))
+                            {
+                                var colName = datepartCol.GetColumnName();
+                                schema.ContainsColumn(colName, out colName);
+
+                                name = colName.Split('.').Last() + "_" + dateGrouping;
+                                var baseName = name;
+
+                                var suffix = 0;
+
+                                while (groupings.Values.Any(grp => grp.GetColumnName().Equals(name, StringComparison.OrdinalIgnoreCase)))
+                                    name = $"{baseName}_{++suffix}";
+                            }
+                        }
+
+                        if (name == null)
+                            name = $"Expr{++_colNameCounter}";
+
                         col = new ColumnReferenceExpression
                         {
                             MultiPartIdentifier = new MultiPartIdentifier
                             {
                                 Identifiers =
                                 {
-                                    new Identifier { Value = $"Expr{++_colNameCounter}" }
+                                    new Identifier { Value = name }
                                 }
                             }
                         };
@@ -214,17 +273,17 @@ namespace MarkMpn.Sql4Cds.Engine
             aggregateCollector.GetAggregates(querySpec);
             var aggregateRewrites = new Dictionary<ScalarExpression, string>();
 
-            foreach (var aggregate in aggregateCollector.Aggregates.Concat(aggregateCollector.SelectAggregates.Select(s => (FunctionCall)s.Expression)))
+            foreach (var aggregate in aggregateCollector.Aggregates.Select(a => new { Expression = a, Alias = (string)null }).Concat(aggregateCollector.SelectAggregates.Select(s => new { Expression = (FunctionCall)s.Expression, Alias = s.ColumnName?.Identifier?.Value })))
             {
                 var converted = new Aggregate
                 {
-                    Distinct = aggregate.UniqueRowFilter == UniqueRowFilter.Distinct
+                    Distinct = aggregate.Expression.UniqueRowFilter == UniqueRowFilter.Distinct
                 };
 
-                if (!(aggregate.Parameters[0] is ColumnReferenceExpression col) || col.ColumnType != ColumnType.Wildcard)
-                    converted.Expression = aggregate.Parameters[0];
+                if (!(aggregate.Expression.Parameters[0] is ColumnReferenceExpression col) || col.ColumnType != ColumnType.Wildcard)
+                    converted.Expression = aggregate.Expression.Parameters[0];
 
-                switch (aggregate.FunctionName.Value.ToUpper())
+                switch (aggregate.Expression.FunctionName.Value.ToUpper())
                 {
                     case "AVG":
                         converted.AggregateType = AggregateType.Average;
@@ -250,21 +309,25 @@ namespace MarkMpn.Sql4Cds.Engine
                         break;
 
                     default:
-                        throw new NotSupportedQueryFragmentException("Unknown aggregate function", aggregate);
+                        throw new NotSupportedQueryFragmentException("Unknown aggregate function", aggregate.Expression);
                 }
 
                 // Create a name for the column that holds the aggregate value in the result set.
                 string aggregateName;
 
-                if (aggregate.Parameters[0] is ColumnReferenceExpression colRef)
+                if (aggregate.Alias != null)
+                {
+                    aggregateName = aggregate.Alias;
+                }
+                else if (aggregate.Expression.Parameters[0] is ColumnReferenceExpression colRef)
                 {
                     if (colRef.ColumnType == ColumnType.Wildcard)
                     {
-                        aggregateName = aggregate.FunctionName.Value.ToLower();
+                        aggregateName = aggregate.Expression.FunctionName.Value.ToLower();
                     }
                     else
                     {
-                        aggregateName = colRef.GetColumnName().Replace('.', '_') + "_" + aggregate.FunctionName.Value.ToLower();
+                        aggregateName = colRef.GetColumnName().Replace('.', '_') + "_" + aggregate.Expression.FunctionName.Value.ToLower();
                     }
                 }
                 else
@@ -273,7 +336,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
 
                 hashMatch.Aggregates[aggregateName] = converted;
-                aggregateRewrites[aggregate] = aggregateName;
+                aggregateRewrites[aggregate.Expression] = aggregateName;
             }
 
             querySpec.Accept(new RewriteVisitor(aggregateRewrites));

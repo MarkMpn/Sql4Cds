@@ -321,6 +321,39 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void AliasedAggregate()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, true);
+
+            var query = @"
+                SELECT
+                    name,
+                    count(*) AS test
+                FROM
+                    account
+                GROUP BY name";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch aggregate='true'>
+                    <entity name='account'>
+                        <attribute name='name' groupby='true' alias='name' />
+                        <attribute name='accountid' aggregate='count' alias='test' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
         public void SimpleAlias()
         {
             var context = new XrmFakedContext();
@@ -387,6 +420,39 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 <fetch aggregate='true'>
                     <entity name='account'>
                         <attribute name='name' groupby='true' alias='name' />
+                        <attribute name='accountid' aggregate='count' alias='count' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void GroupByDatePart()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, true);
+
+            var query = @"
+                SELECT
+                    DATEPART(month, createdon),
+                    count(*)
+                FROM
+                    account
+                GROUP BY DATEPART(month, createdon)";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch aggregate='true'>
+                    <entity name='account'>
+                        <attribute name='createdon' groupby='true' alias='createdon_month' dategrouping='month' />
                         <attribute name='accountid' aggregate='count' alias='count' />
                     </entity>
                 </fetch>");
