@@ -261,7 +261,7 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 filter.Source = MergeNodeDown(filter.Source);
 
-                if (filter.Source is FetchXmlScan fetchXml)
+                if (filter.Source is FetchXmlScan fetchXml && !fetchXml.FetchXml.aggregate)
                 {
                     if (TranslateCriteria(filter.Filter, fetchXml.GetSchema(Metadata), null, fetchXml.Entity.name, fetchXml.Alias, out var fetchFilter))
                     {

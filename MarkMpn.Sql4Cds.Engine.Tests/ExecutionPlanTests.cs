@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using System.Xml.Serialization;
 using FakeXrmEasy;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Microsoft.Xrm.Sdk.Metadata;
 
@@ -342,6 +343,51 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     <entity name='account'>
                         <attribute name='accountid' />
                         <attribute name='name' alias='test' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void SimpleHaving()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, true);
+
+            var query = @"
+                SELECT
+                    name,
+                    count(*)
+                FROM
+                    account
+                GROUP BY name
+                HAVING
+                    count(*) > 1";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var filter = AssertNode<FilterNode>(select.Source);
+            Assert.IsInstanceOfType(filter.Filter, typeof(BooleanComparisonExpression));
+            var gt = (BooleanComparisonExpression)filter.Filter;
+            Assert.IsInstanceOfType(gt.FirstExpression, typeof(ColumnReferenceExpression));
+            var col = (ColumnReferenceExpression)gt.FirstExpression;
+            Assert.AreEqual("count", col.MultiPartIdentifier.Identifiers.Single().Value);
+            Assert.AreEqual(BooleanComparisonType.GreaterThan, gt.ComparisonType);
+            Assert.IsInstanceOfType(gt.SecondExpression, typeof(IntegerLiteral));
+            var val = (IntegerLiteral)gt.SecondExpression;
+            Assert.AreEqual("1", val.Value);
+            var fetch = AssertNode<FetchXmlScan>(filter.Source);
+            AssertFetchXml(fetch, @"
+                <fetch aggregate='true'>
+                    <entity name='account'>
+                        <attribute name='name' groupby='true' alias='name' />
+                        <attribute name='accountid' aggregate='count' alias='count' />
                     </entity>
                 </fetch>");
         }

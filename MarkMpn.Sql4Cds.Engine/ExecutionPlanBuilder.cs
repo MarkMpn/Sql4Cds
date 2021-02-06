@@ -105,6 +105,7 @@ namespace MarkMpn.Sql4Cds.Engine
             node = ConvertGroupByAggregates(node, querySpec);
 
             // Add filters from HAVING
+            node = ConvertHavingClause(node, querySpec.HavingClause);
 
             // Add sorts from ORDER BY
             node = ConvertOrderByClause(node, querySpec.OrderByClause);
@@ -120,6 +121,18 @@ namespace MarkMpn.Sql4Cds.Engine
             node = ConvertSelectClause(querySpec.SelectElements, node);
 
             return node;
+        }
+
+        private IExecutionPlanNode ConvertHavingClause(IExecutionPlanNode source, HavingClause havingClause)
+        {
+            if (havingClause == null)
+                return source;
+
+            return new FilterNode
+            {
+                Filter = havingClause.SearchCondition,
+                Source = source
+            };
         }
 
         private IExecutionPlanNode ConvertGroupByAggregates(IExecutionPlanNode source, QuerySpecification querySpec)
