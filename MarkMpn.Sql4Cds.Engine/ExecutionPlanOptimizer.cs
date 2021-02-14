@@ -76,25 +76,29 @@ namespace MarkMpn.Sql4Cds.Engine
                 // Add columns to FetchXml
                 var entity = fetchXmlNode.FetchXml.Items.OfType<FetchEntityType>().Single();
 
-                var items = new List<object>();
-                if (entity.Items != null)
-                    items.AddRange(entity.Items);
-
-                foreach (var col in columns.Where(c => c.StartsWith(fetchXmlNode.Alias + ".")).Select(c => c.Split('.')[1]).Distinct())
+                foreach (var col in columns)
                 {
-                    if (col == "*")
-                        items.Add(new allattributes());
-                    else if (!items.OfType<FetchAttributeType>().Any(a => a.alias == col || (a.alias == null && a.name == col)))
-                        items.Add(new FetchAttributeType { name = col });
-                }
+                    var parts = col.Split('.');
 
-                if (items.OfType<allattributes>().Any())
-                {
-                    items.Clear();
-                    items.Add(new allattributes());
-                }
+                    if (parts.Length != 2)
+                        continue;
 
-                entity.Items = items.ToArray();
+                    var attr = parts[1] == "*" ? (object) new allattributes() : new FetchAttributeType { name = parts[1] };
+
+                    if (fetchXmlNode.Alias.Equals(parts[0], StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (entity.Items == null || !entity.Items.OfType<FetchAttributeType>().Any(a => (a.alias ?? a.name) == parts[1]))
+                            entity.AddItem(attr);
+                    }
+                    else
+                    {
+                        var linkEntity = FindLinkEntity(entity.Items, parts[0]);
+
+                        if (linkEntity != null && (linkEntity.Items == null || !linkEntity.Items.OfType<FetchAttributeType>().Any(a => (a.alias ?? a.name) == parts[1])))
+                            linkEntity.AddItem(attr);
+                    }
+                }
+                
                 fetchXmlNode.FetchXml = fetchXmlNode.FetchXml;
             }
 
@@ -104,9 +108,17 @@ namespace MarkMpn.Sql4Cds.Engine
             foreach (var col in node.GetRequiredColumns())
             {
                 if (schema.Aliases.TryGetValue(col, out var aliasedCols))
-                    sourceRequiredColumns.AddRange(aliasedCols);
-                else
+                {
+                    foreach (var aliasedCol in aliasedCols)
+                    {
+                        if (!sourceRequiredColumns.Contains(aliasedCol))
+                            sourceRequiredColumns.Add(aliasedCol);
+                    }
+                }
+                else if (!sourceRequiredColumns.Contains(col))
+                {
                     sourceRequiredColumns.Add(col);
+                }
             }
 
             foreach (var source in node.GetSources())

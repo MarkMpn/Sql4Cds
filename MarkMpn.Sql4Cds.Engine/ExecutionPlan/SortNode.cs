@@ -11,7 +11,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Sorts the data in the data stream
     /// </summary>
-    class SortNode : BaseNode
+    public class SortNode : BaseNode
     {
         /// <summary>
         /// The sorts to apply

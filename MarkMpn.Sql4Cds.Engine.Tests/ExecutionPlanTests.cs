@@ -491,6 +491,49 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 </fetch>");
         }
 
+        [TestMethod]
+        public void PartialOrdering()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, true);
+
+            var query = @"
+                SELECT
+                    name,
+                    firstname
+                FROM
+                    account
+                    INNER JOIN contact ON account.accountid = contact.parentcustomerid
+                ORDER BY
+                    name,
+                    firstname,
+                    accountid";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var order = AssertNode<SortNode>(select.Source);
+            var fetch = AssertNode<FetchXmlScan>(order.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <attribute name='accountid' />
+                        <link-entity name='contact' alias='contact' from='parentcustomerid' to='accountid' link-type='inner'>
+                            <attribute name='firstname' />
+                            <order attribute='firstname' />
+                        </link-entity>
+                        <order attribute='name' />
+                    </entity>
+                </fetch>");
+        }
+
         private T AssertNode<T>(IExecutionPlanNode node) where T : IExecutionPlanNode
         {
             Assert.IsInstanceOfType(node, typeof(T));
