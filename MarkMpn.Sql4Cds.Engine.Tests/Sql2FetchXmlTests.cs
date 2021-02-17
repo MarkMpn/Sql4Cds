@@ -2826,6 +2826,34 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             ");
         }
 
+        [TestMethod]
+        public void AggregateAlternativeDoesNotOrderByLinkEntity()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT name, count(*) FROM contact INNER JOIN account ON contact.parentcustomerid = account.accountid GROUP BY name";
+
+            var queries = sql2FetchXml.Convert(query);
+            var select = (SelectQuery)queries[0];
+            AssertFetchXml(new[] { select.AggregateAlternative }, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='contactid'/>
+                        <attribute name='parentcustomerid'/>
+                        <link-entity name='account' from='accountid' to='parentcustomerid' link-type='inner' alias='account'>
+                            <attribute name='accountid'/>
+                            <attribute name='name'/>
+                        </link-entity>
+                    </entity>
+                </fetch>
+            ");
+        }
+
         private void AssertFetchXml(Query[] queries, string fetchXml)
         {
             Assert.AreEqual(1, queries.Length);

@@ -2039,6 +2039,16 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (sortedGroupings.Count > 0)
             {
+                // If the main entity don't have sorts, remove them all to prevent falling back to
+                // legacy paging
+                if (!tables[0].GetItems().OfType<FetchOrderType>().Any())
+                {
+                    foreach (var table in tables)
+                        table.RemoveItems(obj => obj is FetchOrderType);
+
+                    sortedGroupings.Clear();
+                }
+
                 // Sort the groupings according to how the sort orders will be applied
                 var sorts = GetSorts(tables[0].Entity);
                 var i = 0;
