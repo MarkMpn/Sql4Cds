@@ -609,6 +609,40 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual("account", count.EntityName);
         }
 
+        [TestMethod]
+        public void ComputeScalarSelect()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+
+            var query = @"
+                SELECT firstname + ' ' + lastname AS fullname FROM contact WHERE firstname = 'Mark'";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var computeScalar = AssertNode<ComputeScalarNode>(select.Source);
+            Assert.AreEqual(1, computeScalar.Columns.Count);
+            Assert.AreEqual("firstname + ' ' + lastname", computeScalar.Columns["fullname"].ToSql());
+            var fetch = AssertNode<FetchXmlScan>(computeScalar.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <attribute name='lastname' />
+                        <filter>
+                            <condition attribute='firstname' operator='eq' value='Mark' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
         private T AssertNode<T>(IExecutionPlanNode node) where T : IExecutionPlanNode
         {
             Assert.IsInstanceOfType(node, typeof(T));

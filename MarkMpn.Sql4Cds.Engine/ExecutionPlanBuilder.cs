@@ -421,6 +421,11 @@ namespace MarkMpn.Sql4Cds.Engine
                 Source = node
             };
 
+            var computeScalar = new ComputeScalarNode
+            {
+                Source = node
+            };
+
             foreach (var element in selectElements)
             {   
                 if (element is SelectScalarExpression scalar)
@@ -438,8 +443,11 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
                     else
                     {
-                        // TODO: Handle calculations in separate CalculateScalarNode
-                        throw new NotSupportedQueryFragmentException("Unsupported SELECT expression", scalar.Expression);
+                        var alias = scalar.ColumnName?.Value ?? $"Expr{++_colNameCounter}";
+
+                        // TODO: If scalar.Expression contains a subquery, create nested loop to evaluate it in the context
+                        // of the current record
+                        computeScalar.Columns[alias] = scalar.Expression;
                     }
                 }
                 else if (element is SelectStarExpression star)
@@ -453,6 +461,9 @@ namespace MarkMpn.Sql4Cds.Engine
                     });
                 }
             }
+
+            if (computeScalar.Columns.Count > 0)
+                select.Source = computeScalar;
 
             return select;
         }
