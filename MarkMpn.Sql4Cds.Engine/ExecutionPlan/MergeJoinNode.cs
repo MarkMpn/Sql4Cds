@@ -131,115 +131,114 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
-            // Merge join has preceding Sort nodes to ensure data is in correct order. Fold them into the source
-            // FetchXML only if the join itself can't be folded in.
-            var left = LeftSource;
-            if (left is SortNode leftSort && leftSort.IgnoreForFetchXmlFolding)
-            {
-                left = leftSort.Source.MergeNodeDown(metadata, options);
-                leftSort.Source = left;
-            }
+            LeftSource = LeftSource.MergeNodeDown(metadata, options);
+            RightSource = RightSource.MergeNodeDown(metadata, options);
 
-            var right = RightSource;
-            if (right is SortNode rightSort && rightSort.IgnoreForFetchXmlFolding)
+            if (LeftSource is FetchXmlScan leftFetch && RightSource is FetchXmlScan rightFetch)
             {
-                right = rightSort.Source.MergeNodeDown(metadata, options);
-                rightSort.Source = right;
-            }
+                var leftEntity = leftFetch.Entity;
+                var rightEntity = rightFetch.Entity;
 
-            var convertedJoin = false;
+                // Check that the join is on columns that are available in the FetchXML
+                var leftSchema = LeftSource.GetSchema(metadata);
+                var rightSchema = RightSource.GetSchema(metadata);
+                var leftAttribute = LeftAttribute.GetColumnName();
+                if (!leftSchema.ContainsColumn(leftAttribute, out leftAttribute))
+                    return this;
+                var rightAttribute = RightAttribute.GetColumnName();
+                if (!rightSchema.ContainsColumn(rightAttribute, out rightAttribute))
+                    return this;
+                var leftAttributeParts = leftAttribute.Split('.');
+                var rightAttributeParts = rightAttribute.Split('.');
+                if (leftAttributeParts.Length != 2)
+                    return this;
+                if (rightAttributeParts.Length != 2)
+                    return this;
 
-            try
-            {
-                if (left is FetchXmlScan leftFetch && right is FetchXmlScan rightFetch)
+                // Must be joining to the root entity of the right source, i.e. not a child link-entity
+                if (!rightAttributeParts[0].Equals(rightFetch.Alias))
+                    return this;
+
+                // If there are any additional join criteria, either they must be able to be translated to FetchXml criteria
+                // in the new link entity or we must be using an inner join so we can use a post-filter node
+                var additionalCriteria = AdditionalJoinCriteria;
+
+                if (TranslateCriteria(metadata, options, additionalCriteria, rightSchema, rightFetch.Alias, rightEntity.name, rightFetch.Alias, out var filter))
                 {
-                    var leftEntity = leftFetch.Entity;
-                    var rightEntity = rightFetch.Entity;
-
-                    // Check that the join is on columns that are available in the FetchXML
-                    var leftSchema = left.GetSchema(metadata);
-                    var rightSchema = right.GetSchema(metadata);
-                    var leftAttribute = LeftAttribute.GetColumnName();
-                    if (!leftSchema.ContainsColumn(leftAttribute, out leftAttribute))
-                        return this;
-                    var rightAttribute = RightAttribute.GetColumnName();
-                    if (!rightSchema.ContainsColumn(rightAttribute, out rightAttribute))
-                        return this;
-                    var leftAttributeParts = leftAttribute.Split('.');
-                    var rightAttributeParts = rightAttribute.Split('.');
-                    if (leftAttributeParts.Length != 2)
-                        return this;
-                    if (rightAttributeParts.Length != 2)
-                        return this;
-
-                    // Must be joining to the root entity of the right source, i.e. not a child link-entity
-                    if (!rightAttributeParts[0].Equals(rightFetch.Alias))
-                        return this;
-
-                    // If there are any additional join criteria, either they must be able to be translated to FetchXml criteria
-                    // in the new link entity or we must be using an inner join so we can use a post-filter node
-                    var additionalCriteria = AdditionalJoinCriteria;
-
-                    if (TranslateCriteria(metadata, options, additionalCriteria, rightSchema, rightFetch.Alias, rightEntity.name, rightFetch.Alias, out var filter))
-                    {
-                        if (rightEntity.Items == null)
-                            rightEntity.Items = new object[] { filter };
-                        else
-                            rightEntity.Items = rightEntity.Items.Concat(new object[] { filter }).ToArray();
-
-                        additionalCriteria = null;
-                    }
-
-                    if (additionalCriteria != null && JoinType != QualifiedJoinType.Inner)
-                        return this;
-
-                    var rightLinkEntity = new FetchLinkEntityType
-                    {
-                        alias = rightFetch.Alias,
-                        name = rightEntity.name,
-                        linktype = JoinType == QualifiedJoinType.Inner ? "inner" : "outer",
-                        from = rightAttributeParts[1],
-                        to = leftAttributeParts[1],
-                        Items = rightEntity.Items
-                    };
-
-                    // Find where the two FetchXml documents should be merged together and return the merged version
-                    if (leftAttributeParts[0].Equals(leftFetch.Alias))
-                    {
-                        if (leftEntity.Items == null)
-                            leftEntity.Items = new object[] { rightLinkEntity };
-                        else
-                            leftEntity.Items = leftEntity.Items.Concat(new object[] { rightLinkEntity }).ToArray();
-                    }
+                    if (rightEntity.Items == null)
+                        rightEntity.Items = new object[] { filter };
                     else
-                    {
-                        var leftLinkEntity = leftFetch.Entity.FindLinkEntity(leftAttributeParts[0]);
+                        rightEntity.Items = rightEntity.Items.Concat(new object[] { filter }).ToArray();
 
-                        if (leftLinkEntity == null)
-                            return this;
-
-                        if (leftLinkEntity.Items == null)
-                            leftLinkEntity.Items = new object[] { rightLinkEntity };
-                        else
-                            leftLinkEntity.Items = leftLinkEntity.Items.Concat(new object[] { rightLinkEntity }).ToArray();
-                    }
-
-                    convertedJoin = true;
-
-                    if (additionalCriteria != null)
-                        return new FilterNode { Filter = additionalCriteria, Source = leftFetch };
-
-                    return leftFetch;
+                    additionalCriteria = null;
                 }
-            }
-            finally
-            {
-                if (!convertedJoin)
+
+                if (additionalCriteria != null && JoinType != QualifiedJoinType.Inner)
+                    return this;
+
+                var rightLinkEntity = new FetchLinkEntityType
                 {
-                    LeftSource = LeftSource.MergeNodeDown(metadata, options);
-                    RightSource = RightSource.MergeNodeDown(metadata, options);
+                    alias = rightFetch.Alias,
+                    name = rightEntity.name,
+                    linktype = JoinType == QualifiedJoinType.Inner ? "inner" : "outer",
+                    from = rightAttributeParts[1],
+                    to = leftAttributeParts[1],
+                    Items = rightEntity.Items
+                };
+
+                // Find where the two FetchXml documents should be merged together and return the merged version
+                if (leftAttributeParts[0].Equals(leftFetch.Alias))
+                {
+                    if (leftEntity.Items == null)
+                        leftEntity.Items = new object[] { rightLinkEntity };
+                    else
+                        leftEntity.Items = leftEntity.Items.Concat(new object[] { rightLinkEntity }).ToArray();
                 }
+                else
+                {
+                    var leftLinkEntity = leftFetch.Entity.FindLinkEntity(leftAttributeParts[0]);
+
+                    if (leftLinkEntity == null)
+                        return this;
+
+                    if (leftLinkEntity.Items == null)
+                        leftLinkEntity.Items = new object[] { rightLinkEntity };
+                    else
+                        leftLinkEntity.Items = leftLinkEntity.Items.Concat(new object[] { rightLinkEntity }).ToArray();
+                }
+
+                if (additionalCriteria != null)
+                    return new FilterNode { Filter = additionalCriteria, Source = leftFetch };
+
+                return leftFetch;
             }
+
+            // Can't fold the join down into the FetchXML, so add a sort and try to fold that in instead
+            LeftSource = new SortNode
+            {
+                Source = LeftSource,
+                Sorts =
+                {
+                    new ExpressionWithSortOrder
+                    {
+                        Expression = LeftAttribute,
+                        SortOrder = SortOrder.Ascending
+                    }
+                }
+            }.MergeNodeDown(metadata, options);
+
+            RightSource = new SortNode
+            {
+                Source = RightSource,
+                Sorts =
+                {
+                    new ExpressionWithSortOrder
+                    {
+                        Expression = RightAttribute,
+                        SortOrder = SortOrder.Ascending
+                    }
+                }
+            }.MergeNodeDown(metadata, options);
 
             return this;
         }

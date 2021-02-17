@@ -526,35 +526,6 @@ namespace MarkMpn.Sql4Cds.Engine
                     var lhsKey = joinConditionVisitor.LhsKey.GetColumnName();
                     if (lhsSchema.ContainsColumn(lhsKey, out var lhsNormalizedKey) && lhsNormalizedKey.Equals(lhsSchema.PrimaryKey, StringComparison.OrdinalIgnoreCase))
                     {
-                        // Sort by keys before merge join but ignore during FetchXML folding
-                        lhs = new SortNode
-                        {
-                            Source = lhs,
-                            Sorts =
-                            {
-                                new ExpressionWithSortOrder
-                                {
-                                    Expression = joinConditionVisitor.LhsKey,
-                                    SortOrder = SortOrder.Ascending
-                                }
-                            },
-                            IgnoreForFetchXmlFolding = true
-                        };
-
-                        rhs = new SortNode
-                        {
-                            Source = rhs,
-                            Sorts =
-                            {
-                                new ExpressionWithSortOrder
-                                {
-                                    Expression = joinConditionVisitor.RhsKey,
-                                    SortOrder = SortOrder.Ascending
-                                }
-                            },
-                            IgnoreForFetchXmlFolding = true
-                        };
-
                         joinNode = new MergeJoinNode
                         {
                             LeftSource = lhs,
@@ -567,35 +538,6 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
                     else if (rhsSchema.ContainsColumn(lhsKey, out var rhsNormalizedKey) && rhsNormalizedKey.Equals(rhsSchema.PrimaryKey, StringComparison.OrdinalIgnoreCase))
                     {
-                        // Sort by keys before merge join but ignore during FetchXML folding
-                        lhs = new SortNode
-                        {
-                            Source = lhs,
-                            Sorts =
-                            {
-                                new ExpressionWithSortOrder
-                                {
-                                    Expression = joinConditionVisitor.LhsKey,
-                                    SortOrder = SortOrder.Ascending
-                                }
-                            },
-                            IgnoreForFetchXmlFolding = true
-                        };
-
-                        rhs = new SortNode
-                        {
-                            Source = rhs,
-                            Sorts =
-                            {
-                                new ExpressionWithSortOrder
-                                {
-                                    Expression = joinConditionVisitor.RhsKey,
-                                    SortOrder = SortOrder.Ascending
-                                }
-                            },
-                            IgnoreForFetchXmlFolding = true
-                        };
-
                         joinNode = new MergeJoinNode
                         {
                             LeftSource = rhs,
