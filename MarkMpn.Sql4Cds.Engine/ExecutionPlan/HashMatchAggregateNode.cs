@@ -79,6 +79,38 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             Source = Source.MergeNodeDown(metadata, options);
 
+            // Special case for using RetrieveTotalRecordCount instead of FetchXML
+            if (options.UseRetrieveTotalRecordCount &&
+                Source is FetchXmlScan fetch &&
+                (fetch.Entity.Items == null || fetch.Entity.Items.Length == 0) &&
+                GroupBy.Count == 0 &&
+                Aggregates.Count == 1 &&
+                Aggregates.Single().Value.AggregateType == AggregateType.CountStar)
+            {
+                var count = new RetrieveTotalRecordCountNode { EntityName = fetch.Entity.name };
+                var countName = count.GetSchema(metadata).Schema.Single().Key;
+
+                if (countName == Aggregates.Single().Key)
+                    return count;
+
+                var rename = new ComputeScalarNode
+                {
+                    Source = count,
+                    Columns =
+                    {
+                        [Aggregates.Single().Key] = new ColumnReferenceExpression
+                        {
+                            MultiPartIdentifier = new MultiPartIdentifier
+                            {
+                                Identifiers = { new Identifier { Value = countName } }
+                            }
+                        }
+                    }
+                };
+
+                return rename;
+            }
+
             if (Source is FetchXmlScan || Source is ComputeScalarNode computeScalar && computeScalar.Source is FetchXmlScan)
             {
                 // Check if all the aggregates & groupings can be done in FetchXML. Can only convert them if they can ALL

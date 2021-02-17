@@ -11,7 +11,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Gets the total number of records in an entity using <see cref="RetrieveTotalRecordCountRequest"/>
     /// </summary>
-    class RetrieveTotalRecordCountNode : BaseNode
+    public class RetrieveTotalRecordCountNode : BaseNode
     {
         /// <summary>
         /// The logical name of the entity to get the record count for
