@@ -1521,15 +1521,24 @@ namespace MarkMpn.Sql4Cds.Engine
             else if (expr is FunctionCall func)
             {
                 // Function calls become method calls. All allowed methods are statics in the ExpressionFunctions class
-                var method = typeof(ExpressionFunctions).GetMethod(func.FunctionName.Value, BindingFlags.Static | BindingFlags.Public | BindingFlags.IgnoreCase);
+                var methods = typeof(ExpressionFunctions).GetMethods(BindingFlags.Static | BindingFlags.Public)
+                    .Where(m => m.Name.Equals(func.FunctionName.Value, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
 
-                if (method == null)
+                if (methods.Count == 0)
                     throw new NotSupportedQueryFragmentException("Unknown function", func);
 
-                var parameters = method.GetParameters();
+                var matchingParamCount = methods.Where(m => m.GetParameters().Length == func.Parameters.Count)
+                    .ToList();
 
-                if (func.Parameters.Count != parameters.Length)
-                    throw new NotSupportedQueryFragmentException($"{method.Name} function requires {parameters.Length} parameter(s)", func);
+                if (matchingParamCount.Count == 0)
+                    throw new NotSupportedQueryFragmentException($"{methods[0].Name} function requires {methods[0].GetParameters().Length} parameter(s)", func);
+
+                if (matchingParamCount.Count > 1)
+                    throw new NotSupportedQueryFragmentException($"Ambiguous method name {func.FunctionName.Value}", func);
+
+                var method = matchingParamCount[0];
+                var parameters = method.GetParameters();
 
                 Expression[] args;
 
