@@ -312,12 +312,21 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, plans.Length);
 
             var select = AssertNode<SelectNode>(plans[0]);
-            var fetch = AssertNode<FetchXmlScan>(select.Source);
-            AssertFetchXml(fetch, @"
+            var tryCatch = AssertNode<TryCatchNode>(select.Source);
+            var aggregateFetch = AssertNode<FetchXmlScan>(tryCatch.TrySource);
+            AssertFetchXml(aggregateFetch, @"
                 <fetch aggregate='true'>
                     <entity name='account'>
                         <attribute name='name' groupby='true' alias='name' />
                         <attribute name='accountid' aggregate='count' alias='count' />
+                    </entity>
+                </fetch>");
+            var aggregate = AssertNode<HashMatchAggregateNode>(tryCatch.CatchSource);
+            var scalarFetch = AssertNode<FetchXmlScan>(aggregate.Source);
+            AssertFetchXml(scalarFetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
                     </entity>
                 </fetch>");
         }
@@ -345,12 +354,21 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, plans.Length);
 
             var select = AssertNode<SelectNode>(plans[0]);
-            var fetch = AssertNode<FetchXmlScan>(select.Source);
-            AssertFetchXml(fetch, @"
+            var tryCatch = AssertNode<TryCatchNode>(select.Source);
+            var aggregateFetch = AssertNode<FetchXmlScan>(tryCatch.TrySource);
+            AssertFetchXml(aggregateFetch, @"
                 <fetch aggregate='true'>
                     <entity name='account'>
                         <attribute name='name' groupby='true' alias='name' />
                         <attribute name='accountid' aggregate='count' alias='test' />
+                    </entity>
+                </fetch>");
+            var aggregate = AssertNode<HashMatchAggregateNode>(tryCatch.CatchSource);
+            var scalarFetch = AssertNode<FetchXmlScan>(aggregate.Source);
+            AssertFetchXml(scalarFetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
                     </entity>
                 </fetch>");
         }
@@ -378,12 +396,21 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, plans.Length);
 
             var select = AssertNode<SelectNode>(plans[0]);
-            var fetch = AssertNode<FetchXmlScan>(select.Source);
-            AssertFetchXml(fetch, @"
+            var tryCatch = AssertNode<TryCatchNode>(select.Source);
+            var aggregateFetch = AssertNode<FetchXmlScan>(tryCatch.TrySource);
+            AssertFetchXml(aggregateFetch, @"
                 <fetch aggregate='true'>
                     <entity name='account'>
-                        <attribute name='name' groupby='true' alias='test' />
+                        <attribute name='name' groupby='true' alias='name' />
                         <attribute name='accountid' aggregate='count' alias='count' />
+                    </entity>
+                </fetch>");
+            var aggregate = AssertNode<HashMatchAggregateNode>(tryCatch.CatchSource);
+            var scalarFetch = AssertNode<FetchXmlScan>(aggregate.Source);
+            AssertFetchXml(scalarFetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
                     </entity>
                 </fetch>");
         }
@@ -450,12 +477,21 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.IsInstanceOfType(gt.SecondExpression, typeof(IntegerLiteral));
             var val = (IntegerLiteral)gt.SecondExpression;
             Assert.AreEqual("1", val.Value);
-            var fetch = AssertNode<FetchXmlScan>(filter.Source);
-            AssertFetchXml(fetch, @"
+            var tryCatch = AssertNode<TryCatchNode>(filter.Source);
+            var aggregateFetch = AssertNode<FetchXmlScan>(tryCatch.TrySource);
+            AssertFetchXml(aggregateFetch, @"
                 <fetch aggregate='true'>
                     <entity name='account'>
                         <attribute name='name' groupby='true' alias='name' />
                         <attribute name='accountid' aggregate='count' alias='count' />
+                    </entity>
+                </fetch>");
+            var aggregate = AssertNode<HashMatchAggregateNode>(tryCatch.CatchSource);
+            var scalarFetch = AssertNode<FetchXmlScan>(aggregate.Source);
+            AssertFetchXml(scalarFetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
                     </entity>
                 </fetch>");
         }
@@ -483,12 +519,24 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, plans.Length);
 
             var select = AssertNode<SelectNode>(plans[0]);
-            var fetch = AssertNode<FetchXmlScan>(select.Source);
-            AssertFetchXml(fetch, @"
+            var tryCatch = AssertNode<TryCatchNode>(select.Source);
+            var aggregateFetch = AssertNode<FetchXmlScan>(tryCatch.TrySource);
+            AssertFetchXml(aggregateFetch, @"
                 <fetch aggregate='true'>
                     <entity name='account'>
                         <attribute name='createdon' groupby='true' alias='createdon_month' dategrouping='month' />
                         <attribute name='accountid' aggregate='count' alias='count' />
+                    </entity>
+                </fetch>");
+            var aggregate = AssertNode<HashMatchAggregateNode>(tryCatch.CatchSource);
+            var computeScalar = AssertNode<ComputeScalarNode>(aggregate.Source);
+            Assert.AreEqual(1, computeScalar.Columns.Count);
+            Assert.AreEqual("DATEPART(month, createdon)", computeScalar.Columns["createdon_month"].ToSql());
+            var scalarFetch = AssertNode<FetchXmlScan>(computeScalar.Source);
+            AssertFetchXml(scalarFetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='createdon' />
                     </entity>
                 </fetch>");
         }

@@ -1,8 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.ServiceModel;
 using System.Text;
 using System.Threading.Tasks;
+using System.Xml.Serialization;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
 using MarkMpn.Sql4Cds.Engine.Visitors;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
@@ -134,6 +137,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                 }
 
+                // FetchXML aggregates can trigger an AggregateQueryRecordLimitExceeded error. Clone the non-aggregate FetchXML
+                // so we can try to run the native aggregate version but fall back to in-memory processing where necessary
+                var serializer = new XmlSerializer(typeof(FetchXml.FetchType));
+
+                var clonedFetchXml = new FetchXmlScan
+                {
+                    Alias = fetchXml.Alias,
+                    AllPages = fetchXml.AllPages,
+                    FetchXml = (FetchXml.FetchType) serializer.Deserialize(new StringReader(fetchXml.FetchXmlString)),
+                    ReturnFullSchema = fetchXml.ReturnFullSchema
+                };
+
+                if (Source == fetchXml)
+                    Source = clonedFetchXml;
+                else
+                    computeScalar.Source = clonedFetchXml;
+
                 fetchXml.FetchXml.aggregate = true;
                 fetchXml.FetchXml.aggregateSpecified = true;
                 fetchXml.FetchXml = fetchXml.FetchXml;
@@ -210,10 +230,28 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     attribute.alias = agg.Key;
                 }
 
-                return fetchXml;
+                return new TryCatchNode
+                {
+                    TrySource = fetchXml,
+                    CatchSource = this,
+                    ExceptionFilter = IsAggregateQueryRecordLimitExceededException
+                };
             }
 
             return this;
+        }
+
+        private bool IsAggregateQueryRecordLimitExceededException(Exception ex)
+        {
+            if (!(ex is FaultException<OrganizationServiceFault> fault))
+                return false;
+
+            /*
+             * 0x8004E023 / -2147164125	
+             * Name: AggregateQueryRecordLimitExceeded
+             * Message: The maximum record limit is exceeded. Reduce the number of records.
+             */
+            return fault.Detail.ErrorCode == -2147164125;
         }
     }
 }

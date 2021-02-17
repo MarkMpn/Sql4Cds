@@ -34,6 +34,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <returns>A new execution plan node</returns>
         public IExecutionPlanNode Optimize(IExecutionPlanNode node)
         {
+
             // Move any additional operators down to the FetchXml
             node = node.MergeNodeDown(Metadata, Options);
 
