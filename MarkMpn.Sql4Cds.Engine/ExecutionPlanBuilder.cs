@@ -15,10 +15,10 @@ namespace MarkMpn.Sql4Cds.Engine
     {
         private int _colNameCounter;
 
-        public ExecutionPlanBuilder(IAttributeMetadataCache metadata, bool quotedIdentifiers)
+        public ExecutionPlanBuilder(IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
             Metadata = metadata;
-            QuotedIdentifiers = quotedIdentifiers;
+            Options = options;
         }
 
         /// <summary>
@@ -32,9 +32,9 @@ namespace MarkMpn.Sql4Cds.Engine
         public bool QuotedIdentifiers { get; set; }
 
         /// <summary>
-        /// Indicates if column comparison conditions are supported
+        /// Indicates how the query will be executed
         /// </summary>
-        public bool ColumnComparisonAvailable { get; set; }
+        public IQueryExecutionOptions Options { get; set; }
 
         public IExecutionPlanNode[] Build(string sql)
         {
@@ -49,7 +49,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 throw new QueryParseException(errors[0]);
 
             var script = (TSqlScript)fragment;
-            var optimizer = new ExecutionPlanOptimizer(Metadata, ColumnComparisonAvailable);
+            var optimizer = new ExecutionPlanOptimizer(Metadata, Options);
 
             // Convert each statement in turn to the appropriate query type
             foreach (var batch in script.Batches)

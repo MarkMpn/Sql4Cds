@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using MarkMpn.Sql4Cds.Engine.FetchXml;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 
@@ -60,6 +61,54 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Sorts
                 .SelectMany(s => s.GetColumns())
                 .Distinct();
+        }
+
+        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        {
+            Source = Source.MergeNodeDown(metadata, options);
+
+            if (Source is FetchXmlScan fetchXml)
+            {
+                var schema = fetchXml.GetSchema(metadata);
+                var entity = fetchXml.Entity;
+                var items = entity.Items;
+
+                foreach (var sortOrder in Sorts)
+                {
+                    if (!(sortOrder.Expression is ColumnReferenceExpression sortColRef))
+                        return this;
+
+                    if (!schema.ContainsColumn(sortColRef.GetColumnName(), out var sortCol))
+                        return this;
+
+                    var parts = sortCol.Split('.');
+                    var entityName = parts[0];
+                    var attrName = parts[1];
+
+                    var fetchSort = new FetchOrderType { attribute = attrName, descending = sortOrder.SortOrder == SortOrder.Descending };
+                    if (entityName == fetchXml.Alias)
+                    {
+                        if (items != entity.Items)
+                            return this;
+
+                        entity.AddItem(fetchSort);
+                        items = entity.Items;
+                    }
+                    else
+                    {
+                        var linkEntity = FetchXmlExtensions.FindLinkEntity(items, entityName);
+                        if (linkEntity == null)
+                            return this;
+
+                        linkEntity.AddItem(fetchSort);
+                        items = linkEntity.Items;
+                    }
+                }
+
+                return Source;
+            }
+
+            return this;
         }
     }
 }

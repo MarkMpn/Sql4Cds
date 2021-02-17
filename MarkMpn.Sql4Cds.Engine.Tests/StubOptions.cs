@@ -27,6 +27,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         int IQueryExecutionOptions.MaxDegreeOfParallelism => 10;
 
+        bool IQueryExecutionOptions.ColumnComparisonAvailable => true;
+
         bool IQueryExecutionOptions.ConfirmDelete(int count, EntityMetadata meta)
         {
             return true;

@@ -40,5 +40,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             return JoinCondition.GetColumns();
         }
+
+        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        {
+            return this;
+        }
     }
 }

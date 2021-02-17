@@ -35,6 +35,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         int IQueryExecutionOptions.MaxDegreeOfParallelism => 10;
 
+        bool IQueryExecutionOptions.ColumnComparisonAvailable => true;
+
         bool IQueryExecutionOptions.ConfirmDelete(int count, EntityMetadata meta)
         {
             return true;
@@ -62,7 +64,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, true);
+            var planBuilder = new ExecutionPlanBuilder(metadata, this);
 
             var query = "SELECT accountid, name FROM account";
 
@@ -89,7 +91,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, true);
+            var planBuilder = new ExecutionPlanBuilder(metadata, this);
 
             var query = "SELECT accountid, name FROM account INNER JOIN contact ON account.accountid = contact.parentcustomerid";
 
@@ -118,7 +120,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, true);
+            var planBuilder = new ExecutionPlanBuilder(metadata, this);
 
             var query = @"
                 SELECT
@@ -156,7 +158,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, true);
+            var planBuilder = new ExecutionPlanBuilder(metadata, this);
 
             var query = @"
                 SELECT
@@ -193,7 +195,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, true);
+            var planBuilder = new ExecutionPlanBuilder(metadata, this);
 
             var query = @"
                 SELECT
@@ -228,7 +230,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, true);
+            var planBuilder = new ExecutionPlanBuilder(metadata, this);
 
             var query = @"
                 SELECT TOP 10
@@ -260,7 +262,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, true);
+            var planBuilder = new ExecutionPlanBuilder(metadata, this);
 
             var query = @"
                 SELECT
@@ -295,7 +297,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, true);
+            var planBuilder = new ExecutionPlanBuilder(metadata, this);
 
             var query = @"
                 SELECT
@@ -328,7 +330,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, true);
+            var planBuilder = new ExecutionPlanBuilder(metadata, this);
 
             var query = @"
                 SELECT
@@ -361,7 +363,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, true);
+            var planBuilder = new ExecutionPlanBuilder(metadata, this);
 
             var query = @"
                 SELECT
@@ -394,7 +396,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, true);
+            var planBuilder = new ExecutionPlanBuilder(metadata, this);
 
             var query = "SELECT accountid, name AS test FROM account";
 
@@ -421,7 +423,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, true);
+            var planBuilder = new ExecutionPlanBuilder(metadata, this);
 
             var query = @"
                 SELECT
@@ -466,7 +468,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, true);
+            var planBuilder = new ExecutionPlanBuilder(metadata, this);
 
             var query = @"
                 SELECT
@@ -499,7 +501,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, true);
+            var planBuilder = new ExecutionPlanBuilder(metadata, this);
 
             var query = @"
                 SELECT

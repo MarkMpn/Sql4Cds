@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using MarkMpn.Sql4Cds.Engine.FetchXml;
 using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
@@ -40,6 +41,42 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return ColumnSet
                 .Select(col => col.SourceColumn + (col.AllColumns ? ".*" : ""))
                 .Distinct();
+        }
+
+        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        {
+            Source = Source.MergeNodeDown(metadata, options);
+
+            if (Source is FetchXmlScan fetchXml)
+            {
+                // Check if there are any aliases we can apply to the source FetchXml
+                var schema = fetchXml.GetSchema(metadata);
+                var processedSourceColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                foreach (var col in ColumnSet)
+                {
+                    var sourceCol = col.SourceColumn;
+                    schema.ContainsColumn(sourceCol, out sourceCol);
+                    var attr = AddAttribute(fetchXml, sourceCol, null, out var added);
+
+                    if (col.SourceColumn != col.OutputColumn)
+                    {
+                        if (added || (!processedSourceColumns.Contains(col.SourceColumn) && !IsAliasReferenced(fetchXml, attr.alias)))
+                        {
+                            attr.alias = col.OutputColumn;
+                            col.SourceColumn = col.OutputColumn;
+                        }
+                        else
+                        {
+                            col.SourceColumn = attr.alias ?? (sourceCol.Split('.')[0] + "." + attr.name);
+                        }
+                    }
+
+                    processedSourceColumns.Add(col.SourceColumn);
+                }
+            }
+
+            return this;
         }
     }
 

@@ -47,5 +47,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             yield return Source;
         }
+
+        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        {
+            Source = Source.MergeNodeDown(metadata, options);
+            return this;
+        }
     }
 }

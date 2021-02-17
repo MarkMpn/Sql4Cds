@@ -81,5 +81,10 @@ namespace MarkMpn.Sql4Cds.Engine
         /// The maximum number of worker threads to use to execute DML queries
         /// </summary>
         int MaxDegreeOfParallelism { get; }
+
+        /// <summary>
+        /// Indicates if the server supports column comparison conditions in FetchXML
+        /// </summary>
+        bool ColumnComparisonAvailable { get; }
     }
 }

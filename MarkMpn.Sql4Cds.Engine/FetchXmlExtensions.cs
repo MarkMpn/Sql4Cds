@@ -24,5 +24,29 @@ namespace MarkMpn.Sql4Cds.Engine
             else
                 linkEntity.Items = linkEntity.Items.Concat(new[] { item }).ToArray();
         }
+
+        public static FetchLinkEntityType FindLinkEntity(this FetchEntityType entity, string alias)
+        {
+            return FindLinkEntity(entity.Items, alias);
+        }
+
+        public static FetchLinkEntityType FindLinkEntity(object[] items, string alias)
+        {
+            if (items == null)
+                return null;
+
+            foreach (var linkEntity in items.OfType<FetchLinkEntityType>())
+            {
+                if (linkEntity.alias.Equals(alias, StringComparison.OrdinalIgnoreCase))
+                    return linkEntity;
+
+                var childMatch = FindLinkEntity(linkEntity.Items, alias);
+
+                if (childMatch != null)
+                    return childMatch;
+            }
+
+            return null;
+        }
     }
 }

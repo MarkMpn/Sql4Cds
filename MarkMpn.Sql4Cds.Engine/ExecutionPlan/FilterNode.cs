@@ -48,5 +48,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             return Filter.GetColumns();
         }
+
+        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        {
+            Source = Source.MergeNodeDown(metadata, options);
+
+            if (Source is FetchXmlScan fetchXml && !fetchXml.FetchXml.aggregate)
+            {
+                if (TranslateCriteria(metadata, options, Filter, fetchXml.GetSchema(metadata), null, fetchXml.Entity.name, fetchXml.Alias, out var fetchFilter))
+                {
+                    fetchXml.Entity.AddItem(fetchFilter);
+                    return fetchXml;
+                }
+            }
+
+            return this;
+        }
     }
 }

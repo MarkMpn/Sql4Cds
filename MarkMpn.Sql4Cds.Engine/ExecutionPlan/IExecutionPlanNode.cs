@@ -58,5 +58,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         /// <returns></returns>
         IEnumerable<string> GetRequiredColumns();
+
+        /// <summary>
+        /// Attempts to fold the query operator down into its source
+        /// </summary>
+        /// <returns>The final execution plan node to execute</returns>
+        IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options);
     }
 }

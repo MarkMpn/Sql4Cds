@@ -109,5 +109,7 @@ namespace MarkMpn.Sql4Cds
         }
 
         public int MaxDegreeOfParallelism => Settings.Instance.MaxDegreeOfPaallelism;
+
+        public bool ColumnComparisonAvailable => true;
     }
 }
