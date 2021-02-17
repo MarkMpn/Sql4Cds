@@ -325,6 +325,9 @@ namespace MarkMpn.Sql4Cds.Engine
                 count += nextPage.Entities.Count;
                 res = nextPage;
             }
+
+            if (count == 50000 && !res.MoreRecords && String.IsNullOrEmpty(FetchXml.pagingcookie))
+                throw new ApplicationException("Maximum 50,000 records retrieved using legacy paging before query was complete");
         }
 
         private void OnRetrievedEntity(Entity entity)

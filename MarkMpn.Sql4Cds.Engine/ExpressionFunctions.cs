@@ -480,6 +480,38 @@ namespace MarkMpn.Sql4Cds.Engine
 
             return expression.TrimEnd(' ');
         }
+
+        /// <summary>
+        /// Searches for one character expression inside a second character expression, returning the starting position of the first expression if found
+        /// </summary>
+        /// <param name="find">A character expression containing the sequence to find</param>
+        /// <param name="search">A character expression to search.</param>
+        /// <returns></returns>
+        public static int? CharIndex(string find, string search)
+        {
+            return CharIndex(find, search, 0);
+        }
+
+        /// <summary>
+        /// Searches for one character expression inside a second character expression, returning the starting position of the first expression if found
+        /// </summary>
+        /// <param name="find">A character expression containing the sequence to find</param>
+        /// <param name="search">A character expression to search.</param>
+        /// <param name="startLocation">An integer or bigint expression at which the search starts. If start_location is not specified, has a negative value, or has a zero (0) value, the search starts at the beginning of expressionToSearch.</param>
+        /// <returns></returns>
+        public static int? CharIndex(string find, string search, int? startLocation)
+        {
+            if (find == null || search == null || startLocation == null)
+                return null;
+
+            if (startLocation <= 0)
+                startLocation = 1;
+
+            if (startLocation > search.Length)
+                return 0;
+
+            return search.IndexOf(find, startLocation.Value - 1, StringComparison.OrdinalIgnoreCase) + 1;
+        }
     }
 
     /// <summary>

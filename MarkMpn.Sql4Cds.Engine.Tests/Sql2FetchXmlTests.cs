@@ -2828,6 +2828,69 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             ");
         }
 
+        [TestMethod]
+        public void AggregateAlternativeDoesNotOrderByLinkEntity()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT name, count(*) FROM contact INNER JOIN account ON contact.parentcustomerid = account.accountid GROUP BY name";
+
+            var queries = sql2FetchXml.Convert(query);
+            var select = (SelectQuery)queries[0];
+            AssertFetchXml(new[] { select.AggregateAlternative }, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='contactid'/>
+                        <attribute name='parentcustomerid'/>
+                        <link-entity name='account' from='accountid' to='parentcustomerid' link-type='inner' alias='account'>
+                            <attribute name='accountid'/>
+                            <attribute name='name'/>
+                        </link-entity>
+                    </entity>
+                </fetch>
+            ");
+        }
+
+        [TestMethod]
+        public void CharIndex()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT CHARINDEX('a', fullname) AS ci0, CHARINDEX('a', fullname, 1) AS ci1, CHARINDEX('a', fullname, 2) AS ci2, CHARINDEX('a', fullname, 3) AS ci3, CHARINDEX('a', fullname, 8) AS ci8 FROM contact";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            var contact1 = Guid.NewGuid();
+
+            context.Data["contact"] = new Dictionary<Guid, Entity>
+            {
+                [contact1] = new Entity("contact", contact1)
+                {
+                    ["fullname"] = "Mark Carrington",
+                    ["contactid"] = contact1
+                }
+            };
+
+            var select = queries[0];
+            select.Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            var result = (EntityCollection)select.Result;
+            Assert.AreEqual(2, result.Entities[0].GetAttributeValue<int>("ci0"));
+            Assert.AreEqual(2, result.Entities[0].GetAttributeValue<int>("ci1"));
+            Assert.AreEqual(2, result.Entities[0].GetAttributeValue<int>("ci2"));
+            Assert.AreEqual(7, result.Entities[0].GetAttributeValue<int>("ci3"));
+            Assert.AreEqual(0, result.Entities[0].GetAttributeValue<int>("ci8"));
+        }
+
         private void AssertFetchXml(Query[] queries, string fetchXml)
         {
             Assert.AreEqual(1, queries.Length);
