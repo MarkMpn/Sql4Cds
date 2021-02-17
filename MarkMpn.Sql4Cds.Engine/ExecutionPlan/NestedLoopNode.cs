@@ -11,7 +11,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Implements a nested loop join
     /// </summary>
-    class NestedLoopNode : BaseJoinNode
+    public class NestedLoopNode : BaseJoinNode
     {
         /// <summary>
         /// The condition that must be true for  two records to join
