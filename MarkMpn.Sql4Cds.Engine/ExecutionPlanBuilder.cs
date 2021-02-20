@@ -115,6 +115,10 @@ namespace MarkMpn.Sql4Cds.Engine
             // Add sorts from ORDER BY
             node = ConvertOrderByClause(node, querySpec.OrderByClause);
 
+            // Add DISTINCT
+            if (querySpec.UniqueRowFilter == UniqueRowFilter.Distinct)
+                node = new DistinctNode { Source = node };
+
             // Add TOP/OFFSET
             if (querySpec.TopRowFilter != null && querySpec.OffsetClause != null)
                 throw new NotSupportedQueryFragmentException("A TOP can not be used in the same query or sub-query as a OFFSET.", querySpec.TopRowFilter);

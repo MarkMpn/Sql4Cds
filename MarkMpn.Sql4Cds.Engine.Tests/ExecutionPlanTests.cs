@@ -223,6 +223,36 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void SimpleDistinct()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+
+            var query = @"
+                SELECT DISTINCT
+                    name
+                FROM
+                    account";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch distinct='true'>
+                    <entity name='account'>
+                        <attribute name='name' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
         public void SimpleTop()
         {
             var context = new XrmFakedContext();

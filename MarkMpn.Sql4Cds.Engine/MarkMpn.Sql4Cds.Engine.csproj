@@ -67,6 +67,7 @@
     <Compile Include="ExecutionPlan\BaseNode.cs" />
     <Compile Include="ExecutionPlan\ComputeScalarNode.cs" />
     <Compile Include="ExecutionPlan\ConstantScanNode.cs" />
+    <Compile Include="ExecutionPlan\DistinctNode.cs" />
     <Compile Include="ExecutionPlan\ExpressionEvaluatorVisitor.cs" />
     <Compile Include="ExecutionPlan\ExpressionExtensions.cs" />
     <Compile Include="ExecutionPlan\FetchXmlScan.cs" />
