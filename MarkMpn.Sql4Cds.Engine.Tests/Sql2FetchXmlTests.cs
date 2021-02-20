@@ -2846,8 +2846,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <attribute name='contactid'/>
                         <attribute name='parentcustomerid'/>
                         <link-entity name='account' from='accountid' to='parentcustomerid' link-type='inner' alias='account'>
-                            <attribute name='accountid'/>
                             <attribute name='name'/>
+                            <attribute name='accountid'/>
                         </link-entity>
                     </entity>
                 </fetch>
