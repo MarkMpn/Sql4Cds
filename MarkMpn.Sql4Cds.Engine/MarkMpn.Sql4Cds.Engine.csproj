@@ -62,6 +62,7 @@
     <Compile Include="ExecutionPlanBuilder.cs" />
     <Compile Include="ExecutionPlanOptimizer.cs" />
     <Compile Include="ExecutionPlan\Aggregate.cs" />
+    <Compile Include="ExecutionPlan\AssertNode.cs" />
     <Compile Include="ExecutionPlan\BaseJoinNode.cs" />
     <Compile Include="ExecutionPlan\BaseNode.cs" />
     <Compile Include="ExecutionPlan\ComputeScalarNode.cs" />
@@ -124,6 +125,7 @@
     <Compile Include="QueryExtensions\Where.cs" />
     <Compile Include="QueryExtensions\IQueryExtension.cs" />
     <Compile Include="QueryParseException.cs" />
+    <Compile Include="Visitors\ScalarSubqueryVisitor.cs" />
     <Compile Include="Visitors\UpdateTargetVisitor.cs" />
     <Compile Include="Visitors\QueryTypeVisitor.cs" />
     <Compile Include="Visitors\ReplacePrimaryFunctionsVisitor.cs" />

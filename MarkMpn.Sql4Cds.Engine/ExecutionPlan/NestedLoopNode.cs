@@ -38,11 +38,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override IEnumerable<string> GetRequiredColumns()
         {
+            if (JoinCondition == null)
+                return Array.Empty<string>();
+
             return JoinCondition.GetColumns();
         }
 
         public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options)
         {
+            LeftSource = LeftSource.MergeNodeDown(metadata, options);
+            RightSource = RightSource.MergeNodeDown(metadata, options);
             return this;
         }
     }

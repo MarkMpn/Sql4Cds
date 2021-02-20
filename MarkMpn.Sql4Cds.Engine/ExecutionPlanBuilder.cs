@@ -63,7 +63,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     IExecutionPlanNode plan;
 
                     if (statement is SelectStatement select)
-                        plan = ConvertSelectStatement(select);
+                        plan = ConvertSelectStatement(select.QueryExpression);
                     /*else if (statement is UpdateStatement update)
                         query = ConvertUpdateStatement(update);
                     else if (statement is DeleteStatement delete)
@@ -89,11 +89,16 @@ namespace MarkMpn.Sql4Cds.Engine
             return queries.ToArray();
         }
 
-        private IExecutionPlanNode ConvertSelectStatement(SelectStatement select)
+        private SelectNode ConvertSelectStatement(QueryExpression query)
         {
-            if (!(select.QueryExpression is QuerySpecification querySpec))
-                throw new NotSupportedQueryFragmentException("Unhandled SELECT query expression", select.QueryExpression);
+            if (!(query is QuerySpecification querySpec))
+                throw new NotSupportedQueryFragmentException("Unhandled SELECT query expression", query);
 
+            return ConvertSelectQuerySpec(querySpec);
+        }
+
+        private SelectNode ConvertSelectQuerySpec(QuerySpecification querySpec)
+        {
             // Each table in the FROM clause starts as a separate FetchXmlScan node. Add appropriate join nodes
             // TODO: Handle queries without a FROM clause
             var node = ConvertFromClause(querySpec.FromClause.TableReferences);
@@ -118,9 +123,9 @@ namespace MarkMpn.Sql4Cds.Engine
             node = ConvertOffsetClause(node, querySpec.OffsetClause);
 
             // Add SELECT
-            node = ConvertSelectClause(querySpec.SelectElements, node);
+            var selectNode = ConvertSelectClause(querySpec.SelectElements, node);
 
-            return node;
+            return selectNode;
         }
 
         private IExecutionPlanNode ConvertHavingClause(IExecutionPlanNode source, HavingClause havingClause)
@@ -414,7 +419,7 @@ namespace MarkMpn.Sql4Cds.Engine
             };
         }
 
-        private IExecutionPlanNode ConvertSelectClause(IList<SelectElement> selectElements, IExecutionPlanNode node)
+        private SelectNode ConvertSelectClause(IList<SelectElement> selectElements, IExecutionPlanNode node)
         {
             var select = new SelectNode
             {
@@ -445,8 +450,70 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         var alias = scalar.ColumnName?.Value ?? $"Expr{++_colNameCounter}";
 
-                        // TODO: If scalar.Expression contains a subquery, create nested loop to evaluate it in the context
+                        // If scalar.Expression contains a subquery, create nested loop to evaluate it in the context
                         // of the current record
+                        var subqueryVisitor = new ScalarSubqueryVisitor();
+                        scalar.Expression.Accept(subqueryVisitor);
+                        var rewrites = new Dictionary<ScalarExpression, string>();
+
+                        foreach (var subquery in subqueryVisitor.Subqueries)
+                        {
+                            var subqueryPlan = ConvertSelectStatement(subquery.QueryExpression);
+
+                            // Scalar subquery must return exactly one column and one row
+                            if (subqueryPlan.ColumnSet.Count != 1)
+                                throw new NotSupportedQueryFragmentException("Scalar subquery must return exactly one column", subquery);
+
+                            // Insert an aggregate and assertion nodes to check for one row
+                            var subqueryCol = $"Expr{++_colNameCounter}";
+                            var rowCountCol = $"Expr{++_colNameCounter}";
+                            var aggregate = new HashMatchAggregateNode
+                            {
+                                Source = subqueryPlan.Source,
+                                Aggregates =
+                                {
+                                    [subqueryCol] = new Aggregate
+                                    {
+                                        AggregateType = AggregateType.Max,
+                                        Expression = new ColumnReferenceExpression
+                                        {
+                                            MultiPartIdentifier = new MultiPartIdentifier
+                                            {
+                                                Identifiers = { new Identifier { Value = subqueryPlan.ColumnSet[0].SourceColumn } }
+                                            }
+                                        }
+                                    },
+                                    [rowCountCol] = new Aggregate
+                                    {
+                                        AggregateType = AggregateType.CountStar
+                                    }
+                                }
+                            };
+                            var assert = new AssertNode
+                            {
+                                Source = aggregate,
+                                Assertion = e => e.GetAttributeValue<int>(rowCountCol) <= 1,
+                                ErrorMessage = "Subquery produced more than 1 row"
+                            };
+
+                            // Add a nested loop to call the subquery
+                            var loop = new NestedLoopNode
+                            {
+                                LeftSource = node,
+                                RightSource = assert,
+                                JoinType = QualifiedJoinType.LeftOuter
+                            };
+
+                            node = loop;
+                            computeScalar.Source = loop;
+                            select.Source = loop;
+
+                            rewrites[subquery] = subqueryCol;
+                        }
+
+                        if (rewrites.Any())
+                            scalar.Accept(new RewriteVisitor(rewrites));
+
                         computeScalar.Columns[alias] = scalar.Expression;
                     }
                 }

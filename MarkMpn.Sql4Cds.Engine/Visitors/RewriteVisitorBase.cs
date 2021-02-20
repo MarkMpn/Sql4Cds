@@ -11,17 +11,24 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
     /// </summary>
     abstract class RewriteVisitorBase : TSqlFragmentVisitor
     {
-        private string ReplaceExpression<T>(T target, Expression<Func<T, ScalarExpression>> selector)
+        private string ReplaceExpression<T>(T target, Expression<Func<T, ScalarExpression>> selector) where T : TSqlFragment
         {
             var property = (PropertyInfo) ((MemberExpression)selector.Body).Member;
             var expression = (ScalarExpression) property.GetValue(target);
-            property.SetValue(target, ReplaceExpression(expression, out var name));
+            var replaced = ReplaceExpression(expression, out var name);
+
+            if (expression != replaced)
+            {
+                property.SetValue(target, replaced);
+                target.ScriptTokenStream = null;
+            }
+
             return name;
         }
 
         protected abstract ScalarExpression ReplaceExpression(ScalarExpression expression, out string name);
 
-        private void ReplaceExpression<T>(T target, Expression<Func<T, BooleanExpression>> selector)
+        private void ReplaceExpression<T>(T target, Expression<Func<T, BooleanExpression>> selector) where T:TSqlFragment
         {
             var property = (PropertyInfo)((MemberExpression)selector.Body).Member;
             var expression = (BooleanExpression)property.GetValue(target);

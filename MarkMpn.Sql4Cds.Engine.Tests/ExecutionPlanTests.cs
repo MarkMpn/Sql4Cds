@@ -708,11 +708,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         </filter>
                     </entity>
                 </fetch>");
-            var subFetch = AssertNode<FetchXmlScan>(nestedLoop.RightSource);
+            var subAssert = AssertNode<AssertNode>(nestedLoop.RightSource);
+            var subFetch = AssertNode<FetchXmlScan>(subAssert.Source);
             AssertFetchXml(subFetch, @"
-                <fetch>
+                <fetch aggregate='true'>
                     <entity name='account'>
-                        <attribute name='name' />
+                        <attribute name='name' aggregate='max' alias='name' />
+                        <attribute name='accountid' aggregate='count' alias='account_count' />
                         <filter>
                             <condition attribute='accountid' operator='eq' value='@Expr1' />
                         </filter>
