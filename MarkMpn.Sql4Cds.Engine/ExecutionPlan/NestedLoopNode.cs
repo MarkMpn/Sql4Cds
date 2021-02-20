@@ -18,15 +18,30 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         public BooleanExpression JoinCondition { get; set; }
 
-        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        /// <summary>
+        /// Values from the outer query that should be passed as references to the inner query
+        /// </summary>
+        public Dictionary<string,string> OuterReferences { get; set; }
+
+        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string,object> parameterValues)
         {
             var leftSchema = LeftSource.GetSchema(metadata);
             var rightSchema = RightSource.GetSchema(metadata);
             var mergedSchema = GetSchema(metadata);
 
-            foreach (var left in LeftSource.Execute(org, metadata, options))
+            foreach (var left in LeftSource.Execute(org, metadata, options, parameterValues))
             {
-                foreach (var right in RightSource.Execute(org, metadata, options))
+                var innerParameters = parameterValues;
+
+                if (OuterReferences != null)
+                {
+                    innerParameters = new Dictionary<string, object>(parameterValues);
+
+                    foreach (var kvp in OuterReferences)
+                        innerParameters[kvp.Value] = left[kvp.Key];
+                }
+
+                foreach (var right in RightSource.Execute(org, metadata, options, innerParameters))
                 {
                     var merged = Merge(left, leftSchema, right, rightSchema);
 

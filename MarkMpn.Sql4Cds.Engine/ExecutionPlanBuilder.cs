@@ -63,7 +63,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     IExecutionPlanNode plan;
 
                     if (statement is SelectStatement select)
-                        plan = ConvertSelectStatement(select.QueryExpression);
+                        plan = ConvertSelectStatement(select.QueryExpression, null, null);
                     /*else if (statement is UpdateStatement update)
                         query = ConvertUpdateStatement(update);
                     else if (statement is DeleteStatement delete)
@@ -89,22 +89,22 @@ namespace MarkMpn.Sql4Cds.Engine
             return queries.ToArray();
         }
 
-        private SelectNode ConvertSelectStatement(QueryExpression query)
+        private SelectNode ConvertSelectStatement(QueryExpression query, NodeSchema outerSchema, Dictionary<string,string> outerReferences)
         {
             if (!(query is QuerySpecification querySpec))
                 throw new NotSupportedQueryFragmentException("Unhandled SELECT query expression", query);
 
-            return ConvertSelectQuerySpec(querySpec);
+            return ConvertSelectQuerySpec(querySpec, outerSchema, outerReferences);
         }
 
-        private SelectNode ConvertSelectQuerySpec(QuerySpecification querySpec)
+        private SelectNode ConvertSelectQuerySpec(QuerySpecification querySpec, NodeSchema outerSchema, Dictionary<string,string> outerReferences)
         {
             // Each table in the FROM clause starts as a separate FetchXmlScan node. Add appropriate join nodes
             // TODO: Handle queries without a FROM clause
             var node = ConvertFromClause(querySpec.FromClause.TableReferences);
 
             // Add filters from WHERE
-            node = ConvertWhereClause(node, querySpec.WhereClause);
+            node = ConvertWhereClause(node, querySpec.WhereClause, outerSchema, outerReferences);
 
             // Add aggregates from GROUP BY/SELECT/HAVING/ORDER BY
             node = ConvertGroupByAggregates(node, querySpec);
@@ -404,13 +404,48 @@ namespace MarkMpn.Sql4Cds.Engine
             return sort;
         }
 
-        private IExecutionPlanNode ConvertWhereClause(IExecutionPlanNode source, WhereClause whereClause)
+        private IExecutionPlanNode ConvertWhereClause(IExecutionPlanNode source, WhereClause whereClause, NodeSchema outerSchema, Dictionary<string,string> outerReferences)
         {
             if (whereClause == null)
                 return source;
 
             if (whereClause.Cursor != null)
                 throw new NotSupportedQueryFragmentException("Unsupported cursor", whereClause.Cursor);
+
+            if (outerSchema != null)
+            {
+                // We're in a subquery. Check if any columns in the WHERE clause are from the outer query
+                // so we know which columns to pass through and rewrite the filter to use parameters
+                var rewrites = new Dictionary<ScalarExpression, ScalarExpression>();
+                var innerSchema = source.GetSchema(Metadata);
+                var columns = whereClause.SearchCondition.GetColumns();
+
+                foreach (var column in columns)
+                {
+                    // Column names could be ambiguous between the inner and outer data sources. The inner
+                    // data source is used in preference.
+                    // Ref: https://docs.microsoft.com/en-us/sql/relational-databases/performance/subqueries?view=sql-server-ver15#qualifying
+                    var fromInner = innerSchema.ContainsColumn(column, out _);
+
+                    if (fromInner)
+                        continue;
+
+                    var fromOuter = outerSchema.ContainsColumn(column, out var outerColumn);
+
+                    if (fromOuter)
+                    {
+                        var paramName = $"@Expr{++_colNameCounter}";
+                        outerReferences.Add(outerColumn, paramName);
+
+                        rewrites.Add(
+                            new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = column } } } },
+                            new VariableReference { Name = paramName });
+                    }
+                }
+
+                if (rewrites.Any())
+                    whereClause.SearchCondition.Accept(new RewriteVisitor(rewrites));
+            }
 
             return new FilterNode
             {
@@ -458,7 +493,9 @@ namespace MarkMpn.Sql4Cds.Engine
 
                         foreach (var subquery in subqueryVisitor.Subqueries)
                         {
-                            var subqueryPlan = ConvertSelectStatement(subquery.QueryExpression);
+                            var outerSchema = node.GetSchema(Metadata);
+                            var outerReferences = new Dictionary<string,string>();
+                            var subqueryPlan = ConvertSelectStatement(subquery.QueryExpression, outerSchema, outerReferences);
 
                             // Scalar subquery must return exactly one column and one row
                             if (subqueryPlan.ColumnSet.Count != 1)
@@ -501,7 +538,8 @@ namespace MarkMpn.Sql4Cds.Engine
                             {
                                 LeftSource = node,
                                 RightSource = assert,
-                                JoinType = QualifiedJoinType.LeftOuter
+                                JoinType = QualifiedJoinType.LeftOuter,
+                                OuterReferences = outerReferences
                             };
 
                             node = loop;

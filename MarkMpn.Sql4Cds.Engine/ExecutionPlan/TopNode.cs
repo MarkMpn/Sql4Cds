@@ -17,22 +17,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public IExecutionPlanNode Source { get; set; }
 
-        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, object> parameterValues)
         {
             if (WithTies)
                 throw new NotImplementedException();
 
             if (!Percent)
             {
-                return Source.Execute(org, metadata, options)
+                return Source.Execute(org, metadata, options, parameterValues)
                     .Take((int)Top);
             }
             else
             {
-                var count = Source.Execute(org, metadata, options).Count();
+                var count = Source.Execute(org, metadata, options, parameterValues).Count();
                 var top = count * Top / 100;
 
-                return Source.Execute(org, metadata, options)
+                return Source.Execute(org, metadata, options, parameterValues)
                     .Take((int)top);
             }
         }

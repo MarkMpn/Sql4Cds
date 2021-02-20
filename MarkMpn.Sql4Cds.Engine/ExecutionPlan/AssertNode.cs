@@ -15,9 +15,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public string ErrorMessage { get; set; }
 
-        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string,object> parameterValues)
         {
-            foreach (var entity in Source.Execute(org, metadata, options))
+            foreach (var entity in Source.Execute(org, metadata, options, parameterValues))
             {
                 if (!Assertion(entity))
                     throw new ApplicationException(ErrorMessage);

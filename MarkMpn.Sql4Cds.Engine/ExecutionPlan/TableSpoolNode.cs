@@ -86,9 +86,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         public IExecutionPlanNode Source { get; set; }
 
-        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, object> parameterValues)
         {
-            return new CachedList<Entity>(Source.Execute(org, metadata, options));
+            return new CachedList<Entity>(Source.Execute(org, metadata, options, parameterValues));
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()

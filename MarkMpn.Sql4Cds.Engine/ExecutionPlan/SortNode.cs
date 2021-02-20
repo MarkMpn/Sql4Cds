@@ -24,9 +24,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         public IExecutionPlanNode Source { get; set; }
 
-        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, object> parameterValues)
         {
-            var source = Source.Execute(org, metadata, options);
+            var source = Source.Execute(org, metadata, options, parameterValues);
             var schema = GetSchema(metadata);
             IOrderedEnumerable<Entity> sortedSource;
 

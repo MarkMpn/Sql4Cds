@@ -695,7 +695,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var computeScalar = AssertNode<ComputeScalarNode>(select.Source);
             Assert.AreEqual(2, computeScalar.Columns.Count);
             Assert.AreEqual("firstname + ' ' + lastname", computeScalar.Columns["fullname"].ToSql());
-            Assert.AreEqual("'Account: ' + Expr1", computeScalar.Columns["accountname"].ToSql());
+            Assert.AreEqual("'Account: ' + Expr2", computeScalar.Columns["accountname"].ToSql());
             var nestedLoop = AssertNode<NestedLoopNode>(computeScalar.Source);
             var fetch = AssertNode<FetchXmlScan>(nestedLoop.LeftSource);
             AssertFetchXml(fetch, @"
@@ -709,12 +709,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     </entity>
                 </fetch>");
             var subAssert = AssertNode<AssertNode>(nestedLoop.RightSource);
-            var subFetch = AssertNode<FetchXmlScan>(subAssert.Source);
-            AssertFetchXml(subFetch, @"
+            var tryCatch = AssertNode<TryCatchNode>(subAssert.Source);
+            var subAggregateFetch = AssertNode<FetchXmlScan>(tryCatch.TrySource);
+            AssertFetchXml(subAggregateFetch, @"
                 <fetch aggregate='true'>
                     <entity name='account'>
-                        <attribute name='name' aggregate='max' alias='name' />
-                        <attribute name='accountid' aggregate='count' alias='account_count' />
+                        <attribute name='name' aggregate='max' alias='Expr2' />
+                        <attribute name='accountid' aggregate='count' alias='Expr3' />
                         <filter>
                             <condition attribute='accountid' operator='eq' value='@Expr1' />
                         </filter>

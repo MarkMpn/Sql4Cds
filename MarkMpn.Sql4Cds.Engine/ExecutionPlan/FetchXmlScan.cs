@@ -12,6 +12,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
     public class FetchXmlScan : BaseNode
     {
+        private Dictionary<string, condition> _parameterizedConditions;
+
         public FetchXmlScan()
         {
             AllPages = true;
@@ -52,10 +54,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         public bool ReturnFullSchema { get; set; }
 
-        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, object> parameterValues)
         {
             if (options.Cancelled)
                 yield break;
+
+            // Apply any variable conditions
+            if (parameterValues != null)
+            {
+                if (_parameterizedConditions == null)
+                    FindParameterizedConditions();
+
+                foreach (var param in parameterValues)
+                {
+                    if (_parameterizedConditions.TryGetValue(param.Key, out var condition))
+                        condition.value = param.Value?.ToString();
+                }
+            }
 
             var mainEntity = FetchXml.Items.OfType<FetchEntityType>().Single();
             var name = mainEntity.name;
@@ -116,6 +131,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 count += nextPage.Entities.Count;
                 res = nextPage;
             }
+        }
+
+        private void FindParameterizedConditions()
+        {
+            _parameterizedConditions = new Dictionary<string, condition>();
+
+            FindParameterizedConditions(Entity.Items);
+        }
+
+        private void FindParameterizedConditions(object[] items)
+        {
+            foreach (var condition in items.OfType<condition>().Where(c => c.value != null && c.value.StartsWith("@")))
+                _parameterizedConditions[condition.value] = condition;
+
+            foreach (var filter in items.OfType<filter>())
+                FindParameterizedConditions(filter.Items);
+
+            foreach (var link in items.OfType<FetchLinkEntityType>())
+                FindParameterizedConditions(link.Items);
         }
 
         private bool ContainsSort(object[] items)

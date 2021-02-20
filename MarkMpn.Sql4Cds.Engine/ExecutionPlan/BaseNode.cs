@@ -17,9 +17,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public int Index { get; set; }
         public int Length { get; set; }
 
-        public bool IgnoreForFetchXmlFolding { get; set; }
-
-        public abstract IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options);
+        public abstract IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, object> parameterValues);
 
         public abstract IEnumerable<IExecutionPlanNode> GetSources();
 
@@ -184,6 +182,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var literal = comparison.SecondExpression as Literal;
                 var func = comparison.SecondExpression as FunctionCall;
                 var field2 = comparison.SecondExpression as ColumnReferenceExpression;
+                var variable = comparison.SecondExpression as VariableReference;
                 var expr = comparison.SecondExpression;
                 var type = comparison.ComparisonType;
 
@@ -196,11 +195,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 // If we couldn't find the pattern `column = value` or `column = func()`, try looking in the opposite order
-                if (field == null && literal == null && func == null)
+                if (field == null && literal == null && func == null && variable == null)
                 {
                     field = comparison.SecondExpression as ColumnReferenceExpression;
                     literal = comparison.FirstExpression as Literal;
                     func = comparison.FirstExpression as FunctionCall;
+                    variable = comparison.FirstExpression as VariableReference;
                     expr = comparison.FirstExpression;
 
                     // Switch the operator depending on the order of the column and value, so `column > 3` uses gt but `3 > column` uses le
@@ -225,7 +225,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 // If we still couldn't find the column name and value, this isn't a pattern we can support in FetchXML
-                if (field == null || (literal == null && func == null && (field2 == null || !options.ColumnComparisonAvailable) && !IsConstantValueExpression(expr, schema, out literal)))
+                if (field == null || (literal == null && func == null && variable == null && (field2 == null || !options.ColumnComparisonAvailable) && !IsConstantValueExpression(expr, schema, out literal)))
                     return false;
 
                 // Select the correct FetchXML operator
@@ -268,6 +268,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (literal != null)
                 {
                     value = literal.Value;
+                }
+                else if (variable != null)
+                {
+                    value = variable.Name;
                 }
                 else if (func != null && Enum.TryParse<@operator>(func.FunctionName.Value.ToLower(), out var customOperator))
                 {

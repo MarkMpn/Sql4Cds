@@ -31,7 +31,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         public BooleanExpression AdditionalJoinCriteria { get; set; }
 
-        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, object> parameterValues)
         {
             // https://sqlserverfast.com/epr/merge-join/
             // Implemented inner, left outer, right outer and full outer variants
@@ -41,8 +41,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Left & Right: GetNext, mark as unmatched
             var leftSchema = LeftSource.GetSchema(metadata);
             var rightSchema = RightSource.GetSchema(metadata);
-            var left = LeftSource.Execute(org, metadata, options).GetEnumerator();
-            var right = RightSource.Execute(org, metadata, options).GetEnumerator();
+            var left = LeftSource.Execute(org, metadata, options, parameterValues).GetEnumerator();
+            var right = RightSource.Execute(org, metadata, options, parameterValues).GetEnumerator();
             var mergedSchema = GetSchema(metadata);
 
             var hasLeft = left.MoveNext();

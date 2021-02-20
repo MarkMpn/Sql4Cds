@@ -39,7 +39,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         /// <param name="org">The <see cref="IOrganizationService"/> to use to execute the plan</param>
         /// <returns>A sequence of entities matched by the query</returns>
-        IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options);
+        IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string,object> parameterValues);
 
         /// <summary>
         /// Gets the children of this node

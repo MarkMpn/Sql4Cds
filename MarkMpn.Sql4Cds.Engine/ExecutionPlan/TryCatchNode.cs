@@ -13,18 +13,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public IExecutionPlanNode CatchSource { get; set; }
         public Func<Exception,bool> ExceptionFilter { get; set; }
 
-        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, object> parameterValues)
         {
             try
             {
-                return TrySource.Execute(org, metadata, options);
+                return TrySource.Execute(org, metadata, options, parameterValues);
             }
             catch (Exception ex)
             {
                 if (ExceptionFilter != null && !ExceptionFilter(ex))
                     throw;
 
-                return CatchSource.Execute(org, metadata, options);
+                return CatchSource.Execute(org, metadata, options, parameterValues);
             }
         }
 

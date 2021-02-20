@@ -21,7 +21,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public IExecutionPlanNode Source { get; set; }
 
-        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, object> parameterValues)
         {
             throw new NotImplementedException();
         }
@@ -257,7 +257,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
 
                     var attribute = AddAttribute(fetchXml, colName, a => a.aggregate == aggregateType && a.alias == agg.Key, out _);
-
+                    attribute.aggregate = aggregateType;
                     attribute.aggregateSpecified = true;
                     attribute.alias = agg.Key;
                 }
