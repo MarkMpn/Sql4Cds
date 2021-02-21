@@ -116,8 +116,8 @@ namespace MarkMpn.Sql4Cds.Engine
             node = ConvertOrderByClause(node, querySpec.OrderByClause);
 
             // Add DISTINCT
-            if (querySpec.UniqueRowFilter == UniqueRowFilter.Distinct)
-                node = new DistinctNode { Source = node };
+            var distinct = querySpec.UniqueRowFilter == UniqueRowFilter.Distinct ? new DistinctNode { Source = node } : null;
+            node = distinct;
 
             // Add TOP/OFFSET
             if (querySpec.TopRowFilter != null && querySpec.OffsetClause != null)
@@ -127,7 +127,7 @@ namespace MarkMpn.Sql4Cds.Engine
             node = ConvertOffsetClause(node, querySpec.OffsetClause);
 
             // Add SELECT
-            var selectNode = ConvertSelectClause(querySpec.SelectElements, node);
+            var selectNode = ConvertSelectClause(querySpec.SelectElements, node, distinct);
 
             return selectNode;
         }
@@ -458,7 +458,7 @@ namespace MarkMpn.Sql4Cds.Engine
             };
         }
 
-        private SelectNode ConvertSelectClause(IList<SelectElement> selectElements, IExecutionPlanNode node)
+        private SelectNode ConvertSelectClause(IList<SelectElement> selectElements, IExecutionPlanNode node, DistinctNode distinct)
         {
             var select = new SelectNode
             {
@@ -467,7 +467,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var computeScalar = new ComputeScalarNode
             {
-                Source = node
+                Source = distinct?.Source ?? node
             };
 
             foreach (var element in selectElements)
@@ -540,15 +540,18 @@ namespace MarkMpn.Sql4Cds.Engine
                             // Add a nested loop to call the subquery
                             var loop = new NestedLoopNode
                             {
-                                LeftSource = node,
+                                LeftSource = distinct?.Source ?? node,
                                 RightSource = assert,
                                 JoinType = QualifiedJoinType.LeftOuter,
                                 OuterReferences = outerReferences
                             };
 
-                            node = loop;
+                            if (distinct != null)
+                                distinct.Source = loop;
+                            else
+                                node = loop;
+
                             computeScalar.Source = loop;
-                            select.Source = loop;
 
                             rewrites[subquery] = subqueryCol;
                         }
@@ -557,6 +560,11 @@ namespace MarkMpn.Sql4Cds.Engine
                             scalar.Accept(new RewriteVisitor(rewrites));
 
                         computeScalar.Columns[alias] = scalar.Expression;
+                        select.ColumnSet.Add(new SelectColumn
+                        {
+                            SourceColumn = alias,
+                            OutputColumn = alias
+                        });
                     }
                 }
                 else if (element is SelectStarExpression star)
@@ -572,7 +580,28 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             if (computeScalar.Columns.Count > 0)
-                select.Source = computeScalar;
+            {
+                if (distinct != null)
+                    distinct.Source = computeScalar;
+                else
+                    select.Source = computeScalar;
+            }
+
+            if (distinct != null)
+            {
+                foreach (var col in select.ColumnSet)
+                {
+                    if (col.AllColumns)
+                    {
+                        var schema = distinct.GetSchema(Metadata);
+                        distinct.Columns.AddRange(schema.Schema.Keys);
+                    }
+                    else
+                    {
+                        distinct.Columns.Add(col.SourceColumn);
+                    }
+                }
+            }
 
             return select;
         }

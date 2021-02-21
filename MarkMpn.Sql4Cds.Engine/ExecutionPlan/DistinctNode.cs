@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -7,18 +8,81 @@ using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
+    /// <summary>
+    /// Returns only one entity per unique combinatioh of values in specified columns
+    /// </summary>
     public class DistinctNode : BaseNode
     {
+        class DistinctKey
+        {
+            private List<object> _values;
+            private readonly int _hashCode;
+
+            public DistinctKey(Entity entity, List<string> columns)
+            {
+                _values = columns.Select(col => entity[col]).ToList();
+
+                _hashCode = 0;
+
+                foreach (var val in _values)
+                {
+                    if (val == null)
+                        continue;
+
+                    _hashCode ^= CaseInsensitiveHashCodeProvider.Default.GetHashCode(val);
+                }
+            }
+
+            public override int GetHashCode()
+            {
+                return _hashCode;
+            }
+
+            public override bool Equals(object obj)
+            {
+                var other = (DistinctKey)obj;
+
+                for (var i = 0; i < _values.Count; i++)
+                {
+                    if (_values[i] == null && other._values[i] == null)
+                        continue;
+
+                    if (_values[i] == null || other._values[i] == null)
+                        return false;
+
+                    if (CaseInsensitiveComparer.Default.Compare(_values[i], other._values[i]) != 0)
+                        return false;
+                }
+
+                return true;
+            }
+        }
+        /// <summary>
+        /// The columns to consider
+        /// </summary>
+        public List<string> Columns { get; } = new List<string>();
+
+        /// <summary>
+        /// The data source to take the values from
+        /// </summary>
         public IExecutionPlanNode Source { get; set; }
 
         public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, object> parameterValues)
         {
-            throw new NotImplementedException();
+            var distinct = new HashSet<DistinctKey>();
+
+            foreach (var entity in Source.Execute(org, metadata, options, parameterValues))
+            {
+                var key = new DistinctKey(entity, Columns);
+
+                if (distinct.Add(key))
+                    yield return entity;
+            }
         }
 
         public override IEnumerable<string> GetRequiredColumns()
         {
-            return Array.Empty<string>();
+            return Columns;
         }
 
         public override NodeSchema GetSchema(IAttributeMetadataCache metadata)

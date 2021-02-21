@@ -342,5 +342,34 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             CollectionAssert.AreEqual(new[] { 2, 12 }, results);
         }
+
+        [TestMethod]
+        public void DistinctTest()
+        {
+            var node = new DistinctNode
+            {
+                Columns = { "value1" },
+                Source = new ConstantScanNode
+                {
+                    Values =
+                    {
+                        new Entity { ["value1"] = 1, ["value2"] = 1 },
+                        new Entity { ["value1"] = 3, ["value2"] = 2 },
+                        new Entity { ["value1"] = 1, ["value2"] = 3 }
+                    },
+                    Schema =
+                    {
+                        ["value1"] = typeof(int),
+                        ["value2"] = typeof(int)
+                    }
+                }
+            };
+
+            var results = node.Execute(_org, _metadata, new StubOptions(), null)
+                .Select(e => e.GetAttributeValue<int>("value1"))
+                .ToArray();
+
+            CollectionAssert.AreEqual(new[] { 1, 3 }, results);
+        }
     }
 }
