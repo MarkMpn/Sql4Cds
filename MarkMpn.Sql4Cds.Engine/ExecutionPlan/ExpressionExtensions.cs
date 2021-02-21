@@ -283,12 +283,40 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     // Can be used on any numeric type except bit
                     if ((typeCategory == SqlTypeCategory.ExactNumerics || typeCategory == SqlTypeCategory.ApproximateNumerics) && type != typeof(bool))
                         return type;
+
+                    // Addition can also be used on strings
+                    if (type == typeof(string))
+                        return type;
+                    break;
+
+                case BinaryExpressionType.Subtract:
+                    // Can be used on any numeric type except bit
+                    if ((typeCategory == SqlTypeCategory.ExactNumerics || typeCategory == SqlTypeCategory.ApproximateNumerics) && type != typeof(bool))
+                        return type;
                     break;
 
                 case BinaryExpressionType.Multiply:
+                case BinaryExpressionType.Divide:
                     // Can be used on any numeric type
                     if (typeCategory == SqlTypeCategory.ExactNumerics || typeCategory == SqlTypeCategory.ApproximateNumerics)
                         return type;
+                    break;
+
+                case BinaryExpressionType.Modulo:
+                    // Can be used on any exact numeric type
+                    if (typeCategory == SqlTypeCategory.ExactNumerics)
+                        return type;
+                    break;
+
+                case BinaryExpressionType.BitwiseAnd:
+                case BinaryExpressionType.BitwiseOr:
+                case BinaryExpressionType.BitwiseXor:
+                    // Can be used on any integer, bit or binary type
+                    if (type == typeof(int) || type == typeof(byte))
+                        return type;
+
+                    if (type == typeof(bool))
+                        return typeof(byte);
                     break;
             }
 
@@ -322,6 +350,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     if (type == typeof(float))
                         return (float)lhs + (float)rhs;
+
+                    if (type == typeof(string))
+                        return (string)lhs + (string)rhs;
+                    break;
+
+                case BinaryExpressionType.Subtract:
+                    if (type == typeof(long))
+                        return (long)lhs - (long)rhs;
+
+                    if (type == typeof(int))
+                        return (int)lhs - (int)rhs;
+
+                    if (type == typeof(decimal))
+                        return (decimal)lhs - (decimal)rhs;
+
+                    if (type == typeof(double))
+                        return (double)lhs - (double)rhs;
+
+                    if (type == typeof(float))
+                        return (float)lhs - (float)rhs;
                     break;
 
                 case BinaryExpressionType.Multiply:
@@ -342,6 +390,75 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     if (type == typeof(float))
                         return (float)lhs * (float)rhs;
+                    break;
+
+                case BinaryExpressionType.Divide:
+                    if (type == typeof(long))
+                        return (long)lhs / (long)rhs;
+
+                    if (type == typeof(int))
+                        return (int)lhs / (int)rhs;
+
+                    if (type == typeof(decimal))
+                        return (decimal)lhs / (decimal)rhs;
+
+                    // TODO:
+                    //if (type == typeof(bool))
+                    //    return (bool)lhs && (bool)rhs;
+
+                    if (type == typeof(double))
+                        return (double)lhs / (double)rhs;
+
+                    if (type == typeof(float))
+                        return (float)lhs / (float)rhs;
+                    break;
+
+                case BinaryExpressionType.BitwiseAnd:
+                    if (type == typeof(bool))
+                    {
+                        lhs = SqlTypeConverter.ChangeType<byte>(lhs);
+                        rhs = SqlTypeConverter.ChangeType<byte>(rhs);
+                        type = typeof(byte);
+                    }
+
+                    if (type == typeof(int))
+                        return (int)lhs & (int)rhs;
+
+                    if (type == typeof(byte))
+                        return (byte)lhs & (byte)rhs;
+
+                    break;
+
+                case BinaryExpressionType.BitwiseOr:
+                    if (type == typeof(bool))
+                    {
+                        lhs = SqlTypeConverter.ChangeType<byte>(lhs);
+                        rhs = SqlTypeConverter.ChangeType<byte>(rhs);
+                        type = typeof(byte);
+                    }
+
+                    if (type == typeof(int))
+                        return (int)lhs | (int)rhs;
+
+                    if (type == typeof(byte))
+                        return (byte)lhs | (byte)rhs;
+
+                    break;
+
+                case BinaryExpressionType.BitwiseXor:
+                    if (type == typeof(bool))
+                    {
+                        lhs = SqlTypeConverter.ChangeType<byte>(lhs);
+                        rhs = SqlTypeConverter.ChangeType<byte>(rhs);
+                        type = typeof(byte);
+                    }
+
+                    if (type == typeof(int))
+                        return (int)lhs ^ (int)rhs;
+
+                    if (type == typeof(byte))
+                        return (byte)lhs ^ (byte)rhs;
+
                     break;
 
                 default:

@@ -13,6 +13,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             typeof(decimal),
             typeof(long),
             typeof(int),
+            typeof(byte),
             typeof(bool),
             typeof(Guid),
             typeof(string),
@@ -95,6 +96,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return SqlTypeCategory.ExactNumerics;
 
             if (type == typeof(int))
+                return SqlTypeCategory.ExactNumerics;
+
+            if (type == typeof(byte))
                 return SqlTypeCategory.ExactNumerics;
 
             if (type == typeof(decimal))
