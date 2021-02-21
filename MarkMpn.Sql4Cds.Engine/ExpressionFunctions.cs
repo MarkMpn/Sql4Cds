@@ -88,7 +88,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="datepart">The SQL name for the datepart argument</param>
         /// <returns>The equivalent <see cref="DateInterval"/> value</returns>
-        private static DateInterval DatePartToInterval(string datepart)
+        public static DateInterval DatePartToInterval(string datepart)
         {
             switch (datepart.ToLower())
             {

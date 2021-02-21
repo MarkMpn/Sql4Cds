@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine.Visitors;
@@ -33,6 +34,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return GetType(b, schema);
             else if (expr is BinaryExpression bin)
                 return GetType(bin, schema);
+            else if (expr is FunctionCall func)
+                return GetType(func, schema);
             else
                 throw new NotSupportedQueryFragmentException("Unhandled expression type", expr);
         }
@@ -59,6 +62,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return GetValue(b, entity, schema);
             else if (expr is BinaryExpression bin)
                 return GetValue(bin, entity, schema);
+            else if (expr is FunctionCall func)
+                return GetValue(func, entity, schema);
             else
                 throw new NotSupportedQueryFragmentException("Unhandled expression type", expr);
         }
@@ -465,6 +470,121 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             throw new QueryExecutionException(bin, $"Operator {bin.BinaryExpressionType} is not defined for expressions of type {type}");
+        }
+
+        private static MethodInfo GetMethod(FunctionCall func, NodeSchema schema)
+        {
+            Type[] paramTypes;
+
+            // Special case for DATEPART / DATEDIFF / DATEADD - first parameter looks like a field but is actually an identifier
+            if (func.FunctionName.Value.Equals("DATEPART", StringComparison.OrdinalIgnoreCase) ||
+                func.FunctionName.Value.Equals("DATEDIFF", StringComparison.OrdinalIgnoreCase) ||
+                func.FunctionName.Value.Equals("DATEADD", StringComparison.OrdinalIgnoreCase))
+            {
+                paramTypes = func.Parameters
+                    .Select((param, index) =>
+                    {
+                        if (index == 0)
+                        {
+                            // Check parameter is an expected datepart value
+                            if (!(param is ColumnReferenceExpression col))
+                                throw new NotSupportedQueryFragmentException("Expected a datepart name", param);
+
+                            try
+                            {
+                                ExpressionFunctions.DatePartToInterval(col.MultiPartIdentifier.Identifiers.Single().Value);
+                            }
+                            catch
+                            {
+                                throw new NotSupportedQueryFragmentException("Expected a datepart name", param);
+                            }
+
+                            return typeof(string);
+                        }
+
+                        return param.GetType(schema);
+                    })
+                    .ToArray();
+            }
+            else
+            {
+                paramTypes = func.Parameters
+                    .Select(param => param.GetType(schema))
+                    .ToArray();
+            }
+
+            // Find a method that implements this function
+            var methods = typeof(ExpressionFunctions)
+                .GetMethods(BindingFlags.InvokeMethod | BindingFlags.Public | BindingFlags.Static)
+                .Where(m => m.Name.Equals(func.FunctionName.Value, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            if (methods.Count == 0)
+                throw new NotSupportedQueryFragmentException("Unknown function", func);
+
+            // Check parameter count is correct
+            var correctParameterCount = methods.Where(m => m.GetParameters().Length == paramTypes.Length).ToList();
+
+            if (correctParameterCount.Count == 0)
+                throw new NotSupportedQueryFragmentException($"Method expects {methods[0].GetParameters().Length} parameters", func);
+
+            if (correctParameterCount.Count > 1)
+                throw new NotSupportedQueryFragmentException("Ambiguous method", func);
+
+            // Check parameter types can be converted
+            var parameters = correctParameterCount[0].GetParameters();
+
+            for (var i = 0; i < parameters.Length; i++)
+            {
+                if (!SqlTypeConverter.CanChangeType(paramTypes[i], parameters[i].ParameterType))
+                    throw new NotSupportedQueryFragmentException($"Cannot convert {paramTypes[i]} to {parameters[i].ParameterType}", func.Parameters[i]);
+            }
+
+            return correctParameterCount[0];
+        }
+
+        private static Type GetType(this FunctionCall func, NodeSchema schema)
+        {
+            var method = GetMethod(func, schema);
+            return method.ReturnType;
+        }
+
+        private static object GetValue(this FunctionCall func, Entity entity, NodeSchema schema)
+        {
+            var method = GetMethod(func, schema);
+
+            // Get the parameter values
+            object[] paramValues;
+
+            // Special case for DATEPART / DATEDIFF / DATEADD - first parameter looks like a field but is actually an identifier
+            if (func.FunctionName.Value.Equals("DATEPART", StringComparison.OrdinalIgnoreCase) ||
+                func.FunctionName.Value.Equals("DATEDIFF", StringComparison.OrdinalIgnoreCase) ||
+                func.FunctionName.Value.Equals("DATEADD", StringComparison.OrdinalIgnoreCase))
+            {
+                paramValues = func.Parameters
+                    .Select((param, index) =>
+                    {
+                        if (index == 0)
+                            return ((ColumnReferenceExpression)param).MultiPartIdentifier.Identifiers.Single().Value;
+
+                        return param.GetValue(entity, schema);
+                    })
+                    .ToArray();
+            }
+            else
+            {
+                paramValues = func.Parameters
+                    .Select(param => param.GetValue(entity, schema))
+                    .ToArray();
+            }
+
+            // Convert the parameters to the expected types
+            var parameters = method.GetParameters();
+
+            for (var i = 0; i < parameters.Length; i++)
+                paramValues[i] = SqlTypeConverter.ChangeType(paramValues[i], parameters[i].ParameterType);
+
+            return method.Invoke(null, paramValues);
         }
 
         public static BooleanExpression RemoveCondition(this BooleanExpression expr, BooleanExpression remove)

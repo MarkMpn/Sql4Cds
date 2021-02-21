@@ -295,7 +295,58 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private Type GetAttributeType(AttributeMetadata attrMetadata)
         {
-            return typeof(string);
+            if (attrMetadata is MultiSelectPicklistAttributeMetadata)
+                return typeof(OptionSetValueCollection);
+
+            if (attrMetadata is BooleanAttributeMetadata || attrMetadata.AttributeType == AttributeTypeCode.Boolean)
+                return typeof(bool?);
+
+            if (attrMetadata is DateTimeAttributeMetadata || attrMetadata.AttributeType == AttributeTypeCode.DateTime)
+                return typeof(DateTime?);
+
+            if (attrMetadata is DecimalAttributeMetadata || attrMetadata.AttributeType == AttributeTypeCode.Decimal)
+                return typeof(decimal?);
+
+            if (attrMetadata is DoubleAttributeMetadata || attrMetadata.AttributeType == AttributeTypeCode.Double)
+                return typeof(double?);
+
+            if (attrMetadata is EntityNameAttributeMetadata || attrMetadata.AttributeType == AttributeTypeCode.EntityName)
+                return typeof(int?);
+
+            if (attrMetadata is ImageAttributeMetadata)
+                return typeof(byte[]);
+
+            if (attrMetadata is IntegerAttributeMetadata || attrMetadata.AttributeType == AttributeTypeCode.Integer)
+                return typeof(int?);
+
+            if (attrMetadata is BigIntAttributeMetadata || attrMetadata.AttributeType == AttributeTypeCode.BigInt)
+                return typeof(long?);
+
+            if (attrMetadata is LookupAttributeMetadata || attrMetadata.AttributeType == AttributeTypeCode.Lookup || attrMetadata.AttributeType == AttributeTypeCode.Customer || attrMetadata.AttributeType == AttributeTypeCode.Owner)
+                return typeof(Guid?);
+
+            if (attrMetadata is MemoAttributeMetadata || attrMetadata.AttributeType == AttributeTypeCode.Memo)
+                return typeof(string);
+
+            if (attrMetadata is MoneyAttributeMetadata || attrMetadata.AttributeType == AttributeTypeCode.Money)
+                return typeof(decimal?);
+
+            if (attrMetadata is PicklistAttributeMetadata || attrMetadata.AttributeType == AttributeTypeCode.Picklist)
+                return typeof(int?);
+
+            if (attrMetadata is StateAttributeMetadata || attrMetadata.AttributeType == AttributeTypeCode.State)
+                return typeof(int?);
+
+            if (attrMetadata is StatusAttributeMetadata || attrMetadata.AttributeType == AttributeTypeCode.Status)
+                return typeof(int?);
+
+            if (attrMetadata is StringAttributeMetadata || attrMetadata.AttributeType == AttributeTypeCode.String)
+                return typeof(string);
+
+            if (attrMetadata is UniqueIdentifierAttributeMetadata || attrMetadata.AttributeType == AttributeTypeCode.Uniqueidentifier)
+                return typeof(Guid?);
+
+            throw new ApplicationException("Unknown attribute type " + attrMetadata.GetType());
         }
 
         public override IEnumerable<string> GetRequiredColumns()
