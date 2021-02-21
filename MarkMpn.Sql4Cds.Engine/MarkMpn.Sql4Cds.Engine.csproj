@@ -68,7 +68,6 @@
     <Compile Include="ExecutionPlan\ComputeScalarNode.cs" />
     <Compile Include="ExecutionPlan\ConstantScanNode.cs" />
     <Compile Include="ExecutionPlan\DistinctNode.cs" />
-    <Compile Include="ExecutionPlan\ExpressionEvaluatorVisitor.cs" />
     <Compile Include="ExecutionPlan\ExpressionExtensions.cs" />
     <Compile Include="ExecutionPlan\FetchXmlScan.cs" />
     <Compile Include="ExecutionPlan\FilterNode.cs" />
@@ -82,6 +81,7 @@
     <Compile Include="ExecutionPlan\RetrieveTotalRecordCountNode.cs" />
     <Compile Include="ExecutionPlan\SelectNode.cs" />
     <Compile Include="ExecutionPlan\SortNode.cs" />
+    <Compile Include="ExecutionPlan\SqlTypeCategory.cs" />
     <Compile Include="ExecutionPlan\SqlTypeConverter.cs" />
     <Compile Include="ExecutionPlan\TableSpoolNode.cs" />
     <Compile Include="ExecutionPlan\TopNode.cs" />

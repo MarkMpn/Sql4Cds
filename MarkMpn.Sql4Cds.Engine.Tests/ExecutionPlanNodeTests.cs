@@ -268,5 +268,79 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(null, results[2]["f.firstname"]);
             Assert.AreEqual("Hamill", results[2]["l.lastname"]);
         }
+
+        [TestMethod]
+        public void AssertionTest()
+        {
+            var node = new AssertNode
+            {
+                Source = new ConstantScanNode
+                {
+                    Values =
+                    {
+                        new Entity { ["name"] = "Mark" },
+                        new Entity { ["name"] = "Carrington" }
+                    }
+                },
+                Assertion = e => e.GetAttributeValue<string>("name") == "Mark",
+                ErrorMessage = "Only Mark is allowed"
+            };
+
+            var results = node.Execute(_org, _metadata, new StubOptions(), null).GetEnumerator();
+
+            Assert.IsTrue(results.MoveNext());
+            Assert.AreEqual("Mark", results.Current.GetAttributeValue<string>("name"));
+
+            var ex = Assert.ThrowsException<ApplicationException>(() => results.MoveNext());
+            Assert.AreEqual(node.ErrorMessage, ex.Message);
+        }
+
+        [TestMethod]
+        public void ComputeScalarTest()
+        {
+            var node = new ComputeScalarNode
+            {
+                Source = new ConstantScanNode
+                {
+                    Values =
+                    {
+                        new Entity { ["value1"] = 1, ["value2"] = 2 },
+                        new Entity { ["value1"] = 3, ["value2"] = 4 }
+                    },
+                    Schema =
+                    {
+                        ["value1"] = typeof(int),
+                        ["value2"] = typeof(int)
+                    }
+                },
+                Columns =
+                {
+                    ["mul"] = new BinaryExpression
+                    {
+                        FirstExpression = new ColumnReferenceExpression
+                        {
+                            MultiPartIdentifier = new MultiPartIdentifier
+                            {
+                                Identifiers = { new Identifier { Value = "value1" } }
+                            }
+                        },
+                        BinaryExpressionType = BinaryExpressionType.Multiply,
+                        SecondExpression = new ColumnReferenceExpression
+                        {
+                            MultiPartIdentifier = new MultiPartIdentifier
+                            {
+                                Identifiers = { new Identifier { Value = "value2" } }
+                            }
+                        }
+                    }
+                }
+            };
+
+            var results = node.Execute(_org, _metadata, new StubOptions(), null)
+                .Select(e => e.GetAttributeValue<int>("mul"))
+                .ToArray();
+
+            CollectionAssert.AreEqual(new[] { 2, 12 }, results);
+        }
     }
 }

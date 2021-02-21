@@ -7,12 +7,24 @@ using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
+    /// <summary>
+    /// Checks that each row in the results meets an expected condition
+    /// </summary>
     public class AssertNode : BaseNode
     {
+        /// <summary>
+        /// The data source for the assertion
+        /// </summary>
         public IExecutionPlanNode Source { get; set; }
 
+        /// <summary>
+        /// The function that must be true for each entity in the <see cref="Source"/>
+        /// </summary>
         public Func<Entity,bool> Assertion { get; set; }
 
+        /// <summary>
+        /// The error message that is generated if any record in the <see cref="Source"/> fails to meet the <see cref="Assertion"/>
+        /// </summary>
         public string ErrorMessage { get; set; }
 
         public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string,object> parameterValues)
