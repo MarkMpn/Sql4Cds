@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -29,7 +28,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (val == null)
                         continue;
 
-                    _hashCode ^= CaseInsensitiveHashCodeProvider.Default.GetHashCode(val);
+                    _hashCode ^= StringComparer.CurrentCultureIgnoreCase.GetHashCode(val);
                 }
             }
 
@@ -50,7 +49,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (_values[i] == null || other._values[i] == null)
                         return false;
 
-                    if (CaseInsensitiveComparer.Default.Compare(_values[i], other._values[i]) != 0)
+                    if (StringComparer.CurrentCultureIgnoreCase.Compare(_values[i], other._values[i]) != 0)
                         return false;
                 }
 

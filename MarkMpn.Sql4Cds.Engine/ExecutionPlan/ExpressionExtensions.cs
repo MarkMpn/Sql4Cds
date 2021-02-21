@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -203,7 +202,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             SqlTypeConverter.MakeConsistentTypes(ref lhs, ref rhs);
 
-            var comparison = CaseInsensitiveComparer.Default.Compare(lhs, rhs);
+            var comparison = StringComparer.CurrentCultureIgnoreCase.Compare(lhs, rhs);
 
             switch (cmp.ComparisonType)
             {
