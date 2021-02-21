@@ -91,10 +91,68 @@ namespace MarkMpn.Sql4Cds.Engine
 
         private SelectNode ConvertSelectStatement(QueryExpression query, NodeSchema outerSchema, Dictionary<string,string> outerReferences)
         {
-            if (!(query is QuerySpecification querySpec))
-                throw new NotSupportedQueryFragmentException("Unhandled SELECT query expression", query);
+            if (query is QuerySpecification querySpec)
+                return ConvertSelectQuerySpec(querySpec, outerSchema, outerReferences);
 
-            return ConvertSelectQuerySpec(querySpec, outerSchema, outerReferences);
+            if (query is BinaryQueryExpression binary)
+                return ConvertBinaryQuery(binary, outerSchema, outerReferences);
+
+            throw new NotSupportedQueryFragmentException("Unhandled SELECT query expression", query);
+        }
+
+        private SelectNode ConvertBinaryQuery(BinaryQueryExpression binary, NodeSchema outerSchema, Dictionary<string, string> outerReferences)
+        {
+            if (binary.BinaryQueryExpressionType != BinaryQueryExpressionType.Union)
+                throw new NotSupportedQueryFragmentException($"Unhandled {binary.BinaryQueryExpressionType} query type", binary);
+
+            if (binary.ForClause != null)
+                throw new NotSupportedQueryFragmentException("Unhandled FOR clause", binary.ForClause);
+
+            var left = ConvertSelectStatement(binary.FirstQueryExpression, outerSchema, outerReferences);
+            var right = ConvertSelectStatement(binary.SecondQueryExpression, outerSchema, outerReferences);
+
+            var concat = left.Source as ConcatenateNode;
+
+            if (concat == null)
+            {
+                concat = new ConcatenateNode();
+
+                concat.Sources.Add(left.Source);
+
+                foreach (var col in left.ColumnSet)
+                {
+                    concat.ColumnSet.Add(new ConcatenateColumn
+                    {
+                        OutputColumn = col.OutputColumn,
+                        SourceColumns = { col.SourceColumn }
+                    });
+                }
+            }
+
+            concat.Sources.Add(right.Source);
+
+            if (concat.ColumnSet.Count != right.ColumnSet.Count)
+                throw new NotSupportedQueryFragmentException("UNION must have the same number of columns in each query", binary);
+
+            for (var i = 0; i < concat.ColumnSet.Count; i++)
+                concat.ColumnSet[i].SourceColumns.Add(right.ColumnSet[i].SourceColumn);
+
+            var node = (IExecutionPlanNode)concat;
+
+            if (!binary.All)
+            {
+                var distinct = new DistinctNode { Source = node };
+                distinct.Columns.AddRange(concat.ColumnSet.Select(col => col.OutputColumn));
+                node = distinct;
+            }
+
+            node = ConvertOrderByClause(node, binary.OrderByClause);
+            node = ConvertOffsetClause(node, binary.OffsetClause);
+
+            var select = new SelectNode { Source = node };
+            select.ColumnSet.AddRange(concat.ColumnSet.Select(col => new SelectColumn { SourceColumn = col.OutputColumn, OutputColumn = col.OutputColumn }));
+
+            return select;
         }
 
         private SelectNode ConvertSelectQuerySpec(QuerySpecification querySpec, NodeSchema outerSchema, Dictionary<string,string> outerReferences)
@@ -117,7 +175,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             // Add DISTINCT
             var distinct = querySpec.UniqueRowFilter == UniqueRowFilter.Distinct ? new DistinctNode { Source = node } : null;
-            node = distinct;
+            node = distinct ?? node;
 
             // Add TOP/OFFSET
             if (querySpec.TopRowFilter != null && querySpec.OffsetClause != null)
@@ -460,6 +518,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
         private SelectNode ConvertSelectClause(IList<SelectElement> selectElements, IExecutionPlanNode node, DistinctNode distinct)
         {
+            var schema = node.GetSchema(Metadata);
+
             var select = new SelectNode
             {
                 Source = node
@@ -477,7 +537,11 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (scalar.Expression is ColumnReferenceExpression col)
                     {
                         var colName = String.Join(".", col.MultiPartIdentifier.Identifiers.Select(id => id.Value));
-                        var alias = scalar.ColumnName?.Value ?? colName;
+
+                        if (!schema.ContainsColumn(colName, out colName))
+                            throw new NotSupportedQueryFragmentException("Unknown column", col);
+
+                        var alias = scalar.ColumnName?.Value ?? col.MultiPartIdentifier.Identifiers.Last().Value;
 
                         select.ColumnSet.Add(new SelectColumn
                         {
@@ -487,7 +551,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
                     else
                     {
-                        var alias = scalar.ColumnName?.Value ?? $"Expr{++_colNameCounter}";
+                        var alias = $"Expr{++_colNameCounter}";
 
                         // If scalar.Expression contains a subquery, create nested loop to evaluate it in the context
                         // of the current record
@@ -559,11 +623,15 @@ namespace MarkMpn.Sql4Cds.Engine
                         if (rewrites.Any())
                             scalar.Accept(new RewriteVisitor(rewrites));
 
+                        // Check the type of this expression now so any errors can be reported
+                        var computeScalarSchema = computeScalar.GetSchema(Metadata);
+                        scalar.Expression.GetType(computeScalarSchema);
+
                         computeScalar.Columns[alias] = scalar.Expression;
                         select.ColumnSet.Add(new SelectColumn
                         {
                             SourceColumn = alias,
-                            OutputColumn = alias
+                            OutputColumn = scalar.ColumnName?.Value ?? alias
                         });
                     }
                 }
@@ -593,8 +661,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     if (col.AllColumns)
                     {
-                        var schema = distinct.GetSchema(Metadata);
-                        distinct.Columns.AddRange(schema.Schema.Keys);
+                        var distinctSchema = distinct.GetSchema(Metadata);
+                        distinct.Columns.AddRange(distinctSchema.Schema.Keys);
                     }
                     else
                     {

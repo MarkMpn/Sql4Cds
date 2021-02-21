@@ -59,7 +59,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     schema.ContainsColumn(sourceCol, out sourceCol);
                     var attr = AddAttribute(fetchXml, sourceCol, null, out var added);
 
-                    if (col.SourceColumn != col.OutputColumn)
+                    if (col.OutputColumn != col.SourceColumn.Split('.').Last())
                     {
                         if (added || (!processedSourceColumns.Contains(col.SourceColumn) && !IsAliasReferenced(fetchXml, attr.alias)))
                         {

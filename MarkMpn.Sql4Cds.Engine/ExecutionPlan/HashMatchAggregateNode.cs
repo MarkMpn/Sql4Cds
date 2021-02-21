@@ -67,6 +67,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
+            foreach (var aggregate in Aggregates)
+            {
+                Type aggregateType;
+
+                switch (aggregate.Value.AggregateType)
+                {
+                    case AggregateType.Count:
+                    case AggregateType.CountStar:
+                        aggregateType = typeof(int);
+                        break;
+
+                    default:
+                        aggregateType = aggregate.Value.Expression.GetType(sourceSchema);
+                        break;
+                }
+
+                schema.Schema[aggregate.Key] = aggregateType;
+            }
+
             return schema;
         }
 

@@ -659,7 +659,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var select = AssertNode<SelectNode>(plans[0]);
             var computeScalar = AssertNode<ComputeScalarNode>(select.Source);
             Assert.AreEqual(1, computeScalar.Columns.Count);
-            Assert.AreEqual("firstname + ' ' + lastname", computeScalar.Columns["fullname"].ToSql());
+            Assert.AreEqual("firstname + ' ' + lastname", computeScalar.Columns["Expr1"].ToSql());
             var fetch = AssertNode<FetchXmlScan>(computeScalar.Source);
             AssertFetchXml(fetch, @"
                 <fetch>
@@ -724,8 +724,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var select = AssertNode<SelectNode>(plans[0]);
             var computeScalar = AssertNode<ComputeScalarNode>(select.Source);
             Assert.AreEqual(2, computeScalar.Columns.Count);
-            Assert.AreEqual("firstname + ' ' + lastname", computeScalar.Columns["fullname"].ToSql());
-            Assert.AreEqual("'Account: ' + Expr2", computeScalar.Columns["accountname"].ToSql());
+            Assert.AreEqual("firstname + ' ' + lastname", computeScalar.Columns[select.ColumnSet[0].SourceColumn].ToSql());
+            Assert.AreEqual("'Account: ' + Expr4", computeScalar.Columns[select.ColumnSet[1].SourceColumn].ToSql());
             var nestedLoop = AssertNode<NestedLoopNode>(computeScalar.Source);
             var fetch = AssertNode<FetchXmlScan>(nestedLoop.LeftSource);
             AssertFetchXml(fetch, @"
@@ -744,10 +744,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             AssertFetchXml(subAggregateFetch, @"
                 <fetch aggregate='true'>
                     <entity name='account'>
-                        <attribute name='name' aggregate='max' alias='Expr2' />
-                        <attribute name='accountid' aggregate='count' alias='Expr3' />
+                        <attribute name='name' aggregate='max' alias='Expr4' />
+                        <attribute name='accountid' aggregate='count' alias='Expr5' />
                         <filter>
-                            <condition attribute='accountid' operator='eq' value='@Expr1' />
+                            <condition attribute='accountid' operator='eq' value='@Expr3' />
                         </filter>
                     </entity>
                 </fetch>");
@@ -784,6 +784,47 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 <fetch>
                     <entity name='account'>
                         <attribute name='name' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void UnionAll()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+
+            var query = @"
+                SELECT name FROM account
+                UNION ALL
+                SELECT fullname FROM contact";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var concat = AssertNode<ConcatenateNode>(select.Source);
+            Assert.AreEqual(2, concat.Sources.Count);
+            Assert.AreEqual("name", concat.ColumnSet[0].OutputColumn);
+            Assert.AreEqual("account.name", concat.ColumnSet[0].SourceColumns[0]);
+            Assert.AreEqual("contact.fullname", concat.ColumnSet[0].SourceColumns[1]);
+            var accountFetch = AssertNode<FetchXmlScan>(concat.Sources[0]);
+            AssertFetchXml(accountFetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                    </entity>
+                </fetch>");
+            var contactFetch = AssertNode<FetchXmlScan>(concat.Sources[1]);
+            AssertFetchXml(contactFetch, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='fullname' />
                     </entity>
                 </fetch>");
         }
