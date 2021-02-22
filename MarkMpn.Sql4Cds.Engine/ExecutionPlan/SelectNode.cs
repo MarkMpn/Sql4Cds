@@ -23,7 +23,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, object> parameterValues)
         {
             foreach (var entity in Source.Execute(org, metadata, options, parameterValues))
+            {
+                foreach (var col in ColumnSet)
+                    entity[col.OutputColumn] = entity[col.SourceColumn];
+
                 yield return entity;
+            }
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
