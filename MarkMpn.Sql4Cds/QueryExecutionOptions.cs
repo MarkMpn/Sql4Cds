@@ -1,7 +1,9 @@
-﻿using System.ComponentModel;
+﻿using System;
+using System.ComponentModel;
 using System.Linq;
 using System.Windows.Forms;
 using MarkMpn.Sql4Cds.Engine;
+using McTools.Xrm.Connection;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
@@ -10,13 +12,15 @@ namespace MarkMpn.Sql4Cds
 {
     class QueryExecutionOptions : IQueryExecutionOptions
     {
+        private readonly ConnectionDetail _con;
         private readonly IOrganizationService _org;
         private readonly BackgroundWorker _worker;
         private readonly Control _host;
         private int _localeId;
 
-        public QueryExecutionOptions(IOrganizationService org, BackgroundWorker worker, Control host)
+        public QueryExecutionOptions(ConnectionDetail con, IOrganizationService org, BackgroundWorker worker, Control host)
         {
+            _con = con;
             _org = org;
             _worker = worker;
             _host = host;
@@ -110,6 +114,6 @@ namespace MarkMpn.Sql4Cds
 
         public int MaxDegreeOfParallelism => Settings.Instance.MaxDegreeOfPaallelism;
 
-        public bool ColumnComparisonAvailable => true;
+        public bool ColumnComparisonAvailable => new Version(_con.OrganizationVersion) >= new Version("9.1.0.19251");
     }
 }

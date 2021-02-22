@@ -16,6 +16,7 @@ using System.Xml;
 using System.Xml.Serialization;
 using AutocompleteMenuNS;
 using MarkMpn.Sql4Cds.Engine;
+using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using McTools.Xrm.Connection;
 using Microsoft.ApplicationInsights;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
@@ -41,12 +42,12 @@ namespace MarkMpn.Sql4Cds
 
         class QueryException : ApplicationException
         {
-            public QueryException(Query query, Exception innerException) : base(innerException.Message, innerException)
+            public QueryException(IExecutionPlanNode query, Exception innerException) : base(innerException.Message, innerException)
             {
                 Query = query;
             }
 
-            public Query Query { get; }
+            public IExecutionPlanNode Query { get; }
         }
 
         class TextRange
@@ -925,30 +926,33 @@ namespace MarkMpn.Sql4Cds
 
             backgroundWorker.ReportProgress(0, "Executing query...");
 
-            var converter = new Sql2FetchXml(Metadata, Settings.Instance.QuotedIdentifiers);
+            //var converter = new Sql2FetchXml(Metadata, Settings.Instance.QuotedIdentifiers);
+            var options = new QueryExecutionOptions(_con, Service, backgroundWorker, this);
+            var converter = new ExecutionPlanBuilder(Metadata, options);
 
             if (Settings.Instance.UseTSQLEndpoint &&
                 args.Execute &&
                 !String.IsNullOrEmpty(((CrmServiceClient)Service).CurrentAccessToken))
                 converter.TDSEndpointAvailable = true;
 
-            converter.ColumnComparisonAvailable = new Version(_con.OrganizationVersion) >= new Version("9.1.0.19251");
-
-            var queries = converter.Convert(args.Sql);
-
-            var options = new QueryExecutionOptions(Service, backgroundWorker, this);
+            var queries = converter.Build(args.Sql);
 
             if (args.Execute)
             {
                 foreach (var query in queries)
                 {
                     _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name, ["Source"] = "XrmToolBox" });
-                    query.Execute(Service, Metadata, options);
 
-                    Execute(() => ShowResult(query, args));
+                    try
+                    {
+                        var result = query.Execute(Service, Metadata, options, null).ToList();
 
-                    if (query.Result is Exception ex)
+                        Execute(() => ShowResult(query, args, result));
+                    }
+                    catch (Exception ex)
+                    {
                         throw new QueryException(query, ex);
+                    }
 
                     if (query is ImpersonateQuery || query is RevertQuery)
                         Execute(() => SyncUsername());
@@ -959,11 +963,12 @@ namespace MarkMpn.Sql4Cds
                 foreach (var query in queries)
                 {
                     _ai.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name, ["Source"] = "XrmToolBox" });
-
+                    Execute(() => ShowResult(query, args, null));
+                    /* TODO:
                     if (query is IQueryRequiresFinalization finalize)
                         finalize.FinalizeRequest(Service, options);
 
-                    Execute(() => ShowResult(query, args));
+                    Execute(() => ShowResult(query, args));*/
                 }
             }
 
@@ -974,7 +979,7 @@ namespace MarkMpn.Sql4Cds
             }
         }
 
-        private void ShowResult(Query query, ExecuteParams args)
+        private void ShowResult(IExecutionPlanNode query, ExecuteParams args, List<Entity> results)
         {
             Control result = null;
             Control fetchXml = null;
@@ -982,12 +987,11 @@ namespace MarkMpn.Sql4Cds
 
             var isMetadata = query.GetType().BaseType.IsGenericType && query.GetType().BaseType.GetGenericTypeDefinition() == typeof(MetadataQuery<,>);
 
-            if (query.Result is EntityCollection || query.Result is DataTable)
+            if (results != null)
             {
-                var entityCollection = query.Result as EntityCollection;
-                var dataTable = query.Result as DataTable;
+                var entityCollection = new EntityCollection(results);
 
-                var grid = entityCollection != null ? new CRMGridView() : new DataGridView();
+                var grid = new CRMGridView();
 
                 grid.AllowUserToAddRows = false;
                 grid.AllowUserToDeleteRows = false;
@@ -1005,40 +1009,26 @@ namespace MarkMpn.Sql4Cds
                 grid.ShowEditingIcon = false;
                 grid.ContextMenuStrip = gridContextMenuStrip;
 
-                if (entityCollection != null)
-                {
-                    var crmGrid = (CRMGridView)grid;
-
-                    crmGrid.EntityReferenceClickable = true;
-                    crmGrid.OrganizationService = Service;
-                    crmGrid.ShowFriendlyNames = Settings.Instance.ShowEntityReferenceNames;
-                    crmGrid.ShowIdColumn = false;
-                    crmGrid.ShowIndexColumn = false;
-                    crmGrid.ShowLocalTimes = Settings.Instance.ShowLocalTimes;
-                    crmGrid.RecordClick += Grid_RecordClick;
-                    crmGrid.CellMouseUp += Grid_CellMouseUp;
-                }
-
-                if (query is SelectQuery select && (entityCollection != null || isMetadata))
+                if (query is SelectNode select)
                 {
                     foreach (var col in select.ColumnSet)
                     {
-                        var colName = col;
+                        var colName = col.OutputColumn;
 
-                        if (grid.Columns.Contains(col))
+                        if (grid.Columns.Contains(colName))
                         {
                             var suffix = 1;
-                            while (grid.Columns.Contains($"{col}_{suffix}"))
+                            while (grid.Columns.Contains($"{col.OutputColumn}_{suffix}"))
                                 suffix++;
 
-                            var newCol = $"{col}_{suffix}";
+                            var newCol = $"{col.OutputColumn}_{suffix}";
 
                             if (entityCollection != null)
                             {
                                 foreach (var entity in entityCollection.Entities)
                                 {
-                                    if (entity.Contains(col))
-                                        entity[newCol] = entity[col];
+                                    if (entity.Contains(colName))
+                                        entity[newCol] = entity[colName];
                                 }
                             }
 
@@ -1047,9 +1037,6 @@ namespace MarkMpn.Sql4Cds
 
                         grid.Columns.Add(colName, colName);
                         grid.Columns[colName].FillWeight = 1;
-
-                        if (entityCollection == null)
-                            grid.Columns[colName].DataPropertyName = col;
                     }
 
                     if (isMetadata)
@@ -1058,10 +1045,7 @@ namespace MarkMpn.Sql4Cds
 
                 grid.HandleCreated += (s, e) =>
                 {
-                    if (grid is CRMGridView crmGrid)
-                        crmGrid.DataSource = query.Result;
-                    else
-                        grid.DataSource = query.Result;
+                    ((CRMGridView)grid).DataSource = entityCollection;
 
                     if (Settings.Instance.AutoSizeColumns)
                         grid.AutoResizeColumns();
@@ -1087,18 +1071,21 @@ namespace MarkMpn.Sql4Cds
 
                 if (entityCollection != null)
                     rowCount = entityCollection.Entities.Count;
-                else
-                    rowCount = dataTable.Rows.Count;
+                //else
+                //    rowCount = dataTable.Rows.Count;
 
                 AddMessage(query.Index, query.Length, $"({rowCount} row{(rowCount == 1 ? "" : "s")} affected)", false);
             }
+            /* TODO:
             else if (query.Result is string msg)
             {
                 AddMessage(query.Index, query.Length, msg, false);
-            }
+            }*/
 
             if (args.IncludeFetchXml)
             {
+                fetchXml = new ExecutionPlanView { Plan = query };
+                /*
                 if (isMetadata)
                 {
                     var queryDisplay = CreateXmlEditor();
@@ -1132,7 +1119,7 @@ namespace MarkMpn.Sql4Cds
                         fetchXml.Controls.Add(distinctWithoutSortWarning);
 
                     fetchXml.Controls.Add(toolbar);
-                }
+                }*/
             }
 
             AddResult(result, fetchXml, rowCount);
@@ -1199,6 +1186,9 @@ namespace MarkMpn.Sql4Cds
 
             if (control is Panel panel)
                 return panel.Controls.OfType<Control>().Sum(child => GetMinHeight(child, max));
+
+            if (control is ExecutionPlanView)
+                return control.ClientSize.Height;
 
             return control.Height;
         }
