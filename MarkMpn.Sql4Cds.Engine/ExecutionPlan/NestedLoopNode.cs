@@ -35,11 +35,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (OuterReferences != null)
                 {
-                    innerParameters = new Dictionary<string, object>(parameterValues);
+                    if (parameterValues == null)
+                        innerParameters = new Dictionary<string, object>();
+                    else
+                        innerParameters = new Dictionary<string, object>(parameterValues);
 
                     foreach (var kvp in OuterReferences)
-                        innerParameters[kvp.Value] = left[kvp.Key];
+                    {
+                        left.Attributes.TryGetValue(kvp.Key, out var outerValue);
+                        innerParameters[kvp.Value] = outerValue;
+                    }
                 }
+
+                var hasRight = false;
 
                 foreach (var right in RightSource.Execute(org, metadata, options, innerParameters))
                 {
@@ -47,16 +55,28 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     if (JoinCondition == null || JoinCondition.GetValue(merged, mergedSchema))
                         yield return merged;
+
+                    hasRight = true;
                 }
+
+                if (!hasRight && JoinType == QualifiedJoinType.LeftOuter)
+                    yield return left;
             }
         }
 
         public override IEnumerable<string> GetRequiredColumns()
         {
-            if (JoinCondition == null)
-                return Array.Empty<string>();
+            if (JoinCondition != null)
+            {
+                foreach (var col in JoinCondition.GetColumns())
+                    yield return col;
+            }
 
-            return JoinCondition.GetColumns();
+            if (OuterReferences != null)
+            {
+                foreach (var col in OuterReferences.Keys)
+                    yield return col;
+            }
         }
 
         public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options)

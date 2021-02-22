@@ -452,4 +452,33 @@ namespace MarkMpn.Sql4Cds.Engine.QueryExtensions
             _sumDecimal = 0;
         }
     }
+
+    class First : AggregateFunction
+    {
+        private bool _done;
+
+        /// <summary>
+        /// Creates a new <see cref="Sum"/>
+        /// </summary>
+        /// <param name="selector">A function that extracts the value to sum</param>
+        public First(Func<Entity, object> selector) : base(selector)
+        {
+        }
+
+        protected override void Update(object value)
+        {
+            if (_done)
+                return;
+
+            Value = value;
+        }
+
+        public override Type Type => Expression.Type;
+
+        public override void Reset()
+        {
+            base.Reset();
+            _done = false;
+        }
+    }
 }

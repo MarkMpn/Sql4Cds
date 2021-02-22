@@ -36,6 +36,11 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         public IQueryExecutionOptions Options { get; set; }
 
+        /// <summary>
+        /// Indicates if the TDS Endpoint is available to use if necessary
+        /// </summary>
+        public bool TDSEndpointAvailable { get; set; }
+
         public IExecutionPlanNode[] Build(string sql)
         {
             var queries = new List<IExecutionPlanNode>();
@@ -579,7 +584,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                 {
                                     [subqueryCol] = new Aggregate
                                     {
-                                        AggregateType = AggregateType.Max,
+                                        AggregateType = AggregateType.First,
                                         Expression = new ColumnReferenceExpression
                                         {
                                             MultiPartIdentifier = new MultiPartIdentifier
@@ -738,39 +743,15 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (joinConditionVisitor.LhsKey != null && joinConditionVisitor.RhsKey != null)
                 {
-                    BaseJoinNode joinNode;
-
-                    var lhsKey = joinConditionVisitor.LhsKey.GetColumnName();
-                    if (lhsSchema.ContainsColumn(lhsKey, out var lhsNormalizedKey) && lhsNormalizedKey.Equals(lhsSchema.PrimaryKey, StringComparison.OrdinalIgnoreCase))
+                    var joinNode = new MergeJoinNode
                     {
-                        joinNode = new MergeJoinNode
-                        {
-                            LeftSource = lhs,
-                            LeftAttribute = joinConditionVisitor.LhsKey,
-                            RightSource = rhs,
-                            RightAttribute = joinConditionVisitor.RhsKey,
-                            JoinType = join.QualifiedJoinType,
-                            AdditionalJoinCriteria = join.SearchCondition.RemoveCondition(joinConditionVisitor.JoinCondition)
-                        };
-                    }
-                    else if (rhsSchema.ContainsColumn(lhsKey, out var rhsNormalizedKey) && rhsNormalizedKey.Equals(rhsSchema.PrimaryKey, StringComparison.OrdinalIgnoreCase))
-                    {
-                        joinNode = new MergeJoinNode
-                        {
-                            LeftSource = rhs,
-                            LeftAttribute = joinConditionVisitor.RhsKey,
-                            RightSource = lhs,
-                            RightAttribute = joinConditionVisitor.LhsKey,
-                            JoinType = join.QualifiedJoinType,
-                            AdditionalJoinCriteria = join.SearchCondition.RemoveCondition(joinConditionVisitor.JoinCondition)
-                        };
-                    }
-                    else
-                    {
-                        // TODO: Hash join type that can be folded into FetchXML or implement
-                        // many-to-many joins in MergeJoinNode
-                        throw new NotImplementedException();
-                    }
+                        LeftSource = lhs,
+                        LeftAttribute = joinConditionVisitor.LhsKey,
+                        RightSource = rhs,
+                        RightAttribute = joinConditionVisitor.RhsKey,
+                        JoinType = join.QualifiedJoinType,
+                        AdditionalJoinCriteria = join.SearchCondition.RemoveCondition(joinConditionVisitor.JoinCondition)
+                    };
 
                     return joinNode;
                 }

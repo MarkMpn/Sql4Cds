@@ -14,7 +14,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         Count,
         CountStar,
         Sum,
-        Average
+        Average,
+        First
     }
 
     public class Aggregate

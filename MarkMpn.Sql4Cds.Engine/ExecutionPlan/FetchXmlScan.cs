@@ -12,7 +12,47 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
     public class FetchXmlScan : BaseNode
     {
-        private Dictionary<string, condition> _parameterizedConditions;
+        class ParameterizedCondition
+        {
+            private readonly filter _filter;
+            private readonly condition _condition;
+            private readonly filter _contradiction;
+
+            public ParameterizedCondition(filter filter, condition condition)
+            {
+                _filter = filter;
+                _condition = condition;
+                _contradiction = new filter
+                {
+                    Items = new object[]
+                    {
+                        new condition { attribute = condition.attribute, @operator = @operator.@null },
+                        new condition { attribute = condition.attribute, @operator = @operator.notnull },
+                    }
+                };
+            }
+
+            public void SetValue(object value)
+            {
+                if (value == null)
+                {
+                    if (_filter.Items.Contains(_contradiction))
+                        return;
+
+                    _filter.Items = _filter.Items.Except(new[] { _condition }).Concat(new[] { _contradiction }).ToArray();
+                }
+                else
+                {
+                    if (!_filter.Items.Contains(_condition))
+                        _filter.Items = _filter.Items.Except(new[] { _contradiction }).Concat(new[] { _condition }).ToArray();
+
+                    _condition.value = value.ToString();
+                }
+            }
+        }
+
+        private Dictionary<string, ParameterizedCondition> _parameterizedConditions;
+
 
         public FetchXmlScan()
         {
@@ -59,6 +99,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (options.Cancelled)
                 yield break;
 
+            ReturnFullSchema = false;
+            var schema = GetSchema(metadata);
+
             // Apply any variable conditions
             if (parameterValues != null)
             {
@@ -68,7 +111,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 foreach (var param in parameterValues)
                 {
                     if (_parameterizedConditions.TryGetValue(param.Key, out var condition))
-                        condition.value = param.Value?.ToString();
+                        condition.SetValue(param.Value);
                 }
             }
 
@@ -82,20 +125,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var entity in res.Entities)
             {
-                // Expose any formatted values for OptionSetValue and EntityReference values
-                foreach (var formatted in entity.FormattedValues)
-                {
-                    if (!entity.Contains(formatted.Key + "name"))
-                        entity[formatted.Key + "name"] = formatted.Value;
-                }
-
-                // Expose the type of lookup values
-                foreach (var attribute in entity.Attributes.Where(attr => attr.Value is EntityReference).ToList())
-                {
-                    if (!entity.Contains(attribute.Key + "type"))
-                        entity[attribute.Key + "type"] = ((EntityReference)attribute.Value).LogicalName;
-                }
-
+                OnRetrievedEntity(entity, schema);
                 yield return entity;
             }
 
@@ -126,30 +156,67 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var nextPage = org.RetrieveMultiple(new FetchExpression(Serialize(FetchXml)));
 
                 foreach (var entity in nextPage.Entities)
+                {
+                    OnRetrievedEntity(entity, schema);
                     yield return entity;
+                }
 
                 count += nextPage.Entities.Count;
                 res = nextPage;
             }
         }
 
-        private void FindParameterizedConditions()
+        private void OnRetrievedEntity(Entity entity, NodeSchema schema)
         {
-            _parameterizedConditions = new Dictionary<string, condition>();
+            // Expose any formatted values for OptionSetValue and EntityReference values
+            foreach (var formatted in entity.FormattedValues)
+            {
+                if (!entity.Contains(formatted.Key + "name"))
+                    entity[formatted.Key + "name"] = formatted.Value;
+            }
 
-            FindParameterizedConditions(Entity.Items);
+            // Prefix all attributes of the main entity with the expected alias
+            foreach (var attribute in entity.Attributes.Where(attr => !attr.Key.Contains('.') && !(attr.Value is AliasedValue)).ToList())
+                entity[$"{Alias}.{attribute.Key}"] = attribute.Value;
+
+            // Convert aliased values to the underlying value
+            foreach (var attribute in entity.Attributes.Where(attr => attr.Value is AliasedValue).ToList())
+                entity[attribute.Key] = ((AliasedValue)attribute.Value).Value;
+
+            // Expose the type of lookup values
+            foreach (var attribute in entity.Attributes.Where(attr => attr.Value is EntityReference).ToList())
+            {
+                if (!entity.Contains(attribute.Key + "type"))
+                    entity[attribute.Key + "type"] = ((EntityReference)attribute.Value).LogicalName;
+
+                entity[attribute.Key] = ((EntityReference)attribute.Value).Id;
+            }
+
+            // Populate any missing attributes
+            foreach (var col in schema.Schema.Keys)
+            {
+                if (!entity.Contains(col))
+                    entity[col] = null;
+            }
         }
 
-        private void FindParameterizedConditions(object[] items)
+        private void FindParameterizedConditions()
+        {
+            _parameterizedConditions = new Dictionary<string, ParameterizedCondition>();
+
+            FindParameterizedConditions(null, Entity.Items);
+        }
+
+        private void FindParameterizedConditions(filter filter, object[] items)
         {
             foreach (var condition in items.OfType<condition>().Where(c => c.value != null && c.value.StartsWith("@")))
-                _parameterizedConditions[condition.value] = condition;
+                _parameterizedConditions[condition.value] = new ParameterizedCondition(filter, condition);
 
-            foreach (var filter in items.OfType<filter>())
-                FindParameterizedConditions(filter.Items);
+            foreach (var subFilter in items.OfType<filter>())
+                FindParameterizedConditions(subFilter, subFilter.Items);
 
             foreach (var link in items.OfType<FetchLinkEntityType>())
-                FindParameterizedConditions(link.Items);
+                FindParameterizedConditions(null, link.Items);
         }
 
         private bool ContainsSort(object[] items)
@@ -345,6 +412,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (attrMetadata is UniqueIdentifierAttributeMetadata || attrMetadata.AttributeType == AttributeTypeCode.Uniqueidentifier)
                 return typeof(Guid?);
+
+            if (attrMetadata.AttributeType == AttributeTypeCode.Virtual)
+                return typeof(string);
 
             throw new ApplicationException("Unknown attribute type " + attrMetadata.GetType());
         }
