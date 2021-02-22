@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Xml.Serialization;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
+using MarkMpn.Sql4Cds.Engine.QueryExtensions;
 using MarkMpn.Sql4Cds.Engine.Visitors;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
@@ -15,6 +16,48 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
     public class HashMatchAggregateNode : BaseNode
     {
+        class GroupingKey
+        {
+            private readonly int _hashCode;
+
+            public GroupingKey(Entity entity, List<ColumnReferenceExpression> columns)
+            {
+                Values = columns.Select(col => entity[col.GetColumnName()]).ToList();
+                _hashCode = 0;
+
+                foreach (var value in Values)
+                {
+                    if (value == null)
+                        continue;
+
+                    _hashCode ^= StringComparer.OrdinalIgnoreCase.GetHashCode(value);
+                }
+            }
+
+            public List<object> Values { get; }
+
+            public override int GetHashCode() => _hashCode;
+
+            public override bool Equals(object obj)
+            {
+                var other = (GroupingKey)obj;
+
+                for (var i = 0; i < Values.Count; i++)
+                {
+                    if (Values[i] == null && other.Values[i] == null)
+                        continue;
+
+                    if (Values[i] == null || other.Values[i] == null)
+                        return false;
+
+                    if (!StringComparer.OrdinalIgnoreCase.Equals(Values[i], other.Values[i]))
+                        return false;
+                }
+
+                return true;
+            }
+        }
+
         public List<ColumnReferenceExpression> GroupBy { get; } = new List<ColumnReferenceExpression>();
 
         public Dictionary<string, Aggregate> Aggregates { get; } = new Dictionary<string, Aggregate>();
@@ -23,7 +66,73 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, object> parameterValues)
         {
-            throw new NotImplementedException();
+            var groups = new Dictionary<GroupingKey, Dictionary<string,AggregateFunction>>();
+            var schema = Source.GetSchema(metadata);
+
+            foreach (var entity in Source.Execute(org, metadata, options, parameterValues))
+            {
+                var key = new GroupingKey(entity, GroupBy);
+
+                if (!groups.TryGetValue(key, out var values))
+                {
+                    values = new Dictionary<string,AggregateFunction>();
+
+                    foreach (var aggregate in Aggregates)
+                    {
+                        switch (aggregate.Value.AggregateType)
+                        {
+                            case AggregateType.Average:
+                                values[aggregate.Key] = new Average(e => aggregate.Value.Expression.GetValue(e, schema));
+                                break;
+
+                            case AggregateType.Count:
+                                values[aggregate.Key] = new CountColumn(e => aggregate.Value.Expression.GetValue(e, schema));
+                                break;
+
+                            case AggregateType.CountStar:
+                                values[aggregate.Key] = new Count(null);
+                                break;
+
+                            case AggregateType.Max:
+                                values[aggregate.Key] = new Max(e => aggregate.Value.Expression.GetValue(e, schema));
+                                break;
+
+                            case AggregateType.Min:
+                                values[aggregate.Key] = new Min(e => aggregate.Value.Expression.GetValue(e, schema));
+                                break;
+
+                            case AggregateType.Sum:
+                                values[aggregate.Key] = new Sum(e => aggregate.Value.Expression.GetValue(e, schema));
+                                break;
+
+                            case AggregateType.First:
+                                values[aggregate.Key] = new First(e => aggregate.Value.Expression.GetValue(e, schema));
+                                break;
+
+                            default:
+                                throw new QueryExecutionException(null, "Unknown aggregate type");
+                        }
+                    }
+                    
+                    groups[key] = values;
+                }
+
+                foreach (var func in values.Values)
+                    func.NextRecord(entity);
+            }
+
+            foreach (var group in groups)
+            {
+                var result = new Entity();
+
+                for (var i = 0; i < GroupBy.Count; i++)
+                    result[GroupBy[i].GetColumnName()] = group.Key.Values[i];
+
+                foreach (var aggregate in group.Value)
+                    result[aggregate.Key] = aggregate.Value.Value;
+
+                yield return result;
+            }
         }
 
         public override IEnumerable<string> GetRequiredColumns()
@@ -141,6 +250,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     if (agg.Value.Distinct && agg.Value.AggregateType != ExecutionPlan.AggregateType.Count)
                         return this;
+
+                    if (agg.Value.AggregateType == AggregateType.First)
+                        return this;
                 }
 
                 var fetchXml = Source as FetchXmlScan;
@@ -186,6 +298,27 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         if (!partnames.ContainsKey(datePartType.GetColumnName()))
                             return this;
                     }
+                }
+
+                // Check none of the grouped columns are virtual attributes - FetchXML doesn't support grouping by them
+                var fetchSchema = fetchXml.GetSchema(metadata);
+                foreach (var group in GroupBy)
+                {
+                    if (!fetchSchema.ContainsColumn(group.GetColumnName(), out var groupCol))
+                        continue;
+
+                    var parts = groupCol.Split('.');
+                    string entityName;
+
+                    if (parts[0] == fetchXml.Alias)
+                        entityName = fetchXml.Entity.name;
+                    else
+                        entityName = fetchXml.Entity.FindLinkEntity(parts[0]).name;
+
+                    var attr = metadata[entityName].Attributes.Single(a => a.LogicalName == parts[1]);
+
+                    if (attr.AttributeOf != null)
+                        return this;
                 }
 
                 // FetchXML aggregates can trigger an AggregateQueryRecordLimitExceeded error. Clone the non-aggregate FetchXML
