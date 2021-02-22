@@ -733,6 +733,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     <entity name='contact'>
                         <attribute name='firstname' />
                         <attribute name='lastname' />
+                        <attribute name='parentcustomerid' />
                         <filter>
                             <condition attribute='firstname' operator='eq' value='Mark' />
                         </filter>
