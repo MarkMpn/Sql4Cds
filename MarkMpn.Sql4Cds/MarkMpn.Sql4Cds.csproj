@@ -337,6 +337,16 @@
   <ItemGroup>
     <None Include="Resources\progress.gif" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Images\AssertNode.png" />
+    <EmbeddedResource Include="Images\ComputeScalarNode.png" />
+    <EmbeddedResource Include="Images\FetchXmlScan.png" />
+    <EmbeddedResource Include="Images\HashMatchAggregateNode.png" />
+    <EmbeddedResource Include="Images\NestedLoopNode.png" />
+    <EmbeddedResource Include="Images\SelectNode.png" />
+    <EmbeddedResource Include="Images\SortNode.png" />
+    <EmbeddedResource Include="Images\TopNode.png" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>

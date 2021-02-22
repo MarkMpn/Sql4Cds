@@ -1187,8 +1187,8 @@ namespace MarkMpn.Sql4Cds
             if (control is Panel panel)
                 return panel.Controls.OfType<Control>().Sum(child => GetMinHeight(child, max));
 
-            if (control is ExecutionPlanView)
-                return control.ClientSize.Height;
+            if (control is ExecutionPlanView plan)
+                return plan.AutoScrollMinSize.Height;
 
             return control.Height;
         }

@@ -26,15 +26,20 @@ namespace MarkMpn.Sql4Cds
         private IDictionary<IExecutionPlanNode, Rectangle> _nodeLocations;
         private List<Line> _lines;
         private int _maxY;
+        private ToolTip _toopTip;
 
-        const int _offset = 32;
-        private readonly Size _size = new Size(32, 32);
+        const int _offset = 100;
+        private readonly Size _size = new Size(88, 88);
 
         public ExecutionPlanView()
         {
-            this.SetStyle(ControlStyles.DoubleBuffer, true);
-            this.SetStyle(ControlStyles.AllPaintingInWmPaint, true);
-            this.SetStyle(ControlStyles.UserPaint, true);
+            AutoScroll = true;
+
+            SetStyle(ControlStyles.DoubleBuffer, true);
+            SetStyle(ControlStyles.AllPaintingInWmPaint, true);
+            SetStyle(ControlStyles.UserPaint, true);
+
+            _toopTip = new ToolTip();
         }
 
         public IExecutionPlanNode Plan
@@ -60,7 +65,7 @@ namespace MarkMpn.Sql4Cds
 
             LayoutChildren(_plan);
 
-            ClientSize = new Size(_nodeLocations.Max(kvp => kvp.Value.Right + _offset), _maxY + _size.Height + _offset);
+            AutoScrollMinSize = new Size(_nodeLocations.Max(kvp => kvp.Value.Right + _offset), _maxY + _size.Height + _offset);
         }
 
         private void LayoutChildren(IExecutionPlanNode parent)
@@ -107,8 +112,20 @@ namespace MarkMpn.Sql4Cds
                 if (!kvp.Value.IntersectsWith(e.ClipRectangle))
                     continue;
 
-                e.Graphics.FillRectangle(Brushes.Red, kvp.Value);
-                e.Graphics.DrawString(kvp.Key.GetType().Name, Font, SystemBrushes.ControlText, kvp.Value);
+                using (var stream = GetType().Assembly.GetManifestResourceStream(GetType(), "Images." + kvp.Key.GetType().Name + ".png"))
+                {
+                    if (stream == null)
+                    {
+                        e.Graphics.FillRectangle(Brushes.Red, kvp.Value);
+                        e.Graphics.DrawString(kvp.Key.GetType().Name, Font, SystemBrushes.ControlText, kvp.Value);
+                    }
+                    else
+                    {
+                        var image = Bitmap.FromStream(stream);
+
+                        e.Graphics.DrawImage(image, kvp.Value.X + (kvp.Value.Width - image.Width) / 2, kvp.Value.Y + (kvp.Value.Height - image.Height) / 2);
+                    }
+                }
             }
 
             foreach (var line in _lines)
@@ -120,6 +137,19 @@ namespace MarkMpn.Sql4Cds
                 e.Graphics.DrawLine(Pens.Black, line.Start.X, line.Start.Y, midX, line.Start.Y);
                 e.Graphics.DrawLine(Pens.Black, midX, line.Start.Y, midX, line.End.Y);
                 e.Graphics.DrawLine(Pens.Black, midX, line.End.Y, line.End.X, line.End.Y);
+            }
+        }
+
+        protected override void OnMouseHover(EventArgs e)
+        {
+            base.OnMouseHover(e);
+
+            var mousePos = PointToClient(MousePosition);
+
+            foreach (var kvp in _nodeLocations)
+            {
+                if (kvp.Value.Contains(mousePos))
+                    _toopTip.Show(kvp.Key.GetType().Name, this, mousePos.X, mousePos.Y, 1000);
             }
         }
     }
