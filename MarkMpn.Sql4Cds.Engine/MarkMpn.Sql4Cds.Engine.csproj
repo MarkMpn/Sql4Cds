@@ -65,6 +65,7 @@
     <Compile Include="ExecutionPlan\AssertNode.cs" />
     <Compile Include="ExecutionPlan\BaseJoinNode.cs" />
     <Compile Include="ExecutionPlan\BaseNode.cs" />
+    <Compile Include="ExecutionPlan\CaseInsensitiveObjectComparer.cs" />
     <Compile Include="ExecutionPlan\ComputeScalarNode.cs" />
     <Compile Include="ExecutionPlan\ConcatenateNode.cs" />
     <Compile Include="ExecutionPlan\ConstantScanNode.cs" />

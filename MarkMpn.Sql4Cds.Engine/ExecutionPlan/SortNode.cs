@@ -31,16 +31,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             IOrderedEnumerable<Entity> sortedSource;
 
             if (Sorts[0].SortOrder == SortOrder.Descending)
-                sortedSource = source.OrderBy(e => Sorts[0].Expression.GetValue(e, schema));
+                sortedSource = source.OrderByDescending(e => Sorts[0].Expression.GetValue(e, schema), CaseInsensitiveObjectComparer.Instance);
             else
-                sortedSource = source.OrderByDescending(e => Sorts[0].Expression.GetValue(e, schema));
+                sortedSource = source.OrderBy(e => Sorts[0].Expression.GetValue(e, schema), CaseInsensitiveObjectComparer.Instance);
 
             for (var i = 1; i < Sorts.Count; i++)
             {
                 if (Sorts[i].SortOrder == SortOrder.Descending)
-                    sortedSource = sortedSource.ThenBy(e => Sorts[i].Expression.GetValue(e, schema));
+                    sortedSource = sortedSource.ThenByDescending(e => Sorts[i].Expression.GetValue(e, schema), CaseInsensitiveObjectComparer.Instance);
                 else
-                    sortedSource = sortedSource.ThenByDescending(e => Sorts[i].Expression.GetValue(e, schema));
+                    sortedSource = sortedSource.ThenBy(e => Sorts[i].Expression.GetValue(e, schema), CaseInsensitiveObjectComparer.Instance);
             }
 
             return sortedSource;
