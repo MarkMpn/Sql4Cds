@@ -33,6 +33,8 @@ namespace MarkMpn.Sql4Cds.SSMS
 
         public int MaxDegreeOfParallelism => _options.MaxDegreeOfParallelism;
 
+        public bool ColumnComparisonAvailable => true;
+
         public bool ConfirmDelete(int count, EntityMetadata meta)
         {
             if (count == 1)
