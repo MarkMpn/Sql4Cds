@@ -1098,7 +1098,8 @@ namespace MarkMpn.Sql4Cds
                     Padding = new Padding(4),
                     BackColor = SystemColors.Info,
                     ForeColor = SystemColors.InfoText,
-                    AutoEllipsis = true
+                    AutoEllipsis = true,
+                    UseMnemonic = false
                 };
                 var planView = new ExecutionPlanView { Plan = query, Dock = DockStyle.Fill };
                 planView.NodeSelected += (s, e) => _properties.SelectObject(planView.Selected);

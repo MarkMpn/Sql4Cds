@@ -34,10 +34,10 @@ namespace MarkMpn.Sql4Cds
         public ExecutionPlanView()
         {
             AutoScroll = true;
-
-            SetStyle(ControlStyles.DoubleBuffer, true);
-            SetStyle(ControlStyles.AllPaintingInWmPaint, true);
-            SetStyle(ControlStyles.UserPaint, true);
+            DoubleBuffered = true;
+            //SetStyle(ControlStyles.DoubleBuffer, true);
+            //SetStyle(ControlStyles.AllPaintingInWmPaint, true);
+            //SetStyle(ControlStyles.UserPaint, true);
         }
 
         public IExecutionPlanNode Plan
@@ -111,13 +111,19 @@ namespace MarkMpn.Sql4Cds
         {
             base.OnPaint(e);
 
+            // Apply the scrolling transform so we can still work with original coordinates for each node even when scrolled
             e.Graphics.TranslateTransform(AutoScrollPosition.X, AutoScrollPosition.Y);
             var clipRect = e.ClipRectangle;
             clipRect.Offset(-AutoScrollPosition.X, -AutoScrollPosition.Y);
 
+            // Inflate the clip rectangle slightly to account for antialiasing - removes scrolling artifacts
+            clipRect.Inflate(1, 1);
+
+            // Clear the background
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
             e.Graphics.FillRectangle(SystemBrushes.Window, clipRect);
 
+            // Draw each node within the clip rectangle
             foreach (var kvp in _nodeLocations)
             {
                 if (!kvp.Value.IntersectsWith(clipRect))
@@ -166,6 +172,7 @@ namespace MarkMpn.Sql4Cds
                 }
             }
 
+            // Draw each edge within the clip rectangle
             foreach (var line in _lines)
             {
                 if (!line.MBR.IntersectsWith(clipRect))
@@ -186,7 +193,6 @@ namespace MarkMpn.Sql4Cds
                 });
             }
         }
-
 
         private Size MeasureNode(IExecutionPlanNode node)
         {
