@@ -343,6 +343,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     if (!simpleColumnNameAliases.Contains(fullName))
                         simpleColumnNameAliases.Add(fullName);
+
+                    foreach (var virtualAttrMetadata in meta.Attributes.Where(a => a.AttributeOf == attrMetadata.LogicalName))
+                    {
+                        var virtualAttrType = GetAttributeType(virtualAttrMetadata);
+                        var virtualAttrName = attrName + virtualAttrMetadata.LogicalName.Substring(attrMetadata.LogicalName.Length);
+                        var virtualAttrFullName = attribute.alias != null ? virtualAttrName : $"{alias}.{virtualAttrName}";
+
+                        schema.Schema[virtualAttrFullName] = virtualAttrType;
+
+                        if (!schema.Aliases.TryGetValue(virtualAttrName, out var simpleVirtualColumnNameAliases))
+                        {
+                            simpleVirtualColumnNameAliases = new List<string>();
+                            schema.Aliases[virtualAttrName] = simpleVirtualColumnNameAliases;
+                        }
+
+                        if (!simpleVirtualColumnNameAliases.Contains(virtualAttrFullName))
+                            simpleVirtualColumnNameAliases.Add(virtualAttrFullName);
+                    }
                 }
 
                 foreach (var linkEntity in items.OfType<FetchLinkEntityType>())

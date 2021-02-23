@@ -88,15 +88,40 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     if (fetchXmlNode.Alias.Equals(parts[0], StringComparison.OrdinalIgnoreCase))
                     {
-                        if (entity.Items == null || !entity.Items.OfType<FetchAttributeType>().Any(a => (a.alias ?? a.name) == parts[1]))
-                            entity.AddItem(attr);
+                        if (attr is allattributes)
+                        {
+                            entity.Items = new object[] { attr };
+                        }
+                        else
+                        {
+                            var attrMeta = Metadata[fetchXmlNode.Entity.name].Attributes.SingleOrDefault(a => a.LogicalName == ((FetchAttributeType)attr).name);
+                            if (attrMeta?.AttributeOf != null)
+                                ((FetchAttributeType)attr).name = attrMeta.AttributeOf;
+
+                            if (entity.Items == null || !entity.Items.OfType<FetchAttributeType>().Any(a => (a.alias ?? a.name) == ((FetchAttributeType)attr).name))
+                                entity.AddItem(attr);
+                        }
                     }
                     else
                     {
                         var linkEntity = entity.FindLinkEntity(parts[0]);
 
-                        if (linkEntity != null && (linkEntity.Items == null || !linkEntity.Items.OfType<FetchAttributeType>().Any(a => (a.alias ?? a.name) == parts[1])))
-                            linkEntity.AddItem(attr);
+                        if (linkEntity != null)
+                        {
+                            if (attr is allattributes)
+                            {
+                                linkEntity.Items = new object[] { attr };
+                            }
+                            else
+                            {
+                                var attrMeta = Metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName == ((FetchAttributeType)attr).name);
+                                if (attrMeta?.AttributeOf != null)
+                                    ((FetchAttributeType)attr).name = attrMeta.AttributeOf;
+
+                                if (linkEntity.Items == null || !linkEntity.Items.OfType<FetchAttributeType>().Any(a => (a.alias ?? a.name) == ((FetchAttributeType)attr).name))
+                                    linkEntity.AddItem(attr);
+                            }
+                        }
                     }
                 }
                 

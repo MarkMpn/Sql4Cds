@@ -69,7 +69,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return false;
         }
 
-        protected FetchAttributeType AddAttribute(FetchXmlScan fetchXml, string colName, Func<FetchAttributeType, bool> predicate, out bool added)
+        protected FetchAttributeType AddAttribute(FetchXmlScan fetchXml, string colName, Func<FetchAttributeType, bool> predicate, IAttributeMetadataCache metadata, out bool added)
         {
             var entity = fetchXml.FetchXml.Items.OfType<FetchEntityType>().Single();
             var parts = colName.Split('.');
@@ -85,6 +85,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (fetchXml.Alias == entityName)
             {
+                var meta = metadata[fetchXml.Entity.name].Attributes.SingleOrDefault(a => a.LogicalName == attr.name);
+                if (meta?.AttributeOf != null)
+                    attr.name = meta.AttributeOf;
+
                 if (entity.Items != null)
                 {
                     var existing = entity.Items.OfType<FetchAttributeType>().FirstOrDefault(a => a.name == attr.name);
@@ -100,6 +104,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             else
             {
                 var linkEntity = entity.FindLinkEntity(entityName);
+
+                var meta = metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName == attr.name);
+                if (meta?.AttributeOf != null)
+                    attr.name = meta.AttributeOf;
 
                 if (linkEntity.Items != null)
                 {
