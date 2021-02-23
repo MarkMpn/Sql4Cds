@@ -26,10 +26,10 @@ namespace MarkMpn.Sql4Cds
         private IDictionary<IExecutionPlanNode, Rectangle> _nodeLocations;
         private List<Line> _lines;
         private int _maxY;
-        private ToolTip _toopTip;
+        private int _maxBottom;
 
-        const int _offset = 100;
-        private readonly Size _size = new Size(88, 88);
+        const int _offset = 32;
+        private readonly Size _iconSize = new Size(32, 32);
 
         public ExecutionPlanView()
         {
@@ -38,8 +38,6 @@ namespace MarkMpn.Sql4Cds
             SetStyle(ControlStyles.DoubleBuffer, true);
             SetStyle(ControlStyles.AllPaintingInWmPaint, true);
             SetStyle(ControlStyles.UserPaint, true);
-
-            _toopTip = new ToolTip();
         }
 
         public IExecutionPlanNode Plan
@@ -57,15 +55,16 @@ namespace MarkMpn.Sql4Cds
         {
             _nodeLocations = new Dictionary<IExecutionPlanNode, Rectangle>
             {
-                [_plan] = new Rectangle(new Point(_offset, _offset), _size)
+                [_plan] = new Rectangle(new Point(_offset, _offset), MeasureNode(_plan))
             };
             _lines = new List<Line>();
 
             _maxY = _offset;
+            _maxBottom = _nodeLocations[_plan].Bottom;
 
             LayoutChildren(_plan);
 
-            AutoScrollMinSize = new Size(_nodeLocations.Max(kvp => kvp.Value.Right + _offset), _maxY + _size.Height + _offset);
+            AutoScrollMinSize = new Size(_nodeLocations.Max(kvp => kvp.Value.Right + _offset), _maxBottom + _offset);
         }
 
         private void LayoutChildren(IExecutionPlanNode parent)
@@ -74,10 +73,13 @@ namespace MarkMpn.Sql4Cds
 
             var sourceCount = parent.GetSources().Count();
             var parentRect = _nodeLocations[parent];
-            var lineYSpacing = _size.Height / (sourceCount + 1);
+            var parentIconRect = GetIconRect(parentRect);
+            var lineYSpacing = _iconSize.Height / (sourceCount + 1);
 
             foreach (var child in parent.GetSources())
             {
+                var size = MeasureNode(child);
+
                 Point pt;
 
                 if (i == 0)
@@ -88,12 +90,17 @@ namespace MarkMpn.Sql4Cds
                 else
                 {
                     // Subsequent nodes move down
-                    pt = new Point(parentRect.Right + _offset, _maxY + _size.Height + _offset);
+                    pt = new Point(parentRect.Right + _offset, _maxBottom + _offset);
                     _maxY = pt.Y;
+                    _maxBottom = _maxY + size.Height;
                 }
 
-                _nodeLocations[child] = new Rectangle(pt, _size);
-                _lines.Add(new Line { Start = new Point(pt.X, pt.Y + _size.Height / 2), End = new Point(parentRect.Right, parentRect.Top + (i + 1) * lineYSpacing) });
+                var fullRect = new Rectangle(pt, size);
+                var iconRect = GetIconRect(fullRect);
+
+                _nodeLocations[child] = fullRect;
+
+                _lines.Add(new Line { Start = new Point(iconRect.X, iconRect.Y + iconRect.Height / 2), End = new Point(parentIconRect.Right, parentIconRect.Top + (i + 1) * lineYSpacing) });
 
                 LayoutChildren(child);
                 i++;
@@ -104,53 +111,144 @@ namespace MarkMpn.Sql4Cds
         {
             base.OnPaint(e);
 
+            e.Graphics.TranslateTransform(AutoScrollPosition.X, AutoScrollPosition.Y);
+            var clipRect = e.ClipRectangle;
+            clipRect.Offset(-AutoScrollPosition.X, -AutoScrollPosition.Y);
+
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            e.Graphics.FillRectangle(SystemBrushes.Window, e.ClipRectangle);
+            e.Graphics.FillRectangle(SystemBrushes.Window, clipRect);
 
             foreach (var kvp in _nodeLocations)
             {
-                if (!kvp.Value.IntersectsWith(e.ClipRectangle))
+                if (!kvp.Value.IntersectsWith(clipRect))
                     continue;
 
-                using (var stream = GetType().Assembly.GetManifestResourceStream(GetType(), "Images." + kvp.Key.GetType().Name + ".png"))
+                var iconRect = GetIconRect(kvp.Value);
+
+                if (iconRect.IntersectsWith(clipRect))
                 {
-                    if (stream == null)
+                    using (var stream = GetType().Assembly.GetManifestResourceStream(GetType(), "Images." + kvp.Key.GetType().Name + ".ico"))
                     {
-                        e.Graphics.FillRectangle(Brushes.Red, kvp.Value);
-                        e.Graphics.DrawString(kvp.Key.GetType().Name, Font, SystemBrushes.ControlText, kvp.Value);
+                        if (stream == null)
+                        {
+                            e.Graphics.DrawRectangle(Pens.Black, iconRect);
+
+                            using (var x = new Pen(Color.Red, 4))
+                            {
+                                e.Graphics.DrawLine(x, iconRect.Left, iconRect.Top, iconRect.Right, iconRect.Bottom);
+                                e.Graphics.DrawLine(x, iconRect.Left, iconRect.Bottom, iconRect.Right, iconRect.Top);
+                            }
+                        }
+                        else
+                        {
+                            var image = Bitmap.FromStream(stream);
+
+                            e.Graphics.DrawImage(image, iconRect);
+                        }
+                    }
+                }
+
+                var labelRect = new Rectangle(kvp.Value.X, iconRect.Bottom, kvp.Value.Width, kvp.Value.Height - iconRect.Height);
+
+                if (labelRect.IntersectsWith(clipRect))
+                {
+                    var label = GetLabel(kvp.Key);
+
+                    if (kvp.Key == Selected)
+                    {
+                        e.Graphics.FillRectangle(SystemBrushes.Highlight, labelRect);
+                        e.Graphics.DrawString(label, Font, SystemBrushes.HighlightText, labelRect);
                     }
                     else
                     {
-                        var image = Bitmap.FromStream(stream);
-
-                        e.Graphics.DrawImage(image, kvp.Value.X + (kvp.Value.Width - image.Width) / 2, kvp.Value.Y + (kvp.Value.Height - image.Height) / 2);
+                        e.Graphics.DrawString(label, Font, SystemBrushes.ControlText, labelRect);
                     }
                 }
             }
 
             foreach (var line in _lines)
             {
-                if (!line.MBR.IntersectsWith(e.ClipRectangle))
+                if (!line.MBR.IntersectsWith(clipRect))
                     continue;
 
+                // Draw the line with a dogleg
                 var midX = line.Start.X - (line.Start.X - line.End.X) / 2;
-                e.Graphics.DrawLine(Pens.Black, line.Start.X, line.Start.Y, midX, line.Start.Y);
-                e.Graphics.DrawLine(Pens.Black, midX, line.Start.Y, midX, line.End.Y);
-                e.Graphics.DrawLine(Pens.Black, midX, line.End.Y, line.End.X, line.End.Y);
+                e.Graphics.DrawLine(Pens.Gray, line.Start.X, line.Start.Y, midX, line.Start.Y);
+                e.Graphics.DrawLine(Pens.Gray, midX, line.Start.Y, midX, line.End.Y);
+                e.Graphics.DrawLine(Pens.Gray, midX, line.End.Y, line.End.X, line.End.Y);
+
+                // Draw the arrowhead
+                e.Graphics.FillPolygon(Brushes.Gray, new[]
+                {
+                    line.End,
+                    new Point(line.End.X + 2, line.End.Y - 2),
+                    new Point(line.End.X + 2, line.End.Y + 2)
+                });
             }
         }
 
-        protected override void OnMouseHover(EventArgs e)
+
+        private Size MeasureNode(IExecutionPlanNode node)
         {
-            base.OnMouseHover(e);
+            var label = GetLabel(node);
 
-            var mousePos = PointToClient(MousePosition);
-
-            foreach (var kvp in _nodeLocations)
+            using (var bitmap = new Bitmap(100, 100))
+            using (var g = Graphics.FromImage(bitmap))
             {
-                if (kvp.Value.Contains(mousePos))
-                    _toopTip.Show(kvp.Key.GetType().Name, this, mousePos.X, mousePos.Y, 1000);
+                var labelSize = g.MeasureString(label, Font);
+
+                const int iconLabelGap = 10;
+
+                var width = Math.Max(_iconSize.Width, labelSize.Width);
+                return new Size((int) Math.Ceiling(width), _iconSize.Height + iconLabelGap + (int) Math.Ceiling(labelSize.Height));
             }
+        }
+
+        private Rectangle GetIconRect(Rectangle fullRect)
+        {
+            return new Rectangle(fullRect.X + (fullRect.Width - _iconSize.Width) / 2, fullRect.Y, _iconSize.Width, _iconSize.Height);
+        }
+
+        private string GetLabel(IExecutionPlanNode node)
+        {
+            return node.ToString();
+        }
+
+        public IExecutionPlanNode Selected { get; private set; }
+
+        public event EventHandler NodeSelected;
+
+        protected void OnNodeSelected(EventArgs e)
+        {
+            NodeSelected?.Invoke(this, e);
+        }
+
+        protected override void OnMouseClick(MouseEventArgs e)
+        {
+            base.OnMouseClick(e);
+
+            foreach (var node in _nodeLocations)
+            {
+                if (node.Value.Contains(e.Location))
+                {
+                    if (Selected != null)
+                        Invalidate(Selected);
+
+                    Selected = node.Key;
+
+                    Invalidate(Selected);
+
+                    OnNodeSelected(EventArgs.Empty);
+                }
+            }
+        }
+
+        private void Invalidate(IExecutionPlanNode node)
+        {
+            // Inflate the node rectangle by 1 pixel to allow for antialiasing
+            var rect = _nodeLocations[node];
+            rect.Inflate(1, 1);
+            Invalidate(rect);
         }
     }
 }

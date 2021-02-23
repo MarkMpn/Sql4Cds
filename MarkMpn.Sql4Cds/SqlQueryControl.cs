@@ -67,6 +67,7 @@ namespace MarkMpn.Sql4Cds
         private readonly Scintilla _editor;
         private readonly string _sourcePlugin;
         private readonly Action<string> _log;
+        private readonly PropertiesWindow _properties;
         private string _displayName;
         private string _filename;
         private bool _modified;
@@ -94,7 +95,7 @@ namespace MarkMpn.Sql4Cds
             _sqlIcon = Icon.FromHandle(Properties.Resources.SQLFile_16x.GetHicon());
         }
 
-        public SqlQueryControl(ConnectionDetail con, AttributeMetadataCache metadata, TelemetryClient ai, Action<MessageBusEventArgs> outgoingMessageHandler, string sourcePlugin, Action<string> log)
+        public SqlQueryControl(ConnectionDetail con, AttributeMetadataCache metadata, TelemetryClient ai, Action<MessageBusEventArgs> outgoingMessageHandler, string sourcePlugin, Action<string> log, PropertiesWindow properties)
         {
             InitializeComponent();
             _displayName = $"Query {++_queryCounter}";
@@ -108,6 +109,7 @@ namespace MarkMpn.Sql4Cds
             _ai = ai;
             _con = con;
             _log = log;
+            _properties = properties;
             _stopwatch = new Stopwatch();
             SyncTitle();
             BusyChanged += (s, e) => SyncTitle();
@@ -143,6 +145,7 @@ namespace MarkMpn.Sql4Cds
                 SyncTitle();
             }
         }
+        public ConnectionDetail Connection => _con;
 
         private void SyncTitle()
         {
@@ -1084,7 +1087,23 @@ namespace MarkMpn.Sql4Cds
 
             if (args.IncludeFetchXml)
             {
-                fetchXml = new ExecutionPlanView { Plan = query };
+                fetchXml = new Panel();
+                var fetchLabel = new System.Windows.Forms.Label
+                {
+                    Text = query.Sql,
+                    AutoSize = false,
+                    Dock = DockStyle.Top,
+                    Height = 32,
+                    BorderStyle = BorderStyle.FixedSingle,
+                    Padding = new Padding(4),
+                    BackColor = SystemColors.Info,
+                    ForeColor = SystemColors.InfoText,
+                    AutoEllipsis = true
+                };
+                var planView = new ExecutionPlanView { Plan = query, Dock = DockStyle.Fill };
+                planView.NodeSelected += (s, e) => _properties.SelectObject(planView.Selected);
+                fetchXml.Controls.Add(planView);
+                fetchXml.Controls.Add(fetchLabel);
                 /*
                 if (isMetadata)
                 {

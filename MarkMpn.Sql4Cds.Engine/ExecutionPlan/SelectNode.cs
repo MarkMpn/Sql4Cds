@@ -83,6 +83,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             return this;
         }
+
+        public override string ToString()
+        {
+            return "SELECT";
+        }
     }
 
     public class SelectColumn

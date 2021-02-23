@@ -127,7 +127,7 @@
             this.fetchXmlTabPage.Name = "fetchXmlTabPage";
             this.fetchXmlTabPage.Size = new System.Drawing.Size(142, 19);
             this.fetchXmlTabPage.TabIndex = 2;
-            this.fetchXmlTabPage.Text = "FetchXML";
+            this.fetchXmlTabPage.Text = "Execution Plan";
             this.fetchXmlTabPage.UseVisualStyleBackColor = true;
             // 
             // fetchXMLFlowLayoutPanel

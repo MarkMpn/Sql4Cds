@@ -19,6 +19,7 @@ namespace MarkMpn.Sql4Cds
         private readonly IDictionary<ConnectionDetail, AttributeMetadataCache> _metadata;
         private readonly TelemetryClient _ai;
         private readonly ObjectExplorer _objectExplorer;
+        private readonly PropertiesWindow _properties;
 
         public PluginControl()
         {
@@ -28,10 +29,21 @@ namespace MarkMpn.Sql4Cds
             _objectExplorer = new ObjectExplorer(_metadata, WorkAsync, con => CreateQuery(con, "", null));
             _objectExplorer.Show(dockPanel, DockState.DockLeft);
             _objectExplorer.CloseButtonVisible = false;
+            _properties = new PropertiesWindow();
+            _properties.Show(dockPanel, DockState.DockRightAutoHide);
             _ai = new TelemetryClient(new Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration("79761278-a908-4575-afbf-2f4d82560da6"));
 
             TabIcon = Properties.Resources.SQL4CDS_Icon_16;
             PluginIcon = System.Drawing.Icon.FromHandle(Properties.Resources.SQL4CDS_Icon_16.GetHicon());
+            dockPanel.ActiveDocumentChanged += DockPanel_ActiveDocumentChanged;
+        }
+
+        private void DockPanel_ActiveDocumentChanged(object sender, EventArgs e)
+        {
+            if (dockPanel.ActiveDocument is SqlQueryControl sql)
+                _properties.SelectObject(sql.Connection);
+            else
+                _properties.SelectObject(null);
         }
 
         protected override void OnConnectionUpdated(ConnectionUpdatedEventArgs e)
@@ -106,7 +118,7 @@ namespace MarkMpn.Sql4Cds
 
         private SqlQueryControl CreateQuery(ConnectionDetail con, string sql, string sourcePlugin)
         { 
-            var query = new SqlQueryControl(con, _metadata[con], _ai, SendOutgoingMessage, sourcePlugin, msg => LogError(msg));
+            var query = new SqlQueryControl(con, _metadata[con], _ai, SendOutgoingMessage, sourcePlugin, msg => LogError(msg), _properties);
             query.InsertText(sql);
             query.CancellableChanged += SyncStopButton;
             query.BusyChanged += SyncExecuteButton;

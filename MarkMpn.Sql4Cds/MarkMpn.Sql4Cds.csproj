@@ -232,6 +232,12 @@
       <SubType>Component</SubType>
     </Compile>
     <Compile Include="FunctionMetadata.cs" />
+    <Compile Include="PropertiesWindow.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="PropertiesWindow.Designer.cs">
+      <DependentUpon>PropertiesWindow.cs</DependentUpon>
+    </Compile>
     <Compile Include="ObjectExplorer.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -274,6 +280,9 @@
     </None>
   </ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="PropertiesWindow.resx">
+      <DependentUpon>PropertiesWindow.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="ObjectExplorer.resx">
       <DependentUpon>ObjectExplorer.cs</DependentUpon>
     </EmbeddedResource>
@@ -338,14 +347,17 @@
     <None Include="Resources\progress.gif" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="Images\AssertNode.png" />
-    <EmbeddedResource Include="Images\ComputeScalarNode.png" />
-    <EmbeddedResource Include="Images\FetchXmlScan.png" />
-    <EmbeddedResource Include="Images\HashMatchAggregateNode.png" />
-    <EmbeddedResource Include="Images\NestedLoopNode.png" />
-    <EmbeddedResource Include="Images\SelectNode.png" />
-    <EmbeddedResource Include="Images\SortNode.png" />
-    <EmbeddedResource Include="Images\TopNode.png" />
+    <EmbeddedResource Include="Images\AssertNode.ico" />
+    <EmbeddedResource Include="Images\ComputeScalarNode.ico" />
+    <EmbeddedResource Include="Images\FetchXmlScan.ico" />
+    <EmbeddedResource Include="Images\HashMatchAggregateNode.ico" />
+    <EmbeddedResource Include="Images\NestedLoopNode.ico" />
+    <EmbeddedResource Include="Images\SelectNode.ico" />
+    <EmbeddedResource Include="Images\SortNode.ico" />
+    <EmbeddedResource Include="Images\TopNode.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Images\ConcatenateNode.ico" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>

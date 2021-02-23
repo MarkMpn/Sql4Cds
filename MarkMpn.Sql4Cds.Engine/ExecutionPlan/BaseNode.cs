@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -13,8 +14,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
     public abstract class BaseNode : IExecutionPlanNode
     {
+        [Browsable(false)]
         public string Sql { get; set; }
+
+        [Browsable(false)]
         public int Index { get; set; }
+
+        [Browsable(false)]
         public int Length { get; set; }
 
         public abstract IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, object> parameterValues);
@@ -521,6 +527,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return false;
 
             return true;
+        }
+
+        public override string ToString()
+        {
+            return System.Text.RegularExpressions.Regex.Replace(GetType().Name.Replace("Node", ""), "([a-z])([A-Z])", "$1 $2");
         }
     }
 }
