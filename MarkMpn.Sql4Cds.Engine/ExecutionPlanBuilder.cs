@@ -151,7 +151,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 node = distinct;
             }
 
-            node = ConvertOrderByClause(node, binary.OrderByClause);
+            node = ConvertOrderByClause(node, binary.OrderByClause, concat.ColumnSet.Select(col => new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = col.OutputColumn } } } }).ToArray(), binary);
             node = ConvertOffsetClause(node, binary.OffsetClause);
 
             var select = new SelectNode { Source = node };
@@ -164,7 +164,7 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             // Each table in the FROM clause starts as a separate FetchXmlScan node. Add appropriate join nodes
             // TODO: Handle queries without a FROM clause
-            var node = ConvertFromClause(querySpec.FromClause.TableReferences);
+            var node = ConvertFromClause(querySpec.FromClause.TableReferences, querySpec);
 
             // Add filters from WHERE
             node = ConvertWhereClause(node, querySpec.WhereClause, outerSchema, outerReferences);
@@ -176,7 +176,31 @@ namespace MarkMpn.Sql4Cds.Engine
             node = ConvertHavingClause(node, querySpec.HavingClause);
 
             // Add sorts from ORDER BY
-            node = ConvertOrderByClause(node, querySpec.OrderByClause);
+            var selectFields = new List<ScalarExpression>();
+            var preOrderSchema = node.GetSchema(Metadata);
+            foreach (var el in querySpec.SelectElements)
+            {
+                if (el is SelectScalarExpression expr)
+                {
+                    selectFields.Add(expr.Expression);
+                }
+                else if (el is SelectStarExpression star)
+                {
+                    foreach (var field in preOrderSchema.Schema.Keys.OrderBy(f => f))
+                    {
+                        if (star.Qualifier == null || field.StartsWith(String.Join(".", star.Qualifier.Identifiers.Select(id => id.Value)) + "."))
+                        {
+                            var colRef = new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier() };
+                            foreach (var part in field.Split('.'))
+                                colRef.MultiPartIdentifier.Identifiers.Add(new Identifier { Value = part });
+
+                            selectFields.Add(colRef);
+                        }
+                    }
+                }
+            }
+
+            node = ConvertOrderByClause(node, querySpec.OrderByClause, selectFields.ToArray(), querySpec);
 
             // Add DISTINCT
             var distinct = querySpec.UniqueRowFilter == UniqueRowFilter.Distinct ? new DistinctNode { Source = node } : null;
@@ -190,7 +214,7 @@ namespace MarkMpn.Sql4Cds.Engine
             node = ConvertOffsetClause(node, querySpec.OffsetClause);
 
             // Add SELECT
-            var selectNode = ConvertSelectClause(querySpec.SelectElements, node, distinct);
+            var selectNode = ConvertSelectClause(querySpec.SelectElements, node, distinct, querySpec);
 
             return selectNode;
         }
@@ -460,13 +484,51 @@ namespace MarkMpn.Sql4Cds.Engine
             };
         }
 
-        private IExecutionPlanNode ConvertOrderByClause(IExecutionPlanNode source, OrderByClause orderByClause)
+        private IExecutionPlanNode ConvertOrderByClause(IExecutionPlanNode source, OrderByClause orderByClause, ScalarExpression[] selectList, TSqlFragment query)
         {
             if (orderByClause == null)
                 return source;
 
+            var schema = source.GetSchema(Metadata);
             var sort = new SortNode { Source = source };
-            sort.Sorts.AddRange(orderByClause.OrderByElements);
+
+            // Check if any of the order expressions need pre-calculation
+            var computeScalar = new ComputeScalarNode { Source = source };
+
+            foreach (var orderBy in orderByClause.OrderByElements)
+            {
+                // If the order by element is a numeric literal, use the corresponding expression from the select list at that index
+                if (orderBy.Expression is IntegerLiteral literal)
+                {
+                    var index = Int32.Parse(literal.Value) - 1;
+
+                    if (index < 0 || index >= selectList.Length)
+                    {
+                        throw new NotSupportedQueryFragmentException("Invalid ORDER BY index", literal)
+                        {
+                            Suggestion = $"Must be between 1 and {selectList.Length}"
+                        };
+                    }
+
+                    orderBy.Expression = selectList[index];
+                }
+
+                // Anything other than fields should be pre-calculated
+                if (!(orderBy.Expression is ColumnReferenceExpression))
+                {
+                    var calculated = ComputeScalarExpression(orderBy.Expression, query, computeScalar, ref source);
+                    sort.Source = source;
+                    schema = source.GetSchema(Metadata);
+                }
+
+                // Validate the expression
+                orderBy.Expression.GetType(schema);
+
+                sort.Sorts.Add(orderBy);
+            }
+
+            if (computeScalar.Columns.Any())
+                sort.Source = computeScalar;
 
             return sort;
         }
@@ -521,7 +583,7 @@ namespace MarkMpn.Sql4Cds.Engine
             };
         }
 
-        private SelectNode ConvertSelectClause(IList<SelectElement> selectElements, IExecutionPlanNode node, DistinctNode distinct)
+        private SelectNode ConvertSelectClause(IList<SelectElement> selectElements, IExecutionPlanNode node, DistinctNode distinct, TSqlFragment query)
         {
             var schema = node.GetSchema(Metadata);
 
@@ -541,10 +603,18 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     if (scalar.Expression is ColumnReferenceExpression col)
                     {
-                        var colName = String.Join(".", col.MultiPartIdentifier.Identifiers.Select(id => id.Value));
+                        var colName = col.GetColumnName();
 
                         if (!schema.ContainsColumn(colName, out colName))
-                            throw new NotSupportedQueryFragmentException("Unknown column", col);
+                        {
+                            if (!schema.Aliases.TryGetValue(col.GetColumnName(), out var normalized))
+                                throw new NotSupportedQueryFragmentException("Unknown column", col);
+
+                            throw new NotSupportedQueryFragmentException("Ambiguous column reference", col)
+                            {
+                                Suggestion = $"Did you mean:\r\n{String.Join("\r\n", normalized.Select(c => $"* {c}"))}"
+                            };
+                        }
 
                         var alias = scalar.ColumnName?.Value ?? col.MultiPartIdentifier.Identifiers.Last().Value;
 
@@ -556,83 +626,14 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
                     else
                     {
-                        var alias = $"Expr{++_colNameCounter}";
+                        var scalarSource = distinct?.Source ?? node;
+                        var alias = ComputeScalarExpression(scalar.Expression, query, computeScalar, ref scalarSource);
 
-                        // If scalar.Expression contains a subquery, create nested loop to evaluate it in the context
-                        // of the current record
-                        var subqueryVisitor = new ScalarSubqueryVisitor();
-                        scalar.Expression.Accept(subqueryVisitor);
-                        var rewrites = new Dictionary<ScalarExpression, string>();
+                        if (distinct != null)
+                            distinct.Source = scalarSource;
+                        else
+                            node = scalarSource;
 
-                        foreach (var subquery in subqueryVisitor.Subqueries)
-                        {
-                            var outerSchema = node.GetSchema(Metadata);
-                            var outerReferences = new Dictionary<string,string>();
-                            var subqueryPlan = ConvertSelectStatement(subquery.QueryExpression, outerSchema, outerReferences);
-
-                            // Scalar subquery must return exactly one column and one row
-                            if (subqueryPlan.ColumnSet.Count != 1)
-                                throw new NotSupportedQueryFragmentException("Scalar subquery must return exactly one column", subquery);
-
-                            // Insert an aggregate and assertion nodes to check for one row
-                            var subqueryCol = $"Expr{++_colNameCounter}";
-                            var rowCountCol = $"Expr{++_colNameCounter}";
-                            var aggregate = new HashMatchAggregateNode
-                            {
-                                Source = subqueryPlan.Source,
-                                Aggregates =
-                                {
-                                    [subqueryCol] = new Aggregate
-                                    {
-                                        AggregateType = AggregateType.First,
-                                        Expression = new ColumnReferenceExpression
-                                        {
-                                            MultiPartIdentifier = new MultiPartIdentifier
-                                            {
-                                                Identifiers = { new Identifier { Value = subqueryPlan.ColumnSet[0].SourceColumn } }
-                                            }
-                                        }
-                                    },
-                                    [rowCountCol] = new Aggregate
-                                    {
-                                        AggregateType = AggregateType.CountStar
-                                    }
-                                }
-                            };
-                            var assert = new AssertNode
-                            {
-                                Source = aggregate,
-                                Assertion = e => e.GetAttributeValue<int>(rowCountCol) <= 1,
-                                ErrorMessage = "Subquery produced more than 1 row"
-                            };
-
-                            // Add a nested loop to call the subquery
-                            var loop = new NestedLoopNode
-                            {
-                                LeftSource = distinct?.Source ?? node,
-                                RightSource = assert,
-                                JoinType = QualifiedJoinType.LeftOuter,
-                                OuterReferences = outerReferences
-                            };
-
-                            if (distinct != null)
-                                distinct.Source = loop;
-                            else
-                                node = loop;
-
-                            computeScalar.Source = loop;
-
-                            rewrites[subquery] = subqueryCol;
-                        }
-
-                        if (rewrites.Any())
-                            scalar.Accept(new RewriteVisitor(rewrites));
-
-                        // Check the type of this expression now so any errors can be reported
-                        var computeScalarSchema = computeScalar.GetSchema(Metadata);
-                        scalar.Expression.GetType(computeScalarSchema);
-
-                        computeScalar.Columns[alias] = scalar.Expression;
                         select.ColumnSet.Add(new SelectColumn
                         {
                             SourceColumn = alias,
@@ -667,7 +668,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (col.AllColumns)
                     {
                         var distinctSchema = distinct.GetSchema(Metadata);
-                        distinct.Columns.AddRange(distinctSchema.Schema.Keys);
+                        distinct.Columns.AddRange(distinctSchema.Schema.Keys.Where(k => col.SourceColumn == null || (k.Split('.')[0] + ".*") == col.SourceColumn));
                     }
                     else
                     {
@@ -679,13 +680,95 @@ namespace MarkMpn.Sql4Cds.Engine
             return select;
         }
 
-        private IExecutionPlanNode ConvertFromClause(IList<TableReference> tables)
+        private string ComputeScalarExpression(ScalarExpression expression, TSqlFragment query, ComputeScalarNode computeScalar, ref IExecutionPlanNode node)
         {
-            var node = ConvertTableReference(tables[0]);
+            var alias = $"Expr{++_colNameCounter}";
+
+            // If scalar.Expression contains a subquery, create nested loop to evaluate it in the context
+            // of the current record
+            var subqueryVisitor = new ScalarSubqueryVisitor();
+            expression.Accept(subqueryVisitor);
+            var rewrites = new Dictionary<ScalarExpression, string>();
+
+            foreach (var subquery in subqueryVisitor.Subqueries)
+            {
+                var outerSchema = node.GetSchema(Metadata);
+                var outerReferences = new Dictionary<string, string>();
+                var subqueryPlan = ConvertSelectStatement(subquery.QueryExpression, outerSchema, outerReferences);
+
+                // Scalar subquery must return exactly one column and one row
+                if (subqueryPlan.ColumnSet.Count != 1)
+                    throw new NotSupportedQueryFragmentException("Scalar subquery must return exactly one column", subquery);
+
+                // Insert an aggregate and assertion nodes to check for one row
+                var subqueryCol = $"Expr{++_colNameCounter}";
+                var rowCountCol = $"Expr{++_colNameCounter}";
+                var aggregate = new HashMatchAggregateNode
+                {
+                    Source = subqueryPlan.Source,
+                    Aggregates =
+                    {
+                        [subqueryCol] = new Aggregate
+                        {
+                            AggregateType = AggregateType.First,
+                            Expression = new ColumnReferenceExpression
+                            {
+                                MultiPartIdentifier = new MultiPartIdentifier
+                                {
+                                    Identifiers = { new Identifier { Value = subqueryPlan.ColumnSet[0].SourceColumn } }
+                                }
+                            }
+                        },
+                        [rowCountCol] = new Aggregate
+                        {
+                            AggregateType = AggregateType.CountStar
+                        }
+                    }
+                };
+                var assert = new AssertNode
+                {
+                    Source = aggregate,
+                    Assertion = e => e.GetAttributeValue<int>(rowCountCol) <= 1,
+                    ErrorMessage = "Subquery produced more than 1 row"
+                };
+
+                // Add a nested loop to call the subquery
+                var loop = new NestedLoopNode
+                {
+                    LeftSource = node,
+                    RightSource = assert,
+                    JoinType = QualifiedJoinType.LeftOuter,
+                    OuterReferences = outerReferences
+                };
+
+                node = loop;
+                computeScalar.Source = loop;
+
+                rewrites[subquery] = subqueryCol;
+            }
+
+            if (rewrites.Any())
+                query.Accept(new RewriteVisitor(rewrites));
+
+            if (rewrites.ContainsKey(expression))
+                expression = new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = rewrites[expression] } } } };
+
+            // Check the type of this expression now so any errors can be reported
+            var computeScalarSchema = computeScalar.GetSchema(Metadata);
+            expression.GetType(computeScalarSchema);
+
+            computeScalar.Columns[alias] = expression;
+
+            return alias;
+        }
+
+        private IExecutionPlanNode ConvertFromClause(IList<TableReference> tables, TSqlFragment query)
+        {
+            var node = ConvertTableReference(tables[0], query);
 
             for (var i = 1; i < tables.Count; i++)
             {
-                var nextTable = ConvertTableReference(tables[i]);
+                var nextTable = ConvertTableReference(tables[i], query);
 
                 // TODO: See if we can lift a join predicate from the WHERE clause
                 nextTable = new TableSpoolNode { Source = nextTable };
@@ -696,12 +779,13 @@ namespace MarkMpn.Sql4Cds.Engine
             return node;
         }
 
-        private IExecutionPlanNode ConvertTableReference(TableReference reference)
+        private IExecutionPlanNode ConvertTableReference(TableReference reference, TSqlFragment query)
         {
             if (reference is NamedTableReference table)
             {
                 var entityName = table.SchemaObject.BaseIdentifier.Value;
 
+                // Validate the entity name
                 try
                 {
                     var meta = Metadata[entityName];
@@ -733,17 +817,58 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 // If the join involves the primary key of one table we can safely use a merge join.
                 // Otherwise use a nested loop join
-                var lhs = ConvertTableReference(join.FirstTableReference);
-                var rhs = ConvertTableReference(join.SecondTableReference);
+                var lhs = ConvertTableReference(join.FirstTableReference, query);
+                var rhs = ConvertTableReference(join.SecondTableReference, query);
                 var lhsSchema = lhs.GetSchema(Metadata);
                 var rhsSchema = rhs.GetSchema(Metadata);
 
                 var joinConditionVisitor = new JoinConditionVisitor(lhsSchema, rhsSchema);
                 join.SearchCondition.Accept(joinConditionVisitor);
 
-                if (joinConditionVisitor.LhsKey != null && joinConditionVisitor.RhsKey != null)
+                // If we didn't find any join criteria equating two columns in the table, try again
+                // but allowing computed columns instead. This lets us use more efficient join types (merge or hash join)
+                // by pre-computing the values of the expressions to use as the join keys
+                if (joinConditionVisitor.LhsKey == null || joinConditionVisitor.RhsKey == null)
                 {
-                    var joinNode = new MergeJoinNode
+                    joinConditionVisitor = new JoinConditionVisitor(lhsSchema, rhsSchema);
+                    joinConditionVisitor.AllowExpressions = true;
+
+                    join.SearchCondition.Accept(joinConditionVisitor);
+
+                    if (joinConditionVisitor.LhsExpression != null && joinConditionVisitor.RhsExpression != null)
+                    {
+                        // Calculate the two join expressions
+                        if (joinConditionVisitor.LhsKey == null)
+                        {
+                            if (!(lhs is ComputeScalarNode lhsComputeScalar))
+                            {
+                                lhsComputeScalar = new ComputeScalarNode { Source = lhs };
+                                lhs = lhsComputeScalar;
+                            }
+
+                            var lhsColumn = ComputeScalarExpression(joinConditionVisitor.LhsExpression, query, lhsComputeScalar, ref lhs);
+                            joinConditionVisitor.LhsKey = new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = lhsColumn } } } };
+                        }
+
+                        if (joinConditionVisitor.RhsKey == null)
+                        {
+                            if (!(rhs is ComputeScalarNode rhsComputeScalar))
+                            {
+                                rhsComputeScalar = new ComputeScalarNode { Source = rhs };
+                                rhs = rhsComputeScalar;
+                            }
+
+                            var rhsColumn = ComputeScalarExpression(joinConditionVisitor.RhsExpression, query, rhsComputeScalar, ref lhs);
+                            joinConditionVisitor.RhsKey = new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = rhsColumn } } } };
+                        }
+                    }
+                }
+
+                BaseJoinNode joinNode;
+
+                if (joinConditionVisitor.LhsKey != null && joinConditionVisitor.RhsKey != null && joinConditionVisitor.LhsKey.GetColumnName() == lhsSchema.PrimaryKey)
+                {
+                    joinNode = new MergeJoinNode
                     {
                         LeftSource = lhs,
                         LeftAttribute = joinConditionVisitor.LhsKey,
@@ -752,12 +877,52 @@ namespace MarkMpn.Sql4Cds.Engine
                         JoinType = join.QualifiedJoinType,
                         AdditionalJoinCriteria = join.SearchCondition.RemoveCondition(joinConditionVisitor.JoinCondition)
                     };
+                }
+                else if (joinConditionVisitor.LhsKey != null && joinConditionVisitor.RhsKey != null && joinConditionVisitor.RhsKey.GetColumnName() == rhsSchema.PrimaryKey)
+                {
+                    joinNode = new MergeJoinNode
+                    {
+                        LeftSource = rhs,
+                        LeftAttribute = joinConditionVisitor.RhsKey,
+                        RightSource = lhs,
+                        RightAttribute = joinConditionVisitor.LhsKey,
+                        AdditionalJoinCriteria = join.SearchCondition.RemoveCondition(joinConditionVisitor.JoinCondition)
+                    };
 
-                    return joinNode;
+                    switch (join.QualifiedJoinType)
+                    {
+                        case QualifiedJoinType.Inner:
+                            joinNode.JoinType = QualifiedJoinType.Inner;
+                            break;
+
+                        case QualifiedJoinType.LeftOuter:
+                            joinNode.JoinType = QualifiedJoinType.RightOuter;
+                            break;
+
+                        case QualifiedJoinType.RightOuter:
+                            joinNode.JoinType = QualifiedJoinType.LeftOuter;
+                            break;
+
+                        case QualifiedJoinType.FullOuter:
+                            joinNode.JoinType = QualifiedJoinType.FullOuter;
+                            break;
+                    }
+                }
+                else if (joinConditionVisitor.LhsKey != null && joinConditionVisitor.RhsKey != null)
+                {
+                    joinNode = new HashJoinNode
+                    {
+                        LeftSource = lhs,
+                        LeftAttribute = joinConditionVisitor.LhsKey,
+                        RightSource = rhs,
+                        RightAttribute = joinConditionVisitor.RhsKey,
+                        JoinType = join.QualifiedJoinType,
+                        AdditionalJoinCriteria = join.SearchCondition.RemoveCondition(joinConditionVisitor.JoinCondition)
+                    };
                 }
                 else
                 {
-                    return new NestedLoopNode
+                    joinNode = new NestedLoopNode
                     {
                         LeftSource = lhs,
                         RightSource = rhs,
@@ -765,6 +930,12 @@ namespace MarkMpn.Sql4Cds.Engine
                         JoinCondition = join.SearchCondition
                     };
                 }
+
+                // Validate the join condition
+                var joinSchema = joinNode.GetSchema(Metadata);
+                join.SearchCondition.GetType(joinSchema);
+
+                return joinNode;
             }
 
             throw new NotImplementedException();
