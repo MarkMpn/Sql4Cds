@@ -16,9 +16,15 @@ namespace MarkMpn.Sql4Cds.Engine
             _rhs = rhs;
         }
 
-        public ColumnReferenceExpression LhsKey { get; private set; }
+        public bool AllowExpressions { get; set; }
 
-        public ColumnReferenceExpression RhsKey { get; private set; }
+        public ColumnReferenceExpression LhsKey { get; set; }
+
+        public ScalarExpression LhsExpression { get; set; }
+
+        public ColumnReferenceExpression RhsKey { get; set; }
+
+        public ScalarExpression RhsExpression { get; set; }
 
         public BooleanComparisonExpression JoinCondition { get; private set; }
 
@@ -30,21 +36,56 @@ namespace MarkMpn.Sql4Cds.Engine
                 node.SecondExpression is ColumnReferenceExpression rhsCol &&
                 node.ComparisonType == BooleanComparisonType.Equals)
             {
-                var lhsName = String.Join(".", lhsCol.MultiPartIdentifier.Identifiers.Select(id => id.Value));
-                var rhsName = String.Join(".", rhsCol.MultiPartIdentifier.Identifiers.Select(id => id.Value));
+                var lhsName = lhsCol.GetColumnName();
+                var rhsName = rhsCol.GetColumnName();
 
-                if (_lhs.Schema.ContainsKey(lhsName) && _rhs.Schema.ContainsKey(rhsName))
+                if (_lhs.ContainsColumn(lhsName, out _) && _rhs.ContainsColumn(rhsName, out _))
                 {
                     LhsKey = lhsCol;
                     RhsKey = rhsCol;
                 }
-                else if (_lhs.Schema.ContainsKey(rhsName) && _rhs.Schema.ContainsKey(lhsName))
+                else if (_lhs.ContainsColumn(rhsName, out _) && _rhs.ContainsColumn(lhsName, out _))
                 {
                     LhsKey = rhsCol;
                     RhsKey = lhsCol;
                 }
 
                 JoinCondition = node;
+                return;
+            }
+
+            if (AllowExpressions &&
+                node.ComparisonType == BooleanComparisonType.Equals)
+            {
+                // Check each expression includes at least one column reference and relates entirely to one source
+                var firstColumns = node.FirstExpression.GetColumns().ToList();
+                var secondColumns = node.SecondExpression.GetColumns().ToList();
+
+                if (firstColumns.Count == 0 || secondColumns.Count == 0)
+                    return;
+
+                var firstIsLhs = firstColumns.Any(c => _lhs.ContainsColumn(c, out _));
+                var firstIsRhs = firstColumns.Any(c => _rhs.ContainsColumn(c, out _));
+                var secondIsLhs = secondColumns.Any(c => _lhs.ContainsColumn(c, out _));
+                var secondIsRhs = secondColumns.Any(c => _rhs.ContainsColumn(c, out _));
+
+                if (firstIsLhs && !firstIsRhs && !secondIsLhs && secondIsRhs)
+                {
+                    LhsExpression = node.FirstExpression;
+                    RhsExpression = node.SecondExpression;
+                }
+                else if (!firstIsLhs && firstIsRhs && secondIsLhs && !secondIsRhs)
+                {
+                    LhsExpression = node.SecondExpression;
+                    RhsExpression = node.FirstExpression;
+                }
+                else
+                {
+                    return;
+                }
+
+                LhsKey = LhsExpression as ColumnReferenceExpression;
+                RhsKey = RhsExpression as ColumnReferenceExpression;
             }
         }
 
