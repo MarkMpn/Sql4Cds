@@ -331,7 +331,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         attrType = typeof(int);
 
                     var attrName = attribute.alias ?? attribute.name;
-                    var fullName = attribute.alias != null ? attribute.alias : $"{alias}.{attribute.name}";
+                    var fullName = attribute.alias != null ? attribute.alias : $"{alias}.{attrName}";
 
                     schema.Schema[fullName] = attrType;
 
@@ -360,6 +360,27 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                         if (!simpleVirtualColumnNameAliases.Contains(virtualAttrFullName))
                             simpleVirtualColumnNameAliases.Add(virtualAttrFullName);
+                    }
+                }
+
+                if (items.OfType<allattributes>().Any())
+                {
+                    foreach (var attrMetadata in meta.Attributes)
+                    {
+                        var attrType = GetAttributeType(attrMetadata);
+                        var attrName = attrMetadata.LogicalName;
+                        var fullName = $"{alias}.{attrName}";
+
+                        schema.Schema[fullName] = attrType;
+
+                        if (!schema.Aliases.TryGetValue(attrName, out var simpleColumnNameAliases))
+                        {
+                            simpleColumnNameAliases = new List<string>();
+                            schema.Aliases[attrName] = simpleColumnNameAliases;
+                        }
+
+                        if (!simpleColumnNameAliases.Contains(fullName))
+                            simpleColumnNameAliases.Add(fullName);
                     }
                 }
 
