@@ -159,15 +159,16 @@ namespace MarkMpn.Sql4Cds
                 if (labelRect.IntersectsWith(clipRect))
                 {
                     var label = GetLabel(kvp.Key);
+                    var stringFormat = new StringFormat { Alignment = StringAlignment.Center };
 
                     if (kvp.Key == Selected)
                     {
                         e.Graphics.FillRectangle(SystemBrushes.Highlight, labelRect);
-                        e.Graphics.DrawString(label, Font, SystemBrushes.HighlightText, labelRect);
+                        e.Graphics.DrawString(label, Font, SystemBrushes.HighlightText, labelRect, stringFormat);
                     }
                     else
                     {
-                        e.Graphics.DrawString(label, Font, SystemBrushes.ControlText, labelRect);
+                        e.Graphics.DrawString(label, Font, SystemBrushes.ControlText, labelRect, stringFormat);
                     }
                 }
             }
@@ -229,13 +230,21 @@ namespace MarkMpn.Sql4Cds
             NodeSelected?.Invoke(this, e);
         }
 
+        private Rectangle OriginToClient(Rectangle rect)
+        {
+            rect.Offset(AutoScrollPosition.X, AutoScrollPosition.Y);
+            return rect;
+        }
+
         protected override void OnMouseClick(MouseEventArgs e)
         {
             base.OnMouseClick(e);
 
+            var hit = false;
+
             foreach (var node in _nodeLocations)
             {
-                if (node.Value.Contains(e.Location))
+                if (OriginToClient(node.Value).Contains(e.Location))
                 {
                     if (Selected != null)
                         Invalidate(Selected);
@@ -245,14 +254,24 @@ namespace MarkMpn.Sql4Cds
                     Invalidate(Selected);
 
                     OnNodeSelected(EventArgs.Empty);
+
+                    hit = true;
+                    break;
                 }
+            }
+
+            if (!hit && Selected != null)
+            {
+                Invalidate(Selected);
+                Selected = null;
+                OnNodeSelected(EventArgs.Empty);
             }
         }
 
         private void Invalidate(IExecutionPlanNode node)
         {
             // Inflate the node rectangle by 1 pixel to allow for antialiasing
-            var rect = _nodeLocations[node];
+            var rect = OriginToClient(_nodeLocations[node]);
             rect.Inflate(1, 1);
             Invalidate(rect);
         }
