@@ -40,8 +40,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return type;
         }
 
+        private static Type MakeNonNullable(Type type)
+        {
+            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
+                return type.GetGenericArguments()[0];
+
+            return type;
+        }
+
         public static bool CanMakeConsistentTypes(Type lhs, Type rhs, out Type consistent)
         {
+            lhs = MakeNonNullable(lhs);
+            rhs = MakeNonNullable(rhs);
+
             if (lhs == rhs)
             {
                 consistent = lhs;
@@ -74,6 +85,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (from == to)
                 return true;
 
+            if (from == typeof(string) && to == typeof(Guid))
+                return true;
+
             return false;
         }
 
@@ -84,13 +98,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public static object ChangeType(object value, Type type)
         {
+            if (value == null)
+                return null;
+
+            type = MakeNonNullable(type);
+
+            if (value is string str && type == typeof(Guid))
+                return new Guid(str);
+
             return Convert.ChangeType(value, type);
         }
 
         public static SqlTypeCategory GetCategory(Type type)
         {
-            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
-                type = type.GetGenericArguments()[0];
+            type = MakeNonNullable(type);
 
             if (type == typeof(long))
                 return SqlTypeCategory.ExactNumerics;
