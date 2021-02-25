@@ -98,7 +98,7 @@ namespace MarkMpn.Sql4Cds.Engine
                             if (attrMeta?.AttributeOf != null)
                                 ((FetchAttributeType)attr).name = attrMeta.AttributeOf;
 
-                            if (entity.Items == null || !entity.Items.OfType<FetchAttributeType>().Any(a => (a.alias ?? a.name) == ((FetchAttributeType)attr).name))
+                            if (entity.Items == null || (!entity.Items.OfType<allattributes>().Any() && !entity.Items.OfType<FetchAttributeType>().Any(a => (a.alias ?? a.name) == ((FetchAttributeType)attr).name)))
                                 entity.AddItem(attr);
                         }
                     }
@@ -118,7 +118,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                 if (attrMeta?.AttributeOf != null)
                                     ((FetchAttributeType)attr).name = attrMeta.AttributeOf;
 
-                                if (linkEntity.Items == null || !linkEntity.Items.OfType<FetchAttributeType>().Any(a => (a.alias ?? a.name) == ((FetchAttributeType)attr).name))
+                                if (linkEntity.Items == null || (!linkEntity.Items.OfType<allattributes>().Any() && !linkEntity.Items.OfType<FetchAttributeType>().Any(a => (a.alias ?? a.name) == ((FetchAttributeType)attr).name)))
                                     linkEntity.AddItem(attr);
                             }
                         }
