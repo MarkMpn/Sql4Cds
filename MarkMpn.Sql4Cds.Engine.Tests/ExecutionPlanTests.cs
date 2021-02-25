@@ -84,6 +84,42 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void SimpleSelectStar()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+
+            var query = "SELECT * FROM account";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            CollectionAssert.AreEqual(new[]
+            {
+                "accountid",
+                "createdon",
+                "employees",
+                "name",
+                "primarycontactid",
+                "primarycontactidname",
+                "turnover"
+            }, select.ColumnSet.Select(col => col.OutputColumn).ToArray());
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <all-attributes />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
         public void Join()
         {
             var context = new XrmFakedContext();
@@ -151,6 +187,72 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void NonUniqueJoin()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+
+            var query = "SELECT accountid, name FROM account INNER JOIN contact ON account.name = contact.fullname";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                        <attribute name='name' />
+                        <link-entity name='contact' alias='contact' from='fullname' to='name' link-type='inner'>
+                        </link-entity>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void NonUniqueJoinExpression()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+
+            var query = "SELECT accountid, name FROM account INNER JOIN contact ON account.name = (contact.firstname + ' ' + contact.lastname)";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var join = AssertNode<HashJoinNode>(select.Source);
+            var accountFetch = AssertNode<FetchXmlScan>(join.LeftSource);
+            AssertFetchXml(accountFetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                        <attribute name='name' />
+                    </entity>
+                </fetch>");
+            var contactComputeScalar = AssertNode<ComputeScalarNode>(join.RightSource);
+            var contactFetch = AssertNode<FetchXmlScan>(contactComputeScalar.Source);
+            AssertFetchXml(contactFetch, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <attribute name='lastname' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
         public void SimpleWhere()
         {
             var context = new XrmFakedContext();
@@ -205,6 +307,41 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     account
                 ORDER BY
                     name ASC";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                        <attribute name='name' />
+                        <order attribute='name' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void SimpleSortIndex()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+
+            var query = @"
+                SELECT
+                    accountid,
+                    name
+                FROM
+                    account
+                ORDER BY
+                    2 ASC";
 
             var plans = planBuilder.Build(query);
 
@@ -615,6 +752,47 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void PartialWhere()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+
+            var query = @"
+                SELECT
+                    accountid,
+                    name
+                FROM
+                    account
+                WHERE
+                    name = 'Data8'
+                    and (turnover + employees) = 100";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var filter = AssertNode<FilterNode>(select.Source);
+            var fetch = AssertNode<FetchXmlScan>(filter.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                        <attribute name='name' />
+                        <attribute name='turnover' />
+                        <attribute name='employees' />
+                        <filter>
+                            <condition attribute='name' operator='eq' value='Data8' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
         public void RetrieveTotalRecordCountRequest()
         {
             var context = new XrmFakedContext();
@@ -740,13 +918,12 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     </entity>
                 </fetch>");
             var subAssert = AssertNode<AssertNode>(nestedLoop.RightSource);
-            var tryCatch = AssertNode<TryCatchNode>(subAssert.Source);
-            var subAggregateFetch = AssertNode<FetchXmlScan>(tryCatch.TrySource);
+            var subAggregate = AssertNode<HashMatchAggregateNode>(subAssert.Source);
+            var subAggregateFetch = AssertNode<FetchXmlScan>(subAggregate.Source);
             AssertFetchXml(subAggregateFetch, @"
-                <fetch aggregate='true'>
+                <fetch>
                     <entity name='account'>
-                        <attribute name='name' aggregate='max' alias='Expr4' />
-                        <attribute name='accountid' aggregate='count' alias='Expr5' />
+                        <attribute name='name' />
                         <filter>
                             <condition attribute='accountid' operator='eq' value='@Expr3' />
                         </filter>
