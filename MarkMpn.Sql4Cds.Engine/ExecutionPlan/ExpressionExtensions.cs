@@ -36,6 +36,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return GetType(bin, schema);
             else if (expr is FunctionCall func)
                 return GetType(func, schema);
+            else if (expr is ParenthesisExpression paren)
+                return GetType(paren, schema);
+            else if (expr is UnaryExpression unary)
+                return GetType(unary, schema);
             else
                 throw new NotSupportedQueryFragmentException("Unhandled expression type", expr);
         }
@@ -64,6 +68,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return GetValue(bin, entity, schema);
             else if (expr is FunctionCall func)
                 return GetValue(func, entity, schema);
+            else if (expr is ParenthesisExpression paren)
+                return GetValue(paren, entity, schema);
+            else if (expr is UnaryExpression unary)
+                return GetValue(unary, entity, schema);
             else
                 throw new NotSupportedQueryFragmentException("Unhandled expression type", expr);
         }
@@ -96,10 +104,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var name = col.GetColumnName();
 
-            if (!schema.ContainsColumn(name, out name))
-                throw new QueryExecutionException(col, "Unknown column");
+            if (!schema.ContainsColumn(name, out var normalizedName))
+            {
+                if (!schema.Aliases.TryGetValue(name, out var normalized))
+                    throw new NotSupportedQueryFragmentException("Unknown column", col);
 
-            return schema.Schema[name];
+                throw new NotSupportedQueryFragmentException("Ambiguous column reference", col)
+                {
+                    Suggestion = $"Did you mean:\r\n{String.Join("\r\n", normalized.Select(c => $"* {c}"))}"
+                };
+            }
+
+            return schema.Schema[normalizedName];
         }
 
         private static object GetValue(ColumnReferenceExpression col, Entity entity, NodeSchema schema)
@@ -585,6 +601,78 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 paramValues[i] = SqlTypeConverter.ChangeType(paramValues[i], parameters[i].ParameterType);
 
             return method.Invoke(null, paramValues);
+        }
+
+        private static Type GetType(this ParenthesisExpression paren, NodeSchema schema)
+        {
+            return paren.Expression.GetType(schema);
+        }
+
+        private static object GetValue(this ParenthesisExpression paren, Entity entity, NodeSchema schema)
+        {
+            return paren.Expression.GetValue(entity, schema);
+        }
+
+        private static Type GetType(this UnaryExpression unary, NodeSchema schema)
+        {
+            var type = unary.Expression.GetType(schema);
+            var typeCategory = SqlTypeConverter.GetCategory(type);
+
+            switch (unary.UnaryExpressionType)
+            {
+                case UnaryExpressionType.Positive:
+                case UnaryExpressionType.Negative:
+                    if (typeCategory != SqlTypeCategory.ExactNumerics && typeCategory != SqlTypeCategory.ApproximateNumerics)
+                        throw new NotSupportedQueryFragmentException("Invalid operator for data type", unary);
+
+                    return type;
+
+                case UnaryExpressionType.BitwiseNot:
+                    if (typeCategory != SqlTypeCategory.ExactNumerics)
+                        throw new NotSupportedQueryFragmentException("Invalid operator for data type", unary);
+
+                    if (type == typeof(decimal))
+                        throw new NotSupportedQueryFragmentException("Invalid operator for data type", unary);
+
+                    return type;
+
+                default:
+                    throw new NotSupportedQueryFragmentException("Unknown unary operator", unary);
+            }
+        }
+
+        private static object GetValue(this UnaryExpression unary, Entity entity, NodeSchema schema)
+        {
+            var value = unary.Expression.GetValue(entity, schema);
+
+            if (value == null)
+                return null;
+
+            if (unary.UnaryExpressionType == UnaryExpressionType.Positive)
+                return value;
+
+            if (value is long l)
+                return unary.UnaryExpressionType == UnaryExpressionType.Negative ? -l : ~l;
+
+            if (value is int i)
+                return unary.UnaryExpressionType == UnaryExpressionType.Negative ? -i : ~i;
+
+            if (value is byte b)
+                return unary.UnaryExpressionType == UnaryExpressionType.Negative ? -b : ~b;
+
+            if (value is decimal d && unary.UnaryExpressionType == UnaryExpressionType.Negative)
+                return -d;
+
+            if (value is double m && unary.UnaryExpressionType == UnaryExpressionType.Negative)
+                return -m;
+
+            if (value is float f && unary.UnaryExpressionType == UnaryExpressionType.Negative)
+                return -f;
+
+            if (value is bool tf && unary.UnaryExpressionType == UnaryExpressionType.BitwiseNot)
+                return !tf;
+
+            throw new QueryExecutionException(unary, "Invalid operator for data type");
         }
 
         public static BooleanExpression RemoveCondition(this BooleanExpression expr, BooleanExpression remove)
