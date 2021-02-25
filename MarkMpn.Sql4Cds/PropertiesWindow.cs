@@ -23,7 +23,9 @@ namespace MarkMpn.Sql4Cds
 
         public void SelectObject(object obj)
         {
-            TypeDescriptor.AddAttributes(obj, new ReadOnlyAttribute(true));
+            if (obj != null)
+                TypeDescriptor.AddAttributes(obj, new ReadOnlyAttribute(true));
+
             propertyGrid.SelectedObject = obj;
         }
     }
