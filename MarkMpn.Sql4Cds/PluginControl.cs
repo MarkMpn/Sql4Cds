@@ -253,6 +253,8 @@ namespace MarkMpn.Sql4Cds
                 tsbIncludeFetchXml.PerformClick();
             else if (keyData == Keys.F5 || keyData == (Keys.Control | Keys.E))
                 tsbExecute.PerformClick();
+            else if (keyData == Keys.F4)
+                dockPanel.ActiveAutoHideContent = _properties;
             else
                 return base.ProcessCmdKey(ref msg, keyData);
 
