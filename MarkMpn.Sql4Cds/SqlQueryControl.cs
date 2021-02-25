@@ -808,6 +808,7 @@ namespace MarkMpn.Sql4Cds
                 var error = e.Error;
                 var index = -1;
                 var length = 0;
+                var messageSuffix = "";
 
                 if (e.Error is QueryException queryException)
                 {
@@ -821,6 +822,9 @@ namespace MarkMpn.Sql4Cds
                     _editor.IndicatorFillRange(_params.Offset + err.Fragment.StartOffset, err.Fragment.FragmentLength);
                     index = _params.Offset + err.Fragment.StartOffset;
                     length = err.Fragment.FragmentLength;
+
+                    if (!String.IsNullOrEmpty(err.Suggestion))
+                        messageSuffix = "\r\n" + err.Suggestion;
                 }
                 else if (error is QueryParseException parseErr)
                 {
@@ -840,9 +844,9 @@ namespace MarkMpn.Sql4Cds
                 _log(e.Error.ToString());
 
                 if (error is AggregateException aggregateException)
-                    AddMessage(index, length, String.Join("\r\n", aggregateException.InnerExceptions.Select(ex => ex.Message)), true);
+                    AddMessage(index, length, String.Join("\r\n", aggregateException.InnerExceptions.Select(ex => ex.Message)) + messageSuffix, true);
                 else
-                    AddMessage(index, length, error.Message, true);
+                    AddMessage(index, length, error.Message + messageSuffix, true);
 
                 tabControl.SelectedTab = messagesTabPage;
             }
