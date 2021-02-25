@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using MarkMpn.Sql4Cds.Engine.FetchXml;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 
@@ -55,14 +56,65 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (Source is FetchXmlScan fetchXml && !fetchXml.FetchXml.aggregate)
             {
-                if (TranslateCriteria(metadata, options, Filter, fetchXml.GetSchema(metadata), null, fetchXml.Entity.name, fetchXml.Alias, out var fetchFilter))
+                var schema = fetchXml.GetSchema(metadata);
+                if (TranslateCriteria(metadata, options, Filter, schema, null, fetchXml.Entity.name, fetchXml.Alias, out var fetchFilter))
                 {
                     fetchXml.Entity.AddItem(fetchFilter);
                     return fetchXml;
                 }
+
+                // If the criteria are ANDed, see if any of the individual conditions can be translated to FetchXML
+                Filter = ExtractFetchXMLFilters(metadata, options, Filter, schema, null, fetchXml.Entity.name, fetchXml.Alias, out fetchFilter);
+
+                if (fetchFilter != null)
+                    fetchXml.Entity.AddItem(fetchFilter);
             }
 
             return this;
+        }
+
+        private BooleanExpression ExtractFetchXMLFilters(IAttributeMetadataCache metadata, IQueryExecutionOptions options, BooleanExpression criteria, NodeSchema schema, string allowedPrefix, string targetEntityName, string targetEntityAlias, out filter filter)
+        {
+            filter = null;
+
+            if (!(criteria is BooleanBinaryExpression bin))
+                return criteria;
+
+            if (bin.BinaryExpressionType != BooleanBinaryExpressionType.And)
+                return criteria;
+
+            filter lhsFilter;
+            if (TranslateCriteria(metadata, options, bin.FirstExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, out lhsFilter))
+                bin.FirstExpression = null;
+            else
+                bin.FirstExpression = ExtractFetchXMLFilters(metadata, options, bin.FirstExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, out lhsFilter);
+
+            filter rhsFilter;
+            if (TranslateCriteria(metadata, options, bin.SecondExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, out rhsFilter))
+                bin.SecondExpression = null;
+            else
+                bin.SecondExpression = ExtractFetchXMLFilters(metadata, options, bin.SecondExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, out rhsFilter);
+
+            if (lhsFilter != null && rhsFilter != null)
+            {
+                filter = new filter
+                {
+                    Items = new object[]
+                    {
+                        lhsFilter,
+                        rhsFilter
+                    }
+                };
+            }
+            else
+            {
+                filter = lhsFilter ?? rhsFilter;
+            }
+
+            if (bin.FirstExpression != null && bin.SecondExpression != null)
+                return bin;
+
+            return bin.FirstExpression ?? bin.SecondExpression;
         }
     }
 }
