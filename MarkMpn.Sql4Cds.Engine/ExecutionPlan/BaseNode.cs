@@ -440,21 +440,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         value = targetMetadata.ObjectTypeCode?.ToString();
                     }
 
-                    if (DateTime.TryParse(value, out var dt) &&
-                        dt.Kind != DateTimeKind.Utc &&
-                        attribute is DateTimeAttributeMetadata dtAttr &&
-                        dtAttr.DateTimeBehavior?.Value != DateTimeBehavior.TimeZoneIndependent &&
-                        field.MultiPartIdentifier.Identifiers.Last().Value.Equals(attrName + "utc", StringComparison.OrdinalIgnoreCase))
-                    {
-                        // Convert the value to UTC if we're filtering on a UTC column
-                        if (dt.Kind == DateTimeKind.Unspecified)
-                            dt = DateTime.SpecifyKind(dt, DateTimeKind.Utc);
-                        else
-                            dt = dt.ToUniversalTime();
-
-                        value = dt.ToString("u");
-                    }
-
                     condition = new condition
                     {
                         entityname = entityName == targetEntityName ? null : entityName,
