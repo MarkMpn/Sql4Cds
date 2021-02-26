@@ -498,6 +498,40 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
+            if (criteria is InPredicate inPred)
+            {
+                // Checking if a column is in a list of literals is foldable, everything else isn't
+                if (!(inPred.Expression is ColumnReferenceExpression inCol))
+                    return false;
+
+                if (inPred.Subquery != null)
+                    return false;
+
+                if (!inPred.Values.All(v => v is Literal))
+                    return false;
+
+                var columnName = inCol.GetColumnName();
+
+                if (!schema.ContainsColumn(columnName, out columnName))
+                    return false;
+
+                var parts = columnName.Split('.');
+                var entityName = parts[0];
+                var attrName = parts[1];
+
+                if (allowedPrefix != null && !allowedPrefix.Equals(entityName))
+                    return false;
+
+                condition = new condition
+                {
+                    entityname = entityName == targetEntityName ? null : entityName,
+                    attribute = attrName,
+                    @operator = inPred.NotDefined ? @operator.notin : @operator.@in,
+                    Items = inPred.Values.Cast<Literal>().Select(lit => new conditionValue { Value = lit.Value }).ToArray()
+                };
+                return true;
+            }
+
             return false;
         }
 

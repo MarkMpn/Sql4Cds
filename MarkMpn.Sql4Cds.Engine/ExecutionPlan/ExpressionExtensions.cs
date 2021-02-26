@@ -84,6 +84,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return GetType(cmp, schema);
             else if (b is BooleanParenthesisExpression paren)
                 return GetType(paren, schema);
+            else if (b is InPredicate inPred)
+                return GetType(inPred, schema);
             else
                 throw new NotSupportedQueryFragmentException("Unhandled expression type", b);
         }
@@ -96,6 +98,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return GetValue(cmp, entity, schema);
             else if (b is BooleanParenthesisExpression paren)
                 return GetValue(paren, entity, schema);
+            else if (b is InPredicate inPred)
+                return GetValue(inPred, entity, schema);
             else
                 throw new NotSupportedQueryFragmentException("Unhandled expression type", b);
         }
@@ -673,6 +677,61 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return !tf;
 
             throw new QueryExecutionException(unary, "Invalid operator for data type");
+        }
+
+        private static Type GetType(this InPredicate inPred, NodeSchema schema)
+        {
+            if (inPred.Subquery != null)
+                throw new NotSupportedQueryFragmentException("Subquery should have been eliminated by query plan", inPred);
+
+            var exprType = inPred.Expression.GetType(schema);
+
+            foreach (var value in inPred.Values)
+            {
+                var valueType = value.GetType(schema);
+
+                if (!SqlTypeConverter.CanMakeConsistentTypes(exprType, valueType, out var type))
+                    throw new NotSupportedQueryFragmentException($"No implicit conversion exists for types {exprType} and {valueType}", inPred);
+
+                if (!typeof(IComparable).IsAssignableFrom(type))
+                    throw new NotSupportedQueryFragmentException($"Values of type {type} cannot be compared", inPred);
+            }
+
+            return typeof(bool);
+        }
+
+        private static bool GetValue(this InPredicate inPred, Entity entity, NodeSchema schema)
+        {
+            if (inPred.Subquery != null)
+                throw new NotSupportedQueryFragmentException("Subquery should have been eliminated by query plan", inPred);
+
+            var exprValue = inPred.Expression.GetValue(entity, schema);
+            var match = false;
+
+            if (exprValue != null)
+            {
+                foreach (var value in inPred.Values)
+                {
+                    var comparisonValue = value.GetValue(entity, schema);
+
+                    if (comparisonValue == null)
+                        continue;
+
+                    var convertedExprValue = exprValue;
+                    SqlTypeConverter.MakeConsistentTypes(ref convertedExprValue, ref comparisonValue);
+
+                    if (StringComparer.CurrentCultureIgnoreCase.Equals(convertedExprValue, comparisonValue))
+                    {
+                        match = true;
+                        break;
+                    }
+                }
+            }
+
+            if (inPred.NotDefined)
+                match = !match;
+
+            return match;
         }
 
         public static BooleanExpression RemoveCondition(this BooleanExpression expr, BooleanExpression remove)

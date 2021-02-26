@@ -576,6 +576,9 @@ namespace MarkMpn.Sql4Cds.Engine
                     whereClause.SearchCondition.Accept(new RewriteVisitor(rewrites));
             }
 
+            // Validate the final expression
+            whereClause.SearchCondition.GetType(source.GetSchema(Metadata));
+
             return new FilterNode
             {
                 Filter = whereClause.SearchCondition,
