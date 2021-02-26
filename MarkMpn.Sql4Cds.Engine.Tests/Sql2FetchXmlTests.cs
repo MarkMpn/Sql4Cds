@@ -2748,33 +2748,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
-        public void FilterOnUtcDateTimeColumn()
-        {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
-            var sql2FetchXml = new Sql2FetchXml(metadata, true);
-
-            var query = @"
-                SELECT name FROM account WHERE createdonutc >= '2021-01-01'";
-
-            var queries = sql2FetchXml.Convert(query);
-
-            AssertFetchXml(queries, @"
-                <fetch>
-                    <entity name='account'>
-                        <attribute name='name' />
-                        <filter>
-                            <condition attribute='createdon' operator='ge' value='2021-01-01 00:00:00Z' />
-                        </filter>
-                    </entity>
-                </fetch>
-            ");
-        }
-
-        [TestMethod]
         public void OrderByAggregateByIndex()
         {
             var context = new XrmFakedContext();
