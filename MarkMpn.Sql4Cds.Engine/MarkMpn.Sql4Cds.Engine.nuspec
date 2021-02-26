@@ -11,7 +11,9 @@
     <iconUrl>https://markcarrington.dev/sql4cds-icon/</iconUrl>
     <description>Convert SQL queries to FetchXml and execute them against CDS</description>
     <summary>Convert SQL queries to FetchXml and execute them against CDS</summary>
-    <releaseNotes>Show virtual ___name and ___type attributes across multiple pages of results</releaseNotes>
+    <releaseNotes>Identify queries that hit the legacy paging limit
+Avoid 50K row limit for custom aggregates
+Implemented CHARINDEX function</releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>
     <tags>SQL CDS</tags>
