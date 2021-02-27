@@ -31,16 +31,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         public BooleanExpression AdditionalJoinCriteria { get; set; }
 
-        public override IEnumerable<string> GetRequiredColumns()
+        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            yield return LeftAttribute.GetColumnName();
-            yield return RightAttribute.GetColumnName();
-        }
+            LeftSource = LeftSource.MergeNodeDown(metadata, options, parameterTypes);
+            RightSource = RightSource.MergeNodeDown(metadata, options, parameterTypes);
 
-        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options)
-        {
-            LeftSource = LeftSource.MergeNodeDown(metadata, options);
-            RightSource = RightSource.MergeNodeDown(metadata, options);
+            var leftSchema = LeftSource.GetSchema(metadata, parameterTypes);
+            var rightSchema = RightSource.GetSchema(metadata, parameterTypes);
 
             if (LeftSource is FetchXmlScan leftFetch && RightSource is FetchXmlScan rightFetch)
             {
@@ -48,8 +45,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var rightEntity = rightFetch.Entity;
 
                 // Check that the join is on columns that are available in the FetchXML
-                var leftSchema = LeftSource.GetSchema(metadata);
-                var rightSchema = RightSource.GetSchema(metadata);
                 var leftAttribute = LeftAttribute.GetColumnName();
                 if (!leftSchema.ContainsColumn(leftAttribute, out leftAttribute))
                     return this;
@@ -116,12 +111,32 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 if (additionalCriteria != null)
-                    return new FilterNode { Filter = additionalCriteria, Source = leftFetch };
+                    return new FilterNode { Filter = additionalCriteria, Source = leftFetch }.MergeNodeDown(metadata, options, parameterTypes);
 
                 return leftFetch;
             }
 
             return this;
+        }
+
+        public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        {
+            // Work out which columns need to be pushed down to which source
+            var leftSchema = LeftSource.GetSchema(metadata, parameterTypes);
+            var rightSchema = RightSource.GetSchema(metadata, parameterTypes);
+
+            var leftColumns = requiredColumns
+                .Where(col => leftSchema.ContainsColumn(col, out _))
+                .ToList();
+            var rightColumns = requiredColumns
+                .Where(col => rightSchema.ContainsColumn(col, out _))
+                .ToList();
+
+            leftColumns.Add(LeftAttribute.GetColumnName());
+            rightColumns.Add(RightAttribute.GetColumnName());
+
+            LeftSource.AddRequiredColumns(metadata, parameterTypes, leftColumns);
+            RightSource.AddRequiredColumns(metadata, parameterTypes, rightColumns);
         }
     }
 }

@@ -20,9 +20,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         public IExecutionPlanNode Source { get; set; }
 
-        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, object> parameterValues)
+        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            foreach (var entity in Source.Execute(org, metadata, options, parameterValues))
+            foreach (var entity in Source.Execute(org, metadata, options, parameterTypes, parameterValues))
             {
                 foreach (var col in ColumnSet)
                     entity[col.OutputColumn] = entity[col.SourceColumn];
@@ -36,26 +36,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        public override NodeSchema GetSchema(IAttributeMetadataCache metadata)
+        public override NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
         {
-            return Source.GetSchema(metadata);
+            return Source.GetSchema(metadata, parameterTypes);
         }
 
-        public override IEnumerable<string> GetRequiredColumns()
+        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            return ColumnSet
-                .Select(col => col.SourceColumn + (col.AllColumns ? ".*" : ""))
-                .Distinct();
-        }
-
-        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options)
-        {
-            Source = Source.MergeNodeDown(metadata, options);
+            Source = Source.MergeNodeDown(metadata, options, parameterTypes);
 
             if (Source is FetchXmlScan fetchXml)
             {
                 // Check if there are any aliases we can apply to the source FetchXml
-                var schema = fetchXml.GetSchema(metadata);
+                var schema = fetchXml.GetSchema(metadata, parameterTypes);
                 var processedSourceColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var hasStar = ColumnSet.Any(col => col.AllColumns && col.SourceColumn == null);
                 var aliasStars = new HashSet<string>(ColumnSet.Where(col => col.AllColumns && col.SourceColumn != null).Select(col => col.SourceColumn.Replace(".*", "")).Distinct(StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase);
@@ -113,7 +106,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Expand any AllColumns
             if (ColumnSet.Any(col => col.AllColumns))
             {
-                var schema = Source.GetSchema(metadata);
+                var schema = Source.GetSchema(metadata, parameterTypes);
                 var expanded = new List<SelectColumn>();
 
                 foreach (var col in ColumnSet)
@@ -139,6 +132,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return this;
+        }
+
+        public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        {
+            foreach (var col in ColumnSet.Select(c => c.SourceColumn + (c.AllColumns ? ".*" : "")))
+            {
+                if (!requiredColumns.Contains(col, StringComparer.OrdinalIgnoreCase))
+                    requiredColumns.Add(col);
+            }
+
+            Source.AddRequiredColumns(metadata, parameterTypes, requiredColumns);
         }
 
         private IEnumerable<FetchLinkEntityType> GetLinkEntities(object[] items)

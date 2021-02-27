@@ -86,9 +86,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         public IExecutionPlanNode Source { get; set; }
 
-        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, object> parameterValues)
+        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            return new CachedList<Entity>(Source.Execute(org, metadata, options, parameterValues));
+            return new CachedList<Entity>(Source.Execute(org, metadata, options, parameterTypes, parameterValues));
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
@@ -96,20 +96,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        public override NodeSchema GetSchema(IAttributeMetadataCache metadata)
+        public override NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
         {
-            return Source.GetSchema(metadata);
+            return Source.GetSchema(metadata, parameterTypes);
         }
 
-        public override IEnumerable<string> GetRequiredColumns()
+        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            return Array.Empty<string>();
-        }
-
-        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options)
-        {
-            Source = Source.MergeNodeDown(metadata, options);
+            Source = Source.MergeNodeDown(metadata, options, parameterTypes);
             return this;
+        }
+
+        public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        {
+            Source.AddRequiredColumns(metadata, parameterTypes, requiredColumns);
         }
     }
 }

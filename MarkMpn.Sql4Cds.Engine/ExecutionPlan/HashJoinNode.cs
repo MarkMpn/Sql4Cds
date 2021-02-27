@@ -22,16 +22,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private IDictionary<object, List<OuterRecord>> _hashTable;
 
-        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, object> parameterValues)
+        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             _hashTable = new Dictionary<object, List<OuterRecord>>(CaseInsensitiveObjectComparer.Instance);
-            var mergedSchema = GetSchema(metadata);
+            var mergedSchema = GetSchema(metadata, parameterTypes);
 
             // Build the hash table
-            var leftSchema = LeftSource.GetSchema(metadata);
+            var leftSchema = LeftSource.GetSchema(metadata, parameterTypes);
             leftSchema.ContainsColumn(LeftAttribute.GetColumnName(), out var leftCol);
 
-            foreach (var entity in LeftSource.Execute(org, metadata, options, parameterValues))
+            foreach (var entity in LeftSource.Execute(org, metadata, options, parameterTypes, parameterValues))
             {
                 var key = entity[leftCol];
 
@@ -45,10 +45,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             // Probe the hash table using the right source
-            var rightSchema = RightSource.GetSchema(metadata);
+            var rightSchema = RightSource.GetSchema(metadata, parameterTypes);
             rightSchema.ContainsColumn(RightAttribute.GetColumnName(), out var rightCol);
 
-            foreach (var entity in RightSource.Execute(org, metadata, options, parameterValues))
+            foreach (var entity in RightSource.Execute(org, metadata, options, parameterTypes, parameterValues))
             {
                 var key = entity[rightCol];
                 var matched = false;
@@ -59,7 +59,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         var merged = Merge(left.Entity, leftSchema, entity, rightSchema);
 
-                        if (AdditionalJoinCriteria == null || AdditionalJoinCriteria.GetValue(merged, mergedSchema))
+                        if (AdditionalJoinCriteria == null || AdditionalJoinCriteria.GetValue(merged, mergedSchema, parameterTypes, parameterValues))
                         {
                             yield return merged;
                             left.Used = true;

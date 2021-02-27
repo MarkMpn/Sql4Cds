@@ -24,13 +24,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         public IExecutionPlanNode Source { get; set; }
 
-        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, object> parameterValues)
+        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            var schema = Source.GetSchema(metadata);
+            var schema = Source.GetSchema(metadata, parameterTypes);
 
-            foreach (var entity in Source.Execute(org, metadata, options, parameterValues))
+            foreach (var entity in Source.Execute(org, metadata, options, parameterTypes, parameterValues))
             {
-                if (Filter.GetValue(entity, schema))
+                if (Filter.GetValue(entity, schema, parameterTypes, parameterValues))
                     yield return entity;
             }
         }
@@ -40,23 +40,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        public override NodeSchema GetSchema(IAttributeMetadataCache metadata)
+        public override NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
         {
-            return Source.GetSchema(metadata);
+            return Source.GetSchema(metadata, parameterTypes);
         }
 
-        public override IEnumerable<string> GetRequiredColumns()
+        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            return Filter.GetColumns();
-        }
-
-        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options)
-        {
-            Source = Source.MergeNodeDown(metadata, options);
+            Source = Source.MergeNodeDown(metadata, options, parameterTypes);
+            var schema = Source.GetSchema(metadata, parameterTypes);
 
             if (Source is FetchXmlScan fetchXml && !fetchXml.FetchXml.aggregate)
             {
-                var schema = fetchXml.GetSchema(metadata);
                 if (TranslateCriteria(metadata, options, Filter, schema, null, fetchXml.Entity.name, fetchXml.Alias, out var fetchFilter))
                 {
                     fetchXml.Entity.AddItem(fetchFilter);
@@ -71,6 +66,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return this;
+        }
+
+        public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        {
+            foreach (var col in Filter.GetColumns())
+            {
+                if (!requiredColumns.Contains(col, StringComparer.OrdinalIgnoreCase))
+                    requiredColumns.Add(col);
+            }
+
+            Source.AddRequiredColumns(metadata, parameterTypes, requiredColumns);
         }
 
         private BooleanExpression ExtractFetchXMLFilters(IAttributeMetadataCache metadata, IQueryExecutionOptions options, BooleanExpression criteria, NodeSchema schema, string allowedPrefix, string targetEntityName, string targetEntityAlias, out filter filter)

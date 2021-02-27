@@ -99,13 +99,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public bool ReturnFullSchema { get; set; }
 
-        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, object> parameterValues)
+        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             if (options.Cancelled)
                 yield break;
 
             ReturnFullSchema = false;
-            var schema = GetSchema(metadata);
+            var schema = GetSchema(metadata, parameterTypes);
 
             // Apply any variable conditions
             if (parameterValues != null)
@@ -281,7 +281,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Array.Empty<IExecutionPlanNode>();
         }
 
-        public override NodeSchema GetSchema(IAttributeMetadataCache metadata)
+        public override NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
         {
             var schema = new NodeSchema();
 
@@ -463,14 +463,66 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             throw new ApplicationException("Unknown attribute type " + attrMetadata.GetType());
         }
 
-        public override IEnumerable<string> GetRequiredColumns()
-        {
-            return Array.Empty<string>();
-        }
-
-        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             return this;
+        }
+
+        public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        {
+            var schema = GetSchema(metadata, parameterTypes);
+
+            // Add columns to FetchXml
+            foreach (var col in requiredColumns)
+            {
+                if (!schema.ContainsColumn(col, out var normalizedCol))
+                    continue;
+
+                var parts = normalizedCol.Split('.');
+
+                if (parts.Length != 2)
+                    continue;
+
+                var attr = parts[1] == "*" ? (object)new allattributes() : new FetchAttributeType { name = parts[1] };
+
+                if (Alias.Equals(parts[0], StringComparison.OrdinalIgnoreCase))
+                {
+                    if (attr is allattributes)
+                    {
+                        Entity.Items = new object[] { attr };
+                    }
+                    else
+                    {
+                        var attrMeta = metadata[Entity.name].Attributes.SingleOrDefault(a => a.LogicalName == ((FetchAttributeType)attr).name);
+                        if (attrMeta?.AttributeOf != null)
+                            ((FetchAttributeType)attr).name = attrMeta.AttributeOf;
+
+                        if (Entity.Items == null || (!Entity.Items.OfType<allattributes>().Any() && !Entity.Items.OfType<FetchAttributeType>().Any(a => (a.alias ?? a.name) == ((FetchAttributeType)attr).name)))
+                            Entity.AddItem(attr);
+                    }
+                }
+                else
+                {
+                    var linkEntity = Entity.FindLinkEntity(parts[0]);
+
+                    if (linkEntity != null)
+                    {
+                        if (attr is allattributes)
+                        {
+                            linkEntity.Items = new object[] { attr };
+                        }
+                        else
+                        {
+                            var attrMeta = metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName == ((FetchAttributeType)attr).name);
+                            if (attrMeta?.AttributeOf != null)
+                                ((FetchAttributeType)attr).name = attrMeta.AttributeOf;
+
+                            if (linkEntity.Items == null || (!linkEntity.Items.OfType<allattributes>().Any() && !linkEntity.Items.OfType<FetchAttributeType>().Any(a => (a.alias ?? a.name) == ((FetchAttributeType)attr).name)))
+                                linkEntity.AddItem(attr);
+                        }
+                    }
+                }
+            }
         }
 
         public override string ToString()

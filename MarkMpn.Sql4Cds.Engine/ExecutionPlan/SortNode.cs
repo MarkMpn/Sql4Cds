@@ -24,23 +24,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         public IExecutionPlanNode Source { get; set; }
 
-        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, object> parameterValues)
+        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            var source = Source.Execute(org, metadata, options, parameterValues);
-            var schema = GetSchema(metadata);
+            var source = Source.Execute(org, metadata, options, parameterTypes, parameterValues);
+            var schema = GetSchema(metadata, parameterTypes);
             IOrderedEnumerable<Entity> sortedSource;
 
             if (Sorts[0].SortOrder == SortOrder.Descending)
-                sortedSource = source.OrderByDescending(e => Sorts[0].Expression.GetValue(e, schema), CaseInsensitiveObjectComparer.Instance);
+                sortedSource = source.OrderByDescending(e => Sorts[0].Expression.GetValue(e, schema, parameterTypes, parameterValues), CaseInsensitiveObjectComparer.Instance);
             else
-                sortedSource = source.OrderBy(e => Sorts[0].Expression.GetValue(e, schema), CaseInsensitiveObjectComparer.Instance);
+                sortedSource = source.OrderBy(e => Sorts[0].Expression.GetValue(e, schema, parameterTypes, parameterValues), CaseInsensitiveObjectComparer.Instance);
 
             for (var i = 1; i < Sorts.Count; i++)
             {
                 if (Sorts[i].SortOrder == SortOrder.Descending)
-                    sortedSource = sortedSource.ThenByDescending(e => Sorts[i].Expression.GetValue(e, schema), CaseInsensitiveObjectComparer.Instance);
+                    sortedSource = sortedSource.ThenByDescending(e => Sorts[i].Expression.GetValue(e, schema,parameterTypes, parameterValues), CaseInsensitiveObjectComparer.Instance);
                 else
-                    sortedSource = sortedSource.ThenBy(e => Sorts[i].Expression.GetValue(e, schema), CaseInsensitiveObjectComparer.Instance);
+                    sortedSource = sortedSource.ThenBy(e => Sorts[i].Expression.GetValue(e, schema, parameterTypes, parameterValues), CaseInsensitiveObjectComparer.Instance);
             }
 
             return sortedSource;
@@ -51,25 +51,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        public override NodeSchema GetSchema(IAttributeMetadataCache metadata)
+        public override NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
         {
-            return Source.GetSchema(metadata);
+            return Source.GetSchema(metadata, parameterTypes);
         }
 
-        public override IEnumerable<string> GetRequiredColumns()
+        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            return Sorts
-                .SelectMany(s => s.GetColumns())
-                .Distinct();
-        }
-
-        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options)
-        {
-            Source = Source.MergeNodeDown(metadata, options);
+            Source = Source.MergeNodeDown(metadata, options, parameterTypes);
 
             if (Source is FetchXmlScan fetchXml)
             {
-                var schema = fetchXml.GetSchema(metadata);
+                var schema = Source.GetSchema(metadata, parameterTypes);
                 var entity = fetchXml.Entity;
                 var items = entity.Items;
 
@@ -109,6 +102,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return this;
+        }
+
+        public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        {
+            var sortColumns = Sorts.SelectMany(s => s.Expression.GetColumns()).Distinct();
+
+            foreach (var col in sortColumns)
+            {
+                if (!requiredColumns.Contains(col, StringComparer.OrdinalIgnoreCase))
+                    requiredColumns.Add(col);
+            }
+
+            Source.AddRequiredColumns(metadata, parameterTypes, requiredColumns);
         }
     }
 }

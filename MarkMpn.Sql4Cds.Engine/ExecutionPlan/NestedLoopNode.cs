@@ -23,13 +23,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         public Dictionary<string,string> OuterReferences { get; set; }
 
-        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string,object> parameterValues)
+        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string,object> parameterValues)
         {
-            var leftSchema = LeftSource.GetSchema(metadata);
-            var rightSchema = RightSource.GetSchema(metadata);
-            var mergedSchema = GetSchema(metadata);
+            var leftSchema = LeftSource.GetSchema(metadata, parameterTypes);
+            var innerParameterTypes = GetInnerParameterTypes(leftSchema, parameterTypes);
+            if (OuterReferences != null)
+            {
+                if (parameterTypes == null)
+                    innerParameterTypes = new Dictionary<string, Type>();
+                else
+                    innerParameterTypes = new Dictionary<string, Type>(parameterTypes);
 
-            foreach (var left in LeftSource.Execute(org, metadata, options, parameterValues))
+                foreach (var kvp in OuterReferences)
+                    innerParameterTypes[kvp.Value] = leftSchema.Schema[kvp.Key];
+            }
+
+            var rightSchema = RightSource.GetSchema(metadata, innerParameterTypes);
+            var mergedSchema = GetSchema(metadata, parameterTypes);
+
+            foreach (var left in LeftSource.Execute(org, metadata, options, parameterTypes, parameterValues))
             {
                 var innerParameters = parameterValues;
 
@@ -49,11 +61,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var hasRight = false;
 
-                foreach (var right in RightSource.Execute(org, metadata, options, innerParameters))
+                foreach (var right in RightSource.Execute(org, metadata, options, innerParameterTypes, innerParameters))
                 {
                     var merged = Merge(left, leftSchema, right, rightSchema);
 
-                    if (JoinCondition == null || JoinCondition.GetValue(merged, mergedSchema))
+                    if (JoinCondition == null || JoinCondition.GetValue(merged, mergedSchema, parameterTypes, parameterValues))
                         yield return merged;
 
                     hasRight = true;
@@ -64,26 +76,57 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public override IEnumerable<string> GetRequiredColumns()
+        private IDictionary<string, Type> GetInnerParameterTypes(NodeSchema leftSchema, IDictionary<string, Type> parameterTypes)
+        {
+            var innerParameterTypes = parameterTypes;
+
+            if (OuterReferences != null)
+            {
+                if (parameterTypes == null)
+                    innerParameterTypes = new Dictionary<string, Type>();
+                else
+                    innerParameterTypes = new Dictionary<string, Type>(parameterTypes);
+
+                foreach (var kvp in OuterReferences)
+                    innerParameterTypes[kvp.Value] = leftSchema.Schema[kvp.Key];
+            }
+
+            return innerParameterTypes;
+        }
+
+        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        {
+            var leftSchema = LeftSource.GetSchema(metadata, parameterTypes);
+            LeftSource = LeftSource.MergeNodeDown(metadata, options, parameterTypes);
+
+            var innerParameterTypes = GetInnerParameterTypes(leftSchema, parameterTypes);
+            RightSource = RightSource.MergeNodeDown(metadata, options, innerParameterTypes);
+            return this;
+        }
+
+        public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
         {
             if (JoinCondition != null)
             {
                 foreach (var col in JoinCondition.GetColumns())
-                    yield return col;
+                {
+                    if (!requiredColumns.Contains(col, StringComparer.OrdinalIgnoreCase))
+                        requiredColumns.Add(col);
+                }
             }
 
-            if (OuterReferences != null)
-            {
-                foreach (var col in OuterReferences.Keys)
-                    yield return col;
-            }
-        }
+            var leftSchema = LeftSource.GetSchema(metadata, parameterTypes);
+            var leftColumns = requiredColumns
+                .Where(col => leftSchema.ContainsColumn(col, out _))
+                .Concat(OuterReferences.Keys)
+                .Distinct()
+                .ToList();
+            var innerParameterTypes = GetInnerParameterTypes(leftSchema, parameterTypes);
+            var rightSchema = RightSource.GetSchema(metadata, innerParameterTypes);
+            var rightColumns = requiredColumns.Where(col => rightSchema.ContainsColumn(col, out _)).ToList();
 
-        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options)
-        {
-            LeftSource = LeftSource.MergeNodeDown(metadata, options);
-            RightSource = RightSource.MergeNodeDown(metadata, options);
-            return this;
+            LeftSource.AddRequiredColumns(metadata, parameterTypes, leftColumns);
+            RightSource.AddRequiredColumns(metadata, parameterTypes, rightColumns);
         }
     }
 }

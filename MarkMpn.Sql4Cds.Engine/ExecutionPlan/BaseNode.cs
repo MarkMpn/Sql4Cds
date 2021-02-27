@@ -23,15 +23,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public int Length { get; set; }
 
-        public abstract IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, object> parameterValues);
+        public abstract IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues);
 
         public abstract IEnumerable<IExecutionPlanNode> GetSources();
 
-        public abstract NodeSchema GetSchema(IAttributeMetadataCache metadata);
+        public abstract NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes);
 
-        public abstract IEnumerable<string> GetRequiredColumns();
+        public abstract IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes);
 
-        public abstract IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options);
+        public abstract void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns);
 
         protected bool IsAliasReferenced(FetchXmlScan fetchXml, string alias)
         {
@@ -524,13 +524,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             literal = null;
 
-            var visitor = new ColumnCollectingVisitor();
-            expr.Accept(visitor);
+            var columnVisitor = new ColumnCollectingVisitor();
+            expr.Accept(columnVisitor);
 
-            if (visitor.Columns.Count > 0)
+            if (columnVisitor.Columns.Count > 0)
                 return false;
 
-            var value = expr.GetValue(null, schema);
+            var variableVisitor = new VariableCollectingVisitor();
+            expr.Accept(variableVisitor);
+
+            if (variableVisitor.Variables.Count > 0)
+                return false;
+
+            var value = expr.GetValue(null, schema, null, null);
 
             if (value is int i)
                 literal = new IntegerLiteral { Value = i.ToString() };

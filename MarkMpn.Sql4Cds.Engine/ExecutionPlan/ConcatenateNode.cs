@@ -22,13 +22,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         public List<ConcatenateColumn> ColumnSet { get; } = new List<ConcatenateColumn>();
 
-        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, object> parameterValues)
+        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             for (var i = 0; i < Sources.Count; i++)
             {
                 var source = Sources[i];
 
-                foreach (var entity in source.Execute(org, metadata, options, parameterValues))
+                foreach (var entity in source.Execute(org, metadata, options, parameterTypes, parameterValues))
                 {
                     var result = new Entity(entity.LogicalName, entity.Id);
 
@@ -40,15 +40,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public override IEnumerable<string> GetRequiredColumns()
-        {
-            return ColumnSet.SelectMany(col => col.SourceColumns);
-        }
-
-        public override NodeSchema GetSchema(IAttributeMetadataCache metadata)
+        public override NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
         {
             var schema = new NodeSchema();
-            var sourceSchema = Sources[0].GetSchema(metadata);
+            var sourceSchema = Sources[0].GetSchema(metadata, parameterTypes);
 
             foreach (var col in ColumnSet)
                 schema.Schema[col.OutputColumn] = sourceSchema.Schema[col.SourceColumns[0]];
@@ -61,12 +56,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Sources;
         }
 
-        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             for (var i = 0; i < Sources.Count; i++)
-                Sources[i] = Sources[i].MergeNodeDown(metadata, options);
+                Sources[i] = Sources[i].MergeNodeDown(metadata, options, parameterTypes);
 
             return this;
+        }
+
+        public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        {
+            for (var i = 0; i < Sources.Count; i++)
+            {
+                var sourceRequiredColumns = ColumnSet
+                    .Select(c => c.SourceColumns[i])
+                    .Distinct()
+                    .ToList();
+
+                Sources[i].AddRequiredColumns(metadata, parameterTypes, sourceRequiredColumns);
+            }
         }
     }
 

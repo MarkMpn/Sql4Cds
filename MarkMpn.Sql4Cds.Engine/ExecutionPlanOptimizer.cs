@@ -34,12 +34,11 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <returns>A new execution plan node</returns>
         public IExecutionPlanNode Optimize(IExecutionPlanNode node)
         {
-
             // Move any additional operators down to the FetchXml
-            node = node.MergeNodeDown(Metadata, Options);
+            node = node.MergeNodeDown(Metadata, Options, null);
 
-            // Push required column names down to leaf node data sources so only the required data is exported
-            PushColumnsDown(node, new List<string>());
+            // Ensure all required columns are added to the FetchXML
+            node.AddRequiredColumns(Metadata, null, new List<string>());
 
             //Sort the items in the FetchXml nodes to match examples in documentation
             SortFetchXmlElements(node);
@@ -68,87 +67,6 @@ namespace MarkMpn.Sql4Cds.Engine
 
             foreach (var linkEntity in items.OfType<FetchLinkEntityType>())
                 SortFetchXmlElements(linkEntity.Items);
-        }
-
-        private void PushColumnsDown(IExecutionPlanNode node, List<string> columns)
-        {
-            if (node is FetchXmlScan fetchXmlNode)
-            {
-                // Add columns to FetchXml
-                var entity = fetchXmlNode.FetchXml.Items.OfType<FetchEntityType>().Single();
-
-                foreach (var col in columns)
-                {
-                    var parts = col.Split('.');
-
-                    if (parts.Length != 2)
-                        continue;
-
-                    var attr = parts[1] == "*" ? (object) new allattributes() : new FetchAttributeType { name = parts[1] };
-
-                    if (fetchXmlNode.Alias.Equals(parts[0], StringComparison.OrdinalIgnoreCase))
-                    {
-                        if (attr is allattributes)
-                        {
-                            entity.Items = new object[] { attr };
-                        }
-                        else
-                        {
-                            var attrMeta = Metadata[fetchXmlNode.Entity.name].Attributes.SingleOrDefault(a => a.LogicalName == ((FetchAttributeType)attr).name);
-                            if (attrMeta?.AttributeOf != null)
-                                ((FetchAttributeType)attr).name = attrMeta.AttributeOf;
-
-                            if (entity.Items == null || (!entity.Items.OfType<allattributes>().Any() && !entity.Items.OfType<FetchAttributeType>().Any(a => (a.alias ?? a.name) == ((FetchAttributeType)attr).name)))
-                                entity.AddItem(attr);
-                        }
-                    }
-                    else
-                    {
-                        var linkEntity = entity.FindLinkEntity(parts[0]);
-
-                        if (linkEntity != null)
-                        {
-                            if (attr is allattributes)
-                            {
-                                linkEntity.Items = new object[] { attr };
-                            }
-                            else
-                            {
-                                var attrMeta = Metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName == ((FetchAttributeType)attr).name);
-                                if (attrMeta?.AttributeOf != null)
-                                    ((FetchAttributeType)attr).name = attrMeta.AttributeOf;
-
-                                if (linkEntity.Items == null || (!linkEntity.Items.OfType<allattributes>().Any() && !linkEntity.Items.OfType<FetchAttributeType>().Any(a => (a.alias ?? a.name) == ((FetchAttributeType)attr).name)))
-                                    linkEntity.AddItem(attr);
-                            }
-                        }
-                    }
-                }
-                
-                fetchXmlNode.FetchXml = fetchXmlNode.FetchXml;
-            }
-
-            var schema = node.GetSchema(Metadata);
-            var sourceRequiredColumns = new List<string>(columns);
-
-            foreach (var col in node.GetRequiredColumns())
-            {
-                if (schema.Aliases.TryGetValue(col, out var aliasedCols))
-                {
-                    foreach (var aliasedCol in aliasedCols)
-                    {
-                        if (!sourceRequiredColumns.Contains(aliasedCol))
-                            sourceRequiredColumns.Add(aliasedCol);
-                    }
-                }
-                else if (!sourceRequiredColumns.Contains(col))
-                {
-                    sourceRequiredColumns.Add(col);
-                }
-            }
-
-            foreach (var source in node.GetSources())
-                PushColumnsDown(source, sourceRequiredColumns);
         }
     }
 }

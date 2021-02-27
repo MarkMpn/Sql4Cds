@@ -45,7 +45,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var results = node.Execute(_org, _metadata, new StubOptions(), null).ToArray();
+            var results = node.Execute(_org, _metadata, new StubOptions(), null, null).ToArray();
 
             Assert.AreEqual(1, results.Length);
             Assert.AreEqual("Mark", results[0]["firstname"]);
@@ -85,7 +85,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var results = node.Execute(_org, _metadata, new StubOptions(), null).ToArray();
+            var results = node.Execute(_org, _metadata, new StubOptions(), null, null).ToArray();
 
             Assert.AreEqual(1, results.Length);
             Assert.AreEqual("Mark", results[0]["firstname"]);
@@ -140,7 +140,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 JoinType = QualifiedJoinType.Inner
             };
 
-            var results = node.Execute(_org, _metadata, new StubOptions(), null).ToArray();
+            var results = node.Execute(_org, _metadata, new StubOptions(), null, null).ToArray();
 
             Assert.AreEqual(2, results.Length);
             Assert.AreEqual("Mark", results[0]["f.firstname"]);
@@ -198,7 +198,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 JoinType = QualifiedJoinType.LeftOuter
             };
 
-            var results = node.Execute(_org, _metadata, new StubOptions(), null).ToArray();
+            var results = node.Execute(_org, _metadata, new StubOptions(), null, null).ToArray();
 
             Assert.AreEqual(3, results.Length);
             Assert.AreEqual("Mark", results[0]["f.firstname"]);
@@ -258,7 +258,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 JoinType = QualifiedJoinType.RightOuter
             };
 
-            var results = node.Execute(_org, _metadata, new StubOptions(), null).ToArray();
+            var results = node.Execute(_org, _metadata, new StubOptions(), null, null).ToArray();
 
             Assert.AreEqual(3, results.Length);
             Assert.AreEqual("Mark", results[0]["f.firstname"]);
@@ -286,7 +286,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 ErrorMessage = "Only Mark is allowed"
             };
 
-            var results = node.Execute(_org, _metadata, new StubOptions(), null).GetEnumerator();
+            var results = node.Execute(_org, _metadata, new StubOptions(), null, null).GetEnumerator();
 
             Assert.IsTrue(results.MoveNext());
             Assert.AreEqual("Mark", results.Current.GetAttributeValue<string>("name"));
@@ -336,7 +336,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var results = node.Execute(_org, _metadata, new StubOptions(), null)
+            var results = node.Execute(_org, _metadata, new StubOptions(), null, null)
                 .Select(e => e.GetAttributeValue<int>("mul"))
                 .ToArray();
 
@@ -365,7 +365,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var results = node.Execute(_org, _metadata, new StubOptions(), null)
+            var results = node.Execute(_org, _metadata, new StubOptions(), null, null)
                 .Select(e => e.GetAttributeValue<int>("value1"))
                 .ToArray();
 
@@ -394,7 +394,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var results = node.Execute(_org, _metadata, new StubOptions(), null)
+            var results = node.Execute(_org, _metadata, new StubOptions(), null, null)
                 .Select(e => e.GetAttributeValue<string>("value1"))
                 .ToArray();
 

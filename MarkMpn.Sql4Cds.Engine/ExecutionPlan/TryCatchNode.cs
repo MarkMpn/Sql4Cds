@@ -13,29 +13,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public IExecutionPlanNode CatchSource { get; set; }
         public Func<Exception,bool> ExceptionFilter { get; set; }
 
-        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, object> parameterValues)
+        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             try
             {
-                return TrySource.Execute(org, metadata, options, parameterValues);
+                return TrySource.Execute(org, metadata, options, parameterTypes, parameterValues);
             }
             catch (Exception ex)
             {
                 if (ExceptionFilter != null && !ExceptionFilter(ex))
                     throw;
 
-                return CatchSource.Execute(org, metadata, options, parameterValues);
+                return CatchSource.Execute(org, metadata, options, parameterTypes, parameterValues);
             }
         }
 
-        public override IEnumerable<string> GetRequiredColumns()
+        public override NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
         {
-            return TrySource.GetRequiredColumns();
-        }
-
-        public override NodeSchema GetSchema(IAttributeMetadataCache metadata)
-        {
-            return TrySource.GetSchema(metadata);
+            return TrySource.GetSchema(metadata, parameterTypes);
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
@@ -44,11 +39,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return CatchSource;
         }
 
-        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            TrySource = TrySource.MergeNodeDown(metadata, options);
-            CatchSource = CatchSource.MergeNodeDown(metadata, options);
+            TrySource = TrySource.MergeNodeDown(metadata, options, parameterTypes);
+            CatchSource = CatchSource.MergeNodeDown(metadata, options, parameterTypes);
             return this;
+        }
+
+        public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        {
+            TrySource.AddRequiredColumns(metadata, parameterTypes, requiredColumns);
+            CatchSource.AddRequiredColumns(metadata, parameterTypes, requiredColumns);
         }
     }
 }

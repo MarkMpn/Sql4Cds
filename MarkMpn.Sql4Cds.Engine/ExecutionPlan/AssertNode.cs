@@ -27,9 +27,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         public string ErrorMessage { get; set; }
 
-        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string,object> parameterValues)
+        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string,object> parameterValues)
         {
-            foreach (var entity in Source.Execute(org, metadata, options, parameterValues))
+            foreach (var entity in Source.Execute(org, metadata, options, parameterTypes, parameterValues))
             {
                 if (!Assertion(entity))
                     throw new ApplicationException(ErrorMessage);
@@ -38,14 +38,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public override IEnumerable<string> GetRequiredColumns()
+        public override NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
         {
-            return Array.Empty<string>();
-        }
-
-        public override NodeSchema GetSchema(IAttributeMetadataCache metadata)
-        {
-            return Source.GetSchema(metadata);
+            return Source.GetSchema(metadata, parameterTypes);
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
@@ -53,10 +48,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            Source = Source.MergeNodeDown(metadata, options);
+            Source = Source.MergeNodeDown(metadata, options, parameterTypes);
             return this;
+        }
+
+        public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        {
+            Source.AddRequiredColumns(metadata, parameterTypes, requiredColumns);
         }
     }
 }

@@ -3,13 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
     public class TopNode : BaseNode
     {
-        public float Top { get; set; }
+        public ScalarExpression Top { get; set; }
 
         public bool Percent { get; set; }
 
@@ -17,34 +18,31 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public IExecutionPlanNode Source { get; set; }
 
-        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, object> parameterValues)
+        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             if (WithTies)
                 throw new NotImplementedException();
 
+            var topCount = Top.GetValue(null, null, parameterTypes, parameterValues);
+
             if (!Percent)
             {
-                return Source.Execute(org, metadata, options, parameterValues)
-                    .Take((int)Top);
+                return Source.Execute(org, metadata, options, parameterTypes, parameterValues)
+                    .Take(SqlTypeConverter.ChangeType<int>(topCount));
             }
             else
             {
-                var count = Source.Execute(org, metadata, options, parameterValues).Count();
-                var top = count * Top / 100;
+                var count = Source.Execute(org, metadata, options, parameterTypes, parameterValues).Count();
+                var top = count * SqlTypeConverter.ChangeType<float>(topCount) / 100;
 
-                return Source.Execute(org, metadata, options, parameterValues)
+                return Source.Execute(org, metadata, options, parameterTypes, parameterValues)
                     .Take((int)top);
             }
         }
 
-        public override IEnumerable<string> GetRequiredColumns()
+        public override NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
         {
-            return Array.Empty<string>();
-        }
-
-        public override NodeSchema GetSchema(IAttributeMetadataCache metadata)
-        {
-            return Source.GetSchema(metadata);
+            return Source.GetSchema(metadata, parameterTypes);
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
@@ -52,17 +50,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            Source = Source.MergeNodeDown(metadata, options);
+            Source = Source.MergeNodeDown(metadata, options, parameterTypes);
+
+            if (!IsConstantValueExpression(Top, null, out var literal))
+                return this;
 
             if (!Percent && !WithTies && Source is FetchXmlScan fetchXml)
             {
-                fetchXml.FetchXml.top = Top.ToString();
+                fetchXml.FetchXml.top = literal.Value.ToString();
                 return fetchXml;
             }
 
             return this;
+        }
+
+        public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        {
+            Source.AddRequiredColumns(metadata, parameterTypes, requiredColumns);
         }
     }
 }

@@ -903,8 +903,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var computeScalar = AssertNode<ComputeScalarNode>(select.Source);
             Assert.AreEqual(2, computeScalar.Columns.Count);
             Assert.AreEqual("firstname + ' ' + lastname", computeScalar.Columns[select.ColumnSet[0].SourceColumn].ToSql());
-            Assert.AreEqual("'Account: ' + Expr4", computeScalar.Columns[select.ColumnSet[1].SourceColumn].ToSql());
+            Assert.AreEqual("'Account: ' + Expr3", computeScalar.Columns[select.ColumnSet[1].SourceColumn].ToSql());
             var nestedLoop = AssertNode<NestedLoopNode>(computeScalar.Source);
+            Assert.AreEqual("@Expr2", nestedLoop.OuterReferences["contact.parentcustomerid"]);
             var fetch = AssertNode<FetchXmlScan>(nestedLoop.LeftSource);
             AssertFetchXml(fetch, @"
                 <fetch>
@@ -925,7 +926,55 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     <entity name='account'>
                         <attribute name='name' />
                         <filter>
-                            <condition attribute='accountid' operator='eq' value='@Expr3' />
+                            <condition attribute='accountid' operator='eq' value='@Expr2' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void WhereSubquery()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+
+            var query = @"
+                SELECT firstname + ' ' + lastname AS fullname FROM contact WHERE (SELECT name FROM account WHERE accountid = parentcustomerid) = 'Data8'";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var computeScalar = AssertNode<ComputeScalarNode>(select.Source);
+            Assert.AreEqual(1, computeScalar.Columns.Count);
+            Assert.AreEqual("firstname + ' ' + lastname", computeScalar.Columns[select.ColumnSet[0].SourceColumn].ToSql());
+            var filter = AssertNode<FilterNode>(computeScalar.Source);
+            Assert.AreEqual("Expr2 = 'Data8'", filter.Filter.ToSql());
+            var nestedLoop = AssertNode<NestedLoopNode>(filter.Source);
+            Assert.AreEqual("@Expr1", nestedLoop.OuterReferences["contact.parentcustomerid"]);
+            var fetch = AssertNode<FetchXmlScan>(nestedLoop.LeftSource);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <attribute name='lastname' />
+                        <attribute name='parentcustomerid' />
+                    </entity>
+                </fetch>");
+            var subAssert = AssertNode<AssertNode>(nestedLoop.RightSource);
+            var subAggregate = AssertNode<HashMatchAggregateNode>(subAssert.Source);
+            var subAggregateFetch = AssertNode<FetchXmlScan>(subAggregate.Source);
+            AssertFetchXml(subAggregateFetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <filter>
+                            <condition attribute='accountid' operator='eq' value='@Expr1' />
                         </filter>
                     </entity>
                 </fetch>");
@@ -953,7 +1002,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var select = AssertNode<SelectNode>(plans[0]);
             var top = AssertNode<TopNode>(select.Source);
-            Assert.AreEqual(10, top.Top);
+            Assert.AreEqual("10", top.Top.ToSql());
             var distinct = AssertNode<DistinctNode>(top.Source);
             CollectionAssert.AreEqual(new[] { "Expr1" }, distinct.Columns);
             var computeScalar = AssertNode<ComputeScalarNode>(distinct.Source);

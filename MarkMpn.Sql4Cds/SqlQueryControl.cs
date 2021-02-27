@@ -952,7 +952,7 @@ namespace MarkMpn.Sql4Cds
 
                     try
                     {
-                        var result = query.Execute(Service, Metadata, options, null).ToList();
+                        var result = query.Execute(Service, Metadata, options, null, null).ToList();
 
                         Execute(() => ShowResult(query, args, result));
                     }

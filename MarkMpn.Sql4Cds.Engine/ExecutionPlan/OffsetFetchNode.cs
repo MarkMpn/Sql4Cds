@@ -3,33 +3,39 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
     public class OffsetFetchNode : BaseNode
     {
-        public int Offset { get; set; }
+        public ScalarExpression Offset { get; set; }
 
-        public int Fetch { get; set; }
+        public ScalarExpression Fetch { get; set; }
 
         public IExecutionPlanNode Source { get; set; }
 
-        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, object> parameterValues)
+        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            return Source.Execute(org, metadata, options, parameterValues)
-                .Skip(Offset)
-                .Take(Fetch);
+            var offset = SqlTypeConverter.ChangeType<int>(Offset.GetValue(null, null, parameterTypes, parameterValues));
+            var fetch = SqlTypeConverter.ChangeType<int>(Fetch.GetValue(null, null, parameterTypes, parameterValues));
+
+            if (offset < 0)
+                throw new QueryExecutionException(Offset, "The offset specified in a OFFSET clause may not be negative.");
+
+            if (fetch <= 0)
+                throw new QueryExecutionException(Fetch, "The number of rows provided for a FETCH clause must be greater then zero.");
+
+
+            return Source.Execute(org, metadata, options, parameterTypes, parameterValues)
+                .Skip(offset)
+                .Take(fetch);
         }
 
-        public override IEnumerable<string> GetRequiredColumns()
+        public override NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
         {
-            return Array.Empty<string>();
-        }
-
-        public override NodeSchema GetSchema(IAttributeMetadataCache metadata)
-        {
-            return Source.GetSchema(metadata);
+            return Source.GetSchema(metadata, parameterTypes);
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
@@ -37,16 +43,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            Source = Source.MergeNodeDown(metadata, options);
+            Source = Source.MergeNodeDown(metadata, options, parameterTypes);
+
+            if (!IsConstantValueExpression(Offset, null, out var offsetLiteral) ||
+                !IsConstantValueExpression(Fetch, null, out var fetchLiteral))
+                return this;
 
             if (Source is FetchXmlScan fetchXml)
             {
-                var count = Fetch;
-                var page = Offset / count;
+                var offset = SqlTypeConverter.ChangeType<int>(offsetLiteral.GetValue(null, null, null, null));
+                var count = SqlTypeConverter.ChangeType<int>(fetchLiteral.GetValue(null, null, null, null));
+                var page = offset / count;
 
-                if (page * count == Offset)
+                if (page * count == offset)
                 {
                     fetchXml.FetchXml.count = count.ToString();
                     fetchXml.FetchXml.page = (page + 1).ToString();
@@ -55,6 +66,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return this;
+        }
+
+        public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        {
+            Source.AddRequiredColumns(metadata, parameterTypes, requiredColumns);
         }
     }
 }

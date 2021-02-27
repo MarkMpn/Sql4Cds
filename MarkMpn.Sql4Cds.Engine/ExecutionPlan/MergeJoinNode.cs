@@ -16,7 +16,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// </summary>
     public class MergeJoinNode : FoldableJoinNode
     {
-        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, object> parameterValues)
+        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             // https://sqlserverfast.com/epr/merge-join/
             // Implemented inner, left outer, right outer and full outer variants
@@ -24,11 +24,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // TODO: Handle many-to-many joins
 
             // Left & Right: GetNext, mark as unmatched
-            var leftSchema = LeftSource.GetSchema(metadata);
-            var rightSchema = RightSource.GetSchema(metadata);
-            var left = LeftSource.Execute(org, metadata, options, parameterValues).GetEnumerator();
-            var right = RightSource.Execute(org, metadata, options, parameterValues).GetEnumerator();
-            var mergedSchema = GetSchema(metadata);
+            var leftSchema = LeftSource.GetSchema(metadata, parameterTypes);
+            var rightSchema = RightSource.GetSchema(metadata, parameterTypes);
+            var left = LeftSource.Execute(org, metadata, options, parameterTypes, parameterValues).GetEnumerator();
+            var right = RightSource.Execute(org, metadata, options, parameterTypes, parameterValues).GetEnumerator();
+            var mergedSchema = GetSchema(metadata, parameterTypes);
 
             var hasLeft = left.MoveNext();
             var hasRight = right.MoveNext();
@@ -61,9 +61,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // Compare key values
                 var merged = Merge(hasLeft ? left.Current : null, leftSchema, hasRight ? right.Current : null, rightSchema);
 
-                var isLt = lt.GetValue(merged, mergedSchema);
-                var isEq = eq.GetValue(merged, mergedSchema);
-                var isGt = gt.GetValue(merged, mergedSchema);
+                var isLt = lt.GetValue(merged, mergedSchema, parameterTypes, parameterValues);
+                var isEq = eq.GetValue(merged, mergedSchema, parameterTypes, parameterValues);
+                var isGt = gt.GetValue(merged, mergedSchema, parameterTypes, parameterValues);
 
                 if (isLt || (hasLeft && !hasRight))
                 {
@@ -75,7 +75,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
                 else if (isEq)
                 {
-                    if (AdditionalJoinCriteria == null || AdditionalJoinCriteria.GetValue(merged, mergedSchema) == true)
+                    if (AdditionalJoinCriteria == null || AdditionalJoinCriteria.GetValue(merged, mergedSchema, parameterTypes, parameterValues) == true)
                         yield return merged;
 
                     leftMatched = true;
@@ -108,9 +108,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return !hasLeft && !hasRight;
         }
 
-        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            var folded = base.MergeNodeDown(metadata, options);
+            var folded = base.MergeNodeDown(metadata, options, parameterTypes);
 
             if (folded != this)
                 return folded;
@@ -127,7 +127,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         SortOrder = SortOrder.Ascending
                     }
                 }
-            }.MergeNodeDown(metadata, options);
+            }.MergeNodeDown(metadata, options, parameterTypes);
 
             RightSource = new SortNode
             {
@@ -140,7 +140,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         SortOrder = SortOrder.Ascending
                     }
                 }
-            }.MergeNodeDown(metadata, options);
+            }.MergeNodeDown(metadata, options, parameterTypes);
 
             return this;
         }

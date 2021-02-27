@@ -12,99 +12,103 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
     static class ExpressionExtensions
     {
-        public static Type GetType(this TSqlFragment expr, NodeSchema schema)
+        public static Type GetType(this TSqlFragment expr, NodeSchema schema, IDictionary<string,Type> parameterTypes)
         {
             if (expr is ColumnReferenceExpression col)
-                return GetType(col, schema);
+                return GetType(col, schema, parameterTypes);
             else if (expr is IdentifierLiteral guid)
-                return GetType(guid, schema);
+                return GetType(guid, schema, parameterTypes);
             else if (expr is IntegerLiteral i)
-                return GetType(i, schema);
+                return GetType(i, schema, parameterTypes);
             else if (expr is MoneyLiteral money)
-                return GetType(money, schema);
+                return GetType(money, schema, parameterTypes);
             else if (expr is NullLiteral n)
-                return GetType(n, schema);
+                return GetType(n, schema, parameterTypes);
             else if (expr is NumericLiteral num)
-                return GetType(num, schema);
+                return GetType(num, schema, parameterTypes);
             else if (expr is RealLiteral real)
-                return GetType(real, schema);
+                return GetType(real, schema, parameterTypes);
             else if (expr is StringLiteral str)
-                return GetType(str, schema);
+                return GetType(str, schema, parameterTypes);
             else if (expr is BooleanExpression b)
-                return GetType(b, schema);
+                return GetType(b, schema, parameterTypes);
             else if (expr is BinaryExpression bin)
-                return GetType(bin, schema);
+                return GetType(bin, schema, parameterTypes);
             else if (expr is FunctionCall func)
-                return GetType(func, schema);
+                return GetType(func, schema, parameterTypes);
             else if (expr is ParenthesisExpression paren)
-                return GetType(paren, schema);
+                return GetType(paren, schema, parameterTypes);
             else if (expr is UnaryExpression unary)
-                return GetType(unary, schema);
+                return GetType(unary, schema, parameterTypes);
+            else if (expr is VariableReference var)
+                return GetType(var, schema, parameterTypes);
             else
                 throw new NotSupportedQueryFragmentException("Unhandled expression type", expr);
         }
 
-        public static object GetValue(this TSqlFragment expr, Entity entity, NodeSchema schema)
+        public static object GetValue(this TSqlFragment expr, Entity entity, NodeSchema schema, IDictionary<string, Type> parameterTypes, IDictionary<string,object> parameterValues)
         {
             if (expr is ColumnReferenceExpression col)
-                return GetValue(col, entity, schema);
+                return GetValue(col, entity, schema, parameterTypes, parameterValues);
             else if (expr is IdentifierLiteral guid)
-                return GetValue(guid, entity, schema);
+                return GetValue(guid, entity, schema, parameterTypes, parameterValues);
             else if (expr is IntegerLiteral i)
-                return GetValue(i, entity, schema);
+                return GetValue(i, entity, schema, parameterTypes, parameterValues);
             else if (expr is MoneyLiteral money)
-                return GetValue(money, entity, schema);
+                return GetValue(money, entity, schema, parameterTypes, parameterValues);
             else if (expr is NullLiteral n)
-                return GetValue(n, entity, schema);
+                return GetValue(n, entity, schema, parameterTypes, parameterValues);
             else if (expr is NumericLiteral num)
-                return GetValue(num, entity, schema);
+                return GetValue(num, entity, schema, parameterTypes, parameterValues);
             else if (expr is RealLiteral real)
-                return GetValue(real, entity, schema);
+                return GetValue(real, entity, schema, parameterTypes, parameterValues);
             else if (expr is StringLiteral str)
-                return GetValue(str, entity, schema);
+                return GetValue(str, entity, schema, parameterTypes, parameterValues);
             else if (expr is BooleanExpression b)
-                return GetValue(b, entity, schema);
+                return GetValue(b, entity, schema, parameterTypes, parameterValues);
             else if (expr is BinaryExpression bin)
-                return GetValue(bin, entity, schema);
+                return GetValue(bin, entity, schema, parameterTypes, parameterValues);
             else if (expr is FunctionCall func)
-                return GetValue(func, entity, schema);
+                return GetValue(func, entity, schema, parameterTypes, parameterValues);
             else if (expr is ParenthesisExpression paren)
-                return GetValue(paren, entity, schema);
+                return GetValue(paren, entity, schema, parameterTypes, parameterValues);
             else if (expr is UnaryExpression unary)
-                return GetValue(unary, entity, schema);
+                return GetValue(unary, entity, schema, parameterTypes, parameterValues);
+            else if (expr is VariableReference var)
+                return GetValue(var, entity, schema, parameterTypes, parameterValues);
             else
                 throw new NotSupportedQueryFragmentException("Unhandled expression type", expr);
         }
 
-        public static Type GetType(this BooleanExpression b, NodeSchema schema)
+        public static Type GetType(this BooleanExpression b, NodeSchema schema, IDictionary<string, Type> parameterTypes)
         {
             if (b is BooleanBinaryExpression bin)
-                return GetType(bin, schema);
+                return GetType(bin, schema, parameterTypes);
             else if (b is BooleanComparisonExpression cmp)
-                return GetType(cmp, schema);
+                return GetType(cmp, schema, parameterTypes);
             else if (b is BooleanParenthesisExpression paren)
-                return GetType(paren, schema);
+                return GetType(paren, schema, parameterTypes);
             else if (b is InPredicate inPred)
-                return GetType(inPred, schema);
+                return GetType(inPred, schema, parameterTypes);
             else
                 throw new NotSupportedQueryFragmentException("Unhandled expression type", b);
         }
 
-        public static bool GetValue(this BooleanExpression b, Entity entity, NodeSchema schema)
+        public static bool GetValue(this BooleanExpression b, Entity entity, NodeSchema schema, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             if (b is BooleanBinaryExpression bin)
-                return GetValue(bin, entity, schema);
+                return GetValue(bin, entity, schema, parameterTypes, parameterValues);
             else if (b is BooleanComparisonExpression cmp)
-                return GetValue(cmp, entity, schema);
+                return GetValue(cmp, entity, schema, parameterTypes, parameterValues);
             else if (b is BooleanParenthesisExpression paren)
-                return GetValue(paren, entity, schema);
+                return GetValue(paren, entity, schema, parameterTypes, parameterValues);
             else if (b is InPredicate inPred)
-                return GetValue(inPred, entity, schema);
+                return GetValue(inPred, entity, schema, parameterTypes, parameterValues);
             else
                 throw new NotSupportedQueryFragmentException("Unhandled expression type", b);
         }
 
-        private static Type GetType(ColumnReferenceExpression col, NodeSchema schema)
+        private static Type GetType(ColumnReferenceExpression col, NodeSchema schema, IDictionary<string, Type> parameterTypes)
         {
             var name = col.GetColumnName();
 
@@ -122,7 +126,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return schema.Schema[normalizedName];
         }
 
-        private static object GetValue(ColumnReferenceExpression col, Entity entity, NodeSchema schema)
+        private static object GetValue(ColumnReferenceExpression col, Entity entity, NodeSchema schema, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             var name = col.GetColumnName();
 
@@ -133,80 +137,80 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return value;
         }
 
-        private static Type GetType(IdentifierLiteral guid, NodeSchema schema)
+        private static Type GetType(IdentifierLiteral guid, NodeSchema schema, IDictionary<string, Type> parameterTypes)
         {
             return typeof(Guid);
         }
 
-        private static Guid GetValue(IdentifierLiteral guid, Entity entity, NodeSchema schema)
+        private static Guid GetValue(IdentifierLiteral guid, Entity entity, NodeSchema schema, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             return new Guid(guid.Value);
         }
 
-        private static Type GetType(IntegerLiteral i, NodeSchema schema)
+        private static Type GetType(IntegerLiteral i, NodeSchema schema, IDictionary<string, Type> parameterTypes)
         {
             return typeof(int);
         }
 
-        private static int GetValue(IntegerLiteral i, Entity entity, NodeSchema schema)
+        private static int GetValue(IntegerLiteral i, Entity entity, NodeSchema schema, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             return Int32.Parse(i.Value);
         }
 
-        private static Type GetType(MoneyLiteral money, NodeSchema schema)
+        private static Type GetType(MoneyLiteral money, NodeSchema schema, IDictionary<string, Type> parameterTypes)
         {
             return typeof(decimal);
         }
 
-        private static decimal GetValue(MoneyLiteral money, Entity entity, NodeSchema schema)
+        private static decimal GetValue(MoneyLiteral money, Entity entity, NodeSchema schema, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             return Decimal.Parse(money.Value);
         }
 
-        private static Type GetType(NullLiteral n, NodeSchema schema)
+        private static Type GetType(NullLiteral n, NodeSchema schema, IDictionary<string, Type> parameterTypes)
         {
             return typeof(object);
         }
 
-        private static object GetValue(NullLiteral n, Entity entity, NodeSchema schema)
+        private static object GetValue(NullLiteral n, Entity entity, NodeSchema schema, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             return null;
         }
 
-        private static Type GetType(NumericLiteral num, NodeSchema schema)
+        private static Type GetType(NumericLiteral num, NodeSchema schema, IDictionary<string, Type> parameterTypes)
         {
             return typeof(decimal);
         }
 
-        private static decimal GetValue(NumericLiteral num, Entity entity, NodeSchema schema)
+        private static decimal GetValue(NumericLiteral num, Entity entity, NodeSchema schema, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             return Decimal.Parse(num.Value);
         }
 
-        private static Type GetType(RealLiteral real, NodeSchema schema)
+        private static Type GetType(RealLiteral real, NodeSchema schema, IDictionary<string, Type> parameterTypes)
         {
             return typeof(float);
         }
 
-        private static float GetValue(RealLiteral real, Entity entity, NodeSchema schema)
+        private static float GetValue(RealLiteral real, Entity entity, NodeSchema schema, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             return Single.Parse(real.Value);
         }
 
-        private static Type GetType(StringLiteral str, NodeSchema schema)
+        private static Type GetType(StringLiteral str, NodeSchema schema, IDictionary<string, Type> parameterTypes)
         {
             return typeof(string);
         }
 
-        private static string GetValue(StringLiteral str, Entity entity, NodeSchema schema)
+        private static string GetValue(StringLiteral str, Entity entity, NodeSchema schema, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             return str.Value;
         }
 
-        private static Type GetType(BooleanComparisonExpression cmp, NodeSchema schema)
+        private static Type GetType(BooleanComparisonExpression cmp, NodeSchema schema, IDictionary<string, Type> parameterTypes)
         {
-            var lhs = cmp.FirstExpression.GetType(schema);
-            var rhs = cmp.SecondExpression.GetType(schema);
+            var lhs = cmp.FirstExpression.GetType(schema, parameterTypes);
+            var rhs = cmp.SecondExpression.GetType(schema, parameterTypes);
 
             if (!SqlTypeConverter.CanMakeConsistentTypes(lhs, rhs, out var type))
                 throw new NotSupportedQueryFragmentException($"No implicit conversion exists for types {lhs} and {rhs}", cmp);
@@ -217,10 +221,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return typeof(bool);
         }
 
-        private static bool GetValue(BooleanComparisonExpression cmp, Entity entity, NodeSchema schema)
+        private static bool GetValue(BooleanComparisonExpression cmp, Entity entity, NodeSchema schema, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            var lhs = cmp.FirstExpression.GetValue(entity, schema);
-            var rhs = cmp.SecondExpression.GetValue(entity, schema);
+            var lhs = cmp.FirstExpression.GetValue(entity, schema, parameterTypes, parameterValues);
+            var rhs = cmp.SecondExpression.GetValue(entity, schema, parameterTypes, parameterValues);
 
             if (lhs == null || rhs == null)
                 return false;
@@ -257,17 +261,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private static Type GetType(BooleanBinaryExpression bin, NodeSchema schema)
+        private static Type GetType(BooleanBinaryExpression bin, NodeSchema schema, IDictionary<string, Type> parameterTypes)
         {
-            bin.FirstExpression.GetType(schema);
-            bin.SecondExpression.GetType(schema);
+            bin.FirstExpression.GetType(schema, parameterTypes);
+            bin.SecondExpression.GetType(schema, parameterTypes);
 
             return typeof(bool);
         }
 
-        private static bool GetValue(BooleanBinaryExpression bin, Entity entity, NodeSchema schema)
+        private static bool GetValue(BooleanBinaryExpression bin, Entity entity, NodeSchema schema, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            var lhs = bin.FirstExpression.GetValue(entity, schema);
+            var lhs = bin.FirstExpression.GetValue(entity, schema, parameterTypes, parameterValues);
 
             if (bin.BinaryExpressionType == BooleanBinaryExpressionType.And && !lhs)
                 return false;
@@ -275,26 +279,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (bin.BinaryExpressionType == BooleanBinaryExpressionType.Or && lhs)
                 return true;
 
-            var rhs = bin.SecondExpression.GetValue(entity, schema);
+            var rhs = bin.SecondExpression.GetValue(entity, schema, parameterTypes, parameterValues);
             return rhs;
         }
 
-        private static Type GetType(BooleanParenthesisExpression paren, NodeSchema schema)
+        private static Type GetType(BooleanParenthesisExpression paren, NodeSchema schema, IDictionary<string, Type> parameterTypes)
         {
-            paren.Expression.GetType(schema);
+            paren.Expression.GetType(schema, parameterTypes);
 
             return typeof(bool);
         }
 
-        private static bool GetValue(BooleanParenthesisExpression paren, Entity entity, NodeSchema schema)
+        private static bool GetValue(BooleanParenthesisExpression paren, Entity entity, NodeSchema schema, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            return paren.Expression.GetValue(entity, schema);
+            return paren.Expression.GetValue(entity, schema, parameterTypes, parameterValues);
         }
 
-        private static Type GetType(BinaryExpression bin, NodeSchema schema)
+        private static Type GetType(BinaryExpression bin, NodeSchema schema, IDictionary<string, Type> parameterTypes)
         {
-            var lhs = bin.FirstExpression.GetType(schema);
-            var rhs = bin.SecondExpression.GetType(schema);
+            var lhs = bin.FirstExpression.GetType(schema, parameterTypes);
+            var rhs = bin.SecondExpression.GetType(schema, parameterTypes);
 
             if (!SqlTypeConverter.CanMakeConsistentTypes(lhs, rhs, out var type))
                 throw new NotSupportedQueryFragmentException($"No implicit conversion exists for types {lhs} and {rhs}", bin);
@@ -347,10 +351,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             throw new NotSupportedQueryFragmentException($"Operator {bin.BinaryExpressionType} is not defined for expressions of type {type}", bin);
         }
 
-        private static object GetValue(BinaryExpression bin, Entity entity, NodeSchema schema)
+        private static object GetValue(BinaryExpression bin, Entity entity, NodeSchema schema, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            var lhs = bin.FirstExpression.GetValue(entity, schema);
-            var rhs = bin.SecondExpression.GetValue(entity, schema);
+            var lhs = bin.FirstExpression.GetValue(entity, schema, parameterTypes, parameterValues);
+            var rhs = bin.SecondExpression.GetValue(entity, schema, parameterTypes, parameterValues);
 
             if (lhs == null || rhs == null)
                 return null;
@@ -492,7 +496,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             throw new QueryExecutionException(bin, $"Operator {bin.BinaryExpressionType} is not defined for expressions of type {type}");
         }
 
-        private static MethodInfo GetMethod(FunctionCall func, NodeSchema schema)
+        private static MethodInfo GetMethod(FunctionCall func, NodeSchema schema, IDictionary<string, Type> parameterTypes)
         {
             Type[] paramTypes;
 
@@ -522,14 +526,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             return typeof(string);
                         }
 
-                        return param.GetType(schema);
+                        return param.GetType(schema, parameterTypes);
                     })
                     .ToArray();
             }
             else
             {
                 paramTypes = func.Parameters
-                    .Select(param => param.GetType(schema))
+                    .Select(param => param.GetType(schema, parameterTypes))
                     .ToArray();
             }
 
@@ -563,15 +567,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return correctParameterCount[0];
         }
 
-        private static Type GetType(this FunctionCall func, NodeSchema schema)
+        private static Type GetType(this FunctionCall func, NodeSchema schema, IDictionary<string, Type> parameterTypes)
         {
-            var method = GetMethod(func, schema);
+            var method = GetMethod(func, schema, parameterTypes);
             return method.ReturnType;
         }
 
-        private static object GetValue(this FunctionCall func, Entity entity, NodeSchema schema)
+        private static object GetValue(this FunctionCall func, Entity entity, NodeSchema schema, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            var method = GetMethod(func, schema);
+            var method = GetMethod(func, schema, parameterTypes);
 
             // Get the parameter values
             object[] paramValues;
@@ -587,14 +591,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         if (index == 0)
                             return ((ColumnReferenceExpression)param).MultiPartIdentifier.Identifiers.Single().Value;
 
-                        return param.GetValue(entity, schema);
+                        return param.GetValue(entity, schema, parameterTypes, parameterValues);
                     })
                     .ToArray();
             }
             else
             {
                 paramValues = func.Parameters
-                    .Select(param => param.GetValue(entity, schema))
+                    .Select(param => param.GetValue(entity, schema, parameterTypes, parameterValues))
                     .ToArray();
             }
 
@@ -607,19 +611,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return method.Invoke(null, paramValues);
         }
 
-        private static Type GetType(this ParenthesisExpression paren, NodeSchema schema)
+        private static Type GetType(this ParenthesisExpression paren, NodeSchema schema, IDictionary<string, Type> parameterTypes)
         {
-            return paren.Expression.GetType(schema);
+            return paren.Expression.GetType(schema, parameterTypes);
         }
 
-        private static object GetValue(this ParenthesisExpression paren, Entity entity, NodeSchema schema)
+        private static object GetValue(this ParenthesisExpression paren, Entity entity, NodeSchema schema, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            return paren.Expression.GetValue(entity, schema);
+            return paren.Expression.GetValue(entity, schema, parameterTypes, parameterValues);
         }
 
-        private static Type GetType(this UnaryExpression unary, NodeSchema schema)
+        private static Type GetType(this UnaryExpression unary, NodeSchema schema, IDictionary<string, Type> parameterTypes)
         {
-            var type = unary.Expression.GetType(schema);
+            var type = unary.Expression.GetType(schema, parameterTypes);
             var typeCategory = SqlTypeConverter.GetCategory(type);
 
             switch (unary.UnaryExpressionType)
@@ -645,9 +649,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private static object GetValue(this UnaryExpression unary, Entity entity, NodeSchema schema)
+        private static object GetValue(this UnaryExpression unary, Entity entity, NodeSchema schema, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            var value = unary.Expression.GetValue(entity, schema);
+            var value = unary.Expression.GetValue(entity, schema, parameterTypes, parameterValues);
 
             if (value == null)
                 return null;
@@ -679,16 +683,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             throw new QueryExecutionException(unary, "Invalid operator for data type");
         }
 
-        private static Type GetType(this InPredicate inPred, NodeSchema schema)
+        private static Type GetType(this InPredicate inPred, NodeSchema schema, IDictionary<string, Type> parameterTypes)
         {
             if (inPred.Subquery != null)
                 throw new NotSupportedQueryFragmentException("Subquery should have been eliminated by query plan", inPred);
 
-            var exprType = inPred.Expression.GetType(schema);
+            var exprType = inPred.Expression.GetType(schema, parameterTypes);
 
             foreach (var value in inPred.Values)
             {
-                var valueType = value.GetType(schema);
+                var valueType = value.GetType(schema, parameterTypes);
 
                 if (!SqlTypeConverter.CanMakeConsistentTypes(exprType, valueType, out var type))
                     throw new NotSupportedQueryFragmentException($"No implicit conversion exists for types {exprType} and {valueType}", inPred);
@@ -700,19 +704,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return typeof(bool);
         }
 
-        private static bool GetValue(this InPredicate inPred, Entity entity, NodeSchema schema)
+        private static bool GetValue(this InPredicate inPred, Entity entity, NodeSchema schema, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             if (inPred.Subquery != null)
                 throw new NotSupportedQueryFragmentException("Subquery should have been eliminated by query plan", inPred);
 
-            var exprValue = inPred.Expression.GetValue(entity, schema);
+            var exprValue = inPred.Expression.GetValue(entity, schema, parameterTypes, parameterValues);
             var match = false;
 
             if (exprValue != null)
             {
                 foreach (var value in inPred.Values)
                 {
-                    var comparisonValue = value.GetValue(entity, schema);
+                    var comparisonValue = value.GetValue(entity, schema, parameterTypes, parameterValues);
 
                     if (comparisonValue == null)
                         continue;
@@ -732,6 +736,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 match = !match;
 
             return match;
+        }
+
+        private static Type GetType(this VariableReference var, NodeSchema schema, IDictionary<string, Type> parameterTypes)
+        {
+            if (parameterTypes == null || !parameterTypes.TryGetValue(var.Name, out var type))
+                throw new NotSupportedQueryFragmentException("Undefined variable", var);
+
+            return type;
+        }
+
+        private static object GetValue(this VariableReference var, Entity entity, NodeSchema schema, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        {
+            if (parameterValues == null || !parameterValues.TryGetValue(var.Name, out var value))
+                throw new QueryExecutionException(var, "Undefined variable");
+
+            return value;
         }
 
         public static BooleanExpression RemoveCondition(this BooleanExpression expr, BooleanExpression remove)

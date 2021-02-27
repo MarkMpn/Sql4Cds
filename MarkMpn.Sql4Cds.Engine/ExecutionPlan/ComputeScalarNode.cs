@@ -23,30 +23,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         public IExecutionPlanNode Source { get; set; }
 
-        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, object> parameterValues)
+        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            var schema = Source.GetSchema(metadata);
+            var schema = Source.GetSchema(metadata, parameterTypes);
 
-            foreach (var entity in Source.Execute(org, metadata, options, parameterValues))
+            foreach (var entity in Source.Execute(org, metadata, options, parameterTypes, parameterValues))
             {
                 foreach (var col in Columns)
-                    entity[col.Key] = col.Value.GetValue(entity, schema);
+                    entity[col.Key] = col.Value.GetValue(entity, schema, parameterTypes, parameterValues);
 
                 yield return entity;
             }
         }
 
-        public override IEnumerable<string> GetRequiredColumns()
-        {
-            return Columns.Values
-                .SelectMany(expr => expr.GetColumns())
-                .Distinct();
-        }
-
-        public override NodeSchema GetSchema(IAttributeMetadataCache metadata)
+        public override NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
         {
             // Copy the source schema and add in the additional computed columns
-            var sourceSchema = Source.GetSchema(metadata);
+            var sourceSchema = Source.GetSchema(metadata, parameterTypes);
             var schema = new NodeSchema { PrimaryKey = sourceSchema.PrimaryKey };
 
             foreach (var col in sourceSchema.Schema)
@@ -56,7 +49,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 schema.Aliases.Add(alias);
 
             foreach (var calc in Columns)
-                schema.Schema[calc.Key] = calc.Value.GetType(sourceSchema);
+                schema.Schema[calc.Key] = calc.Value.GetType(sourceSchema, parameterTypes);
 
             return schema;
         }
@@ -66,10 +59,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            Source = Source.MergeNodeDown(metadata, options);
+            Source = Source.MergeNodeDown(metadata, options, parameterTypes);
             return this;
+        }
+
+        public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        {
+            var calcSourceColumns = Columns.Values
+                   .SelectMany(expr => expr.GetColumns());
+
+            foreach (var col in calcSourceColumns)
+            {
+                if (!requiredColumns.Contains(col, StringComparer.OrdinalIgnoreCase))
+                    requiredColumns.Add(col);
+            }
+
+            Source.AddRequiredColumns(metadata, parameterTypes, requiredColumns);
         }
     }
 }

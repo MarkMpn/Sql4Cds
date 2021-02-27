@@ -64,12 +64,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public IExecutionPlanNode Source { get; set; }
 
-        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, object> parameterValues)
+        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             var groups = new Dictionary<GroupingKey, Dictionary<string,AggregateFunction>>();
-            var schema = Source.GetSchema(metadata);
+            var schema = Source.GetSchema(metadata, parameterTypes);
 
-            foreach (var entity in Source.Execute(org, metadata, options, parameterValues))
+            foreach (var entity in Source.Execute(org, metadata, options, parameterTypes, parameterValues))
             {
                 var key = new GroupingKey(entity, GroupBy);
 
@@ -82,11 +82,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         switch (aggregate.Value.AggregateType)
                         {
                             case AggregateType.Average:
-                                values[aggregate.Key] = new Average(e => aggregate.Value.Expression.GetValue(e, schema));
+                                values[aggregate.Key] = new Average(e => aggregate.Value.Expression.GetValue(e, schema, parameterTypes, parameterValues));
                                 break;
 
                             case AggregateType.Count:
-                                values[aggregate.Key] = new CountColumn(e => aggregate.Value.Expression.GetValue(e, schema));
+                                values[aggregate.Key] = new CountColumn(e => aggregate.Value.Expression.GetValue(e, schema, parameterTypes, parameterValues));
                                 break;
 
                             case AggregateType.CountStar:
@@ -94,19 +94,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 break;
 
                             case AggregateType.Max:
-                                values[aggregate.Key] = new Max(e => aggregate.Value.Expression.GetValue(e, schema));
+                                values[aggregate.Key] = new Max(e => aggregate.Value.Expression.GetValue(e, schema, parameterTypes, parameterValues));
                                 break;
 
                             case AggregateType.Min:
-                                values[aggregate.Key] = new Min(e => aggregate.Value.Expression.GetValue(e, schema));
+                                values[aggregate.Key] = new Min(e => aggregate.Value.Expression.GetValue(e, schema, parameterTypes, parameterValues));
                                 break;
 
                             case AggregateType.Sum:
-                                values[aggregate.Key] = new Sum(e => aggregate.Value.Expression.GetValue(e, schema));
+                                values[aggregate.Key] = new Sum(e => aggregate.Value.Expression.GetValue(e, schema, parameterTypes, parameterValues));
                                 break;
 
                             case AggregateType.First:
-                                values[aggregate.Key] = new First(e => aggregate.Value.Expression.GetValue(e, schema));
+                                values[aggregate.Key] = new First(e => aggregate.Value.Expression.GetValue(e, schema, parameterTypes, parameterValues));
                                 break;
 
                             default:
@@ -135,27 +135,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public override IEnumerable<string> GetRequiredColumns()
+        public override NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
         {
-            foreach (var group in GroupBy)
-            {
-                foreach (var col in group.GetColumns())
-                    yield return col;
-            }
-
-            foreach (var aggregate in Aggregates.Values)
-            {
-                if (aggregate.Expression == null)
-                    continue;
-
-                foreach (var col in aggregate.Expression.GetColumns())
-                    yield return col;
-            }
-        }
-
-        public override NodeSchema GetSchema(IAttributeMetadataCache metadata)
-        {
-            var sourceSchema = Source.GetSchema(metadata);
+            var sourceSchema = Source.GetSchema(metadata, parameterTypes);
             var schema = new NodeSchema();
 
             foreach (var group in GroupBy)
@@ -188,7 +170,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         break;
 
                     default:
-                        aggregateType = aggregate.Value.Expression.GetType(sourceSchema);
+                        aggregateType = aggregate.Value.Expression.GetType(sourceSchema, parameterTypes);
                         break;
                 }
 
@@ -203,9 +185,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            Source = Source.MergeNodeDown(metadata, options);
+            Source = Source.MergeNodeDown(metadata, options, parameterTypes);
 
             // Special case for using RetrieveTotalRecordCount instead of FetchXML
             if (options.UseRetrieveTotalRecordCount &&
@@ -216,7 +198,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Aggregates.Single().Value.AggregateType == AggregateType.CountStar)
             {
                 var count = new RetrieveTotalRecordCountNode { EntityName = fetch.Entity.name };
-                var countName = count.GetSchema(metadata).Schema.Single().Key;
+                var countName = count.GetSchema(metadata, parameterTypes).Schema.Single().Key;
 
                 if (countName == Aggregates.Single().Key)
                     return count;
@@ -225,15 +207,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     Source = count,
                     Columns =
+                {
+                    [Aggregates.Single().Key] = new ColumnReferenceExpression
                     {
-                        [Aggregates.Single().Key] = new ColumnReferenceExpression
+                        MultiPartIdentifier = new MultiPartIdentifier
                         {
-                            MultiPartIdentifier = new MultiPartIdentifier
-                            {
-                                Identifiers = { new Identifier { Value = countName } }
-                            }
+                            Identifiers = { new Identifier { Value = countName } }
                         }
                     }
+                }
                 };
 
                 return rename;
@@ -301,7 +283,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 // Check none of the grouped columns are virtual attributes - FetchXML doesn't support grouping by them
-                var fetchSchema = fetchXml.GetSchema(metadata);
+                var fetchSchema = fetchXml.GetSchema(metadata, parameterTypes);
                 foreach (var group in GroupBy)
                 {
                     if (!fetchSchema.ContainsColumn(group.GetColumnName(), out var groupCol))
@@ -329,7 +311,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     Alias = fetchXml.Alias,
                     AllPages = fetchXml.AllPages,
-                    FetchXml = (FetchXml.FetchType) serializer.Deserialize(new StringReader(fetchXml.FetchXmlString)),
+                    FetchXml = (FetchXml.FetchType)serializer.Deserialize(new StringReader(fetchXml.FetchXmlString)),
                     ReturnFullSchema = fetchXml.ReturnFullSchema
                 };
 
@@ -342,7 +324,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 fetchXml.FetchXml.aggregateSpecified = true;
                 fetchXml.FetchXml = fetchXml.FetchXml;
 
-                var schema = Source.GetSchema(metadata);
+                var schema = Source.GetSchema(metadata, parameterTypes);
 
                 foreach (var grouping in GroupBy)
                 {
@@ -423,6 +405,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return this;
+        }
+
+        public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        {
+            // Columns required by previous nodes must be derived from this node, so no need to pass them through.
+            // Just calculate the columns that are required to calculate the groups & aggregates
+            var scalarRequiredColumns = new List<string>();
+            if (GroupBy != null)
+                scalarRequiredColumns.AddRange(GroupBy.Select(g => g.GetColumnName()));
+
+            scalarRequiredColumns.AddRange(Aggregates.Where(agg => agg.Value.Expression != null).SelectMany(agg => agg.Value.Expression.GetColumns()).Distinct());
+
+            Source.AddRequiredColumns(metadata, parameterTypes, scalarRequiredColumns);
         }
 
         private bool IsAggregateQueryRecordLimitExceededException(Exception ex)

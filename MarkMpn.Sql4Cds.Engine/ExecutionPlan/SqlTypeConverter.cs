@@ -88,6 +88,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (from == typeof(string) && to == typeof(Guid))
                 return true;
 
+            if (from == typeof(int) && to == typeof(decimal))
+                return true;
+
             return false;
         }
 

@@ -39,7 +39,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         /// <param name="org">The <see cref="IOrganizationService"/> to use to execute the plan</param>
         /// <returns>A sequence of entities matched by the query</returns>
-        IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string,object> parameterValues);
+        IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string,Type> parameterTypes, IDictionary<string,object> parameterValues);
 
         /// <summary>
         /// Gets the children of this node
@@ -51,18 +51,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// Gets the schema of the dataset returned by the node
         /// </summary>
         /// <returns></returns>
-        NodeSchema GetSchema(IAttributeMetadataCache metadata);
-
-        /// <summary>
-        /// Gets the columns that are required as input for this node from its sources
-        /// </summary>
-        /// <returns></returns>
-        IEnumerable<string> GetRequiredColumns();
+        NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string,Type> parameterTypes);
 
         /// <summary>
         /// Attempts to fold the query operator down into its source
         /// </summary>
         /// <returns>The final execution plan node to execute</returns>
-        IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options);
+        IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes);
+
+        void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns);
     }
 }
