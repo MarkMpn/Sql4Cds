@@ -286,6 +286,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     func = comparison.FirstExpression as FunctionCall;
                     variable = comparison.FirstExpression as VariableReference;
                     expr = comparison.FirstExpression;
+                    field2 = null;
 
                     // Switch the operator depending on the order of the column and value, so `column > 3` uses gt but `3 > column` uses le
                     switch (type)
