@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Windows.Forms;
 using MarkMpn.Sql4Cds.Engine;
+using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using McTools.Xrm.Connection;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
@@ -17,6 +18,7 @@ namespace MarkMpn.Sql4Cds
         private readonly BackgroundWorker _worker;
         private readonly Control _host;
         private int _localeId;
+        private int _retrievedPages;
 
         public QueryExecutionOptions(ConnectionDetail con, IOrganizationService org, BackgroundWorker worker, Control host)
         {
@@ -115,5 +117,13 @@ namespace MarkMpn.Sql4Cds
         public int MaxDegreeOfParallelism => Settings.Instance.MaxDegreeOfPaallelism;
 
         public bool ColumnComparisonAvailable => new Version(_con.OrganizationVersion) >= new Version("9.1.0.19251");
+
+        public void RetrievingNextPage()
+        {
+            _retrievedPages++;
+
+            if (_retrievedPages > Settings.Instance.MaxRetrievesPerQuery)
+                throw new QueryExecutionException("Hit maximum retrieval limit. Try limiting the data to retrieve with WHERE clauses or eliminating subqueries");
+        }
     }
 }

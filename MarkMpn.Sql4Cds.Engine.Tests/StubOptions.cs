@@ -47,5 +47,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         void IQueryExecutionOptions.Progress(double? progress, string message)
         {
         }
+
+        void IQueryExecutionOptions.RetrievingNextPage()
+        {
+        }
     }
 }

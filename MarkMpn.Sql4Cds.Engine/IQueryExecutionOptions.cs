@@ -86,5 +86,10 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Indicates if the server supports column comparison conditions in FetchXML
         /// </summary>
         bool ColumnComparisonAvailable { get; }
+
+        /// <summary>
+        /// A notification that the query is about to retrieve another page of data
+        /// </summary>
+        void RetrievingNextPage();
     }
 }

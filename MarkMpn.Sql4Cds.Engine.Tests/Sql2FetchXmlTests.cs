@@ -38,6 +38,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         bool IQueryExecutionOptions.ColumnComparisonAvailable => true;
 
+        void IQueryExecutionOptions.RetrievingNextPage()
+        {
+        }
+
         [TestMethod]
         public void SimpleSelect()
         {

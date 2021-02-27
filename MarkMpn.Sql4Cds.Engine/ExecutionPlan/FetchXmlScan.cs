@@ -123,6 +123,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             options.Progress(0, $"Retrieving {GetDisplayName(0, meta)}...");
 
             // Get the first page of results
+            options.RetrievingNextPage();
             var res = org.RetrieveMultiple(new FetchExpression(Serialize(FetchXml)));
 
             foreach (var entity in res.Entities)
@@ -155,6 +156,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 FetchXml.pagingcookie = res.PagingCookie;
 
+                options.RetrievingNextPage();
                 var nextPage = org.RetrieveMultiple(new FetchExpression(Serialize(FetchXml)));
 
                 foreach (var entity in nextPage.Entities)

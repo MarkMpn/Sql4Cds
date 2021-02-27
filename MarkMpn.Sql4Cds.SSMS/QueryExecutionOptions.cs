@@ -74,5 +74,9 @@ namespace MarkMpn.Sql4Cds.SSMS
             Task.ContinueWith(t => _sqlScriptEditorControl.DoCancelExec());
             Cancelled = true;
         }
+
+        public void RetrievingNextPage()
+        {
+        }
     }
 }

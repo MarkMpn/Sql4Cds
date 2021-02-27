@@ -56,6 +56,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
         }
 
+        void IQueryExecutionOptions.RetrievingNextPage()
+        {
+        }
+
         [TestMethod]
         public void SimpleSelect()
         {
