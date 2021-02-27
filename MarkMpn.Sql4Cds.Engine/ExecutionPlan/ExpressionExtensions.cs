@@ -135,7 +135,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var name = col.GetColumnName();
 
             if (!schema.ContainsColumn(name, out name))
-                throw new QueryExecutionException(col, "Unknown column");
+                throw new QueryExecutionException("Unknown column");
 
             entity.Attributes.TryGetValue(name, out var value);
             return value;
@@ -261,7 +261,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return comparison != 0;
 
                 default:
-                    throw new QueryExecutionException(cmp, "Unknown comparison type");
+                    throw new QueryExecutionException("Unknown comparison type");
             }
         }
 
@@ -494,10 +494,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     break;
 
                 default:
-                    throw new QueryExecutionException(bin, "Unsupported operator");
+                    throw new QueryExecutionException("Unsupported operator");
             }
 
-            throw new QueryExecutionException(bin, $"Operator {bin.BinaryExpressionType} is not defined for expressions of type {type}");
+            throw new QueryExecutionException($"Operator {bin.BinaryExpressionType} is not defined for expressions of type {type}");
         }
 
         private static MethodInfo GetMethod(FunctionCall func, NodeSchema schema, IDictionary<string, Type> parameterTypes)
@@ -684,7 +684,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (value is bool tf && unary.UnaryExpressionType == UnaryExpressionType.BitwiseNot)
                 return !tf;
 
-            throw new QueryExecutionException(unary, "Invalid operator for data type");
+            throw new QueryExecutionException("Invalid operator for data type");
         }
 
         private static Type GetType(this InPredicate inPred, NodeSchema schema, IDictionary<string, Type> parameterTypes)
@@ -753,7 +753,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private static object GetValue(this VariableReference var, Entity entity, NodeSchema schema, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             if (parameterValues == null || !parameterValues.TryGetValue(var.Name, out var value))
-                throw new QueryExecutionException(var, "Undefined variable");
+                throw new QueryExecutionException("Undefined variable");
 
             return value;
         }

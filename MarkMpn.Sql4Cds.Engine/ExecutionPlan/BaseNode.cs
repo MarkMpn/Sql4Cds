@@ -30,23 +30,61 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            _executionCount++;
+            IEnumerator<Entity> enumerator;
 
-            _stopwatch.Start();
-            var enumerator = ExecuteInternal(org, metadata, options, parameterTypes, parameterValues).GetEnumerator();
-
-            while (enumerator.MoveNext())
+            try
             {
-                var row = enumerator.Current;
-                _rowsOut++;
-                _stopwatch.Stop();
-
-                yield return row;
+                _executionCount++;
 
                 _stopwatch.Start();
+                enumerator = ExecuteInternal(org, metadata, options, parameterTypes, parameterValues).GetEnumerator();
+            }
+            catch (QueryExecutionException ex)
+            {
+                if (ex.Node == null)
+                    ex.Node = this;
+
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new QueryExecutionException(ex.Message, ex) { Node = this };
+            }
+            finally
+            {
+                _stopwatch.Stop();
             }
 
-            _stopwatch.Stop();
+            while (true)
+            {
+                Entity current;
+
+                try
+                {
+                    _stopwatch.Start();
+                    if (!enumerator.MoveNext())
+                        break;
+
+                    current = enumerator.Current;
+                }
+                catch (QueryExecutionException ex)
+                {
+                    if (ex.Node == null)
+                        ex.Node = this;
+
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    throw new QueryExecutionException(ex.Message, ex) { Node = this };
+                }
+                finally
+                {
+                    _stopwatch.Stop();
+                }
+
+                yield return current;
+            }
         }
 
         public int ExecutionCount => _executionCount;

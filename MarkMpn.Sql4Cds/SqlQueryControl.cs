@@ -809,9 +809,11 @@ namespace MarkMpn.Sql4Cds
                 var index = -1;
                 var length = 0;
                 var messageSuffix = "";
+                IExecutionPlanNode plan = null;
 
                 if (e.Error is QueryException queryException)
                 {
+                    plan = queryException.Query;
                     index = _params.Offset + queryException.Query.Index;
                     length = queryException.Query.Length;
                     error = queryException.InnerException;
@@ -838,6 +840,11 @@ namespace MarkMpn.Sql4Cds
                         AddMessage(index, length, msg, false);
 
                     error = partialSuccess.InnerException;
+                }
+                else if (error is QueryExecutionException queryExecution)
+                {
+                    messageSuffix = "\r\nSee the Execution Plan tab for details of where this error occurred";
+                    ShowResult(plan, new ExecuteParams { Execute = true, IncludeFetchXml = true, Sql = plan.Sql }, null, queryExecution);
                 }
 
                 _ai.TrackException(error, new Dictionary<string, string> { ["Sql"] = _params.Sql, ["Source"] = "XrmToolBox" });
@@ -954,7 +961,7 @@ namespace MarkMpn.Sql4Cds
                     {
                         var result = query.Execute(Service, Metadata, options, null, null).ToList();
 
-                        Execute(() => ShowResult(query, args, result));
+                        Execute(() => ShowResult(query, args, result, null));
                     }
                     catch (Exception ex)
                     {
@@ -970,7 +977,7 @@ namespace MarkMpn.Sql4Cds
                 foreach (var query in queries)
                 {
                     _ai.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name, ["Source"] = "XrmToolBox" });
-                    Execute(() => ShowResult(query, args, null));
+                    Execute(() => ShowResult(query, args, null, null));
                     /* TODO:
                     if (query is IQueryRequiresFinalization finalize)
                         finalize.FinalizeRequest(Service, options);
@@ -986,7 +993,7 @@ namespace MarkMpn.Sql4Cds
             }
         }
 
-        private void ShowResult(IExecutionPlanNode query, ExecuteParams args, List<Entity> results)
+        private void ShowResult(IExecutionPlanNode query, ExecuteParams args, List<Entity> results, QueryExecutionException ex)
         {
             Control result = null;
             Control fetchXml = null;
@@ -1105,7 +1112,7 @@ namespace MarkMpn.Sql4Cds
                     AutoEllipsis = true,
                     UseMnemonic = false
                 };
-                var planView = new ExecutionPlanView { Dock = DockStyle.Fill, Executed = args.Execute };
+                var planView = new ExecutionPlanView { Dock = DockStyle.Fill, Executed = args.Execute, Exception = ex };
                 planView.Plan = query;
                 planView.NodeSelected += (s, e) => _properties.SelectObject(planView.Selected);
                 fetchXml.Controls.Add(planView);

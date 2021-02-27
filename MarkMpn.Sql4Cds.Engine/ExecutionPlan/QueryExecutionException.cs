@@ -7,10 +7,16 @@ using Microsoft.SqlServer.TransactSql.ScriptDom;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    class QueryExecutionException : ApplicationException
+    public class QueryExecutionException : ApplicationException
     {
-        public QueryExecutionException(TSqlFragment fragment, string message) : base(message)
+        public QueryExecutionException(string message) : base(message)
         {
         }
+
+        public QueryExecutionException(string message, Exception innerException) : base(message, innerException)
+        {
+        }
+
+        public IExecutionPlanNode Node { get; set; }
     }
 }

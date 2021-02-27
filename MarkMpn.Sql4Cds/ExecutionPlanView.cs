@@ -65,6 +65,8 @@ namespace MarkMpn.Sql4Cds
             }
         }
 
+        public QueryExecutionException Exception { get; set; }
+
         private void LayoutPlan()
         {
             _nodeLocations = new Dictionary<IExecutionPlanNode, Rectangle>
@@ -165,6 +167,12 @@ namespace MarkMpn.Sql4Cds
 
                             e.Graphics.DrawImage(image, iconRect);
                         }
+                    }
+
+                    if (Exception?.Node == kvp.Key)
+                    {
+                        // Show an error icon overlay
+                        e.Graphics.DrawImage(SystemIcons.Error.ToBitmap(), new Rectangle(iconRect.Location, new Size(16, 16)));
                     }
                 }
 

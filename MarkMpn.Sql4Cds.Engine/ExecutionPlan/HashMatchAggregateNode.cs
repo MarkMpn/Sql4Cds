@@ -110,7 +110,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 break;
 
                             default:
-                                throw new QueryExecutionException(null, "Unknown aggregate type");
+                                throw new QueryExecutionException("Unknown aggregate type");
                         }
                     }
                     
