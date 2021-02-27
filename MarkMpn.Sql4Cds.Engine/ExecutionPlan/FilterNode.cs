@@ -45,9 +45,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Source.GetSchema(metadata, parameterTypes);
         }
 
-        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            Source = Source.MergeNodeDown(metadata, options, parameterTypes);
+            Source = Source.FoldQuery(metadata, options, parameterTypes);
             var schema = Source.GetSchema(metadata, parameterTypes);
 
             if (Source is FetchXmlScan fetchXml && !fetchXml.FetchXml.aggregate)

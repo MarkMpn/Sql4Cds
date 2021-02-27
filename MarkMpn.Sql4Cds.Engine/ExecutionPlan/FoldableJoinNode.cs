@@ -31,10 +31,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         public BooleanExpression AdditionalJoinCriteria { get; set; }
 
-        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            LeftSource = LeftSource.MergeNodeDown(metadata, options, parameterTypes);
-            RightSource = RightSource.MergeNodeDown(metadata, options, parameterTypes);
+            LeftSource = LeftSource.FoldQuery(metadata, options, parameterTypes);
+            RightSource = RightSource.FoldQuery(metadata, options, parameterTypes);
 
             var leftSchema = LeftSource.GetSchema(metadata, parameterTypes);
             var rightSchema = RightSource.GetSchema(metadata, parameterTypes);
@@ -115,7 +115,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 if (additionalCriteria != null)
-                    return new FilterNode { Filter = additionalCriteria, Source = leftFetch }.MergeNodeDown(metadata, options, parameterTypes);
+                    return new FilterNode { Filter = additionalCriteria, Source = leftFetch }.FoldQuery(metadata, options, parameterTypes);
 
                 return leftFetch;
             }

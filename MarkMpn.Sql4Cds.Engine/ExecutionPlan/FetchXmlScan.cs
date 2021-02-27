@@ -463,7 +463,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             throw new ApplicationException("Unknown attribute type " + attrMetadata.GetType());
         }
 
-        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             return this;
         }

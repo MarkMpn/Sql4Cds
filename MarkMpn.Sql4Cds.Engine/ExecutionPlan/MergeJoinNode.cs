@@ -108,9 +108,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return !hasLeft && !hasRight;
         }
 
-        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            var folded = base.MergeNodeDown(metadata, options, parameterTypes);
+            var folded = base.FoldQuery(metadata, options, parameterTypes);
 
             if (folded != this)
                 return folded;
@@ -127,7 +127,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         SortOrder = SortOrder.Ascending
                     }
                 }
-            }.MergeNodeDown(metadata, options, parameterTypes);
+            }.FoldQuery(metadata, options, parameterTypes);
 
             RightSource = new SortNode
             {
@@ -140,7 +140,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         SortOrder = SortOrder.Ascending
                     }
                 }
-            }.MergeNodeDown(metadata, options, parameterTypes);
+            }.FoldQuery(metadata, options, parameterTypes);
 
             return this;
         }

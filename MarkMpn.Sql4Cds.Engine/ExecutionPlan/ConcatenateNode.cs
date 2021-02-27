@@ -56,10 +56,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Sources;
         }
 
-        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             for (var i = 0; i < Sources.Count; i++)
-                Sources[i] = Sources[i].MergeNodeDown(metadata, options, parameterTypes);
+                Sources[i] = Sources[i].FoldQuery(metadata, options, parameterTypes);
 
             return this;
         }

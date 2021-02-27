@@ -39,10 +39,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return CatchSource;
         }
 
-        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            TrySource = TrySource.MergeNodeDown(metadata, options, parameterTypes);
-            CatchSource = CatchSource.MergeNodeDown(metadata, options, parameterTypes);
+            TrySource = TrySource.FoldQuery(metadata, options, parameterTypes);
+            CatchSource = CatchSource.FoldQuery(metadata, options, parameterTypes);
             return this;
         }
 

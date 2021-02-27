@@ -35,7 +35,7 @@ namespace MarkMpn.Sql4Cds.Engine
         public IExecutionPlanNode Optimize(IExecutionPlanNode node)
         {
             // Move any additional operators down to the FetchXml
-            node = node.MergeNodeDown(Metadata, Options, null);
+            node = node.FoldQuery(Metadata, Options, null);
 
             // Ensure all required columns are added to the FetchXML
             node.AddRequiredColumns(Metadata, null, new List<string>());

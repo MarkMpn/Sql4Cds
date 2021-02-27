@@ -57,7 +57,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// Attempts to fold the query operator down into its source
         /// </summary>
         /// <returns>The final execution plan node to execute</returns>
-        IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes);
+        IExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes);
 
         void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns);
     }

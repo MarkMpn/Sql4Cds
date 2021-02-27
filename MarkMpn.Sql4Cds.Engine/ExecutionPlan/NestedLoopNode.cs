@@ -94,13 +94,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return innerParameterTypes;
         }
 
-        public override IExecutionPlanNode MergeNodeDown(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             var leftSchema = LeftSource.GetSchema(metadata, parameterTypes);
-            LeftSource = LeftSource.MergeNodeDown(metadata, options, parameterTypes);
+            LeftSource = LeftSource.FoldQuery(metadata, options, parameterTypes);
 
             var innerParameterTypes = GetInnerParameterTypes(leftSchema, parameterTypes);
-            RightSource = RightSource.MergeNodeDown(metadata, options, innerParameterTypes);
+            RightSource = RightSource.FoldQuery(metadata, options, innerParameterTypes);
             return this;
         }
 
