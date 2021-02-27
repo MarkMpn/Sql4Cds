@@ -1105,7 +1105,8 @@ namespace MarkMpn.Sql4Cds
                     AutoEllipsis = true,
                     UseMnemonic = false
                 };
-                var planView = new ExecutionPlanView { Plan = query, Dock = DockStyle.Fill };
+                var planView = new ExecutionPlanView { Dock = DockStyle.Fill, Executed = args.Execute };
+                planView.Plan = query;
                 planView.NodeSelected += (s, e) => _properties.SelectObject(planView.Selected);
                 fetchXml.Controls.Add(planView);
                 fetchXml.Controls.Add(fetchLabel);

@@ -99,11 +99,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public bool ReturnFullSchema { get; set; }
 
-        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            if (options.Cancelled)
-                yield break;
-
             ReturnFullSchema = false;
             var schema = GetSchema(metadata, parameterTypes);
 
@@ -147,7 +144,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 throw new ApplicationException("DISTINCT queries must have an ORDER BY applied to retrieve multiple pages\r\nSee https://docs.microsoft.com/powerapps/developer/common-data-service/org-service/paging-behaviors-and-ordering#ordering-with-a-paging-cookie");
 
             // Move on to subsequent pages
-            while (AllPages && res.MoreRecords && !options.Cancelled && options.ContinueRetrieve(count))
+            while (AllPages && res.MoreRecords && options.ContinueRetrieve(count))
             {
                 options.Progress(0, $"Retrieved {count:N0} {GetDisplayName(count, meta)}...");
 

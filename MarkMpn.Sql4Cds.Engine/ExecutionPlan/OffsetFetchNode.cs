@@ -16,7 +16,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public IExecutionPlanNode Source { get; set; }
 
-        public override IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             var offset = SqlTypeConverter.ChangeType<int>(Offset.GetValue(null, null, parameterTypes, parameterValues));
             var fetch = SqlTypeConverter.ChangeType<int>(Fetch.GetValue(null, null, parameterTypes, parameterValues));

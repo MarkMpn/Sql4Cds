@@ -60,5 +60,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         IExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes);
 
         void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns);
+
+        /// <summary>
+        /// Returns the number of times this node has been executed
+        /// </summary>
+        int ExecutionCount { get; }
+
+        /// <summary>
+        /// Returns the total amount of time spent executing this node, including the time spent calling source nodes
+        /// </summary>
+        TimeSpan Duration { get; }
+
+        /// <summary>
+        /// Returns the total number of rows returned by this node
+        /// </summary>
+        int RowsOut { get; }
     }
 }

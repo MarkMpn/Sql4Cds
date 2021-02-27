@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -14,6 +15,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
     public abstract class BaseNode : IExecutionPlanNode
     {
+        private int _executionCount;
+        private Stopwatch _stopwatch = new Stopwatch();
+        private int _rowsOut;
+
         [Browsable(false)]
         public string Sql { get; set; }
 
@@ -23,7 +28,34 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public int Length { get; set; }
 
-        public abstract IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues);
+        public IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        {
+            _executionCount++;
+
+            _stopwatch.Start();
+            var enumerator = ExecuteInternal(org, metadata, options, parameterTypes, parameterValues).GetEnumerator();
+
+            while (enumerator.MoveNext())
+            {
+                var row = enumerator.Current;
+                _rowsOut++;
+                _stopwatch.Stop();
+
+                yield return row;
+
+                _stopwatch.Start();
+            }
+
+            _stopwatch.Stop();
+        }
+
+        public int ExecutionCount => _executionCount;
+
+        public TimeSpan Duration => _stopwatch.Elapsed;
+
+        public int RowsOut => _rowsOut;
+
+        protected abstract IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues);
 
         public abstract IEnumerable<IExecutionPlanNode> GetSources();
 

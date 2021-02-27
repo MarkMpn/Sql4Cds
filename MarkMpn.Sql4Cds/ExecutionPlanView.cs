@@ -16,10 +16,22 @@ namespace MarkMpn.Sql4Cds
     {
         class Line
         {
+            public IExecutionPlanNode Source { get; set; }
             public Point Start { get; set; }
             public Point End { get; set; }
 
-            public Rectangle MBR => new Rectangle(End.X, End.Y, Start.X - End.X + 1, Start.Y - End.Y + 1);
+            public int Width
+            {
+                get
+                {
+                    if (Source.RowsOut == 0)
+                        return 1;
+
+                    return (int) Math.Ceiling(Math.Log10(Source.RowsOut));
+                }
+            }
+
+            public Rectangle MBR => new Rectangle(End.X, End.Y - Width / 2, Start.X - End.X + 1, Start.Y - End.Y + Width / 2 + 1);
         }
 
         private IExecutionPlanNode _plan;
@@ -39,6 +51,8 @@ namespace MarkMpn.Sql4Cds
             //SetStyle(ControlStyles.AllPaintingInWmPaint, true);
             //SetStyle(ControlStyles.UserPaint, true);
         }
+
+        public bool Executed { get; set; }
 
         public IExecutionPlanNode Plan
         {
@@ -100,7 +114,7 @@ namespace MarkMpn.Sql4Cds
 
                 _nodeLocations[child] = fullRect;
 
-                _lines.Add(new Line { Start = new Point(iconRect.X, iconRect.Y + iconRect.Height / 2), End = new Point(parentIconRect.Right, parentIconRect.Top + (i + 1) * lineYSpacing) });
+                _lines.Add(new Line { Source = child, Start = new Point(iconRect.X, iconRect.Y + iconRect.Height / 2), End = new Point(parentIconRect.Right, parentIconRect.Top + (i + 1) * lineYSpacing) });
 
                 LayoutChildren(child);
                 i++;
@@ -179,18 +193,29 @@ namespace MarkMpn.Sql4Cds
                 if (!line.MBR.IntersectsWith(clipRect))
                     continue;
 
-                // Draw the line with a dogleg
-                var midX = line.Start.X - (line.Start.X - line.End.X) / 2;
-                e.Graphics.DrawLine(Pens.Gray, line.Start.X, line.Start.Y, midX, line.Start.Y);
-                e.Graphics.DrawLine(Pens.Gray, midX, line.Start.Y, midX, line.End.Y);
-                e.Graphics.DrawLine(Pens.Gray, midX, line.End.Y, line.End.X, line.End.Y);
+                using (var pen = new Pen(Color.Gray, line.Width))
+                {
+                    if (line.Start.Y == line.End.Y)
+                    {
+                        // Draw a straight, horizontal line
+                        e.Graphics.DrawLine(pen, line.Start, line.End);
+                    }
+                    else
+                    {
+                        // Draw the line with a dogleg
+                        var midX = line.Start.X - (line.Start.X - line.End.X) / 2;
+                        e.Graphics.DrawLine(pen, line.Start.X, line.Start.Y, midX, line.Start.Y);
+                        e.Graphics.DrawLine(pen, midX, line.Start.Y, midX, line.End.Y);
+                        e.Graphics.DrawLine(pen, midX, line.End.Y, line.End.X + line.Width, line.End.Y);
+                    }
+                }
 
                 // Draw the arrowhead
                 e.Graphics.FillPolygon(Brushes.Gray, new[]
                 {
                     line.End,
-                    new Point(line.End.X + 2, line.End.Y - 2),
-                    new Point(line.End.X + 2, line.End.Y + 2)
+                    new Point(line.End.X + line.Width + 2, line.End.Y - (line.Width / 2) - 2),
+                    new Point(line.End.X + line.Width + 2, line.End.Y + (line.Width / 2) + 2)
                 });
             }
         }
@@ -218,7 +243,12 @@ namespace MarkMpn.Sql4Cds
 
         private string GetLabel(IExecutionPlanNode node)
         {
-            return node.ToString();
+            var text = node.ToString();
+
+            if (Executed)
+                text += "\r\nCost: " + ((node.Duration.TotalMilliseconds - node.GetSources().Sum(source => source.Duration.TotalMilliseconds)) / Plan.Duration.TotalMilliseconds).ToString("P0");
+
+            return text;
         }
 
         public IExecutionPlanNode Selected { get; private set; }
