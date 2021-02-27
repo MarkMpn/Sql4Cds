@@ -128,5 +128,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             LeftSource.AddRequiredColumns(metadata, parameterTypes, leftColumns);
             RightSource.AddRequiredColumns(metadata, parameterTypes, rightColumns);
         }
+
+        protected override NodeSchema GetRightSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
+        {
+            var leftSchema = LeftSource.GetSchema(metadata, parameterTypes);
+            var innerParameterTypes = GetInnerParameterTypes(leftSchema, parameterTypes);
+            return RightSource.GetSchema(metadata, innerParameterTypes);
+        }
     }
 }

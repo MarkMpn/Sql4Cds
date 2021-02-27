@@ -63,7 +63,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
         {
             var outerSchema = LeftSource.GetSchema(metadata, parameterTypes);
-            var innerSchema = RightSource.GetSchema(metadata, parameterTypes);
+            var innerSchema = GetRightSchema(metadata, parameterTypes);
 
             var schema = new NodeSchema();
 
@@ -88,6 +88,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return schema;
+        }
+
+        protected virtual NodeSchema GetRightSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
+        {
+            return RightSource.GetSchema(metadata, parameterTypes);
         }
     }
 }

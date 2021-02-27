@@ -151,7 +151,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 node = distinct;
             }
 
-            node = ConvertOrderByClause(node, binary.OrderByClause, concat.ColumnSet.Select(col => new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = col.OutputColumn } } } }).ToArray(), binary, parameterTypes);
+            node = ConvertOrderByClause(node, binary.OrderByClause, concat.ColumnSet.Select(col => new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = col.OutputColumn } } } }).ToArray(), binary, parameterTypes, outerSchema, outerReferences);
             node = ConvertOffsetClause(node, binary.OffsetClause, parameterTypes);
 
             var select = new SelectNode { Source = node };
@@ -170,10 +170,10 @@ namespace MarkMpn.Sql4Cds.Engine
             node = ConvertWhereClause(node, querySpec.WhereClause, outerSchema, outerReferences, parameterTypes, querySpec);
 
             // Add aggregates from GROUP BY/SELECT/HAVING/ORDER BY
-            node = ConvertGroupByAggregates(node, querySpec, parameterTypes);
+            node = ConvertGroupByAggregates(node, querySpec, parameterTypes, outerSchema, outerReferences);
 
             // Add filters from HAVING
-            node = ConvertHavingClause(node, querySpec.HavingClause);
+            node = ConvertHavingClause(node, querySpec.HavingClause, parameterTypes, outerSchema, outerReferences, querySpec);
 
             // Add sorts from ORDER BY
             var selectFields = new List<ScalarExpression>();
@@ -200,7 +200,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
             }
 
-            node = ConvertOrderByClause(node, querySpec.OrderByClause, selectFields.ToArray(), querySpec, parameterTypes);
+            node = ConvertOrderByClause(node, querySpec.OrderByClause, selectFields.ToArray(), querySpec, parameterTypes, outerSchema, outerReferences);
 
             // Add DISTINCT
             var distinct = querySpec.UniqueRowFilter == UniqueRowFilter.Distinct ? new DistinctNode { Source = node } : null;
@@ -214,15 +214,23 @@ namespace MarkMpn.Sql4Cds.Engine
             node = ConvertOffsetClause(node, querySpec.OffsetClause, parameterTypes);
 
             // Add SELECT
-            var selectNode = ConvertSelectClause(querySpec.SelectElements, node, distinct, querySpec, parameterTypes);
+            var selectNode = ConvertSelectClause(querySpec.SelectElements, node, distinct, querySpec, parameterTypes, outerSchema, outerReferences);
 
             return selectNode;
         }
 
-        private IExecutionPlanNode ConvertHavingClause(IExecutionPlanNode source, HavingClause havingClause)
+        private IExecutionPlanNode ConvertHavingClause(IExecutionPlanNode source, HavingClause havingClause, IDictionary<string, Type> parameterTypes, NodeSchema outerSchema, IDictionary<string, string> outerReferences, TSqlFragment query)
         {
             if (havingClause == null)
                 return source;
+
+            CaptureOuterReferences(outerSchema, source, havingClause, parameterTypes, outerReferences);
+
+            var computeScalar = new ComputeScalarNode { Source = source };
+            ConvertScalarSubqueries(havingClause.SearchCondition, ref source, computeScalar, parameterTypes, query);
+
+            // Validate the final expression
+            havingClause.SearchCondition.GetType(source.GetSchema(Metadata, parameterTypes), parameterTypes);
 
             return new FilterNode
             {
@@ -231,7 +239,7 @@ namespace MarkMpn.Sql4Cds.Engine
             };
         }
 
-        private IExecutionPlanNode ConvertGroupByAggregates(IExecutionPlanNode source, QuerySpecification querySpec, IDictionary<string, Type> parameterTypes)
+        private IExecutionPlanNode ConvertGroupByAggregates(IExecutionPlanNode source, QuerySpecification querySpec, IDictionary<string, Type> parameterTypes, NodeSchema outerSchema, IDictionary<string, string> outerReferences)
         {
             // Check if there is a GROUP BY clause or aggregate functions to convert
             if (querySpec.GroupByClause == null)
@@ -258,6 +266,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (querySpec.GroupByClause != null)
             {
+                CaptureOuterReferences(outerSchema, source, querySpec.GroupByClause, parameterTypes, outerReferences);
+
                 foreach (var grouping in querySpec.GroupByClause.GroupingSpecifications)
                 {
                     if (!(grouping is ExpressionGroupingSpecification exprGroup))
@@ -371,6 +381,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
             foreach (var aggregate in aggregateCollector.Aggregates.Select(a => new { Expression = a, Alias = (string)null }).Concat(aggregateCollector.SelectAggregates.Select(s => new { Expression = (FunctionCall)s.Expression, Alias = s.ColumnName?.Identifier?.Value })))
             {
+                CaptureOuterReferences(outerSchema, source, aggregate.Expression, parameterTypes, outerReferences);
+
                 var converted = new Aggregate
                 {
                     Distinct = aggregate.Expression.UniqueRowFilter == UniqueRowFilter.Distinct
@@ -486,17 +498,20 @@ namespace MarkMpn.Sql4Cds.Engine
             };
         }
 
-        private IExecutionPlanNode ConvertOrderByClause(IExecutionPlanNode source, OrderByClause orderByClause, ScalarExpression[] selectList, TSqlFragment query, IDictionary<string, Type> parameterTypes)
+        private IExecutionPlanNode ConvertOrderByClause(IExecutionPlanNode source, OrderByClause orderByClause, ScalarExpression[] selectList, TSqlFragment query, IDictionary<string, Type> parameterTypes, NodeSchema outerSchema, Dictionary<string, string> outerReferences)
         {
             if (orderByClause == null)
                 return source;
+
+            CaptureOuterReferences(outerSchema, source, orderByClause, parameterTypes, outerReferences);
+
+            var computeScalar = new ComputeScalarNode { Source = source };
+            ConvertScalarSubqueries(orderByClause, ref source, computeScalar, parameterTypes, query);
 
             var schema = source.GetSchema(Metadata, parameterTypes);
             var sort = new SortNode { Source = source };
 
             // Check if any of the order expressions need pre-calculation
-            var computeScalar = new ComputeScalarNode { Source = source };
-
             foreach (var orderBy in orderByClause.OrderByElements)
             {
                 // If the order by element is a numeric literal, use the corresponding expression from the select list at that index
@@ -515,8 +530,10 @@ namespace MarkMpn.Sql4Cds.Engine
                     orderBy.Expression = selectList[index];
                 }
 
-                // Anything other than fields should be pre-calculated
-                if (!(orderBy.Expression is ColumnReferenceExpression))
+                // Anything complex expressoin should be pre-calculated
+                if (!(orderBy.Expression is ColumnReferenceExpression) &&
+                    !(orderBy.Expression is VariableReference) &&
+                    !(orderBy.Expression is Literal))
                 {
                     var calculated = ComputeScalarExpression(orderBy.Expression, query, computeScalar, parameterTypes, ref source);
                     sort.Source = source;
@@ -543,41 +560,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (whereClause.Cursor != null)
                 throw new NotSupportedQueryFragmentException("Unsupported cursor", whereClause.Cursor);
 
-            if (outerSchema != null)
-            {
-                // We're in a subquery. Check if any columns in the WHERE clause are from the outer query
-                // so we know which columns to pass through and rewrite the filter to use parameters
-                var rewrites = new Dictionary<ScalarExpression, ScalarExpression>();
-                var innerSchema = source.GetSchema(Metadata, parameterTypes);
-                var columns = whereClause.SearchCondition.GetColumns();
-
-                foreach (var column in columns)
-                {
-                    // Column names could be ambiguous between the inner and outer data sources. The inner
-                    // data source is used in preference.
-                    // Ref: https://docs.microsoft.com/en-us/sql/relational-databases/performance/subqueries?view=sql-server-ver15#qualifying
-                    var fromInner = innerSchema.ContainsColumn(column, out _);
-
-                    if (fromInner)
-                        continue;
-
-                    var fromOuter = outerSchema.ContainsColumn(column, out var outerColumn);
-
-                    if (fromOuter)
-                    {
-                        var paramName = $"@Expr{++_colNameCounter}";
-                        outerReferences.Add(outerColumn, paramName);
-                        parameterTypes[paramName] = outerSchema.Schema[outerColumn];
-
-                        rewrites.Add(
-                            new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = column } } } },
-                            new VariableReference { Name = paramName });
-                    }
-                }
-
-                if (rewrites.Any())
-                    whereClause.SearchCondition.Accept(new RewriteVisitor(rewrites));
-            }
+            CaptureOuterReferences(outerSchema, source, whereClause.SearchCondition, parameterTypes, outerReferences);
 
             var computeScalar = new ComputeScalarNode { Source = source };
             ConvertScalarSubqueries(whereClause.SearchCondition, ref source, computeScalar, parameterTypes, query);
@@ -592,7 +575,51 @@ namespace MarkMpn.Sql4Cds.Engine
             };
         }
 
-        private SelectNode ConvertSelectClause(IList<SelectElement> selectElements, IExecutionPlanNode node, DistinctNode distinct, TSqlFragment query, IDictionary<string, Type> parameterTypes)
+        private TSqlFragment CaptureOuterReferences(NodeSchema outerSchema, IExecutionPlanNode source, TSqlFragment query, IDictionary<string,Type> parameterTypes, IDictionary<string,string> outerReferences)
+        {
+            if (outerSchema == null)
+                return query;
+
+            // We're in a subquery. Check if any columns in the WHERE clause are from the outer query
+            // so we know which columns to pass through and rewrite the filter to use parameters
+            var rewrites = new Dictionary<ScalarExpression, ScalarExpression>();
+            var innerSchema = source.GetSchema(Metadata, parameterTypes);
+            var columns = query.GetColumns();
+
+            foreach (var column in columns)
+            {
+                // Column names could be ambiguous between the inner and outer data sources. The inner
+                // data source is used in preference.
+                // Ref: https://docs.microsoft.com/en-us/sql/relational-databases/performance/subqueries?view=sql-server-ver15#qualifying
+                var fromInner = innerSchema.ContainsColumn(column, out _);
+
+                if (fromInner)
+                    continue;
+
+                var fromOuter = outerSchema.ContainsColumn(column, out var outerColumn);
+
+                if (fromOuter)
+                {
+                    var paramName = $"@Expr{++_colNameCounter}";
+                    outerReferences.Add(outerColumn, paramName);
+                    parameterTypes[paramName] = outerSchema.Schema[outerColumn];
+
+                    rewrites.Add(
+                        new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = column } } } },
+                        new VariableReference { Name = paramName });
+                }
+            }
+
+            if (rewrites.Any())
+                query.Accept(new RewriteVisitor(rewrites));
+
+            if (query is ScalarExpression scalar && rewrites.TryGetValue(scalar, out var rewritten))
+                return rewritten;
+
+            return query;
+        }
+
+        private SelectNode ConvertSelectClause(IList<SelectElement> selectElements, IExecutionPlanNode node, DistinctNode distinct, TSqlFragment query, IDictionary<string, Type> parameterTypes, NodeSchema outerSchema, IDictionary<string,string> outerReferences)
         {
             var schema = node.GetSchema(Metadata, parameterTypes);
 
@@ -607,7 +634,9 @@ namespace MarkMpn.Sql4Cds.Engine
             };
 
             foreach (var element in selectElements)
-            {   
+            {
+                CaptureOuterReferences(outerSchema, computeScalar, element, parameterTypes, outerReferences);
+
                 if (element is SelectScalarExpression scalar)
                 {
                     if (scalar.Expression is ColumnReferenceExpression col)
