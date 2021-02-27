@@ -107,6 +107,8 @@
     </Compile>
     <Compile Include="FetchXml2Sql.cs" />
     <Compile Include="FetchXmlElementComparer.cs" />
+    <Compile Include="Visitors\InSubqueryVisitor.cs" />
+    <Compile Include="Visitors\BooleanRewriteVisitor.cs" />
     <Compile Include="Visitors\VariableCollectingVisitor.cs" />
     <Compile Include="Visitors\ColumnCollectingVisitor.cs" />
     <Compile Include="Visitors\GroupValidationVisitor.cs" />

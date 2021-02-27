@@ -517,6 +517,32 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return true;
             }
 
+            if (criteria is BooleanIsNullExpression isNull)
+            {
+                if (!(isNull.Expression is ColumnReferenceExpression nullCol))
+                    return false;
+
+                var columnName = nullCol.GetColumnName();
+
+                if (!schema.ContainsColumn(columnName, out columnName))
+                    return false;
+
+                var parts = columnName.Split('.');
+                var entityName = parts[0];
+                var attrName = parts[1];
+
+                if (allowedPrefix != null && !allowedPrefix.Equals(entityName))
+                    return false;
+
+                condition = new condition
+                {
+                    entityname = entityName == targetEntityName ? null : entityName,
+                    attribute = attrName,
+                    @operator = isNull.IsNot ? @operator.notnull : @operator.@null
+                };
+                return true;
+            }
+
             return false;
         }
 

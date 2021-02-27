@@ -166,6 +166,8 @@ namespace MarkMpn.Sql4Cds.Engine
             // TODO: Handle queries without a FROM clause
             var node = ConvertFromClause(querySpec.FromClause.TableReferences, querySpec, parameterTypes);
 
+            node = ConvertInSubqueries(node, querySpec, parameterTypes, outerSchema, outerReferences);
+
             // Add filters from WHERE
             node = ConvertWhereClause(node, querySpec.WhereClause, outerSchema, outerReferences, parameterTypes, querySpec);
 
@@ -217,6 +219,89 @@ namespace MarkMpn.Sql4Cds.Engine
             var selectNode = ConvertSelectClause(querySpec.SelectElements, node, distinct, querySpec, parameterTypes, outerSchema, outerReferences);
 
             return selectNode;
+        }
+
+        private IExecutionPlanNode ConvertInSubqueries(IExecutionPlanNode source, TSqlFragment query, IDictionary<string, Type> parameterTypes, NodeSchema outerSchema, IDictionary<string,string> outerReferences)
+        {
+            var visitor = new InSubqueryVisitor();
+            query.Accept(visitor);
+
+            if (visitor.InSubqueries.Count == 0)
+                return source;
+
+            var computeScalar = source as ComputeScalarNode;
+            var rewrites = new Dictionary<BooleanExpression, BooleanExpression>();
+            var schema = source.GetSchema(Metadata, parameterTypes);
+
+            foreach (var inSubquery in visitor.InSubqueries)
+            {
+                // Each query of the format "col1 IN (SELECT col2 FROM source)" becomes a left outer join:
+                // LEFT JOIN source ON col1 = col2
+                // and the result is col2 IS NOT NULL
+
+                // Ensure the left hand side is a column
+                if (!(inSubquery.Expression is ColumnReferenceExpression lhsCol))
+                {
+                    if (computeScalar == null)
+                    {
+                        computeScalar = new ComputeScalarNode { Source = source };
+                        source = computeScalar;
+                    }
+
+                    var alias = $"Expr{++_colNameCounter}";
+                    computeScalar.Columns[alias] = inSubquery.Expression;
+                    lhsCol = alias.ToColumnReference();
+                }
+
+                var parameters = parameterTypes == null ? new Dictionary<string, Type>() : new Dictionary<string, Type>(parameterTypes);
+                var references = new Dictionary<string, string>();
+                var innerQuery = ConvertSelectStatement(inSubquery.Subquery.QueryExpression, schema, references, parameters);
+
+                // Create the join
+                BaseJoinNode join;
+
+                if (references.Count == 0)
+                {
+                    // This isn't a correlated subquery, so we can use a foldable join type
+                    join = new HashJoinNode
+                    {
+                        LeftSource = source,
+                        LeftAttribute = lhsCol,
+                        RightSource = innerQuery.Source,
+                        RightAttribute = innerQuery.ColumnSet[0].SourceColumn.ToColumnReference()
+                    };
+                }
+                else
+                {
+                    // We need to use nested loops for correlated subqueries
+                    join = new NestedLoopNode
+                    {
+                        LeftSource = source,
+                        RightSource = innerQuery.Source,
+                        OuterReferences = references,
+                        JoinCondition = new BooleanComparisonExpression
+                        {
+                            FirstExpression = lhsCol,
+                            ComparisonType = BooleanComparisonType.Equals,
+                            SecondExpression = innerQuery.ColumnSet[0].SourceColumn.ToColumnReference()
+                        }
+                    };
+                }
+
+                join.JoinType = QualifiedJoinType.LeftOuter;
+
+                rewrites[inSubquery] = new BooleanIsNullExpression
+                {
+                    IsNot = true,
+                    Expression = innerQuery.ColumnSet[0].SourceColumn.ToColumnReference()
+                };
+
+                source = join;
+            }
+
+            query.Accept(new BooleanRewriteVisitor(rewrites));
+
+            return source;
         }
 
         private IExecutionPlanNode ConvertHavingClause(IExecutionPlanNode source, HavingClause havingClause, IDictionary<string, Type> parameterTypes, NodeSchema outerSchema, IDictionary<string, string> outerReferences, TSqlFragment query)

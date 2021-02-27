@@ -90,6 +90,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return GetType(paren, schema, parameterTypes);
             else if (b is InPredicate inPred)
                 return GetType(inPred, schema, parameterTypes);
+            else if (b is BooleanIsNullExpression isNull)
+                return GetType(isNull, schema, parameterTypes);
             else
                 throw new NotSupportedQueryFragmentException("Unhandled expression type", b);
         }
@@ -104,6 +106,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return GetValue(paren, entity, schema, parameterTypes, parameterValues);
             else if (b is InPredicate inPred)
                 return GetValue(inPred, entity, schema, parameterTypes, parameterValues);
+            else if (b is BooleanIsNullExpression isNull)
+                return GetValue(isNull, entity, schema, parameterTypes, parameterValues);
             else
                 throw new NotSupportedQueryFragmentException("Unhandled expression type", b);
         }
@@ -754,6 +758,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return value;
         }
 
+        private static Type GetType(this BooleanIsNullExpression isNull, NodeSchema schema, IDictionary<string, Type> parameterTypes)
+        {
+            isNull.Expression.GetType(schema, parameterTypes);
+            return typeof(bool);
+        }
+
+        private static bool GetValue(this BooleanIsNullExpression isNull, Entity entity, NodeSchema schema, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        {
+            var value = isNull.Expression.GetValue(entity, schema, parameterTypes, parameterValues);
+            var result = value == null;
+
+            if (isNull.IsNot)
+                result = !result;
+
+            return result;
+        }
+
         public static BooleanExpression RemoveCondition(this BooleanExpression expr, BooleanExpression remove)
         {
             if (expr == remove)
@@ -801,6 +822,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return visitor.Columns
                 .Select(col => col.GetColumnName())
                 .Distinct();
+        }
+
+        public static ColumnReferenceExpression ToColumnReference(this string colName)
+        {
+            var col = new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier() };
+
+            foreach (var part in colName.Split('.'))
+                col.MultiPartIdentifier.Identifiers.Add(new Identifier { Value = part });
+
+            return col;
         }
     }
 }

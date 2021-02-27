@@ -1194,6 +1194,129 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 </fetch>");
         }
 
+        [TestMethod]
+        public void UncorrelatedSubqueryInFilter()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+
+            var query = @"
+                SELECT
+                    accountid,
+                    name
+                FROM
+                    account
+                WHERE
+                    name in (SELECT firstname FROM contact)";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                        <attribute name='name' />
+                        <link-entity name='contact' alias='contact' from='firstname' to='name' link-type='outer'/>
+                        <filter>
+                            <condition entityname='contact' attribute='firstname' operator='not-null' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void UncorrelatedSubqueryInFilterJoinFolded()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+
+            var query = @"
+                SELECT
+                    accountid,
+                    name
+                FROM
+                    account
+                WHERE
+                    name in (SELECT firstname FROM contact) OR
+                    name = 'Data8' + name";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var filter = AssertNode<FilterNode>(select.Source);
+            var fetch = AssertNode<FetchXmlScan>(filter.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                        <attribute name='name' />
+                        <link-entity name='contact' alias='contact' from='firstname' to='name' link-type='outer'>
+                            <attribute name='firstname' />
+                        </link-entity>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void CorrelatedSubqueryInFilter()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+
+            var query = @"
+                SELECT
+                    accountid,
+                    name
+                FROM
+                    account
+                WHERE
+                    name in (SELECT firstname FROM contact WHERE parentcustomerid = accountid)";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var filter = AssertNode<FilterNode>(select.Source);
+            var nestedLoop = AssertNode<NestedLoopNode>(filter.Source);
+            var fetch = AssertNode<FetchXmlScan>(nestedLoop.LeftSource);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                        <attribute name='name' />
+                    </entity>
+                </fetch>");
+            var subFetch = AssertNode<FetchXmlScan>(nestedLoop.RightSource);
+            AssertFetchXml(subFetch, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <filter>
+                            <condition attribute='parentcustomerid' operator='eq' value='@Expr1' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
         private T AssertNode<T>(IExecutionPlanNode node) where T : IExecutionPlanNode
         {
             Assert.IsInstanceOfType(node, typeof(T));
