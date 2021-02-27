@@ -41,6 +41,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (LeftSource is FetchXmlScan leftFetch && RightSource is FetchXmlScan rightFetch)
             {
+                // If one source is distinct and the other isn't, joining the two won't produce the expected results
+                if (leftFetch.FetchXml.distinct ^ rightFetch.FetchXml.distinct)
+                    return this;
+
                 var leftEntity = leftFetch.Entity;
                 var rightEntity = rightFetch.Entity;
 

@@ -1195,7 +1195,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
-        public void UncorrelatedSubqueryInFilter()
+        public void SubqueryInFilterUncorrelated()
         {
             var context = new XrmFakedContext();
             context.InitializeMetadata(Assembly.GetExecutingAssembly());
@@ -1218,61 +1218,27 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, plans.Length);
 
             var select = AssertNode<SelectNode>(plans[0]);
-            var fetch = AssertNode<FetchXmlScan>(select.Source);
-            AssertFetchXml(fetch, @"
-                <fetch>
-                    <entity name='account'>
-                        <attribute name='accountid' />
-                        <attribute name='name' />
-                        <link-entity name='contact' alias='contact' from='firstname' to='name' link-type='outer'/>
-                        <filter>
-                            <condition entityname='contact' attribute='firstname' operator='not-null' />
-                        </filter>
-                    </entity>
-                </fetch>");
-        }
-
-        [TestMethod]
-        public void UncorrelatedSubqueryInFilterJoinFolded()
-        {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, this);
-
-            var query = @"
-                SELECT
-                    accountid,
-                    name
-                FROM
-                    account
-                WHERE
-                    name in (SELECT firstname FROM contact) OR
-                    name = 'Data8' + name";
-
-            var plans = planBuilder.Build(query);
-
-            Assert.AreEqual(1, plans.Length);
-
-            var select = AssertNode<SelectNode>(plans[0]);
             var filter = AssertNode<FilterNode>(select.Source);
-            var fetch = AssertNode<FetchXmlScan>(filter.Source);
+            var hashJoin = AssertNode<HashJoinNode>(filter.Source);
+            var fetch = AssertNode<FetchXmlScan>(hashJoin.LeftSource);
             AssertFetchXml(fetch, @"
                 <fetch>
                     <entity name='account'>
                         <attribute name='accountid' />
                         <attribute name='name' />
-                        <link-entity name='contact' alias='contact' from='firstname' to='name' link-type='outer'>
-                            <attribute name='firstname' />
-                        </link-entity>
+                    </entity>
+                </fetch>");
+            var subFetch = AssertNode<FetchXmlScan>(hashJoin.RightSource);
+            AssertFetchXml(subFetch, @"
+                <fetch distinct='true'>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
                     </entity>
                 </fetch>");
         }
 
         [TestMethod]
-        public void CorrelatedSubqueryInFilter()
+        public void SubqueryInFilterCorrelated()
         {
             var context = new XrmFakedContext();
             context.InitializeMetadata(Assembly.GetExecutingAssembly());
@@ -1307,7 +1273,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 </fetch>");
             var subFetch = AssertNode<FetchXmlScan>(nestedLoop.RightSource);
             AssertFetchXml(subFetch, @"
-                <fetch>
+                <fetch distinct='true'>
                     <entity name='contact'>
                         <attribute name='firstname' />
                         <filter>

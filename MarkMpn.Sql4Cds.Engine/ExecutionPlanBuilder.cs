@@ -257,6 +257,17 @@ namespace MarkMpn.Sql4Cds.Engine
                 var references = new Dictionary<string, string>();
                 var innerQuery = ConvertSelectStatement(inSubquery.Subquery.QueryExpression, schema, references, parameters);
 
+                // We need the inner list to be distinct to avoid creating duplicates during the join
+                var innerSchema = innerQuery.GetSchema(Metadata, parameters);
+                if (innerQuery.ColumnSet[0].SourceColumn != innerSchema.PrimaryKey && !(innerQuery.Source is DistinctNode))
+                {
+                    innerQuery.Source = new DistinctNode
+                    {
+                        Source = innerQuery.Source,
+                        Columns = { innerQuery.ColumnSet[0].SourceColumn }
+                    };
+                }
+
                 // Create the join
                 BaseJoinNode join;
 
