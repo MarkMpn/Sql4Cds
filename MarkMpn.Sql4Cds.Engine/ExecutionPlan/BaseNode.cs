@@ -84,6 +84,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 yield return current;
+                _rowsOut++;
             }
         }
 
