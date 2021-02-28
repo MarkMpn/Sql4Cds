@@ -47,9 +47,6 @@ namespace MarkMpn.Sql4Cds
         {
             AutoScroll = true;
             DoubleBuffered = true;
-            //SetStyle(ControlStyles.DoubleBuffer, true);
-            //SetStyle(ControlStyles.AllPaintingInWmPaint, true);
-            //SetStyle(ControlStyles.UserPaint, true);
         }
 
         public bool Executed { get; set; }
@@ -206,7 +203,7 @@ namespace MarkMpn.Sql4Cds
                     if (line.Start.Y == line.End.Y)
                     {
                         // Draw a straight, horizontal line
-                        e.Graphics.DrawLine(pen, line.Start, line.End);
+                        e.Graphics.DrawLine(pen, line.Start.X, line.Start.Y, line.End.X + line.Width, line.End.Y);
                     }
                     else
                     {
