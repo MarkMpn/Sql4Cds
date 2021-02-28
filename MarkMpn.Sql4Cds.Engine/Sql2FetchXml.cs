@@ -2241,10 +2241,6 @@ namespace MarkMpn.Sql4Cds.Engine
             var outputColumns = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase);
             var rewrites = new Dictionary<ScalarExpression, string>();
 
-            // Set the aggregate flag on the FetchXML query
-            fetch.aggregate = true;
-            fetch.aggregateSpecified = true;
-
             // Process each field that the data should be grouped by
             var uniqueGroupings = new HashSet<string>();
 
@@ -2471,6 +2467,10 @@ namespace MarkMpn.Sql4Cds.Engine
                         break;
                 }
             }
+
+            // Set the aggregate flag on the FetchXML query
+            fetch.aggregate = true;
+            fetch.aggregateSpecified = true;
 
             // Rewrite the rest of the query to refer to the new names for the grouped & aggregated data
             var rewrite = new RewriteVisitor(rewrites);
