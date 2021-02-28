@@ -135,7 +135,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             // Check whether each identifier needs to be quoted so we have minimal quoting to make the query easier to read
             select.Accept(new QuoteIdentifiersVisitor());
-            
+
             if (usesToday)
             {
                 requiresTimeZone = true;
@@ -183,7 +183,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         new VariableReference { Name = "@today" }
                     }
                 };
-                
+
                 var todayParam = new DeclareVariableStatement
                 {
                     Declarations =
@@ -205,7 +205,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 batch.Statements.Add(todayParam);
 
-                if (options.UseUtcDateTimeColumns)
+                if (options.ConvertDateTimeToUtc)
                 {
                     todayParam.Declarations.Add(new DeclareVariableElement
                     {
@@ -644,11 +644,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var useUtc = false;
 
-            if (options.UseUtcDateTimeColumns && attr is DateTimeAttributeMetadata dtAttr && dtAttr.DateTimeBehavior.Value != DateTimeBehavior.TimeZoneIndependent)
-            {
+            if (options.ConvertDateTimeToUtc && attr is DateTimeAttributeMetadata dtAttr && dtAttr.DateTimeBehavior.Value != DateTimeBehavior.TimeZoneIndependent)
                 useUtc = true;
-                field.MultiPartIdentifier.Identifiers[1].Value += "utc";
-            }
 
             // Get the literal value to compare to
             object parameterValue = null;
@@ -661,7 +658,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         Identifiers =
                         {
                             new Identifier{Value = condition.entityname ?? prefix},
-                            new Identifier{Value = condition.attribute + (useUtc ? "utc" : "")}
+                            new Identifier{Value = condition.attribute}
                         }
                     }
                 };
@@ -707,9 +704,19 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     value = new StringLiteral { Value = condition.value };
                     if (DateTime.TryParse(condition.value, out var dt))
+                    {
                         parameterValue = dt;
+
+                        if (useUtc)
+                        {
+                            parameterValue = dt.ToUniversalTime();
+                            ((StringLiteral)value).Value = dt.ToUniversalTime().ToString("s");
+                        }
+                    }
                     else
+                    {
                         parameterValue = condition.value;
+                    }
                 }
             }
             else
@@ -2683,7 +2690,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public bool UseParametersForLiterals { get; set; } = false;
 
-        public bool UseUtcDateTimeColumns { get; set; } = false;
+        public bool ConvertDateTimeToUtc { get; set; }
     }
 
     public enum FetchXmlOperatorConversion

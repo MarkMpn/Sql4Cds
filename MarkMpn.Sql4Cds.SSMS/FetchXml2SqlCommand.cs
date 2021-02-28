@@ -136,7 +136,7 @@ namespace MarkMpn.Sql4Cds.SSMS
             {
                 ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.SqlCalculations,
                 UseParametersForLiterals = true,
-                UseUtcDateTimeColumns = true
+                ConvertDateTimeToUtc = true
             }, out var paramValues);
 
             ServiceCache.ScriptFactory.CreateNewBlankScript(ScriptType.Sql, ServiceCache.ScriptFactory.CurrentlyActiveWndConnectionInfo.UIConnectionInfo, null);
@@ -174,10 +174,15 @@ namespace MarkMpn.Sql4Cds.SSMS
 
                 editPoint.Insert($"DECLARE {param.Key} {paramType} = ");
 
+                var value = param.Value.ToString();
+
+                if (param.Value is DateTime dt)
+                    value = dt.ToString("s");
+
                 if (quoteValues)
-                    editPoint.Insert("'" + param.Value.ToString().Replace("'", "''") + "'\r\n");
-                else
-                    editPoint.Insert(param.Value.ToString() + "\r\n");
+                    value = "'" + value.Replace("'", "''") + "'";
+
+                editPoint.Insert(value + "\r\n");
             }
 
             if (paramValues.Count > 0)
