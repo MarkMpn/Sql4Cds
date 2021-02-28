@@ -86,12 +86,22 @@ namespace MarkMpn.Sql4Cds.Engine
                     plan.Index = index;
                     plan.Length = length;
 
+                    SetParent(plan);
                     plan = optimizer.Optimize(plan);
                     queries.Add(plan);
                 }
             }
 
             return queries.ToArray();
+        }
+
+        private void SetParent(IExecutionPlanNode plan)
+        {
+            foreach (var child in plan.GetSources())
+            {
+                child.Parent = plan;
+                SetParent(child);
+            }
         }
 
         private SelectNode ConvertSelectStatement(QueryExpression query, NodeSchema outerSchema, Dictionary<string,string> outerReferences, IDictionary<string, Type> parameterTypes)
