@@ -34,7 +34,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override IExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             LeftSource = LeftSource.FoldQuery(metadata, options, parameterTypes);
+            LeftSource.Parent = this;
             RightSource = RightSource.FoldQuery(metadata, options, parameterTypes);
+            RightSource.Parent = this;
 
             var leftSchema = LeftSource.GetSchema(metadata, parameterTypes);
             var rightSchema = RightSource.GetSchema(metadata, parameterTypes);

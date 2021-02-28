@@ -42,6 +42,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string,Type> parameterTypes, IDictionary<string,object> parameterValues);
 
         /// <summary>
+        /// Returns or sets the parent of this node
+        /// </summary>
+        IExecutionPlanNode Parent { get; set; }
+
+        /// <summary>
         /// Gets the children of this node
         /// </summary>
         /// <returns></returns>

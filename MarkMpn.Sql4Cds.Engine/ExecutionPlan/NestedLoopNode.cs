@@ -98,9 +98,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var leftSchema = LeftSource.GetSchema(metadata, parameterTypes);
             LeftSource = LeftSource.FoldQuery(metadata, options, parameterTypes);
+            LeftSource.Parent = this;
 
             var innerParameterTypes = GetInnerParameterTypes(leftSchema, parameterTypes);
             RightSource = RightSource.FoldQuery(metadata, options, innerParameterTypes);
+            RightSource.Parent = this;
             return this;
         }
 

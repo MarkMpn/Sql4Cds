@@ -291,7 +291,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.IsTrue(results.MoveNext());
             Assert.AreEqual("Mark", results.Current.GetAttributeValue<string>("name"));
 
-            var ex = Assert.ThrowsException<ApplicationException>(() => results.MoveNext());
+            var ex = Assert.ThrowsException<QueryExecutionException>(() => results.MoveNext());
             Assert.AreEqual(node.ErrorMessage, ex.Message);
         }
 

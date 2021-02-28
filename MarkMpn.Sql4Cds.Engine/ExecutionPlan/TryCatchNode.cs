@@ -42,7 +42,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override IExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             TrySource = TrySource.FoldQuery(metadata, options, parameterTypes);
+            TrySource.Parent = this;
             CatchSource = CatchSource.FoldQuery(metadata, options, parameterTypes);
+            CatchSource.Parent = this;
             return this;
         }
 

@@ -96,6 +96,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected abstract IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues);
 
+        public IExecutionPlanNode Parent { get; set; }
+
         public abstract IEnumerable<IExecutionPlanNode> GetSources();
 
         public abstract NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes);

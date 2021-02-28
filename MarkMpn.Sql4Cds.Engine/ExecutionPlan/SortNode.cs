@@ -159,6 +159,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override IExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             Source = Source.FoldQuery(metadata, options, parameterTypes);
+            Source.Parent = this;
 
             if (Source is FetchXmlScan fetchXml)
             {

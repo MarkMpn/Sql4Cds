@@ -128,6 +128,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                 }
             }.FoldQuery(metadata, options, parameterTypes);
+            LeftSource.Parent = this;
 
             RightSource = new SortNode
             {
@@ -141,6 +142,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                 }
             }.FoldQuery(metadata, options, parameterTypes);
+            RightSource.Parent = this;
 
             return this;
         }

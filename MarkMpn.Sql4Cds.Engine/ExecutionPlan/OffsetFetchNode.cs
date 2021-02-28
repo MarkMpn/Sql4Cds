@@ -46,6 +46,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override IExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             Source = Source.FoldQuery(metadata, options, parameterTypes);
+            Source.Parent = this;
 
             if (!IsConstantValueExpression(Offset, null, out var offsetLiteral) ||
                 !IsConstantValueExpression(Fetch, null, out var fetchLiteral))

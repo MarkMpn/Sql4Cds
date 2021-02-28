@@ -188,6 +188,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override IExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             Source = Source.FoldQuery(metadata, options, parameterTypes);
+            Source.Parent = this;
 
             // Special case for using RetrieveTotalRecordCount instead of FetchXML
             if (options.UseRetrieveTotalRecordCount &&
@@ -207,16 +208,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     Source = count,
                     Columns =
-                {
-                    [Aggregates.Single().Key] = new ColumnReferenceExpression
                     {
-                        MultiPartIdentifier = new MultiPartIdentifier
+                        [Aggregates.Single().Key] = new ColumnReferenceExpression
                         {
-                            Identifiers = { new Identifier { Value = countName } }
+                            MultiPartIdentifier = new MultiPartIdentifier
+                            {
+                                Identifiers = { new Identifier { Value = countName } }
+                            }
                         }
                     }
-                }
                 };
+                count.Parent = rename;
 
                 return rename;
             }
@@ -316,9 +318,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 };
 
                 if (Source == fetchXml)
+                {
                     Source = clonedFetchXml;
+                    clonedFetchXml.Parent = this;
+                }
                 else
+                {
                     computeScalar.Source = clonedFetchXml;
+                    clonedFetchXml.Parent = computeScalar;
+                }
 
                 fetchXml.FetchXml.aggregate = true;
                 fetchXml.FetchXml.aggregateSpecified = true;
