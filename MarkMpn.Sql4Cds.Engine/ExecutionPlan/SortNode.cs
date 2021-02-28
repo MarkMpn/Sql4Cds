@@ -20,6 +20,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public List<ExpressionWithSortOrder> Sorts { get; } = new List<ExpressionWithSortOrder>();
 
         /// <summary>
+        /// The number of <see cref="Sorts"/> that the input is already sorted by
+        /// </summary>
+        public int PresortedCount { get; set; }
+
+        /// <summary>
         /// The data source to sort
         /// </summary>
         public IExecutionPlanNode Source { get; set; }
@@ -28,22 +33,117 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var source = Source.Execute(org, metadata, options, parameterTypes, parameterValues);
             var schema = GetSchema(metadata, parameterTypes);
-            IOrderedEnumerable<Entity> sortedSource;
 
-            if (Sorts[0].SortOrder == SortOrder.Descending)
-                sortedSource = source.OrderByDescending(e => Sorts[0].Expression.GetValue(e, schema, parameterTypes, parameterValues), CaseInsensitiveObjectComparer.Instance);
-            else
-                sortedSource = source.OrderBy(e => Sorts[0].Expression.GetValue(e, schema, parameterTypes, parameterValues), CaseInsensitiveObjectComparer.Instance);
-
-            foreach (var sort in Sorts.Skip(1))
+            if (PresortedCount == 0)
             {
-                if (sort.SortOrder == SortOrder.Descending)
-                    sortedSource = sortedSource.ThenByDescending(e => sort.Expression.GetValue(e, schema,parameterTypes, parameterValues), CaseInsensitiveObjectComparer.Instance);
-                else
-                    sortedSource = sortedSource.ThenBy(e => sort.Expression.GetValue(e, schema, parameterTypes, parameterValues), CaseInsensitiveObjectComparer.Instance);
-            }
+                // We haven't been able to fold any of the sort orders down to the source, so we need to apply
+                // them all again here
+                IOrderedEnumerable<Entity> sortedSource;
 
-            return sortedSource;
+                if (Sorts[0].SortOrder == SortOrder.Descending)
+                    sortedSource = source.OrderByDescending(e => Sorts[0].Expression.GetValue(e, schema, parameterTypes, parameterValues), CaseInsensitiveObjectComparer.Instance);
+                else
+                    sortedSource = source.OrderBy(e => Sorts[0].Expression.GetValue(e, schema, parameterTypes, parameterValues), CaseInsensitiveObjectComparer.Instance);
+
+                foreach (var sort in Sorts.Skip(1))
+                {
+                    if (sort.SortOrder == SortOrder.Descending)
+                        sortedSource = sortedSource.ThenByDescending(e => sort.Expression.GetValue(e, schema, parameterTypes, parameterValues), CaseInsensitiveObjectComparer.Instance);
+                    else
+                        sortedSource = sortedSource.ThenBy(e => sort.Expression.GetValue(e, schema, parameterTypes, parameterValues), CaseInsensitiveObjectComparer.Instance);
+                }
+
+                foreach (var entity in sortedSource)
+                    yield return entity;
+            }
+            else
+            {
+                // We have managed to fold some but not all of the sorts down to the source. Take records
+                // from the source that have equal values of the sorts that have been folded, then sort those
+                // subsets individually on the remaining sorts
+                var subset = new List<Entity>();
+                var presortedValues = new List<object>(PresortedCount);
+                IEqualityComparer<object> comparer = CaseInsensitiveObjectComparer.Instance;
+
+                foreach (var next in source)
+                {
+                    // Get the other values to sort on from this next record
+                    var nextSortedValues = Sorts
+                        .Take(PresortedCount)
+                        .Select(sort => sort.Expression.GetValue(next, schema, parameterTypes, parameterValues))
+                        .ToList();
+
+                    // If we've already got a subset to work on, check if this fits in the same subset
+                    if (subset.Count > 0)
+                    {
+                        for (var i = 0; i < PresortedCount; i++)
+                        {
+                            var prevValue = presortedValues[i];
+                            var nextValue = nextSortedValues[i];
+
+                            if (prevValue == null ^ nextValue == null ||
+                                !comparer.Equals(prevValue, nextValue))
+                            {
+                                // A value is different, so this record doesn't fit in the same subset. Sort the subset
+                                // by the remaining sorts and return the values from it
+                                SortSubset(subset, schema, parameterTypes, parameterValues);
+
+                                foreach (var entity in subset)
+                                    yield return entity;
+
+                                // Now clear out the previous subset so we can move on to the next
+                                subset.Clear();
+                                presortedValues.Clear();
+                                break;
+                            }
+                        }
+                    }
+
+                    if (subset.Count == 0)
+                        presortedValues.AddRange(nextSortedValues);
+
+                    subset.Add(next);
+                }
+
+                // Sort and return the final subset
+                SortSubset(subset, schema, parameterTypes, parameterValues);
+
+                foreach (var entity in subset)
+                    yield return entity;
+            }
+        }
+
+        private void SortSubset(List<Entity> subset, NodeSchema schema, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        {
+            // Simple case if there's no need to do any further sorting
+            if (subset.Count <= 1)
+                return;
+
+            // Precalculate the sort keys for the remaining sorts
+            var sortKeys = subset
+                .ToDictionary(entity => entity, entity => Sorts.Skip(PresortedCount).Select(sort => sort.Expression.GetValue(entity, schema, parameterTypes, parameterValues)).ToList());
+
+            // Sort the list according to these sort keys
+            subset.Sort((x, y) =>
+            {
+                var xValues = sortKeys[x];
+                var yValues = sortKeys[y];
+
+                for (var i = 0; i < Sorts.Count - PresortedCount; i++)
+                {
+                    var comparison = CaseInsensitiveObjectComparer.Instance.Compare(xValues[i], yValues[i]);
+
+                    if (comparison == 0)
+                        continue;
+
+                    if (Sorts[PresortedCount + i].SortOrder == SortOrder.Descending)
+                        return -comparison;
+
+                    return comparison;
+                }
+
+                return 0;
+            });
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
@@ -96,6 +196,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         linkEntity.AddItem(fetchSort);
                         items = linkEntity.Items;
                     }
+
+                    PresortedCount++;
                 }
 
                 return Source;

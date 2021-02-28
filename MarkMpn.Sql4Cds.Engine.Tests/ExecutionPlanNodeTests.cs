@@ -442,5 +442,49 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             CollectionAssert.AreEqual(new[] { 1, 2, 3 }, results);
         }
+
+        [TestMethod]
+        public void SortNodePresortedTest()
+        {
+            var node = new SortNode
+            {
+                Sorts =
+                {
+                    new ExpressionWithSortOrder
+                    {
+                        Expression = new ColumnReferenceExpression{MultiPartIdentifier = new MultiPartIdentifier{Identifiers = {new Identifier{Value = "value1" } } } },
+                        SortOrder = SortOrder.Ascending
+                    },
+                    new ExpressionWithSortOrder
+                    {
+                        Expression = new ColumnReferenceExpression{MultiPartIdentifier = new MultiPartIdentifier{Identifiers = {new Identifier{Value = "value2" } } } },
+                        SortOrder = SortOrder.Descending
+                    }
+                },
+                PresortedCount = 1,
+                Source = new ConstantScanNode
+                {
+                    Values =
+                    {
+                        new Entity { ["value1"] = "hello", ["value2"] = 1, ["expectedorder"] = 1 },
+                        new Entity { ["value1"] = "world", ["value2"] = 2, ["expectedorder"] = 2 },
+                        new Entity { ["value1"] = "Hello", ["value2"] = 3, ["expectedorder"] = 4 },
+                        new Entity { ["value1"] = "Hello", ["value2"] = 4, ["expectedorder"] = 3 }
+                    },
+                    Schema =
+                    {
+                        ["value1"] = typeof(string),
+                        ["value2"] = typeof(int),
+                        ["expectedorder"] = typeof(int)
+                    }
+                }
+            };
+
+            var results = node.Execute(_org, _metadata, new StubOptions(), null, null)
+                .Select(e => e.GetAttributeValue<int>("expectedorder"))
+                .ToArray();
+
+            CollectionAssert.AreEqual(new[] { 1, 2, 3, 4 }, results);
+        }
     }
 }
