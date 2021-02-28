@@ -35,12 +35,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             else
                 sortedSource = source.OrderBy(e => Sorts[0].Expression.GetValue(e, schema, parameterTypes, parameterValues), CaseInsensitiveObjectComparer.Instance);
 
-            for (var i = 1; i < Sorts.Count; i++)
+            foreach (var sort in Sorts.Skip(1))
             {
-                if (Sorts[i].SortOrder == SortOrder.Descending)
-                    sortedSource = sortedSource.ThenByDescending(e => Sorts[i].Expression.GetValue(e, schema,parameterTypes, parameterValues), CaseInsensitiveObjectComparer.Instance);
+                if (sort.SortOrder == SortOrder.Descending)
+                    sortedSource = sortedSource.ThenByDescending(e => sort.Expression.GetValue(e, schema,parameterTypes, parameterValues), CaseInsensitiveObjectComparer.Instance);
                 else
-                    sortedSource = sortedSource.ThenBy(e => Sorts[i].Expression.GetValue(e, schema, parameterTypes, parameterValues), CaseInsensitiveObjectComparer.Instance);
+                    sortedSource = sortedSource.ThenBy(e => sort.Expression.GetValue(e, schema, parameterTypes, parameterValues), CaseInsensitiveObjectComparer.Instance);
             }
 
             return sortedSource;

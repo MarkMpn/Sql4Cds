@@ -400,5 +400,47 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             CollectionAssert.AreEqual(new[] { "hello", "world" }, results);
         }
+
+        [TestMethod]
+        public void SortNodeTest()
+        {
+            var node = new SortNode
+            {
+                Sorts =
+                {
+                    new ExpressionWithSortOrder
+                    {
+                        Expression = new ColumnReferenceExpression{MultiPartIdentifier = new MultiPartIdentifier{Identifiers = {new Identifier{Value = "value1" } } } },
+                        SortOrder = SortOrder.Ascending
+                    },
+                    new ExpressionWithSortOrder
+                    {
+                        Expression = new ColumnReferenceExpression{MultiPartIdentifier = new MultiPartIdentifier{Identifiers = {new Identifier{Value = "value2" } } } },
+                        SortOrder = SortOrder.Descending
+                    }
+                },
+                Source = new ConstantScanNode
+                {
+                    Values =
+                    {
+                        new Entity { ["value1"] = "hello", ["value2"] = 1, ["expectedorder"] = 2 },
+                        new Entity { ["value1"] = "world", ["value2"] = 2, ["expectedorder"] = 3 },
+                        new Entity { ["value1"] = "Hello", ["value2"] = 3, ["expectedorder"] = 1 }
+                    },
+                    Schema =
+                    {
+                        ["value1"] = typeof(string),
+                        ["value2"] = typeof(int),
+                        ["expectedorder"] = typeof(int)
+                    }
+                }
+            };
+
+            var results = node.Execute(_org, _metadata, new StubOptions(), null, null)
+                .Select(e => e.GetAttributeValue<int>("expectedorder"))
+                .ToArray();
+
+            CollectionAssert.AreEqual(new[] { 1, 2, 3 }, results);
+        }
     }
 }
