@@ -887,7 +887,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
-        public void SelectSubquery()
+        public void SelectSubqueryWithMergeJoin()
         {
             var context = new XrmFakedContext();
             context.InitializeMetadata(Assembly.GetExecutingAssembly());
@@ -907,37 +907,25 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var computeScalar = AssertNode<ComputeScalarNode>(select.Source);
             Assert.AreEqual(2, computeScalar.Columns.Count);
             Assert.AreEqual("firstname + ' ' + lastname", computeScalar.Columns[select.ColumnSet[0].SourceColumn].ToSql());
-            Assert.AreEqual("'Account: ' + Expr3", computeScalar.Columns[select.ColumnSet[1].SourceColumn].ToSql());
-            var nestedLoop = AssertNode<NestedLoopNode>(computeScalar.Source);
-            Assert.AreEqual("@Expr2", nestedLoop.OuterReferences["contact.parentcustomerid"]);
-            var fetch = AssertNode<FetchXmlScan>(nestedLoop.LeftSource);
+            Assert.AreEqual("'Account: ' + Expr1.name", computeScalar.Columns[select.ColumnSet[1].SourceColumn].ToSql());
+            var fetch = AssertNode<FetchXmlScan>(computeScalar.Source);
             AssertFetchXml(fetch, @"
                 <fetch>
                     <entity name='contact'>
                         <attribute name='firstname' />
                         <attribute name='lastname' />
-                        <attribute name='parentcustomerid' />
+                        <link-entity name='account' alias='Expr1' from='accountid' to='parentcustomerid' link-type='outer'>
+                            <attribute name='name' />
+                        </link-entity>
                         <filter>
                             <condition attribute='firstname' operator='eq' value='Mark' />
-                        </filter>
-                    </entity>
-                </fetch>");
-            var subAssert = AssertNode<AssertNode>(nestedLoop.RightSource);
-            var subAggregate = AssertNode<HashMatchAggregateNode>(subAssert.Source);
-            var subAggregateFetch = AssertNode<FetchXmlScan>(subAggregate.Source);
-            AssertFetchXml(subAggregateFetch, @"
-                <fetch>
-                    <entity name='account'>
-                        <attribute name='name' />
-                        <filter>
-                            <condition attribute='accountid' operator='eq' value='@Expr2' />
                         </filter>
                     </entity>
                 </fetch>");
         }
 
         [TestMethod]
-        public void SelectSubqueryReversed()
+        public void SelectSubqueryWithNestedLoop()
         {
             var context = new XrmFakedContext();
             context.InitializeMetadata(Assembly.GetExecutingAssembly());
@@ -947,7 +935,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var planBuilder = new ExecutionPlanBuilder(metadata, this);
 
             var query = @"
-                SELECT firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT name FROM account WHERE parentcustomerid = accountid) AS accountname FROM contact WHERE firstname = 'Mark'";
+                SELECT firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT name FROM account WHERE createdon = contact.createdon) AS accountname FROM contact WHERE firstname = 'Mark'";
 
             var plans = planBuilder.Build(query);
 
@@ -959,14 +947,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual("firstname + ' ' + lastname", computeScalar.Columns[select.ColumnSet[0].SourceColumn].ToSql());
             Assert.AreEqual("'Account: ' + Expr3", computeScalar.Columns[select.ColumnSet[1].SourceColumn].ToSql());
             var nestedLoop = AssertNode<NestedLoopNode>(computeScalar.Source);
-            Assert.AreEqual("@Expr2", nestedLoop.OuterReferences["contact.parentcustomerid"]);
+            Assert.AreEqual("@Expr2", nestedLoop.OuterReferences["contact.createdon"]);
             var fetch = AssertNode<FetchXmlScan>(nestedLoop.LeftSource);
             AssertFetchXml(fetch, @"
                 <fetch>
                     <entity name='contact'>
                         <attribute name='firstname' />
                         <attribute name='lastname' />
-                        <attribute name='parentcustomerid' />
+                        <attribute name='createdon' />
                         <filter>
                             <condition attribute='firstname' operator='eq' value='Mark' />
                         </filter>
@@ -980,7 +968,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     <entity name='account'>
                         <attribute name='name' />
                         <filter>
-                            <condition attribute='accountid' operator='eq' value='@Expr2' />
+                            <condition attribute='createdon' operator='eq' value='@Expr2' />
                         </filter>
                     </entity>
                 </fetch>");

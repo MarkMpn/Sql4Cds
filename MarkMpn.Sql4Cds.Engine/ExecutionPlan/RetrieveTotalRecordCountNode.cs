@@ -58,5 +58,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
         {
         }
+
+        public override int EstimateRowsOut(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, ITableSizeCache tableSize)
+        {
+            return 1;
+        }
     }
 }

@@ -86,6 +86,7 @@ namespace MarkMpn.Sql4Cds
         private Image _preMetadataLoadingImage;
         private bool _addingResult;
         private IDictionary<int, TextRange> _messageLocations;
+        private readonly ITableSizeCache _tableSize;
 
         static SqlQueryControl()
         {
@@ -95,7 +96,7 @@ namespace MarkMpn.Sql4Cds
             _sqlIcon = Icon.FromHandle(Properties.Resources.SQLFile_16x.GetHicon());
         }
 
-        public SqlQueryControl(ConnectionDetail con, AttributeMetadataCache metadata, TelemetryClient ai, Action<MessageBusEventArgs> outgoingMessageHandler, string sourcePlugin, Action<string> log, PropertiesWindow properties)
+        public SqlQueryControl(ConnectionDetail con, AttributeMetadataCache metadata, ITableSizeCache tableSize, TelemetryClient ai, Action<MessageBusEventArgs> outgoingMessageHandler, string sourcePlugin, Action<string> log, PropertiesWindow properties)
         {
             InitializeComponent();
             _displayName = $"Query {++_queryCounter}";
@@ -111,6 +112,7 @@ namespace MarkMpn.Sql4Cds
             _log = log;
             _properties = properties;
             _stopwatch = new Stopwatch();
+            _tableSize = tableSize;
             SyncTitle();
             BusyChanged += (s, e) => SyncTitle();
 
@@ -1112,7 +1114,7 @@ namespace MarkMpn.Sql4Cds
                     AutoEllipsis = true,
                     UseMnemonic = false
                 };
-                var planView = new ExecutionPlanView { Dock = DockStyle.Fill, Executed = args.Execute, Exception = ex };
+                var planView = new ExecutionPlanView { Dock = DockStyle.Fill, Executed = args.Execute, Exception = ex, Metadata = Metadata, TableSizeCache = _tableSize };
                 planView.Plan = query;
                 planView.NodeSelected += (s, e) => _properties.SelectObject(planView.Selected);
                 fetchXml.Controls.Add(planView);

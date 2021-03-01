@@ -144,5 +144,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             LeftSource.AddRequiredColumns(metadata, parameterTypes, leftColumns);
             RightSource.AddRequiredColumns(metadata, parameterTypes, rightColumns);
         }
+
+        public override int EstimateRowsOut(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, ITableSizeCache tableSize)
+        {
+            var leftEstimate = LeftSource.EstimateRowsOut(metadata, parameterTypes, tableSize);
+            var rightEstimate = RightSource.EstimateRowsOut(metadata, parameterTypes, tableSize);
+
+            if (JoinType == QualifiedJoinType.Inner)
+                return Math.Min(leftEstimate, rightEstimate);
+            else
+                return Math.Max(leftEstimate, rightEstimate);
+        }
     }
 }

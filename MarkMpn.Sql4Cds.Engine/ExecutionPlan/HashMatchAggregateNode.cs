@@ -440,5 +440,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
              */
             return fault.Detail.ErrorCode == -2147164125;
         }
+
+        public override int EstimateRowsOut(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, ITableSizeCache tableSize)
+        {
+            return Source.EstimateRowsOut(metadata, parameterTypes, tableSize) * 4 / 10;
+        }
     }
 }

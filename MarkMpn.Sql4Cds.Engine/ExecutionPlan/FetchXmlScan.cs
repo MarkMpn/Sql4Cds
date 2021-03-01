@@ -524,6 +524,94 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
+        public override int EstimateRowsOut(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, ITableSizeCache tableSize)
+        {
+            return EstimateRowsOut(Entity.name, Entity.Items, metadata, tableSize);
+        }
+
+        private int EstimateRowsOut(string name, object[] items, IAttributeMetadataCache metadata, ITableSizeCache tableSize)
+        {
+            // Start with the total number of records
+            var rowCount = tableSize[name];
+
+            // If there's any 1:N joins, use the larger number
+            if (items == null)
+                return rowCount;
+
+            var entityMetadata = metadata[name];
+            var joins = items.OfType<FetchLinkEntityType>();
+
+            foreach (var join in joins)
+            {
+                if (join.to != entityMetadata.PrimaryIdAttribute)
+                    continue;
+
+                var childCount = EstimateRowsOut(join.name, join.Items, metadata, tableSize);
+
+                if (join.linktype == "outer")
+                    rowCount = Math.Max(rowCount, childCount);
+                else
+                    rowCount = Math.Min(rowCount, childCount);
+            }
+
+            // Reduce the number according to the filters
+            var filters = items.OfType<filter>();
+            var filterMultiple = 1.0;
+
+            foreach (var filter in filters)
+                filterMultiple *= EstimateFilterRate(entityMetadata, filter);
+
+            return (int) (rowCount * filterMultiple);
+        }
+
+        private double EstimateFilterRate(EntityMetadata metadata, filter filter)
+        {
+            var multiple = 1.0;
+
+            if (filter.Items == null)
+                return multiple;
+
+            foreach (var childFilter in filter.Items.OfType<filter>())
+                multiple *= EstimateFilterRate(metadata, childFilter);
+
+            // Use simple heuristics for common conditions
+            // TODO: Make this more specific based on attribute type, e.g. optionset has a known list of
+            // values that could be treated equally, statecode is most likely to be 0
+            foreach (var condition in filter.Items.OfType<condition>())
+            {
+                switch (condition.@operator)
+                {
+                    case @operator.le:
+                    case @operator.lt:
+                    case @operator.ge:
+                    case @operator.gt:
+                        multiple *= 0.5;
+                        break;
+
+                    case @operator.ne:
+                    case @operator.neq:
+                    case @operator.nebusinessid:
+                    case @operator.neuserid:
+                        multiple *= 0.9;
+                        break;
+
+                    case @operator.eq:
+                    case @operator.eqbusinessid:
+                    case @operator.eqorabove:
+                    case @operator.eqorunder:
+                    case @operator.equserid:
+                        multiple *= 0.1;
+                        break;
+
+                    default:
+                        multiple *= 0.8;
+                        break;
+                }
+            }
+
+            return multiple;
+        }
+
         public override string ToString()
         {
             return "FetchXML Query";

@@ -137,5 +137,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var innerParameterTypes = GetInnerParameterTypes(leftSchema, parameterTypes);
             return RightSource.GetSchema(metadata, innerParameterTypes);
         }
+
+        public override int EstimateRowsOut(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, ITableSizeCache tableSize)
+        {
+            var leftEstimate = LeftSource.EstimateRowsOut(metadata, parameterTypes, tableSize);
+
+            // We tend to use a nested loop with an assert node for scalar subqueries - we'll return one record for each record in the outer loop
+            if (RightSource is AssertNode)
+                return leftEstimate;
+
+            var rightEstimate = RightSource.EstimateRowsOut(metadata, parameterTypes, tableSize);
+
+            if (JoinType == QualifiedJoinType.Inner)
+                return Math.Min(leftEstimate, rightEstimate);
+            else
+                return Math.Max(leftEstimate, rightEstimate);
+        }
     }
 }

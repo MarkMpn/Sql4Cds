@@ -71,5 +71,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             Source.AddRequiredColumns(metadata, parameterTypes, requiredColumns);
         }
+
+        public override int EstimateRowsOut(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, ITableSizeCache tableSize)
+        {
+            var sourceCount = Source.EstimateRowsOut(metadata, parameterTypes, tableSize);
+
+            if (!IsConstantValueExpression(Top, null, out var topLiteral))
+                return sourceCount;
+
+            var top = Int32.Parse(topLiteral.Value);
+
+            return Math.Max(0, Math.Min(top, sourceCount));
+        }
     }
 }

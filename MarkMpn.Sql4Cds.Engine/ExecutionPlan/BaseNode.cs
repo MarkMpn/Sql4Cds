@@ -88,6 +88,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
+        public abstract int EstimateRowsOut(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, ITableSizeCache tableSize);
+
         public int ExecutionCount => _executionCount;
 
         public TimeSpan Duration => _stopwatch.Elapsed;

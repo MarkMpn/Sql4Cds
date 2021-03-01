@@ -77,6 +77,7 @@
     <Compile Include="ExecutionPlan\HashMatchAggregateNode.cs" />
     <Compile Include="ExecutionPlan\IExecutionPlanNode.cs" />
     <Compile Include="ExecutionPlan\FoldableJoinNode.cs" />
+    <Compile Include="ExecutionPlan\ITableSizeCache.cs" />
     <Compile Include="ExecutionPlan\MergeJoinNode.cs" />
     <Compile Include="ExecutionPlan\NestedLoopNode.cs" />
     <Compile Include="ExecutionPlan\NodeSchema.cs" />
@@ -96,6 +97,7 @@
     <Compile Include="MetaMetadata.cs" />
     <Compile Include="PartialSuccessException.cs" />
     <Compile Include="QueryExtensions\NoOp.cs" />
+    <Compile Include="TableSizeCache.cs" />
     <Compile Include="TSqlEndpoint.cs" />
     <Compile Include="TSqlFragmentExtensions.cs" />
     <Compile Include="Visitors\AddDefaultColumnAliasesVisitor.cs" />

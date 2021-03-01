@@ -53,5 +53,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             TrySource.AddRequiredColumns(metadata, parameterTypes, requiredColumns);
             CatchSource.AddRequiredColumns(metadata, parameterTypes, requiredColumns);
         }
+
+        public override int EstimateRowsOut(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, ITableSizeCache tableSize)
+        {
+            return TrySource.EstimateRowsOut(metadata, parameterTypes, tableSize);
+        }
     }
 }

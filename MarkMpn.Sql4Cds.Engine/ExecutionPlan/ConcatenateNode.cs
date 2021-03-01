@@ -79,6 +79,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Sources[i].AddRequiredColumns(metadata, parameterTypes, sourceRequiredColumns);
             }
         }
+
+        public override int EstimateRowsOut(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, ITableSizeCache tableSize)
+        {
+            return Sources.Sum(s => s.EstimateRowsOut(metadata, parameterTypes, tableSize));
+        }
     }
 
     public class ConcatenateColumn

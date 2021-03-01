@@ -67,6 +67,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns);
 
         /// <summary>
+        /// Estimates the number of rows that will be returned by this node
+        /// </summary>
+        int EstimateRowsOut(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, ITableSizeCache tableSize);
+
+        /// <summary>
         /// Returns the number of times this node has been executed
         /// </summary>
         int ExecutionCount { get; }

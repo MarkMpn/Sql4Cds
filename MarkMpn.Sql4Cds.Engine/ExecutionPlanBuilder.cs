@@ -295,6 +295,10 @@ namespace MarkMpn.Sql4Cds.Engine
                 else
                 {
                     // We need to use nested loops for correlated subqueries
+                    // TODO: We could use a hash join where there is a simple correlation, but followed by a distinct node to eliminate duplicates
+                    // We could also move the correlation criteria out of the subquery and into the join condition. We would then make one request to
+                    // get all the related records and spool that in memory to get the relevant results in the nested loop. Need to understand how 
+                    // many rows are likely from the outer query to work out if this is going to be more efficient or not.
                     join = new NestedLoopNode
                     {
                         LeftSource = source,
@@ -842,6 +846,14 @@ namespace MarkMpn.Sql4Cds.Engine
 
         private ColumnReferenceExpression ConvertScalarSubqueries(TSqlFragment expression, ref IExecutionPlanNode node, ComputeScalarNode computeScalar, IDictionary<string, Type> parameterTypes, TSqlFragment query)
         {
+            /*
+             * Possible subquery execution plans:
+             * 1. Nested loop. Simple but inefficient as ends up making at least 1 FetchXML request per outer row
+             * 2. Spooled nested loop. Useful when there is no correlation and so the same results can be used for each outer record
+             * 3. Spooled nested loop with correlation criteria pulled into loop. Useful when there are a large number of outer records or a small number of inner records
+             * 4. Merge join. Useful when the correlation criteria is based on the equality of the primary key of either table
+             * 5. Hash join with distinct. Useful when there is a simple correlation not involving the primary key
+             */
             // If scalar.Expression contains a subquery, create nested loop to evaluate it in the context
             // of the current record
             var subqueryVisitor = new ScalarSubqueryVisitor();

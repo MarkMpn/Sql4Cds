@@ -8,6 +8,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using MarkMpn.Sql4Cds.Engine;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 
 namespace MarkMpn.Sql4Cds
@@ -19,17 +20,7 @@ namespace MarkMpn.Sql4Cds
             public IExecutionPlanNode Source { get; set; }
             public Point Start { get; set; }
             public Point End { get; set; }
-
-            public int Width
-            {
-                get
-                {
-                    if (Source.RowsOut == 0)
-                        return 1;
-
-                    return (int) Math.Ceiling(Math.Log10(Source.RowsOut));
-                }
-            }
+            public int Width { get; set; }
 
             public Rectangle MBR => new Rectangle(End.X, End.Y - Width / 2, Start.X - End.X + 1, Start.Y - End.Y + Width / 2 + 1);
         }
@@ -50,6 +41,10 @@ namespace MarkMpn.Sql4Cds
         }
 
         public bool Executed { get; set; }
+
+        public IAttributeMetadataCache Metadata { get; set; }
+
+        public ITableSizeCache TableSizeCache { get; set; }
 
         public IExecutionPlanNode Plan
         {
@@ -113,7 +108,9 @@ namespace MarkMpn.Sql4Cds
 
                 _nodeLocations[child] = fullRect;
 
-                _lines.Add(new Line { Source = child, Start = new Point(iconRect.X, iconRect.Y + iconRect.Height / 2), End = new Point(parentIconRect.Right, parentIconRect.Top + (i + 1) * lineYSpacing) });
+                var rows = Executed ? child.RowsOut : child.EstimateRowsOut(Metadata, null, TableSizeCache);
+                var width = rows == 0 ? 1 : (int)Math.Log10(rows);
+                _lines.Add(new Line { Source = child, Start = new Point(iconRect.X, iconRect.Y + iconRect.Height / 2), End = new Point(parentIconRect.Right, parentIconRect.Top + (i + 1) * lineYSpacing), Width = width });
 
                 LayoutChildren(child);
                 i++;

@@ -17,6 +17,7 @@ namespace MarkMpn.Sql4Cds
     public partial class PluginControl : MultipleConnectionsPluginControlBase, IMessageBusHost, IGitHubPlugin, IHelpPlugin, ISettingsPlugin
     {
         private readonly IDictionary<ConnectionDetail, AttributeMetadataCache> _metadata;
+        private readonly IDictionary<ConnectionDetail, TableSizeCache> _tableSize;
         private readonly TelemetryClient _ai;
         private readonly ObjectExplorer _objectExplorer;
         private readonly PropertiesWindow _properties;
@@ -26,6 +27,7 @@ namespace MarkMpn.Sql4Cds
             InitializeComponent();
             dockPanel.Theme = new VS2015LightTheme();
             _metadata = new Dictionary<ConnectionDetail, AttributeMetadataCache>();
+            _tableSize = new Dictionary<ConnectionDetail, TableSizeCache>();
             _objectExplorer = new ObjectExplorer(_metadata, WorkAsync, con => CreateQuery(con, "", null));
             _objectExplorer.Show(dockPanel, DockState.DockLeft);
             _objectExplorer.CloseButtonVisible = false;
@@ -68,6 +70,7 @@ namespace MarkMpn.Sql4Cds
         private void AddConnection(ConnectionDetail con)
         {
             _metadata[con] = new AttributeMetadataCache(con.ServiceClient);
+            _tableSize[con] = new TableSizeCache(con.ServiceClient, _metadata[con]);
             _objectExplorer.AddConnection(con);
 
             // Start loading the entity list in the background
@@ -118,7 +121,7 @@ namespace MarkMpn.Sql4Cds
 
         private SqlQueryControl CreateQuery(ConnectionDetail con, string sql, string sourcePlugin)
         { 
-            var query = new SqlQueryControl(con, _metadata[con], _ai, SendOutgoingMessage, sourcePlugin, msg => LogError(msg), _properties);
+            var query = new SqlQueryControl(con, _metadata[con], _tableSize[con], _ai, SendOutgoingMessage, sourcePlugin, msg => LogError(msg), _properties);
             query.InsertText(sql);
             query.CancellableChanged += SyncStopButton;
             query.BusyChanged += SyncExecuteButton;

@@ -123,5 +123,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             return bin.FirstExpression ?? bin.SecondExpression;
         }
+
+        public override int EstimateRowsOut(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, ITableSizeCache tableSize)
+        {
+            return Source.EstimateRowsOut(metadata, parameterTypes, tableSize) * 8 / 10;
+        }
     }
 }

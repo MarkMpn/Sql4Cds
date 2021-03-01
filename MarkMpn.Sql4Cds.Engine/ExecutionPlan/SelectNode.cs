@@ -160,6 +160,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
+        public override int EstimateRowsOut(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, ITableSizeCache tableSize)
+        {
+            return Source.EstimateRowsOut(metadata, parameterTypes, tableSize);
+        }
+
         public override string ToString()
         {
             return "SELECT";
