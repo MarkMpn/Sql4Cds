@@ -563,7 +563,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var filter in filters)
             {
-                filterMultiple *= EstimateFilterRate(entityMetadata, filter, out var singleRow);
+                filterMultiple *= EstimateFilterRate(entityMetadata, filter, tableSize, out var singleRow);
 
                 if (singleRow)
                     return 1;
@@ -572,7 +572,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return (int) (rowCount * filterMultiple);
         }
 
-        private double EstimateFilterRate(EntityMetadata metadata, filter filter, out bool singleRow)
+        private double EstimateFilterRate(EntityMetadata metadata, filter filter, ITableSizeCache tableSize, out bool singleRow)
         {
             singleRow = false;
             var multiple = 1.0;
@@ -585,7 +585,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var childFilter in filter.Items.OfType<filter>())
             {
-                var childFilterMultiple = EstimateFilterRate(metadata, childFilter, out var childSingleRow);
+                var childFilterMultiple = EstimateFilterRate(metadata, childFilter, tableSize, out var childSingleRow);
                 
                 if (filter.type == filterType.and)
                 {
@@ -620,21 +620,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         conditionMultiple = 0.5;
                         break;
 
-                    case @operator.ne:
-                    case @operator.neq:
-                    case @operator.nebusinessid:
-                    case @operator.neuserid:
-                        conditionMultiple = 0.9;
+                    case @operator.like:
+                        conditionMultiple = 0.1;
                         break;
 
+                    case @operator.ne:
+                    case @operator.neq:
                     case @operator.eq:
                         if (condition.attribute == metadata.PrimaryIdAttribute)
                         {
-                            singleRow = true;
-                            return 0;
+                            singleRow = condition.@operator == @operator.eq;
+                            conditionMultiple = 0;
                         }
-
-                        if (condition.attribute == "statecode")
+                        else if (condition.attribute == "statecode")
                         {
                             conditionMultiple = condition.value == "0" ? 0.8 : 0.2;
                         }
@@ -647,12 +645,29 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             else
                                 conditionMultiple = 0.01;
                         }
+
+                        if (condition.@operator == @operator.ne || condition.@operator == @operator.neq)
+                            conditionMultiple = 1 - conditionMultiple;
                         break;
 
                     case @operator.eqbusinessid:
+                        conditionMultiple = 1.0 / tableSize["businessunit"];
+                        break;
+
+                    case @operator.nebusinessid:
+                        conditionMultiple = 1 - 1.0 / tableSize["businessunit"];
+                        break;
+
+                    case @operator.equserid:
+                        conditionMultiple = 1.0 / tableSize["systemuser"];
+                        break;
+
+                    case @operator.neuserid:
+                        conditionMultiple = 1 - 1.0 / tableSize["systemuser"];
+                        break;
+
                     case @operator.eqorabove:
                     case @operator.eqorunder:
-                    case @operator.equserid:
                         conditionMultiple = 0.1;
                         break;
 
