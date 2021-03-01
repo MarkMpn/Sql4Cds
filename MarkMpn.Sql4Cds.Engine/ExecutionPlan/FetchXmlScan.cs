@@ -531,6 +531,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private int EstimateRowsOut(string name, object[] items, IAttributeMetadataCache metadata, ITableSizeCache tableSize)
         {
+            if (!String.IsNullOrEmpty(FetchXml.top))
+                return Int32.Parse(FetchXml.top);
+
             // Start with the total number of records
             var rowCount = tableSize[name];
 
@@ -559,55 +562,113 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var filterMultiple = 1.0;
 
             foreach (var filter in filters)
-                filterMultiple *= EstimateFilterRate(entityMetadata, filter);
+            {
+                filterMultiple *= EstimateFilterRate(entityMetadata, filter, out var singleRow);
+
+                if (singleRow)
+                    return 1;
+            }
 
             return (int) (rowCount * filterMultiple);
         }
 
-        private double EstimateFilterRate(EntityMetadata metadata, filter filter)
+        private double EstimateFilterRate(EntityMetadata metadata, filter filter, out bool singleRow)
         {
+            singleRow = false;
             var multiple = 1.0;
 
             if (filter.Items == null)
                 return multiple;
 
+            if (filter.type == filterType.or)
+                multiple = 0;
+
             foreach (var childFilter in filter.Items.OfType<filter>())
-                multiple *= EstimateFilterRate(metadata, childFilter);
+            {
+                var childFilterMultiple = EstimateFilterRate(metadata, childFilter, out var childSingleRow);
+                
+                if (filter.type == filterType.and)
+                {
+                    if (childSingleRow)
+                    {
+                        singleRow = true;
+                        return 0;
+                    }
+
+                    multiple *= childFilterMultiple;
+                }
+                else
+                {
+                    multiple += childFilterMultiple;
+                }
+            }
 
             // Use simple heuristics for common conditions
-            // TODO: Make this more specific based on attribute type, e.g. optionset has a known list of
-            // values that could be treated equally, statecode is most likely to be 0
             foreach (var condition in filter.Items.OfType<condition>())
             {
+                if (!String.IsNullOrEmpty(condition.entityname))
+                    continue;
+
+                double conditionMultiple;
+
                 switch (condition.@operator)
                 {
                     case @operator.le:
                     case @operator.lt:
                     case @operator.ge:
                     case @operator.gt:
-                        multiple *= 0.5;
+                        conditionMultiple = 0.5;
                         break;
 
                     case @operator.ne:
                     case @operator.neq:
                     case @operator.nebusinessid:
                     case @operator.neuserid:
-                        multiple *= 0.9;
+                        conditionMultiple = 0.9;
                         break;
 
                     case @operator.eq:
+                        if (condition.attribute == metadata.PrimaryIdAttribute)
+                        {
+                            singleRow = true;
+                            return 0;
+                        }
+
+                        if (condition.attribute == "statecode")
+                        {
+                            conditionMultiple = condition.value == "0" ? 0.8 : 0.2;
+                        }
+                        else
+                        {
+                            var attribute = metadata.Attributes.Single(a => a.LogicalName == condition.attribute);
+
+                            if (attribute is EnumAttributeMetadata enumAttr)
+                                conditionMultiple = 1.0 / enumAttr.OptionSet.Options.Count;
+                            else
+                                conditionMultiple = 0.01;
+                        }
+                        break;
+
                     case @operator.eqbusinessid:
                     case @operator.eqorabove:
                     case @operator.eqorunder:
                     case @operator.equserid:
-                        multiple *= 0.1;
+                        conditionMultiple = 0.1;
                         break;
 
                     default:
-                        multiple *= 0.8;
+                        conditionMultiple = 0.8;
                         break;
                 }
+
+                if (filter.type == filterType.and)
+                    multiple *= conditionMultiple;
+                else
+                    multiple += conditionMultiple;
             }
+
+            if (multiple > 1)
+                multiple = 1;
 
             return multiple;
         }
