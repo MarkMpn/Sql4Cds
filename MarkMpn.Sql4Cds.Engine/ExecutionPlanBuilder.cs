@@ -871,43 +871,58 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (subqueryPlan.ColumnSet.Count != 1)
                     throw new NotSupportedQueryFragmentException("Scalar subquery must return exactly one column", subquery);
 
-                // Insert an aggregate and assertion nodes to check for one row
-                var subqueryCol = $"Expr{++_colNameCounter}";
-                var rowCountCol = $"Expr{++_colNameCounter}";
-                var aggregate = new HashMatchAggregateNode
+                var loopRightSource = subqueryPlan.Source;
+                var subqueryCol = subqueryPlan.ColumnSet[0].SourceColumn;
+
+                // Unless the subquery has got an explicit TOP 1 clause, insert an aggregate and assertion nodes
+                // to check for one row
+                if (!(subqueryPlan.Source is TopNode top) || !(top.Top is IntegerLiteral topValue) || topValue.Value != "1")
                 {
-                    Source = subqueryPlan.Source,
-                    Aggregates =
+                    subqueryCol = $"Expr{++_colNameCounter}";
+                    var rowCountCol = $"Expr{++_colNameCounter}";
+                    var aggregate = new HashMatchAggregateNode
                     {
-                        [subqueryCol] = new Aggregate
+                        Source = loopRightSource,
+                        Aggregates =
                         {
-                            AggregateType = AggregateType.First,
-                            Expression = new ColumnReferenceExpression
+                            [subqueryCol] = new Aggregate
                             {
-                                MultiPartIdentifier = new MultiPartIdentifier
+                                AggregateType = AggregateType.First,
+                                Expression = new ColumnReferenceExpression
                                 {
-                                    Identifiers = { new Identifier { Value = subqueryPlan.ColumnSet[0].SourceColumn } }
+                                    MultiPartIdentifier = new MultiPartIdentifier
+                                    {
+                                        Identifiers = { new Identifier { Value = subqueryPlan.ColumnSet[0].SourceColumn } }
+                                    }
                                 }
+                            },
+                            [rowCountCol] = new Aggregate
+                            {
+                                AggregateType = AggregateType.CountStar
                             }
-                        },
-                        [rowCountCol] = new Aggregate
-                        {
-                            AggregateType = AggregateType.CountStar
                         }
-                    }
-                };
-                var assert = new AssertNode
+                    };
+                    var assert = new AssertNode
+                    {
+                        Source = aggregate,
+                        Assertion = e => e.GetAttributeValue<int>(rowCountCol) <= 1,
+                        ErrorMessage = "Subquery produced more than 1 row"
+                    };
+                    loopRightSource = assert;
+                }
+
+                // If the subquery is uncorrelated, add a table spool to cache the results
+                if (outerReferences.Count == 0)
                 {
-                    Source = aggregate,
-                    Assertion = e => e.GetAttributeValue<int>(rowCountCol) <= 1,
-                    ErrorMessage = "Subquery produced more than 1 row"
-                };
+                    var spool = new TableSpoolNode { Source = loopRightSource };
+                    loopRightSource = spool;
+                }
 
                 // Add a nested loop to call the subquery
                 var loop = new NestedLoopNode
                 {
                     LeftSource = node,
-                    RightSource = assert,
+                    RightSource = loopRightSource,
                     JoinType = QualifiedJoinType.LeftOuter,
                     OuterReferences = outerReferences
                 };

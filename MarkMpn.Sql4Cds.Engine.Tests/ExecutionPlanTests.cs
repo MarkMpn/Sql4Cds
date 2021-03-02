@@ -1018,6 +1018,52 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void SelectSubqueryWithSpooledNestedLoop()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+
+            var query = @"
+                SELECT firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT TOP 1 name FROM account) AS accountname FROM contact WHERE firstname = 'Mark'";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var computeScalar = AssertNode<ComputeScalarNode>(select.Source);
+            Assert.AreEqual(2, computeScalar.Columns.Count);
+            Assert.AreEqual("firstname + ' ' + lastname", computeScalar.Columns[select.ColumnSet[0].SourceColumn].ToSql());
+            Assert.AreEqual("'Account: ' + Expr3", computeScalar.Columns[select.ColumnSet[1].SourceColumn].ToSql());
+            var nestedLoop = AssertNode<NestedLoopNode>(computeScalar.Source);
+            Assert.AreEqual("@Expr2", nestedLoop.OuterReferences["contact.createdon"]);
+            var fetch = AssertNode<FetchXmlScan>(nestedLoop.LeftSource);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <attribute name='lastname' />
+                        <attribute name='createdon' />
+                        <filter>
+                            <condition attribute='firstname' operator='eq' value='Mark' />
+                        </filter>
+                    </entity>
+                </fetch>");
+            var subSpool = AssertNode<TableSpoolNode>(nestedLoop.RightSource);
+            var subFetch = AssertNode<FetchXmlScan>(subSpool.Source);
+            AssertFetchXml(subFetch, @"
+                <fetch top='1'>
+                    <entity name='account'>
+                        <attribute name='name' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
         public void SelectSubqueryUsingOuterReferenceInSelectClause()
         {
             var context = new XrmFakedContext();

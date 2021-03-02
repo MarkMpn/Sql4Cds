@@ -11,7 +11,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Provides a rewindable cache of a data source
     /// </summary>
-    class TableSpoolNode : BaseNode
+    public class TableSpoolNode : BaseNode
     {
         class CachedList<T> : IEnumerable<T>
         {
@@ -72,7 +72,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             public IEnumerator<T> GetEnumerator()
             {
-                throw new NotImplementedException();
+                return new CachedEnumerator(this);
             }
 
             IEnumerator IEnumerable.GetEnumerator()
@@ -81,6 +81,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
+        private CachedList<Entity> _cache;
+
         /// <summary>
         /// The data source to cache
         /// </summary>
@@ -88,7 +90,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            return new CachedList<Entity>(Source.Execute(org, metadata, options, parameterTypes, parameterValues));
+            if (_cache == null)
+                _cache = new CachedList<Entity>(Source.Execute(org, metadata, options, parameterTypes, parameterValues));
+
+            return _cache;
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()

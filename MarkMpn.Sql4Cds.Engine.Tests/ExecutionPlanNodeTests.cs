@@ -486,5 +486,36 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             CollectionAssert.AreEqual(new[] { 1, 2, 3, 4 }, results);
         }
+
+        [TestMethod]
+        public void TableSpoolTest()
+        {
+            var source = new ConstantScanNode
+            {
+                Values =
+                {
+                    new Entity{["value1"] = 1},
+                    new Entity{["value1"] = 2}
+                },
+                Schema =
+                {
+                    ["value1"] = typeof(int)
+                }
+            };
+
+            var spool = new TableSpoolNode { Source = source };
+
+            var results1 = spool.Execute(_org, _metadata, new StubOptions(), null, null)
+                .Select(e => e.GetAttributeValue<int>("value1"))
+                .ToArray();
+
+            var results2 = spool.Execute(_org, _metadata, new StubOptions(), null, null)
+                .Select(e => e.GetAttributeValue<int>("value1"))
+                .ToArray();
+
+            CollectionAssert.AreEqual(new[] { 1, 2 }, results1);
+            CollectionAssert.AreEqual(new[] { 1, 2 }, results2);
+            Assert.AreEqual(1, source.ExecutionCount);
+        }
     }
 }
