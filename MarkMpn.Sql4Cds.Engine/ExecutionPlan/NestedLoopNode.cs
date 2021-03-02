@@ -69,6 +69,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         yield return merged;
 
                     hasRight = true;
+
+                    if (SemiJoin)
+                        break;
                 }
 
                 if (!hasRight && JoinType == QualifiedJoinType.LeftOuter)
@@ -125,7 +128,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 .ToList();
             var innerParameterTypes = GetInnerParameterTypes(leftSchema, parameterTypes);
             var rightSchema = RightSource.GetSchema(metadata, innerParameterTypes);
-            var rightColumns = requiredColumns.Where(col => rightSchema.ContainsColumn(col, out _)).ToList();
+            var rightColumns = requiredColumns
+                .Where(col => rightSchema.ContainsColumn(col, out _))
+                .Concat(DefinedValues.Values)
+                .Distinct()
+                .ToList();
 
             LeftSource.AddRequiredColumns(metadata, parameterTypes, leftColumns);
             RightSource.AddRequiredColumns(metadata, parameterTypes, rightColumns);

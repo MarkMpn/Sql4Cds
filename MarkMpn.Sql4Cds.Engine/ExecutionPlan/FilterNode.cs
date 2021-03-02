@@ -53,14 +53,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (Source is FetchXmlScan fetchXml && !fetchXml.FetchXml.aggregate)
             {
-                if (TranslateCriteria(metadata, options, Filter, schema, null, fetchXml.Entity.name, fetchXml.Alias, out var fetchFilter))
+                if (TranslateCriteria(metadata, options, Filter, schema, null, fetchXml.Entity.name, fetchXml.Alias, fetchXml.Entity.Items, out var fetchFilter))
                 {
                     fetchXml.Entity.AddItem(fetchFilter);
                     return fetchXml;
                 }
 
                 // If the criteria are ANDed, see if any of the individual conditions can be translated to FetchXML
-                Filter = ExtractFetchXMLFilters(metadata, options, Filter, schema, null, fetchXml.Entity.name, fetchXml.Alias, out fetchFilter);
+                Filter = ExtractFetchXMLFilters(metadata, options, Filter, schema, null, fetchXml.Entity.name, fetchXml.Alias, fetchXml.Entity.Items, out fetchFilter);
 
                 if (fetchFilter != null)
                     fetchXml.Entity.AddItem(fetchFilter);
@@ -80,7 +80,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(metadata, parameterTypes, requiredColumns);
         }
 
-        private BooleanExpression ExtractFetchXMLFilters(IAttributeMetadataCache metadata, IQueryExecutionOptions options, BooleanExpression criteria, NodeSchema schema, string allowedPrefix, string targetEntityName, string targetEntityAlias, out filter filter)
+        private BooleanExpression ExtractFetchXMLFilters(IAttributeMetadataCache metadata, IQueryExecutionOptions options, BooleanExpression criteria, NodeSchema schema, string allowedPrefix, string targetEntityName, string targetEntityAlias, object[] items, out filter filter)
         {
             filter = null;
 
@@ -91,16 +91,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return criteria;
 
             filter lhsFilter;
-            if (TranslateCriteria(metadata, options, bin.FirstExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, out lhsFilter))
+            if (TranslateCriteria(metadata, options, bin.FirstExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out lhsFilter))
                 bin.FirstExpression = null;
             else
-                bin.FirstExpression = ExtractFetchXMLFilters(metadata, options, bin.FirstExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, out lhsFilter);
+                bin.FirstExpression = ExtractFetchXMLFilters(metadata, options, bin.FirstExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out lhsFilter);
 
             filter rhsFilter;
-            if (TranslateCriteria(metadata, options, bin.SecondExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, out rhsFilter))
+            if (TranslateCriteria(metadata, options, bin.SecondExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out rhsFilter))
                 bin.SecondExpression = null;
             else
-                bin.SecondExpression = ExtractFetchXMLFilters(metadata, options, bin.SecondExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, out rhsFilter);
+                bin.SecondExpression = ExtractFetchXMLFilters(metadata, options, bin.SecondExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out rhsFilter);
 
             if (lhsFilter != null && rhsFilter != null)
             {

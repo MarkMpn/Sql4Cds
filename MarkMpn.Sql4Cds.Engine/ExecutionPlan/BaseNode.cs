@@ -146,7 +146,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected FetchAttributeType AddAttribute(FetchXmlScan fetchXml, string colName, Func<FetchAttributeType, bool> predicate, IAttributeMetadataCache metadata, out bool added)
         {
-            var entity = fetchXml.FetchXml.Items.OfType<FetchEntityType>().Single();
+            var entity = fetchXml.Entity;
             var parts = colName.Split('.');
 
             if (parts.Length == 1)
@@ -226,9 +226,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return null;
         }
 
-        protected bool TranslateCriteria(IAttributeMetadataCache metadata, IQueryExecutionOptions options, BooleanExpression criteria, NodeSchema schema, string allowedPrefix, string targetEntityName, string targetEntityAlias, out filter filter)
+        protected bool TranslateCriteria(IAttributeMetadataCache metadata, IQueryExecutionOptions options, BooleanExpression criteria, NodeSchema schema, string allowedPrefix, string targetEntityName, string targetEntityAlias, object[] items, out filter filter)
         {
-            if (!TranslateCriteria(metadata, options, criteria, schema, allowedPrefix, targetEntityName, targetEntityAlias, out var condition, out filter))
+            if (!TranslateCriteria(metadata, options, criteria, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out var condition, out filter))
                 return false;
 
             if (condition != null)
@@ -237,16 +237,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return true;
         }
 
-        protected bool TranslateCriteria(IAttributeMetadataCache metadata, IQueryExecutionOptions options, BooleanExpression criteria, NodeSchema schema, string allowedPrefix, string targetEntityName, string targetEntityAlias, out condition condition, out filter filter)
+        protected bool TranslateCriteria(IAttributeMetadataCache metadata, IQueryExecutionOptions options, BooleanExpression criteria, NodeSchema schema, string allowedPrefix, string targetEntityName, string targetEntityAlias, object[] items, out condition condition, out filter filter)
         {
             condition = null;
             filter = null;
 
             if (criteria is BooleanBinaryExpression binary)
             {
-                if (!TranslateCriteria(metadata, options, binary.FirstExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, out var lhsCondition, out var lhsFilter))
+                if (!TranslateCriteria(metadata, options, binary.FirstExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out var lhsCondition, out var lhsFilter))
                     return false;
-                if (!TranslateCriteria(metadata, options, binary.SecondExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, out var rhsCondition, out var rhsFilter))
+                if (!TranslateCriteria(metadata, options, binary.SecondExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out var rhsCondition, out var rhsFilter))
                     return false;
 
                 filter = new filter
@@ -432,11 +432,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return false;
 
                 var parts = columnName.Split('.');
-                var entityName = parts[0];
-                var attrName = parts[1];
 
-                if (allowedPrefix != null && !allowedPrefix.Equals(entityName))
+                if (parts.Length != 2)
                     return false;
+
+                var entityAlias = parts[0];
+                var attrName = parts[1];
+                
+                if (allowedPrefix != null && !allowedPrefix.Equals(entityAlias))
+                    return false;
+
+                var entityName = AliasToEntityName(targetEntityAlias, targetEntityName, items, entityAlias);
 
                 var meta = metadata[entityName];
 
@@ -518,7 +524,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     condition = new condition
                     {
-                        entityname = entityName == targetEntityName ? null : entityName,
+                        entityname = entityAlias == targetEntityAlias ? null : entityAlias,
                         attribute = attrName,
                         @operator = op,
                         value = value
@@ -533,10 +539,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         return false;
 
                     var parts2 = columnName2.Split('.');
-                    var entityName2 = parts2[0];
+                    var entityAlias2 = parts2[0];
                     var attrName2 = parts2[1];
 
-                    if (!entityName.Equals(entityName2))
+                    if (!entityAlias.Equals(entityAlias2, StringComparison.OrdinalIgnoreCase))
                         return false;
 
                     var attr1 = meta.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase));
@@ -620,6 +626,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return false;
+        }
+
+        private string AliasToEntityName(string targetEntityAlias, string targetEntityName, object[] items, string alias)
+        {
+            if (targetEntityAlias.Equals(alias, StringComparison.OrdinalIgnoreCase))
+                return targetEntityName;
+
+            if (items == null)
+                return null;
+
+            foreach (var link in items.OfType<FetchLinkEntityType>())
+            {
+                var name = AliasToEntityName(link.alias, link.name, link.Items, alias);
+
+                if (name != null)
+                    return name;
+            }
+
+            return null;
         }
 
         protected bool IsConstantValueExpression(ScalarExpression expr, NodeSchema schema, out Literal literal)

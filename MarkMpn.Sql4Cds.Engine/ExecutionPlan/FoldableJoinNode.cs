@@ -72,7 +72,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // in the new link entity or we must be using an inner join so we can use a post-filter node
                 var additionalCriteria = AdditionalJoinCriteria;
 
-                if (TranslateCriteria(metadata, options, additionalCriteria, rightSchema, rightFetch.Alias, rightEntity.name, rightFetch.Alias, out var filter))
+                if (TranslateCriteria(metadata, options, additionalCriteria, rightSchema, rightFetch.Alias, rightEntity.name, rightFetch.Alias, rightEntity.Items, out var filter))
                 {
                     if (rightEntity.Items == null)
                         rightEntity.Items = new object[] { filter };

@@ -57,6 +57,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     foreach (var left in list)
                     {
+                        if (SemiJoin && left.Used)
+                            continue;
+
                         var merged = Merge(left.Entity, leftSchema, entity, rightSchema);
 
                         if (AdditionalJoinCriteria == null || AdditionalJoinCriteria.GetValue(merged, mergedSchema, parameterTypes, parameterValues))

@@ -824,6 +824,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 .Distinct();
         }
 
+        public static IEnumerable<string> GetVariables(this TSqlFragment fragment)
+        {
+            var visitor = new VariableCollectingVisitor();
+            fragment.Accept(visitor);
+
+            return visitor.Variables
+                .Select(var => var.Name)
+                .Distinct();
+        }
+
         public static ColumnReferenceExpression ToColumnReference(this string colName)
         {
             var col = new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier() };

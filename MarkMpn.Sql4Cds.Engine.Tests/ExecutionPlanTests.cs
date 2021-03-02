@@ -950,14 +950,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var computeScalar = AssertNode<ComputeScalarNode>(select.Source);
             Assert.AreEqual(2, computeScalar.Columns.Count);
             Assert.AreEqual("firstname + ' ' + lastname", computeScalar.Columns[select.ColumnSet[0].SourceColumn].ToSql());
-            Assert.AreEqual("'Account: ' + Expr1.name", computeScalar.Columns[select.ColumnSet[1].SourceColumn].ToSql());
+            Assert.AreEqual("'Account: ' + Expr3.name", computeScalar.Columns[select.ColumnSet[1].SourceColumn].ToSql());
             var fetch = AssertNode<FetchXmlScan>(computeScalar.Source);
             AssertFetchXml(fetch, @"
                 <fetch>
                     <entity name='contact'>
                         <attribute name='firstname' />
                         <attribute name='lastname' />
-                        <link-entity name='account' alias='Expr1' from='accountid' to='parentcustomerid' link-type='outer'>
+                        <link-entity name='account' alias='Expr3' from='accountid' to='parentcustomerid' link-type='outer'>
                             <attribute name='name' />
                         </link-entity>
                         <filter>
@@ -1038,16 +1038,17 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var computeScalar = AssertNode<ComputeScalarNode>(select.Source);
             Assert.AreEqual(2, computeScalar.Columns.Count);
             Assert.AreEqual("firstname + ' ' + lastname", computeScalar.Columns[select.ColumnSet[0].SourceColumn].ToSql());
-            Assert.AreEqual("'Account: ' + Expr3", computeScalar.Columns[select.ColumnSet[1].SourceColumn].ToSql());
+            Assert.AreEqual("'Account: ' + Expr2", computeScalar.Columns[select.ColumnSet[1].SourceColumn].ToSql());
             var nestedLoop = AssertNode<NestedLoopNode>(computeScalar.Source);
-            Assert.AreEqual("@Expr2", nestedLoop.OuterReferences["contact.createdon"]);
+            Assert.AreEqual(QualifiedJoinType.LeftOuter, nestedLoop.JoinType);
+            Assert.IsTrue(nestedLoop.SemiJoin);
+            Assert.AreEqual("account.name", nestedLoop.DefinedValues["Expr2"]);
             var fetch = AssertNode<FetchXmlScan>(nestedLoop.LeftSource);
             AssertFetchXml(fetch, @"
                 <fetch>
                     <entity name='contact'>
                         <attribute name='firstname' />
                         <attribute name='lastname' />
-                        <attribute name='createdon' />
                         <filter>
                             <condition attribute='firstname' operator='eq' value='Mark' />
                         </filter>
@@ -1145,9 +1146,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <attribute name='parentcustomerid' />
                     </entity>
                 </fetch>");
-            var subAssert = AssertNode<AssertNode>(nestedLoop.RightSource);
-            var subAggregate = AssertNode<HashMatchAggregateNode>(subAssert.Source);
-            var subTop = AssertNode<TopNode>(subAggregate.Source);
+            var subTop = AssertNode<TopNode>(nestedLoop.RightSource);
             var subSort = AssertNode<SortNode>(subTop.Source);
             var subAggregateFetch = AssertNode<FetchXmlScan>(subSort.Source);
             AssertFetchXml(subAggregateFetch, @"
@@ -1182,28 +1181,17 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var computeScalar = AssertNode<ComputeScalarNode>(select.Source);
             Assert.AreEqual(1, computeScalar.Columns.Count);
             Assert.AreEqual("firstname + ' ' + lastname", computeScalar.Columns[select.ColumnSet[0].SourceColumn].ToSql());
-            var filter = AssertNode<FilterNode>(computeScalar.Source);
-            Assert.AreEqual("Expr2 = 'Data8'", filter.Filter.ToSql());
-            var nestedLoop = AssertNode<NestedLoopNode>(filter.Source);
-            Assert.AreEqual("@Expr1", nestedLoop.OuterReferences["contact.parentcustomerid"]);
-            var fetch = AssertNode<FetchXmlScan>(nestedLoop.LeftSource);
+            var fetch = AssertNode<FetchXmlScan>(computeScalar.Source);
             AssertFetchXml(fetch, @"
                 <fetch>
                     <entity name='contact'>
                         <attribute name='firstname' />
                         <attribute name='lastname' />
-                        <attribute name='parentcustomerid' />
-                    </entity>
-                </fetch>");
-            var subAssert = AssertNode<AssertNode>(nestedLoop.RightSource);
-            var subAggregate = AssertNode<HashMatchAggregateNode>(subAssert.Source);
-            var subAggregateFetch = AssertNode<FetchXmlScan>(subAggregate.Source);
-            AssertFetchXml(subAggregateFetch, @"
-                <fetch>
-                    <entity name='account'>
-                        <attribute name='name' />
+                        <link-entity name='account' alias='Expr2' from='accountid' to='parentcustomerid' link-type='outer'>
+                            <attribute name='name' />
+                        </link-entity>
                         <filter>
-                            <condition attribute='accountid' operator='eq' value='@Expr1' />
+                            <condition entityname='Expr2' attribute='name' operator='eq' value='Data8' />
                         </filter>
                     </entity>
                 </fetch>");

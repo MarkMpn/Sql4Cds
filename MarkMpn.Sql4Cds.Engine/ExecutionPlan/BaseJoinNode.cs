@@ -25,6 +25,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         public QualifiedJoinType JoinType { get; set; }
 
+        /// <summary>
+        /// Indicates if a semi join should be used (single output row for each row from the left source, ignoring duplicate matches from the right source)
+        /// </summary>
+        public bool SemiJoin { get; set; }
+
+        /// <summary>
+        /// For semi joins, lists individual columns that should be created in the output and their corresponding source from the right input
+        /// </summary>
+        public IDictionary<string, string> DefinedValues { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
         protected Entity Merge(Entity leftEntity, NodeSchema leftSchema, Entity rightEntity, NodeSchema rightSchema)
         {
             var merged = new Entity();
@@ -40,15 +50,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     merged[attr.Key] = null;
             }
 
-            if (rightEntity != null)
+            if (!SemiJoin)
             {
-                foreach (var attr in rightEntity.Attributes)
-                    merged[attr.Key] = attr.Value;
+                if (rightEntity != null)
+                {
+                    foreach (var attr in rightEntity.Attributes)
+                        merged[attr.Key] = attr.Value;
+                }
+                else
+                {
+                    foreach (var attr in rightSchema.Schema)
+                        merged[attr.Key] = null;
+                }
             }
-            else
+
+            foreach (var definedValue in DefinedValues)
             {
-                foreach (var attr in rightSchema.Schema)
-                    merged[attr.Key] = null;
+                if (rightEntity == null)
+                    merged[definedValue.Key] = null;
+                else
+                    merged[definedValue.Key] = rightEntity[definedValue.Value];
             }
 
             return merged;
@@ -67,11 +88,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var schema = new NodeSchema();
 
-            if (JoinType == QualifiedJoinType.Inner)
+            if (JoinType == QualifiedJoinType.Inner || (JoinType == QualifiedJoinType.LeftOuter && SemiJoin))
                 schema.PrimaryKey = innerSchema.PrimaryKey;
 
             foreach (var subSchema in new[] { outerSchema, innerSchema })
             {
+                // Semi-join does not include data from the right source
+                if (SemiJoin && subSchema == innerSchema)
+                    continue;
+
                 foreach (var column in subSchema.Schema)
                     schema.Schema[column.Key] = column.Value;
 
@@ -86,6 +111,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     schema.Aliases[alias.Key].AddRange(alias.Value);
                 }
             }
+
+            foreach (var definedValue in DefinedValues)
+                schema.Schema[definedValue.Key] = innerSchema.Schema[definedValue.Value];
 
             return schema;
         }

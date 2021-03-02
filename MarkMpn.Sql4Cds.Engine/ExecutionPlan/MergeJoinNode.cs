@@ -75,7 +75,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
                 else if (isEq)
                 {
-                    if (AdditionalJoinCriteria == null || AdditionalJoinCriteria.GetValue(merged, mergedSchema, parameterTypes, parameterValues) == true)
+                    if ((!leftMatched || !SemiJoin) && (AdditionalJoinCriteria == null || AdditionalJoinCriteria.GetValue(merged, mergedSchema, parameterTypes, parameterValues) == true))
                         yield return merged;
 
                     leftMatched = true;

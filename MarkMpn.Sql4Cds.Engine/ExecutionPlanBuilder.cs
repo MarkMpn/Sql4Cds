@@ -27,6 +27,11 @@ namespace MarkMpn.Sql4Cds.Engine
         public IAttributeMetadataCache Metadata { get; set; }
 
         /// <summary>
+        /// Returns the size of each table
+        /// </summary>
+        public ITableSizeCache TableSize { get; set; }
+
+        /// <summary>
         /// Returns or sets a value indicating if SQL will be parsed using quoted identifiers
         /// </summary>
         public bool QuotedIdentifiers { get; set; }
@@ -871,66 +876,97 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (subqueryPlan.ColumnSet.Count != 1)
                     throw new NotSupportedQueryFragmentException("Scalar subquery must return exactly one column", subquery);
 
-                var loopRightSource = subqueryPlan.Source;
+                string outputcol;
                 var subqueryCol = subqueryPlan.ColumnSet[0].SourceColumn;
-
-                // Unless the subquery has got an explicit TOP 1 clause, insert an aggregate and assertion nodes
-                // to check for one row
-                if (!(subqueryPlan.Source is TopNode top) || !(top.Top is IntegerLiteral topValue) || topValue.Value != "1")
+                BaseJoinNode join = null;
+                if (UseMergeJoin(node, subqueryPlan, outerReferences, subqueryCol, out outputcol, out var merge))
                 {
-                    subqueryCol = $"Expr{++_colNameCounter}";
-                    var rowCountCol = $"Expr{++_colNameCounter}";
-                    var aggregate = new HashMatchAggregateNode
+                    join = merge;
+                }
+                else
+                {
+                    outputcol = $"Expr{++_colNameCounter}";
+                    /*
+                    if (SplitCorrelationCriteria(subqueryPlan, outerReferences, out var uncorrelatedPlan, out var correlationCriteria))
                     {
-                        Source = loopRightSource,
-                        Aggregates =
+                        // We could use an uncorrelated query to get all the possible data for the subquery, spool it and
+                        // find the correlated records for each row. Check if it's worth it based on the record counts
+                        var leftCount = node.EstimateRowsOut(Metadata, parameterTypes, TableSize);
+                        var rightCount = uncorrelatedPlan.EstimateRowsOut(Metadata, parameterTypes, TableSize);
+
+                        if (leftCount > 100 || rightCount < 5000)
                         {
-                            [subqueryCol] = new Aggregate
-                            {
-                                AggregateType = AggregateType.First,
-                                Expression = new ColumnReferenceExpression
-                                {
-                                    MultiPartIdentifier = new MultiPartIdentifier
-                                    {
-                                        Identifiers = { new Identifier { Value = subqueryPlan.ColumnSet[0].SourceColumn } }
-                                    }
-                                }
-                            },
-                            [rowCountCol] = new Aggregate
-                            {
-                                AggregateType = AggregateType.CountStar
-                            }
+                            subqueryPlan = uncorrelatedPlan;
+
+                            // TODO: Merge/hash join if the correlation criteria are "simple"
                         }
-                    };
-                    var assert = new AssertNode
+                    }
+                    */
+                    var loopRightSource = subqueryPlan.Source;
+
+                    // Unless the subquery has got an explicit TOP 1 clause, insert an aggregate and assertion nodes
+                    // to check for one row
+                    if (!(subqueryPlan.Source is TopNode top) || !(top.Top is IntegerLiteral topValue) || topValue.Value != "1")
                     {
-                        Source = aggregate,
-                        Assertion = e => e.GetAttributeValue<int>(rowCountCol) <= 1,
-                        ErrorMessage = "Subquery produced more than 1 row"
-                    };
-                    loopRightSource = assert;
+                        subqueryCol = $"Expr{++_colNameCounter}";
+                        var rowCountCol = $"Expr{++_colNameCounter}";
+                        var aggregate = new HashMatchAggregateNode
+                        {
+                            Source = loopRightSource,
+                            Aggregates =
+                            {
+                                [subqueryCol] = new Aggregate
+                                {
+                                    AggregateType = AggregateType.First,
+                                    Expression = new ColumnReferenceExpression
+                                    {
+                                        MultiPartIdentifier = new MultiPartIdentifier
+                                        {
+                                            Identifiers = { new Identifier { Value = subqueryPlan.ColumnSet[0].SourceColumn } }
+                                        }
+                                    }
+                                },
+                                [rowCountCol] = new Aggregate
+                                {
+                                    AggregateType = AggregateType.CountStar
+                                }
+                            }
+                        };
+                        var assert = new AssertNode
+                        {
+                            Source = aggregate,
+                            Assertion = e => e.GetAttributeValue<int>(rowCountCol) <= 1,
+                            ErrorMessage = "Subquery produced more than 1 row"
+                        };
+                        loopRightSource = assert;
+                    }
+
+                    // If the subquery is uncorrelated, add a table spool to cache the results
+                    if (outerReferences.Count == 0)
+                    {
+                        var spool = new TableSpoolNode { Source = loopRightSource };
+                        loopRightSource = spool;
+                    }
+
+                    // Add a nested loop to call the subquery
+                    if (join == null)
+                    {
+                        join = new NestedLoopNode
+                        {
+                            LeftSource = node,
+                            RightSource = loopRightSource,
+                            OuterReferences = outerReferences,
+                            JoinType = QualifiedJoinType.LeftOuter,
+                            SemiJoin = true,
+                            DefinedValues = { [outputcol] = subqueryCol }
+                        };
+                    }
                 }
 
-                // If the subquery is uncorrelated, add a table spool to cache the results
-                if (outerReferences.Count == 0)
-                {
-                    var spool = new TableSpoolNode { Source = loopRightSource };
-                    loopRightSource = spool;
-                }
+                node = join;
+                computeScalar.Source = join;
 
-                // Add a nested loop to call the subquery
-                var loop = new NestedLoopNode
-                {
-                    LeftSource = node,
-                    RightSource = loopRightSource,
-                    JoinType = QualifiedJoinType.LeftOuter,
-                    OuterReferences = outerReferences
-                };
-
-                node = loop;
-                computeScalar.Source = loop;
-
-                rewrites[subquery] = subqueryCol;
+                rewrites[subquery] = outputcol;
             }
 
             if (rewrites.Any())
@@ -941,6 +977,153 @@ namespace MarkMpn.Sql4Cds.Engine
 
             return null;
         }
+
+        private bool UseMergeJoin(IExecutionPlanNode node, SelectNode subqueryPlan, Dictionary<string, string> outerReferences, string subqueryCol, out string outputCol, out MergeJoinNode merge)
+        {
+            outputCol = null;
+            merge = null;
+
+            // We can use a merge join for a scalar subquery when the subquery is simply SELECT [TOP 1] <column> FROM <table> WHERE <table>.<key> = <outertable>.<column>
+            // The filter must be on the inner table's primary key
+            var subNode = subqueryPlan.Source;
+
+            if (subNode is TopNode top && top.Top is IntegerLiteral topLiteral && topLiteral.Value == "1")
+                subNode = top.Source;
+
+            if (!(subNode is FilterNode filter))
+                return false;
+
+            if (!(filter.Source is FetchXmlScan fetch))
+                return false;
+
+            if (!(filter.Filter is BooleanComparisonExpression cmp))
+                return false;
+
+            if (cmp.ComparisonType != BooleanComparisonType.Equals)
+                return false;
+
+            var col1 = cmp.FirstExpression as ColumnReferenceExpression;
+            var var1 = cmp.FirstExpression as VariableReference;
+
+            var col2 = cmp.SecondExpression as ColumnReferenceExpression;
+            var var2 = cmp.SecondExpression as VariableReference;
+
+            var col = col1 ?? col2;
+            var var = var1 ?? var2;
+
+            if (col == null || var == null)
+                return false;
+
+            var foreignKey = (string)null;
+
+            foreach (var outerReference in outerReferences)
+            {
+                if (outerReference.Value == var.Name)
+                {
+                    foreignKey = outerReference.Key;
+                    break;
+                }
+            }
+
+            if (foreignKey == null)
+                return false;
+
+            var innerSchema = fetch.GetSchema(Metadata, null);
+
+            if (!innerSchema.ContainsColumn(col.GetColumnName(), out var colName))
+                return false;
+
+            if (innerSchema.PrimaryKey != colName)
+                return false;
+
+            // Give the inner fetch a unique alias
+            fetch.Alias = $"Expr{++_colNameCounter}";
+
+            // Add the required column with the expected alias
+            var attr = new FetchXml.FetchAttributeType { name = subqueryCol.Split('.').Last() };
+            fetch.Entity.AddItem(attr);
+
+            // Regenerate the schema after changing the alias
+            innerSchema = fetch.GetSchema(Metadata, null);
+
+            merge = new MergeJoinNode
+            {
+                LeftSource = node,
+                LeftAttribute = foreignKey.ToColumnReference(),
+                RightSource = fetch,
+                RightAttribute = innerSchema.PrimaryKey.ToColumnReference(),
+                JoinType = QualifiedJoinType.LeftOuter
+            };
+
+            outputCol = fetch.Alias + "." + attr.name;
+            return true;
+        }
+        /*
+        private bool SplitCorrelationCriteria(SelectNode originalPlan, IDictionary<string,string> outerReferences, out SelectNode uncorrelatedPlan, out BooleanExpression correlationCriteria)
+        {
+            uncorrelatedPlan = null;
+            correlationCriteria = null;
+
+            if (outerReferences.Count == 0)
+                return false;
+
+            // Look for a simple case where there is a reference to the outer table in a filter node. Extract the minimal
+            // amount of that filter to a new filter node and place a table spool between the correlated filter and its source
+
+            // Skip over simple leading nodes to try to find a Filter node
+            IExecutionPlanNode node = originalPlan.Source;
+            IExecutionPlanNode lastCorrelatedStep = node;
+
+            while (true)
+            {
+                if (node is ComputeScalarNode cs)
+                {
+                    if (cs.Columns.Values.Any(col => col.GetVariables().Any()))
+                        lastCorrelatedStep = node;
+
+                    node = cs.Source;
+                }
+                else if (node is SortNode sort)
+                {
+                    if (sort.Sorts.Any(s => s.Expression.GetVariables().Any()))
+                        lastCorrelatedStep = node;
+
+                    node = sort.Source;
+                }
+                else if (node is TopNode top)
+                {
+                    if (top.Top.GetVariables().Any())
+                        lastCorrelatedStep = node;
+
+                    node = top.Source;
+                }
+                else if (node is OffsetFetchNode offset)
+                {
+                    if (offset.Offset.GetVariables().Any() || offset.Fetch.GetVariables().Any())
+                        lastCorrelatedStep = node;
+
+                    node = offset.Source;
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            // Check we've ended up at a Filter node with a FetchXML source
+            if (!(node is FilterNode filter))
+                return false;
+
+            if (!(filter.Source is FetchXmlScan))
+                return false;
+
+            if (!filter.Filter.GetVariables().Any())
+            {
+                // If the filter isn't using the outer references, they must be being used by an earlier step.
+                // Just add a table spool between that step and its source
+
+            }
+        }*/
 
         private IExecutionPlanNode ConvertFromClause(IList<TableReference> tables, TSqlFragment query, IDictionary<string, Type> parameterTypes)
         {
