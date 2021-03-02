@@ -556,7 +556,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     condition = new condition
                     {
-                        entityname = entityName == targetEntityName ? null : entityName,
+                        entityname = entityAlias == targetEntityAlias ? null : entityAlias,
                         attribute = attrName,
                         @operator = op,
                         valueof = attrName2
@@ -583,15 +583,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return false;
 
                 var parts = columnName.Split('.');
-                var entityName = parts[0];
+                var entityAlias = parts[0];
                 var attrName = parts[1];
 
-                if (allowedPrefix != null && !allowedPrefix.Equals(entityName))
+                if (allowedPrefix != null && !allowedPrefix.Equals(entityAlias))
                     return false;
 
                 condition = new condition
                 {
-                    entityname = entityName == targetEntityName ? null : entityName,
+                    entityname = entityAlias == targetEntityAlias ? null : entityAlias,
                     attribute = attrName,
                     @operator = inPred.NotDefined ? @operator.notin : @operator.@in,
                     Items = inPred.Values.Cast<Literal>().Select(lit => new conditionValue { Value = lit.Value }).ToArray()
@@ -610,17 +610,50 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return false;
 
                 var parts = columnName.Split('.');
-                var entityName = parts[0];
+                var entityAlias = parts[0];
                 var attrName = parts[1];
 
-                if (allowedPrefix != null && !allowedPrefix.Equals(entityName))
+                if (allowedPrefix != null && !allowedPrefix.Equals(entityAlias))
                     return false;
 
                 condition = new condition
                 {
-                    entityname = entityName == targetEntityName ? null : entityName,
+                    entityname = entityAlias == targetEntityAlias ? null : entityAlias,
                     attribute = attrName,
                     @operator = isNull.IsNot ? @operator.notnull : @operator.@null
+                };
+                return true;
+            }
+
+            if (criteria is LikePredicate like)
+            {
+                if (!(like.FirstExpression is ColumnReferenceExpression col))
+                    return false;
+
+                if (!(like.SecondExpression is StringLiteral value))
+                    return false;
+
+                if (like.EscapeExpression != null)
+                    return false;
+
+                var columnName = col.GetColumnName();
+
+                if (!schema.ContainsColumn(columnName, out columnName))
+                    return false;
+
+                var parts = columnName.Split('.');
+                var entityAlias = parts[0];
+                var attrName = parts[1];
+
+                if (allowedPrefix != null && !allowedPrefix.Equals(entityAlias))
+                    return false;
+
+                condition = new condition
+                {
+                    entityname = entityAlias == targetEntityAlias ? null : entityAlias,
+                    attribute = attrName,
+                    @operator = like.NotDefined ? @operator.notlike : @operator.like,
+                    value = value.Value
                 };
                 return true;
             }

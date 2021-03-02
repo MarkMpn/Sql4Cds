@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine.Visitors;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
@@ -92,6 +93,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return GetType(inPred, schema, parameterTypes);
             else if (b is BooleanIsNullExpression isNull)
                 return GetType(isNull, schema, parameterTypes);
+            else if (b is LikePredicate like)
+                return GetType(like, schema, parameterTypes);
             else
                 throw new NotSupportedQueryFragmentException("Unhandled expression type", b);
         }
@@ -108,6 +111,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return GetValue(inPred, entity, schema, parameterTypes, parameterValues);
             else if (b is BooleanIsNullExpression isNull)
                 return GetValue(isNull, entity, schema, parameterTypes, parameterValues);
+            else if (b is LikePredicate like)
+                return GetValue(like, entity, schema, parameterTypes, parameterValues);
             else
                 throw new NotSupportedQueryFragmentException("Unhandled expression type", b);
         }
@@ -770,6 +775,112 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var result = value == null;
 
             if (isNull.IsNot)
+                result = !result;
+
+            return result;
+        }
+
+        private static Type GetType(this LikePredicate like, NodeSchema schema, IDictionary<string, Type> parameterTypes)
+        {
+            var valueType = like.FirstExpression.GetType(schema, parameterTypes);
+            var patternType = like.SecondExpression.GetType(schema, parameterTypes);
+
+            if (!SqlTypeConverter.CanChangeType(valueType, typeof(string)))
+                throw new NotSupportedQueryFragmentException("Cannot convert value to string", like.FirstExpression);
+
+            if (!SqlTypeConverter.CanChangeType(patternType, typeof(string)))
+                throw new NotSupportedQueryFragmentException("Cannot convert pattern to string", like.SecondExpression);
+
+            if (like.EscapeExpression != null)
+            {
+                var escapeType = like.EscapeExpression.GetType(schema, parameterTypes);
+                if (!SqlTypeConverter.CanChangeType(escapeType, typeof(string)))
+                    throw new NotSupportedQueryFragmentException("Cannot convert escape sequence to string", like.EscapeExpression);
+            }
+
+            return typeof(bool);
+        }
+
+        private static bool GetValue(this LikePredicate like, Entity entity, NodeSchema schema, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        {
+            var value = SqlTypeConverter.ChangeType<string>(like.FirstExpression.GetValue(entity, schema, parameterTypes, parameterValues));
+            var pattern = SqlTypeConverter.ChangeType<string>(like.SecondExpression.GetValue(entity, schema, parameterTypes, parameterValues));
+            var escape = SqlTypeConverter.ChangeType<string>(like.EscapeExpression?.GetValue(entity, schema, parameterTypes, parameterValues));
+
+            if (value == null || pattern == null)
+                return false;
+
+            // Convert the LIKE pattern to a regex
+            var regexBuilder = new StringBuilder();
+            regexBuilder.Append("^");
+
+            var escaped = false;
+            var inRange = false;
+
+            foreach (var ch in pattern)
+            {
+                if (escape != null && ch == escape[0])
+                {
+                    escaped = true;
+                    continue;
+                }
+
+                if (escaped)
+                {
+                    regexBuilder.Append(Regex.Escape(ch.ToString()));
+                    escaped = false;
+                    continue;
+                }
+
+                if (ch == '[' && !inRange)
+                {
+                    regexBuilder.Append("[");
+                    inRange = true;
+                    continue;
+                }
+
+                if (ch == ']' && inRange)
+                {
+                    regexBuilder.Append("]");
+                    inRange = false;
+                    continue;
+                }
+
+                if ((ch == '^' || ch == '-') && inRange)
+                {
+                    regexBuilder.Append(ch);
+                    continue;
+                }
+
+                if (inRange)
+                {
+                    regexBuilder.Append(Regex.Escape(ch.ToString()));
+                    continue;
+                }
+
+                if (ch == '%')
+                {
+                    regexBuilder.Append(".*");
+                    continue;
+                }
+
+                if (ch == '_')
+                {
+                    regexBuilder.Append('.');
+                    continue;
+                }
+
+                regexBuilder.Append(Regex.Escape(ch.ToString()));
+            }
+
+            if (escaped || inRange)
+                throw new QueryExecutionException("Invalid LIKE pattern");
+
+            regexBuilder.Append("$");
+
+            var result = Regex.IsMatch(value, regexBuilder.ToString(), RegexOptions.IgnoreCase);
+
+            if (like.NotDefined)
                 result = !result;
 
             return result;
