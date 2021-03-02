@@ -443,6 +443,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override int EstimateRowsOut(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, ITableSizeCache tableSize)
         {
+            if (GroupBy.Count == 0)
+                return 1;
+
             return Source.EstimateRowsOut(metadata, parameterTypes, tableSize) * 4 / 10;
         }
     }
