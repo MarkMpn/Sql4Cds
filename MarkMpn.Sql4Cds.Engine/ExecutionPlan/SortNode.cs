@@ -194,6 +194,32 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         if (linkEntity == null)
                             return this;
 
+                        // Adding sorts to link-entity forces legacy paging which has a maximum record limit of 50K.
+                        // Don't add a sort to a link-entity unless there's also a TOP clause of <= 50K
+                        var top = Parent as TopNode;
+                        var offset = Parent as OffsetFetchNode;
+
+                        if (top == null && offset == null)
+                            return this;
+
+                        if (top != null)
+                        {
+                            if (!IsConstantValueExpression(top.Top, null, out var topLiteral))
+                                return this;
+
+                            if (Int32.Parse(topLiteral.Value) > 50000)
+                                return this;
+                        }
+                        else if (offset != null)
+                        {
+                            if (!IsConstantValueExpression(offset.Offset, null, out var offsetLiteral) ||
+                                !IsConstantValueExpression(offset.Fetch, null, out var fetchLiteral))
+                                return this;
+
+                            if (Int32.Parse(offsetLiteral.Value) + Int32.Parse(fetchLiteral.Value) > 50000)
+                                return this;
+                        }
+
                         linkEntity.AddItem(fetchSort);
                         items = linkEntity.Items;
                     }
