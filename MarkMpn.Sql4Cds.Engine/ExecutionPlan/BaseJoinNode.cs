@@ -88,8 +88,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var schema = new NodeSchema();
 
-            if (JoinType == QualifiedJoinType.Inner || (JoinType == QualifiedJoinType.LeftOuter && SemiJoin))
-                schema.PrimaryKey = innerSchema.PrimaryKey;
+            if (JoinType == QualifiedJoinType.LeftOuter && SemiJoin)
+                schema.PrimaryKey = outerSchema.PrimaryKey;
 
             foreach (var subSchema in new[] { outerSchema, innerSchema })
             {

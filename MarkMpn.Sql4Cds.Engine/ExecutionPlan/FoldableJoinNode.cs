@@ -155,5 +155,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             else
                 return Math.Max(leftEstimate, rightEstimate);
         }
+
+        public override NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
+        {
+            var schema = base.GetSchema(metadata, parameterTypes);
+
+            if (schema.PrimaryKey == null && JoinType == QualifiedJoinType.Inner)
+            {
+                var leftSchema = LeftSource.GetSchema(metadata, parameterTypes);
+                var rightSchema = GetRightSchema(metadata, parameterTypes);
+
+                if (LeftAttribute.GetColumnName() == leftSchema.PrimaryKey)
+                    schema.PrimaryKey = rightSchema.PrimaryKey;
+                else if (RightAttribute.GetColumnName() == rightSchema.PrimaryKey)
+                    schema.PrimaryKey = leftSchema.PrimaryKey;
+            }
+
+            return schema;
+        }
     }
 }

@@ -273,30 +273,39 @@ namespace MarkMpn.Sql4Cds.Engine
                 var references = new Dictionary<string, string>();
                 var innerQuery = ConvertSelectStatement(inSubquery.Subquery.QueryExpression, schema, references, parameters);
 
-                // We need the inner list to be distinct to avoid creating duplicates during the join
-                var innerSchema = innerQuery.GetSchema(Metadata, parameters);
-                if (innerQuery.ColumnSet[0].SourceColumn != innerSchema.PrimaryKey && !(innerQuery.Source is DistinctNode))
-                {
-                    innerQuery.Source = new DistinctNode
-                    {
-                        Source = innerQuery.Source,
-                        Columns = { innerQuery.ColumnSet[0].SourceColumn }
-                    };
-                }
-
                 // Create the join
                 BaseJoinNode join;
+                var testColumn = innerQuery.ColumnSet[0].SourceColumn;
 
                 if (references.Count == 0)
                 {
-                    // This isn't a correlated subquery, so we can use a foldable join type
-                    join = new HashJoinNode
+                    if (UseMergeJoin(source, innerQuery, references, testColumn, lhsCol.GetColumnName(), out var outputCol, out var merge))
                     {
-                        LeftSource = source,
-                        LeftAttribute = lhsCol,
-                        RightSource = innerQuery.Source,
-                        RightAttribute = innerQuery.ColumnSet[0].SourceColumn.ToColumnReference()
-                    };
+                        testColumn = outputCol;
+                        join = merge;
+                    }
+                    else
+                    {
+                        // We need the inner list to be distinct to avoid creating duplicates during the join
+                        var innerSchema = innerQuery.GetSchema(Metadata, parameters);
+                        if (innerQuery.ColumnSet[0].SourceColumn != innerSchema.PrimaryKey && !(innerQuery.Source is DistinctNode))
+                        {
+                            innerQuery.Source = new DistinctNode
+                            {
+                                Source = innerQuery.Source,
+                                Columns = { innerQuery.ColumnSet[0].SourceColumn }
+                            };
+                        }
+
+                        // This isn't a correlated subquery, so we can use a foldable join type
+                        join = new MergeJoinNode
+                        {
+                            LeftSource = source,
+                            LeftAttribute = lhsCol,
+                            RightSource = innerQuery.Source,
+                            RightAttribute = innerQuery.ColumnSet[0].SourceColumn.ToColumnReference()
+                        };
+                    }
                 }
                 else
                 {
@@ -305,6 +314,11 @@ namespace MarkMpn.Sql4Cds.Engine
                     // We could also move the correlation criteria out of the subquery and into the join condition. We would then make one request to
                     // get all the related records and spool that in memory to get the relevant results in the nested loop. Need to understand how 
                     // many rows are likely from the outer query to work out if this is going to be more efficient or not.
+                    if (innerQuery.Source is ISingleSourceExecutionPlanNode loopRightSourceSimple)
+                        InsertCorrelatedSubquerySpool(loopRightSourceSimple, source, parameterTypes);
+
+                    var definedValue = $"Expr{++_colNameCounter}";
+
                     join = new NestedLoopNode
                     {
                         LeftSource = source,
@@ -315,8 +329,12 @@ namespace MarkMpn.Sql4Cds.Engine
                             FirstExpression = lhsCol,
                             ComparisonType = BooleanComparisonType.Equals,
                             SecondExpression = innerQuery.ColumnSet[0].SourceColumn.ToColumnReference()
-                        }
+                        },
+                        SemiJoin = true,
+                        DefinedValues = { [definedValue] = innerQuery.ColumnSet[0].SourceColumn }
                     };
+
+                    testColumn = definedValue;
                 }
 
                 join.JoinType = QualifiedJoinType.LeftOuter;
@@ -324,7 +342,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 rewrites[inSubquery] = new BooleanIsNullExpression
                 {
                     IsNot = true,
-                    Expression = innerQuery.ColumnSet[0].SourceColumn.ToColumnReference()
+                    Expression = testColumn.ToColumnReference()
                 };
 
                 source = join;
@@ -879,7 +897,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 string outputcol;
                 var subqueryCol = subqueryPlan.ColumnSet[0].SourceColumn;
                 BaseJoinNode join = null;
-                if (UseMergeJoin(node, subqueryPlan, outerReferences, subqueryCol, out outputcol, out var merge))
+                if (UseMergeJoin(node, subqueryPlan, outerReferences, subqueryCol, null, out outputcol, out var merge))
                 {
                     join = merge;
                 }
@@ -968,7 +986,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return null;
         }
 
-        private bool UseMergeJoin(IExecutionPlanNode node, SelectNode subqueryPlan, Dictionary<string, string> outerReferences, string subqueryCol, out string outputCol, out MergeJoinNode merge)
+        private bool UseMergeJoin(IExecutionPlanNode node, SelectNode subqueryPlan, Dictionary<string, string> outerReferences, string subqueryCol, string inPredicateCol, out string outputCol, out MergeJoinNode merge)
         {
             outputCol = null;
             merge = null;
@@ -980,50 +998,64 @@ namespace MarkMpn.Sql4Cds.Engine
             if (subNode is TopNode top && top.Top is IntegerLiteral topLiteral && topLiteral.Value == "1")
                 subNode = top.Source;
 
-            if (!(subNode is FilterNode filter))
+            var filter = subNode as FilterNode;
+            if (filter != null)
+                subNode = filter.Source;
+            else if (inPredicateCol == null)
                 return false;
 
-            if (!(filter.Source is FetchXmlScan fetch))
+            if (!(subNode is FetchXmlScan fetch))
                 return false;
 
-            if (!(filter.Filter is BooleanComparisonExpression cmp))
-                return false;
+            var outerKey = (string)null;
+            var innerKey = (string)null;
 
-            if (cmp.ComparisonType != BooleanComparisonType.Equals)
-                return false;
-
-            var col1 = cmp.FirstExpression as ColumnReferenceExpression;
-            var var1 = cmp.FirstExpression as VariableReference;
-
-            var col2 = cmp.SecondExpression as ColumnReferenceExpression;
-            var var2 = cmp.SecondExpression as VariableReference;
-
-            var col = col1 ?? col2;
-            var var = var1 ?? var2;
-
-            if (col == null || var == null)
-                return false;
-
-            var foreignKey = (string)null;
-
-            foreach (var outerReference in outerReferences)
+            if (inPredicateCol != null)
             {
-                if (outerReference.Value == var.Name)
+                outerKey = inPredicateCol;
+                innerKey = subqueryCol;
+            }
+            else
+            {
+                if (!(filter.Filter is BooleanComparisonExpression cmp))
+                    return false;
+
+                if (cmp.ComparisonType != BooleanComparisonType.Equals)
+                    return false;
+
+                var col1 = cmp.FirstExpression as ColumnReferenceExpression;
+                var var1 = cmp.FirstExpression as VariableReference;
+
+                var col2 = cmp.SecondExpression as ColumnReferenceExpression;
+                var var2 = cmp.SecondExpression as VariableReference;
+
+                var col = col1 ?? col2;
+                var var = var1 ?? var2;
+
+                if (col == null || var == null)
+                    return false;
+
+                foreach (var outerReference in outerReferences)
                 {
-                    foreignKey = outerReference.Key;
-                    break;
+                    if (outerReference.Value == var.Name)
+                    {
+                        outerKey = outerReference.Key;
+                        break;
+                    }
                 }
+
+                innerKey = col.GetColumnName();
             }
 
-            if (foreignKey == null)
+            if (outerKey == null)
                 return false;
 
             var innerSchema = fetch.GetSchema(Metadata, null);
 
-            if (!innerSchema.ContainsColumn(col.GetColumnName(), out var colName))
+            if (!innerSchema.ContainsColumn(innerKey, out innerKey))
                 return false;
 
-            if (innerSchema.PrimaryKey != colName)
+            if (innerSchema.PrimaryKey != innerKey)
                 return false;
 
             // Give the inner fetch a unique alias
@@ -1039,8 +1071,8 @@ namespace MarkMpn.Sql4Cds.Engine
             merge = new MergeJoinNode
             {
                 LeftSource = node,
-                LeftAttribute = foreignKey.ToColumnReference(),
-                RightSource = fetch,
+                LeftAttribute = outerKey.ToColumnReference(),
+                RightSource = inPredicateCol != null ? (IExecutionPlanNode) filter ?? fetch : fetch,
                 RightAttribute = innerSchema.PrimaryKey.ToColumnReference(),
                 JoinType = QualifiedJoinType.LeftOuter
             };
