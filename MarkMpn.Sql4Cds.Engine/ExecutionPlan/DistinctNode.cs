@@ -10,7 +10,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Returns only one entity per unique combinatioh of values in specified columns
     /// </summary>
-    public class DistinctNode : BaseNode
+    public class DistinctNode : BaseNode, ISingleSourceExecutionPlanNode
     {
         class DistinctKey
         {

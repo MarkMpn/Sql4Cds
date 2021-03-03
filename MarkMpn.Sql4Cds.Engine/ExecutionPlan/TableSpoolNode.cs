@@ -11,7 +11,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Provides a rewindable cache of a data source
     /// </summary>
-    public class TableSpoolNode : BaseNode
+    public class TableSpoolNode : BaseNode, ISingleSourceExecutionPlanNode
     {
         class CachedList<T> : IEnumerable<T>
         {

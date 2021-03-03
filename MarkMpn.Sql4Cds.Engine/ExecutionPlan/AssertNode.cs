@@ -10,7 +10,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Checks that each row in the results meets an expected condition
     /// </summary>
-    public class AssertNode : BaseNode
+    public class AssertNode : BaseNode, ISingleSourceExecutionPlanNode
     {
         /// <summary>
         /// The data source for the assertion

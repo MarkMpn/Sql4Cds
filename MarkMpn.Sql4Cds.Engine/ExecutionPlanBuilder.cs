@@ -15,9 +15,10 @@ namespace MarkMpn.Sql4Cds.Engine
     {
         private int _colNameCounter;
 
-        public ExecutionPlanBuilder(IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        public ExecutionPlanBuilder(IAttributeMetadataCache metadata, ITableSizeCache tableSize, IQueryExecutionOptions options)
         {
             Metadata = metadata;
+            TableSize = tableSize;
             Options = options;
         }
 
@@ -856,8 +857,7 @@ namespace MarkMpn.Sql4Cds.Engine
              * 1. Nested loop. Simple but inefficient as ends up making at least 1 FetchXML request per outer row
              * 2. Spooled nested loop. Useful when there is no correlation and so the same results can be used for each outer record
              * 3. Spooled nested loop with correlation criteria pulled into loop. Useful when there are a large number of outer records or a small number of inner records
-             * 4. Merge join. Useful when the correlation criteria is based on the equality of the primary key of either table
-             * 5. Hash join with distinct. Useful when there is a simple correlation not involving the primary key
+             * 4. Merge join. Useful when the correlation criteria is based on the equality of the primary key of the inner table
              */
             // If scalar.Expression contains a subquery, create nested loop to evaluate it in the context
             // of the current record
@@ -886,22 +886,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 else
                 {
                     outputcol = $"Expr{++_colNameCounter}";
-                    /*
-                    if (SplitCorrelationCriteria(subqueryPlan, outerReferences, out var uncorrelatedPlan, out var correlationCriteria))
-                    {
-                        // We could use an uncorrelated query to get all the possible data for the subquery, spool it and
-                        // find the correlated records for each row. Check if it's worth it based on the record counts
-                        var leftCount = node.EstimateRowsOut(Metadata, parameterTypes, TableSize);
-                        var rightCount = uncorrelatedPlan.EstimateRowsOut(Metadata, parameterTypes, TableSize);
 
-                        if (leftCount > 100 || rightCount < 5000)
-                        {
-                            subqueryPlan = uncorrelatedPlan;
-
-                            // TODO: Merge/hash join if the correlation criteria are "simple"
-                        }
-                    }
-                    */
                     var loopRightSource = subqueryPlan.Source;
 
                     // Unless the subquery has got an explicit TOP 1 clause, insert an aggregate and assertion nodes
@@ -942,10 +927,15 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
 
                     // If the subquery is uncorrelated, add a table spool to cache the results
+                    // If it is correlated, add a spool where possible closer to the data source
                     if (outerReferences.Count == 0)
                     {
                         var spool = new TableSpoolNode { Source = loopRightSource };
                         loopRightSource = spool;
+                    }
+                    else if (loopRightSource is ISingleSourceExecutionPlanNode loopRightSourceSimple)
+                    {
+                        InsertCorrelatedSubquerySpool(loopRightSourceSimple, node, parameterTypes);
                     }
 
                     // Add a nested loop to call the subquery
@@ -1058,72 +1048,179 @@ namespace MarkMpn.Sql4Cds.Engine
             outputCol = fetch.Alias + "." + attr.name;
             return true;
         }
-        /*
-        private bool SplitCorrelationCriteria(SelectNode originalPlan, IDictionary<string,string> outerReferences, out SelectNode uncorrelatedPlan, out BooleanExpression correlationCriteria)
+        
+        private void InsertCorrelatedSubquerySpool(ISingleSourceExecutionPlanNode node, IExecutionPlanNode outerSource, IDictionary<string, Type> parameterTypes)
         {
-            uncorrelatedPlan = null;
-            correlationCriteria = null;
-
-            if (outerReferences.Count == 0)
-                return false;
-
             // Look for a simple case where there is a reference to the outer table in a filter node. Extract the minimal
             // amount of that filter to a new filter node and place a table spool between the correlated filter and its source
 
             // Skip over simple leading nodes to try to find a Filter node
-            IExecutionPlanNode node = originalPlan.Source;
-            IExecutionPlanNode lastCorrelatedStep = node;
+            var lastCorrelatedStep = node;
+            ISingleSourceExecutionPlanNode parentNode = null;
+            FilterNode filter = null;
+            FetchXmlScan fetchXml = null;
 
-            while (true)
+            while (node != null)
             {
-                if (node is ComputeScalarNode cs)
+                if (node is FilterNode f)
+                {
+                    filter = f;
+                    break;
+                }
+
+                if (node is FetchXmlScan fetch)
+                {
+                    fetchXml = fetch;
+                    break;
+                }
+
+                parentNode = node;
+
+                if (node is AssertNode assert)
+                {
+                    node = assert.Source as ISingleSourceExecutionPlanNode;
+                }
+                else if (node is HashMatchAggregateNode agg)
+                {
+                    if (agg.Aggregates.Values.Any(a => a.Expression != null && a.Expression.GetVariables().Any()))
+                        lastCorrelatedStep = agg;
+
+                    node = agg.Source as ISingleSourceExecutionPlanNode;
+                }
+                else if (node is ComputeScalarNode cs)
                 {
                     if (cs.Columns.Values.Any(col => col.GetVariables().Any()))
-                        lastCorrelatedStep = node;
+                        lastCorrelatedStep = cs;
 
-                    node = cs.Source;
+                    node = cs.Source as ISingleSourceExecutionPlanNode;
                 }
                 else if (node is SortNode sort)
                 {
                     if (sort.Sorts.Any(s => s.Expression.GetVariables().Any()))
-                        lastCorrelatedStep = node;
+                        lastCorrelatedStep = sort;
 
-                    node = sort.Source;
+                    node = sort.Source as ISingleSourceExecutionPlanNode;
                 }
                 else if (node is TopNode top)
                 {
                     if (top.Top.GetVariables().Any())
-                        lastCorrelatedStep = node;
+                        lastCorrelatedStep = top;
 
-                    node = top.Source;
+                    node = top.Source as ISingleSourceExecutionPlanNode;
                 }
                 else if (node is OffsetFetchNode offset)
                 {
                     if (offset.Offset.GetVariables().Any() || offset.Fetch.GetVariables().Any())
-                        lastCorrelatedStep = node;
+                        lastCorrelatedStep = offset;
 
-                    node = offset.Source;
+                    node = offset.Source as ISingleSourceExecutionPlanNode;
                 }
                 else
                 {
-                    break;
+                    return;
                 }
             }
 
-            // Check we've ended up at a Filter node with a FetchXML source
-            if (!(node is FilterNode filter))
-                return false;
-
-            if (!(filter.Source is FetchXmlScan))
-                return false;
-
-            if (!filter.Filter.GetVariables().Any())
+            if (filter != null)
             {
-                // If the filter isn't using the outer references, they must be being used by an earlier step.
-                // Just add a table spool between that step and its source
+                fetchXml = filter.Source as FetchXmlScan;
 
+                // TODO: If the filter is on a join we need to do some more complex checking that there's no outer references
+                // in use by the join before we know we can safely spool the results
+                if (fetchXml == null)
+                    return;
             }
-        }*/
+
+            if (filter != null && filter.Filter.GetVariables().Any())
+            {
+                // The filter is correlated. Check if there's any non-correlated criteria we can split out into a separate node
+                // that could be folded into the data source first
+                if (SplitCorrelatedCriteria(filter.Filter, out var correlatedFilter, out var nonCorrelatedFilter))
+                {
+                    filter.Filter = correlatedFilter;
+                    filter.Source = new FilterNode
+                    {
+                        Filter = nonCorrelatedFilter,
+                        Source = filter.Source
+                    };
+                }
+
+                lastCorrelatedStep = filter;
+            }
+
+            if (lastCorrelatedStep == null)
+                return;
+
+            // TODO: Check the estimated counts for the outer loop and the source at the point we'd insert the spool
+            // If the outer loop is non-trivial (>= 100 rows) or the inner loop is small (<= 5000 records) then we want
+            // to use the spool.
+            var outerCount = outerSource.EstimateRowsOut(Metadata, parameterTypes, TableSize);
+            var innerCount = outerCount >= 100 ? -1 : lastCorrelatedStep.Source.EstimateRowsOut(Metadata, parameterTypes, TableSize);
+
+            if (outerCount >= 100 || innerCount <= 5000)
+            {
+                var spool = new TableSpoolNode
+                {
+                    Source = lastCorrelatedStep.Source
+                };
+
+                lastCorrelatedStep.Source = spool;
+            }
+        }
+
+        private bool SplitCorrelatedCriteria(BooleanExpression filter, out BooleanExpression correlatedFilter, out BooleanExpression nonCorrelatedFilter)
+        {
+            correlatedFilter = null;
+            nonCorrelatedFilter = null;
+
+            if (!filter.GetVariables().Any())
+            {
+                nonCorrelatedFilter = filter;
+                return true;
+            }
+
+            if (filter is BooleanBinaryExpression bin && bin.BinaryExpressionType == BooleanBinaryExpressionType.And)
+            {
+                var splitLhs = SplitCorrelatedCriteria(bin.FirstExpression, out var correlatedLhs, out var nonCorrelatedLhs);
+                var splitRhs = SplitCorrelatedCriteria(bin.SecondExpression, out var correlatedRhs, out var nonCorrelatedRhs);
+
+                if (splitLhs || splitRhs)
+                {
+                    if (correlatedLhs != null && correlatedRhs != null)
+                    {
+                        correlatedFilter = new BooleanBinaryExpression
+                        {
+                            FirstExpression = correlatedLhs,
+                            BinaryExpressionType = BooleanBinaryExpressionType.And,
+                            SecondExpression = correlatedRhs
+                        };
+                    }
+                    else
+                    {
+                        correlatedFilter = correlatedLhs ?? correlatedRhs;
+                    }
+
+                    if (nonCorrelatedLhs != null && nonCorrelatedRhs != null)
+                    {
+                        nonCorrelatedFilter = new BooleanBinaryExpression
+                        {
+                            FirstExpression = nonCorrelatedLhs,
+                            BinaryExpressionType = BooleanBinaryExpressionType.And,
+                            SecondExpression = nonCorrelatedRhs
+                        };
+                    }
+                    else
+                    {
+                        nonCorrelatedFilter = nonCorrelatedLhs ?? nonCorrelatedRhs;
+                    }
+
+                    return true;
+                }
+            }
+
+            correlatedFilter = filter;
+            return false;
+        }
 
         private IExecutionPlanNode ConvertFromClause(IList<TableReference> tables, TSqlFragment query, IDictionary<string, Type> parameterTypes)
         {

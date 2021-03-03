@@ -8,7 +8,7 @@ using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    public class OffsetFetchNode : BaseNode
+    public class OffsetFetchNode : BaseNode, ISingleSourceExecutionPlanNode
     {
         public ScalarExpression Offset { get; set; }
 

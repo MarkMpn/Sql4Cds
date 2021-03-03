@@ -8,7 +8,7 @@ using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    public class TopNode : BaseNode
+    public class TopNode : BaseNode, ISingleSourceExecutionPlanNode
     {
         public ScalarExpression Top { get; set; }
 

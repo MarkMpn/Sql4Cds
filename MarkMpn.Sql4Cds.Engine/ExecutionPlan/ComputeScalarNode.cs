@@ -11,7 +11,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Calculates the value of scalar expressions
     /// </summary>
-    public class ComputeScalarNode : BaseNode
+    public class ComputeScalarNode : BaseNode, ISingleSourceExecutionPlanNode
     {
         /// <summary>
         /// The names and associated expressions for the columns to calculate

@@ -68,7 +68,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = "SELECT accountid, name FROM account";
 
@@ -95,7 +95,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = "SELECT * FROM account";
 
@@ -131,7 +131,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = "SELECT accountid, name FROM account INNER JOIN contact ON account.accountid = contact.parentcustomerid";
 
@@ -160,7 +160,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
                 SELECT
@@ -198,7 +198,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = "SELECT accountid, name FROM account INNER JOIN contact ON account.name = contact.fullname";
 
@@ -227,7 +227,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = "SELECT accountid, name FROM account INNER JOIN contact ON account.name = (contact.firstname + ' ' + contact.lastname)";
 
@@ -264,7 +264,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
                 SELECT
@@ -301,7 +301,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
                 SELECT
@@ -336,7 +336,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
                 SELECT
@@ -371,7 +371,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
                 SELECT DISTINCT
@@ -401,7 +401,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
                 SELECT TOP 10
@@ -433,7 +433,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
                 SELECT
@@ -468,7 +468,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
                 SELECT
@@ -510,7 +510,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
                 SELECT
@@ -552,7 +552,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
                 SELECT
@@ -594,7 +594,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = "SELECT accountid, name AS test FROM account";
 
@@ -621,7 +621,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
                 SELECT
@@ -675,7 +675,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
                 SELECT
@@ -720,7 +720,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
                 SELECT
@@ -762,7 +762,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
                 SELECT TOP 100
@@ -806,7 +806,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
                 SELECT
@@ -847,7 +847,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
                 SELECT count(*) FROM account";
@@ -872,7 +872,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname FROM contact WHERE firstname = 'Mark'";
@@ -906,7 +906,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
                 SELECT contactid FROM contact WHERE firstname + ' ' + lastname = 'Mark Carrington'";
@@ -937,7 +937,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT name FROM account WHERE accountid = parentcustomerid) AS accountname FROM contact WHERE firstname = 'Mark'";
@@ -975,7 +975,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT name FROM account WHERE createdon = contact.createdon) AS accountname FROM contact WHERE firstname = 'Mark'";
@@ -1005,27 +1005,28 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 </fetch>");
             var subAssert = AssertNode<AssertNode>(nestedLoop.RightSource);
             var subAggregate = AssertNode<HashMatchAggregateNode>(subAssert.Source);
-            var subAggregateFetch = AssertNode<FetchXmlScan>(subAggregate.Source);
+            var subFilter = AssertNode<FilterNode>(subAggregate.Source);
+            Assert.AreEqual("createdon = @Expr2", subFilter.Filter.ToSql());
+            var subSpool = AssertNode<TableSpoolNode>(subFilter.Source);
+            var subAggregateFetch = AssertNode<FetchXmlScan>(subSpool.Source);
             AssertFetchXml(subAggregateFetch, @"
                 <fetch>
                     <entity name='account'>
                         <attribute name='name' />
-                        <filter>
-                            <condition attribute='createdon' operator='eq' value='@Expr2' />
-                        </filter>
+                        <attribute name='createdon' />
                     </entity>
                 </fetch>");
         }
 
         [TestMethod]
-        public void SelectSubqueryWithSpooledNestedLoop()
+        public void SelectSubqueryWithNonCorrelatedNestedLoop()
         {
             var context = new XrmFakedContext();
             context.InitializeMetadata(Assembly.GetExecutingAssembly());
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT TOP 1 name FROM account) AS accountname FROM contact WHERE firstname = 'Mark'";
@@ -1065,6 +1066,113 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void SelectSubqueryWithCorrelatedSpooledNestedLoop()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                SELECT firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT name FROM account WHERE createdon = contact.createdon) AS accountname FROM contact WHERE firstname = 'Mark'";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var computeScalar = AssertNode<ComputeScalarNode>(select.Source);
+            Assert.AreEqual(2, computeScalar.Columns.Count);
+            Assert.AreEqual("firstname + ' ' + lastname", computeScalar.Columns[select.ColumnSet[0].SourceColumn].ToSql());
+            Assert.AreEqual("'Account: ' + Expr3", computeScalar.Columns[select.ColumnSet[1].SourceColumn].ToSql());
+            var nestedLoop = AssertNode<NestedLoopNode>(computeScalar.Source);
+            Assert.AreEqual(QualifiedJoinType.LeftOuter, nestedLoop.JoinType);
+            Assert.IsTrue(nestedLoop.SemiJoin);
+            var fetch = AssertNode<FetchXmlScan>(nestedLoop.LeftSource);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <attribute name='lastname' />
+                        <attribute name='createdon' />
+                        <filter>
+                            <condition attribute='firstname' operator='eq' value='Mark' />
+                        </filter>
+                    </entity>
+                </fetch>");
+            var subAssert = AssertNode<AssertNode>(nestedLoop.RightSource);
+            var subAggregate = AssertNode<HashMatchAggregateNode>(subAssert.Source);
+            var subFilter = AssertNode<FilterNode>(subAggregate.Source);
+            Assert.AreEqual("createdon = @Expr2", subFilter.Filter.ToSql());
+            var subSpool = AssertNode<TableSpoolNode>(subFilter.Source);
+            var subFetch = AssertNode<FetchXmlScan>(subSpool.Source);
+            AssertFetchXml(subFetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <attribute name='createdon' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void SelectSubqueryWithPartiallyCorrelatedSpooledNestedLoop()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                SELECT firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT name FROM account WHERE createdon = contact.createdon AND employees > 10) AS accountname FROM contact WHERE firstname = 'Mark'";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var computeScalar = AssertNode<ComputeScalarNode>(select.Source);
+            Assert.AreEqual(2, computeScalar.Columns.Count);
+            Assert.AreEqual("firstname + ' ' + lastname", computeScalar.Columns[select.ColumnSet[0].SourceColumn].ToSql());
+            Assert.AreEqual("'Account: ' + Expr3", computeScalar.Columns[select.ColumnSet[1].SourceColumn].ToSql());
+            var nestedLoop = AssertNode<NestedLoopNode>(computeScalar.Source);
+            Assert.AreEqual(QualifiedJoinType.LeftOuter, nestedLoop.JoinType);
+            Assert.IsTrue(nestedLoop.SemiJoin);
+            var fetch = AssertNode<FetchXmlScan>(nestedLoop.LeftSource);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <attribute name='lastname' />
+                        <attribute name='createdon' />
+                        <filter>
+                            <condition attribute='firstname' operator='eq' value='Mark' />
+                        </filter>
+                    </entity>
+                </fetch>");
+            var subAssert = AssertNode<AssertNode>(nestedLoop.RightSource);
+            var subAggregate = AssertNode<HashMatchAggregateNode>(subAssert.Source);
+            var subFilter = AssertNode<FilterNode>(subAggregate.Source);
+            Assert.AreEqual("createdon = @Expr2", subFilter.Filter.ToSql());
+            var subSpool = AssertNode<TableSpoolNode>(subFilter.Source);
+            var subFetch = AssertNode<FetchXmlScan>(subSpool.Source);
+            AssertFetchXml(subFetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <attribute name='createdon' />
+                        <filter>
+                            <condition attribute='employees' operator='gt' value='10' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
         public void SelectSubqueryUsingOuterReferenceInSelectClause()
         {
             var context = new XrmFakedContext();
@@ -1072,7 +1180,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+            var tableSize = new StubTableSizeCache();
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT firstname + ' ' + name FROM account WHERE accountid = parentcustomerid) AS accountname FROM contact WHERE firstname = 'Mark'";
@@ -1104,14 +1213,15 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var subAssert = AssertNode<AssertNode>(nestedLoop.RightSource);
             var subAggregate = AssertNode<HashMatchAggregateNode>(subAssert.Source);
             var subCompute = AssertNode<ComputeScalarNode>(subAggregate.Source);
-            var subAggregateFetch = AssertNode<FetchXmlScan>(subCompute.Source);
+            var subFilter = AssertNode<FilterNode>(subCompute.Source);
+            Assert.AreEqual("accountid = @Expr2", subFilter.Filter.ToSql());
+            var subSpool = AssertNode<TableSpoolNode>(subFilter.Source);
+            var subAggregateFetch = AssertNode<FetchXmlScan>(subSpool.Source);
             AssertFetchXml(subAggregateFetch, @"
                 <fetch>
                     <entity name='account'>
                         <attribute name='name' />
-                        <filter>
-                            <condition attribute='accountid' operator='eq' value='@Expr2' />
-                        </filter>
+                        <attribute name='accountid' />
                     </entity>
                 </fetch>");
         }
@@ -1124,7 +1234,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
                 SELECT firstname FROM contact ORDER BY (SELECT TOP 1 name FROM account WHERE accountid = parentcustomerid ORDER BY firstname)";
@@ -1148,14 +1258,15 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 </fetch>");
             var subTop = AssertNode<TopNode>(nestedLoop.RightSource);
             var subSort = AssertNode<SortNode>(subTop.Source);
-            var subAggregateFetch = AssertNode<FetchXmlScan>(subSort.Source);
+            var subFilter = AssertNode<FilterNode>(subSort.Source);
+            Assert.AreEqual("accountid = @Expr1", subFilter.Filter.ToSql());
+            var subSpool = AssertNode<TableSpoolNode>(subFilter.Source);
+            var subAggregateFetch = AssertNode<FetchXmlScan>(subSpool.Source);
             AssertFetchXml(subAggregateFetch, @"
                 <fetch>
                     <entity name='account'>
                         <attribute name='name' />
-                        <filter>
-                            <condition attribute='accountid' operator='eq' value='@Expr1' />
-                        </filter>
+                        <attribute name='accountid' />
                     </entity>
                 </fetch>");
         }
@@ -1168,7 +1279,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname FROM contact WHERE (SELECT name FROM account WHERE accountid = parentcustomerid) = 'Data8'";
@@ -1205,7 +1316,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
                 SELECT DISTINCT TOP 10
@@ -1240,7 +1351,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
                 SELECT name FROM account
@@ -1281,7 +1392,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
                 SELECT
@@ -1321,7 +1432,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
                 SELECT
@@ -1364,7 +1475,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
-            var planBuilder = new ExecutionPlanBuilder(metadata, this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
                 SELECT

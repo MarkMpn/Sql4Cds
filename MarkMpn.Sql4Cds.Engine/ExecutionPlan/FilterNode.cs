@@ -12,7 +12,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Applies a filter to the data stream
     /// </summary>
-    public class FilterNode : BaseNode
+    public class FilterNode : BaseNode, ISingleSourceExecutionPlanNode
     {
         /// <summary>
         /// The filter to apply

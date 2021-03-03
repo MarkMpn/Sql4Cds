@@ -14,7 +14,7 @@ using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    public class HashMatchAggregateNode : BaseNode
+    public class HashMatchAggregateNode : BaseNode, ISingleSourceExecutionPlanNode
     {
         class GroupingKey
         {

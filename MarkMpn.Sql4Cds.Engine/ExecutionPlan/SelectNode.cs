@@ -8,7 +8,7 @@ using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    public class SelectNode : BaseNode
+    public class SelectNode : BaseNode, ISingleSourceExecutionPlanNode
     {
         /// <summary>
         /// The columns that should be included in the query results

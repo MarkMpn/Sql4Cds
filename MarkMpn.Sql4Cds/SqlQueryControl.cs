@@ -944,7 +944,7 @@ namespace MarkMpn.Sql4Cds
 
             //var converter = new Sql2FetchXml(Metadata, Settings.Instance.QuotedIdentifiers);
             var options = new QueryExecutionOptions(_con, Service, backgroundWorker, this);
-            var converter = new ExecutionPlanBuilder(Metadata, options);
+            var converter = new ExecutionPlanBuilder(Metadata, _tableSize, options);
 
             if (Settings.Instance.UseTSQLEndpoint &&
                 args.Execute &&
