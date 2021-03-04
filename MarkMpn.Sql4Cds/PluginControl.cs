@@ -14,7 +14,7 @@ using XrmToolBox.Extensibility.Interfaces;
 
 namespace MarkMpn.Sql4Cds
 {
-    public partial class PluginControl : MultipleConnectionsPluginControlBase, IMessageBusHost, IGitHubPlugin, IHelpPlugin, ISettingsPlugin
+    public partial class PluginControl : MultipleConnectionsPluginControlBase, IMessageBusHost, IGitHubPlugin, IHelpPlugin, ISettingsPlugin, IPayPalPlugin
     {
         private readonly IDictionary<ConnectionDetail, AttributeMetadataCache> _metadata;
         private readonly IDictionary<ConnectionDetail, TableSizeCache> _tableSize;
@@ -299,6 +299,10 @@ namespace MarkMpn.Sql4Cds
         string IGitHubPlugin.RepositoryName => "Sql4Cds";
 
         string IHelpPlugin.HelpUrl => "https://markcarrington.dev/sql-4-cds/";
+
+        string IPayPalPlugin.DonationDescription => "SQL 4 CDS Donation";
+
+        string IPayPalPlugin.EmailAccount => "donate@markcarrington.dev";
 
         private void tsbIncludeFetchXml_Click(object sender, EventArgs e)
         {
