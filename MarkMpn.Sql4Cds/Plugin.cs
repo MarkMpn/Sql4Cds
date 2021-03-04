@@ -21,7 +21,7 @@ namespace MarkMpn.Sql4Cds
         ExportMetadata("BackgroundColor", "DarkMagenta"),
         ExportMetadata("PrimaryFontColor", "White"),
         ExportMetadata("SecondaryFontColor", "Gray")]
-    public class Plugin : PluginBase
+    public class Plugin : PluginBase, IPayPalPlugin
     {
         public override IXrmToolBoxPluginControl GetControl()
         {
@@ -78,5 +78,9 @@ namespace MarkMpn.Sql4Cds
 
             return loadAssembly;
         }
+
+        string IPayPalPlugin.DonationDescription => "SQL 4 CDS Donation";
+
+        string IPayPalPlugin.EmailAccount => "donate@markcarrington.dev";
     }
 }
