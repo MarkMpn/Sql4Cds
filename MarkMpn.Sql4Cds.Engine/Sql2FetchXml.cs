@@ -3223,21 +3223,6 @@ namespace MarkMpn.Sql4Cds.Engine
                         value = targetMetadata.ObjectTypeCode?.ToString();
                     }
 
-                    if (DateTime.TryParse(value, out var dt) &&
-                        dt.Kind != DateTimeKind.Utc &&
-                        attribute is DateTimeAttributeMetadata dtAttr &&
-                        dtAttr.DateTimeBehavior?.Value != DateTimeBehavior.TimeZoneIndependent &&
-                        field.MultiPartIdentifier.Identifiers.Last().Value.Equals(attrName + "utc", StringComparison.OrdinalIgnoreCase))
-                    {
-                        // Convert the value to UTC if we're filtering on a UTC column
-                        if (dt.Kind == DateTimeKind.Unspecified)
-                            dt = DateTime.SpecifyKind(dt, DateTimeKind.Utc);
-                        else
-                            dt = dt.ToUniversalTime();
-
-                        value = dt.ToString("u");
-                    }
-
                     var condition = new condition
                     {
                         entityname = entityName,
@@ -4370,16 +4355,6 @@ namespace MarkMpn.Sql4Cds.Engine
                     .ToArray();
             }
 
-            if (possibleEntities.Length == 0 && colName.EndsWith("utc", StringComparison.OrdinalIgnoreCase))
-            {
-                // May be using the UTC version of a date/time column
-                var baseName = colName.Substring(0, colName.Length - 3);
-
-                possibleEntities = tables
-                    .Where(t => !t.Hidden && t.Metadata.Attributes.OfType<DateTimeAttributeMetadata>().Any(attr => attr.LogicalName.Equals(baseName, StringComparison.OrdinalIgnoreCase)))
-                    .ToArray();
-            }
-
             if (possibleEntities.Length == 0)
             {
                 if (col.MultiPartIdentifier.Identifiers.Count == 1 && calculatedFields != null && calculatedFields.ContainsKey(colName))
@@ -4412,15 +4387,6 @@ namespace MarkMpn.Sql4Cds.Engine
         private string GetColumnAttribute(EntityTable table, ColumnReferenceExpression col)
         {
             var attrName = col.MultiPartIdentifier.Identifiers.Last().Value.ToLower();
-
-            if (attrName.EndsWith("utc", StringComparison.OrdinalIgnoreCase))
-            {
-                var baseName = attrName.Substring(0, attrName.Length - 3);
-                var attr = table.Metadata.Attributes.SingleOrDefault(a => a.LogicalName.Equals(baseName, StringComparison.OrdinalIgnoreCase));
-
-                if (attr != null)
-                    attrName = baseName;
-            }
 
             return attrName;
         }
