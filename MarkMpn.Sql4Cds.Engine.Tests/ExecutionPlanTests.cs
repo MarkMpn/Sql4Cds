@@ -1685,6 +1685,38 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void QueryDerivedTableValues()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                SELECT TOP 10
+                    name
+                FROM
+                    (VALUES (1, 'Data8')) a (ID, name)
+                WHERE
+                    name = 'Data8'";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var top = AssertNode<TopNode>(select.Source);
+            var filter = AssertNode<FilterNode>(top.Source);
+            var constant = AssertNode<ConstantScanNode>(filter.Source);
+
+            var schema = constant.GetSchema(metadata, null);
+            Assert.AreEqual(typeof(int), schema.Schema["a.ID"]);
+            Assert.AreEqual(typeof(string), schema.Schema["a.name"]);
+        }
+
+        [TestMethod]
         public void NoLockTableHint()
         {
             var context = new XrmFakedContext();

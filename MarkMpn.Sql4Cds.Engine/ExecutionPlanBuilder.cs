@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using MarkMpn.Sql4Cds.Engine.Visitors;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
+using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
@@ -1452,8 +1453,57 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 return alias;
             }
-            // select top 10 * from (select name from account) a
-            // QueryDerivedTable
+
+            if (reference is InlineDerivedTable inlineDerivedTable)
+            {
+                // Check all the rows have the expected number of values and column names are unique
+                var columnNames = inlineDerivedTable.Columns.Select(col => col.Value).ToList();
+
+                for (var i = 1; i < columnNames.Count; i++)
+                {
+                    if (columnNames.Take(i).Any(prevCol => prevCol.Equals(columnNames[i], StringComparison.OrdinalIgnoreCase)))
+                        throw new NotSupportedQueryFragmentException("Duplicate column name", inlineDerivedTable.Columns[i]);
+                }
+
+                var firstMismatchRow = inlineDerivedTable.RowValues.FirstOrDefault(row => row.ColumnValues.Count != columnNames.Count);
+                if (firstMismatchRow != null)
+                    throw new NotSupportedQueryFragmentException($"Expected {columnNames.Count} columns, got {firstMismatchRow.ColumnValues.Count}", firstMismatchRow);
+
+                // Work out the column types
+                var types = inlineDerivedTable.RowValues[0].ColumnValues.Select(val => val.GetType(null, null)).ToList();
+                
+                foreach (var row in inlineDerivedTable.RowValues.Skip(1))
+                {
+                    for (var colIndex = 0; colIndex < types.Count; colIndex++)
+                    {
+                        if (!SqlTypeConverter.CanMakeConsistentTypes(types[colIndex], row.ColumnValues[colIndex].GetType(null, null), out var colType))
+                            throw new NotSupportedQueryFragmentException("No available implicit type conversion", row.ColumnValues[colIndex]);
+
+                        types[colIndex] = colType;
+                    }
+                }
+
+                // Convert the values
+                var constantScan = new ConstantScanNode();
+
+                foreach (var row in inlineDerivedTable.RowValues)
+                {
+                    var entity = new Entity();
+
+                    for (var colIndex = 0; colIndex < types.Count; colIndex++)
+                        entity[columnNames[colIndex]] = SqlTypeConverter.ChangeType(row.ColumnValues[colIndex].GetValue(null, null, null, null), types[colIndex]);
+
+                    constantScan.Values.Add(entity);
+                }
+
+                // Build the schema
+                for (var colIndex = 0; colIndex < types.Count; colIndex++)
+                    constantScan.Schema[inlineDerivedTable.Columns[colIndex].Value] = types[colIndex];
+
+                constantScan.Alias = inlineDerivedTable.Alias.Value;
+
+                return constantScan;
+            }
 
             throw new NotSupportedQueryFragmentException("Unhandled table reference", reference);
         }

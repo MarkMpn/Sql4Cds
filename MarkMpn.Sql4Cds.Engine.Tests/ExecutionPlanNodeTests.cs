@@ -158,14 +158,15 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     Values =
                     {
-                        new Entity { ["f.key"] = 1, ["f.firstname"] = "Mark" },
-                        new Entity { ["f.key"] = 2, ["f.firstname"] = "Joe" }
+                        new Entity { ["key"] = 1, ["firstname"] = "Mark" },
+                        new Entity { ["key"] = 2, ["firstname"] = "Joe" }
                     },
                     Schema =
                     {
-                        ["f.key"] = typeof(int),
-                        ["f.firstname"] = typeof(string)
-                    }
+                        ["key"] = typeof(int),
+                        ["firstname"] = typeof(string)
+                    },
+                    Alias = "f"
                 },
                 LeftAttribute = new ColumnReferenceExpression
                 {
@@ -178,15 +179,16 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     Values =
                     {
-                        new Entity { ["l.key"] = 1, ["l.lastname"] = "Carrington" },
-                        new Entity { ["l.key"] = 1, ["l.lastname"] = "Twain" },
-                        new Entity { ["l.key"] = 3, ["l.lastname"] = "Hamill" }
+                        new Entity { ["key"] = 1, ["lastname"] = "Carrington" },
+                        new Entity { ["key"] = 1, ["lastname"] = "Twain" },
+                        new Entity { ["key"] = 3, ["lastname"] = "Hamill" }
                     },
                     Schema =
                     {
-                        ["l.key"] = typeof(int),
-                        ["l.lastname"] = typeof(string)
-                    }
+                        ["key"] = typeof(int),
+                        ["lastname"] = typeof(string)
+                    },
+                    Alias = "l"
                 },
                 RightAttribute = new ColumnReferenceExpression
                 {
@@ -218,14 +220,15 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     Values =
                     {
-                        new Entity { ["f.key"] = 1, ["f.firstname"] = "Mark" },
-                        new Entity { ["f.key"] = 2, ["f.firstname"] = "Joe" }
+                        new Entity { ["key"] = 1, ["firstname"] = "Mark" },
+                        new Entity { ["key"] = 2, ["firstname"] = "Joe" }
                     },
                     Schema =
                     {
-                        ["f.key"] = typeof(int),
-                        ["f.firstname"] = typeof(string)
-                    }
+                        ["key"] = typeof(int),
+                        ["firstname"] = typeof(string)
+                    },
+                    Alias = "f"
                 },
                 LeftAttribute = new ColumnReferenceExpression
                 {
@@ -238,15 +241,16 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     Values =
                     {
-                        new Entity { ["l.key"] = 1, ["l.lastname"] = "Carrington" },
-                        new Entity { ["l.key"] = 1, ["l.lastname"] = "Twain" },
-                        new Entity { ["l.key"] = 3, ["l.lastname"] = "Hamill" }
+                        new Entity { ["key"] = 1, ["lastname"] = "Carrington" },
+                        new Entity { ["key"] = 1, ["lastname"] = "Twain" },
+                        new Entity { ["key"] = 3, ["lastname"] = "Hamill" }
                     },
                     Schema =
                     {
-                        ["l.key"] = typeof(int),
-                        ["l.lastname"] = typeof(string)
-                    }
+                        ["key"] = typeof(int),
+                        ["lastname"] = typeof(string)
+                    },
+                    Alias = "l"
                 },
                 RightAttribute = new ColumnReferenceExpression
                 {
