@@ -1430,7 +1430,21 @@ namespace MarkMpn.Sql4Cds.Engine
                 return joinNode;
             }
 
-            throw new NotImplementedException();
+            if (reference is QueryDerivedTable queryDerivedTable)
+            {
+                if (queryDerivedTable.Columns.Count > 0)
+                    throw new NotSupportedQueryFragmentException("Unhandled query derived table column list", queryDerivedTable);
+
+                var select = ConvertSelectStatement(queryDerivedTable.QueryExpression, null, null, null);
+                var alias = new AliasNode(select);
+                alias.Alias = queryDerivedTable.Alias.Value;
+
+                return alias;
+            }
+            // select top 10 * from (select name from account) a
+            // QueryDerivedTable
+
+            throw new NotSupportedQueryFragmentException("Unhandled table reference", reference);
         }
     }
 }

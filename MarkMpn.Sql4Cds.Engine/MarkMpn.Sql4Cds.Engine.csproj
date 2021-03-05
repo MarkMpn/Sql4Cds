@@ -62,6 +62,7 @@
     <Compile Include="ExecutionPlanBuilder.cs" />
     <Compile Include="ExecutionPlanOptimizer.cs" />
     <Compile Include="ExecutionPlan\Aggregate.cs" />
+    <Compile Include="ExecutionPlan\AliasNode.cs" />
     <Compile Include="ExecutionPlan\AssertNode.cs" />
     <Compile Include="ExecutionPlan\BaseJoinNode.cs" />
     <Compile Include="ExecutionPlan\BaseNode.cs" />
