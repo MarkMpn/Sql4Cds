@@ -1287,11 +1287,22 @@ namespace MarkMpn.Sql4Cds.Engine
                     throw new NotSupportedQueryFragmentException(ex.Message, reference);
                 }
 
+                var unsupportedHint = table.TableHints.FirstOrDefault(hint => hint.HintKind != TableHintKind.NoLock);
+                if (unsupportedHint != null)
+                    throw new NotSupportedQueryFragmentException("Unsupported table hint", unsupportedHint);
+
+                if (table.TableSampleClause != null)
+                    throw new NotSupportedQueryFragmentException("Unsupported table sample clause", table.TableSampleClause);
+
+                if (table.TemporalClause != null)
+                    throw new NotSupportedQueryFragmentException("Unsupported temporal clause", table.TemporalClause);
+
                 // Convert to a simple FetchXML source
                 return new FetchXmlScan
                 {
                     FetchXml = new FetchXml.FetchType
                     {
+                        nolock = table.TableHints.Any(hint => hint.HintKind == TableHintKind.NoLock),
                         Items = new object[]
                         {
                             new FetchXml.FetchEntityType
