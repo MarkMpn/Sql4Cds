@@ -1505,6 +1505,27 @@ namespace MarkMpn.Sql4Cds.Engine
                 return constantScan;
             }
 
+            if (reference is UnqualifiedJoin unqualifiedJoin)
+            {
+                var lhs = ConvertTableReference(unqualifiedJoin.FirstTableReference, query, parameterTypes);
+
+                if (unqualifiedJoin.UnqualifiedJoinType != UnqualifiedJoinType.CrossJoin)
+                    throw new NotSupportedQueryFragmentException("TODO", unqualifiedJoin);
+
+                var rhs = ConvertTableReference(unqualifiedJoin.SecondTableReference, query, parameterTypes);
+
+                // For cross joins there is no outer reference so the entire result can be spooled for reuse
+                if (unqualifiedJoin.UnqualifiedJoinType == UnqualifiedJoinType.CrossJoin)
+                    rhs = new TableSpoolNode { Source = rhs };
+                
+                return new NestedLoopNode
+                {
+                    LeftSource = lhs,
+                    RightSource = rhs,
+                    JoinType = unqualifiedJoin.UnqualifiedJoinType == UnqualifiedJoinType.OuterApply ? QualifiedJoinType.LeftOuter : QualifiedJoinType.Inner
+                };
+            }
+
             throw new NotSupportedQueryFragmentException("Unhandled table reference", reference);
         }
     }

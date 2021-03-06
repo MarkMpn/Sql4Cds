@@ -123,7 +123,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var leftSchema = LeftSource.GetSchema(metadata, parameterTypes);
             var leftColumns = requiredColumns
                 .Where(col => leftSchema.ContainsColumn(col, out _))
-                .Concat(OuterReferences.Keys)
+                .Concat((IEnumerable<string>) OuterReferences?.Keys ?? Array.Empty<string>())
                 .Distinct()
                 .ToList();
             var innerParameterTypes = GetInnerParameterTypes(leftSchema, parameterTypes);
