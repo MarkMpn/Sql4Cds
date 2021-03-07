@@ -122,5 +122,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             return Source.EstimateRowsOut(metadata, parameterTypes, tableSize);
         }
+
+        public override string ToString()
+        {
+            return "Table Spool\r\n(Lazy Spool)";
+        }
     }
 }

@@ -66,7 +66,104 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     fetchXml.Entity.AddItem(fetchFilter);
             }
 
+            // If we've got a filter matching a column and a variable (key lookup in a nested loop) from a table spool, replace it with a index spool
+            if (Source is TableSpoolNode tableSpool)
+            {
+                if (ExtractKeyLookupFilter(Filter, out var filter, out var indexColumn, out var seekVariable) && schema.ContainsColumn(indexColumn, out indexColumn))
+                {
+                    var spoolSource = tableSpool.Source;
+
+                    // Index spool requires non-null key values
+                    if (indexColumn != schema.PrimaryKey)
+                    {
+                        spoolSource = new FilterNode
+                        {
+                            Source = tableSpool.Source,
+                            Filter = new BooleanIsNullExpression
+                            {
+                                Expression = indexColumn.ToColumnReference(),
+                                IsNot = true
+                            }
+                        }.FoldQuery(metadata, options, parameterTypes);
+                    }
+
+                    Source = new IndexSpoolNode
+                    {
+                        Source = spoolSource,
+                        KeyColumn = indexColumn,
+                        SeekValue = seekVariable
+                    };
+
+                    if (filter == null)
+                        return Source;
+
+                    Filter = filter;
+                }
+            }
+
             return this;
+        }
+
+        private bool ExtractKeyLookupFilter(BooleanExpression filter, out BooleanExpression remainingFilter, out string indexColumn, out string seekVariable)
+        {
+            remainingFilter = null;
+            indexColumn = null;
+            seekVariable = null;
+
+            if (filter is BooleanComparisonExpression cmp && cmp.ComparisonType == BooleanComparisonType.Equals)
+            {
+                if (cmp.FirstExpression is ColumnReferenceExpression col1 && 
+                    cmp.SecondExpression is VariableReference var2)
+                {
+                    indexColumn = col1.GetColumnName();
+                    seekVariable = var2.Name;
+                    return true;
+                }
+                else if (cmp.FirstExpression is VariableReference var1 &&
+                    cmp.SecondExpression is ColumnReferenceExpression col2)
+                {
+                    indexColumn = col2.GetColumnName();
+                    seekVariable = var1.Name;
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            else if (filter is BooleanBinaryExpression bin && bin.BinaryExpressionType == BooleanBinaryExpressionType.And)
+            {
+                if (ExtractKeyLookupFilter(bin.FirstExpression, out remainingFilter, out indexColumn, out seekVariable))
+                {
+                    if (remainingFilter == null)
+                    {
+                        remainingFilter = bin.SecondExpression;
+                    }
+                    else
+                    {
+                        bin.FirstExpression = remainingFilter;
+                        remainingFilter = bin;
+                    }
+
+                    return true;
+                }
+                else if (ExtractKeyLookupFilter(bin.SecondExpression, out remainingFilter, out indexColumn, out seekVariable))
+                {
+                    if (remainingFilter == null)
+                    {
+                        remainingFilter = bin.FirstExpression;
+                    }
+                    else
+                    {
+                        bin.SecondExpression = remainingFilter;
+                        remainingFilter = bin;
+                    }
+
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)

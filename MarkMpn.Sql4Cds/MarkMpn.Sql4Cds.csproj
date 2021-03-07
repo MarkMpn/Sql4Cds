@@ -383,6 +383,9 @@
   <ItemGroup>
     <EmbeddedResource Include="Images\HashJoinNode.ico" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Images\IndexSpoolNode.ico" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>

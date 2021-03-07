@@ -78,6 +78,7 @@
     <Compile Include="ExecutionPlan\HashMatchAggregateNode.cs" />
     <Compile Include="ExecutionPlan\IExecutionPlanNode.cs" />
     <Compile Include="ExecutionPlan\FoldableJoinNode.cs" />
+    <Compile Include="ExecutionPlan\IndexSpoolNode.cs" />
     <Compile Include="ExecutionPlan\ISingleSourceExecutionPlanNode.cs" />
     <Compile Include="ExecutionPlan\ITableSizeCache.cs" />
     <Compile Include="ExecutionPlan\MergeJoinNode.cs" />

@@ -1005,15 +1005,18 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 </fetch>");
             var subAssert = AssertNode<AssertNode>(nestedLoop.RightSource);
             var subAggregate = AssertNode<HashMatchAggregateNode>(subAssert.Source);
-            var subFilter = AssertNode<FilterNode>(subAggregate.Source);
-            Assert.AreEqual("createdon = @Expr2", subFilter.Filter.ToSql());
-            var subSpool = AssertNode<TableSpoolNode>(subFilter.Source);
-            var subAggregateFetch = AssertNode<FetchXmlScan>(subSpool.Source);
+            var subIndexSpool = AssertNode<IndexSpoolNode>(subAggregate.Source);
+            Assert.AreEqual("account.createdon", subIndexSpool.KeyColumn);
+            Assert.AreEqual("@Expr2", subIndexSpool.SeekValue);
+            var subAggregateFetch = AssertNode<FetchXmlScan>(subIndexSpool.Source);
             AssertFetchXml(subAggregateFetch, @"
                 <fetch>
                     <entity name='account'>
                         <attribute name='name' />
                         <attribute name='createdon' />
+                        <filter>
+                            <condition attribute='createdon' operator='not-null' />
+                        </filter>
                     </entity>
                 </fetch>");
         }
@@ -1154,15 +1157,18 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 </fetch>");
             var subAssert = AssertNode<AssertNode>(nestedLoop.RightSource);
             var subAggregate = AssertNode<HashMatchAggregateNode>(subAssert.Source);
-            var subFilter = AssertNode<FilterNode>(subAggregate.Source);
-            Assert.AreEqual("createdon = @Expr2", subFilter.Filter.ToSql());
-            var subSpool = AssertNode<TableSpoolNode>(subFilter.Source);
-            var subFetch = AssertNode<FetchXmlScan>(subSpool.Source);
+            var subIndexSpool = AssertNode<IndexSpoolNode>(subAggregate.Source);
+            Assert.AreEqual("account.createdon", subIndexSpool.KeyColumn);
+            Assert.AreEqual("@Expr2", subIndexSpool.SeekValue);
+            var subFetch = AssertNode<FetchXmlScan>(subIndexSpool.Source);
             AssertFetchXml(subFetch, @"
                 <fetch>
                     <entity name='account'>
                         <attribute name='name' />
                         <attribute name='createdon' />
+                        <filter>
+                            <condition attribute='createdon' operator='not-null' />
+                        </filter>
                     </entity>
                 </fetch>");
         }
@@ -1206,10 +1212,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 </fetch>");
             var subAssert = AssertNode<AssertNode>(nestedLoop.RightSource);
             var subAggregate = AssertNode<HashMatchAggregateNode>(subAssert.Source);
-            var subFilter = AssertNode<FilterNode>(subAggregate.Source);
-            Assert.AreEqual("createdon = @Expr2", subFilter.Filter.ToSql());
-            var subSpool = AssertNode<TableSpoolNode>(subFilter.Source);
-            var subFetch = AssertNode<FetchXmlScan>(subSpool.Source);
+            var subIndexSpool = AssertNode<IndexSpoolNode>(subAggregate.Source);
+            Assert.AreEqual("account.createdon", subIndexSpool.KeyColumn);
+            Assert.AreEqual("@Expr2", subIndexSpool.SeekValue);
+            var subFetch = AssertNode<FetchXmlScan>(subIndexSpool.Source);
             AssertFetchXml(subFetch, @"
                 <fetch>
                     <entity name='account'>
@@ -1217,6 +1223,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <attribute name='createdon' />
                         <filter>
                             <condition attribute='employees' operator='gt' value='10' />
+                        </filter>
+                        <filter>
+                            <condition attribute='createdon' operator='not-null' />
                         </filter>
                     </entity>
                 </fetch>");
@@ -1263,10 +1272,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var subAssert = AssertNode<AssertNode>(nestedLoop.RightSource);
             var subAggregate = AssertNode<HashMatchAggregateNode>(subAssert.Source);
             var subCompute = AssertNode<ComputeScalarNode>(subAggregate.Source);
-            var subFilter = AssertNode<FilterNode>(subCompute.Source);
-            Assert.AreEqual("accountid = @Expr2", subFilter.Filter.ToSql());
-            var subSpool = AssertNode<TableSpoolNode>(subFilter.Source);
-            var subAggregateFetch = AssertNode<FetchXmlScan>(subSpool.Source);
+            var subIndexSpool = AssertNode<IndexSpoolNode>(subCompute.Source);
+            Assert.AreEqual("account.accountid", subIndexSpool.KeyColumn);
+            Assert.AreEqual("@Expr2", subIndexSpool.SeekValue);
+            var subAggregateFetch = AssertNode<FetchXmlScan>(subIndexSpool.Source);
             AssertFetchXml(subAggregateFetch, @"
                 <fetch>
                     <entity name='account'>
@@ -1308,10 +1317,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 </fetch>");
             var subTop = AssertNode<TopNode>(nestedLoop.RightSource);
             var subSort = AssertNode<SortNode>(subTop.Source);
-            var subFilter = AssertNode<FilterNode>(subSort.Source);
-            Assert.AreEqual("accountid = @Expr1", subFilter.Filter.ToSql());
-            var subSpool = AssertNode<TableSpoolNode>(subFilter.Source);
-            var subAggregateFetch = AssertNode<FetchXmlScan>(subSpool.Source);
+            var subIndexSpool = AssertNode<IndexSpoolNode>(subSort.Source);
+            Assert.AreEqual("account.accountid", subIndexSpool.KeyColumn);
+            Assert.AreEqual("@Expr1", subIndexSpool.SeekValue);
+            var subAggregateFetch = AssertNode<FetchXmlScan>(subIndexSpool.Source);
             AssertFetchXml(subAggregateFetch, @"
                 <fetch>
                     <entity name='account'>
@@ -1599,15 +1608,18 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <attribute name='name' />
                     </entity>
                 </fetch>");
-            var subFilter = AssertNode<FilterNode>(nestedLoop.RightSource);
-            Assert.AreEqual("parentcustomerid = @Expr1", subFilter.Filter.ToSql());
-            var subSpool = AssertNode<TableSpoolNode>(subFilter.Source);
-            var subFetch = AssertNode<FetchXmlScan>(subSpool.Source);
+            var subIndexSpool = AssertNode<IndexSpoolNode>(nestedLoop.RightSource);
+            Assert.AreEqual("contact.parentcustomerid", subIndexSpool.KeyColumn);
+            Assert.AreEqual("@Expr1", subIndexSpool.SeekValue);
+            var subFetch = AssertNode<FetchXmlScan>(subIndexSpool.Source);
             AssertFetchXml(subFetch, @"
                 <fetch>
                     <entity name='contact'>
                         <attribute name='firstname' />
                         <attribute name='parentcustomerid' />
+                        <filter>
+                            <condition attribute='parentcustomerid' operator='not-null' />
+                        </filter>
                     </entity>
                 </fetch>");
         }
@@ -1925,16 +1937,19 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var innerAlias = AssertNode<AliasNode>(loop.RightSource);
             var innerTop = AssertNode<TopNode>(innerAlias.Source);
             var innerSort = AssertNode<SortNode>(innerTop.Source);
-            var innerFilter = AssertNode<FilterNode>(innerSort.Source);
-            Assert.AreEqual("parentcustomerid = @Expr1", innerFilter.Filter.ToSql());
-            var innerSpool = AssertNode<TableSpoolNode>(innerFilter.Source);
-            var innerFetch = AssertNode<FetchXmlScan>(innerSpool.Source);
+            var innerIndexSpool = AssertNode<IndexSpoolNode>(innerSort.Source);
+            Assert.AreEqual("contact.parentcustomerid", innerIndexSpool.KeyColumn);
+            Assert.AreEqual("@Expr1", innerIndexSpool.SeekValue);
+            var innerFetch = AssertNode<FetchXmlScan>(innerIndexSpool.Source);
             AssertFetchXml(innerFetch, @"
                 <fetch>
                     <entity name='contact'>
                         <attribute name='firstname' />
                         <attribute name='lastname' />
                         <attribute name='parentcustomerid' />
+                        <filter>
+                            <condition attribute='parentcustomerid' operator='not-null' />
+                        </filter>
                     </entity>
                 </fetch>");
         }
