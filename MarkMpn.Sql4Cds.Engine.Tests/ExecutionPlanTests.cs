@@ -1824,30 +1824,15 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, plans.Length);
 
             var select = AssertNode<SelectNode>(plans[0]);
-            var loop = AssertNode<NestedLoopNode>(select.Source);
-            Assert.AreEqual(QualifiedJoinType.Inner, loop.JoinType);
-            Assert.IsNull(loop.JoinCondition);
-            Assert.AreEqual(1, loop.OuterReferences.Count);
-            Assert.AreEqual("@Expr1", loop.OuterReferences["account.primarycontactid"]);
-            var outerFetch = AssertNode<FetchXmlScan>(loop.LeftSource);
-            AssertFetchXml(outerFetch, @"
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
                 <fetch>
                     <entity name='account'>
                         <attribute name='name' />
-                        <attribute name='primarycontactid' />
-                    </entity>
-                </fetch>");
-            var innerAlias = AssertNode<AliasNode>(loop.RightSource);
-            var innerFilter = AssertNode<FilterNode>(innerAlias.Source);
-            Assert.AreEqual("@Expr1 = contactid", innerFilter.Filter.ToSql());
-            var innerSpool = AssertNode<TableSpoolNode>(innerFilter.Source);
-            var innerFetch = AssertNode<FetchXmlScan>(innerSpool.Source);
-            AssertFetchXml(innerFetch, @"
-                <fetch>
-                    <entity name='contact'>
-                        <attribute name='firstname' />
-                        <attribute name='lastname' />
-                        <attribute name='contactid' />
+                        <link-entity name='contact' alias='a' from='contactid' to='primarycontactid' link-type='inner'>
+                            <attribute name='firstname' />
+                            <attribute name='lastname' />
+                        </link-entity>
                     </entity>
                 </fetch>");
         }
@@ -1881,22 +1866,67 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, plans.Length);
 
             var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <link-entity name='contact' alias='a' from='contactid' to='primarycontactid' link-type='outer'>
+                            <attribute name='firstname' />
+                            <attribute name='lastname' />
+                        </link-entity>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void OuterApplyNestedLoop()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                SELECT
+                    name,
+                    firstname,
+                    lastname
+                FROM
+                    account
+                    OUTER APPLY
+                    (
+                        SELECT TOP 1 *
+                        FROM   contact
+                        WHERE  parentcustomerid = accountid
+                        ORDER BY firstname
+                    ) a";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
             var loop = AssertNode<NestedLoopNode>(select.Source);
             Assert.AreEqual(QualifiedJoinType.LeftOuter, loop.JoinType);
             Assert.IsNull(loop.JoinCondition);
             Assert.AreEqual(1, loop.OuterReferences.Count);
-            Assert.AreEqual("@Expr1", loop.OuterReferences["account.primarycontactid"]);
+            Assert.AreEqual("@Expr1", loop.OuterReferences["account.accountid"]);
             var outerFetch = AssertNode<FetchXmlScan>(loop.LeftSource);
             AssertFetchXml(outerFetch, @"
                 <fetch>
                     <entity name='account'>
                         <attribute name='name' />
-                        <attribute name='primarycontactid' />
+                        <attribute name='accountid' />
                     </entity>
                 </fetch>");
             var innerAlias = AssertNode<AliasNode>(loop.RightSource);
-            var innerFilter = AssertNode<FilterNode>(innerAlias.Source);
-            Assert.AreEqual("@Expr1 = contactid", innerFilter.Filter.ToSql());
+            var innerTop = AssertNode<TopNode>(innerAlias.Source);
+            var innerSort = AssertNode<SortNode>(innerTop.Source);
+            var innerFilter = AssertNode<FilterNode>(innerSort.Source);
+            Assert.AreEqual("parentcustomerid = @Expr1", innerFilter.Filter.ToSql());
             var innerSpool = AssertNode<TableSpoolNode>(innerFilter.Source);
             var innerFetch = AssertNode<FetchXmlScan>(innerSpool.Source);
             AssertFetchXml(innerFetch, @"
@@ -1904,7 +1934,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     <entity name='contact'>
                         <attribute name='firstname' />
                         <attribute name='lastname' />
-                        <attribute name='contactid' />
+                        <attribute name='parentcustomerid' />
                     </entity>
                 </fetch>");
         }

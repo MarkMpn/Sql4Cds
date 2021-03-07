@@ -1060,11 +1060,18 @@ namespace MarkMpn.Sql4Cds.Engine
                 return false;
 
             // Give the inner fetch a unique alias
-            fetch.Alias = $"Expr{++_colNameCounter}";
+            if (subqueryPlan is AliasNode alias)
+                fetch.Alias = alias.Alias;
+            else
+                fetch.Alias = $"Expr{++_colNameCounter}";
 
-            // Add the required column with the expected alias
-            var attr = new FetchXml.FetchAttributeType { name = subqueryCol.Split('.').Last() };
-            fetch.Entity.AddItem(attr);
+            // Add the required column with the expected alias (used for scalar subqueries and IN predicates, not for CROSS/OUTER APPLY
+            if (subqueryCol != null)
+            {
+                var attr = new FetchXml.FetchAttributeType { name = subqueryCol.Split('.').Last() };
+                fetch.Entity.AddItem(attr);
+                outputCol = fetch.Alias + "." + attr.name;
+            }
 
             // Regenerate the schema after changing the alias
             innerSchema = fetch.GetSchema(Metadata, null);
@@ -1078,7 +1085,6 @@ namespace MarkMpn.Sql4Cds.Engine
                 JoinType = QualifiedJoinType.LeftOuter
             };
 
-            outputCol = fetch.Alias + "." + attr.name;
             return true;
         }
         
@@ -1535,6 +1541,13 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         var spool = new TableSpoolNode { Source = rhs };
                         rhs = spool;
+                    }
+                    else if (subqueryPlan is SelectNode subquery && UseMergeJoin(lhs, subquery, lhsReferences, null, null, out _, out var merge))
+                    {
+                        if (unqualifiedJoin.UnqualifiedJoinType == UnqualifiedJoinType.CrossApply)
+                            merge.JoinType = QualifiedJoinType.Inner;
+
+                        return merge;
                     }
                     else if (rhs is ISingleSourceExecutionPlanNode loopRightSourceSimple)
                     {
