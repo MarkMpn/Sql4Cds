@@ -19,14 +19,30 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
         {
+            var mappings = ColumnSet.Where(col => !col.AllColumns).ToDictionary(col => col.OutputColumn, col => col.SourceColumn);
+            ColumnSet.Clear();
+
             // Map the aliased names to the base names
             for (var i = 0; i < requiredColumns.Count; i++)
             {
                 if (requiredColumns[i].StartsWith(Alias + "."))
+                {
                     requiredColumns[i] = requiredColumns[i].Substring(Alias.Length + 1);
+
+                    if (!mappings.TryGetValue(requiredColumns[i], out var sourceCol))
+                        sourceCol = requiredColumns[i];
+
+                    ColumnSet.Add(new SelectColumn
+                    {
+                        SourceColumn = sourceCol,
+                        OutputColumn = requiredColumns[i]
+                    });
+
+                    requiredColumns[i] = sourceCol;
+                }
             }
 
-            base.AddRequiredColumns(metadata, parameterTypes, requiredColumns);
+            Source.AddRequiredColumns(metadata, parameterTypes, requiredColumns);
         }
 
         public override IExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
@@ -49,31 +65,51 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
         {
             // Map the base names to the alias names
-            // TODO: Handle wildcards
             var sourceSchema = Source.GetSchema(metadata, parameterTypes);
             var schema = new NodeSchema();
 
             foreach (var col in ColumnSet)
             {
-                if (!sourceSchema.ContainsColumn(col.SourceColumn, out var normalized))
-                    continue;
-
-                var mapped = $"{Alias}.{col.OutputColumn}";
-                schema.Schema[mapped] = sourceSchema.Schema[normalized];
-
-                if (normalized == sourceSchema.PrimaryKey)
-                    schema.PrimaryKey = mapped;
-
-                if (!schema.Aliases.TryGetValue(col.OutputColumn, out var aliases))
+                if (col.AllColumns)
                 {
-                    aliases = new List<string>();
-                    schema.Aliases[col.OutputColumn] = aliases;
-                }
+                    foreach (var sourceCol in sourceSchema.Schema)
+                    {
+                        if (col.SourceColumn != null && !sourceCol.Key.StartsWith(col.SourceColumn + "."))
+                            continue;
 
-                aliases.Add(mapped);
+                        var simpleName = sourceCol.Key.Split('.').Last();
+                        var outputName = $"{Alias}.{simpleName}";
+
+                        AddSchemaColumn(simpleName, sourceCol.Key, schema, sourceSchema);
+                    }
+                }
+                else
+                {
+                    AddSchemaColumn(col.OutputColumn, col.SourceColumn, schema, sourceSchema);
+                }
             }
 
             return schema;
+        }
+
+        private void AddSchemaColumn(string outputColumn, string sourceColumn, NodeSchema schema, NodeSchema sourceSchema)
+        {
+            if (!sourceSchema.ContainsColumn(sourceColumn, out var normalized))
+                return;
+
+            var mapped = $"{Alias}.{outputColumn}";
+            schema.Schema[mapped] = sourceSchema.Schema[normalized];
+
+            if (normalized == sourceSchema.PrimaryKey)
+                schema.PrimaryKey = mapped;
+
+            if (!schema.Aliases.TryGetValue(outputColumn, out var aliases))
+            {
+                aliases = new List<string>();
+                schema.Aliases[outputColumn] = aliases;
+            }
+
+            aliases.Add(mapped);
         }
 
         protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
