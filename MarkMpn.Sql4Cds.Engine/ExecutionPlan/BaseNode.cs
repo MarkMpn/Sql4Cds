@@ -16,7 +16,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     public abstract class BaseNode : IExecutionPlanNode
     {
         private int _executionCount;
-        private Stopwatch _stopwatch = new Stopwatch();
+        private int _tickCount;
         private int _rowsOut;
 
         [Browsable(false)]
@@ -32,11 +32,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             IEnumerator<Entity> enumerator;
 
+            var start = Environment.TickCount;
             try
             {
                 _executionCount++;
 
-                _stopwatch.Start();
                 enumerator = ExecuteInternal(org, metadata, options, parameterTypes, parameterValues).GetEnumerator();
             }
             catch (QueryExecutionException ex)
@@ -52,16 +52,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
             finally
             {
-                _stopwatch.Stop();
+                var end = Environment.TickCount;
+                _tickCount += (end - start);
             }
 
-            while (true)
+            while (!options.Cancelled)
             {
                 Entity current;
 
                 try
                 {
-                    _stopwatch.Start();
+                    start = Environment.TickCount;
                     if (!enumerator.MoveNext())
                         break;
 
@@ -80,7 +81,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
                 finally
                 {
-                    _stopwatch.Stop();
+                    var end = Environment.TickCount;
+                    _tickCount += (end - start);
                 }
 
                 yield return current;
@@ -92,7 +94,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public int ExecutionCount => _executionCount;
 
-        public TimeSpan Duration => _stopwatch.Elapsed;
+        public TimeSpan Duration => TimeSpan.FromMilliseconds(_tickCount);
 
         public int RowsOut => _rowsOut;
 
