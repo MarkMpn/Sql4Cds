@@ -75,7 +75,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 if (!hasRight && JoinType == QualifiedJoinType.LeftOuter)
-                    yield return left;
+                    yield return Merge(left, leftSchema, null, rightSchema);
             }
         }
 
