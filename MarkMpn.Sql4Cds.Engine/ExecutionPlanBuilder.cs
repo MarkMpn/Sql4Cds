@@ -181,7 +181,7 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             // Each table in the FROM clause starts as a separate FetchXmlScan node. Add appropriate join nodes
             // TODO: Handle queries without a FROM clause
-            var node = ConvertFromClause(querySpec.FromClause.TableReferences, querySpec, parameterTypes);
+            var node = ConvertFromClause(querySpec.FromClause.TableReferences, querySpec, outerSchema, outerReferences, parameterTypes);
 
             node = ConvertInSubqueries(node, querySpec, parameterTypes, outerSchema, outerReferences);
 
@@ -1148,6 +1148,10 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     node = offset.Source as ISingleSourceExecutionPlanNode;
                 }
+                else if (node is AliasNode alias)
+                {
+                    node = alias.Source as ISingleSourceExecutionPlanNode;
+                }
                 else
                 {
                     return;
@@ -1255,13 +1259,13 @@ namespace MarkMpn.Sql4Cds.Engine
             return false;
         }
 
-        private IExecutionPlanNode ConvertFromClause(IList<TableReference> tables, TSqlFragment query, IDictionary<string, Type> parameterTypes)
+        private IExecutionPlanNode ConvertFromClause(IList<TableReference> tables, TSqlFragment query, NodeSchema outerSchema, Dictionary<string, string> outerReferences, IDictionary<string, Type> parameterTypes)
         {
-            var node = ConvertTableReference(tables[0], query, parameterTypes);
+            var node = ConvertTableReference(tables[0], query, outerSchema, outerReferences, parameterTypes);
 
             for (var i = 1; i < tables.Count; i++)
             {
-                var nextTable = ConvertTableReference(tables[i], query, parameterTypes);
+                var nextTable = ConvertTableReference(tables[i], query, outerSchema, outerReferences, parameterTypes);
 
                 // TODO: See if we can lift a join predicate from the WHERE clause
                 nextTable = new TableSpoolNode { Source = nextTable };
@@ -1272,7 +1276,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return node;
         }
 
-        private IExecutionPlanNode ConvertTableReference(TableReference reference, TSqlFragment query, IDictionary<string, Type> parameterTypes)
+        private IExecutionPlanNode ConvertTableReference(TableReference reference, TSqlFragment query, NodeSchema outerSchema, Dictionary<string, string> outerReferences, IDictionary<string, Type> parameterTypes)
         {
             if (reference is NamedTableReference table)
             {
@@ -1321,8 +1325,8 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 // If the join involves the primary key of one table we can safely use a merge join.
                 // Otherwise use a nested loop join
-                var lhs = ConvertTableReference(join.FirstTableReference, query, parameterTypes);
-                var rhs = ConvertTableReference(join.SecondTableReference, query, parameterTypes);
+                var lhs = ConvertTableReference(join.FirstTableReference, query, outerSchema, outerReferences, parameterTypes);
+                var rhs = ConvertTableReference(join.SecondTableReference, query, outerSchema, outerReferences, parameterTypes);
                 var lhsSchema = lhs.GetSchema(Metadata, parameterTypes);
                 var rhsSchema = rhs.GetSchema(Metadata, parameterTypes);
 
@@ -1447,7 +1451,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (queryDerivedTable.Columns.Count > 0)
                     throw new NotSupportedQueryFragmentException("Unhandled query derived table column list", queryDerivedTable);
 
-                var select = ConvertSelectStatement(queryDerivedTable.QueryExpression, null, null, null);
+                var select = ConvertSelectStatement(queryDerivedTable.QueryExpression, outerSchema, outerReferences, parameterTypes);
                 var alias = new AliasNode(select);
                 alias.Alias = queryDerivedTable.Alias.Value;
 
@@ -1507,12 +1511,36 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (reference is UnqualifiedJoin unqualifiedJoin)
             {
-                var lhs = ConvertTableReference(unqualifiedJoin.FirstTableReference, query, parameterTypes);
+                var lhs = ConvertTableReference(unqualifiedJoin.FirstTableReference, query, outerSchema, outerReferences, parameterTypes);
+                IExecutionPlanNode rhs;
+                Dictionary<string, string> lhsReferences;
 
-                if (unqualifiedJoin.UnqualifiedJoinType != UnqualifiedJoinType.CrossJoin)
-                    throw new NotSupportedQueryFragmentException("TODO", unqualifiedJoin);
+                if (unqualifiedJoin.UnqualifiedJoinType == UnqualifiedJoinType.CrossJoin)
+                {
+                    rhs = ConvertTableReference(unqualifiedJoin.SecondTableReference, query, outerSchema, outerReferences, parameterTypes);
+                    lhsReferences = null;
+                }
+                else
+                {
+                    // CROSS APPLY / OUTER APPLY - treat the second table as a correlated subquery
+                    var lhsSchema = lhs.GetSchema(Metadata, parameterTypes);
+                    lhsReferences = new Dictionary<string, string>();
+                    var innerParameterTypes = parameterTypes == null ? new Dictionary<string, Type>() : new Dictionary<string, Type>(parameterTypes);
+                    var subqueryPlan = ConvertTableReference(unqualifiedJoin.SecondTableReference, query, lhsSchema, lhsReferences, innerParameterTypes);
+                    rhs = subqueryPlan;
 
-                var rhs = ConvertTableReference(unqualifiedJoin.SecondTableReference, query, parameterTypes);
+                    // If the subquery is uncorrelated, add a table spool to cache the results
+                    // If it is correlated, add a spool where possible closer to the data source
+                    if (lhsReferences.Count == 0)
+                    {
+                        var spool = new TableSpoolNode { Source = rhs };
+                        rhs = spool;
+                    }
+                    else if (rhs is ISingleSourceExecutionPlanNode loopRightSourceSimple)
+                    {
+                        InsertCorrelatedSubquerySpool(loopRightSourceSimple, lhs, parameterTypes);
+                    }
+                }
 
                 // For cross joins there is no outer reference so the entire result can be spooled for reuse
                 if (unqualifiedJoin.UnqualifiedJoinType == UnqualifiedJoinType.CrossJoin)
@@ -1522,7 +1550,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     LeftSource = lhs,
                     RightSource = rhs,
-                    JoinType = unqualifiedJoin.UnqualifiedJoinType == UnqualifiedJoinType.OuterApply ? QualifiedJoinType.LeftOuter : QualifiedJoinType.Inner
+                    JoinType = unqualifiedJoin.UnqualifiedJoinType == UnqualifiedJoinType.OuterApply ? QualifiedJoinType.LeftOuter : QualifiedJoinType.Inner,
+                    OuterReferences = lhsReferences
                 };
             }
 
