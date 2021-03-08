@@ -1625,6 +1625,143 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void ExistsFilterUncorrelated()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                SELECT
+                    accountid,
+                    name
+                FROM
+                    account
+                WHERE
+                    EXISTS (SELECT * FROM contact)";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var filter = AssertNode<FilterNode>(select.Source);
+            var loop = AssertNode<NestedLoopNode>(filter.Source);
+            var fetch = AssertNode<FetchXmlScan>(loop.LeftSource);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                        <attribute name='name' />
+                    </entity>
+                </fetch>");
+            var subSpool = AssertNode<TableSpoolNode>(loop.RightSource);
+            var subFetch = AssertNode<FetchXmlScan>(subSpool.Source);
+            AssertFetchXml(subFetch, @"
+                <fetch top='1'>
+                    <entity name='contact'>
+                        <attribute name='contactid' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void ExistsFilterCorrelatedPrimaryKey()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                SELECT
+                    accountid,
+                    name
+                FROM
+                    account
+                WHERE
+                    EXISTS (SELECT * FROM contact WHERE contactid = primarycontactid)";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                        <attribute name='name' />
+                        <link-entity name='contact' alias='Expr2' from='contactid' to='primarycontactid' link-type='outer'>
+                        </link-entity>
+                        <filter>
+                            <condition entityname='Expr2' attribute='contactid' operator='not-null' />
+                        </filter>
+                    </entity>
+                </fetch>
+            ");
+        }
+
+        [TestMethod]
+        public void ExistsFilterCorrelated()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                SELECT
+                    accountid,
+                    name
+                FROM
+                    account
+                WHERE
+                    EXISTS (SELECT * FROM contact WHERE parentcustomerid = accountid)";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var filter = AssertNode<FilterNode>(select.Source);
+            var nestedLoop = AssertNode<NestedLoopNode>(filter.Source);
+            Assert.AreEqual(QualifiedJoinType.LeftOuter, nestedLoop.JoinType);
+            Assert.IsTrue(nestedLoop.SemiJoin);
+            var fetch = AssertNode<FetchXmlScan>(nestedLoop.LeftSource);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                        <attribute name='name' />
+                    </entity>
+                </fetch>");
+            var subTop = AssertNode<TopNode>(nestedLoop.RightSource);
+            var subIndexSpool = AssertNode<IndexSpoolNode>(subTop.Source);
+            Assert.AreEqual("contact.parentcustomerid", subIndexSpool.KeyColumn);
+            Assert.AreEqual("@Expr1", subIndexSpool.SeekValue);
+            var subFetch = AssertNode<FetchXmlScan>(subIndexSpool.Source);
+            AssertFetchXml(subFetch, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='contactid' />
+                        <attribute name='parentcustomerid' />
+                        <filter>
+                            <condition attribute='parentcustomerid' operator='not-null' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
         public void QueryDerivedTableSimple()
         {
             var context = new XrmFakedContext();
