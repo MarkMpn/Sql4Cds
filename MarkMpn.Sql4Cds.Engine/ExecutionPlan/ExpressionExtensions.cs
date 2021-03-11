@@ -218,6 +218,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private static Type GetType(BooleanComparisonExpression cmp, NodeSchema schema, IDictionary<string, Type> parameterTypes)
         {
+            // Special case for field = func() where func is defined in FetchXmlConditionMethods
+            if (cmp.FirstExpression is ColumnReferenceExpression col &&
+                cmp.ComparisonType == BooleanComparisonType.Equals &&
+                cmp.SecondExpression is FunctionCall func
+                )
+            {
+                var paramTypes = func.Parameters.Select(p => p.GetType(schema, parameterTypes)).ToList();
+                paramTypes.Insert(0, col.GetType(schema, parameterTypes));
+
+                var fetchXmlComparison = GetMethod(typeof(FetchXmlConditionMethods), func, paramTypes.ToArray(), false);
+
+                if (fetchXmlComparison != null)
+                    return typeof(bool);
+            }
+
             var lhs = cmp.FirstExpression.GetType(schema, parameterTypes);
             var rhs = cmp.SecondExpression.GetType(schema, parameterTypes);
 
@@ -232,6 +247,33 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private static bool GetValue(BooleanComparisonExpression cmp, Entity entity, NodeSchema schema, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
+            // Special case for field = func() where func is defined in FetchXmlConditionMethods
+            if (cmp.FirstExpression is ColumnReferenceExpression col &&
+                cmp.ComparisonType == BooleanComparisonType.Equals &&
+                cmp.SecondExpression is FunctionCall func
+                )
+            {
+                var paramTypes = func.Parameters.Select(p => p.GetType(schema, parameterTypes)).ToList();
+                paramTypes.Insert(0, col.GetType(schema, parameterTypes));
+
+                var fetchXmlComparison = GetMethod(typeof(FetchXmlConditionMethods), func, paramTypes.ToArray(), false);
+
+                if (fetchXmlComparison != null)
+                {
+                    // Get the parameter values
+                    var paramValues = func.Parameters.Select(p => p.GetValue(entity, schema, parameterTypes, parameterValues)).ToList();
+                    paramValues.Insert(0, col.GetValue(entity, schema, parameterTypes, parameterValues));
+
+                    // Convert the parameters to the expected types
+                    var parameters = fetchXmlComparison.GetParameters();
+
+                    for (var i = 0; i < parameters.Length; i++)
+                        paramValues[i] = SqlTypeConverter.ChangeType(paramValues[i], parameters[i].ParameterType);
+
+                    return (bool) fetchXmlComparison.Invoke(null, paramValues.ToArray());
+                }
+            }
+
             var lhs = cmp.FirstExpression.GetValue(entity, schema, parameterTypes, parameterValues);
             var rhs = cmp.SecondExpression.GetValue(entity, schema, parameterTypes, parameterValues);
 
@@ -546,14 +588,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     .ToArray();
             }
 
+            return GetMethod(typeof(ExpressionFunctions), func, paramTypes, true);
+        }
+
+        private static MethodInfo GetMethod(Type targetType, FunctionCall func, Type[] paramTypes, bool throwOnMissing)
+        {
             // Find a method that implements this function
-            var methods = typeof(ExpressionFunctions)
+            var methods = targetType
                 .GetMethods(BindingFlags.InvokeMethod | BindingFlags.Public | BindingFlags.Static)
                 .Where(m => m.Name.Equals(func.FunctionName.Value, StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
             if (methods.Count == 0)
-                throw new NotSupportedQueryFragmentException("Unknown function", func);
+            {
+                if (throwOnMissing)
+                    throw new NotSupportedQueryFragmentException("Unknown function", func);
+
+                return null;
+            }
 
             // Check parameter count is correct
             var correctParameterCount = methods.Where(m => m.GetParameters().Length == paramTypes.Length).ToList();
