@@ -1117,6 +1117,16 @@ namespace MarkMpn.Sql4Cds
                 var planView = new ExecutionPlanView { Dock = DockStyle.Fill, Executed = args.Execute, Exception = ex, Metadata = Metadata, TableSizeCache = _tableSize };
                 planView.Plan = query;
                 planView.NodeSelected += (s, e) => _properties.SelectObject(planView.Selected);
+                planView.DoubleClick += (s, e) =>
+                {
+                    if (planView.Selected is FetchXmlScan fetch)
+                    {
+                        OutgoingMessageHandler(new MessageBusEventArgs("FetchXML Builder")
+                        {
+                            TargetArgument = fetch.FetchXmlString
+                        });
+                    }
+                };
                 fetchXml.Controls.Add(planView);
                 fetchXml.Controls.Add(fetchLabel);
                 /*
