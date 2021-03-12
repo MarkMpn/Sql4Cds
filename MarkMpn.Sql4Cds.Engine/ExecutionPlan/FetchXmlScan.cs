@@ -88,12 +88,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public bool AllPages { get; set; }
 
         /// <summary>
-        /// Indicates if this query uses the <see cref="FetchType.distinct"/> option without having a sort order specified
-        /// </summary>
-        [Browsable(false)]
-        public bool DistinctWithoutSort => FetchXml.distinctSpecified && FetchXml.distinct && !ContainsSort(FetchXml.Items);
-
-        /// <summary>
         /// Indicates if all available attributes should be returned as part of the schema, used while the execution plan is being built
         /// </summary>
         [Browsable(false)]
@@ -138,11 +132,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Throw an exception to indicate the error to the caller
             if (AllPages && FetchXml.aggregateSpecified && FetchXml.aggregate && count == 5000 && FetchXml.top != "5000" && !res.MoreRecords)
                 throw new ApplicationException("AggregateQueryRecordLimit");
-
-            // Distinct queries without a sort order can't be reliably paged. Throw an exception to get the user
-            // to apply a useful sort order
-            if (AllPages && DistinctWithoutSort)
-                throw new ApplicationException("DISTINCT queries must have an ORDER BY applied to retrieve multiple pages\r\nSee https://docs.microsoft.com/powerapps/developer/common-data-service/org-service/paging-behaviors-and-ordering#ordering-with-a-paging-cookie");
 
             // Move on to subsequent pages
             while (AllPages && res.MoreRecords && options.ContinueRetrieve(count))

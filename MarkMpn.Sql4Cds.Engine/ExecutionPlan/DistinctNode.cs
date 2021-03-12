@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using MarkMpn.Sql4Cds.Engine.FetchXml;
 using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
@@ -98,6 +99,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 fetch.FetchXml.distinct = true;
                 fetch.FetchXml.distinctSpecified = true;
+
+                // Ensure there is a sort order applied to avoid paging issues
+                if (fetch.Entity.Items == null || !fetch.Entity.Items.OfType<FetchOrderType>().Any())
+                {
+                    // Sort by the primary key
+                    fetch.Entity.AddItem(new FetchOrderType
+                    {
+                        attribute = metadata[fetch.Entity.name].PrimaryIdAttribute
+                    });
+                }
+
                 return fetch;
             }
 
