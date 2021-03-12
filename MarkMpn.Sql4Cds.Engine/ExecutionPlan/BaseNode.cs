@@ -393,7 +393,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                         // Some advanced FetchXML operators use a value as well - take this as the function parameter
                         // This provides support for queries such as `createdon = lastxdays(3)` becoming <condition attribute="createdon" operator="last-x-days" value="3" />
-                        if (op == @operator.containvalues || op == @operator.notcontainvalues)
+                        if (op == @operator.containvalues || op == @operator.notcontainvalues ||
+                            ((op == @operator.infiscalperiodandyear || op == @operator.inorafterfiscalperiodandyear || op == @operator.inorbeforefiscalperiodandyear) && func.Parameters.Count == 2))
                         {
                             values = new List<string>();
 

@@ -259,19 +259,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var fetchXmlComparison = GetMethod(typeof(FetchXmlConditionMethods), func, paramTypes.ToArray(), false);
 
                 if (fetchXmlComparison != null)
-                {
-                    // Get the parameter values
-                    var paramValues = func.Parameters.Select(p => p.GetValue(entity, schema, parameterTypes, parameterValues)).ToList();
-                    paramValues.Insert(0, col.GetValue(entity, schema, parameterTypes, parameterValues));
-
-                    // Convert the parameters to the expected types
-                    var parameters = fetchXmlComparison.GetParameters();
-
-                    for (var i = 0; i < parameters.Length; i++)
-                        paramValues[i] = SqlTypeConverter.ChangeType(paramValues[i], parameters[i].ParameterType);
-
-                    return (bool) fetchXmlComparison.Invoke(null, paramValues.ToArray());
-                }
+                    throw new QueryExecutionException("Custom FetchXML filter conditions must only be used where they can be folded into a FetchXML Scan operator");
             }
 
             var lhs = cmp.FirstExpression.GetValue(entity, schema, parameterTypes, parameterValues);
@@ -608,7 +596,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             // Check parameter count is correct
-            var correctParameterCount = methods.Where(m => m.GetParameters().Length == paramTypes.Length).ToList();
+            var correctParameterCount = methods
+                .Select(m => new { Method = m, Parameters = m.GetParameters() })
+                .Where(m => m.Parameters.Length == paramTypes.Length || (m.Parameters.Length < paramTypes.Length && m.Parameters.Length > 0 && m.Parameters.Last().ParameterType.IsArray))
+                .ToList();
 
             if (correctParameterCount.Count == 0)
                 throw new NotSupportedQueryFragmentException($"Method expects {methods[0].GetParameters().Length} parameters", func);
@@ -617,15 +608,29 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 throw new NotSupportedQueryFragmentException("Ambiguous method", func);
 
             // Check parameter types can be converted
-            var parameters = correctParameterCount[0].GetParameters();
+            var parameters = correctParameterCount[0].Parameters;
+            var paramOffset = targetType == typeof(FetchXmlConditionMethods) ? 1 : 0;
 
             for (var i = 0; i < parameters.Length; i++)
             {
-                if (!SqlTypeConverter.CanChangeType(paramTypes[i], parameters[i].ParameterType))
-                    throw new NotSupportedQueryFragmentException($"Cannot convert {paramTypes[i]} to {parameters[i].ParameterType}", func.Parameters[i]);
+                var paramType = parameters[i].ParameterType;
+
+                if (i == parameters.Length - 1 && paramTypes.Length > parameters.Length && paramType.IsArray)
+                    paramType = paramType.GetElementType();
+
+                if (!SqlTypeConverter.CanChangeType(paramTypes[i], paramType))
+                    throw new NotSupportedQueryFragmentException($"Cannot convert {paramTypes[i]} to {paramType}", func.Parameters[i - paramOffset]);
             }
 
-            return correctParameterCount[0];
+            for (var i = parameters.Length; i < paramTypes.Length; i++)
+            {
+                var paramType = parameters.Last().ParameterType.GetElementType();
+
+                if (!SqlTypeConverter.CanChangeType(paramTypes[i], paramType))
+                    throw new NotSupportedQueryFragmentException($"Cannot convert {paramTypes[i]} to {paramType}", func.Parameters[i - paramOffset]);
+            }
+
+            return correctParameterCount[0].Method;
         }
 
         private static Type GetType(this FunctionCall func, NodeSchema schema, IDictionary<string, Type> parameterTypes)

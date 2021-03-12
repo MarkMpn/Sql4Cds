@@ -81,6 +81,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public static bool CanChangeType(Type from, Type to)
         {
+            from = MakeNonNullable(from);
+            to = MakeNonNullable(to);
+
             if (from == to)
                 return true;
 
