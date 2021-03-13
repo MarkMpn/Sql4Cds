@@ -85,8 +85,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     _tickCount += (end - start);
                 }
 
-                yield return current;
                 _rowsOut++;
+                yield return current;
             }
         }
 
