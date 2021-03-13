@@ -1439,6 +1439,15 @@ namespace MarkMpn.Sql4Cds.Engine
                         };
                     }
 
+                    if (entityName.Equals("attribute", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return new MetadataQueryNode
+                        {
+                            IncludeAttribute = true,
+                            AttributeAlias = table.Alias?.Value ?? entityName
+                        };
+                    }
+
                     if (entityName.Equals("globaloptionset", StringComparison.OrdinalIgnoreCase))
                     {
                         return new GlobalOptionSetQueryNode

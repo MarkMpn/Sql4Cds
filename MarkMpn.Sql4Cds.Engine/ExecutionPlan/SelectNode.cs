@@ -25,7 +25,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             foreach (var entity in Source.Execute(org, metadata, options, parameterTypes, parameterValues))
             {
                 foreach (var col in ColumnSet)
+                {
+                    if (!entity.Contains(col.SourceColumn))
+                        throw new QueryExecutionException($"Missing column {col.SourceColumn}");
+
                     entity[col.OutputColumn] = entity[col.SourceColumn];
+                }
 
                 yield return entity;
             }
