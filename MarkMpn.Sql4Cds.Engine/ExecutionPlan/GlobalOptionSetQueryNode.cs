@@ -12,13 +12,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
     public class GlobalOptionSetQueryNode : BaseNode
     {
-        private IDictionary<string, string> _optionsetProps;
+        private static readonly Type[] _optionsetTypes = new[] { typeof(OptionSetMetadata), typeof(BooleanOptionSetMetadata) };
+        private static readonly Dictionary<Type, Dictionary<string, PropertyInfo>> _optionsetProps = _optionsetTypes.ToDictionary(t => t, t => t.GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(p => p.Name != nameof(OptionSetMetadataBase.ExtensionData) && p.Name != nameof(OptionSetMetadata.Options)).ToDictionary(p => p.Name));
+        private static readonly Dictionary<string, PropertyInfo> _flattenedOptionsetProps = _optionsetProps.SelectMany(kvp => kvp.Value).Select(kvp => kvp.Value).GroupBy(p => p.Name).ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+        private IDictionary<string, string> _optionsetCols;
 
         public string Alias { get; set; }
 
         public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
         {
-            _optionsetProps = new Dictionary<string, string>();
+            _optionsetCols = new Dictionary<string, string>();
 
             foreach (var col in requiredColumns)
             {
@@ -29,8 +33,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (parts[0].Equals(Alias, StringComparison.OrdinalIgnoreCase))
                 {
-                    var prop = typeof(OptionSetMetadataBase).GetProperty(parts[1], BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
-                    _optionsetProps[col] = prop.Name;
+                    var prop = _flattenedOptionsetProps[parts[1]];
+                    _optionsetCols[col] = prop.Name;
                 }
             }
         }
@@ -49,21 +53,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var schema = new NodeSchema();
 
-            var excludedProps = new[]
+            foreach (var prop in _flattenedOptionsetProps.Values)
             {
-                nameof(OptionSetMetadataBase.ExtensionData)
-            };
-
-            var optionsetProps = typeof(OptionSetMetadataBase).GetProperties().Where(p => !excludedProps.Contains(p.Name));
-
-            foreach (var prop in optionsetProps)
-            {
-                var propType = prop.PropertyType;
-
-                if (propType == typeof(Label) || propType.IsEnum || propType.IsGenericType && propType.GetGenericTypeDefinition() == typeof(Nullable<>) && propType.GetGenericArguments()[0].IsEnum)
-                    propType = typeof(string);
-
-                schema.Schema[$"{Alias}.{prop.Name}"] = propType;
+                schema.Schema[$"{Alias}.{prop.Name}"] = MetadataQueryNode.GetPropertyType(prop.PropertyType);
 
                 if (!schema.Aliases.TryGetValue(prop.Name, out var aliases))
                 {
@@ -87,22 +79,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             var resp = (RetrieveAllOptionSetsResponse)org.Execute(new RetrieveAllOptionSetsRequest());
-            var optionsetProps = typeof(OptionSetMetadataBase).GetProperties().ToDictionary(p => p.Name);
 
             foreach (var optionset in resp.OptionSetMetadata)
             {
                 var converted = new Entity("globaloptionset", optionset.MetadataId ?? Guid.Empty);
+                var availableProps = _optionsetProps[optionset.GetType()];
 
-                foreach (var prop in _optionsetProps)
+                foreach (var col in _optionsetCols)
                 {
-                    var value = optionsetProps[prop.Value].GetValue(optionset);
+                    if (!availableProps.TryGetValue(col.Value, out var optionsetProp))
+                    {
+                        converted[col.Key] = null;
+                        continue;
 
-                    if (value is Label l)
-                        value = l.UserLocalizedLabel?.Label;
-                    else if (value != null && value.GetType().IsEnum)
-                        value = value.ToString();
+                    }
 
-                    converted[prop.Key] = value;
+                    converted[col.Key] = MetadataQueryNode.GetPropertyValue(optionsetProp, optionset);
                 }
 
                 yield return converted;

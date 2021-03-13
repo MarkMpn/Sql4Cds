@@ -13,10 +13,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
     public class MetadataQueryNode : BaseNode
     {
-        private IDictionary<string, string> _entityProps;
-        private IDictionary<string, string> _attributeProps;
+        private IDictionary<string, string> _entityCols;
+        private IDictionary<string, string> _attributeCols;
 
         private static Type[] _attributeTypes = typeof(AttributeMetadata).Assembly.GetTypes().Where(t => typeof(AttributeMetadata).IsAssignableFrom(t) && !t.IsAbstract).ToArray();
+        private static readonly Dictionary<Type, Dictionary<string, PropertyInfo>> _attributeProps = _attributeTypes.ToDictionary(t => t, t => t.GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(p => p.Name != nameof(AttributeMetadata.ExtensionData)).ToDictionary(p => p.Name));
+        private static readonly Dictionary<string, PropertyInfo> _flattenedAttributeProps = _attributeProps.SelectMany(kvp => kvp.Value).Select(kvp => kvp.Value).GroupBy(p => p.Name).ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
         public bool IncludeEntity { get; set; }
 
@@ -30,8 +32,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
         {
-            _entityProps = new Dictionary<string, string>();
-            _attributeProps = new Dictionary<string, string>();
+            _entityCols = new Dictionary<string, string>();
+            _attributeCols = new Dictionary<string, string>();
 
             foreach (var col in requiredColumns)
             {
@@ -50,7 +52,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (!Query.Properties.PropertyNames.Contains(prop.Name))
                         Query.Properties.PropertyNames.Add(prop.Name);
 
-                    _entityProps[col] = prop.Name;
+                    _entityCols[col] = prop.Name;
                 }
                 else if (parts[0].Equals(AttributeAlias, StringComparison.OrdinalIgnoreCase))
                 {
@@ -60,18 +62,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (Query.AttributeQuery.Properties == null)
                         Query.AttributeQuery.Properties = new MetadataPropertiesExpression();
 
-                    foreach (var type in _attributeTypes)
-                    {
-                        var prop = type.GetProperty(parts[1], BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+                    var prop = _flattenedAttributeProps[parts[1]];
 
-                        if (prop == null)
-                            continue;
+                    if (!Query.AttributeQuery.Properties.PropertyNames.Contains(prop.Name))
+                        Query.AttributeQuery.Properties.PropertyNames.Add(prop.Name);
 
-                        if (!Query.AttributeQuery.Properties.PropertyNames.Contains(prop.Name))
-                            Query.AttributeQuery.Properties.PropertyNames.Add(prop.Name);
-
-                        _attributeProps[col] = prop.Name;
-                    }
+                    _attributeCols[col] = prop.Name;
                 }
             }
         }
@@ -126,17 +122,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (IncludeAttribute)
             {
-                var excludedProps = new[]
-                {
-                    nameof(AttributeMetadata.ExtensionData)
-                };
-
-                var attributeProps = _attributeTypes.SelectMany(t => t.GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(p => !excludedProps.Contains(p.Name)));
+                var attributeProps = (IEnumerable<PropertyInfo>) _flattenedAttributeProps.Values;
 
                 if (Query.AttributeQuery?.Properties != null)
                     attributeProps = attributeProps.Where(p => Query.AttributeQuery.Properties.PropertyNames.Contains(p.Name, StringComparer.OrdinalIgnoreCase));
 
-                foreach (var prop in attributeProps.GroupBy(p => p.Name).Select(g => g.First()))
+                foreach (var prop in attributeProps)
                 {
                     schema.Schema[$"{AttributeAlias}.{prop.Name}"] = GetPropertyType(prop.PropertyType);
 
@@ -155,16 +146,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return schema;
         }
 
-        private Type GetPropertyType(Type propType)
+        internal static Type GetPropertyType(Type propType)
         {
+            if (propType == typeof(OptionMetadata))
+                propType = typeof(int?);
+
             if (propType.BaseType != null && propType.BaseType.IsGenericType && propType.BaseType.GetGenericTypeDefinition() == typeof(ManagedProperty<>))
                 propType = propType.BaseType.GetGenericArguments()[0];
 
             if (propType.BaseType != null && propType.BaseType.IsGenericType && propType.BaseType.GetGenericTypeDefinition() == typeof(ConstantsBase<>))
                 propType = propType.BaseType.GetGenericArguments()[0];
-
-            if (propType.IsGenericType && propType.GetGenericTypeDefinition() == typeof(Nullable<>))
-                propType = propType.GetGenericArguments()[0];
 
             if (propType == typeof(Label) || propType.IsEnum || propType.IsArray)
                 propType = typeof(string);
@@ -174,12 +165,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return propType;
         }
 
-        private object GetPropertyValue(PropertyInfo prop, object target)
+        internal static object GetPropertyValue(PropertyInfo prop, object target)
         {
             var value = prop.GetValue(target);
 
             if (value == null)
                 return null;
+
+            if (value is OptionMetadata option)
+                value = option.Value;
             
             var valueType = value.GetType();
 
@@ -246,7 +240,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     converted.LogicalName = "entity";
                     converted.Id = result.Entity.MetadataId ?? Guid.Empty;
 
-                    foreach (var prop in _entityProps)
+                    foreach (var prop in _entityCols)
                         converted[prop.Key] = GetPropertyValue(entityProps[prop.Value], result.Entity);
                 }
 
@@ -257,7 +251,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     var availableProps = attributeProps[result.Attribute.GetType()];
 
-                    foreach (var prop in _attributeProps)
+                    foreach (var prop in _attributeCols)
                     {
                         if (!availableProps.TryGetValue(prop.Value, out var attributeProp))
                         {
