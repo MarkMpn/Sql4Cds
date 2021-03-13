@@ -43,6 +43,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return GetType(unary, schema, parameterTypes);
             else if (expr is VariableReference var)
                 return GetType(var, schema, parameterTypes);
+            else if (expr is SimpleCaseExpression simpleCase)
+                return GetType(simpleCase, schema, parameterTypes);
+            else if (expr is SearchedCaseExpression searchedCase)
+                return GetType(searchedCase, schema, parameterTypes);
             else
                 throw new NotSupportedQueryFragmentException("Unhandled expression type", expr);
         }
@@ -77,6 +81,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return GetValue(unary, entity, schema, parameterTypes, parameterValues);
             else if (expr is VariableReference var)
                 return GetValue(var, entity, schema, parameterTypes, parameterValues);
+            else if (expr is SimpleCaseExpression simpleCase)
+                return GetValue(simpleCase, entity, schema, parameterTypes, parameterValues);
+            else if (expr is SearchedCaseExpression searchedCase)
+                return GetValue(searchedCase, entity, schema, parameterTypes, parameterValues);
             else
                 throw new NotSupportedQueryFragmentException("Unhandled expression type", expr);
         }
@@ -941,6 +949,114 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 result = !result;
 
             return result;
+        }
+
+        private static Type GetType(SimpleCaseExpression simpleCase, NodeSchema schema, IDictionary<string, Type> parameterTypes)
+        {
+            var exprType = simpleCase.InputExpression.GetType(schema, parameterTypes);
+            Type returnType = null;
+
+            foreach (var when in simpleCase.WhenClauses)
+            {
+                var whenType = when.WhenExpression.GetType(schema, parameterTypes);
+
+                if (!SqlTypeConverter.CanMakeConsistentTypes(exprType, whenType, out _))
+                    throw new NotSupportedQueryFragmentException($"Cannot compare values of type {exprType} and {whenType}", when);
+
+                var thenType = when.ThenExpression.GetType(schema, parameterTypes);
+
+                if (returnType == null)
+                    returnType = thenType;
+                else if (!SqlTypeConverter.CanMakeConsistentTypes(returnType, thenType, out returnType))
+                    throw new NotSupportedQueryFragmentException($"Cannot determine return type", simpleCase);
+            }
+
+            if (simpleCase.ElseExpression != null)
+            {
+                var elseType = simpleCase.ElseExpression.GetType(schema, parameterTypes);
+
+                if (returnType == null)
+                    returnType = elseType;
+                else if (!SqlTypeConverter.CanMakeConsistentTypes(returnType, elseType, out returnType))
+                    throw new NotSupportedQueryFragmentException($"Cannot determine return type", simpleCase);
+            }
+
+            return returnType;
+        }
+
+        private static object GetValue(this SimpleCaseExpression simpleCase, Entity entity, NodeSchema schema, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        {
+            var value = simpleCase.InputExpression.GetValue(entity, schema, parameterTypes, parameterValues);
+            var type = simpleCase.GetType(schema, parameterTypes);
+
+            foreach (var when in simpleCase.WhenClauses)
+            {
+                var valueCopy = value;
+                var whenValue = when.WhenExpression.GetValue(entity, schema, parameterTypes, parameterValues);
+                SqlTypeConverter.MakeConsistentTypes(ref valueCopy, ref whenValue);
+
+                if (valueCopy == null || whenValue == null)
+                    continue;
+
+                var comparison = StringComparer.CurrentCultureIgnoreCase.Compare(valueCopy, whenValue);
+
+                if (comparison != 0)
+                    continue;
+
+                var returnValue = when.ThenExpression.GetValue(entity, schema, parameterTypes, parameterValues);
+                return SqlTypeConverter.ChangeType(returnValue, type);
+            }
+
+            var elseValue = simpleCase.ElseExpression.GetValue(entity, schema, parameterTypes, parameterValues);
+            return SqlTypeConverter.ChangeType(elseValue, type);
+        }
+
+        private static Type GetType(SearchedCaseExpression searchedCase, NodeSchema schema, IDictionary<string, Type> parameterTypes)
+        {
+            Type returnType = null;
+
+            foreach (var when in searchedCase.WhenClauses)
+            {
+                when.WhenExpression.GetType(schema, parameterTypes);
+
+                var thenType = when.ThenExpression.GetType(schema, parameterTypes);
+
+                if (returnType == null)
+                    returnType = thenType;
+                else if (!SqlTypeConverter.CanMakeConsistentTypes(returnType, thenType, out returnType))
+                    throw new NotSupportedQueryFragmentException($"Cannot determine return type", searchedCase);
+            }
+
+            if (searchedCase.ElseExpression != null)
+            {
+                var elseType = searchedCase.ElseExpression.GetType(schema, parameterTypes);
+
+                if (returnType == null)
+                    returnType = elseType;
+                else if (!SqlTypeConverter.CanMakeConsistentTypes(returnType, elseType, out returnType))
+                    throw new NotSupportedQueryFragmentException($"Cannot determine return type", searchedCase);
+            }
+
+            return returnType;
+        }
+
+        private static object GetValue(this SearchedCaseExpression searchedCase, Entity entity, NodeSchema schema, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        {
+            var type = searchedCase.GetType(schema, parameterTypes);
+
+            foreach (var when in searchedCase.WhenClauses)
+            {
+                var whenValue = when.WhenExpression.GetValue(entity, schema, parameterTypes, parameterValues);
+
+                if (!whenValue)
+                    continue;
+
+                var returnValue = when.ThenExpression.GetValue(entity, schema, parameterTypes, parameterValues);
+                return SqlTypeConverter.ChangeType(returnValue, type);
+            }
+
+            var elseValue = searchedCase.ElseExpression.GetValue(entity, schema, parameterTypes, parameterValues);
+            return SqlTypeConverter.ChangeType(elseValue, type);
         }
 
         public static BooleanExpression RemoveCondition(this BooleanExpression expr, BooleanExpression remove)
