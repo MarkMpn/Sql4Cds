@@ -74,6 +74,7 @@
     <Compile Include="ExecutionPlan\ExpressionExtensions.cs" />
     <Compile Include="ExecutionPlan\FetchXmlScan.cs" />
     <Compile Include="ExecutionPlan\FilterNode.cs" />
+    <Compile Include="ExecutionPlan\GlobalOptionSetQueryNode.cs" />
     <Compile Include="ExecutionPlan\HashJoinNode.cs" />
     <Compile Include="ExecutionPlan\HashMatchAggregateNode.cs" />
     <Compile Include="ExecutionPlan\IExecutionPlanNode.cs" />
@@ -82,6 +83,7 @@
     <Compile Include="ExecutionPlan\ISingleSourceExecutionPlanNode.cs" />
     <Compile Include="ExecutionPlan\ITableSizeCache.cs" />
     <Compile Include="ExecutionPlan\MergeJoinNode.cs" />
+    <Compile Include="ExecutionPlan\MetadataQueryNode.cs" />
     <Compile Include="ExecutionPlan\NestedLoopNode.cs" />
     <Compile Include="ExecutionPlan\NodeSchema.cs" />
     <Compile Include="ExecutionPlan\OffsetFetchNode.cs" />

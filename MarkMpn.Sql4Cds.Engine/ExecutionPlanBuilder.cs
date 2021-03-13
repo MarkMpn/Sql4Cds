@@ -1427,6 +1427,27 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 var entityName = table.SchemaObject.BaseIdentifier.Value;
 
+                if (table.SchemaObject.SchemaIdentifier?.Value?.Equals("metadata", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    // We're asking for metadata - check the type
+                    if (entityName.Equals("entity", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return new MetadataQueryNode
+                        {
+                            IncludeEntity = true,
+                            EntityAlias = table.Alias?.Value ?? entityName
+                        };
+                    }
+
+                    if (entityName.Equals("globaloptionset", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return new GlobalOptionSetQueryNode
+                        {
+                            Alias = table.Alias?.Value ?? entityName
+                        };
+                    }
+                }
+
                 // Validate the entity name
                 try
                 {
@@ -1455,10 +1476,10 @@ namespace MarkMpn.Sql4Cds.Engine
                         nolock = table.TableHints.Any(hint => hint.HintKind == TableHintKind.NoLock),
                         Items = new object[]
                         {
-                            new FetchXml.FetchEntityType
-                            {
-                                name = entityName
-                            }
+                        new FetchXml.FetchEntityType
+                        {
+                            name = entityName
+                        }
                         }
                     },
                     Alias = table.Alias?.Value ?? entityName,
