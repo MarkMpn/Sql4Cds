@@ -11,6 +11,7 @@ using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Microsoft.Xrm.Sdk.Metadata;
+using Microsoft.Xrm.Sdk.Metadata.Query;
 
 namespace MarkMpn.Sql4Cds.Engine.Tests
 {
@@ -2139,10 +2140,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
-                SELECT
-                    logicalname
-                FROM
-                    metadata.entity";
+                SELECT logicalname
+                FROM   metadata.entity";
 
             var plans = planBuilder.Build(query);
 
@@ -2154,6 +2153,37 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.IsTrue(meta.IncludeEntity);
             Assert.AreEqual("entity", meta.EntityAlias);
             CollectionAssert.AreEqual(new[] { "LogicalName" }, meta.Query.Properties.PropertyNames);
+        }
+
+        [TestMethod]
+        public void SimpleMetadataWhere()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                SELECT logicalname
+                FROM   metadata.entity
+                WHERE  objecttypecode = 1";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var meta = AssertNode<MetadataQueryNode>(select.Source);
+
+            Assert.IsTrue(meta.IncludeEntity);
+            Assert.AreEqual("entity", meta.EntityAlias);
+            CollectionAssert.AreEqual(new[] { "LogicalName" }, meta.Query.Properties.PropertyNames);
+            Assert.AreEqual(1, meta.Query.Criteria.Conditions.Count);
+            Assert.AreEqual("ObjectTypeCode", meta.Query.Criteria.Conditions[0].PropertyName);
+            Assert.AreEqual(MetadataConditionOperator.Equals, meta.Query.Criteria.Conditions[0].ConditionOperator);
+            Assert.AreEqual(1, meta.Query.Criteria.Conditions[0].Value);
         }
 
         private T AssertNode<T>(IExecutionPlanNode node) where T : IExecutionPlanNode

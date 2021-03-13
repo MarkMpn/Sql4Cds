@@ -99,6 +99,7 @@
     <Compile Include="FetchXmlConditionMethods.cs" />
     <Compile Include="FetchXmlExtensions.cs" />
     <Compile Include="JoinConditionVisitor.cs" />
+    <Compile Include="MetadataQueryExtensions.cs" />
     <Compile Include="MetaMetadataCache.cs" />
     <Compile Include="MetaMetadata.cs" />
     <Compile Include="PartialSuccessException.cs" />

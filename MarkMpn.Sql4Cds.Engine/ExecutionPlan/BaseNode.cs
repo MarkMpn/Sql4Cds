@@ -10,6 +10,8 @@ using MarkMpn.Sql4Cds.Engine.Visitors;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
+using Microsoft.Xrm.Sdk.Metadata.Query;
+using Microsoft.Xrm.Sdk.Query;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -226,6 +228,209 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return null;
+        }
+
+        protected bool TranslateCriteria(BooleanExpression criteria, MetadataQueryNode meta, out MetadataFilterExpression entityFilter, out MetadataFilterExpression attributeFilter)
+        {
+            entityFilter = null;
+            attributeFilter = null;
+
+            if (criteria is BooleanBinaryExpression binary)
+            {
+                if (!TranslateCriteria(binary.FirstExpression, meta, out var lhsEntityFilter, out var lhsAttributeFilter))
+                    return false;
+                if (!TranslateCriteria(binary.SecondExpression, meta, out var rhsEntityFilter, out var rhsAttributeFilter))
+                    return false;
+
+                if (binary.BinaryExpressionType == BooleanBinaryExpressionType.Or)
+                {
+                    // Can only do OR filters within a single type
+                    if (lhsEntityFilter != null && (lhsAttributeFilter != null || rhsAttributeFilter != null) ||
+                        lhsAttributeFilter != null && (lhsEntityFilter != null || rhsEntityFilter != null))
+                        return false;
+                }
+
+                entityFilter = lhsEntityFilter;
+                attributeFilter = lhsAttributeFilter;
+
+                if (rhsEntityFilter != null)
+                {
+                    if (entityFilter == null)
+                        entityFilter = rhsEntityFilter;
+                    else
+                        entityFilter = new MetadataFilterExpression { Filters = { lhsEntityFilter, rhsEntityFilter }, FilterOperator = binary.BinaryExpressionType == BooleanBinaryExpressionType.And ? LogicalOperator.And : LogicalOperator.Or };
+                }
+
+                if (rhsAttributeFilter != null)
+                {
+                    if (attributeFilter == null)
+                        attributeFilter = rhsAttributeFilter;
+                    else
+                        attributeFilter = new MetadataFilterExpression { Filters = { lhsAttributeFilter, rhsAttributeFilter }, FilterOperator = binary.BinaryExpressionType == BooleanBinaryExpressionType.And ? LogicalOperator.And : LogicalOperator.Or };
+                }
+
+                return true;
+            }
+
+            if (criteria is BooleanComparisonExpression comparison)
+            {
+                if (comparison.ComparisonType != BooleanComparisonType.Equals &&
+                    comparison.ComparisonType != BooleanComparisonType.NotEqualToBrackets &&
+                    comparison.ComparisonType != BooleanComparisonType.NotEqualToExclamation &&
+                    comparison.ComparisonType != BooleanComparisonType.LessThan &&
+                    comparison.ComparisonType != BooleanComparisonType.GreaterThan)
+                    return false;
+
+                var col = comparison.FirstExpression as ColumnReferenceExpression;
+                var literal = comparison.SecondExpression as Literal;
+
+                if (col == null && literal == null)
+                {
+                    col = comparison.SecondExpression as ColumnReferenceExpression;
+                    literal = comparison.FirstExpression as Literal;
+                }
+
+                if (col == null || literal == null)
+                    return false;
+
+                var schema = meta.GetSchema(null, null);
+                if (!schema.ContainsColumn(col.GetColumnName(), out var colName))
+                    return false;
+
+                var parts = colName.Split('.');
+
+                if (parts.Length != 2)
+                    return false;
+
+                MetadataConditionOperator op;
+
+                switch (comparison.ComparisonType)
+                {
+                    case BooleanComparisonType.Equals:
+                        op = MetadataConditionOperator.Equals;
+                        break;
+
+                    case BooleanComparisonType.NotEqualToBrackets:
+                    case BooleanComparisonType.NotEqualToExclamation:
+                        op = MetadataConditionOperator.NotEquals;
+                        break;
+
+                    case BooleanComparisonType.LessThan:
+                        op = MetadataConditionOperator.LessThan;
+                        break;
+
+                    case BooleanComparisonType.GreaterThan:
+                        op = MetadataConditionOperator.GreaterThan;
+                        break;
+
+                    default:
+                        throw new InvalidOperationException();
+                }
+
+                var filter = new MetadataFilterExpression
+                {
+                    Conditions =
+                    {
+                        new MetadataConditionExpression(parts[1], op, literal.GetValue(null, null, null, null))
+                    }
+                };
+
+                if (parts[0].Equals(meta.EntityAlias, StringComparison.OrdinalIgnoreCase))
+                {
+                    entityFilter = filter;
+                    return true;
+                }
+                
+                if (parts[0].Equals(meta.AttributeAlias, StringComparison.OrdinalIgnoreCase))
+                {
+                    attributeFilter = filter;
+                    return true;
+                }
+            }
+
+            if (criteria is InPredicate inPred)
+            {
+                var col = inPred.Expression as ColumnReferenceExpression;
+
+                if (col == null)
+                    return false;
+
+                var schema = meta.GetSchema(null, null);
+                if (!schema.ContainsColumn(col.GetColumnName(), out var colName))
+                    return false;
+
+                var parts = colName.Split('.');
+
+                if (parts.Length != 2)
+                    return false;
+
+                if (inPred.Values.Any(val => !(val is Literal)))
+                    return false;
+
+                var filter = new MetadataFilterExpression
+                {
+                    Conditions =
+                    {
+                        new MetadataConditionExpression(parts[1], inPred.NotDefined ? MetadataConditionOperator.NotIn : MetadataConditionOperator.In, inPred.Values.Select(val => val.GetValue(null, null, null, null)).ToArray())
+                    }
+                };
+
+                if (parts[0].Equals(meta.EntityAlias, StringComparison.OrdinalIgnoreCase))
+                {
+                    entityFilter = filter;
+                    return true;
+                }
+
+                if (parts[0].Equals(meta.AttributeAlias, StringComparison.OrdinalIgnoreCase))
+                {
+                    attributeFilter = filter;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        protected BooleanExpression ExtractMetadataFilters(BooleanExpression criteria, MetadataQueryNode meta, out MetadataFilterExpression entityFilter, out MetadataFilterExpression attributeFilter)
+        {
+            if (TranslateCriteria(criteria, meta, out entityFilter, out attributeFilter))
+                return null;
+
+            if (criteria is BooleanBinaryExpression binary && binary.BinaryExpressionType == BooleanBinaryExpressionType.And)
+            {
+                var lhsRemainder = ExtractMetadataFilters(binary.FirstExpression, meta, out var lhsEntityFilter, out var lhsAttributeFilter);
+                var rhsRemainer = ExtractMetadataFilters(binary.SecondExpression, meta, out var rhsEntityFilter, out var rhsAttributeFilter);
+
+                entityFilter = lhsEntityFilter;
+                attributeFilter = lhsAttributeFilter;
+
+                if (rhsEntityFilter != null)
+                {
+                    if (entityFilter == null)
+                        entityFilter = rhsEntityFilter;
+                    else
+                        entityFilter = new MetadataFilterExpression { Filters = { lhsEntityFilter, rhsEntityFilter }, FilterOperator = binary.BinaryExpressionType == BooleanBinaryExpressionType.And ? LogicalOperator.And : LogicalOperator.Or };
+                }
+
+                if (rhsAttributeFilter != null)
+                {
+                    if (attributeFilter == null)
+                        attributeFilter = rhsAttributeFilter;
+                    else
+                        attributeFilter = new MetadataFilterExpression { Filters = { lhsAttributeFilter, rhsAttributeFilter }, FilterOperator = binary.BinaryExpressionType == BooleanBinaryExpressionType.And ? LogicalOperator.And : LogicalOperator.Or };
+                }
+
+                if (lhsRemainder == null)
+                    return rhsRemainer;
+
+                if (rhsRemainer == null)
+                    return lhsRemainder;
+
+                binary.FirstExpression = lhsRemainder;
+                binary.SecondExpression = rhsRemainer;
+            }
+
+            return criteria;
         }
 
         protected bool TranslateCriteria(IAttributeMetadataCache metadata, IQueryExecutionOptions options, BooleanExpression criteria, NodeSchema schema, string allowedPrefix, string targetEntityName, string targetEntityAlias, object[] items, out filter filter)

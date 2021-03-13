@@ -6,6 +6,8 @@ using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Metadata.Query;
+using Microsoft.Xrm.Sdk.Query;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -64,6 +66,31 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (fetchFilter != null)
                     fetchXml.Entity.AddItem(fetchFilter);
+            }
+
+            if (Source is MetadataQueryNode meta)
+            {
+                if (TranslateCriteria(Filter, meta, out var entityFilter, out var attributeFilter))
+                {
+                    meta.Query.AddFilter(entityFilter);
+
+                    if (attributeFilter != null && meta.Query.AttributeQuery == null)
+                        meta.Query.AttributeQuery = new AttributeQueryExpression();
+
+                    meta.Query.AttributeQuery.AddFilter(attributeFilter);
+
+                    return meta;
+                }
+
+                // If the criteria are ANDed, see if any of the individual conditions can be translated to the metadata query
+                Filter = ExtractMetadataFilters(Filter, meta, out entityFilter, out attributeFilter);
+
+                meta.Query.AddFilter(entityFilter);
+
+                if (attributeFilter != null && meta.Query.AttributeQuery == null)
+                    meta.Query.AttributeQuery = new AttributeQueryExpression();
+
+                meta.Query.AttributeQuery.AddFilter(attributeFilter);
             }
 
             // If we've got a filter matching a column and a variable (key lookup in a nested loop) from a table spool, replace it with a index spool
