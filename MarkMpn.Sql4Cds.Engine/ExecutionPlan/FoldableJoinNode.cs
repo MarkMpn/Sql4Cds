@@ -122,6 +122,37 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return leftFetch;
             }
 
+            if (LeftSource is MetadataQueryNode leftMeta && RightSource is MetadataQueryNode rightMeta && JoinType == QualifiedJoinType.Inner)
+            {
+                // Check if this is a simple join that the MetadataQueryNode can handle
+                if (leftMeta.IncludeEntity && rightMeta.IncludeAttribute && !leftMeta.IncludeAttribute && !rightMeta.IncludeEntity ||
+                    rightMeta.IncludeEntity && leftMeta.IncludeAttribute && !rightMeta.IncludeAttribute && !leftMeta.IncludeEntity)
+                {
+                    // We're joining an entity list with an attribute list. Check the join is on the entity name fields
+                    if (!leftSchema.ContainsColumn(LeftAttribute.GetColumnName(), out var leftKey) ||
+                        !rightSchema.ContainsColumn(RightAttribute.GetColumnName(), out var rightKey))
+                        return this;
+
+                    var entityMeta = leftMeta.IncludeEntity ? leftMeta : rightMeta;
+                    var attributeMeta = leftMeta.IncludeAttribute ? leftMeta : rightMeta;
+                    var entityKey = leftMeta.IncludeEntity ? leftKey : rightKey;
+                    var attributeKey = leftMeta.IncludeAttribute ? leftKey : rightKey;
+
+                    if (!entityKey.Equals($"{entityMeta.EntityAlias}.{nameof(EntityMetadata.LogicalName)}", StringComparison.OrdinalIgnoreCase))
+                        return this;
+
+                    if (!attributeKey.Equals($"{attributeMeta.AttributeAlias}.{nameof(AttributeMetadata.EntityLogicalName)}", StringComparison.OrdinalIgnoreCase))
+                        return this;
+
+                    // Move the attribute details into the entity source
+                    entityMeta.IncludeAttribute = true;
+                    entityMeta.AttributeAlias = attributeMeta.AttributeAlias;
+                    entityMeta.Query.AttributeQuery = attributeMeta.Query.AttributeQuery;
+
+                    return entityMeta;
+                }
+            }
+
             return this;
         }
 
