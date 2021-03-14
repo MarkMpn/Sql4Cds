@@ -663,6 +663,10 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
                 };
             }
+            else if (condition.value == null)
+            {
+                value = new NullLiteral();
+            }
             else if (attr == null)
             {
                 value = new StringLiteral { Value = condition.value };

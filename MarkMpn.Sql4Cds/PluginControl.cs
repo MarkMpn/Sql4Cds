@@ -69,12 +69,14 @@ namespace MarkMpn.Sql4Cds
 
         private void AddConnection(ConnectionDetail con)
         {
-            _metadata[con] = new AttributeMetadataCache(con.ServiceClient);
-            _tableSize[con] = new TableSizeCache(con.ServiceClient, _metadata[con]);
+            var svc = con.ServiceClient;
+
+            _metadata[con] = new AttributeMetadataCache(svc);
+            _tableSize[con] = new TableSizeCache(svc, _metadata[con]);
             _objectExplorer.AddConnection(con);
 
             // Start loading the entity list in the background
-            EntityCache.TryGetEntities(con.ServiceClient, out _);
+            EntityCache.TryGetEntities(svc, out _);
         }
 
         private void PluginControl_Load(object sender, EventArgs e)

@@ -133,7 +133,7 @@ namespace MarkMpn.Sql4Cds
             Icon = _sqlIcon;
         }
 
-        public IOrganizationService Service { get; }
+        public CrmServiceClient Service { get; }
         public IAttributeMetadataCache Metadata { get; }
         public Action<MessageBusEventArgs> OutgoingMessageHandler { get; }
         public string Filename
@@ -341,7 +341,7 @@ namespace MarkMpn.Sql4Cds
                 if (!wordEnd.Success)
                     return;
 
-                EntityCache.TryGetEntities(_con.ServiceClient, out var entities);
+                EntityCache.TryGetEntities(Service, out var entities);
 
                 var metaEntities = MetaMetadata.GetMetadata().Select(m => m.GetEntityMetadata());
 
@@ -410,7 +410,7 @@ namespace MarkMpn.Sql4Cds
                     yield break;
 
                 var text = _control._editor.Text;
-                EntityCache.TryGetEntities(_control._con.ServiceClient, out var entities);
+                EntityCache.TryGetEntities(_control.Service, out var entities);
 
                 var metaEntities = MetaMetadata.GetMetadata().Select(m => m.GetEntityMetadata());
 
@@ -1270,7 +1270,7 @@ namespace MarkMpn.Sql4Cds
 
         private void SyncUsername()
         {
-            if (_con.ServiceClient.CallerId == Guid.Empty)
+            if (Service.CallerId == Guid.Empty)
             {
                 usernameDropDownButton.Text = _con.UserName;
                 usernameDropDownButton.Image = null;
@@ -1278,7 +1278,7 @@ namespace MarkMpn.Sql4Cds
             }
             else
             {
-                var user = Service.Retrieve("systemuser", _con.ServiceClient.CallerId, new ColumnSet("domainname"));
+                var user = Service.Retrieve("systemuser", Service.CallerId, new ColumnSet("domainname"));
 
                 usernameDropDownButton.Text = user.GetAttributeValue<string>("domainname");
                 usernameDropDownButton.Image = Properties.Resources.StatusWarning_16x;
@@ -1297,7 +1297,7 @@ namespace MarkMpn.Sql4Cds
                 if (dlg.ShowDialog(this) == DialogResult.OK)
                 {
                     _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = typeof(ImpersonateQuery).Name, ["Source"] = "XrmToolBox" });
-                    _con.ServiceClient.CallerId = dlg.Entity.Id;
+                    Service.CallerId = dlg.Entity.Id;
                     SyncUsername();
                 }
             }
@@ -1306,7 +1306,7 @@ namespace MarkMpn.Sql4Cds
         private void revertToolStripMenuItem_Click(object sender, EventArgs e)
         {
             _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = typeof(RevertQuery).Name, ["Source"] = "XrmToolBox" });
-            _con.ServiceClient.CallerId = Guid.Empty;
+            Service.CallerId = Guid.Empty;
             SyncUsername();
         }
     }

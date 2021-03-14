@@ -114,7 +114,9 @@ namespace MarkMpn.Sql4Cds
 
         public void AddConnection(ConnectionDetail con)
         {
-            EntityCache.TryGetEntities(con.ServiceClient, out _);
+            var svc = con.ServiceClient;
+
+            EntityCache.TryGetEntities(svc, out _);
 
             var conNode = treeView.Nodes.Add(con.ConnectionName);
             conNode.Tag = con;
@@ -133,9 +135,9 @@ namespace MarkMpn.Sql4Cds
             {
                 var tsqlNode = conNode.Nodes.Add("TDS Endpoint");
 
-                if (TSqlEndpoint.IsEnabled(con.ServiceClient))
+                if (TSqlEndpoint.IsEnabled(svc))
                 {
-                    if (!String.IsNullOrEmpty(con.ServiceClient.CurrentAccessToken))
+                    if (!String.IsNullOrEmpty(svc.CurrentAccessToken))
                     {
                         tsqlNode.ImageIndex = 21;
                         tsqlNode.SelectedImageIndex = 21;
