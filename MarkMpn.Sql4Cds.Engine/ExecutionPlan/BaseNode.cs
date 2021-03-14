@@ -327,6 +327,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         throw new InvalidOperationException();
                 }
 
+                // Translate queries on attribute.EntityLogicalName to entity.LogicalName for better performance
+                var isEntityFilter = parts[0].Equals(meta.EntityAlias, StringComparison.OrdinalIgnoreCase);
+                var isAttributeFilter = parts[0].Equals(meta.AttributeAlias, StringComparison.OrdinalIgnoreCase);
+
+                if (isAttributeFilter &&
+                    parts[1].Equals(nameof(AttributeMetadata.EntityLogicalName), StringComparison.OrdinalIgnoreCase))
+                {
+                    parts[1] = nameof(EntityMetadata.LogicalName);
+                    isAttributeFilter = false;
+                    isEntityFilter = true;
+                }
+
                 var filter = new MetadataFilterExpression
                 {
                     Conditions =
@@ -335,13 +347,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                 };
 
-                if (parts[0].Equals(meta.EntityAlias, StringComparison.OrdinalIgnoreCase))
+                if (isEntityFilter)
                 {
                     entityFilter = filter;
                     return true;
                 }
                 
-                if (parts[0].Equals(meta.AttributeAlias, StringComparison.OrdinalIgnoreCase))
+                if (isAttributeFilter)
                 {
                     attributeFilter = filter;
                     return true;
