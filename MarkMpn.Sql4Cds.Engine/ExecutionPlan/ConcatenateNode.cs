@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -15,6 +16,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// The data sources to concatenate
         /// </summary>
+        [Browsable(false)]
         public List<IExecutionPlanNode> Sources { get; } = new List<IExecutionPlanNode>();
 
         /// <summary>

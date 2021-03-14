@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -11,6 +12,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     {
         public IExecutionPlanNode TrySource { get; set; }
         public IExecutionPlanNode CatchSource { get; set; }
+
+        [Browsable(false)]
         public Func<Exception,bool> ExceptionFilter { get; set; }
 
         protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
