@@ -70,7 +70,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (Source is MetadataQueryNode meta)
             {
-                if (TranslateCriteria(Filter, meta, out var entityFilter, out var attributeFilter))
+                if (TranslateCriteria(Filter, meta, out var entityFilter, out var attributeFilter, out var relationshipFilter))
                 {
                     meta.Query.AddFilter(entityFilter);
 
@@ -79,11 +79,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     meta.Query.AttributeQuery.AddFilter(attributeFilter);
 
+                    if (relationshipFilter != null && meta.Query.RelationshipQuery == null)
+                        meta.Query.RelationshipQuery = new RelationshipQueryExpression();
+
+                    meta.Query.RelationshipQuery.AddFilter(relationshipFilter);
+
                     return meta;
                 }
 
                 // If the criteria are ANDed, see if any of the individual conditions can be translated to the metadata query
-                Filter = ExtractMetadataFilters(Filter, meta, out entityFilter, out attributeFilter);
+                Filter = ExtractMetadataFilters(Filter, meta, out entityFilter, out attributeFilter, out relationshipFilter);
 
                 meta.Query.AddFilter(entityFilter);
 
@@ -91,6 +96,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     meta.Query.AttributeQuery = new AttributeQueryExpression();
 
                 meta.Query.AttributeQuery.AddFilter(attributeFilter);
+
+                if (relationshipFilter != null && meta.Query.RelationshipQuery == null)
+                    meta.Query.RelationshipQuery = new RelationshipQueryExpression();
+
+                meta.Query.RelationshipQuery.AddFilter(relationshipFilter);
             }
 
             // If we've got a filter matching a column and a variable (key lookup in a nested loop) from a table spool, replace it with a index spool

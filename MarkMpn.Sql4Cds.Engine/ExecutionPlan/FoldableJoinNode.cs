@@ -124,32 +124,76 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (LeftSource is MetadataQueryNode leftMeta && RightSource is MetadataQueryNode rightMeta && JoinType == QualifiedJoinType.Inner)
             {
-                // Check if this is a simple join that the MetadataQueryNode can handle
-                if (leftMeta.IncludeEntity && rightMeta.IncludeAttribute && !leftMeta.IncludeAttribute && !rightMeta.IncludeEntity ||
-                    rightMeta.IncludeEntity && leftMeta.IncludeAttribute && !rightMeta.IncludeAttribute && !leftMeta.IncludeEntity)
+                // Check if this is a simple join that the MetadataQueryNode can handle - joining from entity metadata to one of it's children
+                if ((leftMeta.MetadataSource & rightMeta.MetadataSource) == 0 && (leftMeta.MetadataSource | rightMeta.MetadataSource).HasFlag(MetadataSource.Entity))
                 {
-                    // We're joining an entity list with an attribute list. Check the join is on the entity name fields
+                    // We're joining an entity list with an attribute/relationship list. Check the join is on the entity name fields
                     if (!leftSchema.ContainsColumn(LeftAttribute.GetColumnName(), out var leftKey) ||
                         !rightSchema.ContainsColumn(RightAttribute.GetColumnName(), out var rightKey))
                         return this;
 
-                    var entityMeta = leftMeta.IncludeEntity ? leftMeta : rightMeta;
-                    var attributeMeta = leftMeta.IncludeAttribute ? leftMeta : rightMeta;
-                    var entityKey = leftMeta.IncludeEntity ? leftKey : rightKey;
-                    var attributeKey = leftMeta.IncludeAttribute ? leftKey : rightKey;
+                    var entityMeta = leftMeta.MetadataSource.HasFlag(MetadataSource.Entity) ? leftMeta : rightMeta;
+                    var entityKey = entityMeta == leftMeta ? leftKey : rightKey;
+                    var otherMeta = entityMeta == leftMeta ? rightMeta : leftMeta;
+                    var otherKey = entityMeta == leftMeta ? rightKey : leftKey;
 
                     if (!entityKey.Equals($"{entityMeta.EntityAlias}.{nameof(EntityMetadata.LogicalName)}", StringComparison.OrdinalIgnoreCase))
                         return this;
 
-                    if (!attributeKey.Equals($"{attributeMeta.AttributeAlias}.{nameof(AttributeMetadata.EntityLogicalName)}", StringComparison.OrdinalIgnoreCase))
-                        return this;
+                    if (otherMeta.MetadataSource == MetadataSource.Attribute)
+                    {
+                        if (!otherKey.Equals($"{otherMeta.AttributeAlias}.{nameof(AttributeMetadata.EntityLogicalName)}", StringComparison.OrdinalIgnoreCase))
+                            return this;
 
-                    // Move the attribute details into the entity source
-                    entityMeta.IncludeAttribute = true;
-                    entityMeta.AttributeAlias = attributeMeta.AttributeAlias;
-                    entityMeta.Query.AttributeQuery = attributeMeta.Query.AttributeQuery;
+                        // Move the attribute details into the entity source
+                        entityMeta.MetadataSource |= otherMeta.MetadataSource;
+                        entityMeta.AttributeAlias = otherMeta.AttributeAlias;
+                        entityMeta.Query.AttributeQuery = otherMeta.Query.AttributeQuery;
 
-                    return entityMeta;
+                        return entityMeta;
+                    }
+
+                    if (otherMeta.MetadataSource == MetadataSource.OneToManyRelationship)
+                    {
+                        if (!otherKey.Equals($"{otherMeta.OneToManyRelationshipAlias}.{nameof(OneToManyRelationshipMetadata.ReferencedEntity)}", StringComparison.OrdinalIgnoreCase))
+                            return this;
+
+                        // Move the relationship details into the entity source
+                        entityMeta.MetadataSource |= otherMeta.MetadataSource;
+                        entityMeta.OneToManyRelationshipAlias = otherMeta.OneToManyRelationshipAlias;
+                        entityMeta.Query.RelationshipQuery = otherMeta.Query.RelationshipQuery;
+
+                        return entityMeta;
+                    }
+
+                    if (otherMeta.MetadataSource == MetadataSource.ManyToOneRelationship)
+                    {
+                        if (!otherKey.Equals($"{otherMeta.ManyToOneRelationshipAlias}.{nameof(OneToManyRelationshipMetadata.ReferencingEntity)}", StringComparison.OrdinalIgnoreCase))
+                            return this;
+
+                        // Move the relationship details into the entity source
+                        entityMeta.MetadataSource |= otherMeta.MetadataSource;
+                        entityMeta.ManyToOneRelationshipAlias = otherMeta.ManyToOneRelationshipAlias;
+                        entityMeta.Query.RelationshipQuery = otherMeta.Query.RelationshipQuery;
+
+                        return entityMeta;
+                    }
+
+                    if (otherMeta.MetadataSource == MetadataSource.ManyToManyRelationship)
+                    {
+                        if (!otherKey.Equals($"{otherMeta.ManyToManyRelationshipAlias}.{nameof(ManyToManyRelationshipMetadata.Entity1LogicalName)}", StringComparison.OrdinalIgnoreCase) &&
+                            !otherKey.Equals($"{otherMeta.ManyToManyRelationshipAlias}.{nameof(ManyToManyRelationshipMetadata.Entity2LogicalName)}", StringComparison.OrdinalIgnoreCase) &&
+                            !otherKey.Equals($"{otherMeta.ManyToManyRelationshipAlias}.{nameof(ManyToManyRelationshipMetadata.IntersectEntityName)}", StringComparison.OrdinalIgnoreCase))
+                            return this;
+
+                        // Move the relationship details into the entity source
+                        entityMeta.MetadataSource |= otherMeta.MetadataSource;
+                        entityMeta.ManyToManyRelationshipAlias = otherMeta.ManyToManyRelationshipAlias;
+                        entityMeta.ManyToManyRelationshipJoin = otherKey.Split('.')[1];
+                        entityMeta.Query.RelationshipQuery = otherMeta.Query.RelationshipQuery;
+
+                        return entityMeta;
+                    }
                 }
             }
 

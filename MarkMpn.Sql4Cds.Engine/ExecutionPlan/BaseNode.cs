@@ -230,28 +230,40 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return null;
         }
 
-        protected bool TranslateCriteria(BooleanExpression criteria, MetadataQueryNode meta, out MetadataFilterExpression entityFilter, out MetadataFilterExpression attributeFilter)
+        protected bool TranslateCriteria(BooleanExpression criteria, MetadataQueryNode meta, out MetadataFilterExpression entityFilter, out MetadataFilterExpression attributeFilter, out MetadataFilterExpression relationshipFilter)
         {
             entityFilter = null;
             attributeFilter = null;
+            relationshipFilter = null;
 
             if (criteria is BooleanBinaryExpression binary)
             {
-                if (!TranslateCriteria(binary.FirstExpression, meta, out var lhsEntityFilter, out var lhsAttributeFilter))
+                if (!TranslateCriteria(binary.FirstExpression, meta, out var lhsEntityFilter, out var lhsAttributeFilter, out var lhsRelationshipFilter))
                     return false;
-                if (!TranslateCriteria(binary.SecondExpression, meta, out var rhsEntityFilter, out var rhsAttributeFilter))
+                if (!TranslateCriteria(binary.SecondExpression, meta, out var rhsEntityFilter, out var rhsAttributeFilter, out var rhsRelationshipFilter))
                     return false;
 
                 if (binary.BinaryExpressionType == BooleanBinaryExpressionType.Or)
                 {
                     // Can only do OR filters within a single type
-                    if (lhsEntityFilter != null && (lhsAttributeFilter != null || rhsAttributeFilter != null) ||
-                        lhsAttributeFilter != null && (lhsEntityFilter != null || rhsEntityFilter != null))
+                    var typeCount = 0;
+
+                    if (lhsEntityFilter != null || rhsEntityFilter != null)
+                        typeCount++;
+
+                    if (lhsAttributeFilter != null || rhsAttributeFilter != null)
+                        typeCount++;
+
+                    if (lhsRelationshipFilter != null || rhsRelationshipFilter != null)
+                        typeCount++;
+
+                    if (typeCount > 1)
                         return false;
                 }
 
                 entityFilter = lhsEntityFilter;
                 attributeFilter = lhsAttributeFilter;
+                relationshipFilter = lhsRelationshipFilter;
 
                 if (rhsEntityFilter != null)
                 {
@@ -267,6 +279,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         attributeFilter = rhsAttributeFilter;
                     else
                         attributeFilter = new MetadataFilterExpression { Filters = { lhsAttributeFilter, rhsAttributeFilter }, FilterOperator = binary.BinaryExpressionType == BooleanBinaryExpressionType.And ? LogicalOperator.And : LogicalOperator.Or };
+                }
+
+                if (rhsRelationshipFilter != null)
+                {
+                    if (relationshipFilter == null)
+                        relationshipFilter = rhsRelationshipFilter;
+                    else
+                        relationshipFilter = new MetadataFilterExpression { Filters = { lhsRelationshipFilter, rhsRelationshipFilter }, FilterOperator = binary.BinaryExpressionType == BooleanBinaryExpressionType.And ? LogicalOperator.And : LogicalOperator.Or };
                 }
 
                 return true;
@@ -330,12 +350,29 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // Translate queries on attribute.EntityLogicalName to entity.LogicalName for better performance
                 var isEntityFilter = parts[0].Equals(meta.EntityAlias, StringComparison.OrdinalIgnoreCase);
                 var isAttributeFilter = parts[0].Equals(meta.AttributeAlias, StringComparison.OrdinalIgnoreCase);
+                var isRelationshipFilter = parts[0].Equals(meta.OneToManyRelationshipAlias, StringComparison.OrdinalIgnoreCase) || parts[0].Equals(meta.ManyToOneRelationshipAlias, StringComparison.OrdinalIgnoreCase) || parts[0].Equals(meta.ManyToManyRelationshipAlias, StringComparison.OrdinalIgnoreCase);
 
                 if (isAttributeFilter &&
                     parts[1].Equals(nameof(AttributeMetadata.EntityLogicalName), StringComparison.OrdinalIgnoreCase))
                 {
                     parts[1] = nameof(EntityMetadata.LogicalName);
                     isAttributeFilter = false;
+                    isEntityFilter = true;
+                }
+
+                if (parts[0].Equals(meta.OneToManyRelationshipAlias, StringComparison.OrdinalIgnoreCase) &&
+                    parts[1].Equals(nameof(OneToManyRelationshipMetadata.ReferencedEntity), StringComparison.OrdinalIgnoreCase))
+                {
+                    parts[1] = nameof(EntityMetadata.LogicalName);
+                    isRelationshipFilter = false;
+                    isEntityFilter = true;
+                }
+
+                if (parts[0].Equals(meta.ManyToOneRelationshipAlias, StringComparison.OrdinalIgnoreCase) &&
+                    parts[1].Equals(nameof(OneToManyRelationshipMetadata.ReferencingEntity), StringComparison.OrdinalIgnoreCase))
+                {
+                    parts[1] = nameof(EntityMetadata.LogicalName);
+                    isRelationshipFilter = false;
                     isEntityFilter = true;
                 }
 
@@ -356,6 +393,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (isAttributeFilter)
                 {
                     attributeFilter = filter;
+                    return true;
+                }
+
+                if (isRelationshipFilter)
+                {
+                    relationshipFilter = filter;
                     return true;
                 }
             }
@@ -379,6 +422,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (inPred.Values.Any(val => !(val is Literal)))
                     return false;
 
+                // Translate queries on attribute.EntityLogicalName to entity.LogicalName for better performance
+                var isEntityFilter = parts[0].Equals(meta.EntityAlias, StringComparison.OrdinalIgnoreCase);
+                var isAttributeFilter = parts[0].Equals(meta.AttributeAlias, StringComparison.OrdinalIgnoreCase);
+                var isRelationshipFilter = parts[0].Equals(meta.OneToManyRelationshipAlias, StringComparison.OrdinalIgnoreCase) || parts[0].Equals(meta.ManyToOneRelationshipAlias, StringComparison.OrdinalIgnoreCase) || parts[0].Equals(meta.ManyToManyRelationshipAlias, StringComparison.OrdinalIgnoreCase);
+
+                if (isAttributeFilter &&
+                    parts[1].Equals(nameof(AttributeMetadata.EntityLogicalName), StringComparison.OrdinalIgnoreCase))
+                {
+                    parts[1] = nameof(EntityMetadata.LogicalName);
+                    isAttributeFilter = false;
+                    isEntityFilter = true;
+                }
+
                 var filter = new MetadataFilterExpression
                 {
                     Conditions =
@@ -387,15 +443,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                 };
 
-                if (parts[0].Equals(meta.EntityAlias, StringComparison.OrdinalIgnoreCase))
+                if (isEntityFilter)
                 {
                     entityFilter = filter;
                     return true;
                 }
 
-                if (parts[0].Equals(meta.AttributeAlias, StringComparison.OrdinalIgnoreCase))
+                if (isAttributeFilter)
                 {
                     attributeFilter = filter;
+                    return true;
+                }
+
+                if (isRelationshipFilter)
+                {
+                    relationshipFilter = filter;
                     return true;
                 }
             }
@@ -403,18 +465,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return false;
         }
 
-        protected BooleanExpression ExtractMetadataFilters(BooleanExpression criteria, MetadataQueryNode meta, out MetadataFilterExpression entityFilter, out MetadataFilterExpression attributeFilter)
+        protected BooleanExpression ExtractMetadataFilters(BooleanExpression criteria, MetadataQueryNode meta, out MetadataFilterExpression entityFilter, out MetadataFilterExpression attributeFilter, out MetadataFilterExpression relationshipFilter)
         {
-            if (TranslateCriteria(criteria, meta, out entityFilter, out attributeFilter))
+            if (TranslateCriteria(criteria, meta, out entityFilter, out attributeFilter, out relationshipFilter))
                 return null;
 
             if (criteria is BooleanBinaryExpression binary && binary.BinaryExpressionType == BooleanBinaryExpressionType.And)
             {
-                var lhsRemainder = ExtractMetadataFilters(binary.FirstExpression, meta, out var lhsEntityFilter, out var lhsAttributeFilter);
-                var rhsRemainer = ExtractMetadataFilters(binary.SecondExpression, meta, out var rhsEntityFilter, out var rhsAttributeFilter);
+                var lhsRemainder = ExtractMetadataFilters(binary.FirstExpression, meta, out var lhsEntityFilter, out var lhsAttributeFilter, out var lhsRelationshipFilter);
+                var rhsRemainer = ExtractMetadataFilters(binary.SecondExpression, meta, out var rhsEntityFilter, out var rhsAttributeFilter, out var rhsRelationshipFilter);
 
                 entityFilter = lhsEntityFilter;
                 attributeFilter = lhsAttributeFilter;
+                relationshipFilter = lhsRelationshipFilter;
 
                 if (rhsEntityFilter != null)
                 {
@@ -430,6 +493,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         attributeFilter = rhsAttributeFilter;
                     else
                         attributeFilter = new MetadataFilterExpression { Filters = { lhsAttributeFilter, rhsAttributeFilter }, FilterOperator = binary.BinaryExpressionType == BooleanBinaryExpressionType.And ? LogicalOperator.And : LogicalOperator.Or };
+                }
+
+                if (rhsRelationshipFilter != null)
+                {
+                    if (relationshipFilter == null)
+                        relationshipFilter = rhsRelationshipFilter;
+                    else
+                        relationshipFilter = new MetadataFilterExpression { Filters = { lhsRelationshipFilter, rhsRelationshipFilter }, FilterOperator = binary.BinaryExpressionType == BooleanBinaryExpressionType.And ? LogicalOperator.And : LogicalOperator.Or };
                 }
 
                 if (lhsRemainder == null)

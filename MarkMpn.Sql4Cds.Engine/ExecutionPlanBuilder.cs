@@ -1434,7 +1434,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         return new MetadataQueryNode
                         {
-                            IncludeEntity = true,
+                            MetadataSource = MetadataSource.Entity,
                             EntityAlias = table.Alias?.Value ?? entityName
                         };
                     }
@@ -1443,8 +1443,35 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         return new MetadataQueryNode
                         {
-                            IncludeAttribute = true,
+                            MetadataSource = MetadataSource.Attribute,
                             AttributeAlias = table.Alias?.Value ?? entityName
+                        };
+                    }
+
+                    if (entityName.Equals("relationship_1_n", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return new MetadataQueryNode
+                        {
+                            MetadataSource = MetadataSource.OneToManyRelationship,
+                            OneToManyRelationshipAlias = table.Alias?.Value ?? entityName
+                        };
+                    }
+
+                    if (entityName.Equals("relationship_n_1", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return new MetadataQueryNode
+                        {
+                            MetadataSource = MetadataSource.ManyToOneRelationship,
+                            ManyToOneRelationshipAlias = table.Alias?.Value ?? entityName
+                        };
+                    }
+
+                    if (entityName.Equals("relationship_n_n", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return new MetadataQueryNode
+                        {
+                            MetadataSource = MetadataSource.ManyToManyRelationship,
+                            ManyToManyRelationshipAlias = table.Alias?.Value ?? entityName
                         };
                     }
 

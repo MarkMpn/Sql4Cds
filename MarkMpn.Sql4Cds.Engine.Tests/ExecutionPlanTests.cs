@@ -2150,7 +2150,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var select = AssertNode<SelectNode>(plans[0]);
             var meta = AssertNode<MetadataQueryNode>(select.Source);
 
-            Assert.IsTrue(meta.IncludeEntity);
+            Assert.AreEqual(MetadataSource.Entity, meta.MetadataSource);
             Assert.AreEqual("entity", meta.EntityAlias);
             CollectionAssert.AreEqual(new[] { "LogicalName" }, meta.Query.Properties.PropertyNames);
         }
@@ -2177,7 +2177,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var select = AssertNode<SelectNode>(plans[0]);
             var meta = AssertNode<MetadataQueryNode>(select.Source);
 
-            Assert.IsTrue(meta.IncludeEntity);
+            Assert.AreEqual(MetadataSource.Entity, meta.MetadataSource);
             Assert.AreEqual("entity", meta.EntityAlias);
             CollectionAssert.AreEqual(new[] { "LogicalName" }, meta.Query.Properties.PropertyNames);
             Assert.AreEqual(1, meta.Query.Criteria.Conditions.Count);
