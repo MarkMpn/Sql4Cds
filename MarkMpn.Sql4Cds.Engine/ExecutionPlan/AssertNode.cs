@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -20,6 +21,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// The function that must be true for each entity in the <see cref="Source"/>
         /// </summary>
+        [Browsable(false)]
         public Func<Entity,bool> Assertion { get; set; }
 
         /// <summary>

@@ -23,17 +23,17 @@ namespace MarkMpn.Sql4Cds
         public void SelectObject(object obj)
         {
             if (obj != null)
-                obj = new TestTypeDescriptor(obj);
+                obj = new WrappedTypeDescriptor(obj);
 
             propertyGrid.SelectedObject = obj;
         }
     }
 
-    class TestTypeDescriptor : CustomTypeDescriptor
+    class WrappedTypeDescriptor : CustomTypeDescriptor
     {
         private readonly object _obj;
 
-        public TestTypeDescriptor(object obj)
+        public WrappedTypeDescriptor(object obj)
         {
             _obj = obj;
         }
@@ -54,7 +54,7 @@ namespace MarkMpn.Sql4Cds
                 .Where(p => p.DeclaringType != typeof(BaseNode))
                 .Where(p => p.DeclaringType != typeof(TSqlFragment))
                 .Where(p => p.GetCustomAttribute<BrowsableAttribute>()?.Browsable != false)
-                .Select(p => new TestPropertyDescriptor(_obj, p))
+                .Select(p => new WrappedPropertyDescriptor(_obj, p))
                 .ToArray());
         }
 
@@ -64,15 +64,23 @@ namespace MarkMpn.Sql4Cds
         }
     }
 
-    class TestPropertyDescriptor : PropertyDescriptor
+    class WrappedPropertyDescriptor : PropertyDescriptor
     {
         private readonly object _target;
         private readonly PropertyInfo _prop;
+        private readonly object _value;
 
-        public TestPropertyDescriptor(object target, PropertyInfo prop) : base(prop.Name, GetAttributes(target, prop))
+        public WrappedPropertyDescriptor(object target, PropertyInfo prop) : base(prop.Name, GetAttributes(target, prop))
         {
             _target = target;
             _prop = prop;
+            _value = prop.GetValue(target);
+        }
+
+        public WrappedPropertyDescriptor(object target, string name, object value) : base(name, GetAttributes(value.GetType()))
+        {
+            _target = target;
+            _value = value;
         }
 
         private static Attribute[] GetAttributes(object target, PropertyInfo prop)
@@ -85,6 +93,14 @@ namespace MarkMpn.Sql4Cds
             return GetAttributes(prop.PropertyType);
         }
 
+        public static string GetName(ITypeDescriptorContext context)
+        {
+            if (context.PropertyDescriptor is WrappedPropertyDescriptor pd && pd._prop == null)
+                return $"({context.PropertyDescriptor.PropertyType.Name})";
+
+            return $"({context.PropertyDescriptor.Name})";
+        }
+
         public static Attribute[] GetAttributes(Type type)
         {
             var attrs = new List<Attribute>();
@@ -95,6 +111,8 @@ namespace MarkMpn.Sql4Cds
 
                 if (typeof(System.Collections.IList).IsAssignableFrom(type))
                     typeConverter = typeof(DataCollectionConverter);
+                else if (typeof(System.Collections.IDictionary).IsAssignableFrom(type))
+                    typeConverter = typeof(DictionaryConverter);
                 else if (typeof(MultiPartIdentifier).IsAssignableFrom(type))
                     typeConverter = typeof(MultiPartIdentifierConverter);
                 else
@@ -115,18 +133,20 @@ namespace MarkMpn.Sql4Cds
         {
             get
             {
-                var val = _prop.GetValue(_target);
-                var type = val?.GetType() ?? _prop.PropertyType;
+                var type = _value?.GetType() ?? _prop.PropertyType;
 
                 if ((type.IsClass || type.IsInterface) && type != typeof(string))
                 {
                     if (typeof(System.Collections.IList).IsAssignableFrom(type))
                         return new DataCollectionConverter();
 
+                    if (typeof(System.Collections.IDictionary).IsAssignableFrom(type))
+                        return new DictionaryConverter();
+
                     if (typeof(MultiPartIdentifier).IsAssignableFrom(type))
                         return new MultiPartIdentifierConverter();
 
-                    return new SimpleNameExpandableObjectConverter(val != null && type != _prop.PropertyType ? $"({type.Name})" : $"({Name})");
+                    return new SimpleNameExpandableObjectConverter(_prop == null || (_value != null && _prop != null && type != _prop.PropertyType) ? $"({type.Name})" : $"({Name})");
                 }
 
                 return base.Converter;
@@ -137,7 +157,7 @@ namespace MarkMpn.Sql4Cds
 
         public override bool IsReadOnly => true;
 
-        public override Type PropertyType => _prop.PropertyType;
+        public override Type PropertyType => _prop?.PropertyType ?? _value.GetType();
 
         public override bool CanResetValue(object component)
         {
@@ -146,17 +166,15 @@ namespace MarkMpn.Sql4Cds
 
         public override object GetValue(object component)
         {
-            var val = _prop.GetValue(_target);
-
-            if (val == null)
+            if (_value == null)
                 return null;
 
-            var type = val.GetType();
+            var type = _value.GetType();
 
             if (type.IsClass && type != typeof(string))
-                return new TestTypeDescriptor(val);
+                return new WrappedTypeDescriptor(_value);
 
-            return val;
+            return _value;
         }
 
         public override void ResetValue(object component)
@@ -198,7 +216,7 @@ namespace MarkMpn.Sql4Cds
                 if (_name != null)
                     return _name;
 
-                return $"({context.PropertyDescriptor.Name})";
+                return WrappedPropertyDescriptor.GetName(context);
             }
 
             return base.ConvertTo(context, culture, value, destinationType);
@@ -217,12 +235,26 @@ namespace MarkMpn.Sql4Cds
             if (value == null)
                 return String.Empty;
 
-            return $"({context.PropertyDescriptor.Name})";
+            if (value is ICustomTypeDescriptor desc)
+                value = desc.GetPropertyOwner(null);
+
+            var list = (System.Collections.IList)value;
+
+            if (list.Count == 0)
+                return "(None)";
+
+            return WrappedPropertyDescriptor.GetName(context);
         }
 
         public override bool GetPropertiesSupported(ITypeDescriptorContext context)
         {
-            return true;
+            var value = context.PropertyDescriptor.GetValue(context.Instance);
+
+            if (value is ICustomTypeDescriptor desc)
+                value = desc.GetPropertyOwner(null);
+
+            var list = (System.Collections.IList)value;
+            return list.Count > 0;
         }
 
         public override PropertyDescriptorCollection GetProperties(ITypeDescriptorContext context, object value, Attribute[] attributes)
@@ -232,74 +264,59 @@ namespace MarkMpn.Sql4Cds
 
             var list = (System.Collections.IList)value;
 
-            return new PropertyDescriptorCollection(list.Cast<object>().Select((item, i) => new DataCollectionItemPropertyDescriptor(item, i, list.Count)).ToArray());
+            return new PropertyDescriptorCollection(list.Cast<object>().Select((item, i) => new DataCollectionItemPropertyDescriptor(list, item, i)).ToArray());
         }
     }
 
-    class DataCollectionItemPropertyDescriptor : PropertyDescriptor
+    class DataCollectionItemPropertyDescriptor : WrappedPropertyDescriptor
     {
-        private readonly object _item;
-
-        public DataCollectionItemPropertyDescriptor(object item, int index, int count) : base(index.ToString().PadLeft((int)Math.Ceiling(Math.Log10(count)), '0'), TestPropertyDescriptor.GetAttributes(item.GetType()))
+        public DataCollectionItemPropertyDescriptor(System.Collections.IList list, object item, int index) : base(list, index.ToString().PadLeft((int)Math.Ceiling(Math.Log10(list.Count)), '0'), item)
         {
-            _item = item;
+        }
+    }
+
+    class DictionaryConverter : TypeConverter
+    {
+        public override bool CanConvertTo(ITypeDescriptorContext context, Type destinationType)
+        {
+            return destinationType == typeof(string);
         }
 
-        public override TypeConverter Converter
+        public override object ConvertTo(ITypeDescriptorContext context, CultureInfo culture, object value, Type destinationType)
         {
-            get
-            {
-                var type = _item.GetType();
+            if (value == null)
+                return String.Empty;
 
-                if ((type.IsClass || type.IsInterface) && type != typeof(string))
-                {
-                    if (typeof(System.Collections.IList).IsAssignableFrom(type))
-                        return new DataCollectionConverter();
+            if (value is ICustomTypeDescriptor desc)
+                value = desc.GetPropertyOwner(null);
 
-                    if (typeof(MultiPartIdentifier).IsAssignableFrom(type))
-                        return new MultiPartIdentifierConverter();
+            var list = (System.Collections.IDictionary)value;
 
-                    return new SimpleNameExpandableObjectConverter($"({type.Name})");
-                }
+            if (list.Count == 0)
+                return "(None)";
 
-                return base.Converter;
-            }
+            return WrappedPropertyDescriptor.GetName(context);
         }
 
-        public override Type ComponentType => typeof(System.Collections.IList);
-
-        public override bool IsReadOnly => true;
-
-        public override Type PropertyType => _item.GetType();
-
-        public override bool CanResetValue(object component)
+        public override bool GetPropertiesSupported(ITypeDescriptorContext context)
         {
-            return false;
+            var value = context.PropertyDescriptor.GetValue(context.Instance);
+
+            if (value is ICustomTypeDescriptor desc)
+                value = desc.GetPropertyOwner(null);
+
+            var dict = (System.Collections.IDictionary)value;
+            return dict.Count > 0;
         }
 
-        public override object GetValue(object component)
+        public override PropertyDescriptorCollection GetProperties(ITypeDescriptorContext context, object value, Attribute[] attributes)
         {
-            var type = _item.GetType();
+            if (value is ICustomTypeDescriptor desc)
+                value = desc.GetPropertyOwner(null);
 
-            if (type.IsClass && type != typeof(string))
-                return new TestTypeDescriptor(_item);
+            var dict = (System.Collections.IDictionary)value;
 
-            return _item;
-        }
-
-        public override void ResetValue(object component)
-        {
-            throw new NotImplementedException();
-        }
-
-        public override void SetValue(object component, object value)
-        {
-            throw new NotImplementedException();
-        }
-
-        public override bool ShouldSerializeValue(object component)
-        {
-            return false;
+            return new PropertyDescriptorCollection(dict.Keys.OfType<string>().Select(key => new WrappedPropertyDescriptor(dict, key, dict[key])).ToArray());
         }
     }
 

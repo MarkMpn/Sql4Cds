@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -15,6 +16,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// The list of values to be returned
         /// </summary>
+        [Browsable(false)]
         public List<Entity> Values { get; } = new List<Entity>();
 
         /// <summary>
@@ -25,6 +27,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// The types of values to be returned
         /// </summary>
+        [Browsable(false)]
         public Dictionary<string, Type> Schema { get; } = new Dictionary<string, Type>();
 
         protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
