@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
@@ -383,6 +384,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         new MetadataConditionExpression(parts[1], op, literal.GetValue(null, null, null, null))
                     }
                 };
+
+                // Attributes & relationships are polymorphic, but filters can only be applied to the base type. Check the property
+                // we're filtering on is valid to be folded
+                var targetType = isEntityFilter ? typeof(EntityMetadata) : isAttributeFilter ? typeof(AttributeMetadata) : typeof(RelationshipMetadataBase);
+                var prop = targetType.GetProperty(parts[1], BindingFlags.Public | BindingFlags.Instance);
+
+                if (prop == null)
+                    return false;
+
+                // Convert the value to the expected type
+                filter.Conditions[0].Value = SqlTypeConverter.ChangeType(filter.Conditions[0].Value, prop.PropertyType);
 
                 if (isEntityFilter)
                 {

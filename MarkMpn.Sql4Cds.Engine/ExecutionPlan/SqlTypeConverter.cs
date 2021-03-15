@@ -58,6 +58,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return true;
             }
 
+            // Special case for string -> enum
+            if (lhs == typeof(string) && rhs.IsEnum)
+            {
+                consistent = rhs;
+                return true;
+            }
+
+            if (lhs.IsEnum && rhs == typeof(string))
+            {
+                consistent = lhs;
+                return true;
+            }
+
             var lhsPrecedence = Array.IndexOf(_precendenceOrder, lhs);
             var rhsPrecedence = Array.IndexOf(_precendenceOrder, rhs);
 
@@ -85,6 +98,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             to = MakeNonNullable(to);
 
             if (from == to)
+                return true;
+
+            // Special case for string -> enum
+            if (from == typeof(string) && to.IsEnum)
                 return true;
 
             if (Array.IndexOf(_precendenceOrder, from) == -1 ||
@@ -162,6 +179,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (type == typeof(DateTime))
                     return DateTime.Parse(str);
+
+                if (type.IsEnum)
+                    return Enum.Parse(type, str);
             }
 
             if (value is bool b)
