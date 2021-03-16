@@ -348,71 +348,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         throw new InvalidOperationException();
                 }
 
-                // Translate queries on attribute.EntityLogicalName to entity.LogicalName for better performance
-                var isEntityFilter = parts[0].Equals(meta.EntityAlias, StringComparison.OrdinalIgnoreCase);
-                var isAttributeFilter = parts[0].Equals(meta.AttributeAlias, StringComparison.OrdinalIgnoreCase);
-                var isRelationshipFilter = parts[0].Equals(meta.OneToManyRelationshipAlias, StringComparison.OrdinalIgnoreCase) || parts[0].Equals(meta.ManyToOneRelationshipAlias, StringComparison.OrdinalIgnoreCase) || parts[0].Equals(meta.ManyToManyRelationshipAlias, StringComparison.OrdinalIgnoreCase);
+                var condition = new MetadataConditionExpression(parts[1], op, literal.GetValue(null, null, null, null));
 
-                if (isAttributeFilter &&
-                    parts[1].Equals(nameof(AttributeMetadata.EntityLogicalName), StringComparison.OrdinalIgnoreCase))
-                {
-                    parts[1] = nameof(EntityMetadata.LogicalName);
-                    isAttributeFilter = false;
-                    isEntityFilter = true;
-                }
-
-                if (parts[0].Equals(meta.OneToManyRelationshipAlias, StringComparison.OrdinalIgnoreCase) &&
-                    parts[1].Equals(nameof(OneToManyRelationshipMetadata.ReferencedEntity), StringComparison.OrdinalIgnoreCase))
-                {
-                    parts[1] = nameof(EntityMetadata.LogicalName);
-                    isRelationshipFilter = false;
-                    isEntityFilter = true;
-                }
-
-                if (parts[0].Equals(meta.ManyToOneRelationshipAlias, StringComparison.OrdinalIgnoreCase) &&
-                    parts[1].Equals(nameof(OneToManyRelationshipMetadata.ReferencingEntity), StringComparison.OrdinalIgnoreCase))
-                {
-                    parts[1] = nameof(EntityMetadata.LogicalName);
-                    isRelationshipFilter = false;
-                    isEntityFilter = true;
-                }
-
-                var filter = new MetadataFilterExpression
-                {
-                    Conditions =
-                    {
-                        new MetadataConditionExpression(parts[1], op, literal.GetValue(null, null, null, null))
-                    }
-                };
-
-                // Attributes & relationships are polymorphic, but filters can only be applied to the base type. Check the property
-                // we're filtering on is valid to be folded
-                var targetType = isEntityFilter ? typeof(EntityMetadata) : isAttributeFilter ? typeof(AttributeMetadata) : typeof(RelationshipMetadataBase);
-                var prop = targetType.GetProperty(parts[1], BindingFlags.Public | BindingFlags.Instance);
-
-                if (prop == null)
-                    return false;
-
-                // Convert the value to the expected type
-                filter.Conditions[0].Value = SqlTypeConverter.ChangeType(filter.Conditions[0].Value, prop.PropertyType);
-
-                if (isEntityFilter)
-                {
-                    entityFilter = filter;
-                    return true;
-                }
-                
-                if (isAttributeFilter)
-                {
-                    attributeFilter = filter;
-                    return true;
-                }
-
-                if (isRelationshipFilter)
-                {
-                    relationshipFilter = filter;
-                    return true;
-                }
+                return TranslateCriteria(condition, parts[0], meta, out entityFilter, out attributeFilter, out relationshipFilter);
             }
 
             if (criteria is InPredicate inPred)
@@ -434,44 +372,99 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (inPred.Values.Any(val => !(val is Literal)))
                     return false;
 
-                // Translate queries on attribute.EntityLogicalName to entity.LogicalName for better performance
-                var isEntityFilter = parts[0].Equals(meta.EntityAlias, StringComparison.OrdinalIgnoreCase);
-                var isAttributeFilter = parts[0].Equals(meta.AttributeAlias, StringComparison.OrdinalIgnoreCase);
-                var isRelationshipFilter = parts[0].Equals(meta.OneToManyRelationshipAlias, StringComparison.OrdinalIgnoreCase) || parts[0].Equals(meta.ManyToOneRelationshipAlias, StringComparison.OrdinalIgnoreCase) || parts[0].Equals(meta.ManyToManyRelationshipAlias, StringComparison.OrdinalIgnoreCase);
+                var condition = new MetadataConditionExpression(parts[1], inPred.NotDefined ? MetadataConditionOperator.NotIn : MetadataConditionOperator.In, inPred.Values.Select(val => val.GetValue(null, null, null, null)).ToArray());
 
-                if (isAttributeFilter &&
-                    parts[1].Equals(nameof(AttributeMetadata.EntityLogicalName), StringComparison.OrdinalIgnoreCase))
-                {
-                    parts[1] = nameof(EntityMetadata.LogicalName);
-                    isAttributeFilter = false;
-                    isEntityFilter = true;
-                }
+                return TranslateCriteria(condition, parts[0], meta, out entityFilter, out attributeFilter, out relationshipFilter);
+            }
 
-                var filter = new MetadataFilterExpression
-                {
-                    Conditions =
-                    {
-                        new MetadataConditionExpression(parts[1], inPred.NotDefined ? MetadataConditionOperator.NotIn : MetadataConditionOperator.In, inPred.Values.Select(val => val.GetValue(null, null, null, null)).ToArray())
-                    }
-                };
+            if (criteria is BooleanIsNullExpression isNull)
+            {
+                var col = isNull.Expression as ColumnReferenceExpression;
 
-                if (isEntityFilter)
-                {
-                    entityFilter = filter;
-                    return true;
-                }
+                if (col == null)
+                    return false;
 
-                if (isAttributeFilter)
-                {
-                    attributeFilter = filter;
-                    return true;
-                }
+                var schema = meta.GetSchema(null, null);
+                if (!schema.ContainsColumn(col.GetColumnName(), out var colName))
+                    return false;
 
-                if (isRelationshipFilter)
-                {
-                    relationshipFilter = filter;
-                    return true;
-                }
+                var parts = colName.Split('.');
+
+                if (parts.Length != 2)
+                    return false;
+
+                var condition = new MetadataConditionExpression(parts[1], isNull.IsNot ? MetadataConditionOperator.NotEquals : MetadataConditionOperator.Equals, null);
+
+                return TranslateCriteria(condition, parts[0], meta, out entityFilter, out attributeFilter, out relationshipFilter);
+            }
+
+            return false;
+        }
+
+        private bool TranslateCriteria(MetadataConditionExpression condition, string alias, MetadataQueryNode meta, out MetadataFilterExpression entityFilter, out MetadataFilterExpression attributeFilter, out MetadataFilterExpression relationshipFilter)
+        {
+            entityFilter = null;
+            attributeFilter = null;
+            relationshipFilter = null;
+
+            // Translate queries on attribute.EntityLogicalName to entity.LogicalName for better performance
+            var isEntityFilter = alias.Equals(meta.EntityAlias, StringComparison.OrdinalIgnoreCase);
+            var isAttributeFilter = alias.Equals(meta.AttributeAlias, StringComparison.OrdinalIgnoreCase);
+            var isRelationshipFilter = alias.Equals(meta.OneToManyRelationshipAlias, StringComparison.OrdinalIgnoreCase) || alias.Equals(meta.ManyToOneRelationshipAlias, StringComparison.OrdinalIgnoreCase) || alias.Equals(meta.ManyToManyRelationshipAlias, StringComparison.OrdinalIgnoreCase);
+
+            if (isAttributeFilter &&
+                condition.PropertyName.Equals(nameof(AttributeMetadata.EntityLogicalName), StringComparison.OrdinalIgnoreCase))
+            {
+                condition.PropertyName = nameof(EntityMetadata.LogicalName);
+                isAttributeFilter = false;
+                isEntityFilter = true;
+            }
+
+            if (alias.Equals(meta.OneToManyRelationshipAlias, StringComparison.OrdinalIgnoreCase) &&
+                condition.PropertyName.Equals(nameof(OneToManyRelationshipMetadata.ReferencedEntity), StringComparison.OrdinalIgnoreCase))
+            {
+                condition.PropertyName = nameof(EntityMetadata.LogicalName);
+                isRelationshipFilter = false;
+                isEntityFilter = true;
+            }
+
+            if (alias.Equals(meta.ManyToOneRelationshipAlias, StringComparison.OrdinalIgnoreCase) &&
+                condition.PropertyName.Equals(nameof(OneToManyRelationshipMetadata.ReferencingEntity), StringComparison.OrdinalIgnoreCase))
+            {
+                condition.PropertyName = nameof(EntityMetadata.LogicalName);
+                isRelationshipFilter = false;
+                isEntityFilter = true;
+            }
+
+            var filter = new MetadataFilterExpression { Conditions = { condition } };
+
+            // Attributes & relationships are polymorphic, but filters can only be applied to the base type. Check the property
+            // we're filtering on is valid to be folded
+            var targetType = isEntityFilter ? typeof(EntityMetadata) : isAttributeFilter ? typeof(AttributeMetadata) : typeof(RelationshipMetadataBase);
+            var prop = targetType.GetProperty(condition.PropertyName, BindingFlags.Public | BindingFlags.Instance);
+
+            if (prop == null)
+                return false;
+
+            // Convert the value to the expected type
+            filter.Conditions[0].Value = SqlTypeConverter.ChangeType(filter.Conditions[0].Value, prop.PropertyType);
+
+            if (isEntityFilter)
+            {
+                entityFilter = filter;
+                return true;
+            }
+
+            if (isAttributeFilter)
+            {
+                attributeFilter = filter;
+                return true;
+            }
+
+            if (isRelationshipFilter)
+            {
+                relationshipFilter = filter;
+                return true;
             }
 
             return false;
