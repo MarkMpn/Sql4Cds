@@ -79,6 +79,7 @@
     <Compile Include="ExecutionPlan\HashJoinNode.cs" />
     <Compile Include="ExecutionPlan\HashMatchAggregateNode.cs" />
     <Compile Include="ExecutionPlan\IDataExecutionPlanNode.cs" />
+    <Compile Include="ExecutionPlan\IDmlQueryExecutionPlanNode.cs" />
     <Compile Include="ExecutionPlan\IExecutionPlanNode.cs" />
     <Compile Include="ExecutionPlan\FoldableJoinNode.cs" />
     <Compile Include="ExecutionPlan\IndexSpoolNode.cs" />
@@ -99,6 +100,7 @@
     <Compile Include="ExecutionPlan\TableSpoolNode.cs" />
     <Compile Include="ExecutionPlan\TopNode.cs" />
     <Compile Include="ExecutionPlan\TryCatchNode.cs" />
+    <Compile Include="ExecutionPlan\UpdateNode.cs" />
     <Compile Include="FetchXmlConditionMethods.cs" />
     <Compile Include="FetchXmlExtensions.cs" />
     <Compile Include="JoinConditionVisitor.cs" />

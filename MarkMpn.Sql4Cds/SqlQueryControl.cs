@@ -846,7 +846,7 @@ namespace MarkMpn.Sql4Cds
                 else if (error is QueryExecutionException queryExecution)
                 {
                     messageSuffix = "\r\nSee the Execution Plan tab for details of where this error occurred";
-                    ShowResult(plan, new ExecuteParams { Execute = true, IncludeFetchXml = true, Sql = plan.Sql }, null, queryExecution);
+                    ShowResult(plan, new ExecuteParams { Execute = true, IncludeFetchXml = true, Sql = plan.Sql }, null, null, queryExecution);
                 }
 
                 _ai.TrackException(error, new Dictionary<string, string> { ["Sql"] = _params.Sql, ["Source"] = "XrmToolBox" });
@@ -965,7 +965,13 @@ namespace MarkMpn.Sql4Cds
                         {
                             var result = dataQuery.Execute(Service, Metadata, options, null, null).ToList();
 
-                            Execute(() => ShowResult(query, args, result, null));
+                            Execute(() => ShowResult(query, args, result, null, null));
+                        }
+                        else if (query is IDmlQueryExecutionPlanNode dmlQuery)
+                        {
+                            var result = dmlQuery.Execute(Service, Metadata, options, null, null);
+
+                            Execute(() => ShowResult(query, args, null, result, null));
                         }
                     }
                     catch (Exception ex)
@@ -982,7 +988,7 @@ namespace MarkMpn.Sql4Cds
                 foreach (var query in queries)
                 {
                     _ai.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name, ["Source"] = "XrmToolBox" });
-                    Execute(() => ShowResult(query, args, null, null));
+                    Execute(() => ShowResult(query, args, null, null, null));
                     /* TODO:
                     if (query is IQueryRequiresFinalization finalize)
                         finalize.FinalizeRequest(Service, options);
@@ -998,7 +1004,7 @@ namespace MarkMpn.Sql4Cds
             }
         }
 
-        private void ShowResult(IRootExecutionPlanNode query, ExecuteParams args, List<Entity> results, QueryExecutionException ex)
+        private void ShowResult(IRootExecutionPlanNode query, ExecuteParams args, List<Entity> results, string msg, QueryExecutionException ex)
         {
             Control result = null;
             Control fetchXml = null;
@@ -1095,11 +1101,10 @@ namespace MarkMpn.Sql4Cds
 
                 AddMessage(query.Index, query.Length, $"({rowCount} row{(rowCount == 1 ? "" : "s")} affected)", false);
             }
-            /* TODO:
-            else if (query.Result is string msg)
+            else if (msg != null)
             {
                 AddMessage(query.Index, query.Length, msg, false);
-            }*/
+            }
 
             if (args.IncludeFetchXml)
             {

@@ -392,6 +392,9 @@
   <ItemGroup>
     <EmbeddedResource Include="Images\GlobalOptionSetQueryNode.ico" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Images\UpdateNode.ico" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>

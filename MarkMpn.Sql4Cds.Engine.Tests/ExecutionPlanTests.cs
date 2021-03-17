@@ -2296,6 +2296,36 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, meta.Query.Criteria.Conditions[0].Value);
         }
 
+        [TestMethod]
+        public void SimpleUpdate()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "UPDATE account SET name = 'foo' WHERE name = 'bar'";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var update = AssertNode<UpdateNode>(plans[0]);
+            var computeScalar = AssertNode<ComputeScalarNode>(update.Source);
+            var fetch = AssertNode<FetchXmlScan>(computeScalar.Source);
+            AssertFetchXml(fetch, @"
+                <fetch distinct='true'>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                        <filter>
+                            <condition attribute='name' operator='eq' value='bar' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
         private T AssertNode<T>(IExecutionPlanNode node) where T : IExecutionPlanNode
         {
             Assert.IsInstanceOfType(node, typeof(T));
