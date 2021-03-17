@@ -11,7 +11,7 @@
     <iconUrl>http://markcarrington.dev/sql4cds-icon/</iconUrl>
     <description>Converts FetchXML to SQL queries. This is a minimal source-only package, you can also use the MarkMpn.Sql4Cds.Engine package that includes this conversion as well as SQL to FetchXML conversion.</description>
     <summary>Minimal source-only package to convert FetchXML to SQL</summary>
-    <releaseNotes>Handle new UTC timezone change in TDS endpoint</releaseNotes>
+    <releaseNotes>Fixed FetchXML to SQL conversion for null numeric attribute conditions</releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>
     <tags>FetchXML SQL CDS</tags>
