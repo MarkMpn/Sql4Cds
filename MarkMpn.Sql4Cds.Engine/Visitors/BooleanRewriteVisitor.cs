@@ -16,13 +16,16 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             _mappings = rewrites;
         }
 
-        private void Rewrite<TSource>(TSource source, Expression<Func<TSource, BooleanExpression>> expr)
+        private void Rewrite<TSource>(TSource source, Expression<Func<TSource, BooleanExpression>> expr) where TSource:TSqlFragment
         {
             var prop = (PropertyInfo) ((MemberExpression) expr.Body).Member;
 
             var value = (BooleanExpression) prop.GetValue(source, null);
             if (_mappings.TryGetValue(value, out var mapped))
+            {
                 prop.SetValue(source, mapped);
+                source.ScriptTokenStream = null;
+            }
         }
 
         public override void ExplicitVisit(WhereClause node)
@@ -45,6 +48,12 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
         }
 
         public override void ExplicitVisit(BooleanParenthesisExpression node)
+        {
+            Rewrite(node, n => n.Expression);
+            base.ExplicitVisit(node);
+        }
+
+        public override void ExplicitVisit(BooleanNotExpression node)
         {
             Rewrite(node, n => n.Expression);
             base.ExplicitVisit(node);

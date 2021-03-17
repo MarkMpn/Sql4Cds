@@ -343,7 +343,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 rewrites[inSubquery] = new BooleanIsNullExpression
                 {
-                    IsNot = true,
+                    IsNot = !inSubquery.NotDefined,
                     Expression = testColumn.ToColumnReference()
                 };
 

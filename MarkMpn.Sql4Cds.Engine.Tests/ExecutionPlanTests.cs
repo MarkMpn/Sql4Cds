@@ -1599,6 +1599,60 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var select = AssertNode<SelectNode>(plans[0]);
             var filter = AssertNode<FilterNode>(select.Source);
+            Assert.AreEqual("Expr2 IS NOT NULL", filter.Filter.ToSql());
+            var nestedLoop = AssertNode<NestedLoopNode>(filter.Source);
+            Assert.AreEqual(QualifiedJoinType.LeftOuter, nestedLoop.JoinType);
+            Assert.IsTrue(nestedLoop.SemiJoin);
+            var fetch = AssertNode<FetchXmlScan>(nestedLoop.LeftSource);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                        <attribute name='name' />
+                    </entity>
+                </fetch>");
+            var subIndexSpool = AssertNode<IndexSpoolNode>(nestedLoop.RightSource);
+            Assert.AreEqual("contact.parentcustomerid", subIndexSpool.KeyColumn);
+            Assert.AreEqual("@Expr1", subIndexSpool.SeekValue);
+            var subFetch = AssertNode<FetchXmlScan>(subIndexSpool.Source);
+            AssertFetchXml(subFetch, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <attribute name='parentcustomerid' />
+                        <filter>
+                            <condition attribute='parentcustomerid' operator='not-null' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void SubqueryNotInFilterCorrelated()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                SELECT
+                    accountid,
+                    name
+                FROM
+                    account
+                WHERE
+                    name not in (SELECT firstname FROM contact WHERE parentcustomerid = accountid)";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var filter = AssertNode<FilterNode>(select.Source);
+            Assert.AreEqual("Expr2 IS NULL", filter.Filter.ToSql());
             var nestedLoop = AssertNode<NestedLoopNode>(filter.Source);
             Assert.AreEqual(QualifiedJoinType.LeftOuter, nestedLoop.JoinType);
             Assert.IsTrue(nestedLoop.SemiJoin);
@@ -1735,6 +1789,61 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var select = AssertNode<SelectNode>(plans[0]);
             var filter = AssertNode<FilterNode>(select.Source);
+            Assert.AreEqual("Expr2 IS NOT NULL", filter.Filter.ToSql());
+            var nestedLoop = AssertNode<NestedLoopNode>(filter.Source);
+            Assert.AreEqual(QualifiedJoinType.LeftOuter, nestedLoop.JoinType);
+            Assert.IsTrue(nestedLoop.SemiJoin);
+            var fetch = AssertNode<FetchXmlScan>(nestedLoop.LeftSource);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                        <attribute name='name' />
+                    </entity>
+                </fetch>");
+            var subTop = AssertNode<TopNode>(nestedLoop.RightSource);
+            var subIndexSpool = AssertNode<IndexSpoolNode>(subTop.Source);
+            Assert.AreEqual("contact.parentcustomerid", subIndexSpool.KeyColumn);
+            Assert.AreEqual("@Expr1", subIndexSpool.SeekValue);
+            var subFetch = AssertNode<FetchXmlScan>(subIndexSpool.Source);
+            AssertFetchXml(subFetch, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='contactid' />
+                        <attribute name='parentcustomerid' />
+                        <filter>
+                            <condition attribute='parentcustomerid' operator='not-null' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void NotExistsFilterCorrelated()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                SELECT
+                    accountid,
+                    name
+                FROM
+                    account
+                WHERE
+                    NOT EXISTS (SELECT * FROM contact WHERE parentcustomerid = accountid)";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var filter = AssertNode<FilterNode>(select.Source);
+            Assert.AreEqual("NOT Expr2 IS NOT NULL", filter.Filter.ToSql());
             var nestedLoop = AssertNode<NestedLoopNode>(filter.Source);
             Assert.AreEqual(QualifiedJoinType.LeftOuter, nestedLoop.JoinType);
             Assert.IsTrue(nestedLoop.SemiJoin);

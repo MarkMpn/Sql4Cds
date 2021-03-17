@@ -103,6 +103,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return GetType(isNull, schema, parameterTypes);
             else if (b is LikePredicate like)
                 return GetType(like, schema, parameterTypes);
+            else if (b is BooleanNotExpression not)
+                return GetType(not, schema, parameterTypes);
             else
                 throw new NotSupportedQueryFragmentException("Unhandled expression type", b);
         }
@@ -121,6 +123,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return GetValue(isNull, entity, schema, parameterTypes, parameterValues);
             else if (b is LikePredicate like)
                 return GetValue(like, entity, schema, parameterTypes, parameterValues);
+            else if (b is BooleanNotExpression not)
+                return GetValue(not, entity, schema, parameterTypes, parameterValues);
             else
                 throw new NotSupportedQueryFragmentException("Unhandled expression type", b);
         }
@@ -1057,6 +1061,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var elseValue = searchedCase.ElseExpression.GetValue(entity, schema, parameterTypes, parameterValues);
             return SqlTypeConverter.ChangeType(elseValue, type);
+        }
+
+        private static Type GetType(this BooleanNotExpression not, NodeSchema schema, IDictionary<string,Type> parameterTypes)
+        {
+            not.Expression.GetType(schema, parameterTypes);
+            return typeof(bool);
+        }
+
+        private static bool GetValue(this BooleanNotExpression not, Entity entity, NodeSchema schema, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        {
+            var value = not.Expression.GetValue(entity, schema, parameterTypes, parameterValues);
+            return !value;
         }
 
         public static BooleanExpression RemoveCondition(this BooleanExpression expr, BooleanExpression remove)
