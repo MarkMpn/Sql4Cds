@@ -196,7 +196,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 (fetch.Entity.Items == null || fetch.Entity.Items.Length == 0) &&
                 GroupBy.Count == 0 &&
                 Aggregates.Count == 1 &&
-                Aggregates.Single().Value.AggregateType == AggregateType.CountStar)
+                Aggregates.Single().Value.AggregateType == AggregateType.CountStar &&
+                metadata[fetch.Entity.name].DataProviderId == null) // RetrieveTotalRecordCountRequest is not valid for virtual entities
             {
                 var count = new RetrieveTotalRecordCountNode { EntityName = fetch.Entity.name };
                 var countName = count.GetSchema(metadata, parameterTypes).Schema.Single().Key;
@@ -283,6 +284,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             return this;
                     }
                 }
+
+                // FetchXML is translated to QueryExpression for virtual entities, which doesn't support aggregates
+                if (metadata[fetchXml.Entity.name].DataProviderId != null)
+                    return this;
 
                 // Check none of the grouped columns are virtual attributes - FetchXML doesn't support grouping by them
                 var fetchSchema = fetchXml.GetSchema(metadata, parameterTypes);

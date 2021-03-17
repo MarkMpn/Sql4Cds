@@ -68,6 +68,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!rightAttributeParts[0].Equals(rightFetch.Alias))
                     return this;
 
+                // If the entities are from different virtual entity data providers it's probably not going to work
+                if (metadata[leftFetch.Entity.name].DataProviderId != metadata[rightFetch.Entity.name].DataProviderId)
+                    return this;
+
                 // If there are any additional join criteria, either they must be able to be translated to FetchXml criteria
                 // in the new link entity or we must be using an inner join so we can use a post-filter node
                 var additionalCriteria = AdditionalJoinCriteria;
