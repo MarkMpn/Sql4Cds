@@ -11,13 +11,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Concatenates the results from multiple queries
     /// </summary>
-    public class ConcatenateNode : BaseNode
+    public class ConcatenateNode : BaseDataNode
     {
         /// <summary>
         /// The data sources to concatenate
         /// </summary>
         [Browsable(false)]
-        public List<IExecutionPlanNode> Sources { get; } = new List<IExecutionPlanNode>();
+        public List<IDataExecutionPlanNode> Sources { get; } = new List<IDataExecutionPlanNode>();
 
         /// <summary>
         /// The columns to produce in the result and the source columns from each data source
@@ -53,12 +53,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return schema;
         }
 
-        public override IEnumerable<IExecutionPlanNode> GetSources()
+        public override IEnumerable<IDataExecutionPlanNode> GetSources()
         {
             return Sources;
         }
 
-        public override IExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             for (var i = 0; i < Sources.Count; i++)
             {

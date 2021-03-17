@@ -14,7 +14,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Applies a filter to the data stream
     /// </summary>
-    public class FilterNode : BaseNode, ISingleSourceExecutionPlanNode
+    public class FilterNode : BaseDataNode, ISingleSourceExecutionPlanNode
     {
         /// <summary>
         /// The filter to apply
@@ -24,7 +24,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// The data source to select from
         /// </summary>
-        public IExecutionPlanNode Source { get; set; }
+        public IDataExecutionPlanNode Source { get; set; }
 
         protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
@@ -37,7 +37,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public override IEnumerable<IExecutionPlanNode> GetSources()
+        public override IEnumerable<IDataExecutionPlanNode> GetSources()
         {
             yield return Source;
         }
@@ -47,7 +47,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Source.GetSchema(metadata, parameterTypes);
         }
 
-        public override IExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             Source = Source.FoldQuery(metadata, options, parameterTypes);
             Source.Parent = this;

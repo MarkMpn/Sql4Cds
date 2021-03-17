@@ -11,7 +11,7 @@ using Microsoft.Xrm.Sdk.Metadata.Query;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    public class MetadataQueryNode : BaseNode
+    public class MetadataQueryNode : BaseDataNode
     {
         private IDictionary<string, string> _entityCols;
         private IDictionary<string, string> _attributeCols;
@@ -134,7 +134,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return 100;
         }
 
-        public override IExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             return this;
         }
@@ -339,9 +339,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return value;
         }
 
-        public override IEnumerable<IExecutionPlanNode> GetSources()
+        public override IEnumerable<IDataExecutionPlanNode> GetSources()
         {
-            return Array.Empty<IExecutionPlanNode>();
+            return Array.Empty<IDataExecutionPlanNode>();
         }
 
         protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)

@@ -8,7 +8,7 @@ using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    public class TopNode : BaseNode, ISingleSourceExecutionPlanNode
+    public class TopNode : BaseDataNode, ISingleSourceExecutionPlanNode
     {
         public ScalarExpression Top { get; set; }
 
@@ -16,7 +16,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public bool WithTies { get; set; }
 
-        public IExecutionPlanNode Source { get; set; }
+        public IDataExecutionPlanNode Source { get; set; }
 
         protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
@@ -45,12 +45,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Source.GetSchema(metadata, parameterTypes);
         }
 
-        public override IEnumerable<IExecutionPlanNode> GetSources()
+        public override IEnumerable<IDataExecutionPlanNode> GetSources()
         {
             yield return Source;
         }
 
-        public override IExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             Source = Source.FoldQuery(metadata, options, parameterTypes);
             Source.Parent = this;

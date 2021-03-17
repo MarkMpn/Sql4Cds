@@ -11,7 +11,7 @@ using Microsoft.Xrm.Sdk.Query;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    public class FetchXmlScan : BaseNode
+    public class FetchXmlScan : BaseDataNode
     {
         class ParameterizedCondition
         {
@@ -264,9 +264,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 meta.LogicalName;
         }
 
-        public override IEnumerable<IExecutionPlanNode> GetSources()
+        public override IEnumerable<IDataExecutionPlanNode> GetSources()
         {
-            return Array.Empty<IExecutionPlanNode>();
+            return Array.Empty<IDataExecutionPlanNode>();
         }
 
         public override NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
@@ -456,7 +456,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             throw new ApplicationException("Unknown attribute type " + attrMetadata.GetType());
         }
 
-        public override IExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             return this;
         }

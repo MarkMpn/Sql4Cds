@@ -11,7 +11,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Gets the total number of records in an entity using <see cref="RetrieveTotalRecordCountRequest"/>
     /// </summary>
-    public class RetrieveTotalRecordCountNode : BaseNode
+    public class RetrieveTotalRecordCountNode : BaseDataNode
     {
         /// <summary>
         /// The logical name of the entity to get the record count for
@@ -30,9 +30,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return resultEntity;
         }
 
-        public override IEnumerable<IExecutionPlanNode> GetSources()
+        public override IEnumerable<IDataExecutionPlanNode> GetSources()
         {
-            return Array.Empty<IExecutionPlanNode>();
+            return Array.Empty<IDataExecutionPlanNode>();
         }
 
         public override NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
@@ -50,7 +50,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             };
         }
 
-        public override IExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             return this;
         }

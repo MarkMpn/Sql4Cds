@@ -11,12 +11,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Checks that each row in the results meets an expected condition
     /// </summary>
-    public class AssertNode : BaseNode, ISingleSourceExecutionPlanNode
+    public class AssertNode : BaseDataNode, ISingleSourceExecutionPlanNode
     {
         /// <summary>
         /// The data source for the assertion
         /// </summary>
-        public IExecutionPlanNode Source { get; set; }
+        public IDataExecutionPlanNode Source { get; set; }
 
         /// <summary>
         /// The function that must be true for each entity in the <see cref="Source"/>
@@ -45,12 +45,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Source.GetSchema(metadata, parameterTypes);
         }
 
-        public override IEnumerable<IExecutionPlanNode> GetSources()
+        public override IEnumerable<IDataExecutionPlanNode> GetSources()
         {
             yield return Source;
         }
 
-        public override IExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             Source = Source.FoldQuery(metadata, options, parameterTypes);
             Source.Parent = this;

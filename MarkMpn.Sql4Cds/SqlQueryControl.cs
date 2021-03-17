@@ -42,12 +42,12 @@ namespace MarkMpn.Sql4Cds
 
         class QueryException : ApplicationException
         {
-            public QueryException(IExecutionPlanNode query, Exception innerException) : base(innerException.Message, innerException)
+            public QueryException(IRootExecutionPlanNode query, Exception innerException) : base(innerException.Message, innerException)
             {
                 Query = query;
             }
 
-            public IExecutionPlanNode Query { get; }
+            public IRootExecutionPlanNode Query { get; }
         }
 
         class TextRange
@@ -811,7 +811,7 @@ namespace MarkMpn.Sql4Cds
                 var index = -1;
                 var length = 0;
                 var messageSuffix = "";
-                IExecutionPlanNode plan = null;
+                IRootExecutionPlanNode plan = null;
 
                 if (e.Error is QueryException queryException)
                 {
@@ -961,9 +961,12 @@ namespace MarkMpn.Sql4Cds
 
                     try
                     {
-                        var result = query.Execute(Service, Metadata, options, null, null).ToList();
+                        if (query is IDataExecutionPlanNode dataQuery)
+                        {
+                            var result = dataQuery.Execute(Service, Metadata, options, null, null).ToList();
 
-                        Execute(() => ShowResult(query, args, result, null));
+                            Execute(() => ShowResult(query, args, result, null));
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -995,7 +998,7 @@ namespace MarkMpn.Sql4Cds
             }
         }
 
-        private void ShowResult(IExecutionPlanNode query, ExecuteParams args, List<Entity> results, QueryExecutionException ex)
+        private void ShowResult(IRootExecutionPlanNode query, ExecuteParams args, List<Entity> results, QueryExecutionException ex)
         {
             Control result = null;
             Control fetchXml = null;

@@ -8,7 +8,7 @@ using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    public class SelectNode : BaseNode, ISingleSourceExecutionPlanNode
+    public class SelectNode : BaseDataNode, ISingleSourceExecutionPlanNode, IRootExecutionPlanNode
     {
         /// <summary>
         /// The columns that should be included in the query results
@@ -18,7 +18,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// The data source to select from
         /// </summary>
-        public IExecutionPlanNode Source { get; set; }
+        public IDataExecutionPlanNode Source { get; set; }
+
+        public string Sql { get; set; }
+        
+        public int Index { get; set; }
+        
+        public int Length { get; set; }
 
         protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
@@ -36,7 +42,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public override IEnumerable<IExecutionPlanNode> GetSources()
+        public override IEnumerable<IDataExecutionPlanNode> GetSources()
         {
             yield return Source;
         }
@@ -46,7 +52,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Source.GetSchema(metadata, parameterTypes);
         }
 
-        public override IExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             Source = Source.FoldQuery(metadata, options, parameterTypes);
             Source.Parent = this;
@@ -138,6 +144,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return this;
+        }
+
+        IRootExecutionPlanNode IRootExecutionPlanNode.FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        {
+            return (IRootExecutionPlanNode)this.FoldQuery(metadata, options, parameterTypes);
         }
 
         public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)

@@ -20,28 +20,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     public interface IExecutionPlanNode
     {
         /// <summary>
-        /// The SQL string that the node was generated from
-        /// </summary>
-        string Sql { get; set; }
-
-        /// <summary>
-        /// The location of the SQL fragment that this node was generated from within the original string
-        /// </summary>
-        int Index { get; set; }
-
-        /// <summary>
-        /// The length of the SQL fragment that this node was generated from within the original string
-        /// </summary>
-        int Length { get; set; }
-
-        /// <summary>
-        /// Executes the execution plan
-        /// </summary>
-        /// <param name="org">The <see cref="IOrganizationService"/> to use to execute the plan</param>
-        /// <returns>A sequence of entities matched by the query</returns>
-        IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string,Type> parameterTypes, IDictionary<string,object> parameterValues);
-
-        /// <summary>
         /// Returns or sets the parent of this node
         /// </summary>
         IExecutionPlanNode Parent { get; set; }
@@ -50,26 +28,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// Gets the children of this node
         /// </summary>
         /// <returns></returns>
-        IEnumerable<IExecutionPlanNode> GetSources();
+        IEnumerable<IDataExecutionPlanNode> GetSources();
 
         /// <summary>
-        /// Gets the schema of the dataset returned by the node
+        /// Adds 
         /// </summary>
-        /// <returns></returns>
-        NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string,Type> parameterTypes);
-
-        /// <summary>
-        /// Attempts to fold the query operator down into its source
-        /// </summary>
-        /// <returns>The final execution plan node to execute</returns>
-        IExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes);
-
+        /// <param name="metadata"></param>
+        /// <param name="parameterTypes"></param>
+        /// <param name="requiredColumns"></param>
         void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns);
-
-        /// <summary>
-        /// Estimates the number of rows that will be returned by this node
-        /// </summary>
-        int EstimateRowsOut(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, ITableSizeCache tableSize);
 
         /// <summary>
         /// Returns the number of times this node has been executed
@@ -80,10 +47,5 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// Returns the total amount of time spent executing this node, including the time spent calling source nodes
         /// </summary>
         TimeSpan Duration { get; }
-
-        /// <summary>
-        /// Returns the total number of rows returned by this node
-        /// </summary>
-        int RowsOut { get; }
     }
 }

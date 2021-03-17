@@ -7,11 +7,11 @@ using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    public class IndexSpoolNode : BaseNode, ISingleSourceExecutionPlanNode
+    public class IndexSpoolNode : BaseDataNode, ISingleSourceExecutionPlanNode
     {
         private IDictionary<object, List<Entity>> _hashTable;
 
-        public IExecutionPlanNode Source { get; set; }
+        public IDataExecutionPlanNode Source { get; set; }
 
         public string KeyColumn { get; set; }
 
@@ -29,7 +29,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Source.EstimateRowsOut(metadata, parameterTypes, tableSize) / 100;
         }
 
-        public override IExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             Source = Source.FoldQuery(metadata, options, parameterTypes);
             return this;
@@ -40,7 +40,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Source.GetSchema(metadata, parameterTypes);
         }
 
-        public override IEnumerable<IExecutionPlanNode> GetSources()
+        public override IEnumerable<IDataExecutionPlanNode> GetSources()
         {
             yield return Source;
         }

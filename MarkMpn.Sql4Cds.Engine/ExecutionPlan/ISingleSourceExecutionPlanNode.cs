@@ -8,6 +8,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
     interface ISingleSourceExecutionPlanNode : IExecutionPlanNode
     {
-        IExecutionPlanNode Source { get; set; }
+        IDataExecutionPlanNode Source { get; set; }
     }
 }

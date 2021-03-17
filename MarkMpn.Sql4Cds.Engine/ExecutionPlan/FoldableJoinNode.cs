@@ -31,7 +31,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         public BooleanExpression AdditionalJoinCriteria { get; set; }
 
-        public override IExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             LeftSource = LeftSource.FoldQuery(metadata, options, parameterTypes);
             LeftSource.Parent = this;

@@ -10,7 +10,7 @@ using Microsoft.Xrm.Sdk.Metadata;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    public class GlobalOptionSetQueryNode : BaseNode
+    public class GlobalOptionSetQueryNode : BaseDataNode
     {
         private static readonly Type[] _optionsetTypes = new[] { typeof(OptionSetMetadata), typeof(BooleanOptionSetMetadata) };
         private static readonly Dictionary<Type, Dictionary<string, PropertyInfo>> _optionsetProps = _optionsetTypes.ToDictionary(t => t, t => t.GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(p => p.Name != nameof(OptionSetMetadataBase.ExtensionData) && p.Name != nameof(OptionSetMetadata.Options)).ToDictionary(p => p.Name));
@@ -44,7 +44,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return 100;
         }
 
-        public override IExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             return this;
         }
@@ -71,9 +71,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return schema;
         }
 
-        public override IEnumerable<IExecutionPlanNode> GetSources()
+        public override IEnumerable<IDataExecutionPlanNode> GetSources()
         {
-            return Array.Empty<IExecutionPlanNode>();
+            return Array.Empty<IDataExecutionPlanNode>();
         }
 
         protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)

@@ -64,6 +64,7 @@
     <Compile Include="ExecutionPlan\Aggregate.cs" />
     <Compile Include="ExecutionPlan\AliasNode.cs" />
     <Compile Include="ExecutionPlan\AssertNode.cs" />
+    <Compile Include="ExecutionPlan\BaseDataNode.cs" />
     <Compile Include="ExecutionPlan\BaseJoinNode.cs" />
     <Compile Include="ExecutionPlan\BaseNode.cs" />
     <Compile Include="ExecutionPlan\CaseInsensitiveObjectComparer.cs" />
@@ -77,9 +78,11 @@
     <Compile Include="ExecutionPlan\GlobalOptionSetQueryNode.cs" />
     <Compile Include="ExecutionPlan\HashJoinNode.cs" />
     <Compile Include="ExecutionPlan\HashMatchAggregateNode.cs" />
+    <Compile Include="ExecutionPlan\IDataExecutionPlanNode.cs" />
     <Compile Include="ExecutionPlan\IExecutionPlanNode.cs" />
     <Compile Include="ExecutionPlan\FoldableJoinNode.cs" />
     <Compile Include="ExecutionPlan\IndexSpoolNode.cs" />
+    <Compile Include="ExecutionPlan\IRootExecutionPlanNode.cs" />
     <Compile Include="ExecutionPlan\ISingleSourceExecutionPlanNode.cs" />
     <Compile Include="ExecutionPlan\ITableSizeCache.cs" />
     <Compile Include="ExecutionPlan\MergeJoinNode.cs" />

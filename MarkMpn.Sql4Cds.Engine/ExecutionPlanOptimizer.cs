@@ -32,7 +32,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="node">The root node of the execution plan</param>
         /// <returns>A new execution plan node</returns>
-        public IExecutionPlanNode Optimize(IExecutionPlanNode node)
+        public IRootExecutionPlanNode Optimize(IRootExecutionPlanNode node)
         {
             // Move any additional operators down to the FetchXml
             node = node.FoldQuery(Metadata, Options, null);

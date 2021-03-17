@@ -97,7 +97,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return innerParameterTypes;
         }
 
-        public override IExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             var leftSchema = LeftSource.GetSchema(metadata, parameterTypes);
             LeftSource = LeftSource.FoldQuery(metadata, options, parameterTypes);

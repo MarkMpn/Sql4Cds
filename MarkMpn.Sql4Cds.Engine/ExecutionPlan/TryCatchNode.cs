@@ -8,10 +8,10 @@ using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    public class TryCatchNode : BaseNode
+    public class TryCatchNode : BaseDataNode
     {
-        public IExecutionPlanNode TrySource { get; set; }
-        public IExecutionPlanNode CatchSource { get; set; }
+        public IDataExecutionPlanNode TrySource { get; set; }
+        public IDataExecutionPlanNode CatchSource { get; set; }
 
         [Browsable(false)]
         public Func<Exception,bool> ExceptionFilter { get; set; }
@@ -36,13 +36,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return TrySource.GetSchema(metadata, parameterTypes);
         }
 
-        public override IEnumerable<IExecutionPlanNode> GetSources()
+        public override IEnumerable<IDataExecutionPlanNode> GetSources()
         {
             yield return TrySource;
             yield return CatchSource;
         }
 
-        public override IExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             TrySource = TrySource.FoldQuery(metadata, options, parameterTypes);
             TrySource.Parent = this;

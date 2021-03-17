@@ -8,17 +8,17 @@ using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    public abstract class BaseJoinNode : BaseNode
+    public abstract class BaseJoinNode : BaseDataNode
     {
         /// <summary>
         /// The first data source to merge
         /// </summary>
-        public IExecutionPlanNode LeftSource { get; set; }
+        public IDataExecutionPlanNode LeftSource { get; set; }
 
         /// <summary>
         /// The second data source to merge
         /// </summary>
-        public IExecutionPlanNode RightSource { get; set; }
+        public IDataExecutionPlanNode RightSource { get; set; }
 
         /// <summary>
         /// The type of join to apply
@@ -75,7 +75,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return merged;
         }
 
-        public override IEnumerable<IExecutionPlanNode> GetSources()
+        public override IEnumerable<IDataExecutionPlanNode> GetSources()
         {
             yield return LeftSource;
             yield return RightSource;
