@@ -48,5 +48,25 @@ namespace MarkMpn.Sql4Cds.Engine
 
             return null;
         }
+
+        public static IEnumerable<FetchLinkEntityType> GetLinkEntities(this FetchEntityType entity)
+        {
+            foreach (var linkEntity in GetLinkEntities(entity.Items))
+                yield return linkEntity;
+        }
+
+        private static IEnumerable<FetchLinkEntityType> GetLinkEntities(object[] items)
+        {
+            if (items == null)
+                yield break;
+
+            foreach (var linkEntity in items.OfType<FetchLinkEntityType>())
+            {
+                yield return linkEntity;
+
+                foreach (var childLinkEntity in GetLinkEntities(linkEntity.Items))
+                    yield return childLinkEntity;
+            }
+        }
     }
 }

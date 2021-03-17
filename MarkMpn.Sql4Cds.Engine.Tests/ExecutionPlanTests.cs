@@ -390,6 +390,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 <fetch distinct='true'>
                     <entity name='account'>
                         <attribute name='name' />
+                        <order attribute='accountid' />
                     </entity>
                 </fetch>");
         }

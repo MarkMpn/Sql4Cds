@@ -163,6 +163,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (Source is FetchXmlScan fetchXml)
             {
+                // Remove any existing sorts
+                if (fetchXml.Entity.Items != null)
+                {
+                    fetchXml.Entity.Items = fetchXml.Entity.Items.Where(i => !(i is FetchOrderType)).ToArray();
+
+                    foreach (var linkEntity in fetchXml.Entity.GetLinkEntities().Where(le => le.Items != null))
+                        linkEntity.Items = linkEntity.Items.Where(i => !(i is FetchOrderType)).ToArray();
+                }
+
                 var schema = Source.GetSchema(metadata, parameterTypes);
                 var entity = fetchXml.Entity;
                 var items = entity.Items;
