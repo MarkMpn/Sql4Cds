@@ -231,7 +231,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return null;
         }
 
-        protected bool TranslateCriteria(BooleanExpression criteria, MetadataQueryNode meta, out MetadataFilterExpression entityFilter, out MetadataFilterExpression attributeFilter, out MetadataFilterExpression relationshipFilter)
+        protected bool TranslateMetadataCriteria(BooleanExpression criteria, MetadataQueryNode meta, out MetadataFilterExpression entityFilter, out MetadataFilterExpression attributeFilter, out MetadataFilterExpression relationshipFilter)
         {
             entityFilter = null;
             attributeFilter = null;
@@ -239,9 +239,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (criteria is BooleanBinaryExpression binary)
             {
-                if (!TranslateCriteria(binary.FirstExpression, meta, out var lhsEntityFilter, out var lhsAttributeFilter, out var lhsRelationshipFilter))
+                if (!TranslateMetadataCriteria(binary.FirstExpression, meta, out var lhsEntityFilter, out var lhsAttributeFilter, out var lhsRelationshipFilter))
                     return false;
-                if (!TranslateCriteria(binary.SecondExpression, meta, out var rhsEntityFilter, out var rhsAttributeFilter, out var rhsRelationshipFilter))
+                if (!TranslateMetadataCriteria(binary.SecondExpression, meta, out var rhsEntityFilter, out var rhsAttributeFilter, out var rhsRelationshipFilter))
                     return false;
 
                 if (binary.BinaryExpressionType == BooleanBinaryExpressionType.Or)
@@ -350,7 +350,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var condition = new MetadataConditionExpression(parts[1], op, literal.GetValue(null, null, null, null));
 
-                return TranslateCriteria(condition, parts[0], meta, out entityFilter, out attributeFilter, out relationshipFilter);
+                return TranslateMetadataCondition(condition, parts[0], meta, out entityFilter, out attributeFilter, out relationshipFilter);
             }
 
             if (criteria is InPredicate inPred)
@@ -374,7 +374,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var condition = new MetadataConditionExpression(parts[1], inPred.NotDefined ? MetadataConditionOperator.NotIn : MetadataConditionOperator.In, inPred.Values.Select(val => val.GetValue(null, null, null, null)).ToArray());
 
-                return TranslateCriteria(condition, parts[0], meta, out entityFilter, out attributeFilter, out relationshipFilter);
+                return TranslateMetadataCondition(condition, parts[0], meta, out entityFilter, out attributeFilter, out relationshipFilter);
             }
 
             if (criteria is BooleanIsNullExpression isNull)
@@ -395,13 +395,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var condition = new MetadataConditionExpression(parts[1], isNull.IsNot ? MetadataConditionOperator.NotEquals : MetadataConditionOperator.Equals, null);
 
-                return TranslateCriteria(condition, parts[0], meta, out entityFilter, out attributeFilter, out relationshipFilter);
+                return TranslateMetadataCondition(condition, parts[0], meta, out entityFilter, out attributeFilter, out relationshipFilter);
             }
 
             return false;
         }
 
-        private bool TranslateCriteria(MetadataConditionExpression condition, string alias, MetadataQueryNode meta, out MetadataFilterExpression entityFilter, out MetadataFilterExpression attributeFilter, out MetadataFilterExpression relationshipFilter)
+        private bool TranslateMetadataCondition(MetadataConditionExpression condition, string alias, MetadataQueryNode meta, out MetadataFilterExpression entityFilter, out MetadataFilterExpression attributeFilter, out MetadataFilterExpression relationshipFilter)
         {
             entityFilter = null;
             attributeFilter = null;
@@ -470,60 +470,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return false;
         }
 
-        protected BooleanExpression ExtractMetadataFilters(BooleanExpression criteria, MetadataQueryNode meta, out MetadataFilterExpression entityFilter, out MetadataFilterExpression attributeFilter, out MetadataFilterExpression relationshipFilter)
+        protected bool TranslateFetchXMLCriteria(IAttributeMetadataCache metadata, IQueryExecutionOptions options, BooleanExpression criteria, NodeSchema schema, string allowedPrefix, string targetEntityName, string targetEntityAlias, object[] items, out filter filter)
         {
-            if (TranslateCriteria(criteria, meta, out entityFilter, out attributeFilter, out relationshipFilter))
-                return null;
-
-            if (criteria is BooleanBinaryExpression binary && binary.BinaryExpressionType == BooleanBinaryExpressionType.And)
-            {
-                var lhsRemainder = ExtractMetadataFilters(binary.FirstExpression, meta, out var lhsEntityFilter, out var lhsAttributeFilter, out var lhsRelationshipFilter);
-                var rhsRemainer = ExtractMetadataFilters(binary.SecondExpression, meta, out var rhsEntityFilter, out var rhsAttributeFilter, out var rhsRelationshipFilter);
-
-                entityFilter = lhsEntityFilter;
-                attributeFilter = lhsAttributeFilter;
-                relationshipFilter = lhsRelationshipFilter;
-
-                if (rhsEntityFilter != null)
-                {
-                    if (entityFilter == null)
-                        entityFilter = rhsEntityFilter;
-                    else
-                        entityFilter = new MetadataFilterExpression { Filters = { lhsEntityFilter, rhsEntityFilter }, FilterOperator = binary.BinaryExpressionType == BooleanBinaryExpressionType.And ? LogicalOperator.And : LogicalOperator.Or };
-                }
-
-                if (rhsAttributeFilter != null)
-                {
-                    if (attributeFilter == null)
-                        attributeFilter = rhsAttributeFilter;
-                    else
-                        attributeFilter = new MetadataFilterExpression { Filters = { lhsAttributeFilter, rhsAttributeFilter }, FilterOperator = binary.BinaryExpressionType == BooleanBinaryExpressionType.And ? LogicalOperator.And : LogicalOperator.Or };
-                }
-
-                if (rhsRelationshipFilter != null)
-                {
-                    if (relationshipFilter == null)
-                        relationshipFilter = rhsRelationshipFilter;
-                    else
-                        relationshipFilter = new MetadataFilterExpression { Filters = { lhsRelationshipFilter, rhsRelationshipFilter }, FilterOperator = binary.BinaryExpressionType == BooleanBinaryExpressionType.And ? LogicalOperator.And : LogicalOperator.Or };
-                }
-
-                if (lhsRemainder == null)
-                    return rhsRemainer;
-
-                if (rhsRemainer == null)
-                    return lhsRemainder;
-
-                binary.FirstExpression = lhsRemainder;
-                binary.SecondExpression = rhsRemainer;
-            }
-
-            return criteria;
-        }
-
-        protected bool TranslateCriteria(IAttributeMetadataCache metadata, IQueryExecutionOptions options, BooleanExpression criteria, NodeSchema schema, string allowedPrefix, string targetEntityName, string targetEntityAlias, object[] items, out filter filter)
-        {
-            if (!TranslateCriteria(metadata, options, criteria, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out var condition, out filter))
+            if (!TranslateFetchXMLCriteria(metadata, options, criteria, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out var condition, out filter))
                 return false;
 
             if (condition != null)
@@ -532,16 +481,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return true;
         }
 
-        protected bool TranslateCriteria(IAttributeMetadataCache metadata, IQueryExecutionOptions options, BooleanExpression criteria, NodeSchema schema, string allowedPrefix, string targetEntityName, string targetEntityAlias, object[] items, out condition condition, out filter filter)
+        protected bool TranslateFetchXMLCriteria(IAttributeMetadataCache metadata, IQueryExecutionOptions options, BooleanExpression criteria, NodeSchema schema, string allowedPrefix, string targetEntityName, string targetEntityAlias, object[] items, out condition condition, out filter filter)
         {
             condition = null;
             filter = null;
 
             if (criteria is BooleanBinaryExpression binary)
             {
-                if (!TranslateCriteria(metadata, options, binary.FirstExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out var lhsCondition, out var lhsFilter))
+                if (!TranslateFetchXMLCriteria(metadata, options, binary.FirstExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out var lhsCondition, out var lhsFilter))
                     return false;
-                if (!TranslateCriteria(metadata, options, binary.SecondExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out var rhsCondition, out var rhsFilter))
+                if (!TranslateFetchXMLCriteria(metadata, options, binary.SecondExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out var rhsCondition, out var rhsFilter))
                     return false;
 
                 filter = new filter

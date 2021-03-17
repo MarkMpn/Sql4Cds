@@ -55,7 +55,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (Source is FetchXmlScan fetchXml && !fetchXml.FetchXml.aggregate)
             {
-                if (TranslateCriteria(metadata, options, Filter, schema, null, fetchXml.Entity.name, fetchXml.Alias, fetchXml.Entity.Items, out var fetchFilter))
+                if (TranslateFetchXMLCriteria(metadata, options, Filter, schema, null, fetchXml.Entity.name, fetchXml.Alias, fetchXml.Entity.Items, out var fetchFilter))
                 {
                     fetchXml.Entity.AddItem(fetchFilter);
                     return fetchXml;
@@ -70,7 +70,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (Source is MetadataQueryNode meta)
             {
-                if (TranslateCriteria(Filter, meta, out var entityFilter, out var attributeFilter, out var relationshipFilter))
+                if (TranslateMetadataCriteria(Filter, meta, out var entityFilter, out var attributeFilter, out var relationshipFilter))
                 {
                     meta.Query.AddFilter(entityFilter);
 
@@ -216,7 +216,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private BooleanExpression ExtractFetchXMLFilters(IAttributeMetadataCache metadata, IQueryExecutionOptions options, BooleanExpression criteria, NodeSchema schema, string allowedPrefix, string targetEntityName, string targetEntityAlias, object[] items, out filter filter)
         {
-            filter = null;
+            if (TranslateFetchXMLCriteria(metadata, options, criteria, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out filter))
+                return null;
 
             if (!(criteria is BooleanBinaryExpression bin))
                 return criteria;
@@ -224,33 +225,34 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (bin.BinaryExpressionType != BooleanBinaryExpressionType.And)
                 return criteria;
 
-            filter lhsFilter;
-            if (TranslateCriteria(metadata, options, bin.FirstExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out lhsFilter))
-                bin.FirstExpression = null;
-            else
-                bin.FirstExpression = ExtractFetchXMLFilters(metadata, options, bin.FirstExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out lhsFilter);
+            bin.FirstExpression = ExtractFetchXMLFilters(metadata, options, bin.FirstExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out var lhsFilter);
+            bin.SecondExpression = ExtractFetchXMLFilters(metadata, options, bin.SecondExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out var rhsFilter);
 
-            filter rhsFilter;
-            if (TranslateCriteria(metadata, options, bin.SecondExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out rhsFilter))
-                bin.SecondExpression = null;
-            else
-                bin.SecondExpression = ExtractFetchXMLFilters(metadata, options, bin.SecondExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out rhsFilter);
+            filter = (lhsFilter != null && rhsFilter != null) ? new filter { Items = new object[] { lhsFilter, rhsFilter } } : lhsFilter ?? rhsFilter;
 
-            if (lhsFilter != null && rhsFilter != null)
-            {
-                filter = new filter
-                {
-                    Items = new object[]
-                    {
-                        lhsFilter,
-                        rhsFilter
-                    }
-                };
-            }
-            else
-            {
-                filter = lhsFilter ?? rhsFilter;
-            }
+            if (bin.FirstExpression != null && bin.SecondExpression != null)
+                return bin;
+
+            return bin.FirstExpression ?? bin.SecondExpression;
+        }
+
+        protected BooleanExpression ExtractMetadataFilters(BooleanExpression criteria, MetadataQueryNode meta, out MetadataFilterExpression entityFilter, out MetadataFilterExpression attributeFilter, out MetadataFilterExpression relationshipFilter)
+        {
+            if (TranslateMetadataCriteria(criteria, meta, out entityFilter, out attributeFilter, out relationshipFilter))
+                return null;
+
+            if (!(criteria is BooleanBinaryExpression bin))
+                return criteria;
+
+            if (bin.BinaryExpressionType != BooleanBinaryExpressionType.And)
+                return criteria;
+
+            bin.FirstExpression = ExtractMetadataFilters(bin.FirstExpression, meta, out var lhsEntityFilter, out var lhsAttributeFilter, out var lhsRelationshipFilter);
+            bin.SecondExpression = ExtractMetadataFilters(bin.SecondExpression, meta, out var rhsEntityFilter, out var rhsAttributeFilter, out var rhsRelationshipFilter);
+
+            entityFilter = (lhsEntityFilter != null && rhsEntityFilter != null) ? new MetadataFilterExpression { Filters = { lhsEntityFilter, rhsEntityFilter } } : lhsEntityFilter ?? rhsEntityFilter;
+            attributeFilter = (lhsAttributeFilter != null && rhsAttributeFilter != null) ? new MetadataFilterExpression { Filters = { lhsAttributeFilter, rhsAttributeFilter } } : lhsAttributeFilter ?? rhsAttributeFilter;
+            relationshipFilter = (lhsRelationshipFilter != null && rhsRelationshipFilter != null) ? new MetadataFilterExpression { Filters = { lhsRelationshipFilter, rhsRelationshipFilter } } : lhsRelationshipFilter ?? rhsRelationshipFilter;
 
             if (bin.FirstExpression != null && bin.SecondExpression != null)
                 return bin;
