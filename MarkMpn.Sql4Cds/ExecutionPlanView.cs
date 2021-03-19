@@ -207,7 +207,7 @@ namespace MarkMpn.Sql4Cds
                         // Draw the line with a dogleg
                         var midX = line.Start.X - (line.Start.X - line.End.X) / 2;
                         e.Graphics.DrawLine(pen, line.Start.X, line.Start.Y, midX, line.Start.Y);
-                        e.Graphics.DrawLine(pen, midX, line.Start.Y, midX, line.End.Y);
+                        e.Graphics.DrawLine(pen, midX, line.Start.Y + line.Width / 2, midX, line.End.Y - line.Width / 2);
                         e.Graphics.DrawLine(pen, midX, line.End.Y, line.End.X + line.Width, line.End.Y);
                     }
                 }
