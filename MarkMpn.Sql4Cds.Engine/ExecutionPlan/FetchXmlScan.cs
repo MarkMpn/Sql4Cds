@@ -293,7 +293,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 foreach (var attrMetadata in meta.Attributes)
                 {
-                    var attrType = GetAttributeType(attrMetadata);
+                    var attrType = attrMetadata.GetAttributeType();
                     var fullName = $"{alias}.{attrMetadata.LogicalName}";
 
                     schema.Schema[fullName] = attrType;
@@ -313,7 +313,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 foreach (var attribute in items.OfType<FetchAttributeType>())
                 {
                     var attrMetadata = meta.Attributes.Single(a => a.LogicalName == attribute.name);
-                    var attrType = GetAttributeType(attrMetadata);
+                    var attrType = attrMetadata.GetAttributeType();
 
                     if (attribute.aggregateSpecified && (attribute.aggregate == Engine.FetchXml.AggregateType.count || attribute.aggregate == Engine.FetchXml.AggregateType.countcolumn))
                         attrType = typeof(int);
@@ -334,7 +334,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     foreach (var virtualAttrMetadata in meta.Attributes.Where(a => a.AttributeOf == attrMetadata.LogicalName))
                     {
-                        var virtualAttrType = GetAttributeType(virtualAttrMetadata);
+                        var virtualAttrType = virtualAttrMetadata.GetAttributeType();
                         var virtualAttrName = attrName + virtualAttrMetadata.LogicalName.Substring(attrMetadata.LogicalName.Length);
                         var virtualAttrFullName = attribute.alias != null ? virtualAttrName : $"{alias}.{virtualAttrName}";
 
@@ -355,7 +355,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     foreach (var attrMetadata in meta.Attributes)
                     {
-                        var attrType = GetAttributeType(attrMetadata);
+                        var attrType = attrMetadata.GetAttributeType();
                         var attrName = attrMetadata.LogicalName;
                         var fullName = $"{alias}.{attrName}";
 
@@ -390,70 +390,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     AddAttributes(schema, metadata, linkEntity.name, linkEntity.alias, linkEntity.Items);
                 }
             }
-        }
-
-        private Type GetAttributeType(AttributeMetadata attrMetadata)
-        {
-            if (attrMetadata is MultiSelectPicklistAttributeMetadata)
-                return typeof(OptionSetValueCollection);
-
-            var typeCode = attrMetadata.AttributeType;
-
-            if (attrMetadata is ManagedPropertyAttributeMetadata managedProp)
-                typeCode = managedProp.ValueAttributeTypeCode;
-
-            if (attrMetadata is BooleanAttributeMetadata || typeCode == AttributeTypeCode.Boolean)
-                return typeof(bool?);
-
-            if (attrMetadata is DateTimeAttributeMetadata || typeCode == AttributeTypeCode.DateTime)
-                return typeof(DateTime?);
-
-            if (attrMetadata is DecimalAttributeMetadata || typeCode == AttributeTypeCode.Decimal)
-                return typeof(decimal?);
-
-            if (attrMetadata is DoubleAttributeMetadata || typeCode == AttributeTypeCode.Double)
-                return typeof(double?);
-
-            if (attrMetadata is EntityNameAttributeMetadata || typeCode == AttributeTypeCode.EntityName)
-                return typeof(int?);
-
-            if (attrMetadata is ImageAttributeMetadata)
-                return typeof(byte[]);
-
-            if (attrMetadata is IntegerAttributeMetadata || typeCode == AttributeTypeCode.Integer)
-                return typeof(int?);
-
-            if (attrMetadata is BigIntAttributeMetadata || typeCode == AttributeTypeCode.BigInt)
-                return typeof(long?);
-
-            if (attrMetadata is LookupAttributeMetadata || typeCode == AttributeTypeCode.Lookup || typeCode == AttributeTypeCode.Customer || typeCode == AttributeTypeCode.Owner)
-                return typeof(Guid?);
-
-            if (attrMetadata is MemoAttributeMetadata || typeCode == AttributeTypeCode.Memo)
-                return typeof(string);
-
-            if (attrMetadata is MoneyAttributeMetadata || typeCode == AttributeTypeCode.Money)
-                return typeof(decimal?);
-
-            if (attrMetadata is PicklistAttributeMetadata || typeCode == AttributeTypeCode.Picklist)
-                return typeof(int?);
-
-            if (attrMetadata is StateAttributeMetadata || typeCode == AttributeTypeCode.State)
-                return typeof(int?);
-
-            if (attrMetadata is StatusAttributeMetadata || typeCode == AttributeTypeCode.Status)
-                return typeof(int?);
-
-            if (attrMetadata is StringAttributeMetadata || typeCode == AttributeTypeCode.String)
-                return typeof(string);
-
-            if (attrMetadata is UniqueIdentifierAttributeMetadata || typeCode == AttributeTypeCode.Uniqueidentifier)
-                return typeof(Guid?);
-
-            if (attrMetadata.AttributeType == AttributeTypeCode.Virtual)
-                return typeof(string);
-
-            throw new ApplicationException("Unknown attribute type " + attrMetadata.GetType());
         }
 
         public override IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)

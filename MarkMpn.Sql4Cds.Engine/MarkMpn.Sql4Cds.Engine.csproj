@@ -65,6 +65,7 @@
     <Compile Include="ExecutionPlan\AliasNode.cs" />
     <Compile Include="ExecutionPlan\AssertNode.cs" />
     <Compile Include="ExecutionPlan\BaseDataNode.cs" />
+    <Compile Include="ExecutionPlan\BaseDmlNode.cs" />
     <Compile Include="ExecutionPlan\BaseJoinNode.cs" />
     <Compile Include="ExecutionPlan\BaseNode.cs" />
     <Compile Include="ExecutionPlan\CaseInsensitiveObjectComparer.cs" />
@@ -104,6 +105,7 @@
     <Compile Include="FetchXmlConditionMethods.cs" />
     <Compile Include="FetchXmlExtensions.cs" />
     <Compile Include="JoinConditionVisitor.cs" />
+    <Compile Include="MetadataExtensions.cs" />
     <Compile Include="MetadataQueryExtensions.cs" />
     <Compile Include="MetaMetadataCache.cs" />
     <Compile Include="MetaMetadata.cs" />
