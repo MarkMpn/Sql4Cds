@@ -21,10 +21,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         public IDataExecutionPlanNode Source { get; set; }
 
+        [Browsable(false)]
         public string Sql { get; set; }
-        
+
+        [Browsable(false)]
         public int Index { get; set; }
-        
+
+        [Browsable(false)]
         public int Length { get; set; }
 
         protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
@@ -188,8 +191,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         }
     }
 
-    public class SelectColumn : ColumnMapping
+    public class SelectColumn
     {
+        public string SourceColumn { get; set; }
+
+        public string OutputColumn { get; set; }
+
         [Browsable(false)]
         public bool AllColumns { get; set; }
     }
