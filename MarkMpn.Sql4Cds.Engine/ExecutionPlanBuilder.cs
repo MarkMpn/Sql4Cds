@@ -9,6 +9,7 @@ using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using MarkMpn.Sql4Cds.Engine.Visitors;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Metadata;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
@@ -75,10 +76,10 @@ namespace MarkMpn.Sql4Cds.Engine
                     IRootExecutionPlanNode plan;
 
                     if (statement is SelectStatement select)
-                        plan = ConvertSelectStatement(select.QueryExpression, null, null, null);
-                    /*else if (statement is UpdateStatement update)
-                        query = ConvertUpdateStatement(update);
-                    else if (statement is DeleteStatement delete)
+                        plan = ConvertSelectStatement(select);
+                    else if (statement is UpdateStatement update)
+                        plan = ConvertUpdateStatement(update);
+                    /*else if (statement is DeleteStatement delete)
                         query = ConvertDeleteStatement(delete);
                     else if (statement is InsertStatement insert)
                         query = ConvertInsertStatement(insert);
@@ -109,6 +110,277 @@ namespace MarkMpn.Sql4Cds.Engine
                 child.Parent = plan;
                 SetParent(child);
             }
+        }
+
+        private UpdateNode ConvertUpdateStatement(UpdateStatement update)
+        {
+            if (update.OptimizerHints != null && update.OptimizerHints.Count > 0)
+                throw new NotSupportedQueryFragmentException("Unsupported optimizer hint", update.OptimizerHints[0]);
+
+            if (update.WithCtesAndXmlNamespaces != null)
+                throw new NotSupportedQueryFragmentException("Unsupported CTE clause", update.WithCtesAndXmlNamespaces);
+
+            return ConvertUpdateStatement(update.UpdateSpecification);
+        }
+
+        private UpdateNode ConvertUpdateStatement(UpdateSpecification update)
+        {
+            if (update.OutputClause != null)
+                throw new NotSupportedQueryFragmentException("Unsupported OUTPUT clause", update.OutputClause);
+
+            if (update.OutputIntoClause != null)
+                throw new NotSupportedQueryFragmentException("Unsupported OUTPUT INTO clause", update.OutputIntoClause);
+
+            if (!(update.Target is NamedTableReference target))
+                throw new NotSupportedQueryFragmentException("Unsupported UPDATE target", update.Target);
+
+            IDataExecutionPlanNode node;
+
+            if (update.FromClause != null)
+                node = ConvertFromClause(update.FromClause.TableReferences, update, null, null, null);
+            else
+                node = ConvertTableReference(update.Target, update, null, null, null);
+
+            var targetSource = FindTargetTable(node, target, true);
+
+            if (targetSource == null)
+                targetSource = FindTargetTable(node, target, false);
+
+            if (targetSource == null)
+                throw new NotSupportedQueryFragmentException("Unknown table", target);
+
+            if (!(targetSource is FetchXmlScan targetFetch))
+            {
+                throw new NotSupportedQueryFragmentException("Unsupported UPDATE target", update.Target)
+                {
+                    Suggestion = "Only standard entities can be updated, not metadata"
+                };
+            }
+
+            if (update.WhereClause == null && Options.BlockUpdateWithoutWhere)
+            {
+                throw new NotSupportedQueryFragmentException("UPDATE without WHERE is blocked by your settings", update)
+                {
+                    Suggestion = "Add a WHERE clause to limit the records that will be affected by the update, or disable the \"Prevent UPDATE without WHERE\" option in the settings window"
+                };
+            }
+
+            node = ConvertInSubqueries(node, update, null, null, null);
+            node = ConvertExistsSubqueries(node, update, null, null, null);
+
+            // Add filters from WHERE
+            node = ConvertWhereClause(node, update.WhereClause, null, null, null, update);
+
+            // Add DISTINCT
+            node = new DistinctNode { Source = node };
+
+            // Add TOP/OFFSET
+            node = ConvertTopClause(node, update.TopRowFilter, null);
+
+            // Add UPDATE
+            var updateNode = ConvertSetClause(update.SetClauses, node, targetFetch);
+
+            return updateNode;
+        }
+
+        private UpdateNode ConvertSetClause(IList<SetClause> setClauses, IDataExecutionPlanNode node, FetchXmlScan targetFetch)
+        {
+            var targetMetadata = Metadata[targetFetch.Entity.name];
+            var update = new UpdateNode
+            {
+                Source = node,
+                LogicalName = targetMetadata.LogicalName,
+                PrimaryIdSource = $"{targetFetch.Alias}.{targetMetadata.PrimaryIdAttribute}"
+            };
+            var computeScalar = new ComputeScalarNode { Source = node };
+            var schema = node.GetSchema(Metadata, null);
+
+            foreach (var set in setClauses)
+            {
+                if (!(set is AssignmentSetClause assignment))
+                    throw new NotSupportedQueryFragmentException("Unhandled SET clause", set);
+
+                if (assignment.Variable != null)
+                    throw new NotSupportedQueryFragmentException("Unhandled variable SET clause", set);
+
+                switch (assignment.AssignmentKind)
+                {
+                    case AssignmentKind.AddEquals:
+                        assignment.NewValue = new BinaryExpression { FirstExpression = assignment.Column, BinaryExpressionType = BinaryExpressionType.Add, SecondExpression = assignment.NewValue };
+                        break;
+
+                    case AssignmentKind.BitwiseAndEquals:
+                        assignment.NewValue = new BinaryExpression { FirstExpression = assignment.Column, BinaryExpressionType = BinaryExpressionType.BitwiseAnd, SecondExpression = assignment.NewValue };
+                        break;
+
+                    case AssignmentKind.BitwiseOrEquals:
+                        assignment.NewValue = new BinaryExpression { FirstExpression = assignment.Column, BinaryExpressionType = BinaryExpressionType.BitwiseOr, SecondExpression = assignment.NewValue };
+                        break;
+
+                    case AssignmentKind.BitwiseXorEquals:
+                        assignment.NewValue = new BinaryExpression { FirstExpression = assignment.Column, BinaryExpressionType = BinaryExpressionType.BitwiseXor, SecondExpression = assignment.NewValue };
+                        break;
+
+                    case AssignmentKind.DivideEquals:
+                        assignment.NewValue = new BinaryExpression { FirstExpression = assignment.Column, BinaryExpressionType = BinaryExpressionType.Divide, SecondExpression = assignment.NewValue };
+                        break;
+
+                    case AssignmentKind.ModEquals:
+                        assignment.NewValue = new BinaryExpression { FirstExpression = assignment.Column, BinaryExpressionType = BinaryExpressionType.Modulo, SecondExpression = assignment.NewValue };
+                        break;
+
+                    case AssignmentKind.MultiplyEquals:
+                        assignment.NewValue = new BinaryExpression { FirstExpression = assignment.Column, BinaryExpressionType = BinaryExpressionType.Multiply, SecondExpression = assignment.NewValue };
+                        break;
+
+                    case AssignmentKind.SubtractEquals:
+                        assignment.NewValue = new BinaryExpression { FirstExpression = assignment.Column, BinaryExpressionType = BinaryExpressionType.Subtract, SecondExpression = assignment.NewValue };
+                        break;
+                }
+
+                if (!(assignment.NewValue is ColumnReferenceExpression col))
+                {
+                    var colName = $"Expr{++_colNameCounter}";
+                    computeScalar.Columns[colName] = assignment.NewValue;
+                    col = colName.ToColumnReference();
+                    update.Source = computeScalar;
+                    schema = computeScalar.GetSchema(Metadata, null);
+                }
+
+                // Validate the target attribute and type conversion
+                var sourceColumnName = col.GetColumnName();
+                var targetAttrName = assignment.Column.MultiPartIdentifier.Identifiers.Last().Value;
+                var targetAttribute = targetMetadata.Attributes.SingleOrDefault(attr => attr.LogicalName.Equals(targetAttrName));
+
+                if (targetAttribute == null)
+                    throw new NotSupportedQueryFragmentException($"Unknown column name", assignment.Column);
+
+                if (targetAttribute.IsValidForUpdate == false)
+                    throw new NotSupportedQueryFragmentException($"Column cannot be updated", assignment.Column);
+
+                var sourceType = assignment.NewValue.GetType(schema, null);
+                var targetType = targetAttribute.GetAttributeType();
+
+                if (!SqlTypeConverter.CanChangeType(sourceType, targetType))
+                    throw new NotSupportedQueryFragmentException($"Cannot convert value of type {sourceType} to {targetType}", assignment);
+
+                // Normalize the source column name
+                schema.ContainsColumn(sourceColumnName, out sourceColumnName);
+
+                if (update.ColumnMappings.ContainsKey(targetAttribute.LogicalName))
+                    throw new NotSupportedQueryFragmentException("Duplicate target column", assignment.Column);
+
+                update.ColumnMappings[targetAttribute.LogicalName] = sourceColumnName;
+            }
+
+            // If any of the updates are for a polymorphic lookup field, make sure we've got an update for the associated type field too
+            foreach (var targetAttrName in update.ColumnMappings.Keys)
+            {
+                var targetLookupAttribute = targetMetadata.Attributes.Single(attr => attr.LogicalName == targetAttrName) as LookupAttributeMetadata;
+
+                if (targetLookupAttribute == null)
+                    continue;
+
+                if (targetLookupAttribute.Targets.Length > 1 && !update.ColumnMappings.ContainsKey(targetAttrName + "type"))
+                {
+                    // Check we're not just setting the lookup column to null - no need to set the corresponding type then
+                    if (computeScalar.Columns.TryGetValue(update.ColumnMappings[targetAttrName], out var lookupSource) && lookupSource is NullLiteral)
+                        continue;
+
+                    var assignment = setClauses.Cast<AssignmentSetClause>().SingleOrDefault(a => a.Column.MultiPartIdentifier.Identifiers.Last().Value.Equals(targetAttrName, StringComparison.OrdinalIgnoreCase));
+                    throw new NotSupportedQueryFragmentException("Updating a polymorphic lookup field requires setting the associated type column as well", assignment.Column)
+                    {
+                        Suggestion = $"Add a SET clause for the {targetLookupAttribute.LogicalName}type column and set it to one of the following values:\r\n{String.Join("\r\n", targetLookupAttribute.Targets.Select(t => $"* {t}"))}"
+                    };
+                }
+            }
+
+            return update;
+        }
+
+        private IDataExecutionPlanNode FindTargetTable(IDataExecutionPlanNode node, NamedTableReference table, bool alias)
+        {
+            if (node is FetchXmlScan fetch)
+            {
+                var name = alias ? fetch.Alias : fetch.Entity.name;
+
+                if (name.Equals(table.SchemaObject.BaseIdentifier.Value, StringComparison.OrdinalIgnoreCase))
+                    return node;
+            }
+
+            if (node is MetadataQueryNode meta)
+            {
+                // Even though we can't update metadata, still return it as the target table so we can give a more helpful error message
+                if (meta.MetadataSource.HasFlag(MetadataSource.Entity))
+                {
+                    var name = alias ? meta.EntityAlias : "entity";
+
+                    if (name.Equals(table.SchemaObject.BaseIdentifier.Value, StringComparison.OrdinalIgnoreCase))
+                        return node;
+                }
+
+                if (meta.MetadataSource.HasFlag(MetadataSource.Attribute))
+                {
+                    var name = alias ? meta.AttributeAlias : "attribute";
+
+                    if (name.Equals(table.SchemaObject.BaseIdentifier.Value, StringComparison.OrdinalIgnoreCase))
+                        return node;
+                }
+
+                if (meta.MetadataSource.HasFlag(MetadataSource.OneToManyRelationship))
+                {
+                    var name = alias ? meta.OneToManyRelationshipAlias : "relationship_1_n";
+
+                    if (name.Equals(table.SchemaObject.BaseIdentifier.Value, StringComparison.OrdinalIgnoreCase))
+                        return node;
+                }
+
+                if (meta.MetadataSource.HasFlag(MetadataSource.ManyToOneRelationship))
+                {
+                    var name = alias ? meta.ManyToOneRelationshipAlias : "relationship_n_1";
+
+                    if (name.Equals(table.SchemaObject.BaseIdentifier.Value, StringComparison.OrdinalIgnoreCase))
+                        return node;
+                }
+
+                if (meta.MetadataSource.HasFlag(MetadataSource.ManyToManyRelationship))
+                {
+                    var name = alias ? meta.ManyToManyRelationshipAlias : "relationship_n_n";
+
+                    if (name.Equals(table.SchemaObject.BaseIdentifier.Value, StringComparison.OrdinalIgnoreCase))
+                        return node;
+                }
+            }
+
+            foreach (var child in node.GetSources())
+            {
+                var match = FindTargetTable(child, table, alias);
+
+                if (match != null)
+                    return match;
+            }
+
+            return null;
+        }
+
+        private SelectNode ConvertSelectStatement(SelectStatement select)
+        {
+            if (select.ComputeClauses != null && select.ComputeClauses.Count > 0)
+                throw new NotSupportedQueryFragmentException("Unsupported COMPUTE clause", select.ComputeClauses[0]);
+
+            if (select.Into != null)
+                throw new NotSupportedQueryFragmentException("Unsupported INTO clause", select.Into);
+
+            if (select.On != null)
+                throw new NotSupportedQueryFragmentException("Unsupported ON clause", select.On);
+
+            if (select.OptimizerHints != null && select.OptimizerHints.Count > 0)
+                throw new NotSupportedQueryFragmentException("Unsupported optimizer hint", select.OptimizerHints[0]);
+
+            if (select.WithCtesAndXmlNamespaces != null)
+                throw new NotSupportedQueryFragmentException("Unsupported CTE clause", select.WithCtesAndXmlNamespaces);
+
+            return ConvertSelectStatement(select.QueryExpression, null, null, null);
         }
 
         private SelectNode ConvertSelectStatement(QueryExpression query, NodeSchema outerSchema, Dictionary<string,string> outerReferences, IDictionary<string, Type> parameterTypes)
