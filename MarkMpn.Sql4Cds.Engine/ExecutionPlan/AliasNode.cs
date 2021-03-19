@@ -125,5 +125,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 yield return entity;
             }
         }
+
+        public override string ToString()
+        {
+            return "Subquery Alias";
+        }
     }
 }
