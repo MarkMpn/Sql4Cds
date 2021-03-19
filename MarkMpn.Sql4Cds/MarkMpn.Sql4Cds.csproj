@@ -395,6 +395,9 @@
   <ItemGroup>
     <EmbeddedResource Include="Images\UpdateNode.ico" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Images\AliasNode.ico" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>
