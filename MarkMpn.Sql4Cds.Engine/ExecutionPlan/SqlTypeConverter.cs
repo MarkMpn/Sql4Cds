@@ -58,6 +58,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return true;
             }
 
+            // Special case for null -> anything
+            if (lhs == typeof(object))
+            {
+                consistent = rhs;
+                return true;
+            }
+
+            if (rhs == typeof(object))
+            {
+                consistent = lhs;
+                return true;
+            }
+
             // Special case for string -> enum
             if (lhs == typeof(string) && rhs.IsEnum)
             {
@@ -98,6 +111,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             to = MakeNonNullable(to);
 
             if (from == to)
+                return true;
+
+            // Special case for null -> anything
+            if (from == typeof(object))
                 return true;
 
             // Special case for string -> enum
