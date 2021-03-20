@@ -134,33 +134,6 @@ namespace MarkMpn.Sql4Cds.Engine
             if (!(update.Target is NamedTableReference target))
                 throw new NotSupportedQueryFragmentException("Unsupported UPDATE target", update.Target);
 
-            IDataExecutionPlanNode node;
-            string targetAlias;
-            string targetLogicalName;
-
-            if (update.FromClause != null)
-            {
-                var updateTarget = new UpdateTargetVisitor(target.SchemaObject.BaseIdentifier.Value);
-                update.FromClause.Accept(updateTarget);
-
-                if (String.IsNullOrEmpty(updateTarget.TargetEntityName))
-                    throw new NotSupportedQueryFragmentException("Target table not found in FROM clause", target);
-
-                if (updateTarget.Ambiguous)
-                    throw new NotSupportedQueryFragmentException("Target table name is ambiguous", target);
-
-                targetAlias = updateTarget.TargetAliasName ?? updateTarget.TargetEntityName;
-                targetLogicalName = updateTarget.TargetEntityName;
-
-                node = ConvertFromClause(update.FromClause.TableReferences, update, null, null, null);
-            }
-            else
-            {
-                targetAlias = target.SchemaObject.BaseIdentifier.Value;
-                targetLogicalName = targetAlias;
-                node = ConvertTableReference(update.Target, update, null, null, null);
-            }
-
             if (update.WhereClause == null && Options.BlockUpdateWithoutWhere)
             {
                 throw new NotSupportedQueryFragmentException("UPDATE without WHERE is blocked by your settings", update)
@@ -169,37 +142,50 @@ namespace MarkMpn.Sql4Cds.Engine
                 };
             }
 
-            node = ConvertInSubqueries(node, update, null, null, null);
-            node = ConvertExistsSubqueries(node, update, null, null, null);
-
-            // Add filters from WHERE
-            node = ConvertWhereClause(node, update.WhereClause, null, null, null, update);
-
-            // Add DISTINCT
-            node = new DistinctNode { Source = node };
-
-            // Add TOP/OFFSET
-            node = ConvertTopClause(node, update.TopRowFilter, null);
-
-            // Add UPDATE
-            var updateNode = ConvertSetClause(update.SetClauses, node, targetLogicalName, targetAlias);
-
-            return updateNode;
-        }
-
-        private UpdateNode ConvertSetClause(IList<SetClause> setClauses, IDataExecutionPlanNode node, string targetLogicalName, string targetAlias)
-        {
-            var targetMetadata = Metadata[targetLogicalName];
-            var update = new UpdateNode
+            // Create the SELECT statement that generates the required information
+            var queryExpression = new QuerySpecification
             {
-                Source = node,
-                LogicalName = targetMetadata.LogicalName,
-                PrimaryIdSource = $"{targetAlias}.{targetMetadata.PrimaryIdAttribute}"
+                FromClause = update.FromClause ?? new FromClause { TableReferences = { target } },
+                WhereClause = update.WhereClause,
+                UniqueRowFilter = UniqueRowFilter.Distinct,
+                TopRowFilter = update.TopRowFilter
             };
-            var computeScalar = new ComputeScalarNode { Source = node };
-            var schema = node.GetSchema(Metadata, null);
 
-            foreach (var set in setClauses)
+            var updateTarget = new UpdateTargetVisitor(target.SchemaObject.BaseIdentifier.Value);
+            queryExpression.FromClause.Accept(updateTarget);
+
+            if (String.IsNullOrEmpty(updateTarget.TargetEntityName))
+                throw new NotSupportedQueryFragmentException("Target table not found in FROM clause", target);
+
+            if (updateTarget.Ambiguous)
+                throw new NotSupportedQueryFragmentException("Target table name is ambiguous", target);
+
+            var targetAlias = updateTarget.TargetAliasName ?? updateTarget.TargetEntityName;
+            var targetLogicalName = updateTarget.TargetEntityName;
+
+            var targetMetadata = Metadata[targetLogicalName];
+            queryExpression.SelectElements.Add(new SelectScalarExpression
+            {
+                Expression = new ColumnReferenceExpression
+                {
+                    MultiPartIdentifier = new MultiPartIdentifier
+                    {
+                        Identifiers =
+                        {
+                            new Identifier { Value = targetAlias },
+                            new Identifier { Value = targetMetadata.PrimaryIdAttribute }
+                        }
+                    }
+                },
+                ColumnName = new IdentifierOrValueExpression
+                {
+                    Identifier = new Identifier { Value = targetMetadata.PrimaryIdAttribute }
+                }
+            });
+
+            var attributeNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var set in update.SetClauses)
             {
                 if (!(set is AssignmentSetClause assignment))
                     throw new NotSupportedQueryFragmentException("Unhandled SET clause", set);
@@ -242,45 +228,86 @@ namespace MarkMpn.Sql4Cds.Engine
                         break;
                 }
 
-                if (!(assignment.NewValue is ColumnReferenceExpression col))
-                {
-                    var colName = $"Expr{++_colNameCounter}";
-                    computeScalar.Columns[colName] = assignment.NewValue;
-                    col = colName.ToColumnReference();
-                    update.Source = computeScalar;
-                    schema = computeScalar.GetSchema(Metadata, null);
-                }
-
-                // Validate the target attribute and type conversion
-                var sourceColumnName = col.GetColumnName();
+                // Validate the target attribute
                 var targetAttrName = assignment.Column.MultiPartIdentifier.Identifiers.Last().Value;
                 var targetAttribute = targetMetadata.Attributes.SingleOrDefault(attr => attr.LogicalName.Equals(targetAttrName));
 
                 if (targetAttribute == null)
-                    throw new NotSupportedQueryFragmentException($"Unknown column name", assignment.Column);
+                    throw new NotSupportedQueryFragmentException("Unknown column name", assignment.Column);
 
                 if (targetAttribute.IsValidForUpdate == false)
-                    throw new NotSupportedQueryFragmentException($"Column cannot be updated", assignment.Column);
+                    throw new NotSupportedQueryFragmentException("Column cannot be updated", assignment.Column);
 
-                var sourceType = assignment.NewValue.GetType(schema, null);
-                var targetType = targetAttribute.GetAttributeType();
+                if (!attributeNames.Add(targetAttribute.LogicalName))
+                    throw new NotSupportedQueryFragmentException("Duplicate column name", assignment.Column);
 
-                if (!SqlTypeConverter.CanChangeType(sourceType, targetType))
-                    throw new NotSupportedQueryFragmentException($"Cannot convert value of type {sourceType} to {targetType}", assignment);
+                queryExpression.SelectElements.Add(new SelectScalarExpression { Expression = assignment.NewValue, ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = targetAttribute.LogicalName } } });
+            }
 
-                // Normalize the source column name
-                schema.ContainsColumn(sourceColumnName, out sourceColumnName);
+            var source = ConvertSelectStatement(new SelectStatement { QueryExpression = queryExpression });
 
-                if (update.ColumnMappings.ContainsKey(targetAttribute.LogicalName))
-                    throw new NotSupportedQueryFragmentException("Duplicate target column", assignment.Column);
+            // Add UPDATE
+            var updateNode = ConvertSetClause(update.SetClauses, source, targetLogicalName, targetAlias);
 
-                update.ColumnMappings[targetAttribute.LogicalName] = sourceColumnName;
+            return updateNode;
+        }
+
+        private UpdateNode ConvertSetClause(IList<SetClause> setClauses, IExecutionPlanNode node, string targetLogicalName, string targetAlias)
+        {
+            var targetMetadata = Metadata[targetLogicalName];
+            var update = new UpdateNode
+            {
+                LogicalName = targetMetadata.LogicalName
+            };
+
+            if (node is SelectNode select)
+            {
+                update.Source = select.Source;
+                update.PrimaryIdSource = $"{targetAlias}.{targetMetadata.PrimaryIdAttribute}";
+
+                var schema = select.Source.GetSchema(Metadata, null);
+
+                foreach (var assignment in setClauses.Cast<AssignmentSetClause>())
+                {
+                    // Validate the type conversion
+                    var targetAttrName = assignment.Column.MultiPartIdentifier.Identifiers.Last().Value;
+                    var targetAttribute = targetMetadata.Attributes.Single(attr => attr.LogicalName.Equals(targetAttrName));
+
+                    var sourceColName = select.ColumnSet.Single(col => col.OutputColumn == targetAttribute.LogicalName).SourceColumn;
+                    var sourceCol = sourceColName.ToColumnReference();
+                    var sourceType = sourceCol.GetType(schema, null);
+                    var targetType = targetAttribute.GetAttributeType();
+
+                    if (!SqlTypeConverter.CanChangeType(sourceType, targetType))
+                        throw new NotSupportedQueryFragmentException($"Cannot convert value of type {sourceType} to {targetType}", assignment);
+
+                    if (update.ColumnMappings.ContainsKey(targetAttribute.LogicalName))
+                        throw new NotSupportedQueryFragmentException("Duplicate target column", assignment.Column);
+
+                    // Normalize the column name
+                    schema.ContainsColumn(sourceColName, out sourceColName);
+                    update.ColumnMappings[targetAttribute.LogicalName] = sourceColName;
+                }
+            }
+            else
+            {
+                update.Source = node;
+                update.PrimaryIdSource = targetMetadata.PrimaryIdAttribute;
+
+                foreach (var assignment in setClauses.Cast<AssignmentSetClause>())
+                {
+                    var targetAttrName = assignment.Column.MultiPartIdentifier.Identifiers.Last().Value;
+                    var targetAttribute = targetMetadata.Attributes.Single(attr => attr.LogicalName.Equals(targetAttrName));
+
+                    update.ColumnMappings[targetAttribute.LogicalName] = targetAttribute.LogicalName;
+                }
             }
 
             // If any of the updates are for a polymorphic lookup field, make sure we've got an update for the associated type field too
-            foreach (var targetAttrName in update.ColumnMappings.Keys)
+            foreach (var assignment in setClauses.Cast<AssignmentSetClause>())
             {
-                var targetLookupAttribute = targetMetadata.Attributes.Single(attr => attr.LogicalName == targetAttrName) as LookupAttributeMetadata;
+                var targetAttrName = assignment.Column.MultiPartIdentifier.Identifiers.Last().Value;
+                var targetLookupAttribute = targetMetadata.Attributes.Single(attr => attr.LogicalName.Equals(targetAttrName)) as LookupAttributeMetadata;
 
                 if (targetLookupAttribute == null)
                     continue;
@@ -288,10 +315,9 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (targetLookupAttribute.Targets.Length > 1 && !update.ColumnMappings.ContainsKey(targetAttrName + "type"))
                 {
                     // Check we're not just setting the lookup column to null - no need to set the corresponding type then
-                    if (computeScalar.Columns.TryGetValue(update.ColumnMappings[targetAttrName], out var lookupSource) && lookupSource is NullLiteral)
+                    if (assignment.NewValue is NullLiteral)
                         continue;
 
-                    var assignment = setClauses.Cast<AssignmentSetClause>().SingleOrDefault(a => a.Column.MultiPartIdentifier.Identifiers.Last().Value.Equals(targetAttrName, StringComparison.OrdinalIgnoreCase));
                     throw new NotSupportedQueryFragmentException("Updating a polymorphic lookup field requires setting the associated type column as well", assignment.Column)
                     {
                         Suggestion = $"Add a SET clause for the {targetLookupAttribute.LogicalName}type column and set it to one of the following values:\r\n{String.Join("\r\n", targetLookupAttribute.Targets.Select(t => $"* {t}"))}"
@@ -302,8 +328,14 @@ namespace MarkMpn.Sql4Cds.Engine
             return update;
         }
 
-        private SelectNode ConvertSelectStatement(SelectStatement select)
+        private IRootExecutionPlanNode ConvertSelectStatement(SelectStatement select)
         {
+            if (Options.UseTDSEndpoint)
+            {
+                select.ScriptTokenStream = null;
+                return new SqlNode { Sql = select.ToSql() };
+            }
+
             if (select.ComputeClauses != null && select.ComputeClauses.Count > 0)
                 throw new NotSupportedQueryFragmentException("Unsupported COMPUTE clause", select.ComputeClauses[0]);
 

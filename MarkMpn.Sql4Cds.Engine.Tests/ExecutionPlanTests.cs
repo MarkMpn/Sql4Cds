@@ -2316,17 +2316,17 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual("account", update.LogicalName);
             Assert.AreEqual("account.accountid", update.PrimaryIdSource);
             Assert.AreEqual("Expr1", update.ColumnMappings["name"]);
-            var computeScalar = AssertNode<ComputeScalarNode>(update.Source);
+            var distinct = AssertNode<DistinctNode>(update.Source);
+            var computeScalar = AssertNode<ComputeScalarNode>(distinct.Source);
             Assert.AreEqual("'foo'", computeScalar.Columns["Expr1"].ToSql());
             var fetch = AssertNode<FetchXmlScan>(computeScalar.Source);
             AssertFetchXml(fetch, @"
-                <fetch distinct='true'>
+                <fetch>
                     <entity name='account'>
                         <attribute name='accountid' />
                         <filter>
                             <condition attribute='name' operator='eq' value='bar' />
                         </filter>
-                        <order attribute='accountid' />
                     </entity>
                 </fetch>");
         }
@@ -2351,18 +2351,18 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual("account", update.LogicalName);
             Assert.AreEqual("a.accountid", update.PrimaryIdSource);
             Assert.AreEqual("Expr1", update.ColumnMappings["name"]);
-            var computeScalar = AssertNode<ComputeScalarNode>(update.Source);
+            var distinct = AssertNode<DistinctNode>(update.Source);
+            var computeScalar = AssertNode<ComputeScalarNode>(distinct.Source);
             Assert.AreEqual("'foo'", computeScalar.Columns["Expr1"].ToSql());
             var fetch = AssertNode<FetchXmlScan>(computeScalar.Source);
             AssertFetchXml(fetch, @"
-                <fetch distinct='true'>
+                <fetch>
                     <entity name='account'>
                         <attribute name='accountid' />
                         <link-entity name='contact' alias='c' from='parentcustomerid' to='accountid' link-type='inner' />
                         <filter>
                             <condition attribute='name' operator='eq' value='bar' />
                         </filter>
-                        <order attribute='accountid' />
                     </entity>
                 </fetch>");
         }

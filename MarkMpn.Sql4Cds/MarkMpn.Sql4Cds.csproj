@@ -398,6 +398,9 @@
   <ItemGroup>
     <EmbeddedResource Include="Images\AliasNode.ico" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Images\SqlNode.ico" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>
