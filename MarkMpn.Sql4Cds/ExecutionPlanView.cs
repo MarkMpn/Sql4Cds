@@ -108,7 +108,7 @@ namespace MarkMpn.Sql4Cds
 
                 _nodeLocations[child] = fullRect;
 
-                var rows = Executed ? child.RowsOut : child.EstimateRowsOut(Metadata, null, TableSizeCache);
+                var rows = child is IDataExecutionPlanNode dataChild ? Executed ? dataChild.RowsOut : dataChild.EstimateRowsOut(Metadata, null, TableSizeCache) : 1;
                 var width = rows == 0 ? 1 : (int)Math.Log10(rows);
                 _lines.Add(new Line { Source = child, Start = new Point(iconRect.X, iconRect.Y + iconRect.Height / 2), End = new Point(parentIconRect.Right, parentIconRect.Top + (i + 1) * lineYSpacing), Width = width });
 

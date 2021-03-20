@@ -36,7 +36,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return TrySource.GetSchema(metadata, parameterTypes);
         }
 
-        public override IEnumerable<IDataExecutionPlanNode> GetSources()
+        public override IEnumerable<IExecutionPlanNode> GetSources()
         {
             yield return TrySource;
             yield return CatchSource;

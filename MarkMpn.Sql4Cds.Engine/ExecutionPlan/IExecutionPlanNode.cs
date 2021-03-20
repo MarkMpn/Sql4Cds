@@ -28,7 +28,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// Gets the children of this node
         /// </summary>
         /// <returns></returns>
-        IEnumerable<IDataExecutionPlanNode> GetSources();
+        IEnumerable<IExecutionPlanNode> GetSources();
 
         /// <summary>
         /// Adds 

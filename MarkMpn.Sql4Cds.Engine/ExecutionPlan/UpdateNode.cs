@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Data;
 using System.Linq;
 using System.Text;
 using System.Threading;
@@ -23,7 +24,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public override TimeSpan Duration => _duration;
 
-        public IDataExecutionPlanNode Source { get; set; }
+        public IExecutionPlanNode Source { get; set; }
 
         public string LogicalName { get; set; }
 
@@ -83,7 +84,32 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             using (var timer = new Timer(this))
             {
-                var entities = Source.Execute(org, metadata, options, parameterTypes, parameterValues).ToList();
+                List<Entity> entities;
+
+                if (Source is IDataExecutionPlanNode dataSource)
+                {
+                    entities = dataSource.Execute(org, metadata, options, parameterTypes, parameterValues).ToList();
+                }
+                else if (Source is IDataSetExecutionPlanNode dataSetSource)
+                {
+                    var dataTable = dataSetSource.Execute(org, metadata, options, parameterTypes, parameterValues);
+                    entities = dataTable.Rows
+                        .Cast<DataRow>()
+                        .Select(row =>
+                        {
+                            var entity = new Entity();
+
+                            for (var i = 0; i < dataTable.Columns.Count; i++)
+                                entity[dataTable.Columns[i].ColumnName] = row[i];
+
+                            return entity;
+                        })
+                        .ToList();
+                }
+                else
+                {
+                    throw new QueryExecutionException("Unexpected UPDATE data source") { Node = this };
+                }
 
                 var meta = metadata[LogicalName];
                 var attributes = meta.Attributes.ToDictionary(a => a.LogicalName);
@@ -247,11 +273,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override IRootExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            Source = Source.FoldQuery(metadata, options, parameterTypes);
+            if (Source is IDataExecutionPlanNode dataNode)
+                Source = dataNode.FoldQuery(metadata, options, parameterTypes);
+            else if (Source is IDataSetExecutionPlanNode dataSetNode)
+                Source = dataSetNode.FoldQuery(metadata, options, parameterTypes);
+
             return this;
         }
 
-        public override IEnumerable<IDataExecutionPlanNode> GetSources()
+        public override IEnumerable<IExecutionPlanNode> GetSources()
         {
             yield return Source;
         }

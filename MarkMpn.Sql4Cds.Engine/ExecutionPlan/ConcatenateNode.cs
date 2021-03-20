@@ -53,7 +53,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return schema;
         }
 
-        public override IEnumerable<IDataExecutionPlanNode> GetSources()
+        public override IEnumerable<IExecutionPlanNode> GetSources()
         {
             return Sources;
         }

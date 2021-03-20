@@ -135,26 +135,30 @@ namespace MarkMpn.Sql4Cds.Engine
                 throw new NotSupportedQueryFragmentException("Unsupported UPDATE target", update.Target);
 
             IDataExecutionPlanNode node;
+            string targetAlias;
+            string targetLogicalName;
 
             if (update.FromClause != null)
-                node = ConvertFromClause(update.FromClause.TableReferences, update, null, null, null);
-            else
-                node = ConvertTableReference(update.Target, update, null, null, null);
-
-            var targetSource = FindTargetTable(node, target, true);
-
-            if (targetSource == null)
-                targetSource = FindTargetTable(node, target, false);
-
-            if (targetSource == null)
-                throw new NotSupportedQueryFragmentException("Unknown table", target);
-
-            if (!(targetSource is FetchXmlScan targetFetch))
             {
-                throw new NotSupportedQueryFragmentException("Unsupported UPDATE target", update.Target)
-                {
-                    Suggestion = "Only standard entities can be updated, not metadata"
-                };
+                var updateTarget = new UpdateTargetVisitor(target.SchemaObject.BaseIdentifier.Value);
+                update.FromClause.Accept(updateTarget);
+
+                if (String.IsNullOrEmpty(updateTarget.TargetEntityName))
+                    throw new NotSupportedQueryFragmentException("Target table not found in FROM clause", target);
+
+                if (updateTarget.Ambiguous)
+                    throw new NotSupportedQueryFragmentException("Target table name is ambiguous", target);
+
+                targetAlias = updateTarget.TargetAliasName ?? updateTarget.TargetEntityName;
+                targetLogicalName = updateTarget.TargetEntityName;
+
+                node = ConvertFromClause(update.FromClause.TableReferences, update, null, null, null);
+            }
+            else
+            {
+                targetAlias = target.SchemaObject.BaseIdentifier.Value;
+                targetLogicalName = targetAlias;
+                node = ConvertTableReference(update.Target, update, null, null, null);
             }
 
             if (update.WhereClause == null && Options.BlockUpdateWithoutWhere)
@@ -178,19 +182,19 @@ namespace MarkMpn.Sql4Cds.Engine
             node = ConvertTopClause(node, update.TopRowFilter, null);
 
             // Add UPDATE
-            var updateNode = ConvertSetClause(update.SetClauses, node, targetFetch);
+            var updateNode = ConvertSetClause(update.SetClauses, node, targetLogicalName, targetAlias);
 
             return updateNode;
         }
 
-        private UpdateNode ConvertSetClause(IList<SetClause> setClauses, IDataExecutionPlanNode node, FetchXmlScan targetFetch)
+        private UpdateNode ConvertSetClause(IList<SetClause> setClauses, IDataExecutionPlanNode node, string targetLogicalName, string targetAlias)
         {
-            var targetMetadata = Metadata[targetFetch.Entity.name];
+            var targetMetadata = Metadata[targetLogicalName];
             var update = new UpdateNode
             {
                 Source = node,
                 LogicalName = targetMetadata.LogicalName,
-                PrimaryIdSource = $"{targetFetch.Alias}.{targetMetadata.PrimaryIdAttribute}"
+                PrimaryIdSource = $"{targetAlias}.{targetMetadata.PrimaryIdAttribute}"
             };
             var computeScalar = new ComputeScalarNode { Source = node };
             var schema = node.GetSchema(Metadata, null);
@@ -296,71 +300,6 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             return update;
-        }
-
-        private IDataExecutionPlanNode FindTargetTable(IDataExecutionPlanNode node, NamedTableReference table, bool alias)
-        {
-            if (node is FetchXmlScan fetch)
-            {
-                var name = alias ? fetch.Alias : fetch.Entity.name;
-
-                if (name.Equals(table.SchemaObject.BaseIdentifier.Value, StringComparison.OrdinalIgnoreCase))
-                    return node;
-            }
-
-            if (node is MetadataQueryNode meta)
-            {
-                // Even though we can't update metadata, still return it as the target table so we can give a more helpful error message
-                if (meta.MetadataSource.HasFlag(MetadataSource.Entity))
-                {
-                    var name = alias ? meta.EntityAlias : "entity";
-
-                    if (name.Equals(table.SchemaObject.BaseIdentifier.Value, StringComparison.OrdinalIgnoreCase))
-                        return node;
-                }
-
-                if (meta.MetadataSource.HasFlag(MetadataSource.Attribute))
-                {
-                    var name = alias ? meta.AttributeAlias : "attribute";
-
-                    if (name.Equals(table.SchemaObject.BaseIdentifier.Value, StringComparison.OrdinalIgnoreCase))
-                        return node;
-                }
-
-                if (meta.MetadataSource.HasFlag(MetadataSource.OneToManyRelationship))
-                {
-                    var name = alias ? meta.OneToManyRelationshipAlias : "relationship_1_n";
-
-                    if (name.Equals(table.SchemaObject.BaseIdentifier.Value, StringComparison.OrdinalIgnoreCase))
-                        return node;
-                }
-
-                if (meta.MetadataSource.HasFlag(MetadataSource.ManyToOneRelationship))
-                {
-                    var name = alias ? meta.ManyToOneRelationshipAlias : "relationship_n_1";
-
-                    if (name.Equals(table.SchemaObject.BaseIdentifier.Value, StringComparison.OrdinalIgnoreCase))
-                        return node;
-                }
-
-                if (meta.MetadataSource.HasFlag(MetadataSource.ManyToManyRelationship))
-                {
-                    var name = alias ? meta.ManyToManyRelationshipAlias : "relationship_n_n";
-
-                    if (name.Equals(table.SchemaObject.BaseIdentifier.Value, StringComparison.OrdinalIgnoreCase))
-                        return node;
-                }
-            }
-
-            foreach (var child in node.GetSources())
-            {
-                var match = FindTargetTable(child, table, alias);
-
-                if (match != null)
-                    return match;
-            }
-
-            return null;
         }
 
         private SelectNode ConvertSelectStatement(SelectStatement select)

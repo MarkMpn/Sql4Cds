@@ -264,7 +264,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 meta.LogicalName;
         }
 
-        public override IEnumerable<IDataExecutionPlanNode> GetSources()
+        public override IEnumerable<IExecutionPlanNode> GetSources()
         {
             return Array.Empty<IDataExecutionPlanNode>();
         }

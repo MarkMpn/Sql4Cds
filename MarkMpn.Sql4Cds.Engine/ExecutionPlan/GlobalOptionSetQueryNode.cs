@@ -71,9 +71,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return schema;
         }
 
-        public override IEnumerable<IDataExecutionPlanNode> GetSources()
+        public override IEnumerable<IExecutionPlanNode> GetSources()
         {
-            return Array.Empty<IDataExecutionPlanNode>();
+            return Array.Empty<IExecutionPlanNode>();
         }
 
         protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)

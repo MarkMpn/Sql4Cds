@@ -24,7 +24,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public abstract TimeSpan Duration { get; }
 
-        public abstract IEnumerable<IDataExecutionPlanNode> GetSources();
+        public abstract IEnumerable<IExecutionPlanNode> GetSources();
 
         public abstract void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns);
 

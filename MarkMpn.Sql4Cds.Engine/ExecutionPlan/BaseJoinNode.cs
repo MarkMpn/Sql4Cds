@@ -75,7 +75,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return merged;
         }
 
-        public override IEnumerable<IDataExecutionPlanNode> GetSources()
+        public override IEnumerable<IExecutionPlanNode> GetSources()
         {
             yield return LeftSource;
             yield return RightSource;
