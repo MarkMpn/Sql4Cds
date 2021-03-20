@@ -553,7 +553,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (references.Count == 0)
                 {
-                    if (UseMergeJoin(source, innerQuery, references, testColumn, lhsCol.GetColumnName(), out var outputCol, out var merge))
+                    if (UseMergeJoin(source, innerQuery.Source, references, testColumn, lhsCol.GetColumnName(), out var outputCol, out var merge))
                     {
                         testColumn = outputCol;
                         join = merge;
@@ -561,7 +561,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     else
                     {
                         // We need the inner list to be distinct to avoid creating duplicates during the join
-                        var innerSchema = innerQuery.GetSchema(Metadata, parameters);
+                        var innerSchema = innerQuery.Source.GetSchema(Metadata, parameters);
                         if (innerQuery.ColumnSet[0].SourceColumn != innerSchema.PrimaryKey && !(innerQuery.Source is DistinctNode))
                         {
                             innerQuery.Source = new DistinctNode
@@ -644,7 +644,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 var parameters = parameterTypes == null ? new Dictionary<string, Type>() : new Dictionary<string, Type>(parameterTypes);
                 var references = new Dictionary<string, string>();
                 var innerQuery = ConvertSelectStatement(existsSubquery.Subquery.QueryExpression, schema, references, parameters);
-                var innerSchema = innerQuery.GetSchema(Metadata, parameters);
+                var innerSchema = innerQuery.Source.GetSchema(Metadata, parameters);
 
                 // Create the join
                 BaseJoinNode join;
@@ -696,7 +696,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         }
                     };
                 }
-                else if (UseMergeJoin(source, innerQuery, references, null, null, out _, out var merge))
+                else if (UseMergeJoin(source, innerQuery.Source, references, null, null, out _, out var merge))
                 {
                     join = merge;
                     testColumn = merge.RightAttribute.GetColumnName();
@@ -1309,7 +1309,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 string outputcol;
                 var subqueryCol = subqueryPlan.ColumnSet[0].SourceColumn;
                 BaseJoinNode join = null;
-                if (UseMergeJoin(node, subqueryPlan, outerReferences, subqueryCol, null, out outputcol, out var merge))
+                if (UseMergeJoin(node, subqueryPlan.Source, outerReferences, subqueryCol, null, out outputcol, out var merge))
                 {
                     join = merge;
                 }
@@ -1398,14 +1398,18 @@ namespace MarkMpn.Sql4Cds.Engine
             return null;
         }
 
-        private bool UseMergeJoin(IDataExecutionPlanNode node, SelectNode subqueryPlan, Dictionary<string, string> outerReferences, string subqueryCol, string inPredicateCol, out string outputCol, out MergeJoinNode merge)
+        private bool UseMergeJoin(IDataExecutionPlanNode node, IDataExecutionPlanNode subqueryPlan, Dictionary<string, string> outerReferences, string subqueryCol, string inPredicateCol, out string outputCol, out MergeJoinNode merge)
         {
             outputCol = null;
             merge = null;
 
             // We can use a merge join for a scalar subquery when the subquery is simply SELECT [TOP 1] <column> FROM <table> WHERE <table>.<key> = <outertable>.<column>
             // The filter must be on the inner table's primary key
-            var subNode = subqueryPlan.Source;
+            var subNode = subqueryPlan;
+
+            var alias = subNode as AliasNode;
+            if (alias != null)
+                subNode = alias.Source;
 
             if (subNode is TopNode top && top.Top is IntegerLiteral topLiteral && topLiteral.Value == "1")
                 subNode = top.Source;
@@ -1471,7 +1475,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 return false;
 
             // Give the inner fetch a unique alias
-            if (subqueryPlan is AliasNode alias)
+            if (alias != null)
                 fetch.Alias = alias.Alias;
             else
                 fetch.Alias = $"Expr{++_colNameCounter}";
@@ -2010,7 +2014,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         var spool = new TableSpoolNode { Source = rhs };
                         rhs = spool;
                     }
-                    else if (subqueryPlan is SelectNode subquery && UseMergeJoin(lhs, subquery, lhsReferences, null, null, out _, out var merge))
+                    else if (UseMergeJoin(lhs, subqueryPlan, lhsReferences, null, null, out _, out var merge))
                     {
                         if (unqualifiedJoin.UnqualifiedJoinType == UnqualifiedJoinType.CrossApply)
                             merge.JoinType = QualifiedJoinType.Inner;

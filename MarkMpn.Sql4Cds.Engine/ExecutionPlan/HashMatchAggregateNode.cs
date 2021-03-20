@@ -353,7 +353,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     schema.ContainsColumn(colName, out colName);
 
-                    var attribute = AddAttribute(fetchXml, colName, a => a.groupby == FetchBoolType.@true && a.alias == alias, metadata, out _);
+                    var attribute = fetchXml.AddAttribute(colName, a => a.groupby == FetchBoolType.@true && a.alias == alias, metadata, out _);
                     attribute.groupby = FetchBoolType.@true;
                     attribute.groupbySpecified = true;
                     attribute.alias = alias;
@@ -403,7 +403,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             throw new ArgumentOutOfRangeException();
                     }
 
-                    var attribute = AddAttribute(fetchXml, colName, a => a.aggregate == aggregateType && a.alias == agg.Key, metadata, out _);
+                    var attribute = fetchXml.AddAttribute(colName, a => a.aggregate == aggregateType && a.alias == agg.Key, metadata, out _);
                     attribute.aggregate = aggregateType;
                     attribute.aggregateSpecified = true;
                     attribute.alias = agg.Key;

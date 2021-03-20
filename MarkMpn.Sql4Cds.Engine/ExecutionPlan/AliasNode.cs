@@ -7,7 +7,7 @@ using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    public class AliasNode : SelectNode
+    public class AliasNode : BaseDataNode, ISingleSourceExecutionPlanNode
     {
         public AliasNode(SelectNode select)
         {
@@ -16,6 +16,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         }
 
         public string Alias { get; set; }
+
+        public List<SelectColumn> ColumnSet { get; } = new List<SelectColumn>();
+
+        public IDataExecutionPlanNode Source { get; set; }
 
         public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
         {
@@ -47,7 +51,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            base.FoldQuery(metadata, options, parameterTypes);
+            Source = Source.FoldQuery(metadata, options, parameterTypes);
+            Source.Parent = this;
+
+            SelectNode.FoldFetchXmlColumns(Source, ColumnSet, metadata, parameterTypes);
+            SelectNode.ExpandWildcardColumns(Source, ColumnSet, metadata, parameterTypes);
 
             if (Source is FetchXmlScan fetchXml)
             {
@@ -129,6 +137,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override string ToString()
         {
             return "Subquery Alias";
+        }
+
+        public override int EstimateRowsOut(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, ITableSizeCache tableSize)
+        {
+            return Source.EstimateRowsOut(metadata, parameterTypes, tableSize);
+        }
+
+        public override IEnumerable<IDataExecutionPlanNode> GetSources()
+        {
+            yield return Source;
         }
     }
 }

@@ -961,9 +961,9 @@ namespace MarkMpn.Sql4Cds
 
                     try
                     {
-                        if (query is IDataExecutionPlanNode dataQuery)
+                        if (query is IDataSetExecutionPlanNode dataQuery)
                         {
-                            var result = dataQuery.Execute(Service, Metadata, options, null, null).ToList();
+                            var result = dataQuery.Execute(Service, Metadata, options, null, null);
 
                             Execute(() => ShowResult(query, args, result, null, null));
                         }
@@ -1004,7 +1004,7 @@ namespace MarkMpn.Sql4Cds
             }
         }
 
-        private void ShowResult(IRootExecutionPlanNode query, ExecuteParams args, List<Entity> results, string msg, QueryExecutionException ex)
+        private void ShowResult(IRootExecutionPlanNode query, ExecuteParams args, DataTable results, string msg, QueryExecutionException ex)
         {
             Control result = null;
             Control fetchXml = null;
@@ -1014,9 +1014,7 @@ namespace MarkMpn.Sql4Cds
 
             if (results != null)
             {
-                var entityCollection = new EntityCollection(results);
-
-                var grid = new CRMGridView();
+                var grid = new DataGridView();
 
                 grid.AllowUserToAddRows = false;
                 grid.AllowUserToDeleteRows = false;
@@ -1033,45 +1031,9 @@ namespace MarkMpn.Sql4Cds
                 grid.RowHeadersWidth = 24;
                 grid.ShowEditingIcon = false;
                 grid.ContextMenuStrip = gridContextMenuStrip;
-
-                if (query is SelectNode select)
-                {
-                    foreach (var col in select.ColumnSet)
-                    {
-                        var colName = col.OutputColumn;
-
-                        if (grid.Columns.Contains(colName))
-                        {
-                            var suffix = 1;
-                            while (grid.Columns.Contains($"{col.OutputColumn}_{suffix}"))
-                                suffix++;
-
-                            var newCol = $"{col.OutputColumn}_{suffix}";
-
-                            if (entityCollection != null)
-                            {
-                                foreach (var entity in entityCollection.Entities)
-                                {
-                                    if (entity.Contains(colName))
-                                        entity[newCol] = entity[colName];
-                                }
-                            }
-
-                            colName = newCol;
-                        }
-
-                        grid.Columns.Add(colName, colName);
-                        grid.Columns[colName].FillWeight = 1;
-                    }
-
-                    if (isMetadata)
-                        grid.AutoGenerateColumns = false;
-                }
-
+                grid.DataSource = results;
                 grid.HandleCreated += (s, e) =>
                 {
-                    ((CRMGridView)grid).DataSource = entityCollection;
-
                     if (Settings.Instance.AutoSizeColumns)
                         grid.AutoResizeColumns();
                 };
@@ -1094,10 +1056,7 @@ namespace MarkMpn.Sql4Cds
 
                 result = grid;
 
-                if (entityCollection != null)
-                    rowCount = entityCollection.Entities.Count;
-                //else
-                //    rowCount = dataTable.Rows.Count;
+                rowCount = results.Rows.Count;
 
                 AddMessage(query.Index, query.Length, $"({rowCount} row{(rowCount == 1 ? "" : "s")} affected)", false);
             }

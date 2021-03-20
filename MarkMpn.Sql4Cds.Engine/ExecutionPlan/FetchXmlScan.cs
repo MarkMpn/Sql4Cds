@@ -282,6 +282,98 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return schema;
         }
 
+        internal FetchAttributeType AddAttribute(string colName, Func<FetchAttributeType, bool> predicate, IAttributeMetadataCache metadata, out bool added)
+        {
+            var parts = colName.Split('.');
+
+            if (parts.Length == 1)
+            {
+                added = false;
+                return FindAliasedAttribute(Entity.Items, colName, predicate);
+            }
+
+            var entityName = parts[0];
+            var attr = new FetchAttributeType { name = parts[1] };
+
+            if (Alias == entityName)
+            {
+                var meta = metadata[Entity.name].Attributes.SingleOrDefault(a => a.LogicalName == attr.name);
+                if (meta?.AttributeOf != null)
+                    attr.name = meta.AttributeOf;
+
+                if (Entity.Items != null)
+                {
+                    var existing = Entity.Items.OfType<FetchAttributeType>().FirstOrDefault(a => a.name == attr.name);
+                    if (existing != null && (predicate == null || predicate(existing)))
+                    {
+                        added = false;
+                        return existing;
+                    }
+                }
+
+                Entity.AddItem(attr);
+            }
+            else
+            {
+                var linkEntity = Entity.FindLinkEntity(entityName);
+
+                var meta = metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName == attr.name);
+                if (meta?.AttributeOf != null)
+                    attr.name = meta.AttributeOf;
+
+                if (linkEntity.Items != null)
+                {
+                    var existing = linkEntity.Items.OfType<FetchAttributeType>().FirstOrDefault(a => a.name == attr.name);
+                    if (existing != null && (predicate == null || predicate(existing)))
+                    {
+                        added = false;
+                        return existing;
+                    }
+                }
+
+                linkEntity.AddItem(attr);
+            }
+
+            added = true;
+            return attr;
+        }
+
+        internal bool IsAliasReferenced(string alias)
+        {
+            var entity = FetchXml.Items.OfType<FetchEntityType>().Single();
+            return IsAliasReferenced(entity.Items, alias);
+        }
+
+        private bool IsAliasReferenced(object[] items, string alias)
+        {
+            if (items == null)
+                return false;
+
+            var hasSort = items.OfType<FetchOrderType>().Any(sort => sort.alias.Equals(alias, StringComparison.OrdinalIgnoreCase));
+
+            if (hasSort)
+                return true;
+
+            var hasCondition = items.OfType<condition>().Any(condition => condition.alias.Equals(alias, StringComparison.OrdinalIgnoreCase));
+
+            if (hasCondition)
+                return true;
+
+            foreach (var filter in items.OfType<filter>())
+            {
+                if (IsAliasReferenced(filter.Items, alias))
+                    return true;
+            }
+
+            foreach (var linkEntity in items.OfType<FetchLinkEntityType>())
+            {
+                if (IsAliasReferenced(linkEntity.Items, alias))
+                    return true;
+            }
+
+            return false;
+        }
+
         private void AddAttributes(NodeSchema schema, IAttributeMetadataCache metadata, string entityName, string alias, object[] items)
         {
             if (items == null && !ReturnFullSchema)

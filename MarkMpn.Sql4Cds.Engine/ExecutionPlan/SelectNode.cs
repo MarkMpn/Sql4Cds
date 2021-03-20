@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Data;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -9,8 +10,11 @@ using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    public class SelectNode : BaseDataNode, ISingleSourceExecutionPlanNode, IRootExecutionPlanNode
+    public class SelectNode : BaseNode, ISingleSourceExecutionPlanNode, IDataSetExecutionPlanNode
     {
+        private TimeSpan _duration;
+        private int _executionCount;
+
         /// <summary>
         /// The columns that should be included in the query results
         /// </summary>
@@ -30,19 +34,43 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public int Length { get; set; }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
-        {
-            foreach (var entity in Source.Execute(org, metadata, options, parameterTypes, parameterValues))
-            {
-                foreach (var col in ColumnSet)
-                {
-                    if (!entity.Contains(col.SourceColumn))
-                        throw new QueryExecutionException($"Missing column {col.SourceColumn}");
+        public override TimeSpan Duration => _duration;
 
-                    entity[col.OutputColumn] = entity[col.SourceColumn];
+        public override int ExecutionCount => _executionCount;
+
+        public DataTable Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        {
+            _executionCount++;
+            var startTime = DateTime.Now;
+
+            try
+            {
+                var dataTable = new DataTable();
+
+                foreach (var col in ColumnSet)
+                    dataTable.Columns.Add(col.OutputColumn);
+
+                foreach (var entity in Source.Execute(org, metadata, options, parameterTypes, parameterValues))
+                {
+                    var row = dataTable.NewRow();
+
+                    foreach (var col in ColumnSet)
+                    {
+                        if (!entity.Contains(col.SourceColumn))
+                            throw new QueryExecutionException($"Missing column {col.SourceColumn}");
+
+                        row[col.OutputColumn] = entity[col.SourceColumn];
+                    }
+
+                    dataTable.Rows.Add(row);
                 }
 
-                yield return entity;
+                return dataTable;
+            }
+            finally
+            {
+                var endTime = DateTime.Now;
+                _duration += (endTime - startTime);
             }
         }
 
@@ -51,58 +79,78 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        public override NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
-        {
-            return Source.GetSchema(metadata, parameterTypes);
-        }
-
-        public override IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public IRootExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             Source = Source.FoldQuery(metadata, options, parameterTypes);
             Source.Parent = this;
 
-            if (Source is FetchXmlScan fetchXml)
+            FoldFetchXmlColumns(Source, ColumnSet, metadata, parameterTypes);
+
+            ExpandWildcardColumns(metadata, parameterTypes);
+
+            // Ensure column names are unique
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var col in ColumnSet)
+            {
+                if (!names.Add(col.OutputColumn))
+                {
+                    var suffix = 1;
+
+                    while (!names.Add(col.OutputColumn + suffix))
+                        suffix++;
+
+                    col.OutputColumn += suffix;
+                }
+            }
+
+            return this;
+        }
+
+        internal static void FoldFetchXmlColumns(IDataExecutionPlanNode source, List<SelectColumn> columnSet, IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
+        {
+            if (source is FetchXmlScan fetchXml)
             {
                 // Check if there are any aliases we can apply to the source FetchXml
                 var schema = fetchXml.GetSchema(metadata, parameterTypes);
                 var processedSourceColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                var hasStar = ColumnSet.Any(col => col.AllColumns && col.SourceColumn == null);
-                var aliasStars = new HashSet<string>(ColumnSet.Where(col => col.AllColumns && col.SourceColumn != null).Select(col => col.SourceColumn.Replace(".*", "")).Distinct(StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase);
+                var hasStar = columnSet.Any(col => col.AllColumns && col.SourceColumn == null);
+                var aliasStars = new HashSet<string>(columnSet.Where(col => col.AllColumns && col.SourceColumn != null).Select(col => col.SourceColumn.Replace(".*", "")).Distinct(StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase);
 
-                foreach (var col in ColumnSet)
+                foreach (var col in columnSet)
                 {
                     if (col.AllColumns)
                     {
                         if (col.SourceColumn == null)
                         {
-                            // Add an allattributes to the main entity and all link-entities
+                            // Add an all-attributes to the main entity and all link-entities
                             fetchXml.Entity.AddItem(new allattributes());
 
-                            foreach (var link in GetLinkEntities(fetchXml.Entity.Items))
+                            foreach (var link in fetchXml.Entity.GetLinkEntities())
                                 link.AddItem(new allattributes());
                         }
                         else if (!hasStar)
                         {
-                            // Only add an allattributes to the appropriate entity/link-entity
+                            // Only add an all-attributes to the appropriate entity/link-entity
                             var link = fetchXml.Entity.FindLinkEntity(col.SourceColumn.Replace(".*", ""));
                             link.AddItem(new allattributes());
                         }
                     }
                     else if (!hasStar)
                     {
-                        // Only fold individual columns down to the FetchXML if there is no corresponding allatributes
+                        // Only fold individual columns down to the FetchXML if there is no corresponding all-attributes
                         var parts = col.SourceColumn.Split('.');
 
                         if (parts.Length == 1 || !aliasStars.Contains(parts[0]))
                         {
                             var sourceCol = col.SourceColumn;
                             schema.ContainsColumn(sourceCol, out sourceCol);
-                            var attr = AddAttribute(fetchXml, sourceCol, null, metadata, out var added);
+                            var attr = fetchXml.AddAttribute(sourceCol, null, metadata, out var added);
 
                             // Check if we can fold the alias down to the FetchXML too. Don't do this if 
                             if (col.OutputColumn != parts.Last())
                             {
-                                if (added || (!processedSourceColumns.Contains(col.SourceColumn) && !IsAliasReferenced(fetchXml, attr.alias)))
+                                if (added || (!processedSourceColumns.Contains(col.SourceColumn) && !fetchXml.IsAliasReferenced(attr.alias)))
                                 {
                                     attr.alias = col.OutputColumn;
                                     col.SourceColumn = col.OutputColumn;
@@ -118,14 +166,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                 }
             }
+        }
 
+        public void ExpandWildcardColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
+        {
+            ExpandWildcardColumns(Source, ColumnSet, metadata, parameterTypes);
+        }
+
+        internal static void ExpandWildcardColumns(IDataExecutionPlanNode source, List<SelectColumn> columnSet, IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
+        {
             // Expand any AllColumns
-            if (ColumnSet.Any(col => col.AllColumns))
+            if (columnSet.Any(col => col.AllColumns))
             {
-                var schema = Source.GetSchema(metadata, parameterTypes);
+                var schema = source.GetSchema(metadata, parameterTypes);
                 var expanded = new List<SelectColumn>();
 
-                foreach (var col in ColumnSet)
+                foreach (var col in columnSet)
                 {
                     if (!col.AllColumns)
                     {
@@ -143,16 +199,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                 }
 
-                ColumnSet.Clear();
-                ColumnSet.AddRange(expanded);
+                columnSet.Clear();
+                columnSet.AddRange(expanded);
             }
-
-            return this;
         }
 
         IRootExecutionPlanNode IRootExecutionPlanNode.FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            return (IRootExecutionPlanNode)this.FoldQuery(metadata, options, parameterTypes);
+            return this.FoldQuery(metadata, options, parameterTypes);
         }
 
         public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
@@ -164,25 +218,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             Source.AddRequiredColumns(metadata, parameterTypes, requiredColumns);
-        }
-
-        private IEnumerable<FetchLinkEntityType> GetLinkEntities(object[] items)
-        {
-            if (items == null)
-                yield break;
-
-            foreach (var link in items.OfType<FetchLinkEntityType>())
-            {
-                yield return link;
-
-                foreach (var subLink in GetLinkEntities(link.Items))
-                    yield return subLink;
-            }
-        }
-
-        public override int EstimateRowsOut(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, ITableSizeCache tableSize)
-        {
-            return Source.EstimateRowsOut(metadata, parameterTypes, tableSize);
         }
 
         public override string ToString()

@@ -80,6 +80,7 @@
     <Compile Include="ExecutionPlan\HashJoinNode.cs" />
     <Compile Include="ExecutionPlan\HashMatchAggregateNode.cs" />
     <Compile Include="ExecutionPlan\IDataExecutionPlanNode.cs" />
+    <Compile Include="ExecutionPlan\IDataSetExecutionPlanNode.cs" />
     <Compile Include="ExecutionPlan\IDmlQueryExecutionPlanNode.cs" />
     <Compile Include="ExecutionPlan\IExecutionPlanNode.cs" />
     <Compile Include="ExecutionPlan\FoldableJoinNode.cs" />
