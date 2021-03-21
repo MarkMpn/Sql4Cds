@@ -559,7 +559,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     // get all the related records and spool that in memory to get the relevant results in the nested loop. Need to understand how 
                     // many rows are likely from the outer query to work out if this is going to be more efficient or not.
                     if (innerQuery.Source is ISingleSourceExecutionPlanNode loopRightSourceSimple)
-                        InsertCorrelatedSubquerySpool(loopRightSourceSimple, source, parameterTypes);
+                        InsertCorrelatedSubquerySpool(loopRightSourceSimple, source, hints, parameterTypes);
 
                     var definedValue = $"Expr{++_colNameCounter}";
 
@@ -679,7 +679,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     // get all the related records and spool that in memory to get the relevant results in the nested loop. Need to understand how 
                     // many rows are likely from the outer query to work out if this is going to be more efficient or not.
                     if (innerQuery.Source is ISingleSourceExecutionPlanNode loopRightSourceSimple)
-                        InsertCorrelatedSubquerySpool(loopRightSourceSimple, source, parameterTypes);
+                        InsertCorrelatedSubquerySpool(loopRightSourceSimple, source, hints, parameterTypes);
 
                     // We only need one record to check for EXISTS
                     if (!(innerQuery.Source is TopNode) && !(innerQuery.Source is OffsetFetchNode))
@@ -1335,7 +1335,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
                     else if (loopRightSource is ISingleSourceExecutionPlanNode loopRightSourceSimple)
                     {
-                        InsertCorrelatedSubquerySpool(loopRightSourceSimple, node, parameterTypes);
+                        InsertCorrelatedSubquerySpool(loopRightSourceSimple, node, hints, parameterTypes);
                     }
 
                     // Add a nested loop to call the subquery
@@ -1473,8 +1473,11 @@ namespace MarkMpn.Sql4Cds.Engine
             return true;
         }
         
-        private void InsertCorrelatedSubquerySpool(ISingleSourceExecutionPlanNode node, IDataExecutionPlanNode outerSource, IDictionary<string, Type> parameterTypes)
+        private void InsertCorrelatedSubquerySpool(ISingleSourceExecutionPlanNode node, IDataExecutionPlanNode outerSource, IList<OptimizerHint> hints, IDictionary<string, Type> parameterTypes)
         {
+            if (hints.Any(hint => hint.HintKind == OptimizerHintKind.NoPerformanceSpool))
+                return;
+
             // Look for a simple case where there is a reference to the outer table in a filter node. Extract the minimal
             // amount of that filter to a new filter node and place a table spool between the correlated filter and its source
 
@@ -1579,7 +1582,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (lastCorrelatedStep == null)
                 return;
 
-            // TODO: Check the estimated counts for the outer loop and the source at the point we'd insert the spool
+            // Check the estimated counts for the outer loop and the source at the point we'd insert the spool
             // If the outer loop is non-trivial (>= 100 rows) or the inner loop is small (<= 5000 records) then we want
             // to use the spool.
             var outerCount = outerSource.EstimateRowsOut(Metadata, parameterTypes, TableSize);
@@ -1994,7 +1997,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
                     else if (rhs is ISingleSourceExecutionPlanNode loopRightSourceSimple)
                     {
-                        InsertCorrelatedSubquerySpool(loopRightSourceSimple, lhs, parameterTypes);
+                        InsertCorrelatedSubquerySpool(loopRightSourceSimple, lhs, hints, parameterTypes);
                     }
                 }
 
