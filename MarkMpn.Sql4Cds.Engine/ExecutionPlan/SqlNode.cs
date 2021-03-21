@@ -40,6 +40,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             try
             {
                 var svc = (CrmServiceClient) org;
+
+                if (svc.CallerId != Guid.Empty)
+                    throw new InvalidOperationException("Cannot use impersonation with the TDS Endpoint");
+
                 using (var con = new SqlConnection("server=" + svc.CrmConnectOrgUriActual.Host))
                 {
                     con.AccessToken = svc.CurrentAccessToken;
@@ -59,6 +63,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         return result;
                     }
                 }
+            }
+            catch (Exception ex)
+            {
+                throw new QueryExecutionException(ex.Message, ex)
+                {
+                    Node = this
+                };
             }
             finally
             {
