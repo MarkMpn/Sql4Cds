@@ -2367,6 +2367,33 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 </fetch>");
         }
 
+        [TestMethod]
+        public void QueryHints()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT accountid, name FROM account OPTION (OPTIMIZE FOR UNKNOWN, FORCE ORDER, RECOMPILE, USE HINT('DISABLE_OPTIMIZER_ROWGOAL'), USE HINT('ENABLE_QUERY_OPTIMIZER_HOTFIXES'), LOOP JOIN, MERGE JOIN, HASH JOIN, NO_PERFORMANCE_SPOOL, MAXRECURSION 2)";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch options='OptimizeForUnknown,ForceOrder,Recompile,DisableRowGoal,EnableOptimizerHotfixes,LoopJoin,MergeJoin,HashJoin,NO_PERFORMANCE_SPOOL,MaxRecursion=2'>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                        <attribute name='name' />
+                    </entity>
+                </fetch>");
+        }
+
         private T AssertNode<T>(IExecutionPlanNode node) where T : IExecutionPlanNode
         {
             Assert.IsInstanceOfType(node, typeof(T));

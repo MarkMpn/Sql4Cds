@@ -1684,6 +1684,9 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml {
                 this.nolockField = value;
             }
         }
+
+        [System.Xml.Serialization.XmlAttributeAttribute("options")]
+        public string options { get; set; }
     }
     
     /// <remarks/>
