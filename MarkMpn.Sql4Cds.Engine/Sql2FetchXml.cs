@@ -2112,15 +2112,15 @@ namespace MarkMpn.Sql4Cds.Engine
                         break;
 
                     case "MAX":
-                        aggregateFunction = new Max(selector);
+                        aggregateFunction = new Max(selector, expression.Type);
                         break;
 
                     case "MIN":
-                        aggregateFunction = new Min(selector);
+                        aggregateFunction = new Min(selector, expression.Type);
                         break;
 
                     case "SUM":
-                        aggregateFunction = new Sum(selector);
+                        aggregateFunction = new Sum(selector, expression.Type);
                         break;
 
                     default:

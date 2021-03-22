@@ -29,6 +29,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var left = LeftSource.Execute(org, metadata, options, parameterTypes, parameterValues).GetEnumerator();
             var right = RightSource.Execute(org, metadata, options, parameterTypes, parameterValues).GetEnumerator();
             var mergedSchema = GetSchema(metadata, parameterTypes);
+            var additionalJoinCriteria = AdditionalJoinCriteria?.Compile(mergedSchema, parameterTypes);
 
             var hasLeft = left.MoveNext();
             var hasRight = right.MoveNext();
@@ -40,30 +41,30 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 FirstExpression = LeftAttribute,
                 ComparisonType = BooleanComparisonType.LessThan,
                 SecondExpression = RightAttribute
-            };
+            }.Compile(mergedSchema, parameterTypes);
 
             var eq = new BooleanComparisonExpression
             {
                 FirstExpression = LeftAttribute,
                 ComparisonType = BooleanComparisonType.Equals,
                 SecondExpression = RightAttribute
-            };
+            }.Compile(mergedSchema, parameterTypes);
 
             var gt = new BooleanComparisonExpression
             {
                 FirstExpression = LeftAttribute,
                 ComparisonType = BooleanComparisonType.GreaterThan,
                 SecondExpression = RightAttribute
-            };
+            }.Compile(mergedSchema, parameterTypes);
 
             while (!Done(hasLeft, hasRight))
             {
                 // Compare key values
                 var merged = Merge(hasLeft ? left.Current : null, leftSchema, hasRight ? right.Current : null, rightSchema);
 
-                var isLt = lt.GetValue(merged, mergedSchema, parameterTypes, parameterValues);
-                var isEq = eq.GetValue(merged, mergedSchema, parameterTypes, parameterValues);
-                var isGt = gt.GetValue(merged, mergedSchema, parameterTypes, parameterValues);
+                var isLt = lt(merged, parameterValues);
+                var isEq = eq(merged, parameterValues);
+                var isGt = gt(merged, parameterValues);
 
                 if (isLt || (hasLeft && !hasRight))
                 {
@@ -75,7 +76,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
                 else if (isEq)
                 {
-                    if ((!leftMatched || !SemiJoin) && (AdditionalJoinCriteria == null || AdditionalJoinCriteria.GetValue(merged, mergedSchema, parameterTypes, parameterValues) == true))
+                    if ((!leftMatched || !SemiJoin) && (additionalJoinCriteria == null || additionalJoinCriteria(merged, parameterValues) == true))
                         yield return merged;
 
                     leftMatched = true;

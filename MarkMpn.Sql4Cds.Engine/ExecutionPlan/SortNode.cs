@@ -33,6 +33,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var source = Source.Execute(org, metadata, options, parameterTypes, parameterValues);
             var schema = GetSchema(metadata, parameterTypes);
+            var expressions = Sorts.Select(sort => sort.Expression.Compile(schema, parameterTypes)).ToList();
 
             if (PresortedCount == 0)
             {
@@ -41,16 +42,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 IOrderedEnumerable<Entity> sortedSource;
 
                 if (Sorts[0].SortOrder == SortOrder.Descending)
-                    sortedSource = source.OrderByDescending(e => Sorts[0].Expression.GetValue(e, schema, parameterTypes, parameterValues), CaseInsensitiveObjectComparer.Instance);
+                    sortedSource = source.OrderByDescending(e => expressions[0](e, parameterValues), CaseInsensitiveObjectComparer.Instance);
                 else
-                    sortedSource = source.OrderBy(e => Sorts[0].Expression.GetValue(e, schema, parameterTypes, parameterValues), CaseInsensitiveObjectComparer.Instance);
+                    sortedSource = source.OrderBy(e => expressions[0](e, parameterValues), CaseInsensitiveObjectComparer.Instance);
 
-                foreach (var sort in Sorts.Skip(1))
+                for (var i = 1; i < Sorts.Count; i++)
                 {
-                    if (sort.SortOrder == SortOrder.Descending)
-                        sortedSource = sortedSource.ThenByDescending(e => sort.Expression.GetValue(e, schema, parameterTypes, parameterValues), CaseInsensitiveObjectComparer.Instance);
+                    var expr = expressions[i];
+
+                    if (Sorts[i].SortOrder == SortOrder.Descending)
+                        sortedSource = sortedSource.ThenByDescending(e => expr(e, parameterValues), CaseInsensitiveObjectComparer.Instance);
                     else
-                        sortedSource = sortedSource.ThenBy(e => sort.Expression.GetValue(e, schema, parameterTypes, parameterValues), CaseInsensitiveObjectComparer.Instance);
+                        sortedSource = sortedSource.ThenBy(e => expr(e, parameterValues), CaseInsensitiveObjectComparer.Instance);
                 }
 
                 foreach (var entity in sortedSource)
@@ -68,9 +71,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 foreach (var next in source)
                 {
                     // Get the other values to sort on from this next record
-                    var nextSortedValues = Sorts
+                    var nextSortedValues = expressions
                         .Take(PresortedCount)
-                        .Select(sort => sort.Expression.GetValue(next, schema, parameterTypes, parameterValues))
+                        .Select(expr => expr(next, parameterValues))
                         .ToList();
 
                     // If we've already got a subset to work on, check if this fits in the same subset
@@ -86,7 +89,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             {
                                 // A value is different, so this record doesn't fit in the same subset. Sort the subset
                                 // by the remaining sorts and return the values from it
-                                SortSubset(subset, schema, parameterTypes, parameterValues);
+                                SortSubset(subset, schema, parameterTypes, parameterValues, expressions);
 
                                 foreach (var entity in subset)
                                     yield return entity;
@@ -106,14 +109,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 // Sort and return the final subset
-                SortSubset(subset, schema, parameterTypes, parameterValues);
+                SortSubset(subset, schema, parameterTypes, parameterValues, expressions);
 
                 foreach (var entity in subset)
                     yield return entity;
             }
         }
 
-        private void SortSubset(List<Entity> subset, NodeSchema schema, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        private void SortSubset(List<Entity> subset, NodeSchema schema, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues, List<Func<Entity, IDictionary<string, object>, object>> expressions)
         {
             // Simple case if there's no need to do any further sorting
             if (subset.Count <= 1)
@@ -121,7 +124,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Precalculate the sort keys for the remaining sorts
             var sortKeys = subset
-                .ToDictionary(entity => entity, entity => Sorts.Skip(PresortedCount).Select(sort => sort.Expression.GetValue(entity, schema, parameterTypes, parameterValues)).ToList());
+                .ToDictionary(entity => entity, entity => expressions.Skip(PresortedCount).Select(expr => expr(entity, parameterValues)).ToList());
 
             // Sort the list according to these sort keys
             subset.Sort((x, y) =>
@@ -213,7 +216,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                         if (top != null)
                         {
-                            if (!IsConstantValueExpression(top.Top, null, out var topLiteral))
+                            if (!top.Top.IsConstantValueExpression(null, out var topLiteral))
                                 return this;
 
                             if (Int32.Parse(topLiteral.Value) > 50000)
@@ -221,8 +224,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         }
                         else if (offset != null)
                         {
-                            if (!IsConstantValueExpression(offset.Offset, null, out var offsetLiteral) ||
-                                !IsConstantValueExpression(offset.Fetch, null, out var fetchLiteral))
+                            if (!offset.Offset.IsConstantValueExpression(null, out var offsetLiteral) ||
+                                !offset.Fetch.IsConstantValueExpression(null, out var fetchLiteral))
                                 return this;
 
                             if (Int32.Parse(offsetLiteral.Value) + Int32.Parse(fetchLiteral.Value) > 50000)

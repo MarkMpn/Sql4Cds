@@ -29,10 +29,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             var schema = Source.GetSchema(metadata, parameterTypes);
+            var filter = Filter.Compile(schema, parameterTypes);
 
             foreach (var entity in Source.Execute(org, metadata, options, parameterTypes, parameterValues))
             {
-                if (Filter.GetValue(entity, schema, parameterTypes, parameterValues))
+                if (filter(entity, parameterValues))
                     yield return entity;
             }
         }

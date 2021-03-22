@@ -40,6 +40,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var rightSchema = RightSource.GetSchema(metadata, innerParameterTypes);
             var mergedSchema = GetSchema(metadata, parameterTypes);
+            var joinCondition = JoinCondition?.Compile(mergedSchema, parameterTypes);
 
             foreach (var left in LeftSource.Execute(org, metadata, options, parameterTypes, parameterValues))
             {
@@ -65,7 +66,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     var merged = Merge(left, leftSchema, right, rightSchema);
 
-                    if (JoinCondition == null || JoinCondition.GetValue(merged, mergedSchema, parameterTypes, parameterValues))
+                    if (joinCondition == null || joinCondition(merged, parameterValues))
                         yield return merged;
 
                     hasRight = true;

@@ -20,9 +20,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             private readonly int _hashCode;
 
-            public GroupingKey(Entity entity, List<ColumnReferenceExpression> columns)
+            public GroupingKey(Entity entity, List<string> columns)
             {
-                Values = columns.Select(col => entity[col.GetColumnName()]).ToList();
+                Values = columns.Select(col => entity[col]).ToList();
                 _hashCode = 0;
 
                 foreach (var value in Values)
@@ -68,10 +68,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var groups = new Dictionary<GroupingKey, Dictionary<string,AggregateFunction>>();
             var schema = Source.GetSchema(metadata, parameterTypes);
+            var groupByCols = GroupBy
+                .Select(col =>
+                {
+                    var colName = col.GetColumnName();
+                    schema.ContainsColumn(colName, out colName);
+                    return colName;
+                })
+                .ToList();
+
+            foreach (var aggregate in Aggregates.Where(agg => agg.Value.SqlExpression != null))
+            {
+                aggregate.Value.Expression = aggregate.Value.SqlExpression.Compile(schema, parameterTypes);
+                aggregate.Value.ExpressionType = aggregate.Value.SqlExpression.GetType(schema, parameterTypes);
+            }
 
             foreach (var entity in Source.Execute(org, metadata, options, parameterTypes, parameterValues))
             {
-                var key = new GroupingKey(entity, GroupBy);
+                var key = new GroupingKey(entity, groupByCols);
 
                 if (!groups.TryGetValue(key, out var values))
                 {
@@ -82,11 +96,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         switch (aggregate.Value.AggregateType)
                         {
                             case AggregateType.Average:
-                                values[aggregate.Key] = new Average(e => aggregate.Value.Expression.GetValue(e, schema, parameterTypes, parameterValues));
+                                values[aggregate.Key] = new Average(e => aggregate.Value.Expression(e, parameterValues));
                                 break;
 
                             case AggregateType.Count:
-                                values[aggregate.Key] = new CountColumn(e => aggregate.Value.Expression.GetValue(e, schema, parameterTypes, parameterValues));
+                                values[aggregate.Key] = new CountColumn(e => aggregate.Value.Expression(e, parameterValues));
                                 break;
 
                             case AggregateType.CountStar:
@@ -94,19 +108,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 break;
 
                             case AggregateType.Max:
-                                values[aggregate.Key] = new Max(e => aggregate.Value.Expression.GetValue(e, schema, parameterTypes, parameterValues));
+                                values[aggregate.Key] = new Max(e => aggregate.Value.Expression(e, parameterValues), aggregate.Value.ExpressionType);
                                 break;
 
                             case AggregateType.Min:
-                                values[aggregate.Key] = new Min(e => aggregate.Value.Expression.GetValue(e, schema, parameterTypes, parameterValues));
+                                values[aggregate.Key] = new Min(e => aggregate.Value.Expression(e, parameterValues), aggregate.Value.ExpressionType);
                                 break;
 
                             case AggregateType.Sum:
-                                values[aggregate.Key] = new Sum(e => aggregate.Value.Expression.GetValue(e, schema, parameterTypes, parameterValues));
+                                values[aggregate.Key] = new Sum(e => aggregate.Value.Expression(e, parameterValues), aggregate.Value.ExpressionType);
                                 break;
 
                             case AggregateType.First:
-                                values[aggregate.Key] = new First(e => aggregate.Value.Expression.GetValue(e, schema, parameterTypes, parameterValues));
+                                values[aggregate.Key] = new First(e => aggregate.Value.Expression(e, parameterValues), aggregate.Value.ExpressionType);
                                 break;
 
                             default:
@@ -126,7 +140,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var result = new Entity();
 
                 for (var i = 0; i < GroupBy.Count; i++)
-                    result[GroupBy[i].GetColumnName()] = group.Key.Values[i];
+                    result[groupByCols[i]] = group.Key.Values[i];
 
                 foreach (var aggregate in group.Value)
                     result[aggregate.Key] = aggregate.Value.Value;
@@ -170,7 +184,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         break;
 
                     default:
-                        aggregateType = aggregate.Value.Expression.GetType(sourceSchema, parameterTypes);
+                        aggregateType = aggregate.Value.SqlExpression.GetType(sourceSchema, parameterTypes);
                         break;
                 }
 
@@ -230,7 +244,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // be handled - if any one needs to be calculated manually, we need to calculate them all
                 foreach (var agg in Aggregates)
                 {
-                    if (agg.Value.Expression != null && !(agg.Value.Expression is ColumnReferenceExpression))
+                    if (agg.Value.SqlExpression != null && !(agg.Value.SqlExpression is ColumnReferenceExpression))
                         return this;
 
                     if (agg.Value.Distinct && agg.Value.AggregateType != ExecutionPlan.AggregateType.Count)
@@ -367,7 +381,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 foreach (var agg in Aggregates)
                 {
-                    var col = (ColumnReferenceExpression)agg.Value.Expression;
+                    var col = (ColumnReferenceExpression)agg.Value.SqlExpression;
                     var colName = col == null ? schema.PrimaryKey : col.GetColumnName();
                     schema.ContainsColumn(colName, out colName);
 
@@ -428,7 +442,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (GroupBy != null)
                 scalarRequiredColumns.AddRange(GroupBy.Select(g => g.GetColumnName()));
 
-            scalarRequiredColumns.AddRange(Aggregates.Where(agg => agg.Value.Expression != null).SelectMany(agg => agg.Value.Expression.GetColumns()).Distinct());
+            scalarRequiredColumns.AddRange(Aggregates.Where(agg => agg.Value.SqlExpression != null).SelectMany(agg => agg.Value.SqlExpression.GetColumns()).Distinct());
 
             Source.AddRequiredColumns(metadata, parameterTypes, scalarRequiredColumns);
         }

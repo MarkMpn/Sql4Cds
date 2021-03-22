@@ -26,6 +26,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             _hashTable = new Dictionary<object, List<OuterRecord>>(CaseInsensitiveObjectComparer.Instance);
             var mergedSchema = GetSchema(metadata, parameterTypes);
+            var additionalJoinCriteria = AdditionalJoinCriteria?.Compile(mergedSchema, parameterTypes);
 
             // Build the hash table
             var leftSchema = LeftSource.GetSchema(metadata, parameterTypes);
@@ -62,7 +63,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                         var merged = Merge(left.Entity, leftSchema, entity, rightSchema);
 
-                        if (AdditionalJoinCriteria == null || AdditionalJoinCriteria.GetValue(merged, mergedSchema, parameterTypes, parameterValues))
+                        if (additionalJoinCriteria == null || additionalJoinCriteria(merged, parameterValues))
                         {
                             yield return merged;
                             left.Used = true;

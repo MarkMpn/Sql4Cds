@@ -236,7 +236,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         throw new InvalidOperationException();
                 }
 
-                var condition = new MetadataConditionExpression(parts[1], op, literal.GetValue(null, null, null, null));
+                var condition = new MetadataConditionExpression(parts[1], op, literal.Compile(null, null)(null, null));
 
                 return TranslateMetadataCondition(condition, parts[0], meta, out entityFilter, out attributeFilter, out relationshipFilter);
             }
@@ -260,7 +260,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (inPred.Values.Any(val => !(val is Literal)))
                     return false;
 
-                var condition = new MetadataConditionExpression(parts[1], inPred.NotDefined ? MetadataConditionOperator.NotIn : MetadataConditionOperator.In, inPred.Values.Select(val => val.GetValue(null, null, null, null)).ToArray());
+                var condition = new MetadataConditionExpression(parts[1], inPred.NotDefined ? MetadataConditionOperator.NotIn : MetadataConditionOperator.In, inPred.Values.Select(val => val.Compile(null, null)(null, null)).ToArray());
 
                 return TranslateMetadataCondition(condition, parts[0], meta, out entityFilter, out attributeFilter, out relationshipFilter);
             }
@@ -447,7 +447,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 // If we still couldn't find the column name and value, this isn't a pattern we can support in FetchXML
-                if (field == null || (literal == null && func == null && variable == null && (field2 == null || !options.ColumnComparisonAvailable) && !IsConstantValueExpression(expr, schema, out literal)))
+                if (field == null || (literal == null && func == null && variable == null && (field2 == null || !options.ColumnComparisonAvailable) && !expr.IsConstantValueExpression(schema, out literal)))
                     return false;
 
                 // Select the correct FetchXML operator
@@ -552,7 +552,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
                 else if (func != null)
                 {
-                    if (IsConstantValueExpression(func, schema, out literal))
+                    if (func.IsConstantValueExpression(schema, out literal))
                         value = literal.Value;
                     else
                         throw new PostProcessingRequiredException("Unsupported FetchXML function", func);
@@ -822,48 +822,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return null;
-        }
-
-        protected bool IsConstantValueExpression(ScalarExpression expr, NodeSchema schema, out Literal literal)
-        {
-            literal = null;
-
-            var columnVisitor = new ColumnCollectingVisitor();
-            expr.Accept(columnVisitor);
-
-            if (columnVisitor.Columns.Count > 0)
-                return false;
-
-            var variableVisitor = new VariableCollectingVisitor();
-            expr.Accept(variableVisitor);
-
-            if (variableVisitor.Variables.Count > 0)
-                return false;
-
-            var value = expr.GetValue(null, schema, null, null);
-
-            if (value is int i)
-                literal = new IntegerLiteral { Value = i.ToString() };
-            else if (value == null)
-                literal = new NullLiteral();
-            else if (value is decimal dec)
-                literal = new NumericLiteral { Value = dec.ToString() };
-            else if (value is double dbl)
-                literal = new NumericLiteral { Value = dbl.ToString() };
-            else if (value is float flt)
-                literal = new RealLiteral { Value = flt.ToString() };
-            else if (value is string str)
-                literal = new StringLiteral { Value = str };
-            else if (value is DateTime dt)
-                literal = new StringLiteral { Value = dt.ToString("o") };
-            else if (value is EntityReference er)
-                literal = new StringLiteral { Value = er.Id.ToString() };
-            else if (value is Guid g)
-                literal = new StringLiteral { Value = g.ToString() };
-            else
-                return false;
-
-            return true;
         }
     }
 }

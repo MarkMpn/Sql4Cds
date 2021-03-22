@@ -905,7 +905,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 };
 
                 if (!(aggregate.Expression.Parameters[0] is ColumnReferenceExpression col) || col.ColumnType != ColumnType.Wildcard)
-                    converted.Expression = aggregate.Expression.Parameters[0];
+                    converted.SqlExpression = aggregate.Expression.Parameters[0];
 
                 switch (aggregate.Expression.FunctionName.Value.ToUpper())
                 {
@@ -914,7 +914,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         break;
 
                     case "COUNT":
-                        if (converted.Expression == null)
+                        if (converted.SqlExpression == null)
                             converted.AggregateType = AggregateType.CountStar;
                         else
                             converted.AggregateType = AggregateType.Count;
@@ -1303,7 +1303,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                 [subqueryCol] = new Aggregate
                                 {
                                     AggregateType = AggregateType.First,
-                                    Expression = new ColumnReferenceExpression
+                                    SqlExpression = new ColumnReferenceExpression
                                     {
                                         MultiPartIdentifier = new MultiPartIdentifier
                                         {
@@ -1509,7 +1509,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
                 else if (node is HashMatchAggregateNode agg)
                 {
-                    if (agg.Aggregates.Values.Any(a => a.Expression != null && a.Expression.GetVariables().Any()))
+                    if (agg.Aggregates.Values.Any(a => a.SqlExpression != null && a.SqlExpression.GetVariables().Any()))
                         lastCorrelatedStep = agg;
 
                     node = agg.Source as ISingleSourceExecutionPlanNode;
@@ -1949,7 +1949,12 @@ namespace MarkMpn.Sql4Cds.Engine
                     var entity = new Entity();
 
                     for (var colIndex = 0; colIndex < types.Count; colIndex++)
-                        entity[columnNames[colIndex]] = SqlTypeConverter.ChangeType(row.ColumnValues[colIndex].GetValue(null, null, null, null), types[colIndex]);
+                    {
+                        if (!row.ColumnValues[colIndex].IsConstantValueExpression(null, out var literal))
+                            throw new NotSupportedQueryFragmentException("Literal value expected", row.ColumnValues[colIndex]);
+
+                        entity[columnNames[colIndex]] = SqlTypeConverter.ChangeType(literal.Value, types[colIndex]);
+                    }
 
                     constantScan.Values.Add(entity);
                 }

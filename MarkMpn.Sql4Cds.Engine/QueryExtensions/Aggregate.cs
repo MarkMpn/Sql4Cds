@@ -366,8 +366,9 @@ namespace MarkMpn.Sql4Cds.Engine.QueryExtensions
         /// Creates a new <see cref="Max"/>
         /// </summary>
         /// <param name="selector">A function that extracts the value to find the maximum value of</param>
-        public Max(Func<Entity, object> selector) : base(selector)
+        public Max(Func<Entity, object> selector, Type type) : base(selector)
         {
+            Type = type;
         }
 
         protected override void Update(object value)
@@ -382,7 +383,7 @@ namespace MarkMpn.Sql4Cds.Engine.QueryExtensions
                 Value = value;
         }
 
-        public override Type Type => Expression.Type;
+        public override Type Type { get; }
     }
 
     /// <summary>
@@ -394,8 +395,9 @@ namespace MarkMpn.Sql4Cds.Engine.QueryExtensions
         /// Creates a new <see cref="Min"/>
         /// </summary>
         /// <param name="selector">A function that extracts the value to find the minimum value of</param>
-        public Min(Func<Entity, object> selector) : base(selector)
+        public Min(Func<Entity, object> selector, Type type) : base(selector)
         {
+            Type = type;
         }
 
         protected override void Update(object value)
@@ -410,7 +412,7 @@ namespace MarkMpn.Sql4Cds.Engine.QueryExtensions
                 Value = value;
         }
 
-        public override Type Type => Expression.Type;
+        public override Type Type { get; }
     }
 
     /// <summary>
@@ -424,8 +426,9 @@ namespace MarkMpn.Sql4Cds.Engine.QueryExtensions
         /// Creates a new <see cref="Sum"/>
         /// </summary>
         /// <param name="selector">A function that extracts the value to sum</param>
-        public Sum(Func<Entity, object> selector) : base(selector)
+        public Sum(Func<Entity, object> selector, Type type) : base(selector)
         {
+            Type = type;
         }
 
         protected override void Update(object value)
@@ -436,7 +439,7 @@ namespace MarkMpn.Sql4Cds.Engine.QueryExtensions
             var d = Convert.ToDecimal(value);
             _sumDecimal += d;
 
-            var targetType = Expression.Type;
+            var targetType = Type;
 
             if (targetType.IsGenericType && targetType.GetGenericTypeDefinition() == typeof(Nullable<>))
                 targetType = targetType.GetGenericArguments()[0];
@@ -444,7 +447,7 @@ namespace MarkMpn.Sql4Cds.Engine.QueryExtensions
             Value = Convert.ChangeType(_sumDecimal, targetType);
         }
 
-        public override Type Type => Expression.Type;
+        public override Type Type { get; }
 
         public override void Reset()
         {
@@ -461,8 +464,9 @@ namespace MarkMpn.Sql4Cds.Engine.QueryExtensions
         /// Creates a new <see cref="Sum"/>
         /// </summary>
         /// <param name="selector">A function that extracts the value to sum</param>
-        public First(Func<Entity, object> selector) : base(selector)
+        public First(Func<Entity, object> selector, Type type) : base(selector)
         {
+            Type = type;
         }
 
         protected override void Update(object value)
@@ -473,7 +477,7 @@ namespace MarkMpn.Sql4Cds.Engine.QueryExtensions
             Value = value;
         }
 
-        public override Type Type => Expression.Type;
+        public override Type Type { get; }
 
         public override void Reset()
         {

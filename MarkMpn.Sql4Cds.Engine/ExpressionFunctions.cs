@@ -587,6 +587,25 @@ namespace MarkMpn.Sql4Cds.Engine
         }
 
         /// <summary>
+        /// Box an expression
+        /// </summary>
+        /// <param name="expr"></param>
+        /// <returns></returns>
+        public static Expression Box(Expression expr)
+        {
+            if (!expr.Type.IsValueType)
+                return expr;
+
+            if (expr.NodeType == ExpressionType.Convert)
+            {
+                var node = (UnaryExpression)expr;
+                return Box(node.Operand);
+            }
+
+            return Expression.Convert(expr, typeof(object));
+        }
+
+        /// <summary>
         /// Applies the required conversion process to return a value of an expected type from an expression
         /// </summary>
         /// <typeparam name="T">The type of value required from an expression</typeparam>

@@ -18,8 +18,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            var offset = SqlTypeConverter.ChangeType<int>(Offset.GetValue(null, null, parameterTypes, parameterValues));
-            var fetch = SqlTypeConverter.ChangeType<int>(Fetch.GetValue(null, null, parameterTypes, parameterValues));
+            var offset = SqlTypeConverter.ChangeType<int>(Offset.Compile(null, parameterTypes)(null, parameterValues));
+            var fetch = SqlTypeConverter.ChangeType<int>(Fetch.Compile(null, parameterTypes)(null, parameterValues));
 
             if (offset < 0)
                 throw new QueryExecutionException("The offset specified in a OFFSET clause may not be negative.");
@@ -48,14 +48,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source = Source.FoldQuery(metadata, options, parameterTypes);
             Source.Parent = this;
 
-            if (!IsConstantValueExpression(Offset, null, out var offsetLiteral) ||
-                !IsConstantValueExpression(Fetch, null, out var fetchLiteral))
+            if (!Offset.IsConstantValueExpression(null, out var offsetLiteral) ||
+                !Fetch.IsConstantValueExpression(null, out var fetchLiteral))
                 return this;
 
             if (Source is FetchXmlScan fetchXml)
             {
-                var offset = SqlTypeConverter.ChangeType<int>(offsetLiteral.GetValue(null, null, null, null));
-                var count = SqlTypeConverter.ChangeType<int>(fetchLiteral.GetValue(null, null, null, null));
+                var offset = SqlTypeConverter.ChangeType<int>(offsetLiteral.Compile(null, null)(null, null));
+                var count = SqlTypeConverter.ChangeType<int>(fetchLiteral.Compile(null, null)(null, null));
                 var page = offset / count;
 
                 if (page * count == offset)
@@ -78,8 +78,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var sourceCount = Source.EstimateRowsOut(metadata, parameterTypes, tableSize);
 
-            if (!IsConstantValueExpression(Offset, null, out var offsetLiteral) ||
-                !IsConstantValueExpression(Fetch, null, out var fetchLiteral))
+            if (!Offset.IsConstantValueExpression(null, out var offsetLiteral) ||
+                !Fetch.IsConstantValueExpression(null, out var fetchLiteral))
                 return sourceCount;
 
             var offset = Int32.Parse(offsetLiteral.Value);

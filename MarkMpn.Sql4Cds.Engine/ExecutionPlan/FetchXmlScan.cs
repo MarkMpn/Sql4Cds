@@ -185,6 +185,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 entity[attribute.Key] = ((EntityReference)attribute.Value).Id;
             }
 
+            // Extract Money and OptionSetValue values
+            foreach (var attribute in entity.Attributes.Where(attr => attr.Value is Money).ToList())
+                entity[attribute.Key] = ((Money)attribute.Value).Value;
+            foreach (var attribute in entity.Attributes.Where(attr => attr.Value is OptionSetValue).ToList())
+                entity[attribute.Key] = ((OptionSetValue)attribute.Value).Value;
+
             // Populate any missing attributes
             foreach (var col in schema.Schema.Keys)
             {

@@ -23,7 +23,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (WithTies)
                 throw new NotImplementedException();
 
-            var topCount = Top.GetValue(null, null, parameterTypes, parameterValues);
+            var topCount = Top.Compile(null, parameterTypes)(null, parameterValues);
 
             if (!Percent)
             {
@@ -55,7 +55,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source = Source.FoldQuery(metadata, options, parameterTypes);
             Source.Parent = this;
 
-            if (!IsConstantValueExpression(Top, null, out var literal))
+            if (!Top.IsConstantValueExpression(null, out var literal))
                 return this;
 
             if (!Percent && !WithTies && Source is FetchXmlScan fetchXml)
@@ -76,7 +76,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var sourceCount = Source.EstimateRowsOut(metadata, parameterTypes, tableSize);
 
-            if (!IsConstantValueExpression(Top, null, out var topLiteral))
+            if (!Top.IsConstantValueExpression(null, out var topLiteral))
                 return sourceCount;
 
             var top = Int32.Parse(topLiteral.Value);
