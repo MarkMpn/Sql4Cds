@@ -293,7 +293,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             var entityName = parts[0];
-            var attr = new FetchAttributeType { name = parts[1] };
+            var attr = new FetchAttributeType { name = parts[1].ToLowerInvariant() };
 
             if (Alias == entityName)
             {
@@ -504,7 +504,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (parts.Length != 2)
                     continue;
 
-                var attr = parts[1] == "*" ? (object)new allattributes() : new FetchAttributeType { name = parts[1] };
+                var attr = parts[1] == "*" ? (object)new allattributes() : new FetchAttributeType { name = parts[1].ToLowerInvariant() };
 
                 if (Alias.Equals(parts[0], StringComparison.OrdinalIgnoreCase))
                 {
@@ -660,7 +660,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         }
                         else
                         {
-                            var attribute = metadata.Attributes.Single(a => a.LogicalName == condition.attribute);
+                            var attribute = metadata.Attributes.Single(a => a.LogicalName.Equals(condition.attribute, StringComparison.OrdinalIgnoreCase));
 
                             if (attribute is EnumAttributeMetadata enumAttr)
                                 conditionMultiple = 1.0 / enumAttr.OptionSet.Options.Count;

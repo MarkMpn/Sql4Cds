@@ -657,8 +657,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     condition = new condition
                     {
-                        entityname = entityAlias == targetEntityAlias ? null : entityAlias,
-                        attribute = attrName,
+                        entityname = StandardizeAlias(entityAlias, targetEntityAlias, items),
+                        attribute = attrName.ToLowerInvariant(),
                         @operator = op,
                         value = value
                     };
@@ -689,10 +689,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     condition = new condition
                     {
-                        entityname = entityAlias == targetEntityAlias ? null : entityAlias,
-                        attribute = attrName,
+                        entityname = StandardizeAlias(entityAlias, targetEntityAlias, items),
+                        attribute = attrName.ToLowerInvariant(),
                         @operator = op,
-                        valueof = attrName2
+                        valueof = attrName2.ToLowerInvariant()
                     };
                     return true;
                 }
@@ -724,8 +724,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 condition = new condition
                 {
-                    entityname = entityAlias == targetEntityAlias ? null : entityAlias,
-                    attribute = attrName,
+                    entityname = StandardizeAlias(entityAlias, targetEntityAlias, items),
+                    attribute = attrName.ToLowerInvariant(),
                     @operator = inPred.NotDefined ? @operator.notin : @operator.@in,
                     Items = inPred.Values.Cast<Literal>().Select(lit => new conditionValue { Value = lit.Value }).ToArray()
                 };
@@ -751,8 +751,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 condition = new condition
                 {
-                    entityname = entityAlias == targetEntityAlias ? null : entityAlias,
-                    attribute = attrName,
+                    entityname = StandardizeAlias(entityAlias, targetEntityAlias, items),
+                    attribute = attrName.ToLowerInvariant(),
                     @operator = isNull.IsNot ? @operator.notnull : @operator.@null
                 };
                 return true;
@@ -783,8 +783,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 condition = new condition
                 {
-                    entityname = entityAlias == targetEntityAlias ? null : entityAlias,
-                    attribute = attrName,
+                    entityname = StandardizeAlias(entityAlias, targetEntityAlias, items),
+                    attribute = attrName.ToLowerInvariant(),
                     @operator = like.NotDefined ? @operator.notlike : @operator.like,
                     value = value.Value
                 };
@@ -792,6 +792,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return false;
+        }
+
+        private string StandardizeAlias(string entityAlias, string targetEntityAlias, object[] items)
+        {
+            if (entityAlias.Equals(targetEntityAlias, StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            var entity = new FetchEntityType { Items = items };
+            var linkEntity = entity.FindLinkEntity(entityAlias);
+
+            return linkEntity.alias;
         }
 
         private string AliasToEntityName(string targetEntityAlias, string targetEntityName, object[] items, string alias)

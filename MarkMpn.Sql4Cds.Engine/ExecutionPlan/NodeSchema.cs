@@ -18,7 +18,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             if (Schema.TryGetValue(column, out _))
             {
-                normalized = column;
+                normalized = Schema.Keys.Single(k => k.Equals(column, StringComparison.OrdinalIgnoreCase));
                 return true;
             }
 

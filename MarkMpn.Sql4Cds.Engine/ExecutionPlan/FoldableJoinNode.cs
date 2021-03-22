@@ -94,8 +94,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     alias = rightFetch.Alias,
                     name = rightEntity.name,
                     linktype = JoinType == QualifiedJoinType.Inner ? "inner" : "outer",
-                    from = rightAttributeParts[1],
-                    to = leftAttributeParts[1],
+                    from = rightAttributeParts[1].ToLowerInvariant(),
+                    to = leftAttributeParts[1].ToLowerInvariant(),
                     Items = rightEntity.Items
                 };
 

@@ -188,7 +188,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var entityName = parts[0];
                     var attrName = parts[1];
 
-                    var fetchSort = new FetchOrderType { attribute = attrName, descending = sortOrder.SortOrder == SortOrder.Descending };
+                    var fetchSort = new FetchOrderType { attribute = attrName.ToLowerInvariant(), descending = sortOrder.SortOrder == SortOrder.Descending };
                     if (entityName == fetchXml.Alias)
                     {
                         if (items != entity.Items)

@@ -1734,9 +1734,11 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
 
                 // Validate the entity name
+                EntityMetadata meta;
+
                 try
                 {
-                    var meta = Metadata[entityName];
+                    meta = Metadata[entityName];
                 }
                 catch (FaultException ex)
                 {
@@ -1763,7 +1765,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         {
                             new FetchXml.FetchEntityType
                             {
-                                name = entityName
+                                name = meta.LogicalName
                             }
                         },
                         options = ConvertQueryHints(hints)
