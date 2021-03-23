@@ -1,11 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data.SqlTypes;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Metadata;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -197,6 +199,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         if (items != entity.Items)
                             return this;
 
+                        // Sorting on a lookup Guid column actually sorts by the associated name field, which isn't what we want
+                        if (IsLookupColumn(metadata, entity.name, fetchSort.attribute))
+                            return this;
+
                         entity.AddItem(fetchSort);
                         items = entity.Items;
                     }
@@ -204,6 +210,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         var linkEntity = FetchXmlExtensions.FindLinkEntity(items, entityName);
                         if (linkEntity == null)
+                            return this;
+
+                        if (IsLookupColumn(metadata, linkEntity.name, fetchSort.attribute))
                             return this;
 
                         // Adding sorts to link-entity forces legacy paging which has a maximum record limit of 50K.
@@ -243,6 +252,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return this;
+        }
+
+        private bool IsLookupColumn(IAttributeMetadataCache metadata, string entityName, string attributeName)
+        {
+            var meta = metadata[entityName];
+            var attribute = meta.Attributes.Single(a => a.LogicalName == attributeName);
+
+            return attribute is LookupAttributeMetadata;
         }
 
         public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
