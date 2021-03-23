@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data.SqlTypes;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -188,12 +189,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private static Type GetType(IdentifierLiteral guid, NodeSchema schema, IDictionary<string, Type> parameterTypes)
         {
-            return typeof(Guid);
+            return typeof(SqlGuid);
         }
 
         private static Expression ToExpression(IdentifierLiteral guid, NodeSchema schema, IDictionary<string, Type> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam)
         {
-            return Expression.Constant(guid.Value);
+            return Expression.Constant(new SqlGuid(guid.Value));
         }
 
         private static Type GetType(IntegerLiteral i, NodeSchema schema, IDictionary<string, Type> parameterTypes)
@@ -1391,7 +1392,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 literal = new StringLiteral { Value = dt.ToString("o") };
             else if (value is EntityReference er)
                 literal = new StringLiteral { Value = er.Id.ToString() };
-            else if (value is Guid g)
+            else if (value is SqlGuid g)
                 literal = new StringLiteral { Value = g.ToString() };
             else
                 return false;

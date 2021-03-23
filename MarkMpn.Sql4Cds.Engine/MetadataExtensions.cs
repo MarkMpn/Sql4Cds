@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data.SqlTypes;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -45,7 +46,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 return typeof(long?);
 
             if (attrMetadata is LookupAttributeMetadata || typeCode == AttributeTypeCode.Lookup || typeCode == AttributeTypeCode.Customer || typeCode == AttributeTypeCode.Owner)
-                return typeof(Guid?);
+                return typeof(SqlGuid?);
 
             if (attrMetadata is MemoAttributeMetadata || typeCode == AttributeTypeCode.Memo)
                 return typeof(string);
@@ -66,7 +67,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 return typeof(string);
 
             if (attrMetadata is UniqueIdentifierAttributeMetadata || typeCode == AttributeTypeCode.Uniqueidentifier)
-                return typeof(Guid?);
+                return typeof(SqlGuid?);
 
             if (attrMetadata.AttributeType == AttributeTypeCode.Virtual)
                 return typeof(string);

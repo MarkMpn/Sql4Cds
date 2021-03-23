@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Data.SqlTypes;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -191,6 +192,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 entity[attribute.Key] = ((Money)attribute.Value).Value;
             foreach (var attribute in entity.Attributes.Where(attr => attr.Value is OptionSetValue).ToList())
                 entity[attribute.Key] = ((OptionSetValue)attribute.Value).Value;
+
+            // Convert Guid to SqlGuid for consistent sorting
+            foreach (var attribute in entity.Attributes.Where(attr => attr.Value is Guid).ToList())
+                entity[attribute.Key] = new SqlGuid((Guid)attribute.Value);
 
             // Populate any missing attributes
             foreach (var col in schema.Schema.Keys)

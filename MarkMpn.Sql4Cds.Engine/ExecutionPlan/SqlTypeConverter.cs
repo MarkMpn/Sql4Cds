@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Data.SqlTypes;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -15,7 +16,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             typeof(int),
             typeof(byte),
             typeof(bool),
-            typeof(Guid),
+            typeof(SqlGuid),
             typeof(string),
         };
 
@@ -128,7 +129,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (from == typeof(string))
                 return true;
 
-            if (from == typeof(Guid) && to == typeof(string))
+            if (from == typeof(SqlGuid) && to == typeof(string))
                 return true;
 
             if ((from == typeof(bool) || from == typeof(byte) || from == typeof(int) || from == typeof(long) || from == typeof(decimal) || from == typeof(float) || from == typeof(double)) &&
@@ -170,8 +171,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (value is string str)
             {
-                if (type == typeof(Guid))
-                    return new Guid(str);
+                if (type == typeof(SqlGuid))
+                    return new SqlGuid(str);
 
                 if (type == typeof(bool))
                     return str.Equals("true", StringComparison.OrdinalIgnoreCase) || str == "1";
