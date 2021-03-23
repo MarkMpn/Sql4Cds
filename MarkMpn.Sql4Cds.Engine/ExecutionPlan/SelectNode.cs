@@ -147,8 +147,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             schema.ContainsColumn(sourceCol, out sourceCol);
                             var attr = fetchXml.AddAttribute(sourceCol, null, metadata, out var added);
 
-                            // Check if we can fold the alias down to the FetchXML too. Don't do this if 
-                            if (col.OutputColumn != parts.Last())
+                            // Check if we can fold the alias down to the FetchXML too. Don't do this if the name isn't valid for FetchXML
+                            if (col.OutputColumn != parts.Last() && FetchXmlScan.IsValidAlias(col.OutputColumn))
                             {
                                 if (added || (!processedSourceColumns.Contains(col.SourceColumn) && !fetchXml.IsAliasReferenced(attr.alias)))
                                 {

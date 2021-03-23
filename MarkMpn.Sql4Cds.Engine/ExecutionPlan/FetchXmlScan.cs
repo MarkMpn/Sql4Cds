@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Xml.Serialization;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
 using Microsoft.Xrm.Sdk;
@@ -342,6 +343,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             added = true;
             return attr;
+        }
+
+        internal static bool IsValidAlias(string alias)
+        {
+            // FetchXML only supports aliases for attributes and link-entities matching a simple pattern
+            return Regex.IsMatch(alias, "^[A-Za-z_][A-Za-z0-9_]*$");
         }
 
         internal bool IsAliasReferenced(string alias)

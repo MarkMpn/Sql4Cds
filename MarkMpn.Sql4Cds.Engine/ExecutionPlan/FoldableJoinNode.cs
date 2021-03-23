@@ -47,6 +47,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (leftFetch.FetchXml.distinct ^ rightFetch.FetchXml.distinct)
                     return this;
 
+                // Check that the alias is valid for FetchXML
+                if (!FetchXmlScan.IsValidAlias(rightFetch.Alias))
+                    return this;
+
                 var leftEntity = leftFetch.Entity;
                 var rightEntity = rightFetch.Entity;
 
