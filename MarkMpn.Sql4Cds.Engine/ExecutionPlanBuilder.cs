@@ -62,6 +62,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 throw new QueryParseException(errors[0]);
 
             var script = (TSqlScript)fragment;
+            script.Accept(new ReplacePrimaryFunctionsVisitor());
             var optimizer = new ExecutionPlanOptimizer(Metadata, Options);
 
             // Convert each statement in turn to the appropriate query type
