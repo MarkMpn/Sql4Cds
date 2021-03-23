@@ -1010,8 +1010,6 @@ namespace MarkMpn.Sql4Cds
             Control fetchXml = null;
             var rowCount = 0;
 
-            var isMetadata = query.GetType().BaseType.IsGenericType && query.GetType().BaseType.GetGenericTypeDefinition() == typeof(MetadataQuery<,>);
-
             if (results != null)
             {
                 var grid = new DataGridView();
