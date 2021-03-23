@@ -58,10 +58,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var count = SqlTypeConverter.ChangeType<int>(fetchLiteral.Compile(null, null)(null, null));
                 var page = offset / count;
 
-                if (page * count == offset)
+                if (page * count == offset && count <= 5000)
                 {
                     fetchXml.FetchXml.count = count.ToString();
                     fetchXml.FetchXml.page = (page + 1).ToString();
+                    fetchXml.AllPages = false;
                     return fetchXml;
                 }
             }

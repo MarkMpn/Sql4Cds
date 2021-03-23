@@ -58,9 +58,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!Top.IsConstantValueExpression(null, out var literal))
                 return this;
 
-            if (!Percent && !WithTies && Source is FetchXmlScan fetchXml)
+            if (!Percent && !WithTies && Int32.TryParse(literal.Value, out var top) && top <= 5000 && Source is FetchXmlScan fetchXml)
             {
-                fetchXml.FetchXml.top = literal.Value.ToString();
+                fetchXml.FetchXml.top = literal.Value;
+                fetchXml.AllPages = false;
                 return fetchXml;
             }
 
