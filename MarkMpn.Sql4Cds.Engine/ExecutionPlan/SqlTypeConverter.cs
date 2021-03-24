@@ -1,12 +1,15 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Data.SqlTypes;
+using System.Globalization;
+using System.Linq;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
     internal class SqlTypeConverter
     {
         // Abbreviated version of data type precedence from https://docs.microsoft.com/en-us/sql/t-sql/data-types/data-type-precedence-transact-sql?view=sql-server-ver15
-        private static Type[] _precendenceOrder = new[]
+        private static readonly Type[] _precendenceOrder = new[]
         {
             typeof(DateTime),
             typeof(double),
@@ -19,6 +22,100 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             typeof(SqlGuid),
             typeof(string),
         };
+
+        private static readonly DateTime MinDateTime = new DateTime(1900, 1, 1);
+        private static readonly List<string> _datetimeFormats;
+
+        static SqlTypeConverter()
+        {
+            // Handle different formats as per https://docs.microsoft.com/en-us/sql/t-sql/data-types/datetime-transact-sql?view=sql-server-ver15#supported-string-literal-formats-for-datetime
+            // Note regional settings from https://docs.microsoft.com/en-us/sql/t-sql/statements/set-dateformat-transact-sql?view=sql-server-ver15
+            // Extracted from sp_helplanguage
+            var dateformat = "dmy";
+
+            if (CultureInfo.CurrentCulture.Name == "en-US")
+                dateformat = "mdy";
+            else if (CultureInfo.CurrentCulture.Name.StartsWith("jp"))
+                dateformat = "ymd";
+            else if (CultureInfo.CurrentCulture.Name.StartsWith("se"))
+                dateformat = "ymd";
+            else if (CultureInfo.CurrentCulture.Name.StartsWith("hu"))
+                dateformat = "ymd";
+            else if (CultureInfo.CurrentCulture.Name.StartsWith("hr"))
+                dateformat = "ymd";
+            else if (CultureInfo.CurrentCulture.Name.StartsWith("lv"))
+                dateformat = "ymd";
+            else if (CultureInfo.CurrentCulture.Name.StartsWith("lt"))
+                dateformat = "ymd";
+            else if (CultureInfo.CurrentCulture.Name.StartsWith("cn"))
+                dateformat = "ymd";
+            else if (CultureInfo.CurrentCulture.Name.StartsWith("kr"))
+                dateformat = "ymd";
+
+            var baseFormats = new List<string>();
+
+            // Numeric formats
+            switch (dateformat)
+            {
+                case "mdy":
+                    baseFormats.AddRange(ExpandDateTimeFormat("M'/'d'/'[yy]yy"));
+                    baseFormats.AddRange(ExpandDateTimeFormat("M-d-[yy]yy"));
+                    baseFormats.AddRange(ExpandDateTimeFormat("M.d.[yy]yy"));
+                    break;
+
+                case "myd":
+                    baseFormats.AddRange(ExpandDateTimeFormat("M'/'d'/'[yy]yy"));
+                    break;
+
+                case "dmy":
+                    baseFormats.AddRange(ExpandDateTimeFormat("d'/'M'/'[yy]yy"));
+                    break;
+
+                case "dym":
+                    baseFormats.AddRange(ExpandDateTimeFormat("d'/'[yy]yy'/'M"));
+                    break;
+
+                case "ydm":
+                    baseFormats.AddRange(ExpandDateTimeFormat("[yy]yy'/'d'/'M"));
+                    break;
+
+                case "ymd":
+                    baseFormats.AddRange(ExpandDateTimeFormat("[yy]yy'/'M'/'d"));
+                    break;
+            }
+
+            var timeFormats = new[]
+            {
+                "H':'m",
+                "H':'m':'s",
+                "H':'m':'s':'fff",
+                "H':'m':'s'.'f",
+                "Htt",
+                "H tt"
+            };
+
+            var _datetimeFormats = baseFormats
+                .Concat(baseFormats.SelectMany(d => timeFormats.Select(t => d + " " + t)))
+                .ToList();
+
+            // Alphabetical
+            _datetimeFormats.AddRange(ExpandDateTimeFormat("MMM[M] [d][,] yyyy"));
+            _datetimeFormats.AddRange(ExpandDateTimeFormat("MMM[M] d[,] [yy]yy"));
+            _datetimeFormats.AddRange(ExpandDateTimeFormat("MMM[M] yyyy [d]"));
+            _datetimeFormats.AddRange(ExpandDateTimeFormat("[d] MMM[M][,] yyyy"));
+            _datetimeFormats.AddRange(ExpandDateTimeFormat("d MMM[M][,] [yy]yy"));
+            _datetimeFormats.AddRange(ExpandDateTimeFormat("d [yy]yy MMM[M]"));
+            _datetimeFormats.AddRange(ExpandDateTimeFormat("[d] yyyy MMM[M]"));
+            _datetimeFormats.AddRange(ExpandDateTimeFormat("yyyy MMM[M] [d]"));
+            _datetimeFormats.AddRange(ExpandDateTimeFormat("yyyy [d] MMM[M]"));
+
+            // ISO 8601
+            _datetimeFormats.AddRange(ExpandDateTimeFormat("yyyy'-'MM'-'dd'T'HH':'mm':'ss['.'fff]"));
+
+            // Unseparated
+            _datetimeFormats.AddRange(ExpandDateTimeFormat("yyyyMMdd [HH':'mm':'ss]"));
+            _datetimeFormats.Add("yyyyMMddHH HH':'mm':'ss'.'fff");
+        }
 
         public static Type MakeConsistentTypes(ref object lhs, ref object rhs)
         {
@@ -96,7 +193,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var targetType = _precendenceOrder[Math.Min(lhsPrecedence, rhsPrecedence)];
 
-            if (CanChangeType(lhs, targetType) && CanChangeType(rhs, targetType))
+            if (CanChangeTypeImplicit(lhs, targetType) && CanChangeTypeImplicit(rhs, targetType))
             {
                 consistent = targetType;
                 return true;
@@ -106,7 +203,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return false;
         }
 
-        public static bool CanChangeType(Type from, Type to)
+        public static bool CanChangeTypeImplicit(Type from, Type to)
         {
             from = MakeNonNullable(from);
             to = MakeNonNullable(to);
@@ -118,7 +215,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (from == typeof(object))
                 return true;
 
-            // Special case for string -> enum
+            // Special case for string -> enum (from metadata types)
             if (from == typeof(string) && to.IsEnum)
                 return true;
 
@@ -126,22 +223,35 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Array.IndexOf(_precendenceOrder, to) == -1)
                 return false;
 
-            if (from == typeof(string))
+            // Anything can be converted to/from strings
+            if (from == typeof(string) || to == typeof(string))
                 return true;
 
-            if (from == typeof(SqlGuid) && to == typeof(string))
-                return true;
-
+            // Any numeric type can be implicitly converted to any other. SQL requires a cast between decimal/numeric when precision/scale changes
+            // but we don't have precision/scale as part of the data types
             if ((from == typeof(bool) || from == typeof(byte) || from == typeof(int) || from == typeof(long) || from == typeof(decimal) || from == typeof(float) || from == typeof(double)) &&
                 (to == typeof(bool) || to == typeof(byte) || to == typeof(int) || to == typeof(long) || to == typeof(decimal) || to == typeof(float) || to == typeof(double)))
                 return true;
 
+            // Any numeric type can be implicitly converted to datetime
             if ((from == typeof(int) || from == typeof(long) || from == typeof(decimal) || from == typeof(float) || from == typeof(double)) &&
                 to == typeof(DateTime))
                 return true;
 
-            if (from == typeof(DateTime) &&
-                (to == typeof(int) || to == typeof(long) || to == typeof(decimal) || to == typeof(float) || to == typeof(double)))
+            // datetime can only be converted implicitly to string
+            if (from == typeof(DateTime) && to == typeof(string))
+                return true;
+
+            return false;
+        }
+
+        public static bool CanChangeTypeExplicit(Type from, Type to)
+        {
+            if (CanChangeTypeImplicit(from, to))
+                return true;
+
+            // Require explicit conversion from datetime to numeric types
+            if (from == typeof(DateTime) && (to == typeof(bool) || to == typeof(byte) || to == typeof(int) || to == typeof(long) || to == typeof(decimal) || to == typeof(float) || to == typeof(double)))
                 return true;
 
             return false;
@@ -151,8 +261,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             return (T)ChangeType(value, typeof(T));
         }
-
-        private static readonly DateTime MinDateTime = new DateTime(1900, 1, 1);
 
         public static object ChangeType(object value, Type type)
         {
@@ -196,7 +304,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return Double.Parse(str);
 
                 if (type == typeof(DateTime))
-                    return DateTime.Parse(str);
+                {
+                    foreach (var format in _datetimeFormats)
+                    {
+                        if (DateTime.TryParseExact(str, format, CultureInfo.CurrentCulture, DateTimeStyles.None, out var parsedDate))
+                            return parsedDate;
+                    }
+
+                    throw new QueryExecutionException("Cannot convert string value to datetime");
+                }
 
                 if (type.IsEnum)
                     return Enum.Parse(type, str);
@@ -374,6 +490,68 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return Convert.ChangeType(value, type);
+        }
+
+        private static IEnumerable<string> ExpandDateTimeFormat(string format)
+        {
+            var parts = new List<string>();
+            var options = new List<bool>();
+
+            var partStart = -1;
+            var optional = false;
+            for (var i = 0; i < format.Length; i++)
+            {
+                if (format[i] == '[' || format[i] == ']')
+                {
+                    if (partStart != -1)
+                    {
+                        parts.Add(format.Substring(partStart, i - partStart));
+                        options.Add(optional);
+                    }
+
+                    partStart = i + 1;
+                    optional = format[i] == '[';
+                }
+
+                if (partStart == -1)
+                    partStart = 0;
+            }
+
+            if (partStart < format.Length)
+            {
+                parts.Add(format.Substring(partStart));
+                options.Add(false);
+            }
+
+            var combinations = new List<int>();
+            combinations.AddRange(parts.Select(p => 0));
+
+            var count = Math.Pow(2, options.Count(o => o));
+
+            for (var combination = 0; combination < count; combination++)
+            {
+                yield return String.Join("", parts.Select((p, i) =>
+                {
+                    if (combinations[i] == 0)
+                        return p;
+
+                    return String.Empty;
+                })).Trim();
+
+                for (var i = 0; i < parts.Count; i++)
+                {
+                    if (combinations[i] == 0 && options[i])
+                    {
+                        combinations[i] = 1;
+                        break;
+                    }
+
+                    if (combinations[i] == 1)
+                    {
+                        combinations[i] = 0;
+                    }
+                }
+            }
         }
 
         public static SqlTypeCategory GetCategory(Type type)

@@ -281,7 +281,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     var sourceType = sourceCol.GetType(schema, null);
                     var targetType = targetAttribute.GetAttributeType();
 
-                    if (!SqlTypeConverter.CanChangeType(sourceType, targetType))
+                    if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, targetType))
                         throw new NotSupportedQueryFragmentException($"Cannot convert value of type {sourceType} to {targetType}", assignment);
 
                     if (update.ColumnMappings.ContainsKey(targetAttribute.LogicalName))
@@ -423,8 +423,7 @@ namespace MarkMpn.Sql4Cds.Engine
         private SelectNode ConvertSelectQuerySpec(QuerySpecification querySpec, IList<OptimizerHint> hints, NodeSchema outerSchema, Dictionary<string,string> outerReferences, IDictionary<string, Type> parameterTypes)
         {
             // Each table in the FROM clause starts as a separate FetchXmlScan node. Add appropriate join nodes
-            // TODO: Handle queries without a FROM clause
-            var node = ConvertFromClause(querySpec.FromClause.TableReferences, hints, querySpec, outerSchema, outerReferences, parameterTypes);
+            var node = querySpec.FromClause == null ? new ConstantScanNode { Values = { new Entity() } } : ConvertFromClause(querySpec.FromClause.TableReferences, hints, querySpec, outerSchema, outerReferences, parameterTypes);
 
             node = ConvertInSubqueries(node, hints, querySpec, parameterTypes, outerSchema, outerReferences);
             node = ConvertExistsSubqueries(node, hints, querySpec, parameterTypes, outerSchema, outerReferences);
@@ -976,10 +975,10 @@ namespace MarkMpn.Sql4Cds.Engine
             var offsetType = offsetClause.OffsetExpression.GetType(null, parameterTypes);
             var fetchType = offsetClause.FetchExpression.GetType(null, parameterTypes);
 
-            if (!SqlTypeConverter.CanChangeType(offsetType, typeof(int)))
+            if (!SqlTypeConverter.CanChangeTypeImplicit(offsetType, typeof(int)))
                 throw new NotSupportedQueryFragmentException("Unexpected OFFSET type", offsetClause.OffsetExpression);
 
-            if (!SqlTypeConverter.CanChangeType(fetchType, typeof(int)))
+            if (!SqlTypeConverter.CanChangeTypeImplicit(fetchType, typeof(int)))
                 throw new NotSupportedQueryFragmentException("Unexpected FETCH type", offsetClause.FetchExpression);
 
             return new OffsetFetchNode
@@ -1003,7 +1002,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var topType = topRowFilter.Expression.GetType(null, parameterTypes);
             var targetType = topRowFilter.Percent ? typeof(float) : typeof(int);
 
-            if (!SqlTypeConverter.CanChangeType(topType, targetType))
+            if (!SqlTypeConverter.CanChangeTypeImplicit(topType, targetType))
                 throw new NotSupportedQueryFragmentException("Unexpected TOP type", topRowFilter.Expression);
 
             return new TopNode
