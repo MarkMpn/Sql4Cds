@@ -1373,7 +1373,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!_typeMapping.TryGetValue(targetTypeName, out var targetType))
                 throw new NotSupportedQueryFragmentException("Unknown type name", convert.DataType);
 
-            if (!SqlTypeConverter.CanChangeType(sourceType, targetType))
+            if (!SqlTypeConverter.CanChangeTypeExplicit(sourceType, targetType))
                 throw new NotSupportedQueryFragmentException($"No type conversion available from {sourceType} to {targetType}", convert);
 
             return targetType;

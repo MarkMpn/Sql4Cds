@@ -94,7 +94,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 "H tt"
             };
 
-            var _datetimeFormats = baseFormats
+            _datetimeFormats = baseFormats
                 .Concat(baseFormats.SelectMany(d => timeFormats.Select(t => d + " " + t)))
                 .ToList();
 
