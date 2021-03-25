@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data.SqlTypes;
 using System.IO;
 using System.Linq;
 using System.ServiceModel;
@@ -143,7 +144,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     result[groupByCols[i]] = group.Key.Values[i];
 
                 foreach (var aggregate in group.Value)
-                    result[aggregate.Key] = aggregate.Value.Value;
+                    result[aggregate.Key] = SqlTypeConverter.NetToSqlType(aggregate.Value.Value);
 
                 yield return result;
             }
@@ -180,7 +181,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     case AggregateType.Count:
                     case AggregateType.CountStar:
-                        aggregateType = typeof(int);
+                        aggregateType = typeof(SqlInt32);
                         break;
 
                     default:
@@ -356,7 +357,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 foreach (var grouping in GroupBy)
                 {
                     var colName = grouping.GetColumnName();
-                    var alias = colName;
+                    var alias = grouping.MultiPartIdentifier.Identifiers.Last().Value;
                     DateGroupingType? dateGrouping = null;
 
                     if (computeScalar != null && computeScalar.Columns.TryGetValue(colName, out var datePart))
@@ -449,6 +450,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private bool IsAggregateQueryRecordLimitExceededException(Exception ex)
         {
+            if (ex is QueryExecutionException qee)
+                ex = qee.InnerException;
+
             if (!(ex is FaultException<OrganizationServiceFault> fault))
                 return false;
 

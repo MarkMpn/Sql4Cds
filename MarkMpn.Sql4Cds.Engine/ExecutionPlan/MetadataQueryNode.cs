@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data.SqlTypes;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -283,7 +284,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         internal static Type GetPropertyType(Type propType)
         {
             if (propType == typeof(OptionMetadata))
-                propType = typeof(int?);
+                propType = typeof(SqlInt32);
 
             if (propType.BaseType != null && propType.BaseType.IsGenericType && propType.BaseType.GetGenericTypeDefinition() == typeof(ManagedProperty<>))
                 propType = propType.BaseType.GetGenericArguments()[0];
@@ -294,9 +295,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (propType == typeof(Label) || propType.IsEnum || propType.IsArray)
                 propType = typeof(string);
             else if (typeof(MetadataBase).IsAssignableFrom(propType))
-                propType = typeof(Guid?);
+                propType = typeof(Guid);
 
-            return propType;
+            return SqlTypeConverter.NetToSqlType(propType);
         }
 
         internal static object GetPropertyValue(PropertyInfo prop, object target)
@@ -304,7 +305,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var value = prop.GetValue(target);
 
             if (value == null)
-                return null;
+                return SqlTypeConverter.GetNullValue(SqlTypeConverter.NetToSqlType(prop.PropertyType));
 
             if (value is OptionMetadata option)
                 value = option.Value;
@@ -336,7 +337,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             else if (value is MetadataBase meta)
                 value = meta.MetadataId;
 
-            return value;
+            // Value might have become null during conversion, so check again
+            if (value == null)
+                return SqlTypeConverter.GetNullValue(SqlTypeConverter.NetToSqlType(prop.PropertyType));
+
+            return SqlTypeConverter.NetToSqlType(value);
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
@@ -429,7 +434,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         if (!availableProps.TryGetValue(prop.Value, out var attributeProp))
                         {
-                            converted[prop.Key] = null;
+                            converted[prop.Key] = SqlTypeConverter.GetNullValue(GetPropertyType(_flattenedAttributeProps[prop.Value].PropertyType));
                             continue;
                         }
 

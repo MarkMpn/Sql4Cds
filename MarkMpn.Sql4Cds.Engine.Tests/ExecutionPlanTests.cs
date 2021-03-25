@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data.SqlTypes;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -640,6 +641,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, plans.Length);
 
             var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual("account.name", select.ColumnSet[0].SourceColumn);
+            Assert.AreEqual("count", select.ColumnSet[1].SourceColumn);
             var filter = AssertNode<FilterNode>(select.Source);
             Assert.IsInstanceOfType(filter.Filter, typeof(BooleanComparisonExpression));
             var gt = (BooleanComparisonExpression)filter.Filter;
@@ -660,6 +663,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     </entity>
                 </fetch>");
             var aggregate = AssertNode<HashMatchAggregateNode>(tryCatch.CatchSource);
+            Assert.AreEqual("account.name", aggregate.GroupBy[0].ToSql());
+            Assert.AreEqual("count", aggregate.Aggregates.Single().Key);
             var scalarFetch = AssertNode<FetchXmlScan>(aggregate.Source);
             AssertFetchXml(scalarFetch, @"
                 <fetch>
@@ -692,6 +697,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, plans.Length);
 
             var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual("createdon_month", select.ColumnSet[0].SourceColumn);
+            Assert.AreEqual("count", select.ColumnSet[1].SourceColumn);
             var tryCatch = AssertNode<TryCatchNode>(select.Source);
             var aggregateFetch = AssertNode<FetchXmlScan>(tryCatch.TrySource);
             AssertFetchXml(aggregateFetch, @"
@@ -702,6 +709,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     </entity>
                 </fetch>");
             var aggregate = AssertNode<HashMatchAggregateNode>(tryCatch.CatchSource);
+            Assert.AreEqual("createdon_month", aggregate.GroupBy[0].ToSql());
+            Assert.AreEqual("count", aggregate.Aggregates.Single().Key);
             var computeScalar = AssertNode<ComputeScalarNode>(aggregate.Source);
             Assert.AreEqual(1, computeScalar.Columns.Count);
             Assert.AreEqual("DATEPART(month, createdon)", computeScalar.Columns["createdon_month"].ToSql());
@@ -1972,8 +1981,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var constant = AssertNode<ConstantScanNode>(filter.Source);
 
             var schema = constant.GetSchema(metadata, null);
-            Assert.AreEqual(typeof(int), schema.Schema["a.ID"]);
-            Assert.AreEqual(typeof(string), schema.Schema["a.name"]);
+            Assert.AreEqual(typeof(SqlInt32), schema.Schema["a.ID"]);
+            Assert.AreEqual(typeof(SqlString), schema.Schema["a.name"]);
         }
 
         [TestMethod]

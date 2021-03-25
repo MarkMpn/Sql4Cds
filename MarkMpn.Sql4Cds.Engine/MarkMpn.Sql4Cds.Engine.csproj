@@ -98,7 +98,6 @@
     <Compile Include="ExecutionPlan\SelectNode.cs" />
     <Compile Include="ExecutionPlan\SortNode.cs" />
     <Compile Include="ExecutionPlan\SqlNode.cs" />
-    <Compile Include="ExecutionPlan\SqlTypeCategory.cs" />
     <Compile Include="ExecutionPlan\SqlTypeConverter.cs" />
     <Compile Include="ExecutionPlan\TableSpoolNode.cs" />
     <Compile Include="ExecutionPlan\TopNode.cs" />

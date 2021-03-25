@@ -2,8 +2,10 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data.SqlTypes;
+using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.ServiceModel;
 using System.Text.RegularExpressions;
 using System.Xml.Serialization;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
@@ -55,7 +57,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         }
 
         private Dictionary<string, ParameterizedCondition> _parameterizedConditions;
-
 
         public FetchXmlScan()
         {
@@ -122,18 +123,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             options.RetrievingNextPage();
             var res = org.RetrieveMultiple(new FetchExpression(Serialize(FetchXml)));
 
-            foreach (var entity in res.Entities)
-            {
-                OnRetrievedEntity(entity, schema);
-                yield return entity;
-            }
-
             var count = res.Entities.Count;
 
             // Aggregate queries return up to 5000 records and don't provide a method to move on to the next page
             // Throw an exception to indicate the error to the caller
             if (AllPages && FetchXml.aggregateSpecified && FetchXml.aggregate && count == 5000 && FetchXml.top != "5000" && !res.MoreRecords)
-                throw new ApplicationException("AggregateQueryRecordLimit");
+                throw new FaultException<OrganizationServiceFault>(new OrganizationServiceFault { ErrorCode = -2147164125, Message = "AggregateQueryRecordLimitExceeded" });
+
+            foreach (var entity in res.Entities)
+            {
+                OnRetrievedEntity(entity, schema);
+                yield return entity;
+            }
 
             // Move on to subsequent pages
             while (AllPages && res.MoreRecords && options.ContinueRetrieve(count))
@@ -178,6 +179,28 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             foreach (var attribute in entity.Attributes.Where(attr => attr.Value is AliasedValue).ToList())
                 entity[attribute.Key] = ((AliasedValue)attribute.Value).Value;
 
+            // Copy any grouped values to their full names
+            if (FetchXml.aggregateSpecified && FetchXml.aggregate)
+            {
+                if (Entity.Items != null)
+                {
+                    foreach (var attr in Entity.Items.OfType<FetchAttributeType>().Where(a => a.groupbySpecified && a.groupby == FetchBoolType.@true))
+                    {
+                        if (entity.Attributes.TryGetValue(attr.alias, out var value))
+                            entity[$"{Alias}.{attr.alias}"] = value;
+                    }
+                }
+
+                foreach (var linkEntity in Entity.GetLinkEntities().Where(le => le.Items != null))
+                {
+                    foreach (var attr in linkEntity.Items.OfType<FetchAttributeType>().Where(a => a.groupbySpecified && a.groupby == FetchBoolType.@true))
+                    {
+                        if (entity.Attributes.TryGetValue(attr.alias, out var value))
+                            entity[$"{linkEntity.alias}.{attr.alias}"] = value;
+                    }
+                }
+            }
+
             // Expose the type of lookup values
             foreach (var attribute in entity.Attributes.Where(attr => attr.Value is EntityReference).ToList())
             {
@@ -187,21 +210,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 entity[attribute.Key] = ((EntityReference)attribute.Value).Id;
             }
 
-            // Extract Money and OptionSetValue values
-            foreach (var attribute in entity.Attributes.Where(attr => attr.Value is Money).ToList())
-                entity[attribute.Key] = ((Money)attribute.Value).Value;
-            foreach (var attribute in entity.Attributes.Where(attr => attr.Value is OptionSetValue).ToList())
-                entity[attribute.Key] = ((OptionSetValue)attribute.Value).Value;
-
-            // Convert Guid to SqlGuid for consistent sorting
-            foreach (var attribute in entity.Attributes.Where(attr => attr.Value is Guid).ToList())
-                entity[attribute.Key] = new SqlGuid((Guid)attribute.Value);
-
-            // Populate any missing attributes
-            foreach (var col in schema.Schema.Keys)
+            // Convert values to SQL types
+            foreach (var col in schema.Schema)
             {
-                if (!entity.Contains(col))
-                    entity[col] = null;
+                if (entity.Attributes.TryGetValue(col.Key, out var value))
+                    entity[col.Key] = SqlTypeConverter.NetToSqlType(value);
+                else
+                    entity[col.Key] = SqlTypeConverter.GetNullValue(col.Value);
             }
         }
 
@@ -403,7 +418,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 foreach (var attrMetadata in meta.Attributes)
                 {
-                    var attrType = attrMetadata.GetAttributeType();
+                    var attrType = attrMetadata.GetAttributeSqlType();
                     var fullName = $"{alias}.{attrMetadata.LogicalName}";
 
                     schema.Schema[fullName] = attrType;
@@ -423,20 +438,39 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 foreach (var attribute in items.OfType<FetchAttributeType>())
                 {
                     var attrMetadata = meta.Attributes.Single(a => a.LogicalName == attribute.name);
-                    var attrType = attrMetadata.GetAttributeType();
+                    var attrType = attrMetadata.GetAttributeSqlType();
 
                     if (attribute.aggregateSpecified && (attribute.aggregate == Engine.FetchXml.AggregateType.count || attribute.aggregate == Engine.FetchXml.AggregateType.countcolumn))
-                        attrType = typeof(int);
+                        attrType = typeof(SqlInt32);
 
-                    var attrName = attribute.alias ?? attribute.name;
-                    var fullName = attribute.alias != null ? attribute.alias : $"{alias}.{attrName}";
+                    string fullName;
+                    string attrAlias;
+
+                    if (!String.IsNullOrEmpty(attribute.alias))
+                    {
+                        if (!FetchXml.aggregate || attribute.groupby == FetchBoolType.@true)
+                        {
+                            fullName = $"{alias}.{attribute.alias}";
+                            attrAlias = attribute.alias;
+                        }
+                        else
+                        {
+                            fullName = attribute.alias;
+                            attrAlias = null;
+                        }
+                    }
+                    else
+                    {
+                        fullName = $"{alias}.{attribute.name}";
+                        attrAlias = attribute.name;
+                    }
 
                     schema.Schema[fullName] = attrType;
 
-                    if (!schema.Aliases.TryGetValue(attrName, out var simpleColumnNameAliases))
+                    if (!schema.Aliases.TryGetValue(attrAlias, out var simpleColumnNameAliases))
                     {
                         simpleColumnNameAliases = new List<string>();
-                        schema.Aliases[attrName] = simpleColumnNameAliases;
+                        schema.Aliases[attrAlias] = simpleColumnNameAliases;
                     }
 
                     if (!simpleColumnNameAliases.Contains(fullName))
@@ -444,16 +478,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     foreach (var virtualAttrMetadata in meta.Attributes.Where(a => a.AttributeOf == attrMetadata.LogicalName))
                     {
-                        var virtualAttrType = virtualAttrMetadata.GetAttributeType();
-                        var virtualAttrName = attrName + virtualAttrMetadata.LogicalName.Substring(attrMetadata.LogicalName.Length);
-                        var virtualAttrFullName = attribute.alias != null ? virtualAttrName : $"{alias}.{virtualAttrName}";
+                        var virtualAttrType = virtualAttrMetadata.GetAttributeSqlType();
+                        var virtualAttrAlias = attrAlias + virtualAttrMetadata.LogicalName.Substring(attrMetadata.LogicalName.Length);
+                        var virtualAttrFullName = fullName + virtualAttrMetadata.LogicalName.Substring(attrMetadata.LogicalName.Length);
 
                         schema.Schema[virtualAttrFullName] = virtualAttrType;
 
-                        if (!schema.Aliases.TryGetValue(virtualAttrName, out var simpleVirtualColumnNameAliases))
+                        if (!schema.Aliases.TryGetValue(virtualAttrAlias, out var simpleVirtualColumnNameAliases))
                         {
                             simpleVirtualColumnNameAliases = new List<string>();
-                            schema.Aliases[virtualAttrName] = simpleVirtualColumnNameAliases;
+                            schema.Aliases[virtualAttrAlias] = simpleVirtualColumnNameAliases;
                         }
 
                         if (!simpleVirtualColumnNameAliases.Contains(virtualAttrFullName))
@@ -465,7 +499,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     foreach (var attrMetadata in meta.Attributes)
                     {
-                        var attrType = attrMetadata.GetAttributeType();
+                        var attrType = attrMetadata.GetAttributeSqlType();
                         var attrName = attrMetadata.LogicalName;
                         var fullName = $"{alias}.{attrName}";
 

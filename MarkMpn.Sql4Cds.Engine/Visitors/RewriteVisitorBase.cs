@@ -11,6 +11,17 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
     /// </summary>
     abstract class RewriteVisitorBase : TSqlFragmentVisitor
     {
+        public ScalarExpression ReplaceExpression(ScalarExpression expression)
+        {
+            var directReplaced = ReplaceExpression(expression, out _);
+
+            if (directReplaced != expression)
+                return directReplaced;
+
+            expression.Accept(this);
+            return expression;
+        }
+
         private string ReplaceExpression<T>(T target, Expression<Func<T, ScalarExpression>> selector) where T : TSqlFragment
         {
             var property = (PropertyInfo) ((MemberExpression)selector.Body).Member;
@@ -170,6 +181,18 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
         {
             base.ExplicitVisit(node);
             ReplaceExpression(node, n => n.SearchCondition);
+        }
+
+        public override void ExplicitVisit(CastCall node)
+        {
+            base.ExplicitVisit(node);
+            ReplaceExpression(node, n => n.Parameter);
+        }
+
+        public override void ExplicitVisit(ConvertCall node)
+        {
+            base.ExplicitVisit(node);
+            ReplaceExpression(node, n => n.Parameter);
         }
     }
 }

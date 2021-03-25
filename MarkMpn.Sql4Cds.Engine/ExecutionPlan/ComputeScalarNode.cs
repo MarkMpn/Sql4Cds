@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using MarkMpn.Sql4Cds.Engine.Visitors;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 
@@ -65,6 +66,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             Source = Source.FoldQuery(metadata, options, parameterTypes);
+
+            // Combine multiple ComputeScalar nodes. Calculations in this node might be dependent on those in the previous node, so rewrite any references
+            // to the earlier computed columns
+            if (Source is ComputeScalarNode computeScalar)
+            {
+                var rewrites = new Dictionary<ScalarExpression, ScalarExpression>();
+
+                foreach (var prevCalc in computeScalar.Columns)
+                    rewrites[prevCalc.Key.ToColumnReference()] = prevCalc.Value;
+
+                var rewrite = new RewriteVisitor(rewrites);
+
+                foreach (var calc in Columns)
+                    computeScalar.Columns.Add(calc.Key, rewrite.ReplaceExpression(calc.Value));
+
+                return computeScalar;
+            }
+
             Source.Parent = this;
             return this;
         }

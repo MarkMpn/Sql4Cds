@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data.SqlTypes;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.ServiceModel;
@@ -279,7 +281,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     var sourceColName = select.ColumnSet.Single(col => col.OutputColumn == targetAttribute.LogicalName).SourceColumn;
                     var sourceCol = sourceColName.ToColumnReference();
                     var sourceType = sourceCol.GetType(schema, null);
-                    var targetType = targetAttribute.GetAttributeType();
+                    var targetType = targetAttribute.GetAttributeSqlType();
 
                     if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, targetType))
                         throw new NotSupportedQueryFragmentException($"Cannot convert value of type {sourceType} to {targetType}", assignment);
@@ -789,7 +791,18 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (!(grouping is ExpressionGroupingSpecification exprGroup))
                         throw new NotSupportedQueryFragmentException("Unhandled GROUP BY expression", grouping);
 
-                    if (!(exprGroup.Expression is ColumnReferenceExpression col))
+                    if (exprGroup.Expression is ColumnReferenceExpression col)
+                    {
+                        if (!schema.ContainsColumn(col.GetColumnName(), out var groupByColName))
+                            throw new NotSupportedQueryFragmentException("Unknown column", col);
+
+                        if (col.GetColumnName() != groupByColName)
+                        {
+                            col = groupByColName.ToColumnReference();
+                            exprGroup.Expression = col;
+                        }
+                    }
+                    else
                     {
                         // Use generic name for computed columns by default. Special case for DATEPART functions which
                         // could be folded down to FetchXML directly, so make these nicer names
@@ -975,10 +988,10 @@ namespace MarkMpn.Sql4Cds.Engine
             var offsetType = offsetClause.OffsetExpression.GetType(null, parameterTypes);
             var fetchType = offsetClause.FetchExpression.GetType(null, parameterTypes);
 
-            if (!SqlTypeConverter.CanChangeTypeImplicit(offsetType, typeof(int)))
+            if (!SqlTypeConverter.CanChangeTypeImplicit(offsetType, typeof(SqlInt32)))
                 throw new NotSupportedQueryFragmentException("Unexpected OFFSET type", offsetClause.OffsetExpression);
 
-            if (!SqlTypeConverter.CanChangeTypeImplicit(fetchType, typeof(int)))
+            if (!SqlTypeConverter.CanChangeTypeImplicit(fetchType, typeof(SqlInt32)))
                 throw new NotSupportedQueryFragmentException("Unexpected FETCH type", offsetClause.FetchExpression);
 
             return new OffsetFetchNode
@@ -1000,7 +1013,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 source = new TableSpoolNode { Source = source };
 
             var topType = topRowFilter.Expression.GetType(null, parameterTypes);
-            var targetType = topRowFilter.Percent ? typeof(float) : typeof(int);
+            var targetType = topRowFilter.Percent ? typeof(SqlSingle) : typeof(SqlInt32);
 
             if (!SqlTypeConverter.CanChangeTypeImplicit(topType, targetType))
                 throw new NotSupportedQueryFragmentException("Unexpected TOP type", topRowFilter.Expression);
@@ -1953,7 +1966,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         if (!row.ColumnValues[colIndex].IsConstantValueExpression(null, out var literal))
                             throw new NotSupportedQueryFragmentException("Literal value expected", row.ColumnValues[colIndex]);
 
-                        entity[columnNames[colIndex]] = SqlTypeConverter.ChangeType(literal.Value, types[colIndex]);
+                        entity[columnNames[colIndex]] = SqlTypeConverter.ChangeType(new SqlString(literal.Value, CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace), types[colIndex]);
                     }
 
                     constantScan.Values.Add(entity);

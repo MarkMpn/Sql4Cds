@@ -2,7 +2,10 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
+using System.Data.SqlTypes;
 using System.Linq;
+using System.Linq.Expressions;
+using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -84,15 +87,32 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             using (var timer = new Timer(this))
             {
+                var meta = metadata[LogicalName];
+                var attributes = meta.Attributes.ToDictionary(a => a.LogicalName);
+
                 List<Entity> entities;
+                NodeSchema schema;
 
                 if (Source is IDataExecutionPlanNode dataSource)
                 {
+                    schema = dataSource.GetSchema(metadata, parameterTypes);
                     entities = dataSource.Execute(org, metadata, options, parameterTypes, parameterValues).ToList();
                 }
                 else if (Source is IDataSetExecutionPlanNode dataSetSource)
                 {
                     var dataTable = dataSetSource.Execute(org, metadata, options, parameterTypes, parameterValues);
+                    var columnSqlTypes = dataTable.Columns.Cast<DataColumn>().Select(col => SqlTypeConverter.NetToSqlType(col.DataType)).ToArray();
+                    var columnNullValues = columnSqlTypes.Select(type => SqlTypeConverter.GetNullValue(type)).ToArray();
+
+                    // Values will be stored as BCL types, convert them to SqlXxx types for consistency with IDataExecutionPlanNodes
+                    schema = new NodeSchema();
+
+                    for (var i = 0; i < dataTable.Columns.Count; i++)
+                    {
+                        var col = dataTable.Columns[i];
+                        schema.Schema[col.ColumnName] = columnSqlTypes[i];
+                    }
+
                     entities = dataTable.Rows
                         .Cast<DataRow>()
                         .Select(row =>
@@ -100,7 +120,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             var entity = new Entity();
 
                             for (var i = 0; i < dataTable.Columns.Count; i++)
-                                entity[dataTable.Columns[i].ColumnName] = row[i];
+                                entity[dataTable.Columns[i].ColumnName] = DBNull.Value.Equals(row[i]) ? columnNullValues[i] : SqlTypeConverter.NetToSqlType(row[i]);
 
                             return entity;
                         })
@@ -111,8 +131,40 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     throw new QueryExecutionException("Unexpected UPDATE data source") { Node = this };
                 }
 
-                var meta = metadata[LogicalName];
-                var attributes = meta.Attributes.ToDictionary(a => a.LogicalName);
+                // Precompile mappings with type conversions
+                var attributeAccessors = new Dictionary<string, Func<Entity, object>>();
+                Func<Entity,Guid> primaryIdAccessor;
+                var entityParam = Expression.Parameter(typeof(Entity));
+
+                foreach (var mapping in ColumnMappings)
+                {
+                    var sourceColumnName = mapping.Value;
+                    var destAttributeName = mapping.Key;
+
+                    if (!schema.ContainsColumn(sourceColumnName, out sourceColumnName))
+                        throw new QueryExecutionException($"Missing source column {mapping.Value}") { Node = this };
+
+                    var sourceType = schema.Schema[sourceColumnName];
+                    var destType = attributes[destAttributeName].GetAttributeType();
+                    var destSqlType = SqlTypeConverter.NetToSqlType(destType);
+
+                    var expr = (Expression)Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(sourceColumnName));
+                    expr = SqlTypeConverter.Convert(expr, sourceType);
+                    expr = SqlTypeConverter.Convert(expr, destSqlType);
+                    expr = SqlTypeConverter.Convert(expr, destType);
+
+                    attributeAccessors[destAttributeName] = Expression.Lambda<Func<Entity, object>>(expr, entityParam).Compile();
+                }
+
+                if (!schema.ContainsColumn(PrimaryIdSource, out var primaryIdColumn))
+                    throw new QueryExecutionException($"Missing source column {PrimaryIdSource}") { Node = this };
+
+                var primaryIdSourceType = schema.Schema[primaryIdColumn];
+                var primaryIdExpr = (Expression)Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(primaryIdColumn));
+                primaryIdExpr = SqlTypeConverter.Convert(primaryIdExpr, primaryIdSourceType);
+                primaryIdExpr = SqlTypeConverter.Convert(primaryIdExpr, typeof(SqlGuid));
+                primaryIdExpr = SqlTypeConverter.Convert(primaryIdExpr, typeof(Guid));
+                primaryIdAccessor = Expression.Lambda<Func<Entity, Guid>>(primaryIdExpr, entityParam).Compile();
 
                 // Check again that the update is allowed. Don't count any UI interaction in the execution time
                 timer.Pause();
@@ -144,20 +196,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                     return threadLocalState;
                                 }
 
-                                var update = new Entity(LogicalName, (Guid)entity[PrimaryIdSource]);
+                                var update = new Entity(LogicalName, primaryIdAccessor(entity));
 
-                                foreach (var mapping in ColumnMappings)
+                                foreach (var attributeAccessor in attributeAccessors)
                                 {
-                                    var value = entity[mapping.Value];
-                                    var attr = attributes[mapping.Key];
+                                    var value = attributeAccessor.Value(entity);
+                                    var attr = attributes[attributeAccessor.Key];
 
                                     if (!String.IsNullOrEmpty(attr.AttributeOf))
                                         continue;
 
                                     if (value != null)
                                     {
-                                        value = SqlTypeConverter.ChangeType(value, attr.GetAttributeType());
-
                                         if (attr is LookupAttributeMetadata lookupAttr)
                                         {
                                             value = new EntityReference { Id = (Guid)value };
@@ -165,7 +215,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                             if (lookupAttr.Targets.Length == 1)
                                                 ((EntityReference)value).LogicalName = lookupAttr.Targets[0];
                                             else
-                                                ((EntityReference)value).LogicalName = (string)entity[ColumnMappings[attr.LogicalName + "type"]];
+                                                ((EntityReference)value).LogicalName = (string)attributeAccessors[attr.LogicalName + "type"](entity);
                                         }
                                         else if (attr is EnumAttributeMetadata)
                                         {

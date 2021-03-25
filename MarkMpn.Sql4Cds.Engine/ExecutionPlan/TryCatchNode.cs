@@ -18,16 +18,53 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
+            var useCatchSource = false;
+            IEnumerator<Entity> enumerator;
+
             try
             {
-                return TrySource.Execute(org, metadata, options, parameterTypes, parameterValues);
+                enumerator = TrySource.Execute(org, metadata, options, parameterTypes, parameterValues).GetEnumerator();
             }
             catch (Exception ex)
             {
                 if (ExceptionFilter != null && !ExceptionFilter(ex))
                     throw;
 
-                return CatchSource.Execute(org, metadata, options, parameterTypes, parameterValues);
+                useCatchSource = true;
+                enumerator = null;
+            }
+
+            var doneFirst = false;
+
+            while (!useCatchSource && !options.Cancelled)
+            {
+                Entity current;
+
+                try
+                {
+                    if (!enumerator.MoveNext())
+                        break;
+
+                    doneFirst = true;
+                    current = enumerator.Current;
+                }
+                catch (Exception ex)
+                {
+                    if (doneFirst || ExceptionFilter != null && !ExceptionFilter(ex))
+                        throw;
+
+                    useCatchSource = true;
+                    current = null;
+                }
+                
+                if (!useCatchSource)
+                    yield return current;
+            }
+
+            if (useCatchSource)
+            {
+                foreach (var entity in CatchSource.Execute(org, metadata, options, parameterTypes, parameterValues))
+                    yield return entity;
             }
         }
 

@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
+using System.Data.SqlTypes;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
@@ -1030,6 +1031,15 @@ namespace MarkMpn.Sql4Cds
                 grid.ShowEditingIcon = false;
                 grid.ContextMenuStrip = gridContextMenuStrip;
                 grid.DataSource = results;
+                grid.CellFormatting += (s, e) =>
+                {
+                    if (e.Value is INullable nullable && nullable.IsNull || e.Value is DBNull)
+                    {
+                        e.Value = "NULL";
+                        e.CellStyle.BackColor = Color.FromArgb(0xff, 0xff, 0xe1);
+                        e.FormattingApplied = true;
+                    }
+                };
                 grid.HandleCreated += (s, e) =>
                 {
                     if (Settings.Instance.AutoSizeColumns)

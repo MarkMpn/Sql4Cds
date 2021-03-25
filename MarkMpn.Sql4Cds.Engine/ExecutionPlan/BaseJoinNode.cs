@@ -47,7 +47,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             else
             {
                 foreach (var attr in leftSchema.Schema)
-                    merged[attr.Key] = null;
+                    merged[attr.Key] = SqlTypeConverter.GetNullValue(attr.Value);
             }
 
             if (!SemiJoin)
@@ -60,14 +60,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 else
                 {
                     foreach (var attr in rightSchema.Schema)
-                        merged[attr.Key] = null;
+                        merged[attr.Key] = SqlTypeConverter.GetNullValue(attr.Value);
                 }
             }
 
             foreach (var definedValue in DefinedValues)
             {
                 if (rightEntity == null)
-                    merged[definedValue.Key] = null;
+                    merged[definedValue.Key] = SqlTypeConverter.GetNullValue(rightSchema.Schema[definedValue.Value]);
                 else
                     merged[definedValue.Key] = rightEntity[definedValue.Value];
             }

@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data.SqlTypes;
+using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -36,19 +38,19 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     new Entity
                     {
-                        ["firstname"] = "Mark"
+                        ["firstname"] = new SqlString("Mark", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace)
                     }
                 },
                 Schema =
                 {
-                    ["firstname"] = typeof(string)
+                    ["firstname"] = typeof(SqlString)
                 }
             };
 
             var results = node.Execute(_org, _metadata, new StubOptions(), null, null).ToArray();
 
             Assert.AreEqual(1, results.Length);
-            Assert.AreEqual("Mark", results[0]["firstname"]);
+            Assert.AreEqual("Mark", ((SqlString)results[0]["firstname"]).Value);
         }
 
         [TestMethod]
@@ -60,12 +62,12 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     Values =
                     {
-                        new Entity { ["firstname"] = "Mark" },
-                        new Entity { ["firstname"] = "Joe" }
+                        new Entity { ["firstname"] = new SqlString("Mark", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) },
+                        new Entity { ["firstname"] = new SqlString("Joe", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) }
                     },
                     Schema =
                     {
-                        ["firstname"] = typeof(string)
+                        ["firstname"] = typeof(SqlString)
                     }
                 },
                 Filter = new BooleanComparisonExpression
@@ -88,7 +90,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var results = node.Execute(_org, _metadata, new StubOptions(), null, null).ToArray();
 
             Assert.AreEqual(1, results.Length);
-            Assert.AreEqual("Mark", results[0]["firstname"]);
+            Assert.AreEqual("Mark", ((SqlString)results[0]["firstname"]).Value);
         }
 
         [TestMethod]
@@ -100,13 +102,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     Values =
                     {
-                        new Entity { ["f.key"] = 1, ["f.firstname"] = "Mark" },
-                        new Entity { ["f.key"] = 2, ["f.firstname"] = "Joe" }
+                        new Entity { ["f.key"] = new SqlInt32(1), ["f.firstname"] = new SqlString("Mark", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) },
+                        new Entity { ["f.key"] = new SqlInt32(2), ["f.firstname"] = new SqlString("Joe", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) }
                     },
                     Schema =
                     {
-                        ["f.key"] = typeof(int),
-                        ["f.firstname"] = typeof(string)
+                        ["f.key"] = typeof(SqlInt32),
+                        ["f.firstname"] = typeof(SqlString)
                     }
                 },
                 LeftAttribute = new ColumnReferenceExpression
@@ -120,14 +122,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     Values =
                     {
-                        new Entity { ["l.key"] = 1, ["l.lastname"] = "Carrington" },
-                        new Entity { ["l.key"] = 1, ["l.lastname"] = "Twain" },
-                        new Entity { ["l.key"] = 3, ["l.lastname"] = "Webber" }
+                        new Entity { ["l.key"] = new SqlInt32(1), ["l.lastname"] = new SqlString("Carrington", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) },
+                        new Entity { ["l.key"] = new SqlInt32(1), ["l.lastname"] = new SqlString("Twain", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) },
+                        new Entity { ["l.key"] = new SqlInt32(3), ["l.lastname"] = new SqlString("Webber", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) }
                     },
                     Schema =
                     {
-                        ["l.key"] = typeof(int),
-                        ["l.lastname"] = typeof(string)
+                        ["l.key"] = typeof(SqlInt32),
+                        ["l.lastname"] = typeof(SqlString)
                     }
                 },
                 RightAttribute = new ColumnReferenceExpression
@@ -143,10 +145,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var results = node.Execute(_org, _metadata, new StubOptions(), null, null).ToArray();
 
             Assert.AreEqual(2, results.Length);
-            Assert.AreEqual("Mark", results[0]["f.firstname"]);
-            Assert.AreEqual("Carrington", results[0]["l.lastname"]);
-            Assert.AreEqual("Mark", results[1]["f.firstname"]);
-            Assert.AreEqual("Twain", results[1]["l.lastname"]);
+            Assert.AreEqual("Mark", ((SqlString)results[0]["f.firstname"]).Value);
+            Assert.AreEqual("Carrington", ((SqlString)results[0]["l.lastname"]).Value);
+            Assert.AreEqual("Mark", ((SqlString)results[1]["f.firstname"]).Value);
+            Assert.AreEqual("Twain", ((SqlString)results[1]["l.lastname"]).Value);
         }
 
         [TestMethod]
@@ -158,13 +160,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     Values =
                     {
-                        new Entity { ["key"] = 1, ["firstname"] = "Mark" },
-                        new Entity { ["key"] = 2, ["firstname"] = "Joe" }
+                        new Entity { ["key"] = new SqlInt32(1), ["firstname"] = new SqlString("Mark", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) },
+                        new Entity { ["key"] = new SqlInt32(2), ["firstname"] = new SqlString("Joe", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) }
                     },
                     Schema =
                     {
-                        ["key"] = typeof(int),
-                        ["firstname"] = typeof(string)
+                        ["key"] = typeof(SqlInt32),
+                        ["firstname"] = typeof(SqlString)
                     },
                     Alias = "f"
                 },
@@ -179,14 +181,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     Values =
                     {
-                        new Entity { ["key"] = 1, ["lastname"] = "Carrington" },
-                        new Entity { ["key"] = 1, ["lastname"] = "Twain" },
-                        new Entity { ["key"] = 3, ["lastname"] = "Hamill" }
+                        new Entity { ["key"] = new SqlInt32(1), ["lastname"] = new SqlString("Carrington", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) },
+                        new Entity { ["key"] = new SqlInt32(1), ["lastname"] = new SqlString("Twain", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) },
+                        new Entity { ["key"] = new SqlInt32(3), ["lastname"] = new SqlString("Hamill", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) }
                     },
                     Schema =
                     {
-                        ["key"] = typeof(int),
-                        ["lastname"] = typeof(string)
+                        ["key"] = typeof(SqlInt32),
+                        ["lastname"] = typeof(SqlString)
                     },
                     Alias = "l"
                 },
@@ -203,12 +205,12 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var results = node.Execute(_org, _metadata, new StubOptions(), null, null).ToArray();
 
             Assert.AreEqual(3, results.Length);
-            Assert.AreEqual("Mark", results[0]["f.firstname"]);
-            Assert.AreEqual("Carrington", results[0]["l.lastname"]);
-            Assert.AreEqual("Mark", results[1]["f.firstname"]);
-            Assert.AreEqual("Twain", results[1]["l.lastname"]);
-            Assert.AreEqual("Joe", results[2]["f.firstname"]);
-            Assert.AreEqual(null, results[2]["l.lastname"]);
+            Assert.AreEqual("Mark", ((SqlString)results[0]["f.firstname"]).Value);
+            Assert.AreEqual("Carrington", ((SqlString)results[0]["l.lastname"]).Value);
+            Assert.AreEqual("Mark", ((SqlString)results[1]["f.firstname"]).Value);
+            Assert.AreEqual("Twain", ((SqlString)results[1]["l.lastname"]).Value);
+            Assert.AreEqual("Joe", ((SqlString)results[2]["f.firstname"]).Value);
+            Assert.IsTrue(((SqlString)results[2]["l.lastname"]).IsNull);
         }
 
         [TestMethod]
@@ -220,13 +222,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     Values =
                     {
-                        new Entity { ["key"] = 1, ["firstname"] = "Mark" },
-                        new Entity { ["key"] = 2, ["firstname"] = "Joe" }
+                        new Entity { ["key"] = new SqlInt32(1), ["firstname"] = new SqlString("Mark", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) },
+                        new Entity { ["key"] = new SqlInt32(2), ["firstname"] = new SqlString("Joe", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) }
                     },
                     Schema =
                     {
-                        ["key"] = typeof(int),
-                        ["firstname"] = typeof(string)
+                        ["key"] = typeof(SqlInt32),
+                        ["firstname"] = typeof(SqlString)
                     },
                     Alias = "f"
                 },
@@ -241,14 +243,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     Values =
                     {
-                        new Entity { ["key"] = 1, ["lastname"] = "Carrington" },
-                        new Entity { ["key"] = 1, ["lastname"] = "Twain" },
-                        new Entity { ["key"] = 3, ["lastname"] = "Hamill" }
+                        new Entity { ["key"] = new SqlInt32(1), ["lastname"] = new SqlString("Carrington", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) },
+                        new Entity { ["key"] = new SqlInt32(1), ["lastname"] = new SqlString("Twain", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) },
+                        new Entity { ["key"] = new SqlInt32(3), ["lastname"] = new SqlString("Hamill", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) }
                     },
                     Schema =
                     {
-                        ["key"] = typeof(int),
-                        ["lastname"] = typeof(string)
+                        ["key"] = typeof(SqlInt32),
+                        ["lastname"] = typeof(SqlString)
                     },
                     Alias = "l"
                 },
@@ -265,12 +267,12 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var results = node.Execute(_org, _metadata, new StubOptions(), null, null).ToArray();
 
             Assert.AreEqual(3, results.Length);
-            Assert.AreEqual("Mark", results[0]["f.firstname"]);
-            Assert.AreEqual("Carrington", results[0]["l.lastname"]);
-            Assert.AreEqual("Mark", results[1]["f.firstname"]);
-            Assert.AreEqual("Twain", results[1]["l.lastname"]);
-            Assert.AreEqual(null, results[2]["f.firstname"]);
-            Assert.AreEqual("Hamill", results[2]["l.lastname"]);
+            Assert.AreEqual("Mark", ((SqlString)results[0]["f.firstname"]).Value);
+            Assert.AreEqual("Carrington", ((SqlString)results[0]["l.lastname"]).Value);
+            Assert.AreEqual("Mark", ((SqlString)results[1]["f.firstname"]).Value);
+            Assert.AreEqual("Twain", ((SqlString)results[1]["l.lastname"]).Value);
+            Assert.IsTrue(((SqlString)results[2]["f.firstname"]).IsNull);
+            Assert.AreEqual("Hamill", ((SqlString)results[2]["l.lastname"]).Value);
         }
 
         [TestMethod]
@@ -282,18 +284,18 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     Values =
                     {
-                        new Entity { ["name"] = "Mark" },
-                        new Entity { ["name"] = "Carrington" }
+                        new Entity { ["name"] = new SqlString("Mark", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) },
+                        new Entity { ["name"] = new SqlString("Carrington", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) }
                     }
                 },
-                Assertion = e => e.GetAttributeValue<string>("name") == "Mark",
+                Assertion = e => e.GetAttributeValue<SqlString>("name").Value == "Mark",
                 ErrorMessage = "Only Mark is allowed"
             };
 
             var results = node.Execute(_org, _metadata, new StubOptions(), null, null).GetEnumerator();
 
             Assert.IsTrue(results.MoveNext());
-            Assert.AreEqual("Mark", results.Current.GetAttributeValue<string>("name"));
+            Assert.AreEqual("Mark", results.Current.GetAttributeValue<SqlString>("name").Value);
 
             var ex = Assert.ThrowsException<QueryExecutionException>(() => results.MoveNext());
             Assert.AreEqual(node.ErrorMessage, ex.Message);
@@ -308,13 +310,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     Values =
                     {
-                        new Entity { ["value1"] = 1, ["value2"] = 2 },
-                        new Entity { ["value1"] = 3, ["value2"] = 4 }
+                        new Entity { ["value1"] = new SqlInt32(1), ["value2"] = new SqlInt32(2) },
+                        new Entity { ["value1"] = new SqlInt32(3), ["value2"] = new SqlInt32(4) }
                     },
                     Schema =
                     {
-                        ["value1"] = typeof(int),
-                        ["value2"] = typeof(int)
+                        ["value1"] = typeof(SqlInt32),
+                        ["value2"] = typeof(SqlInt32)
                     }
                 },
                 Columns =
@@ -341,7 +343,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             };
 
             var results = node.Execute(_org, _metadata, new StubOptions(), null, null)
-                .Select(e => e.GetAttributeValue<int>("mul"))
+                .Select(e => e.GetAttributeValue<SqlInt32>("mul").Value)
                 .ToArray();
 
             CollectionAssert.AreEqual(new[] { 2, 12 }, results);
@@ -357,20 +359,20 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     Values =
                     {
-                        new Entity { ["value1"] = 1, ["value2"] = 1 },
-                        new Entity { ["value1"] = 3, ["value2"] = 2 },
-                        new Entity { ["value1"] = 1, ["value2"] = 3 }
+                        new Entity { ["value1"] = new SqlInt32(1), ["value2"] = new SqlInt32(1) },
+                        new Entity { ["value1"] = new SqlInt32(3), ["value2"] = new SqlInt32(2) },
+                        new Entity { ["value1"] = new SqlInt32(1), ["value2"] = new SqlInt32(3) }
                     },
                     Schema =
                     {
-                        ["value1"] = typeof(int),
-                        ["value2"] = typeof(int)
+                        ["value1"] = typeof(SqlInt32),
+                        ["value2"] = typeof(SqlInt32)
                     }
                 }
             };
 
             var results = node.Execute(_org, _metadata, new StubOptions(), null, null)
-                .Select(e => e.GetAttributeValue<int>("value1"))
+                .Select(e => e.GetAttributeValue<SqlInt32>("value1").Value)
                 .ToArray();
 
             CollectionAssert.AreEqual(new[] { 1, 3 }, results);
@@ -386,20 +388,20 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     Values =
                     {
-                        new Entity { ["value1"] = "hello", ["value2"] = 1 },
-                        new Entity { ["value1"] = "world", ["value2"] = 2 },
-                        new Entity { ["value1"] = "Hello", ["value2"] = 3 }
+                        new Entity { ["value1"] = new SqlString("hello", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace), ["value2"] = new SqlInt32(1) },
+                        new Entity { ["value1"] = new SqlString("world", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace), ["value2"] = new SqlInt32(2) },
+                        new Entity { ["value1"] = new SqlString("Hello", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace), ["value2"] = new SqlInt32(3) }
                     },
                     Schema =
                     {
-                        ["value1"] = typeof(string),
-                        ["value2"] = typeof(int)
+                        ["value1"] = typeof(SqlString),
+                        ["value2"] = typeof(SqlInt32)
                     }
                 }
             };
 
             var results = node.Execute(_org, _metadata, new StubOptions(), null, null)
-                .Select(e => e.GetAttributeValue<string>("value1"))
+                .Select(e => e.GetAttributeValue<SqlString>("value1").Value)
                 .ToArray();
 
             CollectionAssert.AreEqual(new[] { "hello", "world" }, results);
@@ -427,21 +429,21 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     Values =
                     {
-                        new Entity { ["value1"] = "hello", ["value2"] = 1, ["expectedorder"] = 2 },
-                        new Entity { ["value1"] = "world", ["value2"] = 2, ["expectedorder"] = 3 },
-                        new Entity { ["value1"] = "Hello", ["value2"] = 3, ["expectedorder"] = 1 }
+                        new Entity { ["value1"] = new SqlString("hello", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace), ["value2"] = new SqlInt32(1), ["expectedorder"] = new SqlInt32(2) },
+                        new Entity { ["value1"] = new SqlString("world", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace), ["value2"] = new SqlInt32(2), ["expectedorder"] = new SqlInt32(3) },
+                        new Entity { ["value1"] = new SqlString("Hello", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace), ["value2"] = new SqlInt32(3), ["expectedorder"] = new SqlInt32(1) }
                     },
                     Schema =
                     {
-                        ["value1"] = typeof(string),
-                        ["value2"] = typeof(int),
-                        ["expectedorder"] = typeof(int)
+                        ["value1"] = typeof(SqlString),
+                        ["value2"] = typeof(SqlInt32),
+                        ["expectedorder"] = typeof(SqlInt32)
                     }
                 }
             };
 
             var results = node.Execute(_org, _metadata, new StubOptions(), null, null)
-                .Select(e => e.GetAttributeValue<int>("expectedorder"))
+                .Select(e => e.GetAttributeValue<SqlInt32>("expectedorder").Value)
                 .ToArray();
 
             CollectionAssert.AreEqual(new[] { 1, 2, 3 }, results);
@@ -470,22 +472,22 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     Values =
                     {
-                        new Entity { ["value1"] = "hello", ["value2"] = 1, ["expectedorder"] = 1 },
-                        new Entity { ["value1"] = "world", ["value2"] = 2, ["expectedorder"] = 2 },
-                        new Entity { ["value1"] = "Hello", ["value2"] = 3, ["expectedorder"] = 4 },
-                        new Entity { ["value1"] = "Hello", ["value2"] = 4, ["expectedorder"] = 3 }
+                        new Entity { ["value1"] = new SqlString("hello", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace), ["value2"] = new SqlInt32(1), ["expectedorder"] = new SqlInt32(1) },
+                        new Entity { ["value1"] = new SqlString("world", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace), ["value2"] = new SqlInt32(2), ["expectedorder"] = new SqlInt32(2) },
+                        new Entity { ["value1"] = new SqlString("Hello", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace), ["value2"] = new SqlInt32(3), ["expectedorder"] = new SqlInt32(4) },
+                        new Entity { ["value1"] = new SqlString("Hello", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace), ["value2"] = new SqlInt32(4), ["expectedorder"] = new SqlInt32(3) }
                     },
                     Schema =
                     {
-                        ["value1"] = typeof(string),
-                        ["value2"] = typeof(int),
-                        ["expectedorder"] = typeof(int)
+                        ["value1"] = typeof(SqlString),
+                        ["value2"] = typeof(SqlInt32),
+                        ["expectedorder"] = typeof(SqlInt32)
                     }
                 }
             };
 
             var results = node.Execute(_org, _metadata, new StubOptions(), null, null)
-                .Select(e => e.GetAttributeValue<int>("expectedorder"))
+                .Select(e => e.GetAttributeValue<SqlInt32>("expectedorder").Value)
                 .ToArray();
 
             CollectionAssert.AreEqual(new[] { 1, 2, 3, 4 }, results);
@@ -498,23 +500,23 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 Values =
                 {
-                    new Entity{["value1"] = 1},
-                    new Entity{["value1"] = 2}
+                    new Entity{["value1"] = new SqlInt32(1)},
+                    new Entity{["value1"] = new SqlInt32(2)}
                 },
                 Schema =
                 {
-                    ["value1"] = typeof(int)
+                    ["value1"] = typeof(SqlInt32)
                 }
             };
 
             var spool = new TableSpoolNode { Source = source };
 
             var results1 = spool.Execute(_org, _metadata, new StubOptions(), null, null)
-                .Select(e => e.GetAttributeValue<int>("value1"))
+                .Select(e => e.GetAttributeValue<SqlInt32>("value1").Value)
                 .ToArray();
 
             var results2 = spool.Execute(_org, _metadata, new StubOptions(), null, null)
-                .Select(e => e.GetAttributeValue<int>("value1"))
+                .Select(e => e.GetAttributeValue<SqlInt32>("value1").Value)
                 .ToArray();
 
             CollectionAssert.AreEqual(new[] { 1, 2 }, results1);

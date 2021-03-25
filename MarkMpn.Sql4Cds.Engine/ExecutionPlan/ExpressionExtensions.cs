@@ -141,6 +141,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var parameterParam = Expression.Parameter(typeof(IDictionary<string, object>));
 
             var expression = ToExpression(b, schema, parameterTypes, entityParam, parameterParam);
+            expression = Expression.IsTrue(expression);
             return Expression.Lambda<Func<Entity, IDictionary<string, object>, bool>>(expression, entityParam, parameterParam).Compile();
         }
 
@@ -212,27 +213,27 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private static Type GetType(IntegerLiteral i, NodeSchema schema, IDictionary<string, Type> parameterTypes)
         {
-            return typeof(int);
+            return typeof(SqlInt32);
         }
 
         private static Expression ToExpression(IntegerLiteral i, NodeSchema schema, IDictionary<string, Type> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam)
         {
-            return Expression.Constant(Int32.Parse(i.Value));
+            return Expression.Constant(new SqlInt32(Int32.Parse(i.Value)));
         }
 
         private static Type GetType(MoneyLiteral money, NodeSchema schema, IDictionary<string, Type> parameterTypes)
         {
-            return typeof(decimal);
+            return typeof(SqlDecimal);
         }
 
         private static Expression ToExpression(MoneyLiteral money, NodeSchema schema, IDictionary<string, Type> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam)
         {
-            return Expression.Constant(Decimal.Parse(money.Value));
+            return Expression.Constant(new SqlDecimal(Decimal.Parse(money.Value)));
         }
 
         private static Type GetType(NullLiteral n, NodeSchema schema, IDictionary<string, Type> parameterTypes)
         {
-            return typeof(object);
+            return null;
         }
 
         private static Expression ToExpression(NullLiteral n, NodeSchema schema, IDictionary<string, Type> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam)
@@ -242,32 +243,32 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private static Type GetType(NumericLiteral num, NodeSchema schema, IDictionary<string, Type> parameterTypes)
         {
-            return typeof(decimal);
+            return typeof(SqlDecimal);
         }
 
         private static Expression ToExpression(NumericLiteral num, NodeSchema schema, IDictionary<string, Type> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam)
         {
-            return Expression.Constant(Decimal.Parse(num.Value));
+            return Expression.Constant(new SqlDecimal(Decimal.Parse(num.Value)));
         }
 
         private static Type GetType(RealLiteral real, NodeSchema schema, IDictionary<string, Type> parameterTypes)
         {
-            return typeof(float);
+            return typeof(SqlSingle);
         }
 
         private static Expression ToExpression(RealLiteral real, NodeSchema schema, IDictionary<string, Type> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam)
         {
-            return Expression.Constant(Single.Parse(real.Value));
+            return Expression.Constant(new SqlSingle(Single.Parse(real.Value)));
         }
 
         private static Type GetType(StringLiteral str, NodeSchema schema, IDictionary<string, Type> parameterTypes)
         {
-            return typeof(string);
+            return typeof(SqlString);
         }
 
         private static Expression ToExpression(StringLiteral str, NodeSchema schema, IDictionary<string, Type> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam)
         {
-            return Expression.Constant(str.Value);
+            return Expression.Constant(new SqlString(str.Value, CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace));
         }
 
         private static Type GetType(OdbcLiteral odbc, NodeSchema schema, IDictionary<string, Type> parameterTypes)
@@ -276,7 +277,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 case OdbcLiteralType.Date:
                 case OdbcLiteralType.Timestamp:
-                    return typeof(DateTime);
+                    return typeof(SqlDateTime);
 
                 case OdbcLiteralType.Guid:
                     return typeof(SqlGuid);
@@ -291,13 +292,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             switch (odbc.OdbcLiteralType)
             {
                 case OdbcLiteralType.Date:
-                    return Expression.Constant(DateTime.ParseExact(odbc.Value, "yyyy'-'MM'-'dd", CultureInfo.CurrentCulture, DateTimeStyles.None));
+                    return Expression.Constant(new SqlDateTime(DateTime.ParseExact(odbc.Value, "yyyy'-'MM'-'dd", CultureInfo.CurrentCulture, DateTimeStyles.None)));
 
                 case OdbcLiteralType.Timestamp:
-                    return Expression.Constant(DateTime.ParseExact(odbc.Value, "yyyy'-'MM'-'dd HH':'mm':'ss", CultureInfo.CurrentCulture, DateTimeStyles.None));
+                    return Expression.Constant(new SqlDateTime(DateTime.ParseExact(odbc.Value, "yyyy'-'MM'-'dd HH':'mm':'ss", CultureInfo.CurrentCulture, DateTimeStyles.None)));
 
                 case OdbcLiteralType.Guid:
-                    return Expression.Constant(new SqlGuid(Guid.Parse(odbc.Value)));
+                    return Expression.Constant(new SqlGuid(odbc.Value));
 
                 default:
                     throw new QueryExecutionException("Unknown literal type");
@@ -318,7 +319,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var fetchXmlComparison = GetMethod(typeof(FetchXmlConditionMethods), func, paramTypes.ToArray(), false);
 
                 if (fetchXmlComparison != null)
-                    return typeof(bool);
+                    return typeof(SqlBoolean);
             }
 
             var lhs = cmp.FirstExpression.GetType(schema, parameterTypes);
@@ -330,7 +331,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!typeof(IComparable).IsAssignableFrom(type))
                 throw new NotSupportedQueryFragmentException($"Values of type {type} cannot be compared", cmp);
 
-            return typeof(bool);
+            return typeof(SqlBoolean);
         }
 
         private static Expression ToExpression(BooleanComparisonExpression cmp, NodeSchema schema, IDictionary<string, Type> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam)
@@ -357,52 +358,33 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 throw new NotSupportedQueryFragmentException($"No implicit conversion exists for types {lhs} and {rhs}", cmp);
 
             if (lhs.Type != type)
-            {
-                lhs = Expr.Box(lhs);
-                lhs = Expr.Call(() => SqlTypeConverter.ChangeType(Expr.Arg<object>(), Expr.Arg<Type>()), lhs, Expression.Constant(type));
-            }
+                lhs = SqlTypeConverter.Convert(lhs, type);
 
             if (rhs.Type != type)
-            {
-                rhs = Expr.Box(rhs);
-                rhs = Expr.Call(() => SqlTypeConverter.ChangeType(Expr.Arg<object>(), Expr.Arg<Type>()), rhs, Expression.Constant(type));
-            }
+                rhs = SqlTypeConverter.Convert(rhs, type);
 
-            lhs = Expr.Box(lhs);
-            rhs = Expr.Box(rhs);
-
-            return Expr.Call(() => BooleanComparison(Expr.Arg<object>(), Expr.Arg<object>(), Expr.Arg<BooleanComparisonType>()), lhs, rhs, Expression.Constant(cmp.ComparisonType));
-        }
-
-        private static bool BooleanComparison(object lhs, object rhs, BooleanComparisonType comparisonType)
-        {
-            if (lhs == null || rhs == null)
-                return false;
-
-            var comparison = StringComparer.CurrentCultureIgnoreCase.Compare(lhs, rhs);
-
-            switch (comparisonType)
+            switch (cmp.ComparisonType)
             {
                 case BooleanComparisonType.Equals:
-                    return comparison == 0;
+                    return Expression.Equal(lhs, rhs);
 
                 case BooleanComparisonType.GreaterThan:
-                    return comparison > 0;
+                    return Expression.GreaterThan(lhs, rhs);
 
                 case BooleanComparisonType.GreaterThanOrEqualTo:
                 case BooleanComparisonType.NotLessThan:
-                    return comparison >= 0;
+                    return Expression.GreaterThanOrEqual(lhs, rhs);
 
                 case BooleanComparisonType.LessThan:
-                    return comparison < 0;
+                    return Expression.LessThan(lhs, rhs);
 
                 case BooleanComparisonType.LessThanOrEqualTo:
                 case BooleanComparisonType.NotGreaterThan:
-                    return comparison <= 0;
+                    return Expression.LessThanOrEqual(lhs, rhs);
 
                 case BooleanComparisonType.NotEqualToBrackets:
                 case BooleanComparisonType.NotEqualToExclamation:
-                    return comparison != 0;
+                    return Expression.NotEqual(lhs, rhs);
 
                 default:
                     throw new QueryExecutionException("Unknown comparison type");
@@ -414,7 +396,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             bin.FirstExpression.GetType(schema, parameterTypes);
             bin.SecondExpression.GetType(schema, parameterTypes);
 
-            return typeof(bool);
+            return typeof(SqlBoolean);
         }
 
         private static Expression ToExpression(BooleanBinaryExpression bin, NodeSchema schema, IDictionary<string, Type> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam)
@@ -432,7 +414,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             paren.Expression.GetType(schema, parameterTypes);
 
-            return typeof(bool);
+            return typeof(SqlBoolean);
         }
 
         private static Expression ToExpression(BooleanParenthesisExpression paren, NodeSchema schema, IDictionary<string, Type> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam)
@@ -448,52 +430,52 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!SqlTypeConverter.CanMakeConsistentTypes(lhs, rhs, out var type))
                 throw new NotSupportedQueryFragmentException($"No implicit conversion exists for types {lhs} and {rhs}", bin);
 
-            var typeCategory = SqlTypeConverter.GetCategory(type);
+            string methodName;
 
             switch (bin.BinaryExpressionType)
             {
                 case BinaryExpressionType.Add:
-                    // Can be used on any numeric type except bit
-                    if ((typeCategory == SqlTypeCategory.ExactNumerics || typeCategory == SqlTypeCategory.ApproximateNumerics) && type != typeof(bool))
-                        return type;
-
-                    // Addition can also be used on strings
-                    if (type == typeof(string))
-                        return type;
+                    methodName = "op_Addition";
                     break;
 
                 case BinaryExpressionType.Subtract:
-                    // Can be used on any numeric type except bit
-                    if ((typeCategory == SqlTypeCategory.ExactNumerics || typeCategory == SqlTypeCategory.ApproximateNumerics) && type != typeof(bool))
-                        return type;
+                    methodName = "op_Subtraction";
                     break;
 
                 case BinaryExpressionType.Multiply:
+                    methodName = "op_Multiply";
+                    break;
+
                 case BinaryExpressionType.Divide:
-                    // Can be used on any numeric type
-                    if (typeCategory == SqlTypeCategory.ExactNumerics || typeCategory == SqlTypeCategory.ApproximateNumerics)
-                        return type;
+                    methodName = "op_Division";
                     break;
 
                 case BinaryExpressionType.Modulo:
-                    // Can be used on any exact numeric type
-                    if (typeCategory == SqlTypeCategory.ExactNumerics)
-                        return type;
+                    methodName = "op_Modulus";
                     break;
 
                 case BinaryExpressionType.BitwiseAnd:
-                case BinaryExpressionType.BitwiseOr:
-                case BinaryExpressionType.BitwiseXor:
-                    // Can be used on any integer, bit or binary type
-                    if (type == typeof(int) || type == typeof(byte))
-                        return type;
-
-                    if (type == typeof(bool))
-                        return typeof(byte);
+                    methodName = "op_BitwiseAnd";
                     break;
+
+                case BinaryExpressionType.BitwiseOr:
+                    methodName = "op_BitwiseOr";
+                    break;
+
+                case BinaryExpressionType.BitwiseXor:
+                    methodName = "op_ExclusiveOr";
+                    break;
+
+                default:
+                    throw new NotSupportedQueryFragmentException("Unknown operator", bin);
             }
 
-            throw new NotSupportedQueryFragmentException($"Operator {bin.BinaryExpressionType} is not defined for expressions of type {type}", bin);
+            var method = type.GetMethod(methodName, BindingFlags.Public | BindingFlags.Static, null, new[] { type, type }, null);
+
+            if (method == null)
+                throw new NotSupportedQueryFragmentException($"Operator {bin.BinaryExpressionType} is not defined for expressions of type {type}", bin);
+
+            return method.ReturnType;
         }
 
         private static Expression ToExpression(Microsoft.SqlServer.TransactSql.ScriptDom.BinaryExpression bin, NodeSchema schema, IDictionary<string, Type> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam)
@@ -505,162 +487,40 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 throw new NotSupportedQueryFragmentException($"No implicit conversion exists for types {lhs} and {rhs}", bin);
 
             if (lhs.Type != type)
-            {
-                lhs = Expr.Box(lhs);
-                lhs = Expr.Call(() => SqlTypeConverter.ChangeType(Expr.Arg<object>(), Expr.Arg<Type>()), lhs, Expression.Constant(type));
-            }
+                lhs = SqlTypeConverter.Convert(lhs, type);
 
             if (rhs.Type != type)
-            {
-                rhs = Expr.Box(rhs);
-                rhs = Expr.Call(() => SqlTypeConverter.ChangeType(Expr.Arg<object>(), Expr.Arg<Type>()), rhs, Expression.Constant(type));
-            }
+                rhs = SqlTypeConverter.Convert(rhs, type);
 
-            lhs = Expr.Box(lhs);
-            rhs = Expr.Box(rhs);
-
-            var expr = Expr.Call(() => BinaryOperation(Expr.Arg<object>(), Expr.Arg<object>(), Expr.Arg<BinaryExpressionType>(), Expr.Arg<Type>()), lhs, rhs, Expression.Constant(bin.BinaryExpressionType), Expression.Constant(type));
-            return Expression.Convert(expr, type);
-        }
-
-        private static object BinaryOperation(object lhs, object rhs, BinaryExpressionType binaryExpressionType, Type type)
-        {
-            if (lhs == null || rhs == null)
-                return null;
-
-            switch (binaryExpressionType)
+            switch (bin.BinaryExpressionType)
             {
                 case BinaryExpressionType.Add:
-                    if (type == typeof(long))
-                        return (long)lhs + (long)rhs;
-
-                    if (type == typeof(int))
-                        return (int)lhs + (int)rhs;
-
-                    if (type == typeof(decimal))
-                        return (decimal)lhs + (decimal)rhs;
-
-                    if (type == typeof(double))
-                        return (double)lhs + (double)rhs;
-
-                    if (type == typeof(float))
-                        return (float)lhs + (float)rhs;
-
-                    if (type == typeof(string))
-                        return (string)lhs + (string)rhs;
-                    break;
+                    return Expression.Add(lhs, rhs);
 
                 case BinaryExpressionType.Subtract:
-                    if (type == typeof(long))
-                        return (long)lhs - (long)rhs;
-
-                    if (type == typeof(int))
-                        return (int)lhs - (int)rhs;
-
-                    if (type == typeof(decimal))
-                        return (decimal)lhs - (decimal)rhs;
-
-                    if (type == typeof(double))
-                        return (double)lhs - (double)rhs;
-
-                    if (type == typeof(float))
-                        return (float)lhs - (float)rhs;
-                    break;
+                    return Expression.Subtract(lhs, rhs);
 
                 case BinaryExpressionType.Multiply:
-                    if (type == typeof(long))
-                        return (long)lhs * (long)rhs;
-
-                    if (type == typeof(int))
-                        return (int)lhs * (int)rhs;
-
-                    if (type == typeof(decimal))
-                        return (decimal)lhs * (decimal)rhs;
-
-                    if (type == typeof(bool))
-                        return (bool)lhs && (bool)rhs;
-
-                    if (type == typeof(double))
-                        return (double)lhs * (double)rhs;
-
-                    if (type == typeof(float))
-                        return (float)lhs * (float)rhs;
-                    break;
+                    return Expression.Multiply(lhs, rhs);
 
                 case BinaryExpressionType.Divide:
-                    if (type == typeof(long))
-                        return (long)lhs / (long)rhs;
+                    return Expression.Divide(lhs, rhs);
 
-                    if (type == typeof(int))
-                        return (int)lhs / (int)rhs;
-
-                    if (type == typeof(decimal))
-                        return (decimal)lhs / (decimal)rhs;
-
-                    // TODO:
-                    //if (type == typeof(bool))
-                    //    return (bool)lhs && (bool)rhs;
-
-                    if (type == typeof(double))
-                        return (double)lhs / (double)rhs;
-
-                    if (type == typeof(float))
-                        return (float)lhs / (float)rhs;
-                    break;
+                case BinaryExpressionType.Modulo:
+                    return Expression.Modulo(lhs, rhs);
 
                 case BinaryExpressionType.BitwiseAnd:
-                    if (type == typeof(bool))
-                    {
-                        lhs = SqlTypeConverter.ChangeType<byte>(lhs);
-                        rhs = SqlTypeConverter.ChangeType<byte>(rhs);
-                        type = typeof(byte);
-                    }
-
-                    if (type == typeof(int))
-                        return (int)lhs & (int)rhs;
-
-                    if (type == typeof(byte))
-                        return (byte)lhs & (byte)rhs;
-
-                    break;
+                    return Expression.And(lhs, rhs);
 
                 case BinaryExpressionType.BitwiseOr:
-                    if (type == typeof(bool))
-                    {
-                        lhs = SqlTypeConverter.ChangeType<byte>(lhs);
-                        rhs = SqlTypeConverter.ChangeType<byte>(rhs);
-                        type = typeof(byte);
-                    }
-
-                    if (type == typeof(int))
-                        return (int)lhs | (int)rhs;
-
-                    if (type == typeof(byte))
-                        return (byte)lhs | (byte)rhs;
-
-                    break;
+                    return Expression.Or(lhs, rhs);
 
                 case BinaryExpressionType.BitwiseXor:
-                    if (type == typeof(bool))
-                    {
-                        lhs = SqlTypeConverter.ChangeType<byte>(lhs);
-                        rhs = SqlTypeConverter.ChangeType<byte>(rhs);
-                        type = typeof(byte);
-                    }
-
-                    if (type == typeof(int))
-                        return (int)lhs ^ (int)rhs;
-
-                    if (type == typeof(byte))
-                        return (byte)lhs ^ (byte)rhs;
-
-                    break;
+                    return Expression.ExclusiveOr(lhs, rhs);
 
                 default:
-                    throw new QueryExecutionException("Unsupported operator");
+                    throw new NotSupportedQueryFragmentException("Unknown operator", bin);
             }
-
-            throw new QueryExecutionException($"Operator {binaryExpressionType} is not defined for expressions of type {type}");
         }
 
         private static MethodInfo GetMethod(FunctionCall func, NodeSchema schema, IDictionary<string, Type> parameterTypes)
@@ -747,7 +607,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     paramType = paramType.GetElementType();
 
                 if (!SqlTypeConverter.CanChangeTypeImplicit(paramTypes[i], paramType))
-                    throw new NotSupportedQueryFragmentException($"Cannot convert {paramTypes[i]} to {paramType}", func.Parameters[i - paramOffset]);
+                    throw new NotSupportedQueryFragmentException($"Cannot convert {paramTypes[i]} to {paramType}", i < paramOffset ? func : func.Parameters[i - paramOffset]);
             }
 
             for (var i = parameters.Length; i < paramTypes.Length; i++)
@@ -755,7 +615,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var paramType = parameters.Last().ParameterType.GetElementType();
 
                 if (!SqlTypeConverter.CanChangeTypeImplicit(paramTypes[i], paramType))
-                    throw new NotSupportedQueryFragmentException($"Cannot convert {paramTypes[i]} to {paramType}", func.Parameters[i - paramOffset]);
+                    throw new NotSupportedQueryFragmentException($"Cannot convert {paramTypes[i]} to {paramType}", i < paramOffset ? func : func.Parameters[i - paramOffset]);
             }
 
             return correctParameterCount[0].Method;
@@ -802,11 +662,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             for (var i = 0; i < parameters.Length; i++)
             {
                 if (paramValues[i].Type != parameters[i].ParameterType)
-                {
-                    paramValues[i] = Expr.Box(paramValues[i]);
-                    paramValues[i] = Expr.Call(() => SqlTypeConverter.ChangeType(Expr.Arg<object>(), Expr.Arg<Type>()), paramValues[i], Expression.Constant(parameters[i].ParameterType));
-                    paramValues[i] = Expression.Convert(paramValues[i], parameters[i].ParameterType);
-                }
+                    paramValues[i] = SqlTypeConverter.Convert(paramValues[i], parameters[i].ParameterType);
             }
 
             return Expression.Call(method, paramValues);
@@ -825,72 +681,53 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private static Type GetType(this Microsoft.SqlServer.TransactSql.ScriptDom.UnaryExpression unary, NodeSchema schema, IDictionary<string, Type> parameterTypes)
         {
             var type = unary.Expression.GetType(schema, parameterTypes);
-            var typeCategory = SqlTypeConverter.GetCategory(type);
+
+            string methodName;
 
             switch (unary.UnaryExpressionType)
             {
                 case UnaryExpressionType.Positive:
-                case UnaryExpressionType.Negative:
-                    if (typeCategory != SqlTypeCategory.ExactNumerics && typeCategory != SqlTypeCategory.ApproximateNumerics)
-                        throw new NotSupportedQueryFragmentException("Invalid operator for data type", unary);
+                    methodName = "op_UnaryPlus";
+                    break;
 
-                    return type;
+                case UnaryExpressionType.Negative:
+                    methodName = "op_UnaryNegation";
+                    break;
 
                 case UnaryExpressionType.BitwiseNot:
-                    if (typeCategory != SqlTypeCategory.ExactNumerics)
-                        throw new NotSupportedQueryFragmentException("Invalid operator for data type", unary);
-
-                    if (type == typeof(decimal))
-                        throw new NotSupportedQueryFragmentException("Invalid operator for data type", unary);
-
-                    return type;
+                    methodName = "op_OnesComplement";
+                    break;
 
                 default:
                     throw new NotSupportedQueryFragmentException("Unknown unary operator", unary);
             }
+
+            var method = type.GetMethod(methodName, BindingFlags.Public | BindingFlags.Static, null, new[] { type }, null);
+
+            if (method == null)
+                throw new NotSupportedQueryFragmentException($"Operator {unary.UnaryExpressionType} is not defined for expressions of type {type}", unary);
+
+            return method.ReturnType;
         }
 
         private static Expression ToExpression(this Microsoft.SqlServer.TransactSql.ScriptDom.UnaryExpression unary, NodeSchema schema, IDictionary<string, Type> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam)
         {
             var value = unary.Expression.ToExpression(schema, parameterTypes, entityParam, parameterParam);
-            var type = unary.GetType(schema, parameterTypes);
+            
+            switch (unary.UnaryExpressionType)
+            {
+                case UnaryExpressionType.Positive:
+                    return Expression.UnaryPlus(value);
 
-            value = Expr.Box(value);
-            value = Expr.Call(() => UnaryOperation(Expr.Arg<object>(), Expr.Arg<UnaryExpressionType>()), value, Expression.Constant(unary.UnaryExpressionType));
-            value = Expression.Convert(value, type);
-            return value;
-        }
+                case UnaryExpressionType.Negative:
+                    return Expression.Negate(value);
 
-        private static object UnaryOperation(object value, UnaryExpressionType unaryExpressionType)
-        {
-            if (value == null)
-                return null;
+                case UnaryExpressionType.BitwiseNot:
+                    return Expression.Not(value);
 
-            if (unaryExpressionType == UnaryExpressionType.Positive)
-                return value;
-
-            if (value is long l)
-                return unaryExpressionType == UnaryExpressionType.Negative ? -l : ~l;
-
-            if (value is int i)
-                return unaryExpressionType == UnaryExpressionType.Negative ? -i : ~i;
-
-            if (value is byte b)
-                return unaryExpressionType == UnaryExpressionType.Negative ? -b : ~b;
-
-            if (value is decimal d && unaryExpressionType == UnaryExpressionType.Negative)
-                return -d;
-
-            if (value is double m && unaryExpressionType == UnaryExpressionType.Negative)
-                return -m;
-
-            if (value is float f && unaryExpressionType == UnaryExpressionType.Negative)
-                return -f;
-
-            if (value is bool tf && unaryExpressionType == UnaryExpressionType.BitwiseNot)
-                return !tf;
-
-            throw new QueryExecutionException("Invalid operator for data type");
+                default:
+                    throw new NotSupportedQueryFragmentException("Unknown unary operator", unary);
+            }
         }
 
         private static Type GetType(this InPredicate inPred, NodeSchema schema, IDictionary<string, Type> parameterTypes)
@@ -911,7 +748,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     throw new NotSupportedQueryFragmentException($"Values of type {type} cannot be compared", inPred);
             }
 
-            return typeof(bool);
+            return typeof(SqlBoolean);
         }
 
         private static Expression ToExpression(this InPredicate inPred, NodeSchema schema, IDictionary<string, Type> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam)
@@ -927,39 +764,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 var comparisonValue = value.ToExpression(schema, parameterTypes, entityParam, parameterParam);
 
-                var comparison = Expression.NotEqual(comparisonValue, Expression.Constant(null));
-
                 if (!SqlTypeConverter.CanMakeConsistentTypes(exprValue.Type, comparisonValue.Type, out var type))
-                    throw new NotSupportedQueryFragmentException($"No implicit conversion exists for types {exprValue.Type} and {comparison.Type}", inPred);
+                    throw new NotSupportedQueryFragmentException($"No implicit conversion exists for types {exprValue.Type} and {comparisonValue.Type}", inPred);
 
                 var convertedExprValue = exprValue;
 
                 if (exprValue.Type != type)
-                {
-                    convertedExprValue = Expr.Box(convertedExprValue);
-                    convertedExprValue = Expr.Call(() => SqlTypeConverter.ChangeType(Expr.Arg<object>(), Expr.Arg<Type>()), convertedExprValue, Expression.Constant(type));
-                }
+                    convertedExprValue = SqlTypeConverter.Convert(convertedExprValue, type);
 
                 if (comparisonValue.Type != type)
-                {
-                    comparisonValue = Expr.Box(comparisonValue);
-                    comparisonValue = Expr.Call(() => SqlTypeConverter.ChangeType(Expr.Arg<object>(), Expr.Arg<Type>()), comparisonValue, Expression.Constant(type));
-                }
+                    comparisonValue = SqlTypeConverter.Convert(comparisonValue, type);
 
-                convertedExprValue = Expr.Box(convertedExprValue);
-                comparisonValue = Expr.Box(comparisonValue);
-                comparison = Expression.AndAlso(comparison, Expr.Call(() => StringComparer.CurrentCultureIgnoreCase.Equals(Expr.Arg<object>(), Expr.Arg<object>()), convertedExprValue, comparisonValue));
+                var comparison = inPred.NotDefined ? Expression.NotEqual(convertedExprValue, comparisonValue) : Expression.Equal(convertedExprValue, comparisonValue);
 
                 if (result == null)
                     result = comparison;
                 else
-                    result = Expression.OrElse(result, comparison);
+                    result = inPred.NotDefined ? Expression.AndAlso(result, comparison) : Expression.OrElse(result, comparison);
             }
-
-            if (inPred.NotDefined)
-                result = Expression.Not(result);
-
-            result = Expression.AndAlso(Expression.NotEqual(exprValue, Expression.Constant(null)), result);
 
             return result;
         }
@@ -990,17 +812,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private static Type GetType(this BooleanIsNullExpression isNull, NodeSchema schema, IDictionary<string, Type> parameterTypes)
         {
             isNull.Expression.GetType(schema, parameterTypes);
-            return typeof(bool);
+            return typeof(SqlBoolean);
         }
 
         private static Expression ToExpression(this BooleanIsNullExpression isNull, NodeSchema schema, IDictionary<string, Type> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam)
         {
             var value = isNull.Expression.ToExpression(schema, parameterTypes, entityParam, parameterParam);
+            value = Expression.PropertyOrField(value, nameof(INullable.IsNull));
 
             if (isNull.IsNot)
-                return Expression.NotEqual(value, Expression.Constant(null));
+                return Expression.Not(value);
 
-            return Expression.Equal(value, Expression.Constant(null));
+            return value;
         }
 
         private static Type GetType(this LikePredicate like, NodeSchema schema, IDictionary<string, Type> parameterTypes)
@@ -1008,20 +831,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var valueType = like.FirstExpression.GetType(schema, parameterTypes);
             var patternType = like.SecondExpression.GetType(schema, parameterTypes);
 
-            if (!SqlTypeConverter.CanChangeTypeImplicit(valueType, typeof(string)))
+            if (!SqlTypeConverter.CanChangeTypeImplicit(valueType, typeof(SqlString)))
                 throw new NotSupportedQueryFragmentException("Cannot convert value to string", like.FirstExpression);
 
-            if (!SqlTypeConverter.CanChangeTypeImplicit(patternType, typeof(string)))
+            if (!SqlTypeConverter.CanChangeTypeImplicit(patternType, typeof(SqlString)))
                 throw new NotSupportedQueryFragmentException("Cannot convert pattern to string", like.SecondExpression);
 
             if (like.EscapeExpression != null)
             {
                 var escapeType = like.EscapeExpression.GetType(schema, parameterTypes);
-                if (!SqlTypeConverter.CanChangeTypeImplicit(escapeType, typeof(string)))
+                if (!SqlTypeConverter.CanChangeTypeImplicit(escapeType, typeof(SqlString)))
                     throw new NotSupportedQueryFragmentException("Cannot convert escape sequence to string", like.EscapeExpression);
             }
 
-            return typeof(bool);
+            return typeof(SqlBoolean);
         }
 
         private static Expression ToExpression(this LikePredicate like, NodeSchema schema, IDictionary<string, Type> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam)
@@ -1030,45 +853,37 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var pattern = like.SecondExpression.ToExpression(schema, parameterTypes, entityParam, parameterParam);
             var escape = like.EscapeExpression?.ToExpression(schema, parameterTypes, entityParam, parameterParam);
 
-            if (value.Type != typeof(string))
-            {
-                value = Expr.Box(value);
-                value = Expr.Call(() => SqlTypeConverter.ChangeType<string>(Expr.Arg<object>()), value);
-            }
+            if (value.Type != typeof(SqlString))
+                value = SqlTypeConverter.Convert(value, typeof(SqlString));
 
-            if (pattern.Type != typeof(string))
-            {
-                pattern = Expr.Box(pattern);
-                pattern = Expr.Call(() => SqlTypeConverter.ChangeType<string>(Expr.Arg<object>()), pattern);
-            }
+            if (pattern.Type != typeof(SqlString))
+                pattern = SqlTypeConverter.Convert(pattern, typeof(SqlString));
 
-            if (escape != null && escape.Type != typeof(string))
-            {
-                escape = Expr.Box(escape);
-                escape = Expr.Call(() => SqlTypeConverter.ChangeType<string>(Expr.Arg<object>()), escape);
-            }
+            if (escape != null && escape.Type != typeof(SqlString))
+                escape = SqlTypeConverter.Convert(escape, typeof(SqlString));
 
             if (pattern.NodeType == ExpressionType.Constant && (escape == null || escape.NodeType == ExpressionType.Constant))
             {
                 // Do a one-off conversion to regex
-                var regex = LikeToRegex((string)((ConstantExpression)pattern).Value, (string)((ConstantExpression)escape)?.Value);
-                return Expr.Call(() => Like(Expr.Arg<string>(), Expr.Arg<Regex>(), Expr.Arg<bool>()), value, Expression.Constant(regex), Expression.Constant(like.NotDefined));
+                var regex = LikeToRegex((SqlString)((ConstantExpression)pattern).Value, (SqlString)(((ConstantExpression)escape)?.Value ?? SqlString.Null));
+                return Expr.Call(() => Like(Expr.Arg<SqlString>(), Expr.Arg<Regex>(), Expr.Arg<bool>()), value, Expression.Constant(regex), Expression.Constant(like.NotDefined));
             }
 
-            return Expr.Call(() => Like(Expr.Arg<string>(), Expr.Arg<string>(), Expr.Arg<string>(), Expr.Arg<bool>()), value, pattern, escape, Expression.Constant(like.NotDefined));
+            return Expr.Call(() => Like(Expr.Arg<SqlString>(), Expr.Arg<SqlString>(), Expr.Arg<SqlString>(), Expr.Arg<bool>()), value, pattern, escape, Expression.Constant(like.NotDefined));
         }
 
-        private static Regex LikeToRegex(string pattern, string escape)
+        private static Regex LikeToRegex(SqlString pattern, SqlString escape)
         {
             var regexBuilder = new StringBuilder();
             regexBuilder.Append("^");
 
             var escaped = false;
             var inRange = false;
+            var escapeChar = escape.IsNull ? '\0' : escape.Value[0];
 
-            foreach (var ch in pattern)
+            foreach (var ch in pattern.Value)
             {
-                if (escape != null && ch == escape[0])
+                if (escapeChar != '\0' && ch == escapeChar)
                 {
                     escaped = true;
                     continue;
@@ -1130,14 +945,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return new Regex(regexBuilder.ToString(), RegexOptions.IgnoreCase);
         }
 
-        private static bool Like(string value, string pattern, string escape, bool not)
+        private static bool Like(SqlString value, SqlString pattern, SqlString escape, bool not)
         {
-            if (value == null || pattern == null)
+            if (value.IsNull || pattern.IsNull)
                 return false;
 
             // Convert the LIKE pattern to a regex
             var regex = LikeToRegex(pattern, escape);
-            var result = regex.IsMatch(value);
+            var result = regex.IsMatch(value.Value);
 
             if (not)
                 result = !result;
@@ -1145,12 +960,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return result;
         }
 
-        private static bool Like(string value, Regex pattern, bool not)
+        private static bool Like(SqlString value, Regex pattern, bool not)
         {
-            if (value == null)
+            if (value.IsNull)
                 return false;
 
-            var result = pattern.IsMatch(value);
+            var result = pattern.IsMatch(value.Value);
 
             if (not)
                 result = !result;
@@ -1202,16 +1017,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (elseValue != null)
             {
                 if (elseValue.Type != type)
-                {
-                    elseValue = Expr.Box(elseValue);
-                    elseValue = Expr.Call(() => SqlTypeConverter.ChangeType(Expr.Arg<object>(), Expr.Arg<Type>()), elseValue, Expression.Constant(type));
-                }
+                    elseValue = SqlTypeConverter.Convert(elseValue, type);
 
                 result = elseValue;
             }
             else
             {
-                result = Expression.Constant(null);
+                result = Expression.Constant(SqlTypeConverter.GetNullValue(type));
             }
 
             foreach (var when in simpleCase.WhenClauses.Reverse())
@@ -1223,33 +1035,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     throw new NotSupportedQueryFragmentException($"Cannot compare values of type {value.Type} and {whenValue.Type}", when);
 
                 if (value.Type != caseType)
-                {
-                    valueCopy = Expr.Box(valueCopy);
-                    valueCopy = Expr.Call(() => SqlTypeConverter.ChangeType(Expr.Arg<object>(), Expr.Arg<Type>()), valueCopy, Expression.Constant(caseType));
-                }
+                    valueCopy = SqlTypeConverter.Convert(valueCopy, caseType);
 
                 if (whenValue.Type != caseType)
-                {
-                    whenValue = Expr.Box(whenValue);
-                    whenValue = Expr.Call(() => SqlTypeConverter.ChangeType(Expr.Arg<object>(), Expr.Arg<Type>()), valueCopy, Expression.Constant(whenValue));
-                }
+                    whenValue = SqlTypeConverter.Convert(whenValue, type);
 
-                var comparison = Expression.NotEqual(value, Expression.Constant(null));
-                comparison = Expression.AndAlso(comparison, Expression.NotEqual(whenValue, Expression.Constant(null)));
-                comparison = Expression.AndAlso(comparison, Expr.Call(() => StringComparer.CurrentCultureIgnoreCase.Equals(Expr.Arg<object>(), Expr.Arg<object>()), valueCopy, whenValue));
-
+                var comparison = Expression.Equal(valueCopy, whenValue);
                 var returnValue = when.ThenExpression.ToExpression(schema, parameterTypes, entityParam, parameterParam);
 
                 if (returnValue.Type != type)
-                {
-                    returnValue = Expr.Box(returnValue);
-                    returnValue = Expr.Call(() => SqlTypeConverter.ChangeType(Expr.Arg<object>(), Expr.Arg<Type>()), returnValue, Expression.Constant(type));
-                }
+                    returnValue = SqlTypeConverter.Convert(returnValue, type);
 
                 result = Expression.Condition(comparison, returnValue, result);
             }
 
-            return Expression.Convert(result, type);
+            return result;
         }
 
         private static Type GetType(SearchedCaseExpression searchedCase, NodeSchema schema, IDictionary<string, Type> parameterTypes)
@@ -1291,40 +1091,33 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (elseValue != null)
             {
                 if (elseValue.Type != type)
-                {
-                    elseValue = Expr.Box(elseValue);
-                    elseValue = Expr.Call(() => SqlTypeConverter.ChangeType(Expr.Arg<object>(), Expr.Arg<Type>()), elseValue, Expression.Constant(type));
-                }
+                    elseValue = SqlTypeConverter.Convert(elseValue, type);
 
                 result = elseValue;
             }
             else
             {
-                result = Expression.Constant(null);
+                result = Expression.Constant(SqlTypeConverter.GetNullValue(type));
             }
 
             foreach (var when in searchedCase.WhenClauses.Reverse())
             {
                 var whenValue = when.WhenExpression.ToExpression(schema, parameterTypes, entityParam, parameterParam);
-
                 var returnValue = when.ThenExpression.ToExpression(schema, parameterTypes, entityParam, parameterParam);
 
                 if (returnValue.Type != type)
-                {
-                    returnValue = Expr.Box(returnValue);
-                    returnValue = Expr.Call(() => SqlTypeConverter.ChangeType(Expr.Arg<object>(), Expr.Arg<Type>()), returnValue, Expression.Constant(type));
-                }
+                    returnValue = SqlTypeConverter.Convert(returnValue, type);
 
                 result = Expression.Condition(whenValue, returnValue, result);
             }
 
-            return Expression.Convert(result, type);
+            return result;
         }
 
         private static Type GetType(this BooleanNotExpression not, NodeSchema schema, IDictionary<string,Type> parameterTypes)
         {
             not.Expression.GetType(schema, parameterTypes);
-            return typeof(bool);
+            return typeof(SqlBoolean);
         }
 
         private static Expression ToExpression(this BooleanNotExpression not, NodeSchema schema, IDictionary<string, Type> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam)
@@ -1335,34 +1128,32 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private static readonly IDictionary<string, Type> _typeMapping = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
         {
-            ["bit"] = typeof(bool?),
-            ["tinyint"] = typeof(byte?),
-            ["smallint"] = typeof(short?),
-            ["int"] = typeof(int?),
-            ["bigint"] = typeof(long?),
-            ["real"] = typeof(float?),
-            ["float"] = typeof(double?),
-            ["decimal"] = typeof(decimal?),
-            ["numeric"] = typeof(decimal?),
-            ["smallmoney"] = typeof(decimal?),
-            ["money"] = typeof(decimal?),
-            ["char"] = typeof(string),
-            ["nchar"] = typeof(string),
-            ["varchar"] = typeof(string),
-            ["nvarchar"] = typeof(string),
-            ["text"] = typeof(string),
-            ["ntext"] = typeof(string),
-            ["binary"] = typeof(byte[]),
-            ["varbinary"] = typeof(byte[]),
-            ["image"] = typeof(byte[]),
-            ["rowversion"] = typeof(byte[]),
-            ["date"] = typeof(DateTime?),
-            ["smalldatetime"] = typeof(DateTime?),
-            ["datetime"] = typeof(DateTime?),
-            ["datetime2"] = typeof(DateTime?),
-            ["datetimeoffset"] = typeof(DateTimeOffset?),
-            ["time"] = typeof(TimeSpan?),
-            ["uniqueidentifer"] = typeof(SqlGuid?)
+            ["bit"] = typeof(SqlBoolean),
+            ["tinyint"] = typeof(SqlByte),
+            ["smallint"] = typeof(SqlInt16),
+            ["int"] = typeof(SqlInt32),
+            ["bigint"] = typeof(SqlInt64),
+            ["real"] = typeof(SqlSingle),
+            ["float"] = typeof(SqlDouble),
+            ["decimal"] = typeof(SqlDecimal),
+            ["numeric"] = typeof(SqlDecimal),
+            ["smallmoney"] = typeof(SqlDecimal),
+            ["money"] = typeof(SqlDecimal),
+            ["char"] = typeof(SqlString),
+            ["nchar"] = typeof(SqlString),
+            ["varchar"] = typeof(SqlString),
+            ["nvarchar"] = typeof(SqlString),
+            ["text"] = typeof(SqlString),
+            ["ntext"] = typeof(SqlString),
+            ["binary"] = typeof(SqlBinary),
+            ["varbinary"] = typeof(SqlBinary),
+            ["image"] = typeof(SqlBinary),
+            ["rowversion"] = typeof(SqlBinary),
+            ["date"] = typeof(SqlDateTime),
+            ["smalldatetime"] = typeof(SqlDateTime),
+            ["datetime"] = typeof(SqlDateTime),
+            ["datetime2"] = typeof(SqlDateTime),
+            ["uniqueidentifer"] = typeof(SqlGuid)
         };
 
         private static Type GetType(this ConvertCall convert, NodeSchema schema, IDictionary<string, Type> parameterTypes)
@@ -1371,7 +1162,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var targetTypeName = convert.DataType.Name.BaseIdentifier.Value;
 
             if (!_typeMapping.TryGetValue(targetTypeName, out var targetType))
-                throw new NotSupportedQueryFragmentException("Unknown type name", convert.DataType);
+                throw new NotSupportedQueryFragmentException("Unsupported type name", convert.DataType);
 
             if (!SqlTypeConverter.CanChangeTypeExplicit(sourceType, targetType))
                 throw new NotSupportedQueryFragmentException($"No type conversion available from {sourceType} to {targetType}", convert);
@@ -1388,10 +1179,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 throw new NotSupportedQueryFragmentException("Unknown type name", convert.DataType);
 
             if (value.Type != targetType)
-            {
-                value = Expr.Box(value);
-                value = Expr.Call(() => SqlTypeConverter.ChangeType(Expr.Arg<object>(), Expr.Arg<Type>()), value, Expression.Constant(targetType));
-            }
+                value = SqlTypeConverter.Convert(value, targetType);
 
             if (targetTypeName.Equals("date", StringComparison.OrdinalIgnoreCase))
             {
@@ -1399,7 +1187,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 value = Expression.Condition(Expression.Equal(value, Expression.Constant(null)), Expression.Constant(null), Expression.Convert(Expression.Property(Expression.Convert(value, typeof(DateTime)), nameof(DateTime.Date)), typeof(object)));
             }
 
-            return Expression.Convert(value, targetType);
+            return value;
         }
 
         private static Type GetType(this CastCall cast, NodeSchema schema, IDictionary<string, Type> parameterTypes)

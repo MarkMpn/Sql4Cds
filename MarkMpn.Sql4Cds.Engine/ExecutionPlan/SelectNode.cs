@@ -45,10 +45,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             try
             {
+                var schema = Source.GetSchema(metadata, parameterTypes);
                 var dataTable = new DataTable();
 
                 foreach (var col in ColumnSet)
-                    dataTable.Columns.Add(col.OutputColumn);
+                {
+                    var sourceName = col.SourceColumn;
+                    if (!schema.ContainsColumn(sourceName, out sourceName))
+                        throw new QueryExecutionException($"Missing column {col.SourceColumn}") { Node = this };
+
+                    dataTable.Columns.Add(col.OutputColumn, schema.Schema[sourceName]);
+                }
 
                 foreach (var entity in Source.Execute(org, metadata, options, parameterTypes, parameterValues))
                 {
@@ -57,7 +64,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     foreach (var col in ColumnSet)
                     {
                         if (!entity.Contains(col.SourceColumn))
-                            throw new QueryExecutionException($"Missing column {col.SourceColumn}");
+                            throw new QueryExecutionException($"Missing column {col.SourceColumn}") { Node = this };
 
                         row[col.OutputColumn] = entity[col.SourceColumn];
                     }

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data.SqlTypes;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -12,142 +13,137 @@ namespace MarkMpn.Sql4Cds.Engine
     /// </summary>
     static class FetchXmlConditionMethods
     {
-        public static bool Yesterday(DateTime? field) => ThrowException();
+        public static SqlBoolean Yesterday(SqlDateTime field) => ThrowException();
 
-        public static bool Today(DateTime? field) => ThrowException();
+        public static SqlBoolean Today(SqlDateTime field) => ThrowException();
         
-        public static bool Tomorrow(DateTime? field) => ThrowException();
+        public static SqlBoolean Tomorrow(SqlDateTime field) => ThrowException();
 
-        public static bool LastSevenDays(DateTime? field) => ThrowException();
+        public static SqlBoolean LastSevenDays(SqlDateTime field) => ThrowException();
 
-        public static bool NextSevenDays(DateTime? field) => ThrowException();
+        public static SqlBoolean NextSevenDays(SqlDateTime field) => ThrowException();
 
-        public static bool LastWeek(DateTime? field) => ThrowException();
+        public static SqlBoolean LastWeek(SqlDateTime field) => ThrowException();
 
-        public static bool ThisWeek(DateTime? field) => ThrowException();
+        public static SqlBoolean ThisWeek(SqlDateTime field) => ThrowException();
 
-        public static bool NextWeek(DateTime? field) => ThrowException();
+        public static SqlBoolean NextWeek(SqlDateTime field) => ThrowException();
 
-        public static bool LastMonth(DateTime? field) => ThrowException();
+        public static SqlBoolean LastMonth(SqlDateTime field) => ThrowException();
 
-        public static bool ThisMonth(DateTime? field) => ThrowException();
+        public static SqlBoolean ThisMonth(SqlDateTime field) => ThrowException();
 
-        public static bool NextMonth(DateTime? field) => ThrowException();
+        public static SqlBoolean NextMonth(SqlDateTime field) => ThrowException();
 
-        public static bool On(DateTime? field, DateTime? date) => ThrowException();
+        public static SqlBoolean On(SqlDateTime field, SqlDateTime date) => ThrowException();
 
-        public static bool OnOrBefore(DateTime? field, DateTime? date) => ThrowException();
+        public static SqlBoolean OnOrBefore(SqlDateTime field, SqlDateTime date) => ThrowException();
 
-        public static bool OnOrAfter(DateTime? field, DateTime? date) => ThrowException();
+        public static SqlBoolean OnOrAfter(SqlDateTime field, SqlDateTime date) => ThrowException();
 
-        public static bool LastYear(DateTime? field) => ThrowException();
+        public static SqlBoolean LastYear(SqlDateTime field) => ThrowException();
 
-        public static bool ThisYear(DateTime? field) => ThrowException();
+        public static SqlBoolean ThisYear(SqlDateTime field) => ThrowException();
 
-        public static bool NextYear(DateTime? field) => ThrowException();
+        public static SqlBoolean NextYear(SqlDateTime field) => ThrowException();
 
-        public static bool LastXHours(DateTime? field, int? value) => ThrowException();
+        public static SqlBoolean LastXHours(SqlDateTime field, SqlInt32 value) => ThrowException();
 
-        public static bool NextXHours(DateTime? field, int? value) => ThrowException();
+        public static SqlBoolean NextXHours(SqlDateTime field, SqlInt32 value) => ThrowException();
 
-        public static bool LastXDays(DateTime? field, int? value) => ThrowException();
+        public static SqlBoolean LastXDays(SqlDateTime field, SqlInt32 value) => ThrowException();
 
-        public static bool NextXDays(DateTime? field, int? value) => ThrowException();
+        public static SqlBoolean NextXDays(SqlDateTime field, SqlInt32 value) => ThrowException();
 
-        public static bool LastXWeeks(DateTime? field, int? value) => ThrowException();
+        public static SqlBoolean LastXWeeks(SqlDateTime field, SqlInt32 value) => ThrowException();
 
-        public static bool NextXWeeks(DateTime? field, int? value) => ThrowException();
+        public static SqlBoolean NextXWeeks(SqlDateTime field, SqlInt32 value) => ThrowException();
 
-        public static bool LastXMonths(DateTime? field, int? value) => ThrowException();
+        public static SqlBoolean LastXMonths(SqlDateTime field, SqlInt32 value) => ThrowException();
 
-        public static bool NextXMonths(DateTime? field, int? value) => ThrowException();
+        public static SqlBoolean NextXMonths(SqlDateTime field, SqlInt32 value) => ThrowException();
 
-        public static bool OlderThanXMonths(DateTime? field, int? value) => ThrowException();
+        public static SqlBoolean OlderThanXMonths(SqlDateTime field, SqlInt32 value) => ThrowException();
 
-        public static bool OlderThanXYears(DateTime? field, int? value) => ThrowException();
+        public static SqlBoolean OlderThanXYears(SqlDateTime field, SqlInt32 value) => ThrowException();
 
-        public static bool OlderThanXWeeks(DateTime? field, int? value) => ThrowException();
+        public static SqlBoolean OlderThanXWeeks(SqlDateTime field, SqlInt32 value) => ThrowException();
 
-        public static bool OlderThanXDays(DateTime? field, int? value) => ThrowException();
+        public static SqlBoolean OlderThanXDays(SqlDateTime field, SqlInt32 value) => ThrowException();
 
-        public static bool OlderThanXHours(DateTime? field, int? value) => ThrowException();
+        public static SqlBoolean OlderThanXHours(SqlDateTime field, SqlInt32 value) => ThrowException();
 
-        public static bool OlderThanXMinutes(DateTime? field, int? value) => ThrowException();
+        public static SqlBoolean OlderThanXMinutes(SqlDateTime field, SqlInt32 value) => ThrowException();
 
-        public static bool LastXYears(DateTime? field, int? value) => ThrowException();
+        public static SqlBoolean LastXYears(SqlDateTime field, SqlInt32 value) => ThrowException();
 
-        public static bool NextXYears(DateTime? field, int? value) => ThrowException();
+        public static SqlBoolean NextXYears(SqlDateTime field, SqlInt32 value) => ThrowException();
 
-        public static bool EqUserId(Guid? field) => ThrowException();
+        public static SqlBoolean EqUserId(SqlGuid field) => ThrowException();
 
-        public static bool NeUserId(Guid? field) => ThrowException();
+        public static SqlBoolean NeUserId(SqlGuid field) => ThrowException();
 
-        public static bool EqUserTeams(Guid? field) => ThrowException();
+        public static SqlBoolean EqUserTeams(SqlGuid field) => ThrowException();
 
-        public static bool EqUserOrUserTeams(Guid? field) => ThrowException();
+        public static SqlBoolean EqUserOrUserTeams(SqlGuid field) => ThrowException();
 
-        public static bool EqUserOrUserHierarchy(Guid? field) => ThrowException();
+        public static SqlBoolean EqUserOrUserHierarchy(SqlGuid field) => ThrowException();
 
-        public static bool EqUserOrUserHierarchyAndTeams(Guid? field) => ThrowException();
+        public static SqlBoolean EqUserOrUserHierarchyAndTeams(SqlGuid field) => ThrowException();
 
-        public static bool EqBusinessId(Guid? field) => ThrowException();
+        public static SqlBoolean EqBusinessId(SqlGuid field) => ThrowException();
 
-        public static bool NeBusinessId(Guid? field) => ThrowException();
+        public static SqlBoolean NeBusinessId(SqlGuid field) => ThrowException();
 
-        public static bool EqUserLanguage(int? field) => ThrowException();
+        public static SqlBoolean EqUserLanguage(SqlInt32 field) => ThrowException();
 
-        public static bool ThisFiscalYear(DateTime? field) => ThrowException();
+        public static SqlBoolean ThisFiscalYear(SqlDateTime field) => ThrowException();
 
-        public static bool ThisFiscalPeriod(DateTime? field) => ThrowException();
+        public static SqlBoolean ThisFiscalPeriod(SqlDateTime field) => ThrowException();
 
-        public static bool NextFiscalYear(DateTime? field) => ThrowException();
+        public static SqlBoolean NextFiscalYear(SqlDateTime field) => ThrowException();
 
-        public static bool NextFiscalPeriod(DateTime? field) => ThrowException();
+        public static SqlBoolean NextFiscalPeriod(SqlDateTime field) => ThrowException();
 
-        public static bool LastFiscalYear(DateTime? field) => ThrowException();
+        public static SqlBoolean LastFiscalYear(SqlDateTime field) => ThrowException();
 
-        public static bool LastFiscalPeriod(DateTime? field) => ThrowException();
+        public static SqlBoolean LastFiscalPeriod(SqlDateTime field) => ThrowException();
 
-        public static bool LastXFiscalYears(DateTime? field, int? value) => ThrowException();
+        public static SqlBoolean LastXFiscalYears(SqlDateTime field, SqlInt32 value) => ThrowException();
 
-        public static bool LastXFiscalPeriods(DateTime? field, int? value) => ThrowException();
+        public static SqlBoolean LastXFiscalPeriods(SqlDateTime field, SqlInt32 value) => ThrowException();
 
-        public static bool NextXFiscalYears(DateTime? field, int? value) => ThrowException();
+        public static SqlBoolean NextXFiscalYears(SqlDateTime field, SqlInt32 value) => ThrowException();
 
-        public static bool NextXFiscalPeriods(DateTime? field, int? value) => ThrowException();
+        public static SqlBoolean NextXFiscalPeriods(SqlDateTime field, SqlInt32 value) => ThrowException();
 
-        public static bool InFiscalYear(DateTime? field, int? value) => ThrowException();
+        public static SqlBoolean InFiscalYear(SqlDateTime field, SqlInt32 value) => ThrowException();
 
-        public static bool InFiscalPeriod(DateTime? field, int? value) => ThrowException();
+        public static SqlBoolean InFiscalPeriod(SqlDateTime field, SqlInt32 value) => ThrowException();
 
-        public static bool InFiscalPeriodAndYear(DateTime? field, int? period, int? year) => ThrowException();
+        public static SqlBoolean InFiscalPeriodAndYear(SqlDateTime field, SqlInt32 period, SqlInt32 year) => ThrowException();
 
-        public static bool InOrBeforeFiscalPeriodAndYear(DateTime? field, int? period, int? year) => ThrowException();
+        public static SqlBoolean InOrBeforeFiscalPeriodAndYear(SqlDateTime field, SqlInt32 period, SqlInt32 year) => ThrowException();
 
-        public static bool InOrAfterFiscalPeriodAndYear(DateTime? field, int? period, int? year) => ThrowException();
+        public static SqlBoolean InOrAfterFiscalPeriodAndYear(SqlDateTime field, SqlInt32 period, SqlInt32 year) => ThrowException();
 
-        public static bool Under(Guid? field, Guid? value) => ThrowException();
+        public static SqlBoolean Under(SqlGuid field, SqlGuid value) => ThrowException();
 
-        public static bool EqOrUnder(Guid? field, Guid? value) => ThrowException();
+        public static SqlBoolean EqOrUnder(SqlGuid field, SqlGuid value) => ThrowException();
 
-        public static bool NotUnder(Guid? field, Guid? value) => ThrowException();
+        public static SqlBoolean NotUnder(SqlGuid field, SqlGuid value) => ThrowException();
 
-        public static bool Above(Guid? field, Guid? value) => ThrowException();
+        public static SqlBoolean Above(SqlGuid field, SqlGuid value) => ThrowException();
 
-        public static bool EqOrAbove(Guid? field, Guid? value) => ThrowException();
+        public static SqlBoolean EqOrAbove(SqlGuid field, SqlGuid value) => ThrowException();
 
-        public static bool ContainValues(OptionSetValueCollection field, int?[] value) => ThrowException();
+        public static SqlBoolean ContainValues(OptionSetValueCollection field, SqlInt32[] value) => ThrowException();
 
-        public static bool NotContainValues(OptionSetValueCollection field, int?[] value) => ThrowException();
+        public static SqlBoolean NotContainValues(OptionSetValueCollection field, SqlInt32[] value) => ThrowException();
 
-        private static Exception CreateException()
+        private static SqlBoolean ThrowException()
         {
-            return new NotImplementedException("Custom FetchXML filter conditions must only be used where they can be folded into a FetchXML Scan operator");
-        }
-
-        private static bool ThrowException()
-        {
-            throw new NotImplementedException();
+            throw new NotImplementedException("Custom FetchXML filter conditions must only be used where they can be folded into a FetchXML Scan operator");
         }
     }
 }

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data.SqlTypes;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -24,7 +25,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var resultEntity = new Entity(EntityName)
             {
-                [$"{EntityName}_count"] = new AliasedValue(EntityName, $"{EntityName}_count", count)
+                [$"{EntityName}_count"] = new SqlInt64(count)
             };
 
             yield return resultEntity;
@@ -41,7 +42,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 Schema =
                 {
-                    [$"{EntityName}_count"] = typeof(long)
+                    [$"{EntityName}_count"] = typeof(SqlInt64)
                 },
                 Aliases =
                 {

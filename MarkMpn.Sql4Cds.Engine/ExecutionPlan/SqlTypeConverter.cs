@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Data.SqlTypes;
 using System.Globalization;
 using System.Linq;
+using System.Linq.Expressions;
+using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -11,145 +13,42 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         // Abbreviated version of data type precedence from https://docs.microsoft.com/en-us/sql/t-sql/data-types/data-type-precedence-transact-sql?view=sql-server-ver15
         private static readonly Type[] _precendenceOrder = new[]
         {
-            typeof(DateTime),
-            typeof(double),
-            typeof(float),
-            typeof(decimal),
-            typeof(long),
-            typeof(int),
-            typeof(byte),
-            typeof(bool),
+            typeof(SqlDateTime),
+            typeof(SqlDouble),
+            typeof(SqlSingle),
+            typeof(SqlDecimal),
+            typeof(SqlInt64),
+            typeof(SqlInt32),
+            typeof(SqlInt16),
+            typeof(SqlByte),
+            typeof(SqlBoolean),
             typeof(SqlGuid),
-            typeof(string),
+            typeof(SqlString),
         };
 
-        private static readonly DateTime MinDateTime = new DateTime(1900, 1, 1);
-        private static readonly List<string> _datetimeFormats;
+        private static readonly IDictionary<Type, object> _nullValues;
 
         static SqlTypeConverter()
         {
-            // Handle different formats as per https://docs.microsoft.com/en-us/sql/t-sql/data-types/datetime-transact-sql?view=sql-server-ver15#supported-string-literal-formats-for-datetime
-            // Note regional settings from https://docs.microsoft.com/en-us/sql/t-sql/statements/set-dateformat-transact-sql?view=sql-server-ver15
-            // Extracted from sp_helplanguage
-            var dateformat = "dmy";
-
-            if (CultureInfo.CurrentCulture.Name == "en-US")
-                dateformat = "mdy";
-            else if (CultureInfo.CurrentCulture.Name.StartsWith("jp"))
-                dateformat = "ymd";
-            else if (CultureInfo.CurrentCulture.Name.StartsWith("se"))
-                dateformat = "ymd";
-            else if (CultureInfo.CurrentCulture.Name.StartsWith("hu"))
-                dateformat = "ymd";
-            else if (CultureInfo.CurrentCulture.Name.StartsWith("hr"))
-                dateformat = "ymd";
-            else if (CultureInfo.CurrentCulture.Name.StartsWith("lv"))
-                dateformat = "ymd";
-            else if (CultureInfo.CurrentCulture.Name.StartsWith("lt"))
-                dateformat = "ymd";
-            else if (CultureInfo.CurrentCulture.Name.StartsWith("cn"))
-                dateformat = "ymd";
-            else if (CultureInfo.CurrentCulture.Name.StartsWith("kr"))
-                dateformat = "ymd";
-
-            var baseFormats = new List<string>();
-
-            // Numeric formats
-            switch (dateformat)
+            _nullValues = new Dictionary<Type, object>
             {
-                case "mdy":
-                    baseFormats.AddRange(ExpandDateTimeFormat("M'/'d'/'[yy]yy"));
-                    baseFormats.AddRange(ExpandDateTimeFormat("M-d-[yy]yy"));
-                    baseFormats.AddRange(ExpandDateTimeFormat("M.d.[yy]yy"));
-                    break;
-
-                case "myd":
-                    baseFormats.AddRange(ExpandDateTimeFormat("M'/'d'/'[yy]yy"));
-                    break;
-
-                case "dmy":
-                    baseFormats.AddRange(ExpandDateTimeFormat("d'/'M'/'[yy]yy"));
-                    break;
-
-                case "dym":
-                    baseFormats.AddRange(ExpandDateTimeFormat("d'/'[yy]yy'/'M"));
-                    break;
-
-                case "ydm":
-                    baseFormats.AddRange(ExpandDateTimeFormat("[yy]yy'/'d'/'M"));
-                    break;
-
-                case "ymd":
-                    baseFormats.AddRange(ExpandDateTimeFormat("[yy]yy'/'M'/'d"));
-                    break;
-            }
-
-            var timeFormats = new[]
-            {
-                "H':'m",
-                "H':'m':'s",
-                "H':'m':'s':'fff",
-                "H':'m':'s'.'f",
-                "Htt",
-                "H tt"
+                [typeof(SqlBinary)] = SqlBinary.Null,
+                [typeof(SqlBoolean)] = SqlBoolean.Null,
+                [typeof(SqlByte)] = SqlByte.Null,
+                [typeof(SqlDateTime)] = SqlDateTime.Null,
+                [typeof(SqlDecimal)] = SqlDecimal.Null,
+                [typeof(SqlDouble)] = SqlDouble.Null,
+                [typeof(SqlGuid)] = SqlGuid.Null,
+                [typeof(SqlInt16)] = SqlInt16.Null,
+                [typeof(SqlInt32)] = SqlInt32.Null,
+                [typeof(SqlInt64)] = SqlInt64.Null,
+                [typeof(SqlSingle)] = SqlSingle.Null,
+                [typeof(SqlString)] = SqlString.Null
             };
-
-            _datetimeFormats = baseFormats
-                .Concat(baseFormats.SelectMany(d => timeFormats.Select(t => d + " " + t)))
-                .ToList();
-
-            // Alphabetical
-            _datetimeFormats.AddRange(ExpandDateTimeFormat("MMM[M] [d][,] yyyy"));
-            _datetimeFormats.AddRange(ExpandDateTimeFormat("MMM[M] d[,] [yy]yy"));
-            _datetimeFormats.AddRange(ExpandDateTimeFormat("MMM[M] yyyy [d]"));
-            _datetimeFormats.AddRange(ExpandDateTimeFormat("[d] MMM[M][,] yyyy"));
-            _datetimeFormats.AddRange(ExpandDateTimeFormat("d MMM[M][,] [yy]yy"));
-            _datetimeFormats.AddRange(ExpandDateTimeFormat("d [yy]yy MMM[M]"));
-            _datetimeFormats.AddRange(ExpandDateTimeFormat("[d] yyyy MMM[M]"));
-            _datetimeFormats.AddRange(ExpandDateTimeFormat("yyyy MMM[M] [d]"));
-            _datetimeFormats.AddRange(ExpandDateTimeFormat("yyyy [d] MMM[M]"));
-
-            // ISO 8601
-            _datetimeFormats.AddRange(ExpandDateTimeFormat("yyyy'-'MM'-'dd'T'HH':'mm':'ss['.'fff]"));
-
-            // Unseparated
-            _datetimeFormats.AddRange(ExpandDateTimeFormat("yyyyMMdd [HH':'mm':'ss]"));
-            _datetimeFormats.Add("yyyyMMddHH HH':'mm':'ss'.'fff");
-        }
-
-        public static Type MakeConsistentTypes(ref object lhs, ref object rhs)
-        {
-            if (lhs == null || rhs == null)
-                return typeof(object);
-
-            var lhsType = lhs.GetType();
-            var rhsType = rhs.GetType();
-
-            if (!CanMakeConsistentTypes(lhsType, rhsType, out var type))
-                throw new InvalidCastException($"Cannot implicity convert objects of type {lhsType} and {rhsType} to a consistent type");
-
-            if (lhsType != type)
-                lhs = ChangeType(lhs, type);
-
-            if (rhsType != type)
-                rhs = ChangeType(rhs, type);
-
-            return type;
-        }
-
-        private static Type MakeNonNullable(Type type)
-        {
-            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
-                return type.GetGenericArguments()[0];
-
-            return type;
         }
 
         public static bool CanMakeConsistentTypes(Type lhs, Type rhs, out Type consistent)
         {
-            lhs = MakeNonNullable(lhs);
-            rhs = MakeNonNullable(rhs);
-
             if (lhs == rhs)
             {
                 consistent = lhs;
@@ -157,26 +56,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             // Special case for null -> anything
-            if (lhs == typeof(object))
+            if (lhs == null)
             {
                 consistent = rhs;
                 return true;
             }
 
-            if (rhs == typeof(object))
-            {
-                consistent = lhs;
-                return true;
-            }
-
-            // Special case for string -> enum
-            if (lhs == typeof(string) && rhs.IsEnum)
-            {
-                consistent = rhs;
-                return true;
-            }
-
-            if (lhs.IsEnum && rhs == typeof(string))
+            if (rhs == null)
             {
                 consistent = lhs;
                 return true;
@@ -205,18 +91,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public static bool CanChangeTypeImplicit(Type from, Type to)
         {
-            from = MakeNonNullable(from);
-            to = MakeNonNullable(to);
-
             if (from == to)
                 return true;
 
             // Special case for null -> anything
-            if (from == typeof(object))
-                return true;
-
-            // Special case for string -> enum (from metadata types)
-            if (from == typeof(string) && to.IsEnum)
+            if (from == null)
                 return true;
 
             if (Array.IndexOf(_precendenceOrder, from) == -1 ||
@@ -224,22 +103,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return false;
 
             // Anything can be converted to/from strings
-            if (from == typeof(string) || to == typeof(string))
+            if (from == typeof(SqlString) || to == typeof(SqlString))
                 return true;
 
             // Any numeric type can be implicitly converted to any other. SQL requires a cast between decimal/numeric when precision/scale changes
             // but we don't have precision/scale as part of the data types
-            if ((from == typeof(bool) || from == typeof(byte) || from == typeof(int) || from == typeof(long) || from == typeof(decimal) || from == typeof(float) || from == typeof(double)) &&
-                (to == typeof(bool) || to == typeof(byte) || to == typeof(int) || to == typeof(long) || to == typeof(decimal) || to == typeof(float) || to == typeof(double)))
+            if ((from == typeof(SqlBoolean) || from == typeof(SqlByte) || from == typeof(SqlInt16) || from == typeof(SqlInt32) || from == typeof(SqlInt64) || from == typeof(SqlDecimal) || from == typeof(SqlSingle) || from == typeof(SqlDouble)) &&
+                (to == typeof(SqlBoolean) || to == typeof(SqlByte) || to == typeof(SqlInt16) || to == typeof(SqlInt32) || to == typeof(SqlInt64) || to == typeof(SqlDecimal) || to == typeof(SqlSingle) || to == typeof(SqlDouble)))
                 return true;
 
             // Any numeric type can be implicitly converted to datetime
-            if ((from == typeof(int) || from == typeof(long) || from == typeof(decimal) || from == typeof(float) || from == typeof(double)) &&
-                to == typeof(DateTime))
+            if ((from == typeof(SqlInt32) || from == typeof(SqlInt64) || from == typeof(SqlDecimal) || from == typeof(SqlSingle) || from == typeof(SqlDouble)) &&
+                to == typeof(SqlDateTime))
                 return true;
 
             // datetime can only be converted implicitly to string
-            if (from == typeof(DateTime) && to == typeof(string))
+            if (from == typeof(DateTime) && to == typeof(SqlString))
                 return true;
 
             return false;
@@ -251,10 +130,163 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return true;
 
             // Require explicit conversion from datetime to numeric types
-            if (from == typeof(DateTime) && (to == typeof(bool) || to == typeof(byte) || to == typeof(int) || to == typeof(long) || to == typeof(decimal) || to == typeof(float) || to == typeof(double)))
+            if (from == typeof(SqlDateTime) && (to == typeof(SqlBoolean) || to == typeof(SqlByte) || to == typeof(SqlInt16) || to == typeof(SqlInt32) || to == typeof(SqlInt64) || to == typeof(SqlDecimal) || to == typeof(SqlSingle) || to == typeof(SqlDouble)))
                 return true;
 
             return false;
+        }
+
+        public static Expression Convert(Expression expr, Type to)
+        {
+            if (expr.Type == typeof(SqlDateTime) && (to == typeof(SqlBoolean) || to == typeof(SqlByte) || to == typeof(SqlInt16) || to == typeof(SqlInt32) || to == typeof(SqlInt64) || to == typeof(SqlDecimal) || to == typeof(SqlSingle) || to == typeof(SqlDouble)))
+            {
+                expr = Expression.Condition(
+                    Expression.PropertyOrField(expr, nameof(SqlDateTime.IsNull)),
+                    Expression.Constant(SqlDouble.Null),
+                    Expression.Convert(
+                        Expression.PropertyOrField(
+                            Expression.Subtract(
+                                Expression.Convert(expr, typeof(DateTime)),
+                                Expression.Constant(SqlDateTime.MinValue)
+                            ),
+                            nameof(TimeSpan.TotalDays)
+                        ),
+                        typeof(SqlDouble)
+                    )
+                );
+            }
+
+            if (expr.Type != to)
+            {
+                expr = Expression.Convert(expr, to);
+
+                if (to == typeof(SqlString))
+                    expr = Expr.Call(() => UseDefaultCollation(Expr.Arg<SqlString>()), expr);
+            }
+
+            return expr;
+        }
+
+        public static SqlString UseDefaultCollation(SqlString value)
+        {
+            if (value.IsNull)
+                return value;
+
+            if (value.LCID == CultureInfo.CurrentCulture.LCID && value.SqlCompareOptions == (SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreWidth))
+                return value;
+
+            return new SqlString((string)value, CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace);
+        }
+
+        public static Type NetToSqlType(Type type)
+        {
+            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
+                type = type.GetGenericArguments()[0];
+
+            if (type.BaseType != null && type.BaseType.IsGenericType && type.BaseType.GetGenericTypeDefinition() == typeof(ManagedProperty<>))
+                type = type.BaseType.GetGenericArguments()[0];
+
+            if (type == typeof(byte[]))
+                return typeof(SqlBinary);
+
+            if (type == typeof(bool))
+                return typeof(SqlBoolean);
+
+            if (type == typeof(byte))
+                return typeof(SqlByte);
+
+            if (type == typeof(DateTime))
+                return typeof(SqlDateTime);
+
+            if (type == typeof(decimal))
+                return typeof(SqlDecimal);
+
+            if (type == typeof(double))
+                return typeof(SqlDouble);
+
+            if (type == typeof(Guid))
+                return typeof(SqlGuid);
+
+            if (type == typeof(short))
+                return typeof(SqlInt16);
+
+            if (type == typeof(int))
+                return typeof(SqlInt32);
+
+            if (type == typeof(long))
+                return typeof(SqlInt64);
+
+            if (type == typeof(float))
+                return typeof(SqlSingle);
+
+            if (type == typeof(string))
+                return typeof(SqlString);
+
+            // Convert any other complex types (e.g. from metadata queries) to strings
+            return typeof(SqlString);
+        }
+
+        public static object NetToSqlType(object value)
+        {
+            if (value != null)
+            {
+                var type = value.GetType();
+                if (type.BaseType != null && type.BaseType.IsGenericType && type.BaseType.GetGenericTypeDefinition() == typeof(ManagedProperty<>))
+                    value = type.GetProperty("Value").GetValue(value);
+            }
+
+            if (value is byte[] bin)
+                return new SqlBinary(bin);
+
+            if (value is bool b)
+                return new SqlBoolean(b);
+
+            if (value is byte by)
+                return new SqlByte(by);
+
+            if (value is DateTime dt)
+                return new SqlDateTime(dt);
+
+            if (value is decimal dec)
+                return new SqlDecimal(dec);
+
+            if (value is double dbl)
+                return new SqlDouble(dbl);
+
+            if (value is Guid g)
+                return new SqlGuid(g);
+
+            if (value is short s)
+                return new SqlInt16(s);
+
+            if (value is int i)
+                return new SqlInt32(i);
+
+            if (value is long l)
+                return new SqlInt64(l);
+
+            if (value is float f)
+                return new SqlSingle(f);
+
+            if (value is string str)
+                return new SqlString(str, CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace);
+
+            if (value is Money m)
+                return new SqlDecimal(m.Value);
+
+            if (value is OptionSetValue osv)
+                return new SqlInt32(osv.Value);
+
+            if (value is OptionSetValueCollection osvc)
+                return new SqlString(String.Join(",", osvc.Select(v => v.Value)), CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace);
+
+            // Convert any other complex types (e.g. from metadata queries) to strings
+            return new SqlString(value.ToString(), CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace);
+        }
+
+        public static object GetNullValue(Type sqlType)
+        {
+            return _nullValues[sqlType];
         }
 
         public static T ChangeType<T>(object value)
@@ -264,331 +296,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public static object ChangeType(object value, Type type)
         {
-            if (value == null)
-                return null;
+            var expression = (Expression)Expression.Constant(value);
 
-            type = MakeNonNullable(type);
-
-            if (type == typeof(string))
+            // Special case for converting from string to enum for metadata filters
+            if (expression.Type == typeof(SqlString) && type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>) && type.GetGenericArguments()[0].IsEnum)
             {
-                if (value is DateTime date)
-                    return date.ToString("yyyy-MM-dd HH:mm:ss.fff");
-
-                return value.ToString();
+                var nullCheck = Expression.PropertyOrField(expression, nameof(INullable.IsNull));
+                var nullValue = (Expression)Expression.Constant(null);
+                nullValue = Expression.Convert(nullValue, type);
+                var parsedValue = (Expression)Expression.Convert(expression, typeof(string));
+                parsedValue = Expr.Call(() => Enum.Parse(Expr.Arg<Type>(), Expr.Arg<string>()), Expression.Constant(type.GetGenericArguments()[0]), parsedValue);
+                parsedValue = Expression.Convert(parsedValue, type);
+                expression = Expression.Condition(nullCheck, nullValue, parsedValue);
+            }
+            else
+            {
+                expression = Expression.Convert(expression, type);
             }
 
-            if (value is string str)
-            {
-                if (type == typeof(SqlGuid))
-                    return new SqlGuid(str);
-
-                if (type == typeof(bool))
-                    return str.Equals("true", StringComparison.OrdinalIgnoreCase) || str == "1";
-
-                if (type == typeof(byte))
-                    return Byte.Parse(str);
-
-                if (type == typeof(int))
-                    return Int32.Parse(str);
-
-                if (type == typeof(long))
-                    return Int64.Parse(str);
-
-                if (type == typeof(decimal))
-                    return Decimal.Parse(str);
-
-                if (type == typeof(float))
-                    return Single.Parse(str);
-
-                if (type == typeof(double))
-                    return Double.Parse(str);
-
-                if (type == typeof(DateTime))
-                {
-                    foreach (var format in _datetimeFormats)
-                    {
-                        if (DateTime.TryParseExact(str, format, CultureInfo.CurrentCulture, DateTimeStyles.None, out var parsedDate))
-                            return parsedDate;
-                    }
-
-                    throw new QueryExecutionException("Cannot convert string value to datetime");
-                }
-
-                if (type.IsEnum)
-                    return Enum.Parse(type, str);
-            }
-
-            if (value is bool b)
-            {
-                if (type == typeof(byte))
-                    return b ? (byte) 1 : (byte) 0;
-
-                if (type == typeof(int))
-                    return b ? 1 : 0;
-
-                if (type == typeof(long))
-                    return b ? 1L : 0L;
-
-                if (type == typeof(decimal))
-                    return b ? 1M : 0M;
-
-                if (type == typeof(float))
-                    return b ? 1F : 0F;
-
-                if (type == typeof(double))
-                    return b ? 1D : 0D;
-
-                if (type == typeof(DateTime))
-                    return MinDateTime.AddDays(b ? 1 : 0);
-            }
-
-            if (value is byte by)
-            {
-                if (type == typeof(bool))
-                    return by != 0;
-
-                if (type == typeof(int))
-                    return (int)by;
-
-                if (type == typeof(long))
-                    return (long)by;
-
-                if (type == typeof(decimal))
-                    return (decimal)by;
-
-                if (type == typeof(float))
-                    return (float)by;
-
-                if (type == typeof(double))
-                    return (double)by;
-
-                if (type == typeof(DateTime))
-                    return MinDateTime.AddDays(by);
-            }
-
-            if (value is int i)
-            {
-                if (type == typeof(bool))
-                    return i != 0;
-
-                if (type == typeof(byte))
-                    return (byte)i;
-
-                if (type == typeof(long))
-                    return (long)i;
-
-                if (type == typeof(decimal))
-                    return (decimal)i;
-
-                if (type == typeof(float))
-                    return (float)i;
-
-                if (type == typeof(double))
-                    return (double)i;
-
-                if (type == typeof(DateTime))
-                    return MinDateTime.AddDays(i);
-            }
-
-            if (value is long l)
-            {
-                if (type == typeof(bool))
-                    return l != 0;
-
-                if (type == typeof(byte))
-                    return (byte)l;
-
-                if (type == typeof(int))
-                    return (int)l;
-
-                if (type == typeof(decimal))
-                    return (decimal)l;
-
-                if (type == typeof(float))
-                    return (float)l;
-
-                if (type == typeof(double))
-                    return (double)l;
-
-                if (type == typeof(DateTime))
-                    return MinDateTime.AddDays(l);
-            }
-
-            if (value is decimal dec)
-            {
-                if (type == typeof(bool))
-                    return dec != 0;
-
-                if (type == typeof(byte))
-                    return (byte)dec;
-
-                if (type == typeof(int))
-                    return (int)dec;
-
-                if (type == typeof(long))
-                    return (long)dec;
-
-                if (type == typeof(float))
-                    return (float)dec;
-
-                if (type == typeof(double))
-                    return (double)dec;
-
-                if (type == typeof(DateTime))
-                    return MinDateTime.AddDays((double)dec);
-            }
-
-            if (value is float f)
-            {
-                if (type == typeof(bool))
-                    return f != 0;
-
-                if (type == typeof(byte))
-                    return (byte)f;
-
-                if (type == typeof(int))
-                    return (int)f;
-
-                if (type == typeof(long))
-                    return (long)f;
-
-                if (type == typeof(decimal))
-                    return (decimal)f;
-
-                if (type == typeof(double))
-                    return (double)f;
-
-                if (type == typeof(DateTime))
-                    return MinDateTime.AddDays(f);
-            }
-
-            if (value is DateTime dt)
-                value = (dt - MinDateTime).TotalDays;
-
-            if (value is double dbl)
-            {
-                if (type == typeof(bool))
-                    return dbl != 0;
-
-                if (type == typeof(byte))
-                    return (byte)dbl;
-
-                if (type == typeof(int))
-                    return (int)dbl;
-
-                if (type == typeof(long))
-                    return (long)dbl;
-
-                if (type == typeof(decimal))
-                    return (decimal)dbl;
-
-                if (type == typeof(float))
-                    return (float)dbl;
-
-                if (type == typeof(DateTime))
-                    return MinDateTime.AddDays(dbl);
-            }
-
-            return Convert.ChangeType(value, type);
-        }
-
-        private static IEnumerable<string> ExpandDateTimeFormat(string format)
-        {
-            var parts = new List<string>();
-            var options = new List<bool>();
-
-            var partStart = -1;
-            var optional = false;
-            for (var i = 0; i < format.Length; i++)
-            {
-                if (format[i] == '[' || format[i] == ']')
-                {
-                    if (partStart != -1)
-                    {
-                        parts.Add(format.Substring(partStart, i - partStart));
-                        options.Add(optional);
-                    }
-
-                    partStart = i + 1;
-                    optional = format[i] == '[';
-                }
-
-                if (partStart == -1)
-                    partStart = 0;
-            }
-
-            if (partStart < format.Length)
-            {
-                parts.Add(format.Substring(partStart));
-                options.Add(false);
-            }
-
-            var combinations = new List<int>();
-            combinations.AddRange(parts.Select(p => 0));
-
-            var count = Math.Pow(2, options.Count(o => o));
-
-            for (var combination = 0; combination < count; combination++)
-            {
-                yield return String.Join("", parts.Select((p, i) =>
-                {
-                    if (combinations[i] == 0)
-                        return p;
-
-                    return String.Empty;
-                })).Trim();
-
-                for (var i = 0; i < parts.Count; i++)
-                {
-                    if (combinations[i] == 0 && options[i])
-                    {
-                        combinations[i] = 1;
-                        break;
-                    }
-
-                    if (combinations[i] == 1)
-                    {
-                        combinations[i] = 0;
-                    }
-                }
-            }
-        }
-
-        public static SqlTypeCategory GetCategory(Type type)
-        {
-            type = MakeNonNullable(type);
-
-            if (type == typeof(long))
-                return SqlTypeCategory.ExactNumerics;
-
-            if (type == typeof(int))
-                return SqlTypeCategory.ExactNumerics;
-
-            if (type == typeof(byte))
-                return SqlTypeCategory.ExactNumerics;
-
-            if (type == typeof(decimal))
-                return SqlTypeCategory.ExactNumerics;
-
-            if (type == typeof(bool))
-                return SqlTypeCategory.ExactNumerics;
-
-            if (type == typeof(double))
-                return SqlTypeCategory.ApproximateNumerics;
-
-            if (type == typeof(float))
-                return SqlTypeCategory.ApproximateNumerics;
-
-            if (type == typeof(DateTime))
-                return SqlTypeCategory.DateTime;
-
-            if (type == typeof(string))
-                return SqlTypeCategory.UnicodeStrings;
-
-            if (type == typeof(byte[]))
-                return SqlTypeCategory.BinaryStrings;
-
-            return SqlTypeCategory.Other;
+            expression = Expression.Convert(expression, typeof(object));
+            return Expression.Lambda<Func<object>>(expression).Compile()();
         }
     }
 }
