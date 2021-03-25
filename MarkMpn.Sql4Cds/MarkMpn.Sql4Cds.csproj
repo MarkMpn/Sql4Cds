@@ -401,6 +401,9 @@
   <ItemGroup>
     <EmbeddedResource Include="Images\SqlNode.ico" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Images\RetrieveTotalRecordCountNode.ico" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>
