@@ -213,7 +213,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Convert values to SQL types
             foreach (var col in schema.Schema)
             {
-                if (entity.Attributes.TryGetValue(col.Key, out var value))
+                if (entity.Attributes.TryGetValue(col.Key, out var value) && value != null)
                     entity[col.Key] = SqlTypeConverter.NetToSqlType(value);
                 else
                     entity[col.Key] = SqlTypeConverter.GetNullValue(col.Value);
