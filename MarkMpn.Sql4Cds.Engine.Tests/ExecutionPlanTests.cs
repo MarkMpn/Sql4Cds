@@ -2403,6 +2403,48 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 </fetch>");
         }
 
+        [TestMethod]
+        public void AggregateSort()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT name, count(*) from account group by name order by 2 desc";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual("account.name", select.ColumnSet[0].SourceColumn);
+            Assert.AreEqual("count", select.ColumnSet[1].SourceColumn);
+            var tryCatch = AssertNode<TryCatchNode>(select.Source);
+            var aggregateFetch = AssertNode<FetchXmlScan>(tryCatch.TrySource);
+            AssertFetchXml(aggregateFetch, @"
+                <fetch aggregate='true'>
+                    <entity name='account'>
+                        <attribute name='name' groupby='true' alias='name' />
+                        <attribute name='accountid' aggregate='count' alias='count' />
+                        <order alias='count' descending='true' />
+                    </entity>
+                </fetch>");
+            var sort = AssertNode<SortNode>(tryCatch.CatchSource);
+            Assert.AreEqual("count", sort.Sorts.Single().Expression.ToSql());
+            Assert.AreEqual(SortOrder.Descending, sort.Sorts.Single().SortOrder);
+            var aggregate = AssertNode<HashMatchAggregateNode>(sort.Source);
+            var fetch = AssertNode<FetchXmlScan>(aggregate.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                    </entity>
+                </fetch>");
+        }
+
         private T AssertNode<T>(IExecutionPlanNode node) where T : IExecutionPlanNode
         {
             Assert.IsInstanceOfType(node, typeof(T));

@@ -166,6 +166,36 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source = Source.FoldQuery(metadata, options, parameterTypes);
             Source.Parent = this;
 
+            return FoldSorts(metadata, options, parameterTypes);
+        }
+
+        private IDataExecutionPlanNode FoldSorts(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        {
+            if (Source is TryCatchNode tryCatch && tryCatch.TrySource is FetchXmlScan tryFetch && tryFetch.FetchXml.aggregate)
+            {
+                // We're sorting on the results of an aggregate that will try to go as a single FetchXML request first, then to a separate plan
+                // if that fails. Try to fold the sorts in to the aggregate FetchXML first
+                var fetchAggregateSort = new SortNode { Source = tryFetch };
+                fetchAggregateSort.Sorts.AddRange(Sorts);
+
+                var sortedFetchResult = fetchAggregateSort.FoldSorts(metadata, options, parameterTypes);
+
+                // If we managed to fold any of the sorts in to the FetchXML, do the same for the non-FetchXML version and remove this node
+                if (sortedFetchResult == tryFetch || (sortedFetchResult == fetchAggregateSort && fetchAggregateSort.PresortedCount > 0))
+                {
+                    tryCatch.TrySource = sortedFetchResult;
+                    sortedFetchResult.Parent = tryCatch;
+
+                    var nonFetchAggregateSort = new SortNode { Source = tryCatch.CatchSource };
+                    nonFetchAggregateSort.Sorts.AddRange(Sorts);
+
+                    var sortedNonFetchResult = nonFetchAggregateSort.FoldSorts(metadata, options, parameterTypes);
+                    tryCatch.CatchSource = sortedNonFetchResult;
+                    sortedNonFetchResult.Parent = tryCatch;
+                    return tryCatch;
+                }
+            }
+
             if (Source is FetchXmlScan fetchXml)
             {
                 // Remove any existing sorts
@@ -194,6 +224,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var attrName = parts[1];
 
                     var fetchSort = new FetchOrderType { attribute = attrName.ToLowerInvariant(), descending = sortOrder.SortOrder == SortOrder.Descending };
+
+                    if (fetchXml.FetchXml.aggregate)
+                    {
+                        fetchSort.alias = fetchSort.attribute;
+                        fetchSort.attribute = null;
+                    }
+
                     if (entityName == fetchXml.Alias)
                     {
                         if (items != entity.Items)
@@ -257,7 +294,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private bool IsLookupColumn(IAttributeMetadataCache metadata, string entityName, string attributeName)
         {
             var meta = metadata[entityName];
-            var attribute = meta.Attributes.Single(a => a.LogicalName == attributeName);
+            var attribute = meta.Attributes.SingleOrDefault(a => a.LogicalName == attributeName);
 
             return attribute is LookupAttributeMetadata;
         }
