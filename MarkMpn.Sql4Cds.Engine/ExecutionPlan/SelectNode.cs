@@ -139,8 +139,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         else if (!hasStar)
                         {
                             // Only add an all-attributes to the appropriate entity/link-entity
-                            var link = fetchXml.Entity.FindLinkEntity(col.SourceColumn.Replace(".*", ""));
-                            link.AddItem(new allattributes());
+                            if (col.SourceColumn.Replace(".*", "").Equals(fetchXml.Alias))
+                            {
+                                fetchXml.Entity.AddItem(new allattributes());
+                            }
+                            else
+                            {
+                                var link = fetchXml.Entity.FindLinkEntity(col.SourceColumn.Replace(".*", ""));
+                                link.AddItem(new allattributes());
+                            }
                         }
                     }
                     else if (!hasStar)
