@@ -12,17 +12,65 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
     public class GlobalOptionSetQueryNode : BaseDataNode
     {
-        private static readonly Type[] _optionsetTypes = new[] { typeof(OptionSetMetadata), typeof(BooleanOptionSetMetadata) };
-        private static readonly Dictionary<Type, Dictionary<string, PropertyInfo>> _optionsetProps = _optionsetTypes.ToDictionary(t => t, t => t.GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(p => p.Name != nameof(OptionSetMetadataBase.ExtensionData) && p.Name != nameof(OptionSetMetadata.Options)).ToDictionary(p => p.Name));
-        private static readonly Dictionary<string, PropertyInfo> _flattenedOptionsetProps = _optionsetProps.SelectMany(kvp => kvp.Value).Select(kvp => kvp.Value).GroupBy(p => p.Name).ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+        class OptionSetProperty
+        {
+            public string Name { get; set; }
+            public IDictionary<Type, Func<object, object>> Accessors { get; set; }
+            public Type Type { get; set; }
+        }
 
-        private IDictionary<string, string> _optionsetCols;
+        private static readonly Type[] _optionsetTypes;
+        private static readonly Dictionary<string, OptionSetProperty> _optionsetProps;
+
+        private IDictionary<string, OptionSetProperty> _optionsetCols;
+
+        static GlobalOptionSetQueryNode()
+        {
+            _optionsetTypes = new[] { typeof(OptionSetMetadata), typeof(BooleanOptionSetMetadata) };
+
+            // Combine the properties available from each optionset type
+            _optionsetProps = _optionsetTypes
+                .SelectMany(t => t.GetProperties(BindingFlags.Public | BindingFlags.Instance).Select(p => new { Type = t, Property = p }))
+                .Where(p => p.Property.Name != nameof(AttributeMetadata.ExtensionData))
+                .GroupBy(p => p.Property.Name, p => p, StringComparer.OrdinalIgnoreCase)
+                .Select(g =>
+                {
+                    // Work out the consistent type for each property
+                    Type type = null;
+
+                    foreach (var prop in g)
+                    {
+                        if (type == null)
+                        {
+                            type = MetadataQueryNode.GetPropertyType(prop.Property.PropertyType);
+                        }
+                        else if (!SqlTypeConverter.CanMakeConsistentTypes(type, MetadataQueryNode.GetPropertyType(prop.Property.PropertyType), out type))
+                        {
+                            // Can't make a consistent type for this property, so we can't use it
+                            type = null;
+                            break;
+                        }
+                    }
+
+                    if (type == null)
+                        return null;
+
+                    return new OptionSetProperty
+                    {
+                        Name = g.Key,
+                        Type = type,
+                        Accessors = g.ToDictionary(p => p.Type, p => MetadataQueryNode.GetPropertyAccessor(p.Property, type))
+                    };
+                })
+                .Where(p => p != null)
+                .ToDictionary(p => p.Name, StringComparer.OrdinalIgnoreCase);
+        }
 
         public string Alias { get; set; }
 
         public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
         {
-            _optionsetCols = new Dictionary<string, string>();
+            _optionsetCols = new Dictionary<string, OptionSetProperty>();
 
             foreach (var col in requiredColumns)
             {
@@ -33,8 +81,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (parts[0].Equals(Alias, StringComparison.OrdinalIgnoreCase))
                 {
-                    var prop = _flattenedOptionsetProps[parts[1]];
-                    _optionsetCols[col] = prop.Name;
+                    var prop = _optionsetProps[parts[1]];
+                    _optionsetCols[col] = prop;
                 }
             }
         }
@@ -53,9 +101,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var schema = new NodeSchema();
 
-            foreach (var prop in _flattenedOptionsetProps.Values)
+            foreach (var prop in _optionsetProps.Values)
             {
-                schema.Schema[$"{Alias}.{prop.Name}"] = MetadataQueryNode.GetPropertyType(prop.PropertyType);
+                schema.Schema[$"{Alias}.{prop.Name}"] = prop.Type;
 
                 if (!schema.Aliases.TryGetValue(prop.Name, out var aliases))
                 {
@@ -83,18 +131,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             foreach (var optionset in resp.OptionSetMetadata)
             {
                 var converted = new Entity("globaloptionset", optionset.MetadataId ?? Guid.Empty);
-                var availableProps = _optionsetProps[optionset.GetType()];
 
                 foreach (var col in _optionsetCols)
                 {
-                    if (!availableProps.TryGetValue(col.Value, out var optionsetProp))
+                    if (!col.Value.Accessors.TryGetValue(optionset.GetType(), out var optionsetProp))
                     {
-                        converted[col.Key] = null;
+                        converted[col.Key] = SqlTypeConverter.GetNullValue(col.Value.Type);
                         continue;
-
                     }
 
-                    converted[col.Key] = MetadataQueryNode.GetPropertyValue(optionsetProp, optionset);
+                    converted[col.Key] = optionsetProp(optionset);
                 }
 
                 yield return converted;

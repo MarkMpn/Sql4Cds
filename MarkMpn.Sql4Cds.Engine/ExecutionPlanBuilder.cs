@@ -1744,7 +1744,12 @@ namespace MarkMpn.Sql4Cds.Engine
                             Alias = table.Alias?.Value ?? entityName
                         };
                     }
+
+                    throw new NotSupportedQueryFragmentException("Unknown table name", table);
                 }
+
+                if (!String.IsNullOrEmpty(table.SchemaObject.SchemaIdentifier?.Value) && !table.SchemaObject.SchemaIdentifier.Value.Equals("dbo", StringComparison.OrdinalIgnoreCase))
+                    throw new NotSupportedQueryFragmentException("Unknown table name", table);
 
                 // Validate the entity name
                 EntityMetadata meta;

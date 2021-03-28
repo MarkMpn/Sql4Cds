@@ -693,6 +693,13 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
             }
 
+            // Check for compatible array types
+            if (expr.Type.IsArray && type.IsArray)
+            {
+                if (type.GetElementType().IsAssignableFrom(expr.Type.GetElementType()))
+                    return expr;
+            }
+
             throw new NotSupportedException($"Cannot convert from {expr.Type} to {type}");
         }
 
