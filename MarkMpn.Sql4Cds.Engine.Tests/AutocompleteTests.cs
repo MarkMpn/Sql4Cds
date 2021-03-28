@@ -224,7 +224,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1).Select(s => s.Text).ToList();
 
             CollectionAssert.Contains(suggestions, "today()");
-            CollectionAssert.DoesNotContain(suggestions, "under(id)");
+            CollectionAssert.DoesNotContain(suggestions, "under(value)");
         }
 
         [TestMethod]
@@ -235,7 +235,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1).Select(s => s.MenuText).ToList();
 
             CollectionAssert.DoesNotContain(suggestions, "today()");
-            CollectionAssert.Contains(suggestions, "under(id)");
+            CollectionAssert.Contains(suggestions, "under(value)");
         }
     }
 }
