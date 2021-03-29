@@ -57,7 +57,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     return new OptionSetProperty
                     {
-                        Name = g.Key,
+                        Name = g.Key.ToLowerInvariant(),
                         Type = type,
                         Accessors = g.ToDictionary(p => p.Type, p => MetadataQueryNode.GetPropertyAccessor(p.Property, type))
                     };

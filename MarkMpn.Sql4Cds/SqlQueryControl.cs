@@ -344,7 +344,7 @@ namespace MarkMpn.Sql4Cds
 
                 EntityCache.TryGetEntities(Service, out var entities);
 
-                var metaEntities = MetaMetadata.GetMetadata().Select(m => m.GetEntityMetadata());
+                var metaEntities = MetaMetadataCache.GetMetadata();
 
                 if (entities == null)
                     entities = metaEntities.ToArray();
@@ -413,7 +413,7 @@ namespace MarkMpn.Sql4Cds
                 var text = _control._editor.Text;
                 EntityCache.TryGetEntities(_control.Service, out var entities);
 
-                var metaEntities = MetaMetadata.GetMetadata().Select(m => m.GetEntityMetadata());
+                var metaEntities = MetaMetadataCache.GetMetadata();
 
                 if (entities == null)
                     entities = metaEntities.ToArray();

@@ -57,7 +57,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _entityProps = typeof(EntityMetadata)
                 .GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .Where(p => !excludedEntityProps.Contains(p.Name))
-                .ToDictionary(p => p.Name, p => new MetadataProperty { Name = p.Name, Type = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType)) }, StringComparer.OrdinalIgnoreCase);
+                .ToDictionary(p => p.Name, p => new MetadataProperty { Name = p.Name.ToLowerInvariant(), Type = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType)) }, StringComparer.OrdinalIgnoreCase);
 
             var excludedOneToManyRelationshipProps = new[]
             {
@@ -70,7 +70,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _oneToManyRelationshipProps = typeof(OneToManyRelationshipMetadata)
                 .GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .Where(p => !excludedOneToManyRelationshipProps.Contains(p.Name))
-                .ToDictionary(p => p.Name, p => new MetadataProperty { Name = p.Name, Type = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType)) }, StringComparer.OrdinalIgnoreCase);
+                .ToDictionary(p => p.Name, p => new MetadataProperty { Name = p.Name.ToLowerInvariant(), Type = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType)) }, StringComparer.OrdinalIgnoreCase);
 
             var excludedManyToManyRelationshipProps = new[]
             {
@@ -82,7 +82,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _manyToManyRelationshipProps = typeof(ManyToManyRelationshipMetadata)
                 .GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .Where(p => !excludedManyToManyRelationshipProps.Contains(p.Name))
-                .ToDictionary(p => p.Name, p => new MetadataProperty { Name = p.Name, Type = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType)) }, StringComparer.OrdinalIgnoreCase);
+                .ToDictionary(p => p.Name, p => new MetadataProperty { Name = p.Name.ToLowerInvariant(), Type = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType)) }, StringComparer.OrdinalIgnoreCase);
 
             // Get a list of all attribute types
             _attributeTypes = typeof(AttributeMetadata).Assembly
@@ -119,7 +119,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     return new AttributeProperty
                     {
-                        Name = g.Key,
+                        Name = g.Key.ToLowerInvariant(),
                         Type = type,
                         Accessors = g.ToDictionary(p => p.Type, p => GetPropertyAccessor(p.Property, type))
                     };

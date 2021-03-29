@@ -228,7 +228,7 @@ namespace MarkMpn.Sql4Cds
                         // Start loading all the appropriate metadata in the background
                         foreach (var table in tables.Values)
                         {
-                            if (_entities.Any(e => e.LogicalName.Equals(table, StringComparison.OrdinalIgnoreCase)))
+                            if (_entities.Any(e => e.LogicalName.Equals(table, StringComparison.OrdinalIgnoreCase) && e.DataProviderId != MetaMetadataCache.ProviderId))
                                 _metadata.TryGetMinimalData(table, out _);
                         }
                     }
@@ -626,7 +626,7 @@ namespace MarkMpn.Sql4Cds
             private readonly EntityMetadata _entity;
             private readonly IAttributeMetadataCache _metadata;
 
-            public EntityAutocompleteItem(EntityMetadata entity, IAttributeMetadataCache metadata, int replaceLength) : this(entity, entity.LogicalName, metadata, replaceLength)
+            public EntityAutocompleteItem(EntityMetadata entity, IAttributeMetadataCache metadata, int replaceLength) : this(entity, (entity.DataProviderId == MetaMetadataCache.ProviderId ? "metadata." : "") + entity.LogicalName, metadata, replaceLength)
             {
             }
 

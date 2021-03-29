@@ -92,7 +92,7 @@ namespace MarkMpn.Sql4Cds
 
         private TreeNode[] LoadMetadata(TreeNode parent)
         {
-            var metadata = MetaMetadata.GetMetadata().Select(md => md.GetEntityMetadata());
+            var metadata = MetaMetadataCache.GetMetadata();
 
             return metadata
                 .OrderBy(e => e.LogicalName)
@@ -371,7 +371,7 @@ namespace MarkMpn.Sql4Cds
                 var join = $@"
 {oneToMany.ReferencingEntity}
 INNER JOIN {oneToMany.ReferencedEntity}
-    ON {oneToMany.ReferencingEntity}.{oneToMany.ReferencingAttribute} = {oneToMany.ReferencedEntity}.{oneToMany.ReferencedAttribute}";
+    ON {oneToMany.ReferencingEntity.Split('.').Last()}.{oneToMany.ReferencingAttribute} = {oneToMany.ReferencedEntity.Split('.').Last()}.{oneToMany.ReferencedAttribute}";
 
                 query.InsertText(join);
             }
