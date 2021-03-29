@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Windows.Forms;
@@ -17,6 +18,7 @@ namespace MarkMpn.Sql4Cds
         private readonly IOrganizationService _org;
         private readonly BackgroundWorker _worker;
         private readonly Control _host;
+        private readonly List<JoinOperator> _joinOperators;
         private int _localeId;
         private int _retrievedPages;
 
@@ -26,6 +28,14 @@ namespace MarkMpn.Sql4Cds
             _org = org;
             _worker = worker;
             _host = host;
+            _joinOperators = new List<JoinOperator>
+            {
+                JoinOperator.Inner,
+                JoinOperator.LeftOuter
+            };
+
+            if (new Version(con.OrganizationVersion) >= new Version("9.1.0.17461"))
+                _joinOperators.Add(JoinOperator.Any); // First documented in SDK Version 9.0.2.25: Updated for 9.1.0.17461 CDS release
         }
 
         public bool Cancelled => _worker.CancellationPending;
@@ -117,6 +127,8 @@ namespace MarkMpn.Sql4Cds
         public int MaxDegreeOfParallelism => Settings.Instance.MaxDegreeOfPaallelism;
 
         public bool ColumnComparisonAvailable => new Version(_con.OrganizationVersion) >= new Version("9.1.0.19251");
+
+        public List<JoinOperator> JoinOperatorsAvailable => _joinOperators;
 
         public void RetrievingNextPage()
         {

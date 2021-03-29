@@ -13,12 +13,19 @@ using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Metadata.Query;
+using Microsoft.Xrm.Sdk.Query;
 
 namespace MarkMpn.Sql4Cds.Engine.Tests
 {
     [TestClass]
     public class ExecutionPlanTests : IQueryExecutionOptions
     {
+        private List<JoinOperator> _supportedJoins = new List<JoinOperator>
+        {
+            JoinOperator.Inner,
+            JoinOperator.LeftOuter
+        };
+
         bool IQueryExecutionOptions.Cancelled => false;
 
         bool IQueryExecutionOptions.BlockUpdateWithoutWhere => false;
@@ -38,6 +45,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         int IQueryExecutionOptions.MaxDegreeOfParallelism => 10;
 
         bool IQueryExecutionOptions.ColumnComparisonAvailable => true;
+
+        List<JoinOperator> IQueryExecutionOptions.JoinOperatorsAvailable => _supportedJoins;
 
         bool IQueryExecutionOptions.ConfirmDelete(int count, EntityMetadata meta)
         {
@@ -2443,6 +2452,127 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <attribute name='name' />
                     </entity>
                 </fetch>");
+        }
+
+        [TestMethod]
+        public void FoldFilterWithNonFoldedJoin()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT name from account INNER JOIN contact ON left(name, 4) = left(firstname, 4) where name like 'Data8%' and firstname like 'Mark%'";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var join = AssertNode<HashJoinNode>(select.Source);
+            var leftCompute = AssertNode<ComputeScalarNode>(join.LeftSource);
+            var leftFetch = AssertNode<FetchXmlScan>(leftCompute.Source);
+            AssertFetchXml(leftFetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <filter>
+                            <condition attribute='name' operator='like' value='Data8%' />
+                        </filter>
+                    </entity>
+                </fetch>");
+            var rightCompute = AssertNode<ComputeScalarNode>(join.RightSource);
+            var rightFetch = AssertNode<FetchXmlScan>(rightCompute.Source);
+            AssertFetchXml(rightFetch, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <filter>
+                            <condition attribute='firstname' operator='like' value='Mark%' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void FoldFilterWithInClause()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT name from account where name like 'Data8%' and primarycontactid in (select contactid from contact where firstname = 'Mark')";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <link-entity name='contact' alias='Expr1' from='contactid' to='primarycontactid' link-type='outer'>
+                            <attribute name='contactid' />
+                            <filter>
+                                <condition attribute='firstname' operator='eq' value='Mark' />
+                            </filter>
+                        </link-entity>
+                        <filter>
+                            <condition attribute='name' operator='like' value='Data8%' />
+                            <condition entityname='Expr1' attribute='contactid' operator='not-null' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void FoldFilterWithInClauseWithoutPrimaryKey()
+        {
+            _supportedJoins.Add(JoinOperator.Any);
+
+            try
+            {
+                var context = new XrmFakedContext();
+                context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+                var org = context.GetOrganizationService();
+                var metadata = new AttributeMetadataCache(org);
+                var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+                var query = "SELECT name from account where name like 'Data8%' and createdon in (select createdon from contact where firstname = 'Mark')";
+
+                var plans = planBuilder.Build(query);
+
+                Assert.AreEqual(1, plans.Length);
+
+                var select = AssertNode<SelectNode>(plans[0]);
+                var fetch = AssertNode<FetchXmlScan>(select.Source);
+                AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <link-entity name='contact' alias='contact' from='createdon' to='createdon' link-type='in'>
+                            <filter>
+                                <condition attribute='firstname' operator='eq' value='Mark' />
+                            </filter>
+                        </link-entity>
+                        <filter>
+                            <condition attribute='name' operator='like' value='Data8%' />
+                        </filter>
+                    </entity>
+                </fetch>");
+            }
+            finally
+            {
+                _supportedJoins.Remove(JoinOperator.Any);
+            }
         }
 
         private T AssertNode<T>(IExecutionPlanNode node) where T : IExecutionPlanNode

@@ -329,13 +329,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Attributes & relationships are polymorphic, but filters can only be applied to the base type. Check the property
             // we're filtering on is valid to be folded
             var targetType = isEntityFilter ? typeof(EntityMetadata) : isAttributeFilter ? typeof(AttributeMetadata) : typeof(RelationshipMetadataBase);
-            var prop = targetType.GetProperty(condition.PropertyName, BindingFlags.Public | BindingFlags.Instance);
+            var prop = targetType.GetProperty(condition.PropertyName, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
 
             if (prop == null)
                 return false;
 
+            // Convert the property name to the correct case
+            filter.Conditions[0].PropertyName = prop.Name;
+
             // Convert the value to the expected type
-            filter.Conditions[0].Value = SqlTypeConverter.ChangeType(filter.Conditions[0].Value, prop.PropertyType);
+            filter.Conditions[0].Value = SqlTypeConverter.ChangeType(SqlTypeConverter.ChangeType(filter.Conditions[0].Value, MetadataQueryNode.GetPropertyType(prop.PropertyType)), prop.PropertyType);
 
             if (isEntityFilter)
             {

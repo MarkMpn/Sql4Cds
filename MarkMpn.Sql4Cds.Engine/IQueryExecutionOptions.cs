@@ -1,4 +1,6 @@
-﻿using Microsoft.Xrm.Sdk.Metadata;
+﻿using System.Collections.Generic;
+using Microsoft.Xrm.Sdk.Metadata;
+using Microsoft.Xrm.Sdk.Query;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
@@ -86,6 +88,11 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Indicates if the server supports column comparison conditions in FetchXML
         /// </summary>
         bool ColumnComparisonAvailable { get; }
+
+        /// <summary>
+        /// Returns a list of join operators that are supported by the server
+        /// </summary>
+        List<JoinOperator> JoinOperatorsAvailable { get; }
 
         /// <summary>
         /// A notification that the query is about to retrieve another page of data

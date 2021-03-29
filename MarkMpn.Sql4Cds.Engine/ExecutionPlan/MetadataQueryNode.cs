@@ -17,14 +17,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     {
         class MetadataProperty
         {
-            public string Name { get; set; }
+            public string SqlName { get; set; }
+            public string PropertyName { get; set; }
             public Func<object,object> Accessor { get; set; }
             public Type Type { get; set; }
         }
 
         class AttributeProperty
         {
-            public string Name { get; set; }
+            public string SqlName { get; set; }
+            public string PropertyName { get; set; }
             public IDictionary<Type, Func<object,object>> Accessors { get; set; }
             public Type Type { get; set; }
         }
@@ -57,7 +59,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _entityProps = typeof(EntityMetadata)
                 .GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .Where(p => !excludedEntityProps.Contains(p.Name))
-                .ToDictionary(p => p.Name, p => new MetadataProperty { Name = p.Name.ToLowerInvariant(), Type = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType)) }, StringComparer.OrdinalIgnoreCase);
+                .ToDictionary(p => p.Name, p => new MetadataProperty { SqlName = p.Name.ToLowerInvariant(), PropertyName = p.Name, Type = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType)) }, StringComparer.OrdinalIgnoreCase);
 
             var excludedOneToManyRelationshipProps = new[]
             {
@@ -70,7 +72,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _oneToManyRelationshipProps = typeof(OneToManyRelationshipMetadata)
                 .GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .Where(p => !excludedOneToManyRelationshipProps.Contains(p.Name))
-                .ToDictionary(p => p.Name, p => new MetadataProperty { Name = p.Name.ToLowerInvariant(), Type = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType)) }, StringComparer.OrdinalIgnoreCase);
+                .ToDictionary(p => p.Name, p => new MetadataProperty { SqlName = p.Name.ToLowerInvariant(), PropertyName = p.Name, Type = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType)) }, StringComparer.OrdinalIgnoreCase);
 
             var excludedManyToManyRelationshipProps = new[]
             {
@@ -82,7 +84,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _manyToManyRelationshipProps = typeof(ManyToManyRelationshipMetadata)
                 .GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .Where(p => !excludedManyToManyRelationshipProps.Contains(p.Name))
-                .ToDictionary(p => p.Name, p => new MetadataProperty { Name = p.Name.ToLowerInvariant(), Type = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType)) }, StringComparer.OrdinalIgnoreCase);
+                .ToDictionary(p => p.Name, p => new MetadataProperty { SqlName = p.Name.ToLowerInvariant(), PropertyName = p.Name, Type = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType)) }, StringComparer.OrdinalIgnoreCase);
 
             // Get a list of all attribute types
             _attributeTypes = typeof(AttributeMetadata).Assembly
@@ -119,13 +121,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     return new AttributeProperty
                     {
-                        Name = g.Key.ToLowerInvariant(),
+                        SqlName = g.Key.ToLowerInvariant(),
+                        PropertyName = g.Key,
                         Type = type,
                         Accessors = g.ToDictionary(p => p.Type, p => GetPropertyAccessor(p.Property, type))
                     };
                 })
                 .Where(p => p != null)
-                .ToDictionary(p => p.Name, StringComparer.OrdinalIgnoreCase);
+                .ToDictionary(p => p.SqlName, StringComparer.OrdinalIgnoreCase);
         }
 
         public MetadataSource MetadataSource { get; set; }
@@ -166,8 +169,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     var prop = _entityProps[parts[1]];
 
-                    if (!Query.Properties.PropertyNames.Contains(prop.Name))
-                        Query.Properties.PropertyNames.Add(prop.Name);
+                    if (!Query.Properties.PropertyNames.Contains(prop.PropertyName))
+                        Query.Properties.PropertyNames.Add(prop.PropertyName);
 
                     _entityCols[col] = prop;
                 }
@@ -181,8 +184,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     var prop = _attributeProps[parts[1]];
 
-                    if (!Query.AttributeQuery.Properties.PropertyNames.Contains(prop.Name))
-                        Query.AttributeQuery.Properties.PropertyNames.Add(prop.Name);
+                    if (!Query.AttributeQuery.Properties.PropertyNames.Contains(prop.PropertyName))
+                        Query.AttributeQuery.Properties.PropertyNames.Add(prop.PropertyName);
 
                     _attributeCols[col] = prop;
                 }
@@ -196,8 +199,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     var prop = _oneToManyRelationshipProps[parts[1]];
 
-                    if (!Query.RelationshipQuery.Properties.PropertyNames.Contains(prop.Name))
-                        Query.RelationshipQuery.Properties.PropertyNames.Add(prop.Name);
+                    if (!Query.RelationshipQuery.Properties.PropertyNames.Contains(prop.PropertyName))
+                        Query.RelationshipQuery.Properties.PropertyNames.Add(prop.PropertyName);
 
                     _oneToManyRelationshipCols[col] = prop;
                 }
@@ -211,8 +214,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     var prop = _oneToManyRelationshipProps[parts[1]];
 
-                    if (!Query.RelationshipQuery.Properties.PropertyNames.Contains(prop.Name))
-                        Query.RelationshipQuery.Properties.PropertyNames.Add(prop.Name);
+                    if (!Query.RelationshipQuery.Properties.PropertyNames.Contains(prop.PropertyName))
+                        Query.RelationshipQuery.Properties.PropertyNames.Add(prop.PropertyName);
 
                     _manyToOneRelationshipCols[col] = prop;
                 }
@@ -226,8 +229,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     var prop = _manyToManyRelationshipProps[parts[1]];
 
-                    if (!Query.RelationshipQuery.Properties.PropertyNames.Contains(prop.Name))
-                        Query.RelationshipQuery.Properties.PropertyNames.Add(prop.Name);
+                    if (!Query.RelationshipQuery.Properties.PropertyNames.Contains(prop.PropertyName))
+                        Query.RelationshipQuery.Properties.PropertyNames.Add(prop.PropertyName);
 
                     _manyToManyRelationshipCols[col] = prop;
                 }
@@ -254,19 +257,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var entityProps = (IEnumerable<MetadataProperty>) _entityProps.Values;
 
                 if (Query.Properties != null)
-                    entityProps = entityProps.Where(p => Query.Properties.PropertyNames.Contains(p.Name, StringComparer.OrdinalIgnoreCase));
+                    entityProps = entityProps.Where(p => Query.Properties.PropertyNames.Contains(p.PropertyName, StringComparer.OrdinalIgnoreCase));
 
                 foreach (var prop in entityProps)
                 {
-                    schema.Schema[$"{EntityAlias}.{prop.Name}"] = prop.Type;
+                    schema.Schema[$"{EntityAlias}.{prop.SqlName}"] = prop.Type;
 
-                    if (!schema.Aliases.TryGetValue(prop.Name, out var aliases))
+                    if (!schema.Aliases.TryGetValue(prop.SqlName, out var aliases))
                     {
                         aliases = new List<string>();
-                        schema.Aliases[prop.Name] = aliases;
+                        schema.Aliases[prop.SqlName] = aliases;
                     }
 
-                    aliases.Add($"{EntityAlias}.{prop.Name}");
+                    aliases.Add($"{EntityAlias}.{prop.SqlName}");
                 }
 
                 schema.PrimaryKey = $"{EntityAlias}.{nameof(EntityMetadata.MetadataId)}";
@@ -277,19 +280,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var attributeProps = (IEnumerable<AttributeProperty>) _attributeProps.Values;
 
                 if (Query.AttributeQuery?.Properties != null)
-                    attributeProps = attributeProps.Where(p => Query.AttributeQuery.Properties.PropertyNames.Contains(p.Name, StringComparer.OrdinalIgnoreCase));
+                    attributeProps = attributeProps.Where(p => Query.AttributeQuery.Properties.PropertyNames.Contains(p.PropertyName, StringComparer.OrdinalIgnoreCase));
 
                 foreach (var prop in attributeProps)
                 {
-                    schema.Schema[$"{AttributeAlias}.{prop.Name}"] = prop.Type;
+                    schema.Schema[$"{AttributeAlias}.{prop.SqlName}"] = prop.Type;
 
-                    if (!schema.Aliases.TryGetValue(prop.Name, out var aliases))
+                    if (!schema.Aliases.TryGetValue(prop.SqlName, out var aliases))
                     {
                         aliases = new List<string>();
-                        schema.Aliases[prop.Name] = aliases;
+                        schema.Aliases[prop.SqlName] = aliases;
                     }
 
-                    aliases.Add($"{AttributeAlias}.{prop.Name}");
+                    aliases.Add($"{AttributeAlias}.{prop.SqlName}");
                 }
 
                 schema.PrimaryKey = $"{AttributeAlias}.{nameof(AttributeMetadata.MetadataId)}";
@@ -301,19 +304,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var relationshipProps = (IEnumerable<MetadataProperty>)_oneToManyRelationshipProps.Values;
 
                 if (Query.RelationshipQuery?.Properties != null)
-                    relationshipProps = relationshipProps.Where(p => Query.RelationshipQuery.Properties.PropertyNames.Contains(p.Name, StringComparer.OrdinalIgnoreCase));
+                    relationshipProps = relationshipProps.Where(p => Query.RelationshipQuery.Properties.PropertyNames.Contains(p.PropertyName, StringComparer.OrdinalIgnoreCase));
 
                 foreach (var prop in relationshipProps)
                 {
-                    schema.Schema[$"{OneToManyRelationshipAlias}.{prop.Name}"] = prop.Type;
+                    schema.Schema[$"{OneToManyRelationshipAlias}.{prop.SqlName}"] = prop.Type;
 
-                    if (!schema.Aliases.TryGetValue(prop.Name, out var aliases))
+                    if (!schema.Aliases.TryGetValue(prop.SqlName, out var aliases))
                     {
                         aliases = new List<string>();
-                        schema.Aliases[prop.Name] = aliases;
+                        schema.Aliases[prop.SqlName] = aliases;
                     }
 
-                    aliases.Add($"{OneToManyRelationshipAlias}.{prop.Name}");
+                    aliases.Add($"{OneToManyRelationshipAlias}.{prop.SqlName}");
                 }
 
                 schema.PrimaryKey = $"{OneToManyRelationshipAlias}.{nameof(RelationshipMetadataBase.MetadataId)}";
@@ -325,19 +328,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var relationshipProps = (IEnumerable<MetadataProperty>)_oneToManyRelationshipProps.Values;
 
                 if (Query.RelationshipQuery?.Properties != null)
-                    relationshipProps = relationshipProps.Where(p => Query.RelationshipQuery.Properties.PropertyNames.Contains(p.Name, StringComparer.OrdinalIgnoreCase));
+                    relationshipProps = relationshipProps.Where(p => Query.RelationshipQuery.Properties.PropertyNames.Contains(p.PropertyName, StringComparer.OrdinalIgnoreCase));
 
                 foreach (var prop in relationshipProps)
                 {
-                    schema.Schema[$"{ManyToOneRelationshipAlias}.{prop.Name}"] = prop.Type;
+                    schema.Schema[$"{ManyToOneRelationshipAlias}.{prop.SqlName}"] = prop.Type;
 
-                    if (!schema.Aliases.TryGetValue(prop.Name, out var aliases))
+                    if (!schema.Aliases.TryGetValue(prop.SqlName, out var aliases))
                     {
                         aliases = new List<string>();
-                        schema.Aliases[prop.Name] = aliases;
+                        schema.Aliases[prop.SqlName] = aliases;
                     }
 
-                    aliases.Add($"{ManyToOneRelationshipAlias}.{prop.Name}");
+                    aliases.Add($"{ManyToOneRelationshipAlias}.{prop.SqlName}");
                 }
 
                 schema.PrimaryKey = $"{ManyToOneRelationshipAlias}.{nameof(RelationshipMetadataBase.MetadataId)}";
@@ -349,19 +352,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var relationshipProps = (IEnumerable<MetadataProperty>)_manyToManyRelationshipProps.Values;
 
                 if (Query.RelationshipQuery?.Properties != null)
-                    relationshipProps = relationshipProps.Where(p => Query.RelationshipQuery.Properties.PropertyNames.Contains(p.Name, StringComparer.OrdinalIgnoreCase));
+                    relationshipProps = relationshipProps.Where(p => Query.RelationshipQuery.Properties.PropertyNames.Contains(p.PropertyName, StringComparer.OrdinalIgnoreCase));
 
                 foreach (var prop in relationshipProps)
                 {
-                    schema.Schema[$"{ManyToManyRelationshipAlias}.{prop.Name}"] = prop.Type;
+                    schema.Schema[$"{ManyToManyRelationshipAlias}.{prop.SqlName}"] = prop.Type;
 
-                    if (!schema.Aliases.TryGetValue(prop.Name, out var aliases))
+                    if (!schema.Aliases.TryGetValue(prop.SqlName, out var aliases))
                     {
                         aliases = new List<string>();
-                        schema.Aliases[prop.Name] = aliases;
+                        schema.Aliases[prop.SqlName] = aliases;
                     }
 
-                    aliases.Add($"{ManyToManyRelationshipAlias}.{prop.Name}");
+                    aliases.Add($"{ManyToManyRelationshipAlias}.{prop.SqlName}");
                 }
 
                 schema.PrimaryKey = $"{ManyToManyRelationshipAlias}.{nameof(RelationshipMetadataBase.MetadataId)}";
