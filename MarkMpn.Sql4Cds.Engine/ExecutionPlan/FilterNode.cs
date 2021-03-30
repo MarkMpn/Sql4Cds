@@ -109,84 +109,189 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
-            if (options.JoinOperatorsAvailable.Contains(JoinOperator.Any))
+            if (options.JoinOperatorsAvailable.Contains(JoinOperator.Any) || options.JoinOperatorsAvailable.Contains(JoinOperator.Exists))
             {
-                // Correlated IN filters are created as:
-                // Filter: table.column is not null
-                // -> MergeJoin (LeftOuter) table.column in RightAttribute
+                // Foldable correlated IN queries "lefttable.column IN (SELECT righttable.column FROM righttable WHERE ...) are created as:
+                // Filter: righttable.column is not null
+                // -> MergeJoin (LeftOuter) righttable.column in RightAttribute
                 //    -> FetchXml
-                //    -> FetchXml (Distinct) orderby table.column
-                var merges = new List<MergeJoinNode>();
-                var merge = Source as MergeJoinNode;
-                while (merge != null)
+                //    -> FetchXml (Distinct) orderby righttable.column
+
+                // Foldable correlated EXISTS filters "EXISTS (SELECT * FROM righttable WHERE righttable.column = lefttable.column AND ...) are created as:
+                // Filter - @var2 is not null
+                // -> NestedLoop(Left semi join), null join condition. Outer reference(lefttable.column -> @var1), Defined values(@var2 -> rightttable.primarykey)
+                //   -> FetchXml
+                //   -> Top 1
+                //      -> Index spool, SeekValue @var1, KeyColumn rightttable.column
+                //         -> FetchXml
+                var joins = new List<BaseJoinNode>();
+                var join = Source as BaseJoinNode;
+                while (join != null)
                 {
-                    merges.Add(merge);
-                    merge = merge.LeftSource as MergeJoinNode;
+                    joins.Add(join);
+
+                    if (join is MergeJoinNode && join.LeftSource is SortNode sort)
+                        join = sort.Source as BaseJoinNode;
+                    else
+                        join = join.LeftSource as BaseJoinNode;
                 }
 
-                while (merges.Count > 0)
+                FetchXmlScan leftFetch;
+
+                if (joins.Count == 0)
                 {
-                    merge = merges.Last();
+                    leftFetch = null;
+                }
+                else
+                {
+                    var lastJoin = joins.Last();
+                    if (lastJoin is MergeJoinNode && lastJoin.LeftSource is SortNode sort)
+                        leftFetch = sort.Source as FetchXmlScan;
+                    else
+                        leftFetch = lastJoin.LeftSource as FetchXmlScan;
+                }
 
-                    if (merge.JoinType != QualifiedJoinType.LeftOuter)
+                while (leftFetch != null && joins.Count > 0)
+                {
+                    join = joins.Last();
+
+                    if (join.JoinType != QualifiedJoinType.LeftOuter)
                         break;
 
-                    if (!(merge.LeftSource is FetchXmlScan leftFetch) ||
-                        !(merge.RightSource is FetchXmlScan rightFetch))
-                        break;
+                    FetchLinkEntityType linkToAdd;
+                    string leftAlias;
 
-                    if (!rightFetch.FetchXml.distinct)
-                        break;
-
-                    var rightSorts = (rightFetch.Entity.Items ?? Array.Empty<object>()).OfType<FetchOrderType>().ToList();
-
-                    if (rightSorts.Count != 1)
-                        break;
-
-                    if (!String.IsNullOrEmpty(rightSorts[0].alias))
-                        break;
-
-                    var attribute = $"{rightFetch.Alias}.{rightSorts[0].attribute}";
-
-                    if (!merge.RightAttribute.GetColumnName().Equals(attribute, StringComparison.OrdinalIgnoreCase))
-                        break;
-
-                    var notNullFilter = FindNotNullFilter(Filter, attribute);
-                    if (notNullFilter == null)
-                        break;
-
-                    // Remove the filter and replace with an "in" link-entity
-                    Filter = Filter.RemoveCondition(notNullFilter);
-
-                    var linkEntity = new FetchLinkEntityType
+                    if (join is MergeJoinNode merge)
                     {
-                        name = rightFetch.Entity.name,
-                        alias = rightFetch.Alias,
-                        from = merge.RightAttribute.MultiPartIdentifier.Identifiers.Last().Value,
-                        to = merge.LeftAttribute.MultiPartIdentifier.Identifiers.Last().Value,
-                        linktype = "in",
-                        Items = rightFetch.Entity.Items.Where(i => !(i is FetchOrderType)).ToArray()
-                    };
+                        // Check we meet all the criteria for a foldable correlated IN query
+                        if (!(join.RightSource is FetchXmlScan rightFetch))
+                            break;
 
-                    leftFetch.Entity.AddItem(linkEntity);
-                    merges.Remove(merge);
+                        if (!rightFetch.FetchXml.distinct)
+                            break;
 
-                    // Remove the sort that has been merged into the left side too
-                    leftFetch.Entity.Items = leftFetch.Entity
-                        .Items
-                        .Where(i => !(i is FetchOrderType sort) || !sort.attribute.Equals(merge.LeftAttribute.MultiPartIdentifier.Identifiers.Last().Value, StringComparison.OrdinalIgnoreCase))
-                        .ToArray();
+                        var rightSorts = (rightFetch.Entity.Items ?? Array.Empty<object>()).OfType<FetchOrderType>().ToList();
 
-                    if (merges.Count == 0)
+                        if (rightSorts.Count != 1)
+                            break;
+
+                        if (!String.IsNullOrEmpty(rightSorts[0].alias))
+                            break;
+
+                        var attribute = $"{rightFetch.Alias}.{rightSorts[0].attribute}";
+
+                        if (!merge.RightAttribute.GetColumnName().Equals(attribute, StringComparison.OrdinalIgnoreCase))
+                            break;
+
+                        var notNullFilter = FindNotNullFilter(Filter, attribute);
+                        if (notNullFilter == null)
+                            break;
+
+                        // Remove the filter and replace with an "in" link-entity
+                        Filter = Filter.RemoveCondition(notNullFilter);
+
+                        linkToAdd = new FetchLinkEntityType
+                        {
+                            name = rightFetch.Entity.name,
+                            alias = rightFetch.Alias,
+                            from = merge.RightAttribute.MultiPartIdentifier.Identifiers.Last().Value,
+                            to = merge.LeftAttribute.MultiPartIdentifier.Identifiers.Last().Value,
+                            linktype = "in",
+                            Items = rightFetch.Entity.Items.Where(i => !(i is FetchOrderType)).ToArray()
+                        };
+                        leftAlias = merge.LeftAttribute.MultiPartIdentifier.Identifiers.Reverse().Skip(1).First().Value;
+
+                        // Remove the sort that has been merged into the left side too
+                        leftFetch.Entity.Items = leftFetch.Entity
+                            .Items
+                            .Where(i => !(i is FetchOrderType sort) || !sort.attribute.Equals(merge.LeftAttribute.MultiPartIdentifier.Identifiers.Last().Value, StringComparison.OrdinalIgnoreCase))
+                            .ToArray();
+                    }
+                    else if (join is NestedLoopNode loop)
+                    {
+                        // Check we meet all the criteria for a foldable correlated IN query
+                        if (!loop.SemiJoin ||
+                            loop.JoinCondition != null ||
+                            loop.OuterReferences.Count != 1 ||
+                            loop.DefinedValues.Count != 1)
+                            break;
+
+                        if (!(join.RightSource is TopNode top))
+                            break;
+
+                        if (!(top.Top is IntegerLiteral topLiteral) ||
+                            topLiteral.Value != "1")
+                            break;
+
+                        if (!(top.Source is IndexSpoolNode indexSpool))
+                            break;
+
+                        if (indexSpool.SeekValue != loop.OuterReferences.Single().Value)
+                            break;
+
+                        if (!(indexSpool.Source is FetchXmlScan rightFetch))
+                            break;
+
+                        if (indexSpool.KeyColumn.Split('.').Length != 2 ||
+                            !indexSpool.KeyColumn.Split('.')[0].Equals(rightFetch.Alias, StringComparison.OrdinalIgnoreCase))
+                            break;
+
+                        var notNullFilter = FindNotNullFilter(Filter, loop.DefinedValues.Single().Key);
+                        if (notNullFilter == null)
+                            break;
+
+                        // Remove the filter and replace with an "in" link-entity
+                        Filter = Filter.RemoveCondition(notNullFilter);
+
+                        linkToAdd = new FetchLinkEntityType
+                        {
+                            name = rightFetch.Entity.name,
+                            alias = rightFetch.Alias,
+                            from = indexSpool.KeyColumn.Split('.')[1],
+                            to = loop.OuterReferences.Single().Key.Split('.')[1],
+                            linktype = "exists",
+                            Items = rightFetch.Entity.Items
+                        };
+                        leftAlias = loop.OuterReferences.Single().Key.Split('.')[0];
+                    }
+                    else
+                    {
+                        // This isn't a type of join we can fold as a correlated IN/EXISTS join
+                        break;
+                    }
+
+                    // Remove any attributes from the new linkentity
+                    var tempEntity = new FetchEntityType { Items = new object[] { linkToAdd } };
+
+                    foreach (var link in tempEntity.GetLinkEntities())
+                        link.Items = (link.Items ?? Array.Empty<object>()).Where(i => !(i is FetchAttributeType) && !(i is allattributes)).ToArray();
+
+                    if (leftAlias.Equals(leftFetch.Alias, StringComparison.OrdinalIgnoreCase))
+                        leftFetch.Entity.AddItem(linkToAdd);
+                    else
+                        leftFetch.Entity.FindLinkEntity(leftAlias).AddItem(linkToAdd);
+
+                    joins.Remove(join);
+
+                    if (joins.Count == 0)
                     {
                         Source = leftFetch;
                         leftFetch.Parent = this;
                     }
                     else
                     {
-                        merge = merges.Last();
-                        merge.LeftSource = leftFetch;
-                        leftFetch.Parent = merge;
+                        join = joins.Last();
+
+                        if (join is MergeJoinNode && join.LeftSource is SortNode sort)
+                        {
+                            sort.Source = leftFetch;
+                            leftFetch.Parent = sort;
+                        }
+                        else
+                        {
+                            join.LeftSource = leftFetch;
+                            leftFetch.Parent = join;
+                        }
                     }
                 }
             }

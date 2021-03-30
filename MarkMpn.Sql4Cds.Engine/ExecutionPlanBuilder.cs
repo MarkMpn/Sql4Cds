@@ -497,6 +497,9 @@ namespace MarkMpn.Sql4Cds.Engine
 
             foreach (var inSubquery in visitor.InSubqueries)
             {
+                // Validate the LHS expression
+                inSubquery.Expression.GetType(schema, parameterTypes);
+
                 // Each query of the format "col1 IN (SELECT col2 FROM source)" becomes a left outer join:
                 // LEFT JOIN source ON col1 = col2
                 // and the result is col2 IS NOT NULL
@@ -514,6 +517,12 @@ namespace MarkMpn.Sql4Cds.Engine
                     computeScalar.Columns[alias] = inSubquery.Expression;
                     lhsCol = alias.ToColumnReference();
                 }
+                else
+                {
+                    // Normalize the LHS column
+                    if (schema.ContainsColumn(lhsCol.GetColumnName(), out var lhsColNormalized))
+                        lhsCol = lhsColNormalized.ToColumnReference();
+                }
 
                 var parameters = parameterTypes == null ? new Dictionary<string, Type>() : new Dictionary<string, Type>(parameterTypes);
                 var references = new Dictionary<string, string>();
@@ -525,6 +534,40 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (references.Count == 0)
                 {
+                    /*
+                    // Wrap the query in an alias to prevent column IS NOT NULL filters being incorrectly folded into the outer query if that uses
+                    // the same table name.
+                    var innerSource = new AliasNode(innerQuery);
+                    innerSource.Alias = $"Expr{++_colNameCounter}";
+                    testColumn = $"{innerSource.Alias}.{innerSource.ColumnSet[0].OutputColumn}";
+
+                    if (UseMergeJoin(source, innerSource, references, testColumn, lhsCol.GetColumnName(), out var outputCol, out var merge))
+                    {
+                        testColumn = outputCol;
+                        join = merge;
+                    }
+                    else
+                    {
+                        // We need the inner list to be distinct to avoid creating duplicates during the join
+                        var innerSchema = innerSource.Source.GetSchema(Metadata, parameters);
+                        if (innerSource.ColumnSet[0].SourceColumn != innerSchema.PrimaryKey && !(innerSource.Source is DistinctNode))
+                        {
+                            innerSource.Source = new DistinctNode
+                            {
+                                Source = innerSource.Source,
+                                Columns = { innerSource.ColumnSet[0].SourceColumn }
+                            };
+                        }
+
+                        // This isn't a correlated subquery, so we can use a foldable join type
+                        join = new MergeJoinNode
+                        {
+                            LeftSource = source,
+                            LeftAttribute = lhsCol,
+                            RightSource = innerSource,
+                            RightAttribute = innerSource.ColumnSet[0].SourceColumn.ToColumnReference()
+                        };
+                    }*/
                     if (UseMergeJoin(source, innerQuery.Source, references, testColumn, lhsCol.GetColumnName(), out var outputCol, out var merge))
                     {
                         testColumn = outputCol;
@@ -543,13 +586,17 @@ namespace MarkMpn.Sql4Cds.Engine
                             };
                         }
 
-                        // This isn't a correlated subquery, so we can use a foldable join type
+                        // This isn't a correlated subquery, so we can use a foldable join type. Alias the results so there's no conflict with the
+                        // same table being used inside the IN subquery and elsewhere
+                        var alias = new AliasNode(innerQuery) { Alias = $"Expr{++_colNameCounter}" };
+
+                        testColumn = $"{alias.Alias}.{alias.ColumnSet[0].OutputColumn}";
                         join = new MergeJoinNode
                         {
                             LeftSource = source,
                             LeftAttribute = lhsCol,
-                            RightSource = innerQuery.Source,
-                            RightAttribute = innerQuery.ColumnSet[0].SourceColumn.ToColumnReference()
+                            RightSource = alias,
+                            RightAttribute = new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = alias.Alias }, new Identifier { Value = alias.ColumnSet[0].OutputColumn } } } }
                         };
                     }
                 }

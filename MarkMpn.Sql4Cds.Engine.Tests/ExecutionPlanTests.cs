@@ -2558,7 +2558,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 <fetch>
                     <entity name='account'>
                         <attribute name='name' />
-                        <link-entity name='contact' alias='contact' from='createdon' to='createdon' link-type='in'>
+                        <link-entity name='contact' alias='Expr1' from='createdon' to='createdon' link-type='in'>
                             <filter>
                                 <condition attribute='firstname' operator='eq' value='Mark' />
                             </filter>
@@ -2572,6 +2572,97 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             finally
             {
                 _supportedJoins.Remove(JoinOperator.Any);
+            }
+        }
+
+        [TestMethod]
+        public void FoldFilterWithInClauseOnLinkEntityWithoutPrimaryKey()
+        {
+            _supportedJoins.Add(JoinOperator.Any);
+
+            try
+            {
+                var context = new XrmFakedContext();
+                context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+                var org = context.GetOrganizationService();
+                var metadata = new AttributeMetadataCache(org);
+                var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+                var query = "SELECT name from account inner join contact on account.accountid = contact.parentcustomerid where name like 'Data8%' and contact.createdon in (select createdon from contact where firstname = 'Mark')";
+
+                var plans = planBuilder.Build(query);
+
+                Assert.AreEqual(1, plans.Length);
+
+                var select = AssertNode<SelectNode>(plans[0]);
+                var fetch = AssertNode<FetchXmlScan>(select.Source);
+                AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <link-entity name='contact' alias='contact' from='parentcustomerid' to='accountid' link-type='inner'>
+                            <link-entity name='contact' alias='Expr1' from='createdon' to='createdon' link-type='in'>
+                                <filter>
+                                    <condition attribute='firstname' operator='eq' value='Mark' />
+                                </filter>
+                            </link-entity>
+                        </link-entity>
+                        <filter>
+                            <condition attribute='name' operator='like' value='Data8%' />
+                        </filter>
+                    </entity>
+                </fetch>");
+            }
+            finally
+            {
+                _supportedJoins.Remove(JoinOperator.Any);
+            }
+        }
+
+        [TestMethod]
+        public void FoldFilterWithExistsClauseWithoutPrimaryKey()
+        {
+            _supportedJoins.Add(JoinOperator.Exists);
+
+            try
+            {
+                var context = new XrmFakedContext();
+                context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+                var org = context.GetOrganizationService();
+                var metadata = new AttributeMetadataCache(org);
+                var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+                var query = "SELECT name from account where name like 'Data8%' and exists (select * from contact where firstname = 'Mark' and createdon = account.createdon)";
+
+                var plans = planBuilder.Build(query);
+
+                Assert.AreEqual(1, plans.Length);
+
+                var select = AssertNode<SelectNode>(plans[0]);
+                var fetch = AssertNode<FetchXmlScan>(select.Source);
+                AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <link-entity name='contact' alias='contact' from='createdon' to='createdon' link-type='exists'>
+                            <filter>
+                                <condition attribute='firstname' operator='eq' value='Mark' />
+                            </filter>
+                            <filter>
+                                <condition attribute='createdon' operator='not-null' />
+                            </filter>
+                        </link-entity>
+                        <filter>
+                            <condition attribute='name' operator='like' value='Data8%' />
+                        </filter>
+                    </entity>
+                </fetch>");
+            }
+            finally
+            {
+                _supportedJoins.Remove(JoinOperator.Exists);
             }
         }
 
