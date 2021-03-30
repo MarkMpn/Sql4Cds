@@ -11,7 +11,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Returns a constant data set
     /// </summary>
-    public class ConstantScanNode : BaseDataNode
+    class ConstantScanNode : BaseDataNode
     {
         /// <summary>
         /// The list of values to be returned
@@ -22,6 +22,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// The alias for the data source
         /// </summary>
+        [Category("Constant Scan")]
+        [Description("The alias for the data source")]
         public string Alias { get; set; }
 
         /// <summary>

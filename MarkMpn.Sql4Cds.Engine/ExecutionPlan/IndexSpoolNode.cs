@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -7,14 +8,28 @@ using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    public class IndexSpoolNode : BaseDataNode, ISingleSourceExecutionPlanNode
+    /// <summary>
+    /// Stores data in a hashtable for fast lookups
+    /// </summary>
+    class IndexSpoolNode : BaseDataNode, ISingleSourceExecutionPlanNode
     {
         private IDictionary<object, List<Entity>> _hashTable;
 
+        [Browsable(false)]
         public IDataExecutionPlanNode Source { get; set; }
 
+        /// <summary>
+        /// The column in the data source to create an index on
+        /// </summary>
+        [Category("Index Spool")]
+        [Description("The column in the data source to create an index on")]
         public string KeyColumn { get; set; }
 
+        /// <summary>
+        /// The name of the parameter to use for seeking in the index
+        /// </summary>
+        [Category("Index Spool")]
+        [Description("The name of the parameter to use for seeking in the index")]
         public string SeekValue { get; set; }
 
         public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)

@@ -6,6 +6,9 @@ using System.Threading.Tasks;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
+    /// <summary>
+    /// Provides an <see cref="IEqualityComparer{object}"/> to do case-insensitive matching for string values
+    /// </summary>
     class CaseInsensitiveObjectComparer : IComparer<object>, IEqualityComparer<object>
     {
         public int Compare(object x, object y)
@@ -25,7 +28,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             return StringComparer.CurrentCultureIgnoreCase.GetHashCode(obj);
         }
-
+        
+        /// <summary>
+        /// Returns a static instance of <see cref="CaseInsensitiveObjectComparer"/>
+        /// </summary>
         public static CaseInsensitiveObjectComparer Instance { get; } = new CaseInsensitiveObjectComparer();
     }
 }

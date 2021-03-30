@@ -68,5 +68,33 @@ namespace MarkMpn.Sql4Cds.Engine
                     yield return childLinkEntity;
             }
         }
+
+        public static FetchAttributeType FindAliasedAttribute(this FetchEntityType entity, string colName, Func<FetchAttributeType, bool> predicate)
+        {
+            return FindAliasedAttribute(entity.Items, colName, predicate);
+        }
+
+        private static FetchAttributeType FindAliasedAttribute(object[] items, string colName, Func<FetchAttributeType, bool> predicate)
+        {
+            if (items == null)
+                return null;
+
+            var match = items.OfType<FetchAttributeType>()
+                .Where(a => a.alias == colName && (predicate == null || predicate(a)))
+                .FirstOrDefault();
+
+            if (match != null)
+                return match;
+
+            foreach (var linkEntity in items.OfType<FetchLinkEntityType>())
+            {
+                match = FindAliasedAttribute(linkEntity.Items, colName, predicate);
+
+                if (match != null)
+                    return match;
+            }
+
+            return null;
+        }
     }
 }

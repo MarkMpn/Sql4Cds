@@ -1008,7 +1008,7 @@ namespace MarkMpn.Sql4Cds
         private void ShowResult(IRootExecutionPlanNode query, ExecuteParams args, DataTable results, string msg, QueryExecutionException ex)
         {
             Control result = null;
-            Control fetchXml = null;
+            Control plan = null;
             var rowCount = 0;
 
             if (results != null)
@@ -1075,7 +1075,7 @@ namespace MarkMpn.Sql4Cds
 
             if (args.IncludeFetchXml)
             {
-                fetchXml = new Panel();
+                plan = new Panel();
                 var fetchLabel = new System.Windows.Forms.Label
                 {
                     Text = query.Sql,
@@ -1094,16 +1094,23 @@ namespace MarkMpn.Sql4Cds
                 planView.NodeSelected += (s, e) => _properties.SelectObject(planView.Selected);
                 planView.DoubleClick += (s, e) =>
                 {
-                    if (planView.Selected is FetchXmlScan fetch)
+                    if (planView.Selected == null)
+                        return;
+
+                    var nodeType = planView.Selected.GetType();
+
+                    if (nodeType.Name == "FetchXmlScan")
                     {
+                        var fetchXml = (string) nodeType.GetProperty("FetchXmlString").GetValue(planView.Selected);
+
                         OutgoingMessageHandler(new MessageBusEventArgs("FetchXML Builder")
                         {
-                            TargetArgument = fetch.FetchXmlString
+                            TargetArgument = fetchXml
                         });
                     }
                 };
-                fetchXml.Controls.Add(planView);
-                fetchXml.Controls.Add(fetchLabel);
+                plan.Controls.Add(planView);
+                plan.Controls.Add(fetchLabel);
                 /*
                 if (isMetadata)
                 {
@@ -1141,7 +1148,7 @@ namespace MarkMpn.Sql4Cds
                 }*/
             }
 
-            AddResult(result, fetchXml, rowCount);
+            AddResult(result, plan, rowCount);
         }
 
         private void backgroundWorker_ProgressChanged(object sender, ProgressChangedEventArgs e)

@@ -1,11 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Metadata.Query;
 using Microsoft.Xrm.Sdk.Query;
 
@@ -14,16 +17,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Applies a filter to the data stream
     /// </summary>
-    public class FilterNode : BaseDataNode, ISingleSourceExecutionPlanNode
+    class FilterNode : BaseDataNode, ISingleSourceExecutionPlanNode
     {
         /// <summary>
         /// The filter to apply
         /// </summary>
+        [Category("Filter")]
+        [Description("The filter to apply")]
         public BooleanExpression Filter { get; set; }
 
         /// <summary>
         /// The data source to select from
         /// </summary>
+        [Browsable(false)]
         public IDataExecutionPlanNode Source { get; set; }
 
         protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
@@ -517,6 +523,247 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return bin;
 
             return bin.FirstExpression ?? bin.SecondExpression;
+        }
+        protected bool TranslateMetadataCriteria(BooleanExpression criteria, MetadataQueryNode meta, out MetadataFilterExpression entityFilter, out MetadataFilterExpression attributeFilter, out MetadataFilterExpression relationshipFilter)
+        {
+            entityFilter = null;
+            attributeFilter = null;
+            relationshipFilter = null;
+
+            if (criteria is BooleanBinaryExpression binary)
+            {
+                if (!TranslateMetadataCriteria(binary.FirstExpression, meta, out var lhsEntityFilter, out var lhsAttributeFilter, out var lhsRelationshipFilter))
+                    return false;
+                if (!TranslateMetadataCriteria(binary.SecondExpression, meta, out var rhsEntityFilter, out var rhsAttributeFilter, out var rhsRelationshipFilter))
+                    return false;
+
+                if (binary.BinaryExpressionType == BooleanBinaryExpressionType.Or)
+                {
+                    // Can only do OR filters within a single type
+                    var typeCount = 0;
+
+                    if (lhsEntityFilter != null || rhsEntityFilter != null)
+                        typeCount++;
+
+                    if (lhsAttributeFilter != null || rhsAttributeFilter != null)
+                        typeCount++;
+
+                    if (lhsRelationshipFilter != null || rhsRelationshipFilter != null)
+                        typeCount++;
+
+                    if (typeCount > 1)
+                        return false;
+                }
+
+                entityFilter = lhsEntityFilter;
+                attributeFilter = lhsAttributeFilter;
+                relationshipFilter = lhsRelationshipFilter;
+
+                if (rhsEntityFilter != null)
+                {
+                    if (entityFilter == null)
+                        entityFilter = rhsEntityFilter;
+                    else
+                        entityFilter = new MetadataFilterExpression { Filters = { lhsEntityFilter, rhsEntityFilter }, FilterOperator = binary.BinaryExpressionType == BooleanBinaryExpressionType.And ? LogicalOperator.And : LogicalOperator.Or };
+                }
+
+                if (rhsAttributeFilter != null)
+                {
+                    if (attributeFilter == null)
+                        attributeFilter = rhsAttributeFilter;
+                    else
+                        attributeFilter = new MetadataFilterExpression { Filters = { lhsAttributeFilter, rhsAttributeFilter }, FilterOperator = binary.BinaryExpressionType == BooleanBinaryExpressionType.And ? LogicalOperator.And : LogicalOperator.Or };
+                }
+
+                if (rhsRelationshipFilter != null)
+                {
+                    if (relationshipFilter == null)
+                        relationshipFilter = rhsRelationshipFilter;
+                    else
+                        relationshipFilter = new MetadataFilterExpression { Filters = { lhsRelationshipFilter, rhsRelationshipFilter }, FilterOperator = binary.BinaryExpressionType == BooleanBinaryExpressionType.And ? LogicalOperator.And : LogicalOperator.Or };
+                }
+
+                return true;
+            }
+
+            if (criteria is BooleanComparisonExpression comparison)
+            {
+                if (comparison.ComparisonType != BooleanComparisonType.Equals &&
+                    comparison.ComparisonType != BooleanComparisonType.NotEqualToBrackets &&
+                    comparison.ComparisonType != BooleanComparisonType.NotEqualToExclamation &&
+                    comparison.ComparisonType != BooleanComparisonType.LessThan &&
+                    comparison.ComparisonType != BooleanComparisonType.GreaterThan)
+                    return false;
+
+                var col = comparison.FirstExpression as ColumnReferenceExpression;
+                var literal = comparison.SecondExpression as Literal;
+
+                if (col == null && literal == null)
+                {
+                    col = comparison.SecondExpression as ColumnReferenceExpression;
+                    literal = comparison.FirstExpression as Literal;
+                }
+
+                if (col == null || literal == null)
+                    return false;
+
+                var schema = meta.GetSchema(null, null);
+                if (!schema.ContainsColumn(col.GetColumnName(), out var colName))
+                    return false;
+
+                var parts = colName.Split('.');
+
+                if (parts.Length != 2)
+                    return false;
+
+                MetadataConditionOperator op;
+
+                switch (comparison.ComparisonType)
+                {
+                    case BooleanComparisonType.Equals:
+                        op = MetadataConditionOperator.Equals;
+                        break;
+
+                    case BooleanComparisonType.NotEqualToBrackets:
+                    case BooleanComparisonType.NotEqualToExclamation:
+                        op = MetadataConditionOperator.NotEquals;
+                        break;
+
+                    case BooleanComparisonType.LessThan:
+                        op = MetadataConditionOperator.LessThan;
+                        break;
+
+                    case BooleanComparisonType.GreaterThan:
+                        op = MetadataConditionOperator.GreaterThan;
+                        break;
+
+                    default:
+                        throw new InvalidOperationException();
+                }
+
+                var condition = new MetadataConditionExpression(parts[1], op, literal.Compile(null, null)(null, null));
+
+                return TranslateMetadataCondition(condition, parts[0], meta, out entityFilter, out attributeFilter, out relationshipFilter);
+            }
+
+            if (criteria is InPredicate inPred)
+            {
+                var col = inPred.Expression as ColumnReferenceExpression;
+
+                if (col == null)
+                    return false;
+
+                var schema = meta.GetSchema(null, null);
+                if (!schema.ContainsColumn(col.GetColumnName(), out var colName))
+                    return false;
+
+                var parts = colName.Split('.');
+
+                if (parts.Length != 2)
+                    return false;
+
+                if (inPred.Values.Any(val => !(val is Literal)))
+                    return false;
+
+                var condition = new MetadataConditionExpression(parts[1], inPred.NotDefined ? MetadataConditionOperator.NotIn : MetadataConditionOperator.In, inPred.Values.Select(val => val.Compile(null, null)(null, null)).ToArray());
+
+                return TranslateMetadataCondition(condition, parts[0], meta, out entityFilter, out attributeFilter, out relationshipFilter);
+            }
+
+            if (criteria is BooleanIsNullExpression isNull)
+            {
+                var col = isNull.Expression as ColumnReferenceExpression;
+
+                if (col == null)
+                    return false;
+
+                var schema = meta.GetSchema(null, null);
+                if (!schema.ContainsColumn(col.GetColumnName(), out var colName))
+                    return false;
+
+                var parts = colName.Split('.');
+
+                if (parts.Length != 2)
+                    return false;
+
+                var condition = new MetadataConditionExpression(parts[1], isNull.IsNot ? MetadataConditionOperator.NotEquals : MetadataConditionOperator.Equals, null);
+
+                return TranslateMetadataCondition(condition, parts[0], meta, out entityFilter, out attributeFilter, out relationshipFilter);
+            }
+
+            return false;
+        }
+
+        private bool TranslateMetadataCondition(MetadataConditionExpression condition, string alias, MetadataQueryNode meta, out MetadataFilterExpression entityFilter, out MetadataFilterExpression attributeFilter, out MetadataFilterExpression relationshipFilter)
+        {
+            entityFilter = null;
+            attributeFilter = null;
+            relationshipFilter = null;
+
+            // Translate queries on attribute.EntityLogicalName to entity.LogicalName for better performance
+            var isEntityFilter = alias.Equals(meta.EntityAlias, StringComparison.OrdinalIgnoreCase);
+            var isAttributeFilter = alias.Equals(meta.AttributeAlias, StringComparison.OrdinalIgnoreCase);
+            var isRelationshipFilter = alias.Equals(meta.OneToManyRelationshipAlias, StringComparison.OrdinalIgnoreCase) || alias.Equals(meta.ManyToOneRelationshipAlias, StringComparison.OrdinalIgnoreCase) || alias.Equals(meta.ManyToManyRelationshipAlias, StringComparison.OrdinalIgnoreCase);
+
+            if (isAttributeFilter &&
+                condition.PropertyName.Equals(nameof(AttributeMetadata.EntityLogicalName), StringComparison.OrdinalIgnoreCase))
+            {
+                condition.PropertyName = nameof(EntityMetadata.LogicalName);
+                isAttributeFilter = false;
+                isEntityFilter = true;
+            }
+
+            if (alias.Equals(meta.OneToManyRelationshipAlias, StringComparison.OrdinalIgnoreCase) &&
+                condition.PropertyName.Equals(nameof(OneToManyRelationshipMetadata.ReferencedEntity), StringComparison.OrdinalIgnoreCase))
+            {
+                condition.PropertyName = nameof(EntityMetadata.LogicalName);
+                isRelationshipFilter = false;
+                isEntityFilter = true;
+            }
+
+            if (alias.Equals(meta.ManyToOneRelationshipAlias, StringComparison.OrdinalIgnoreCase) &&
+                condition.PropertyName.Equals(nameof(OneToManyRelationshipMetadata.ReferencingEntity), StringComparison.OrdinalIgnoreCase))
+            {
+                condition.PropertyName = nameof(EntityMetadata.LogicalName);
+                isRelationshipFilter = false;
+                isEntityFilter = true;
+            }
+
+            var filter = new MetadataFilterExpression { Conditions = { condition } };
+
+            // Attributes & relationships are polymorphic, but filters can only be applied to the base type. Check the property
+            // we're filtering on is valid to be folded
+            var targetType = isEntityFilter ? typeof(EntityMetadata) : isAttributeFilter ? typeof(AttributeMetadata) : typeof(RelationshipMetadataBase);
+            var prop = targetType.GetProperty(condition.PropertyName, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+
+            if (prop == null)
+                return false;
+
+            // Convert the property name to the correct case
+            filter.Conditions[0].PropertyName = prop.Name;
+
+            // Convert the value to the expected type
+            filter.Conditions[0].Value = SqlTypeConverter.ChangeType(SqlTypeConverter.ChangeType(filter.Conditions[0].Value, MetadataQueryNode.GetPropertyType(prop.PropertyType)), prop.PropertyType);
+
+            if (isEntityFilter)
+            {
+                entityFilter = filter;
+                return true;
+            }
+
+            if (isAttributeFilter)
+            {
+                attributeFilter = filter;
+                return true;
+            }
+
+            if (isRelationshipFilter)
+            {
+                relationshipFilter = filter;
+                return true;
+            }
+
+            return false;
         }
 
         public override int EstimateRowsOut(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, ITableSizeCache tableSize)

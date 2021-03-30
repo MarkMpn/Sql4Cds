@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Data.SqlTypes;
 using System.Linq;
 using System.Linq.Expressions;
@@ -13,7 +14,10 @@ using Microsoft.Xrm.Sdk.Metadata.Query;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    public class MetadataQueryNode : BaseDataNode
+    /// <summary>
+    /// Returns data from a metadata query
+    /// </summary>
+    class MetadataQueryNode : BaseDataNode
     {
         class MetadataProperty
         {
@@ -131,20 +135,60 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 .ToDictionary(p => p.SqlName, StringComparer.OrdinalIgnoreCase);
         }
 
+        /// <summary>
+        /// The types of metadata to include in the result
+        /// </summary>
+        [Category("Metadata Query")]
+        [Description("The types of metadata to include in the result")]
         public MetadataSource MetadataSource { get; set; }
 
+        /// <summary>
+        /// The alias for entity data
+        /// </summary>
+        [Category("Metadata Query")]
+        [Description("The alias for entity data")]
         public string EntityAlias { get; set; }
 
+        /// <summary>
+        /// The alias for attribute data
+        /// </summary>
+        [Category("Metadata Query")]
+        [Description("The alias for attribute data")]
         public string AttributeAlias { get; set; }
 
+        /// <summary>
+        /// The alias for one-to-many relationship data
+        /// </summary>
+        [Category("Metadata Query")]
+        [Description("The alias for one-to-many relationship data")]
         public string OneToManyRelationshipAlias { get; set; }
 
+        /// <summary>
+        /// The alias for many-to-one relationship data
+        /// </summary>
+        [Category("Metadata Query")]
+        [Description("The alias for many-to-one relationship data")]
         public string ManyToOneRelationshipAlias { get; set; }
 
+        /// <summary>
+        /// The alias for many-to-many relationship data
+        /// </summary>
+        [Category("Metadata Query")]
+        [Description("The alias for many-to-many relationship data")]
         public string ManyToManyRelationshipAlias { get; set; }
 
+        /// <summary>
+        /// The property used to access many-to-many relationship data
+        /// </summary>
+        [Category("Metadata Query")]
+        [Description("The property used to access many-to-many relationship data")]
         public string ManyToManyRelationshipJoin { get; set; }
 
+        /// <summary>
+        /// The metadata query to be executed
+        /// </summary>
+        [Category("Metadata Query")]
+        [Description("The metadata query to be executed")]
         public EntityQueryExpression Query { get; } = new EntityQueryExpression();
 
         public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)

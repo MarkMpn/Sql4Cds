@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Data.SqlTypes;
 using System.Linq;
 using System.Text;
@@ -14,21 +15,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Sorts the data in the data stream
     /// </summary>
-    public class SortNode : BaseDataNode, ISingleSourceExecutionPlanNode
+    class SortNode : BaseDataNode, ISingleSourceExecutionPlanNode
     {
         /// <summary>
         /// The sorts to apply
         /// </summary>
+        [Category("Sort")]
+        [Description("The sorts to apply")]
         public List<ExpressionWithSortOrder> Sorts { get; } = new List<ExpressionWithSortOrder>();
 
         /// <summary>
         /// The number of <see cref="Sorts"/> that the input is already sorted by
         /// </summary>
+        [Category("Sort")]
+        [Description("The number of sorts that the input is already sorted by")]
         public int PresortedCount { get; set; }
 
         /// <summary>
         /// The data source to sort
         /// </summary>
+        [Browsable(false)]
         public IDataExecutionPlanNode Source { get; set; }
 
         protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)

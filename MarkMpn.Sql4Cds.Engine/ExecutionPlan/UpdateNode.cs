@@ -16,23 +16,40 @@ using Microsoft.Xrm.Tooling.Connector;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    public class UpdateNode : BaseDmlNode
+    /// <summary>
+    /// Implements an UPDATE operation
+    /// </summary>
+    class UpdateNode : BaseDmlNode
     {
         private int _executionCount;
         private TimeSpan _duration;
 
-        [Browsable(false)]
         public override int ExecutionCount => _executionCount;
 
-        [Browsable(false)]
         public override TimeSpan Duration => _duration;
 
+        [Browsable(false)]
         public IExecutionPlanNode Source { get; set; }
 
+        /// <summary>
+        /// The logical name of the entity to update
+        /// </summary>
+        [Category("Update")]
+        [Description("The logical name of the entity to update")]
         public string LogicalName { get; set; }
 
+        /// <summary>
+        /// The column that contains the primary ID of the records to update
+        /// </summary>
+        [Category("Update")]
+        [Description("The column that contains the primary ID of the records to update")]
         public string PrimaryIdSource { get; set; }
 
+        /// <summary>
+        /// The columns to update and the associated column to take the new value from
+        /// </summary>
+        [Category("Update")]
+        [Description("The columns to update and the associated column to take the new value from")]
         public IDictionary<string, string> ColumnMappings { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)

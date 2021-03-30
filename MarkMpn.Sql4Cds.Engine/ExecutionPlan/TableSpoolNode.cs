@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -11,7 +12,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Provides a rewindable cache of a data source
     /// </summary>
-    public class TableSpoolNode : BaseDataNode, ISingleSourceExecutionPlanNode
+    class TableSpoolNode : BaseDataNode, ISingleSourceExecutionPlanNode
     {
         class CachedList<T> : IEnumerable<T>
         {
@@ -86,6 +87,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// The data source to cache
         /// </summary>
+        [Browsable(false)]
         public IDataExecutionPlanNode Source { get; set; }
 
         protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)

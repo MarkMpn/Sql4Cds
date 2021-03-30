@@ -11,7 +11,10 @@ using Microsoft.Xrm.Tooling.Connector;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    public class SqlNode : BaseNode, IDataSetExecutionPlanNode
+    /// <summary>
+    /// Executes SQL using the TDS endpoint
+    /// </summary>
+    class SqlNode : BaseNode, IDataSetExecutionPlanNode
     {
         private int _executionCount;
         private TimeSpan _duration;
@@ -20,6 +23,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override TimeSpan Duration => _duration;
 
+        [Category("TDS Endpoint")]
+        [Description("The SQL query to execute")]
         public string Sql { get; set; }
 
         [Browsable(false)]

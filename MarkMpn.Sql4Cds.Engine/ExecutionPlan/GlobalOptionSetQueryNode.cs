@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -10,7 +11,7 @@ using Microsoft.Xrm.Sdk.Metadata;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    public class GlobalOptionSetQueryNode : BaseDataNode
+    class GlobalOptionSetQueryNode : BaseDataNode
     {
         class OptionSetProperty
         {
@@ -66,6 +67,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 .ToDictionary(p => p.Name, StringComparer.OrdinalIgnoreCase);
         }
 
+        /// <summary>
+        /// The alias to use for the dataset
+        /// </summary>
+        [Category("Global Optionset Query")]
+        [Description("The alias to use for the dataset")]
         public string Alias { get; set; }
 
         public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)

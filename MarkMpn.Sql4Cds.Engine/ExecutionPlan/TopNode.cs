@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Data.SqlTypes;
 using System.Linq;
 using System.Text;
@@ -9,14 +10,33 @@ using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    public class TopNode : BaseDataNode, ISingleSourceExecutionPlanNode
+    /// <summary>
+    /// Implements a TOP clause
+    /// </summary>
+    class TopNode : BaseDataNode, ISingleSourceExecutionPlanNode
     {
+        /// <summary>
+        /// The number of records to retrieve
+        /// </summary>
+        [Category("Top")]
+        [Description("The number of records to retrieve")]
         public ScalarExpression Top { get; set; }
 
+        /// <summary>
+        /// Indicates if the Top number indicates a percentage or an absolute number of records
+        /// </summary>
+        [Category("Top")]
+        [Description("Indicates if the Top number indicates a percentage or an absolute number of records")]
         public bool Percent { get; set; }
 
+        /// <summary>
+        /// Indicates if two records with the same sort order should be included even if the total number of records has been met
+        /// </summary>
+        [Category("Top")]
+        [Description("Indicates if two records with the same sort order should be included even if the total number of records has been met")]
         public bool WithTies { get; set; }
 
+        [Browsable(false)]
         public IDataExecutionPlanNode Source { get; set; }
 
         protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)

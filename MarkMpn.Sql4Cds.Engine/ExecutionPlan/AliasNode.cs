@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -7,18 +8,39 @@ using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    public class AliasNode : BaseDataNode, ISingleSourceExecutionPlanNode
+    /// <summary>
+    /// Applies a different alias to the results of a query to keep names unique throughout a query plan
+    /// </summary>
+    class AliasNode : BaseDataNode, ISingleSourceExecutionPlanNode
     {
+        /// <summary>
+        /// Creates a new <see cref="AliasNode"/> to wrap the results of a subquery with a different alias
+        /// </summary>
+        /// <param name="select">The subquery to wrap the results of</param>
         public AliasNode(SelectNode select)
         {
             ColumnSet.AddRange(select.ColumnSet);
             Source = select.Source;
         }
 
+        /// <summary>
+        /// The alias to apply to the results of the subquery
+        /// </summary>
+        [Category("Alias")]
+        [Description("The alias to apply to the results of the subquery")]
         public string Alias { get; set; }
 
+        /// <summary>
+        /// The columns that are produced by the subquery
+        /// </summary>
+        [Category("Alias")]
+        [Description("The columns that are produced by the subquery")]
         public List<SelectColumn> ColumnSet { get; } = new List<SelectColumn>();
 
+        /// <summary>
+        /// The data source of the query
+        /// </summary>
+        [Browsable(false)]
         public IDataExecutionPlanNode Source { get; set; }
 
         public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)

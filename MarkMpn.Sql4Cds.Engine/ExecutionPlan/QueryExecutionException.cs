@@ -7,6 +7,9 @@ using Microsoft.SqlServer.TransactSql.ScriptDom;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
+    /// <summary>
+    /// An exception that is generated during the execution of a query
+    /// </summary>
     public class QueryExecutionException : ApplicationException
     {
         public QueryExecutionException(string message) : base(message)
@@ -17,6 +20,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
         }
 
+        /// <summary>
+        /// The node in the query that generated the exception
+        /// </summary>
         public IExecutionPlanNode Node { get; set; }
     }
 }

@@ -11,7 +11,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Implements a hash join using one column for the hash table
     /// </summary>
-    public class HashJoinNode : FoldableJoinNode
+    class HashJoinNode : FoldableJoinNode
     {
         class OuterRecord
         {

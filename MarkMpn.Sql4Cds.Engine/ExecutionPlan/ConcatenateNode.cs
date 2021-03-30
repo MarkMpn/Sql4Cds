@@ -11,7 +11,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Concatenates the results from multiple queries
     /// </summary>
-    public class ConcatenateNode : BaseDataNode
+    class ConcatenateNode : BaseDataNode
     {
         /// <summary>
         /// The data sources to concatenate
@@ -22,6 +22,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// The columns to produce in the result and the source columns from each data source
         /// </summary>
+        [Category("Concatenate")]
+        [Description("The columns to produce in the result and the source columns from each data source")]
         public List<ConcatenateColumn> ColumnSet { get; } = new List<ConcatenateColumn>();
 
         protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
@@ -88,9 +90,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         }
     }
 
-    public class ConcatenateColumn
+    class ConcatenateColumn
     {
+        /// <summary>
+        /// The name of the column that is generated in the output
+        /// </summary>
+        [Description("The name of the column that is generated in the output")]
         public string OutputColumn { get; set; }
+
+        /// <summary>
+        /// The names of the column in each source node that generates the data for this column
+        /// </summary>
+        [Description("The names of the column in each source node that generates the data for this column")]
         public List<string> SourceColumns { get; } = new List<string>();
     }
 }

@@ -51,10 +51,6 @@ namespace MarkMpn.Sql4Cds
                 .Where(p => p.GetIndexParameters().Length == 0)
                 .Where(p => p.PropertyType != typeof(ExtensionDataObject))
                 .Where(p => p.PropertyType != typeof(IExecutionPlanNode))
-                .Where(p => p.DeclaringType != typeof(BaseNode))
-                .Where(p => p.PropertyType != typeof(IDataExecutionPlanNode))
-                .Where(p => p.DeclaringType != typeof(BaseDataNode))
-                .Where(p => p.DeclaringType != typeof(BaseDmlNode))
                 .Where(p => p.DeclaringType != typeof(TSqlFragment))
                 .Where(p => p.GetCustomAttribute<BrowsableAttribute>()?.Browsable != false)
                 .Select(p => new WrappedPropertyDescriptor(_obj, p))
@@ -88,12 +84,13 @@ namespace MarkMpn.Sql4Cds
 
         private static Attribute[] GetAttributes(object target, PropertyInfo prop)
         {
+            var baseAttributes = Attribute.GetCustomAttributes(prop);
             var value = prop.GetValue(target);
 
             if (value != null)
-                return GetAttributes(value.GetType());
+                return GetAttributes(value.GetType()).Concat(baseAttributes).ToArray();
 
-            return GetAttributes(prop.PropertyType);
+            return GetAttributes(prop.PropertyType).Concat(baseAttributes).ToArray();
         }
 
         public static string GetName(ITypeDescriptorContext context)

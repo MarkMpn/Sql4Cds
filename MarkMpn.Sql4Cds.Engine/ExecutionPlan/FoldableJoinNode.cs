@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -14,21 +15,27 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Merges two sorted data sets
     /// </summary>
-    public abstract class FoldableJoinNode : BaseJoinNode
+    abstract class FoldableJoinNode : BaseJoinNode
     {
         /// <summary>
         /// The attribute in the <see cref="OuterSource"/> to join on
         /// </summary>
+        [Category("Join")]
+        [Description("The attribute in the outer data source to join on")]
         public ColumnReferenceExpression LeftAttribute { get; set; }
 
         /// <summary>
         /// The attribute in the <see cref="InnerSource"/> to join on
         /// </summary>
+        [Category("Join")]
+        [Description("The attribute in the inner data source to join on")]
         public ColumnReferenceExpression RightAttribute { get; set; }
 
         /// <summary>
         /// Any additional criteria to apply to the join
         /// </summary>
+        [Category("Join")]
+        [Description("Any additional criteria to apply to the join")]
         public BooleanExpression AdditionalJoinCriteria { get; set; }
 
         public override IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)

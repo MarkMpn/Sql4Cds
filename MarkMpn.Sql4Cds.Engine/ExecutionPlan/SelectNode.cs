@@ -10,7 +10,10 @@ using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    public class SelectNode : BaseNode, ISingleSourceExecutionPlanNode, IDataSetExecutionPlanNode
+    /// <summary>
+    /// Converts a data stream to a full data table
+    /// </summary>
+    class SelectNode : BaseNode, ISingleSourceExecutionPlanNode, IDataSetExecutionPlanNode
     {
         private TimeSpan _duration;
         private int _executionCount;
@@ -18,11 +21,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// The columns that should be included in the query results
         /// </summary>
+        [Category("Select")]
+        [Description("The columns that should be included in the query results")]
         public List<SelectColumn> ColumnSet { get; } = new List<SelectColumn>();
 
         /// <summary>
         /// The data source to select from
         /// </summary>
+        [Browsable(false)]
         public IDataExecutionPlanNode Source { get; set; }
 
         [Browsable(false)]

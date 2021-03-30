@@ -8,9 +8,15 @@ using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    public class TryCatchNode : BaseDataNode
+    /// <summary>
+    /// Allows execution of a different query plan if the first one fails
+    /// </summary>
+    class TryCatchNode : BaseDataNode
     {
+        [Browsable(false)]
         public IDataExecutionPlanNode TrySource { get; set; }
+
+        [Browsable(false)]
         public IDataExecutionPlanNode CatchSource { get; set; }
 
         [Browsable(false)]

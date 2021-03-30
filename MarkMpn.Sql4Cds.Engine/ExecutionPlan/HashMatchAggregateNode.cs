@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Data.SqlTypes;
 using System.IO;
 using System.Linq;
@@ -15,7 +16,10 @@ using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    public class HashMatchAggregateNode : BaseDataNode, ISingleSourceExecutionPlanNode
+    /// <summary>
+    /// Produces aggregate values using a hash table for grouping
+    /// </summary>
+    class HashMatchAggregateNode : BaseDataNode, ISingleSourceExecutionPlanNode
     {
         class GroupingKey
         {
@@ -59,10 +63,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
+        /// <summary>
+        /// The list of columns to group the results by
+        /// </summary>
+        [Category("Hash Match Aggregate")]
+        [Description("The list of columns to group the results by")]
         public List<ColumnReferenceExpression> GroupBy { get; } = new List<ColumnReferenceExpression>();
 
+        /// <summary>
+        /// The list of aggregate values to produce
+        /// </summary>
+        [Category("Hash Match Aggregate")]
+        [Description("The list of aggregate values to produce")]
         public Dictionary<string, Aggregate> Aggregates { get; } = new Dictionary<string, Aggregate>();
 
+        [Browsable(false)]
         public IDataExecutionPlanNode Source { get; set; }
 
         protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)

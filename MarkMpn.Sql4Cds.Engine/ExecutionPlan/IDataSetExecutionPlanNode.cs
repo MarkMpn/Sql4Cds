@@ -8,6 +8,9 @@ using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
+    /// <summary>
+    /// A <see cref="IRootExecutionPlanNode"/> that produces a data table
+    /// </summary>
     public interface IDataSetExecutionPlanNode : IRootExecutionPlanNode
     {
         /// <summary>

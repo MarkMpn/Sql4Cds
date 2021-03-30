@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -14,14 +15,28 @@ using Microsoft.Xrm.Sdk.Query;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    public abstract class BaseDataNode : BaseNode, IDataExecutionPlanNode
+    /// <summary>
+    /// A base class for execution plan nodes that generate a stream of data
+    /// </summary>
+    abstract class BaseDataNode : BaseNode, IDataExecutionPlanNode
     {
         private int _executionCount;
         private int _tickCount;
         private int _rowsOut;
 
+        /// <summary>
+        /// Executes the query and produces a stram of data in the results
+        /// </summary>
+        /// <param name="org">The <see cref="IOrganizationService"/> to use to get the data</param>
+        /// <param name="metadata">The <see cref="IAttributeMetadataCache"/> to use to get metadata</param>
+        /// <param name="options"><see cref="IQueryExpressionVisitor"/> to indicate how the query can be executed</param>
+        /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
+        /// <param name="parameterValues">A mapping of parameter names to their current values</param>
+        /// <returns>A stream of <see cref="Entity"/> records</returns>
         public IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
+            // Track execution times roughly using Environment.TickCount. Stopwatch provides more accurate results
+            // but gives a large performance penalty.
             IEnumerator<Entity> enumerator;
 
             var start = Environment.TickCount;
@@ -82,285 +97,73 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
+        /// <summary>
+        /// Estimates the number of rows that will be returned by the node
+        /// </summary>
+        /// <param name="metadata">The <see cref="IAttributeMetadataCache"/> to use to get metadata</param>
+        /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
+        /// <param name="tableSize">A cache of the number of records in each table</param>
+        /// <returns>The number of rows the node is estimated to return</returns>
         public abstract int EstimateRowsOut(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, ITableSizeCache tableSize);
 
+        /// <summary>
+        /// Returns the number of times the node has been executed
+        /// </summary>
         public override int ExecutionCount => _executionCount;
 
+        /// <summary>
+        /// Returns the time that the node has taken to execute
+        /// </summary>
         public override TimeSpan Duration => TimeSpan.FromMilliseconds(_tickCount);
 
+        /// <summary>
+        /// Returns the number of rows that the node has generated
+        /// </summary>
+        [Category("Statistics")]
+        [Description("Returns the number of rows that the node has generated")]
         public int RowsOut => _rowsOut;
 
+        /// <summary>
+        /// Produces the data for the node without keeping track of any execution time statistics
+        /// </summary>
+        /// <param name="org">The <see cref="IOrganizationService"/> to use to get the data</param>
+        /// <param name="metadata">The <see cref="IAttributeMetadataCache"/> to use to get metadata</param>
+        /// <param name="options"><see cref="IQueryExpressionVisitor"/> to indicate how the query can be executed</param>
+        /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
+        /// <param name="parameterValues">A mapping of parameter names to their current values</param>
+        /// <returns>A stream of <see cref="Entity"/> records</returns>
         protected abstract IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues);
 
+        /// <summary>
+        /// Gets the details of columns produced by the node
+        /// </summary>
+        /// <param name="metadata">The <see cref="IAttributeMetadataCache"/> to use to get metadata</param>
+        /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
+        /// <returns>Details of the columns produced by the node</returns>
         public abstract NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes);
 
+        /// <summary>
+        /// Attempts to fold this node into its source to simplify the query
+        /// </summary>
+        /// <param name="metadata">The <see cref="IAttributeMetadataCache"/> to use to get metadata</param>
+        /// <param name="options"><see cref="IQueryExpressionVisitor"/> to indicate how the query can be executed</param>
+        /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
+        /// <returns>The node that should be used in place of this node</returns>
         public abstract IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes);
 
-        protected FetchAttributeType FindAliasedAttribute(object[] items, string colName, Func<FetchAttributeType, bool> predicate)
-        {
-            if (items == null)
-                return null;
-
-            var match = items.OfType<FetchAttributeType>()
-                .Where(a => a.alias == colName && (predicate == null || predicate(a)))
-                .FirstOrDefault();
-
-            if (match != null)
-                return match;
-
-            foreach (var linkEntity in items.OfType<FetchLinkEntityType>())
-            {
-                match = FindAliasedAttribute(linkEntity.Items, colName, predicate);
-
-                if (match != null)
-                    return match;
-            }
-
-            return null;
-        }
-
-        protected bool TranslateMetadataCriteria(BooleanExpression criteria, MetadataQueryNode meta, out MetadataFilterExpression entityFilter, out MetadataFilterExpression attributeFilter, out MetadataFilterExpression relationshipFilter)
-        {
-            entityFilter = null;
-            attributeFilter = null;
-            relationshipFilter = null;
-
-            if (criteria is BooleanBinaryExpression binary)
-            {
-                if (!TranslateMetadataCriteria(binary.FirstExpression, meta, out var lhsEntityFilter, out var lhsAttributeFilter, out var lhsRelationshipFilter))
-                    return false;
-                if (!TranslateMetadataCriteria(binary.SecondExpression, meta, out var rhsEntityFilter, out var rhsAttributeFilter, out var rhsRelationshipFilter))
-                    return false;
-
-                if (binary.BinaryExpressionType == BooleanBinaryExpressionType.Or)
-                {
-                    // Can only do OR filters within a single type
-                    var typeCount = 0;
-
-                    if (lhsEntityFilter != null || rhsEntityFilter != null)
-                        typeCount++;
-
-                    if (lhsAttributeFilter != null || rhsAttributeFilter != null)
-                        typeCount++;
-
-                    if (lhsRelationshipFilter != null || rhsRelationshipFilter != null)
-                        typeCount++;
-
-                    if (typeCount > 1)
-                        return false;
-                }
-
-                entityFilter = lhsEntityFilter;
-                attributeFilter = lhsAttributeFilter;
-                relationshipFilter = lhsRelationshipFilter;
-
-                if (rhsEntityFilter != null)
-                {
-                    if (entityFilter == null)
-                        entityFilter = rhsEntityFilter;
-                    else
-                        entityFilter = new MetadataFilterExpression { Filters = { lhsEntityFilter, rhsEntityFilter }, FilterOperator = binary.BinaryExpressionType == BooleanBinaryExpressionType.And ? LogicalOperator.And : LogicalOperator.Or };
-                }
-
-                if (rhsAttributeFilter != null)
-                {
-                    if (attributeFilter == null)
-                        attributeFilter = rhsAttributeFilter;
-                    else
-                        attributeFilter = new MetadataFilterExpression { Filters = { lhsAttributeFilter, rhsAttributeFilter }, FilterOperator = binary.BinaryExpressionType == BooleanBinaryExpressionType.And ? LogicalOperator.And : LogicalOperator.Or };
-                }
-
-                if (rhsRelationshipFilter != null)
-                {
-                    if (relationshipFilter == null)
-                        relationshipFilter = rhsRelationshipFilter;
-                    else
-                        relationshipFilter = new MetadataFilterExpression { Filters = { lhsRelationshipFilter, rhsRelationshipFilter }, FilterOperator = binary.BinaryExpressionType == BooleanBinaryExpressionType.And ? LogicalOperator.And : LogicalOperator.Or };
-                }
-
-                return true;
-            }
-
-            if (criteria is BooleanComparisonExpression comparison)
-            {
-                if (comparison.ComparisonType != BooleanComparisonType.Equals &&
-                    comparison.ComparisonType != BooleanComparisonType.NotEqualToBrackets &&
-                    comparison.ComparisonType != BooleanComparisonType.NotEqualToExclamation &&
-                    comparison.ComparisonType != BooleanComparisonType.LessThan &&
-                    comparison.ComparisonType != BooleanComparisonType.GreaterThan)
-                    return false;
-
-                var col = comparison.FirstExpression as ColumnReferenceExpression;
-                var literal = comparison.SecondExpression as Literal;
-
-                if (col == null && literal == null)
-                {
-                    col = comparison.SecondExpression as ColumnReferenceExpression;
-                    literal = comparison.FirstExpression as Literal;
-                }
-
-                if (col == null || literal == null)
-                    return false;
-
-                var schema = meta.GetSchema(null, null);
-                if (!schema.ContainsColumn(col.GetColumnName(), out var colName))
-                    return false;
-
-                var parts = colName.Split('.');
-
-                if (parts.Length != 2)
-                    return false;
-
-                MetadataConditionOperator op;
-
-                switch (comparison.ComparisonType)
-                {
-                    case BooleanComparisonType.Equals:
-                        op = MetadataConditionOperator.Equals;
-                        break;
-
-                    case BooleanComparisonType.NotEqualToBrackets:
-                    case BooleanComparisonType.NotEqualToExclamation:
-                        op = MetadataConditionOperator.NotEquals;
-                        break;
-
-                    case BooleanComparisonType.LessThan:
-                        op = MetadataConditionOperator.LessThan;
-                        break;
-
-                    case BooleanComparisonType.GreaterThan:
-                        op = MetadataConditionOperator.GreaterThan;
-                        break;
-
-                    default:
-                        throw new InvalidOperationException();
-                }
-
-                var condition = new MetadataConditionExpression(parts[1], op, literal.Compile(null, null)(null, null));
-
-                return TranslateMetadataCondition(condition, parts[0], meta, out entityFilter, out attributeFilter, out relationshipFilter);
-            }
-
-            if (criteria is InPredicate inPred)
-            {
-                var col = inPred.Expression as ColumnReferenceExpression;
-
-                if (col == null)
-                    return false;
-
-                var schema = meta.GetSchema(null, null);
-                if (!schema.ContainsColumn(col.GetColumnName(), out var colName))
-                    return false;
-
-                var parts = colName.Split('.');
-
-                if (parts.Length != 2)
-                    return false;
-
-                if (inPred.Values.Any(val => !(val is Literal)))
-                    return false;
-
-                var condition = new MetadataConditionExpression(parts[1], inPred.NotDefined ? MetadataConditionOperator.NotIn : MetadataConditionOperator.In, inPred.Values.Select(val => val.Compile(null, null)(null, null)).ToArray());
-
-                return TranslateMetadataCondition(condition, parts[0], meta, out entityFilter, out attributeFilter, out relationshipFilter);
-            }
-
-            if (criteria is BooleanIsNullExpression isNull)
-            {
-                var col = isNull.Expression as ColumnReferenceExpression;
-
-                if (col == null)
-                    return false;
-
-                var schema = meta.GetSchema(null, null);
-                if (!schema.ContainsColumn(col.GetColumnName(), out var colName))
-                    return false;
-
-                var parts = colName.Split('.');
-
-                if (parts.Length != 2)
-                    return false;
-
-                var condition = new MetadataConditionExpression(parts[1], isNull.IsNot ? MetadataConditionOperator.NotEquals : MetadataConditionOperator.Equals, null);
-
-                return TranslateMetadataCondition(condition, parts[0], meta, out entityFilter, out attributeFilter, out relationshipFilter);
-            }
-
-            return false;
-        }
-
-        private bool TranslateMetadataCondition(MetadataConditionExpression condition, string alias, MetadataQueryNode meta, out MetadataFilterExpression entityFilter, out MetadataFilterExpression attributeFilter, out MetadataFilterExpression relationshipFilter)
-        {
-            entityFilter = null;
-            attributeFilter = null;
-            relationshipFilter = null;
-
-            // Translate queries on attribute.EntityLogicalName to entity.LogicalName for better performance
-            var isEntityFilter = alias.Equals(meta.EntityAlias, StringComparison.OrdinalIgnoreCase);
-            var isAttributeFilter = alias.Equals(meta.AttributeAlias, StringComparison.OrdinalIgnoreCase);
-            var isRelationshipFilter = alias.Equals(meta.OneToManyRelationshipAlias, StringComparison.OrdinalIgnoreCase) || alias.Equals(meta.ManyToOneRelationshipAlias, StringComparison.OrdinalIgnoreCase) || alias.Equals(meta.ManyToManyRelationshipAlias, StringComparison.OrdinalIgnoreCase);
-
-            if (isAttributeFilter &&
-                condition.PropertyName.Equals(nameof(AttributeMetadata.EntityLogicalName), StringComparison.OrdinalIgnoreCase))
-            {
-                condition.PropertyName = nameof(EntityMetadata.LogicalName);
-                isAttributeFilter = false;
-                isEntityFilter = true;
-            }
-
-            if (alias.Equals(meta.OneToManyRelationshipAlias, StringComparison.OrdinalIgnoreCase) &&
-                condition.PropertyName.Equals(nameof(OneToManyRelationshipMetadata.ReferencedEntity), StringComparison.OrdinalIgnoreCase))
-            {
-                condition.PropertyName = nameof(EntityMetadata.LogicalName);
-                isRelationshipFilter = false;
-                isEntityFilter = true;
-            }
-
-            if (alias.Equals(meta.ManyToOneRelationshipAlias, StringComparison.OrdinalIgnoreCase) &&
-                condition.PropertyName.Equals(nameof(OneToManyRelationshipMetadata.ReferencingEntity), StringComparison.OrdinalIgnoreCase))
-            {
-                condition.PropertyName = nameof(EntityMetadata.LogicalName);
-                isRelationshipFilter = false;
-                isEntityFilter = true;
-            }
-
-            var filter = new MetadataFilterExpression { Conditions = { condition } };
-
-            // Attributes & relationships are polymorphic, but filters can only be applied to the base type. Check the property
-            // we're filtering on is valid to be folded
-            var targetType = isEntityFilter ? typeof(EntityMetadata) : isAttributeFilter ? typeof(AttributeMetadata) : typeof(RelationshipMetadataBase);
-            var prop = targetType.GetProperty(condition.PropertyName, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
-
-            if (prop == null)
-                return false;
-
-            // Convert the property name to the correct case
-            filter.Conditions[0].PropertyName = prop.Name;
-
-            // Convert the value to the expected type
-            filter.Conditions[0].Value = SqlTypeConverter.ChangeType(SqlTypeConverter.ChangeType(filter.Conditions[0].Value, MetadataQueryNode.GetPropertyType(prop.PropertyType)), prop.PropertyType);
-
-            if (isEntityFilter)
-            {
-                entityFilter = filter;
-                return true;
-            }
-
-            if (isAttributeFilter)
-            {
-                attributeFilter = filter;
-                return true;
-            }
-
-            if (isRelationshipFilter)
-            {
-                relationshipFilter = filter;
-                return true;
-            }
-
-            return false;
-        }
-
+        /// <summary>
+        /// Translates filter criteria from ScriptDom to FetchXML
+        /// </summary>
+        /// <param name="metadata">The <see cref="IAttributeMetadataCache"/> to use to get metadata</param>
+        /// <param name="options"><see cref="IQueryExpressionVisitor"/> to indicate how the query can be executed</param>
+        /// <param name="criteria">The SQL criteria to attempt to translate to FetchXML</param>
+        /// <param name="schema">The schema of the node that the criteria apply to</param>
+        /// <param name="allowedPrefix">The prefix of the table that the <paramref name="criteria"/> can be translated for, or <c>null</c> if any tables can be referenced</param>
+        /// <param name="targetEntityName">The logical name of the root entity that the FetchXML query is targetting</param>
+        /// <param name="targetEntityAlias">The alias of the root entity that the FetchXML query is targetting</param>
+        /// <param name="items">The child items of the root entity in the FetchXML query</param>
+        /// <param name="filter">The FetchXML version of the <paramref name="criteria"/> that is generated by this method</param>
+        /// <returns><c>true</c> if the <paramref name="criteria"/> can be translated to FetchXML, or <c>false</c> otherwise</returns>
         protected bool TranslateFetchXMLCriteria(IAttributeMetadataCache metadata, IQueryExecutionOptions options, BooleanExpression criteria, NodeSchema schema, string allowedPrefix, string targetEntityName, string targetEntityAlias, object[] items, out filter filter)
         {
             if (!TranslateFetchXMLCriteria(metadata, options, criteria, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out var condition, out filter))
@@ -372,7 +175,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return true;
         }
 
-        protected bool TranslateFetchXMLCriteria(IAttributeMetadataCache metadata, IQueryExecutionOptions options, BooleanExpression criteria, NodeSchema schema, string allowedPrefix, string targetEntityName, string targetEntityAlias, object[] items, out condition condition, out filter filter)
+        /// <summary>
+        /// Translates filter criteria from ScriptDom to FetchXML
+        /// </summary>
+        /// <param name="metadata">The <see cref="IAttributeMetadataCache"/> to use to get metadata</param>
+        /// <param name="options"><see cref="IQueryExpressionVisitor"/> to indicate how the query can be executed</param>
+        /// <param name="criteria">The SQL criteria to attempt to translate to FetchXML</param>
+        /// <param name="schema">The schema of the node that the criteria apply to</param>
+        /// <param name="allowedPrefix">The prefix of the table that the <paramref name="criteria"/> can be translated for, or <c>null</c> if any tables can be referenced</param>
+        /// <param name="targetEntityName">The logical name of the root entity that the FetchXML query is targetting</param>
+        /// <param name="targetEntityAlias">The alias of the root entity that the FetchXML query is targetting</param>
+        /// <param name="items">The child items of the root entity in the FetchXML query</param>
+        /// <param name="filter">The FetchXML version of the <paramref name="criteria"/> that is generated by this method when it covers multiple conditions</param>
+        /// <param name="condition">The FetchXML version of the <paramref name="criteria"/> that is generated by this method when it is for a single condition only</param>
+        /// <returns><c>true</c> if the <paramref name="criteria"/> can be translated to FetchXML, or <c>false</c> otherwise</returns>
+        private bool TranslateFetchXMLCriteria(IAttributeMetadataCache metadata, IQueryExecutionOptions options, BooleanExpression criteria, NodeSchema schema, string allowedPrefix, string targetEntityName, string targetEntityAlias, object[] items, out condition condition, out filter filter)
         {
             condition = null;
             filter = null;
@@ -647,7 +464,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         }
 
                         if (!virtualAttributeHandled)
-                            throw new PostProcessingRequiredException("Cannot filter on virtual name attributes", field);
+                            return false;
                     }
 
                     if (!Int32.TryParse(value, out _) && attribute?.AttributeType == AttributeTypeCode.EntityName)
@@ -797,6 +614,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return false;
         }
 
+        /// <summary>
+        /// Gets the alias to use for an entity or link-entity in the entityname property of a FetchXML condition
+        /// </summary>
+        /// <param name="entityAlias">The alias of the table that the condition refers to</param>
+        /// <param name="targetEntityAlias">The alias of the root entity in the FetchXML query</param>
+        /// <param name="items">The child items in the root entity object</param>
+        /// <returns>The entityname to use in the FetchXML condition</returns>
         private string StandardizeAlias(string entityAlias, string targetEntityAlias, object[] items)
         {
             if (entityAlias.Equals(targetEntityAlias, StringComparison.OrdinalIgnoreCase))
@@ -808,23 +632,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return linkEntity.alias;
         }
 
+        /// <summary>
+        /// Gets the logical name of an entity from the alias of a table
+        /// </summary>
+        /// <param name="targetEntityAlias">The alias of the root entity in the FetchXML query</param>
+        /// <param name="targetEntityName">The logical name of the root entity in the FetchXML query</param>
+        /// <param name="items">The child items in the root entity object</param>
+        /// <param name="alias">The alias of the table to get the logical name for</param>
+        /// <returns>The logical name of the aliased entity</returns>
         private string AliasToEntityName(string targetEntityAlias, string targetEntityName, object[] items, string alias)
         {
             if (targetEntityAlias.Equals(alias, StringComparison.OrdinalIgnoreCase))
                 return targetEntityName;
 
-            if (items == null)
-                return null;
+            var entity = new FetchEntityType { Items = items };
+            var linkEntity = entity.FindLinkEntity(alias);
 
-            foreach (var link in items.OfType<FetchLinkEntityType>())
-            {
-                var name = AliasToEntityName(link.alias, link.name, link.Items, alias);
-
-                if (name != null)
-                    return name;
-            }
-
-            return null;
+            return linkEntity.name;
         }
     }
 }

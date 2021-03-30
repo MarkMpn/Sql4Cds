@@ -15,7 +15,7 @@ using Microsoft.Xrm.Sdk.Query;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    public class FetchXmlScan : BaseDataNode
+    class FetchXmlScan : BaseDataNode
     {
         class ParameterizedCondition
         {
@@ -78,16 +78,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// The alias to apply to the primary entity in the query
         /// </summary>
+        [Category("FetchXML Scan")]
+        [Description("The alias to apply to the primary entity in the query")]
         public string Alias { get; set; }
 
         /// <summary>
         /// The string representation of the <see cref="FetchXml"/>
         /// </summary>
+        [Category("FetchXML Scan")]
+        [Description("The FetchXML query to execute")]
         public string FetchXmlString => Serialize(FetchXml);
 
         /// <summary>
         /// Indicates if the query will page across all the available data
         /// </summary>
+        [Category("FetchXML Scan")]
+        [Description("Indicates if all subsequent pages of results should be returned")]
         public bool AllPages { get; set; }
 
         /// <summary>
@@ -316,7 +322,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (parts.Length == 1)
             {
                 added = false;
-                return FindAliasedAttribute(Entity.Items, colName, predicate);
+                return Entity.FindAliasedAttribute(colName, predicate);
             }
 
             var entityName = parts[0];

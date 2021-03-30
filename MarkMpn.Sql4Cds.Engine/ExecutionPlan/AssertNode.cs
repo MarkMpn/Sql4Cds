@@ -11,11 +11,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Checks that each row in the results meets an expected condition
     /// </summary>
-    public class AssertNode : BaseDataNode, ISingleSourceExecutionPlanNode
+    class AssertNode : BaseDataNode, ISingleSourceExecutionPlanNode
     {
         /// <summary>
         /// The data source for the assertion
         /// </summary>
+        [Browsable(false)]
         public IDataExecutionPlanNode Source { get; set; }
 
         /// <summary>
@@ -27,6 +28,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// The error message that is generated if any record in the <see cref="Source"/> fails to meet the <see cref="Assertion"/>
         /// </summary>
+        [Category("Assert")]
+        [Description("The error message that is generated if any record in the source fails to meet the assertion")]
         public string ErrorMessage { get; set; }
 
         protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string,object> parameterValues)

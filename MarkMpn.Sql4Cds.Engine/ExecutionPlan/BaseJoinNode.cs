@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -8,33 +9,52 @@ using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    public abstract class BaseJoinNode : BaseDataNode
+    /// <summary>
+    /// A base class for nodes that join the results of two other nodes
+    /// </summary>
+    abstract class BaseJoinNode : BaseDataNode
     {
         /// <summary>
         /// The first data source to merge
         /// </summary>
+        [Browsable(false)]
         public IDataExecutionPlanNode LeftSource { get; set; }
 
         /// <summary>
         /// The second data source to merge
         /// </summary>
+        [Browsable(false)]
         public IDataExecutionPlanNode RightSource { get; set; }
 
         /// <summary>
         /// The type of join to apply
         /// </summary>
+        [Category("Join")]
+        [Description("The type of join to apply")]
         public QualifiedJoinType JoinType { get; set; }
 
         /// <summary>
         /// Indicates if a semi join should be used (single output row for each row from the left source, ignoring duplicate matches from the right source)
         /// </summary>
+        [Category("Join")]
+        [Description("Indicates if a semi join should be used (single output row for each row from the left source, ignoring duplicate matches from the right source)")]
         public bool SemiJoin { get; set; }
 
         /// <summary>
         /// For semi joins, lists individual columns that should be created in the output and their corresponding source from the right input
         /// </summary>
+        [Category("Join")]
+        [Description("For semi joins, lists individual columns that should be created in the output and their corresponding source from the right input")]
         public IDictionary<string, string> DefinedValues { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>
+        /// Creates the output record by merging the records that have been matched from the left and right sources
+        /// </summary>
+        /// <param name="leftEntity">The data from the left source</param>
+        /// <param name="leftSchema">The schema of the left source</param>
+        /// <param name="rightEntity">The data from the right source</param>
+        /// <param name="rightSchema">The schema of the right source</param>
+        /// <returns>The merged data</returns>
         protected Entity Merge(Entity leftEntity, NodeSchema leftSchema, Entity rightEntity, NodeSchema rightSchema)
         {
             var merged = new Entity();

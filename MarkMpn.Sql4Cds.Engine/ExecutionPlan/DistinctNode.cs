@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -11,7 +12,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Returns only one entity per unique combinatioh of values in specified columns
     /// </summary>
-    public class DistinctNode : BaseDataNode, ISingleSourceExecutionPlanNode
+    class DistinctNode : BaseDataNode, ISingleSourceExecutionPlanNode
     {
         class DistinctKey
         {
@@ -57,14 +58,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return true;
             }
         }
+
         /// <summary>
         /// The columns to consider
         /// </summary>
+        [Category("Distinct")]
+        [Description("The columns to consider")]
         public List<string> Columns { get; } = new List<string>();
 
         /// <summary>
         /// The data source to take the values from
         /// </summary>
+        [Browsable(false)]
         public IDataExecutionPlanNode Source { get; set; }
 
         protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)

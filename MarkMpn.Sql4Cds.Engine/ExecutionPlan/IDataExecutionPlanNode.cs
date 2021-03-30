@@ -7,6 +7,9 @@ using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
+    /// <summary>
+    /// A <see cref="IExecutionPlanNode"/> that produces a stream of data
+    /// </summary>
     public interface IDataExecutionPlanNode : IExecutionPlanNode
     {
         /// <summary>

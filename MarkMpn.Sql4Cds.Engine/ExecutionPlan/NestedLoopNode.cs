@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -11,16 +12,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Implements a nested loop join
     /// </summary>
-    public class NestedLoopNode : BaseJoinNode
+    class NestedLoopNode : BaseJoinNode
     {
         /// <summary>
-        /// The condition that must be true for  two records to join
+        /// The condition that must be true for two records to join
         /// </summary>
+        [Category("Join")]
+        [Description("The condition that must be true for two records to join")]
         public BooleanExpression JoinCondition { get; set; }
 
         /// <summary>
         /// Values from the outer query that should be passed as references to the inner query
         /// </summary>
+        [Category("Join")]
+        [Description("Values from the outer query that should be passed as references to the inner query")]
         public Dictionary<string,string> OuterReferences { get; set; }
 
         protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)

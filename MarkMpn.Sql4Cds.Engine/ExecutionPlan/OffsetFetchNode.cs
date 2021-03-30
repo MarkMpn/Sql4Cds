@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -8,12 +9,26 @@ using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    public class OffsetFetchNode : BaseDataNode, ISingleSourceExecutionPlanNode
+    /// <summary>
+    /// Implements an OFFSET/FETCH clause
+    /// </summary>
+    class OffsetFetchNode : BaseDataNode, ISingleSourceExecutionPlanNode
     {
+        /// <summary>
+        /// The number of records to skip
+        /// </summary>
+        [Category("Offset")]
+        [Description("The number of records to skip")]
         public ScalarExpression Offset { get; set; }
 
+        /// <summary>
+        /// The number of records to retrieve
+        /// </summary>
+        [Category("Offset")]
+        [Description("The number of records to retrieve")]
         public ScalarExpression Fetch { get; set; }
 
+        [Browsable(false)]
         public IDataExecutionPlanNode Source { get; set; }
 
         protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
@@ -87,6 +102,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var fetch = Int32.Parse(fetchLiteral.Value);
 
             return Math.Max(0, Math.Min(fetch, sourceCount - offset));
+        }
+
+        public override string ToString()
+        {
+            return "Offset";
         }
     }
 }

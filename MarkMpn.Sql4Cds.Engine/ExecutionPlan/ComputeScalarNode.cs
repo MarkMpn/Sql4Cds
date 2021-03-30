@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -12,16 +13,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Calculates the value of scalar expressions
     /// </summary>
-    public class ComputeScalarNode : BaseDataNode, ISingleSourceExecutionPlanNode
+    class ComputeScalarNode : BaseDataNode, ISingleSourceExecutionPlanNode
     {
         /// <summary>
         /// The names and associated expressions for the columns to calculate
         /// </summary>
+        [Category("Compute Scalar")]
+        [Description("The names and associated expressions for the columns to calculate")]
         public Dictionary<string, ScalarExpression> Columns { get; } = new Dictionary<string, ScalarExpression>();
 
         /// <summary>
         /// The data source to use for the calculations
         /// </summary>
+        [Browsable(false)]
         public IDataExecutionPlanNode Source { get; set; }
 
         protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)

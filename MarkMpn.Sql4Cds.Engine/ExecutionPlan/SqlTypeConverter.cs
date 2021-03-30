@@ -8,7 +8,10 @@ using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    internal class SqlTypeConverter
+    /// <summary>
+    /// Converts values between different types
+    /// </summary>
+    class SqlTypeConverter
     {
         // Abbreviated version of data type precedence from https://docs.microsoft.com/en-us/sql/t-sql/data-types/data-type-precedence-transact-sql?view=sql-server-ver15
         private static readonly Type[] _precendenceOrder = new[]
@@ -47,6 +50,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             };
         }
 
+        /// <summary>
+        /// Checks if values of two different types can be converted to a consistent type
+        /// </summary>
+        /// <param name="lhs">The type of the first value</param>
+        /// <param name="rhs">The type of the second value</param>
+        /// <param name="consistent">The type that both values can be converted to</param>
+        /// <returns><c>true</c> if the two values can be converted to a consistent type, or <c>false</c> otherwise</returns>
         public static bool CanMakeConsistentTypes(Type lhs, Type rhs, out Type consistent)
         {
             if (lhs == rhs)
@@ -89,6 +99,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return false;
         }
 
+        /// <summary>
+        /// Checks if values of one type can be converted to another type implicitly
+        /// </summary>
+        /// <param name="from">The type to convert from</param>
+        /// <param name="to">The type to convert to</param>
+        /// <returns><c>true</c> if the types can be converted implicitly, or <c>false</c> otherwise</returns>
         public static bool CanChangeTypeImplicit(Type from, Type to)
         {
             if (from == to)
@@ -124,6 +140,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return false;
         }
 
+        /// <summary>
+        /// Checks if values of one type can be converted to another type explicitly
+        /// </summary>
+        /// <param name="from">The type to convert from</param>
+        /// <param name="to">The type to convert to</param>
+        /// <returns><c>true</c> if the types can be converted explicitly, or <c>false</c> otherwise</returns>
         public static bool CanChangeTypeExplicit(Type from, Type to)
         {
             if (CanChangeTypeImplicit(from, to))
@@ -136,6 +158,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return false;
         }
 
+        /// <summary>
+        /// Produces the required expression to convert values to a specific type
+        /// </summary>
+        /// <param name="expr">The expression that generates the values to convert</param>
+        /// <param name="to">The type to convert to</param>
+        /// <returns>An expression to generate values of the required type</returns>
         public static Expression Convert(Expression expr, Type to)
         {
             if (expr.Type == typeof(SqlDateTime) && (to == typeof(SqlBoolean) || to == typeof(SqlByte) || to == typeof(SqlInt16) || to == typeof(SqlInt32) || to == typeof(SqlInt64) || to == typeof(SqlDecimal) || to == typeof(SqlSingle) || to == typeof(SqlDouble)))
@@ -167,6 +195,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return expr;
         }
 
+        /// <summary>
+        /// Converts a <see cref="SqlString"/> value to the default collation
+        /// </summary>
+        /// <param name="value">The <see cref="SqlString"/> value to convert</param>
+        /// <returns>A <see cref="SqlString"/> value using the default collation</returns>
         public static SqlString UseDefaultCollation(SqlString value)
         {
             if (value.IsNull)
@@ -178,6 +211,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return new SqlString((string)value, CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace);
         }
 
+        /// <summary>
+        /// Converts a standard CLR type to the equivalent SQL type
+        /// </summary>
+        /// <param name="type">The CLR type to convert from</param>
+        /// <returns>The equivalent SQL type</returns>
         public static Type NetToSqlType(Type type)
         {
             if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
@@ -226,6 +264,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return typeof(SqlString);
         }
 
+        /// <summary>
+        /// Converts a value from a CLR type to the equivalent SQL type. 
+        /// </summary>
+        /// <param name="value">The value in a standard CLR type</param>
+        /// <returns>The value converted to a SQL type</returns>
         public static object NetToSqlType(object value)
         {
             if (value != null)
@@ -284,16 +327,33 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return new SqlString(value.ToString(), CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace);
         }
 
+        /// <summary>
+        /// Gets the null value for a given SQL type
+        /// </summary>
+        /// <param name="sqlType">The SQL type to get the null value for</param>
+        /// <returns>The null value for the requested SQL type</returns>
         public static object GetNullValue(Type sqlType)
         {
             return _nullValues[sqlType];
         }
 
+        /// <summary>
+        /// Converts a value from one type to another
+        /// </summary>
+        /// <typeparam name="T">The type to convert the value to</typeparam>
+        /// <param name="value">The value to convert</param>
+        /// <returns>The value converted to the requested type</returns>
         public static T ChangeType<T>(object value)
         {
             return (T)ChangeType(value, typeof(T));
         }
 
+        /// <summary>
+        /// Converts a value from one type to another
+        /// </summary>
+        /// <param name="value">The value to convert</param>
+        /// <param name="type">The type to convert the value to</param>
+        /// <returns>The value converted to the requested type</returns>
         public static object ChangeType(object value, Type type)
         {
             var expression = (Expression)Expression.Constant(value);

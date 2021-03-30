@@ -14,7 +14,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Merges two sorted data sets
     /// </summary>
-    public class MergeJoinNode : FoldableJoinNode
+    class MergeJoinNode : FoldableJoinNode
     {
         protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {

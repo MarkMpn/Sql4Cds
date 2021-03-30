@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Data.SqlTypes;
 using System.Linq;
 using System.Text;
@@ -12,11 +13,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Gets the total number of records in an entity using <see cref="RetrieveTotalRecordCountRequest"/>
     /// </summary>
-    public class RetrieveTotalRecordCountNode : BaseDataNode
+    class RetrieveTotalRecordCountNode : BaseDataNode
     {
         /// <summary>
         /// The logical name of the entity to get the record count for
         /// </summary>
+        [Category("Retrieve Total Record Count")]
+        [Description("The logical name of the entity to get the record count for")]
         public string EntityName { get; set; }
 
         protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
