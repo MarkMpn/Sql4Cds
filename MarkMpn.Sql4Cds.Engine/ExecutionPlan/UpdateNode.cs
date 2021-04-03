@@ -170,6 +170,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     expr = SqlTypeConverter.Convert(expr, destSqlType);
                     expr = SqlTypeConverter.Convert(expr, destType);
 
+                    if (expr.Type.IsValueType)
+                        expr = SqlTypeConverter.Convert(expr, typeof(object));
+
                     attributeAccessors[destAttributeName] = Expression.Lambda<Func<Entity, object>>(expr, entityParam).Compile();
                 }
 
