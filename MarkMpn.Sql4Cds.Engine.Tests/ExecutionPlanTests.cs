@@ -2334,8 +2334,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual("account", update.LogicalName);
             Assert.AreEqual("account.accountid", update.PrimaryIdSource);
             Assert.AreEqual("Expr1", update.ColumnMappings["name"]);
-            var distinct = AssertNode<DistinctNode>(update.Source);
-            var computeScalar = AssertNode<ComputeScalarNode>(distinct.Source);
+            var computeScalar = AssertNode<ComputeScalarNode>(update.Source);
             Assert.AreEqual("'foo'", computeScalar.Columns["Expr1"].ToSql());
             var fetch = AssertNode<FetchXmlScan>(computeScalar.Source);
             AssertFetchXml(fetch, @"
@@ -2664,6 +2663,63 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 _supportedJoins.Remove(JoinOperator.Exists);
             }
+        }
+
+        [TestMethod]
+        public void DistinctNotRequiredWithPrimaryKey()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT DISTINCT accountid, name from account";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                        <attribute name='name' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void DistinctRequiredWithoutPrimaryKey()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT DISTINCT accountid, name from account INNER JOIN contact ON account.accountid = contact.parentcustomerid";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch distinct='true'>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                        <attribute name='name' />
+                        <link-entity name='contact' alias='contact' from='parentcustomerid' to='accountid' link-type='inner'>
+                        </link-entity>
+                        <order attribute='accountid' />
+                    </entity>
+                </fetch>");
         }
 
         private T AssertNode<T>(IExecutionPlanNode node) where T : IExecutionPlanNode

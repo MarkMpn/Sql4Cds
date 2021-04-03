@@ -100,6 +100,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source = Source.FoldQuery(metadata, options, parameterTypes);
             Source.Parent = this;
 
+            // If one of the fields to include in the DISTINCT calculation is the primary key, there is no possibility of duplicate
+            // rows so we can discard the distinct node
+            var schema = Source.GetSchema(metadata, parameterTypes);
+
+            if (!String.IsNullOrEmpty(schema.PrimaryKey) && Columns.Contains(schema.PrimaryKey, StringComparer.OrdinalIgnoreCase))
+                return Source;
+
             if (Source is FetchXmlScan fetch)
             {
                 fetch.FetchXml.distinct = true;
