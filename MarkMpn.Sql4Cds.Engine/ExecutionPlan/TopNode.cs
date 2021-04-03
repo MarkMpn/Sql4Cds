@@ -79,11 +79,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!Top.IsConstantValueExpression(null, out var literal))
                 return this;
 
-            if (!Percent && !WithTies && Int32.TryParse(literal.Value, out var top) && top <= 5000 && Source is FetchXmlScan fetchXml)
+            // FetchXML can support TOP directly provided it's for no more than 5,000 records
+            if (!Percent && !WithTies && Int32.TryParse(literal.Value, out var top) && top <= 5000)
             {
-                fetchXml.FetchXml.top = literal.Value;
-                fetchXml.AllPages = false;
-                return fetchXml;
+                var fetchXml = Source as FetchXmlScan;
+
+                // Skip over ComputeScalar nodes to fold the TOP into the previous FetchXML node
+                if (fetchXml == null && Source is ComputeScalarNode computeScalar)
+                    fetchXml = computeScalar.Source as FetchXmlScan;
+
+                if (fetchXml != null)
+                {
+                    fetchXml.FetchXml.top = literal.Value;
+                    fetchXml.AllPages = false;
+
+                    if (Source == fetchXml)
+                        return fetchXml;
+
+                    return Source;
+                }
             }
 
             return this;
