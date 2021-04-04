@@ -66,17 +66,50 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (source is FetchXmlScan fetchXml && !fetchXml.FetchXml.aggregate)
                 {
-                    if (TranslateFetchXMLCriteria(metadata, options, Filter, schema, null, fetchXml.Entity.name, fetchXml.Alias, fetchXml.Entity.Items, out var fetchFilter))
+                    var additionalLinkEntities = new Dictionary<object, List<FetchLinkEntityType>>();
+
+                    if (TranslateFetchXMLCriteria(metadata, options, Filter, schema, null, fetchXml.Entity.name, fetchXml.Alias, fetchXml.Entity.Items, out var fetchFilter, additionalLinkEntities))
                     {
                         fetchXml.Entity.AddItem(fetchFilter);
+
+                        foreach (var kvp in additionalLinkEntities)
+                        {
+                            if (kvp.Key is FetchEntityType e)
+                            {
+                                foreach (var le in kvp.Value)
+                                    fetchXml.Entity.AddItem(le);
+                            }
+                            else
+                            {
+                                foreach (var le in kvp.Value)
+                                    ((FetchLinkEntityType)kvp.Key).AddItem(le);
+                            }
+                        }
+
                         return Source;
                     }
 
                     // If the criteria are ANDed, see if any of the individual conditions can be translated to FetchXML
-                    Filter = ExtractFetchXMLFilters(metadata, options, Filter, schema, null, fetchXml.Entity.name, fetchXml.Alias, fetchXml.Entity.Items, out fetchFilter);
+                    Filter = ExtractFetchXMLFilters(metadata, options, Filter, schema, null, fetchXml.Entity.name, fetchXml.Alias, fetchXml.Entity.Items, out fetchFilter, additionalLinkEntities);
 
                     if (fetchFilter != null)
+                    {
                         fetchXml.Entity.AddItem(fetchFilter);
+
+                        foreach (var kvp in additionalLinkEntities)
+                        {
+                            if (kvp.Key is FetchEntityType e)
+                            {
+                                foreach (var le in kvp.Value)
+                                    fetchXml.Entity.AddItem(le);
+                            }
+                            else
+                            {
+                                foreach (var le in kvp.Value)
+                                    ((FetchLinkEntityType)kvp.Key).AddItem(le);
+                            }
+                        }
+                    }
                 }
 
                 if (source is MetadataQueryNode meta)
@@ -479,9 +512,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(metadata, parameterTypes, requiredColumns);
         }
 
-        private BooleanExpression ExtractFetchXMLFilters(IAttributeMetadataCache metadata, IQueryExecutionOptions options, BooleanExpression criteria, NodeSchema schema, string allowedPrefix, string targetEntityName, string targetEntityAlias, object[] items, out filter filter)
+        private BooleanExpression ExtractFetchXMLFilters(IAttributeMetadataCache metadata, IQueryExecutionOptions options, BooleanExpression criteria, NodeSchema schema, string allowedPrefix, string targetEntityName, string targetEntityAlias, object[] items, out filter filter, IDictionary<object, List<FetchLinkEntityType>> additionalLinkEntities)
         {
-            if (TranslateFetchXMLCriteria(metadata, options, criteria, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out filter))
+            if (TranslateFetchXMLCriteria(metadata, options, criteria, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out filter, additionalLinkEntities))
                 return null;
 
             if (!(criteria is BooleanBinaryExpression bin))
@@ -490,8 +523,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (bin.BinaryExpressionType != BooleanBinaryExpressionType.And)
                 return criteria;
 
-            bin.FirstExpression = ExtractFetchXMLFilters(metadata, options, bin.FirstExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out var lhsFilter);
-            bin.SecondExpression = ExtractFetchXMLFilters(metadata, options, bin.SecondExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out var rhsFilter);
+            bin.FirstExpression = ExtractFetchXMLFilters(metadata, options, bin.FirstExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out var lhsFilter, additionalLinkEntities);
+            bin.SecondExpression = ExtractFetchXMLFilters(metadata, options, bin.SecondExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out var rhsFilter, additionalLinkEntities);
 
             filter = (lhsFilter != null && rhsFilter != null) ? new filter { Items = new object[] { lhsFilter, rhsFilter } } : lhsFilter ?? rhsFilter;
 
