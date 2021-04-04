@@ -553,32 +553,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 // If filtering on the display name of an optionset attribute, convert it to filtering on the underlying value field
                 // instead where possible.
-                if (attribute.LogicalName == baseAttribute.LogicalName + "name" && baseAttribute is EnumAttributeMetadata enumAttr)
+                if (attribute.LogicalName == baseAttribute.LogicalName + "name" && baseAttribute is EnumAttributeMetadata enumAttr &&
+                    (op == @operator.eq || op == @operator.ne || op == @operator.neq || op == @operator.@in || op == @operator.notin))
                 {
-                    if (literals == null)
+                    for (var i = 0; i < literals.Length; i++)
                     {
-                        virtualAttributeHandled = true;
-                    }
-                    else
-                    {
-                        for (var i = 0; i < literals.Length; i++)
+                        var matchingOptions = enumAttr.OptionSet.Options.Where(o => o.Label.UserLocalizedLabel.Label.Equals(values[i].Value, StringComparison.OrdinalIgnoreCase)).ToList();
+
+                        if (matchingOptions.Count == 1)
                         {
-                            var matchingOptions = enumAttr.OptionSet.Options.Where(o => o.Label.UserLocalizedLabel.Label.Equals(values[i].Value, StringComparison.OrdinalIgnoreCase)).ToList();
-
-                            if (matchingOptions.Count == 1)
-                            {
-                                attrNames[0] = baseAttribute.LogicalName;
-                                values[i] = new conditionValue { Value = matchingOptions[0].Value.ToString() };
-                                virtualAttributeHandled = true;
-                            }
-                            else if (matchingOptions.Count == 0 && (op == @operator.eq || op == @operator.ne || op == @operator.neq))
-                            {
-                                throw new NotSupportedQueryFragmentException("Unknown optionset value. Supported values are " + String.Join(", ", enumAttr.OptionSet.Options.Select(o => o.Label.UserLocalizedLabel.Label)), literals[i]);
-                            }
+                            attrNames[0] = baseAttribute.LogicalName;
+                            values[i] = new conditionValue { Value = matchingOptions[0].Value.ToString() };
+                            virtualAttributeHandled = true;
                         }
-
-                        value = values[0].Value;
+                        else if (matchingOptions.Count == 0)
+                        {
+                            throw new NotSupportedQueryFragmentException("Unknown optionset value", literals[i]) { Suggestion = "Supported values are:\r\n" + String.Join("\r\n", enumAttr.OptionSet.Options.Select(o => "* " + o.Label.UserLocalizedLabel.Label)) };
+                        }
                     }
+
+                    value = values[0].Value;
                 }
 
                 // If filtering on the display name of a lookup value, add a join to the target type and filter
