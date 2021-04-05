@@ -516,6 +516,46 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return TranslateFetchXMLCriteriaWithVirtualAttributes(meta, entityAlias, attrName, like.NotDefined ? @operator.notlike : @operator.like, new[] { value }, metadata, targetEntityAlias, items, additionalLinkEntities, out condition, out filter);
             }
 
+            if (criteria is FullTextPredicate fullText)
+            {
+                if (fullText.FullTextFunctionType != FullTextFunctionType.Contains)
+                    return false;
+
+                if (fullText.Columns.Count != 1)
+                    return false;
+
+                if (fullText.Columns[0].ColumnType != ColumnType.Regular)
+                    return false;
+
+                if (!(fullText.Value is StringLiteral value))
+                    return false;
+
+                var valueParts = value.Value.ToUpperInvariant().Split(new[] { " OR " }, StringSplitOptions.None);
+                if (valueParts.Any(p => !Int32.TryParse(p, out _)))
+                    return false;
+
+                var columnName = fullText.Columns[0].GetColumnName();
+
+                if (!schema.ContainsColumn(columnName, out columnName))
+                    return false;
+
+                var parts = columnName.Split('.');
+                var entityAlias = parts[0];
+                var attrName = parts[1];
+
+                if (allowedPrefix != null && !allowedPrefix.Equals(entityAlias))
+                    return false;
+
+                var entityName = AliasToEntityName(targetEntityAlias, targetEntityName, items, entityAlias);
+                var meta = metadata[entityName];
+
+                var attr = meta.Attributes.Single(a => a.LogicalName.Equals(attrName));
+                if (!(attr is MultiSelectPicklistAttributeMetadata))
+                    return false;
+
+                return TranslateFetchXMLCriteriaWithVirtualAttributes(meta, entityAlias, attrName, @operator.containvalues, valueParts.Select(v => new IntegerLiteral { Value = v }).ToArray(), metadata, targetEntityAlias, items, additionalLinkEntities, out condition, out filter);
+            }
+
             return false;
         }
 

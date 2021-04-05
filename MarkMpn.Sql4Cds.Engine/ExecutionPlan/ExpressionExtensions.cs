@@ -155,6 +155,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return GetType(like, schema, parameterTypes);
             else if (b is BooleanNotExpression not)
                 return GetType(not, schema, parameterTypes);
+            else if (b is FullTextPredicate fullText)
+                return GetType(fullText, schema, parameterTypes);
             else
                 throw new NotSupportedQueryFragmentException("Unhandled expression type", b);
         }
@@ -192,6 +194,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return ToExpression(like, schema, parameterTypes, entityParam, parameterParam);
             else if (b is BooleanNotExpression not)
                 return ToExpression(not, schema, parameterTypes, entityParam, parameterParam);
+            else if (b is FullTextPredicate fullText)
+                return ToExpression(fullText, schema, parameterTypes, entityParam, parameterParam);
             else
                 throw new NotSupportedQueryFragmentException("Unhandled expression type", b);
         }
@@ -1229,6 +1233,92 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private static Expression ToExpression(this CastCall cast, NodeSchema schema, IDictionary<string, Type> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam)
         {
             return ToExpression(new ConvertCall { Parameter = cast.Parameter, DataType = cast.DataType }, schema, parameterTypes, entityParam, parameterParam);
+        }
+
+        private static readonly Regex _containsParser = new Regex("^\\S+( OR \\S+)*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        private static Type GetType(this FullTextPredicate fullText, NodeSchema schema, IDictionary<string, Type> parameterTypes)
+        {
+            // Only support simple CONTAINS calls to handle multi-select optionsets for now
+            if (fullText.FullTextFunctionType != FullTextFunctionType.Contains)
+                throw new NotSupportedQueryFragmentException("Unsupported full text predicate type", fullText) { Suggestion = "Only CONTAINS is currently supported for full text searching" };
+
+            if (fullText.Columns.Count != 1)
+                throw new NotSupportedQueryFragmentException("Only one column is currently supported for CONTAINS function", fullText);
+
+            if (fullText.Columns[0].ColumnType == ColumnType.Wildcard)
+                throw new NotSupportedQueryFragmentException("Only one column is currently supported for CONTAINS function", fullText);
+
+            if (fullText.PropertyName != null)
+                throw new NotSupportedQueryFragmentException("PROPERTY is not currently supported", fullText.PropertyName);
+
+            if (fullText.LanguageTerm != null)
+                throw new NotSupportedQueryFragmentException("LANGUAGE is not currently supported", fullText.LanguageTerm);
+
+            var colType = fullText.Columns[0].GetType(schema, parameterTypes);
+
+            if (!SqlTypeConverter.CanChangeTypeImplicit(colType, typeof(SqlString)))
+                throw new NotSupportedQueryFragmentException("Only string columns are supported", fullText.Columns[0]);
+
+            var valueType = fullText.Value.GetType(schema, parameterTypes);
+
+            if (!SqlTypeConverter.CanChangeTypeImplicit(valueType, typeof(SqlString)))
+                throw new NotSupportedQueryFragmentException($"Expected string value to match, got {valueType}", fullText.Value);
+
+            if (fullText.Value is Literal lit && !_containsParser.IsMatch(lit.Value))
+                throw new NotSupportedQueryFragmentException("Only simple \"word OR word OR word\" patterns are currently supported", lit);
+
+            return typeof(bool);
+        }
+
+        private static Expression ToExpression(this FullTextPredicate fullText, NodeSchema schema, IDictionary<string, Type> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam)
+        {
+            var col = fullText.Columns[0].ToExpression(schema, parameterTypes, entityParam, parameterParam);
+            col = SqlTypeConverter.Convert(col, typeof(SqlString));
+
+            if (fullText.Value is Literal lit)
+            {
+                var words = GetContainsWords(lit.Value, true);
+                return Expr.Call(() => Contains(Expr.Arg<SqlString>(), Expr.Arg<Regex[]>()), col, Expression.Constant(words));
+            }
+
+            var value = fullText.Value.ToExpression(schema, parameterTypes, entityParam, parameterParam);
+            value = SqlTypeConverter.Convert(value, typeof(SqlString));
+
+            return Expr.Call(() => Contains(Expr.Arg<SqlString>(), Expr.Arg<SqlString>()), col, value);
+        }
+
+        private static bool Contains(SqlString col, SqlString value)
+        {
+            if (col.IsNull || value.IsNull)
+                return false;
+
+            var words = GetContainsWords(value.Value, false);
+            return Contains(col, words);
+        }
+
+        private static bool Contains(SqlString col, Regex[] words)
+        {
+            if (col.IsNull)
+                return false;
+
+            return words.Any(w => w.IsMatch(col.Value));
+        }
+
+        private static Regex[] GetContainsWords(string pattern, bool compile)
+        {
+            if (!_containsParser.IsMatch(pattern))
+                throw new QueryExecutionException("Invalid CONTAINS pattern. Only simple \"word OR word OR word\" patterns are currently supported");
+
+            var options = RegexOptions.IgnoreCase;
+            if (compile)
+                options |= RegexOptions.Compiled;
+
+            var words = pattern.ToUpperInvariant().Split(new[] { " OR " }, StringSplitOptions.None);
+
+            return words
+                .Select(w => new Regex($@"\b{Regex.Escape(w)}\b", options))
+                .ToArray();
         }
 
         /// <summary>
