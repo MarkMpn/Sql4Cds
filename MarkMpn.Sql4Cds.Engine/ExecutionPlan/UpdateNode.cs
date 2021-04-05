@@ -161,17 +161,82 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (!schema.ContainsColumn(sourceColumnName, out sourceColumnName))
                         throw new QueryExecutionException($"Missing source column {mapping.Value}") { Node = this };
 
+                    var attr = attributes[destAttributeName];
+
+                    if (attr.AttributeOf != null)
+                        continue;
+
                     var sourceType = schema.Schema[sourceColumnName];
-                    var destType = attributes[destAttributeName].GetAttributeType();
+                    var destType = attr.GetAttributeType();
                     var destSqlType = SqlTypeConverter.NetToSqlType(destType);
 
                     var expr = (Expression)Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(sourceColumnName));
-                    expr = SqlTypeConverter.Convert(expr, sourceType);
-                    expr = SqlTypeConverter.Convert(expr, destSqlType);
-                    expr = SqlTypeConverter.Convert(expr, destType);
 
-                    if (expr.Type.IsValueType)
-                        expr = SqlTypeConverter.Convert(expr, typeof(object));
+                    if (sourceType == null)
+                    {
+                        // null literal
+                        expr = Expression.Constant(null);
+                    }
+                    else
+                    {
+                        expr = SqlTypeConverter.Convert(expr, sourceType);
+                        expr = SqlTypeConverter.Convert(expr, destSqlType);
+                        expr = SqlTypeConverter.Convert(expr, destType);
+
+                        if (attr is LookupAttributeMetadata lookupAttr)
+                        {
+                            Expression targetExpr;
+
+                            if (lookupAttr.Targets.Length == 1)
+                            {
+                                targetExpr = Expression.Constant(lookupAttr.Targets[0]);
+                            }
+                            else
+                            {
+                                var sourceTargetColumnName = ColumnMappings[destAttributeName + "type"];
+                                var sourceTargetType = schema.Schema[sourceTargetColumnName];
+                                targetExpr = Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(sourceTargetColumnName));
+                                targetExpr = SqlTypeConverter.Convert(targetExpr, sourceTargetType);
+                                targetExpr = SqlTypeConverter.Convert(targetExpr, typeof(SqlString));
+                                targetExpr = SqlTypeConverter.Convert(targetExpr, typeof(string));
+                            }
+
+                            expr = Expression.Condition(
+                                SqlTypeConverter.NullCheck(expr),
+                                Expression.Convert(Expression.Constant(null), typeof(EntityReference)),
+                                Expression.New(
+                                    typeof(EntityReference).GetConstructor(new[] { typeof(string), typeof(Guid) }),
+                                    targetExpr,
+                                    Expression.Convert(expr, typeof(Guid))
+                                )
+                            ); ;
+                        }
+                        else if (attr is EnumAttributeMetadata)
+                        {
+                            expr = Expression.Condition(
+                                SqlTypeConverter.NullCheck(expr),
+                                Expression.Convert(Expression.Constant(null), typeof(OptionSetValue)),
+                                Expression.New(
+                                    typeof(OptionSetValue).GetConstructor(new[] { typeof(int) }),
+                                    Expression.Convert(expr, typeof(int))
+                                )
+                            );
+                        }
+                        else if (attr is MoneyAttributeMetadata)
+                        {
+                            expr = Expression.Condition(
+                                SqlTypeConverter.NullCheck(expr),
+                                Expression.Convert(Expression.Constant(null), typeof(Money)),
+                                Expression.New(
+                                    typeof(Money).GetConstructor(new[] { typeof(decimal) }),
+                                    Expression.Convert(expr, typeof(decimal))
+                                )
+                            );
+                        }
+
+                        if (expr.Type.IsValueType)
+                            expr = SqlTypeConverter.Convert(expr, typeof(object));
+                    }
 
                     attributeAccessors[destAttributeName] = Expression.Lambda<Func<Entity, object>>(expr, entityParam).Compile();
                 }
@@ -225,27 +290,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                                     if (!String.IsNullOrEmpty(attr.AttributeOf))
                                         continue;
-
-                                    if (value != null)
-                                    {
-                                        if (attr is LookupAttributeMetadata lookupAttr)
-                                        {
-                                            value = new EntityReference { Id = (Guid)value };
-
-                                            if (lookupAttr.Targets.Length == 1)
-                                                ((EntityReference)value).LogicalName = lookupAttr.Targets[0];
-                                            else
-                                                ((EntityReference)value).LogicalName = (string)attributeAccessors[attr.LogicalName + "type"](entity);
-                                        }
-                                        else if (attr is EnumAttributeMetadata)
-                                        {
-                                            value = new OptionSetValue((int)value);
-                                        }
-                                        else if (attr is MoneyAttributeMetadata)
-                                        {
-                                            value = new Money((decimal)value);
-                                        }
-                                    }
 
                                     update[attr.LogicalName] = value;
                                 }

@@ -22,52 +22,52 @@ namespace MarkMpn.Sql4Cds.Engine
                 typeCode = managedProp.ValueAttributeTypeCode;
 
             if (attrMetadata is BooleanAttributeMetadata || typeCode == AttributeTypeCode.Boolean)
-                return typeof(bool);
+                return typeof(bool?);
 
             if (attrMetadata is DateTimeAttributeMetadata || typeCode == AttributeTypeCode.DateTime)
-                return typeof(DateTime);
+                return typeof(DateTime?);
 
             if (attrMetadata is DecimalAttributeMetadata || typeCode == AttributeTypeCode.Decimal)
-                return typeof(decimal);
+                return typeof(decimal?);
 
             if (attrMetadata is DoubleAttributeMetadata || typeCode == AttributeTypeCode.Double)
-                return typeof(double);
+                return typeof(double?);
 
             if (attrMetadata is EntityNameAttributeMetadata || typeCode == AttributeTypeCode.EntityName)
-                return typeof(int);
+                return typeof(int?);
 
             if (attrMetadata is ImageAttributeMetadata)
                 return typeof(byte[]);
 
             if (attrMetadata is IntegerAttributeMetadata || typeCode == AttributeTypeCode.Integer)
-                return typeof(int);
+                return typeof(int?);
 
             if (attrMetadata is BigIntAttributeMetadata || typeCode == AttributeTypeCode.BigInt)
-                return typeof(long);
+                return typeof(long?);
 
             if (attrMetadata is LookupAttributeMetadata || typeCode == AttributeTypeCode.Lookup || typeCode == AttributeTypeCode.Customer || typeCode == AttributeTypeCode.Owner)
-                return typeof(SqlGuid);
+                return typeof(Guid?);
 
             if (attrMetadata is MemoAttributeMetadata || typeCode == AttributeTypeCode.Memo)
                 return typeof(string);
 
             if (attrMetadata is MoneyAttributeMetadata || typeCode == AttributeTypeCode.Money)
-                return typeof(decimal);
+                return typeof(decimal?);
 
             if (attrMetadata is PicklistAttributeMetadata || typeCode == AttributeTypeCode.Picklist)
-                return typeof(int);
+                return typeof(int?);
 
             if (attrMetadata is StateAttributeMetadata || typeCode == AttributeTypeCode.State)
-                return typeof(int);
+                return typeof(int?);
 
             if (attrMetadata is StatusAttributeMetadata || typeCode == AttributeTypeCode.Status)
-                return typeof(int);
+                return typeof(int?);
 
             if (attrMetadata is StringAttributeMetadata || typeCode == AttributeTypeCode.String)
                 return typeof(string);
 
             if (attrMetadata is UniqueIdentifierAttributeMetadata || typeCode == AttributeTypeCode.Uniqueidentifier)
-                return typeof(Guid);
+                return typeof(Guid?);
 
             if (attrMetadata.AttributeType == AttributeTypeCode.Virtual)
                 return typeof(string);

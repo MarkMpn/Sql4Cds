@@ -66,13 +66,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             // Special case for null -> anything
-            if (lhs == null)
+            if (lhs == null || lhs == typeof(object))
             {
                 consistent = rhs;
                 return true;
             }
 
-            if (rhs == null)
+            if (rhs == null || rhs == typeof(object))
             {
                 consistent = lhs;
                 return true;
@@ -111,7 +111,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return true;
 
             // Special case for null -> anything
-            if (from == null)
+            if (from == null || from == typeof(object))
                 return true;
 
             if (Array.IndexOf(_precendenceOrder, from) == -1 ||
@@ -186,6 +186,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (expr.Type != to)
             {
+                if (expr.Type == typeof(object) && typeof(INullable).IsAssignableFrom(to))
+                    return Expression.Constant(GetNullValue(to));
+
                 expr = Expression.Convert(expr, to);
 
                 if (to == typeof(SqlString))
@@ -376,6 +379,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             expression = Expression.Convert(expression, typeof(object));
             return Expression.Lambda<Func<object>>(expression).Compile()();
+        }
+
+        /// <summary>
+        /// Creates an expression to check if a value is null
+        /// </summary>
+        /// <param name="expr">The expression to check for null</param>
+        /// <returns>An expression which returns <c>true</c> if the <paramref name="expr"/> is <c>null</c></returns>
+        public static Expression NullCheck(Expression expr)
+        {
+            if (typeof(INullable).IsAssignableFrom(expr.Type))
+                return Expression.Property(expr, nameof(INullable.IsNull));
+
+            if (expr.Type.IsGenericType && expr.Type.GetGenericTypeDefinition() == typeof(Nullable<>))
+                return Expression.Not(Expression.Property(expr, nameof(Nullable<int>.HasValue)));
+
+            if (expr.Type.IsValueType)
+                return Expression.Constant(false);
+
+            return Expression.Equal(expr, Expression.Constant(null));
         }
     }
 }

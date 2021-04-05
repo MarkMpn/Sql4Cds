@@ -519,7 +519,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var rhs = bin.SecondExpression.ToExpression(schema, parameterTypes, entityParam, parameterParam);
 
             if (!SqlTypeConverter.CanMakeConsistentTypes(lhs.Type, rhs.Type, out var type))
-                throw new NotSupportedQueryFragmentException($"No implicit conversion exists for types {lhs} and {rhs}", bin);
+                throw new NotSupportedQueryFragmentException($"No implicit conversion exists for types {lhs.Type} and {rhs.Type}", bin);
 
             if (lhs.Type != type)
                 lhs = SqlTypeConverter.Convert(lhs, type);
