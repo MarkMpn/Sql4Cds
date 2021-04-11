@@ -116,7 +116,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 return typeof(SqlString);
 
             if (attrMetadata is MoneyAttributeMetadata || typeCode == AttributeTypeCode.Money)
-                return typeof(SqlDecimal);
+                return typeof(SqlMoney);
 
             if (attrMetadata is PicklistAttributeMetadata || typeCode == AttributeTypeCode.Picklist)
                 return typeof(SqlInt32);

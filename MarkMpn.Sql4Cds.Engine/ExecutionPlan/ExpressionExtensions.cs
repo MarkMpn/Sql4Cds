@@ -1161,42 +1161,44 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Expression.Not(value);
         }
 
-        private static readonly IDictionary<string, Type> _typeMapping = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
+        private static readonly IDictionary<SqlDataTypeOption, Type> _typeMapping = new Dictionary<SqlDataTypeOption, Type>()
         {
-            ["bit"] = typeof(SqlBoolean),
-            ["tinyint"] = typeof(SqlByte),
-            ["smallint"] = typeof(SqlInt16),
-            ["int"] = typeof(SqlInt32),
-            ["bigint"] = typeof(SqlInt64),
-            ["real"] = typeof(SqlSingle),
-            ["float"] = typeof(SqlDouble),
-            ["decimal"] = typeof(SqlDecimal),
-            ["numeric"] = typeof(SqlDecimal),
-            ["smallmoney"] = typeof(SqlDecimal),
-            ["money"] = typeof(SqlDecimal),
-            ["char"] = typeof(SqlString),
-            ["nchar"] = typeof(SqlString),
-            ["varchar"] = typeof(SqlString),
-            ["nvarchar"] = typeof(SqlString),
-            ["text"] = typeof(SqlString),
-            ["ntext"] = typeof(SqlString),
-            ["binary"] = typeof(SqlBinary),
-            ["varbinary"] = typeof(SqlBinary),
-            ["image"] = typeof(SqlBinary),
-            ["rowversion"] = typeof(SqlBinary),
-            ["date"] = typeof(SqlDateTime),
-            ["smalldatetime"] = typeof(SqlDateTime),
-            ["datetime"] = typeof(SqlDateTime),
-            ["datetime2"] = typeof(SqlDateTime),
-            ["uniqueidentifer"] = typeof(SqlGuid)
+            [SqlDataTypeOption.BigInt] = typeof(SqlInt64),
+            [SqlDataTypeOption.Binary] = typeof(SqlBinary),
+            [SqlDataTypeOption.Bit] = typeof(SqlBoolean),
+            [SqlDataTypeOption.Char] = typeof(SqlString),
+            [SqlDataTypeOption.Date] = typeof(SqlDateTime),
+            [SqlDataTypeOption.DateTime] = typeof(SqlDateTime),
+            [SqlDataTypeOption.DateTime2] = typeof(SqlDateTime),
+            [SqlDataTypeOption.DateTimeOffset] = typeof(SqlDateTime),
+            [SqlDataTypeOption.Decimal] = typeof(SqlDecimal),
+            [SqlDataTypeOption.Float] = typeof(SqlDouble),
+            [SqlDataTypeOption.Image] = typeof(SqlBinary),
+            [SqlDataTypeOption.Int] = typeof(SqlInt32),
+            [SqlDataTypeOption.Money] = typeof(SqlMoney),
+            [SqlDataTypeOption.NChar] = typeof(SqlString),
+            [SqlDataTypeOption.NText] = typeof(SqlString),
+            [SqlDataTypeOption.Numeric] = typeof(SqlDecimal),
+            [SqlDataTypeOption.NVarChar] = typeof(SqlString),
+            [SqlDataTypeOption.Real] = typeof(SqlSingle),
+            [SqlDataTypeOption.SmallDateTime] = typeof(SqlDateTime),
+            [SqlDataTypeOption.SmallInt] = typeof(SqlInt16),
+            [SqlDataTypeOption.SmallMoney] = typeof(SqlMoney),
+            [SqlDataTypeOption.Text] = typeof(SqlString),
+            [SqlDataTypeOption.TinyInt] = typeof(SqlByte),
+            [SqlDataTypeOption.UniqueIdentifier] = typeof(SqlGuid),
+            [SqlDataTypeOption.VarBinary] = typeof(SqlBinary),
+            [SqlDataTypeOption.VarChar] = typeof(SqlString)
         };
 
         private static Type GetType(this ConvertCall convert, NodeSchema schema, IDictionary<string, Type> parameterTypes)
         {
             var sourceType = convert.Parameter.GetType(schema, parameterTypes);
-            var targetTypeName = convert.DataType.Name.BaseIdentifier.Value;
 
-            if (!_typeMapping.TryGetValue(targetTypeName, out var targetType))
+            if (!(convert.DataType is SqlDataTypeReference dataType))
+                throw new NotSupportedQueryFragmentException("Unsupported data type reference", convert.DataType);
+            
+            if (!_typeMapping.TryGetValue(dataType.SqlDataTypeOption, out var targetType))
                 throw new NotSupportedQueryFragmentException("Unsupported type name", convert.DataType);
 
             if (!SqlTypeConverter.CanChangeTypeExplicit(sourceType, targetType))
@@ -1208,21 +1210,119 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private static Expression ToExpression(this ConvertCall convert, NodeSchema schema, IDictionary<string, Type> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam)
         {
             var value = convert.Parameter.ToExpression(schema, parameterTypes, entityParam, parameterParam);
-            var targetTypeName = convert.DataType.Name.BaseIdentifier.Value;
 
-            if (!_typeMapping.TryGetValue(targetTypeName, out var targetType))
+            if (!(convert.DataType is SqlDataTypeReference dataType))
+                throw new NotSupportedQueryFragmentException("Unsupported data type reference", convert.DataType);
+
+            if (!_typeMapping.TryGetValue(dataType.SqlDataTypeOption, out var targetType))
                 throw new NotSupportedQueryFragmentException("Unknown type name", convert.DataType);
+
+            var sourceType = value.Type;
 
             if (value.Type != targetType)
                 value = SqlTypeConverter.Convert(value, targetType);
 
-            if (targetTypeName.Equals("date", StringComparison.OrdinalIgnoreCase))
+            if (dataType.SqlDataTypeOption == SqlDataTypeOption.Date)
             {
                 // Remove the time part of the DateTime value
                 value = Expression.Condition(Expression.Equal(value, Expression.Constant(null)), Expression.Constant(null), Expression.Convert(Expression.Property(Expression.Convert(value, typeof(DateTime)), nameof(DateTime.Date)), typeof(object)));
             }
 
+            // Truncate results for [n][var]char
+            // https://docs.microsoft.com/en-us/sql/t-sql/functions/cast-and-convert-transact-sql?view=sql-server-ver15#truncating-and-rounding-results
+            if (dataType.SqlDataTypeOption == SqlDataTypeOption.Char ||
+                dataType.SqlDataTypeOption == SqlDataTypeOption.NChar ||
+                dataType.SqlDataTypeOption == SqlDataTypeOption.VarChar ||
+                dataType.SqlDataTypeOption == SqlDataTypeOption.NVarChar)
+            {
+                if (dataType.Parameters.Count == 1)
+                {
+                    if (Int32.TryParse(dataType.Parameters[0].Value, out var maxLength))
+                    {
+                        if (maxLength < 1)
+                            throw new NotSupportedQueryFragmentException("Length or precision specification 0 is invalid.", dataType);
+
+                        // Truncate the value to the specified length, but some special cases
+                        string valueOnTruncate = null;
+                        Exception exceptionOnTruncate = null;
+
+                        if (sourceType == typeof(SqlInt32) || sourceType == typeof(SqlInt16) || sourceType == typeof(SqlByte))
+                        {
+                            if (dataType.SqlDataTypeOption == SqlDataTypeOption.Char || dataType.SqlDataTypeOption == SqlDataTypeOption.VarChar)
+                                valueOnTruncate = "*";
+                            else if (dataType.SqlDataTypeOption == SqlDataTypeOption.NChar || dataType.SqlDataTypeOption == SqlDataTypeOption.NVarChar)
+                                exceptionOnTruncate = new QueryExecutionException("Arithmetic overflow error converting expression to data type " + dataType.SqlDataTypeOption);
+                        }
+                        else if ((sourceType == typeof(SqlMoney) || sourceType == typeof(SqlDecimal) || sourceType == typeof(SqlSingle)) &&
+                            (dataType.SqlDataTypeOption == SqlDataTypeOption.Char || dataType.SqlDataTypeOption == SqlDataTypeOption.VarChar || dataType.SqlDataTypeOption == SqlDataTypeOption.NChar || dataType.SqlDataTypeOption == SqlDataTypeOption.NVarChar))
+                        {
+                            exceptionOnTruncate = new QueryExecutionException("Arithmetic overflow error converting expression to data type " + dataType.SqlDataTypeOption);
+                        }
+
+                        value = Expr.Call(() => Truncate(Expr.Arg<SqlString>(), Expr.Arg<int>(), Expr.Arg<string>(), Expr.Arg<Exception>()),
+                            value,
+                            Expression.Constant(maxLength),
+                            Expression.Constant(valueOnTruncate, typeof(string)),
+                            Expression.Constant(exceptionOnTruncate, typeof(Exception)));
+                    }
+                    else if (!dataType.Parameters[0].Value.Equals("max", StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new NotSupportedQueryFragmentException("Invalid attributes specified for type " + dataType.SqlDataTypeOption, dataType);
+                    }
+                }
+                else if (dataType.Parameters.Count > 1)
+                {
+                    throw new NotSupportedQueryFragmentException("Invalid attributes specified for type " + dataType.SqlDataTypeOption, dataType);
+                }
+            }
+
+            // Apply changes to precision & scale
+            if (value.Type == typeof(SqlDecimal))
+            {
+                if (dataType.Parameters.Count > 0)
+                {
+                    if (!Int32.TryParse(dataType.Parameters[0].Value, out var precision))
+                        throw new NotSupportedQueryFragmentException("Invalid attributes specified for type " + dataType.SqlDataTypeOption, dataType);
+
+                    if (precision < 1)
+                        throw new NotSupportedQueryFragmentException("Length or precision specification 0 is invalid.", dataType);
+
+                    var scale = 0;
+
+                    if (dataType.Parameters.Count > 1)
+                    {
+                        if (!Int32.TryParse(dataType.Parameters[1].Value, out scale))
+                            throw new NotSupportedQueryFragmentException("Invalid attributes specified for type " + dataType.SqlDataTypeOption, dataType);
+                    }
+
+                    if (dataType.Parameters.Count > 2)
+                        throw new NotSupportedQueryFragmentException("Invalid attributes specified for type " + dataType.SqlDataTypeOption, dataType);
+
+                    value = Expr.Call(() => SqlDecimal.ConvertToPrecScale(Expr.Arg<SqlDecimal>(), Expr.Arg<int>(), Expr.Arg<int>()),
+                        value,
+                        Expression.Constant(precision),
+                        Expression.Constant(scale));
+                }
+            }
+
             return value;
+        }
+
+        private static SqlString Truncate(SqlString value, int maxLength, string valueOnTruncate, Exception exceptionOnTruncate)
+        {
+            if (value.IsNull)
+                return value;
+
+            if (value.Value.Length <= maxLength)
+                return value;
+
+            if (valueOnTruncate != null)
+                return SqlTypeConverter.UseDefaultCollation(new SqlString(valueOnTruncate));
+
+            if (exceptionOnTruncate != null)
+                throw exceptionOnTruncate;
+
+            return SqlTypeConverter.UseDefaultCollation(new SqlString(value.Value.Substring(0, maxLength)));
         }
 
         private static Type GetType(this CastCall cast, NodeSchema schema, IDictionary<string, Type> parameterTypes)

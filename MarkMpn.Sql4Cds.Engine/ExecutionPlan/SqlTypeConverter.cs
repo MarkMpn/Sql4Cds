@@ -20,6 +20,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             typeof(SqlDouble),
             typeof(SqlSingle),
             typeof(SqlDecimal),
+            typeof(SqlMoney),
             typeof(SqlInt64),
             typeof(SqlInt32),
             typeof(SqlInt16),
@@ -45,6 +46,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 [typeof(SqlInt16)] = SqlInt16.Null,
                 [typeof(SqlInt32)] = SqlInt32.Null,
                 [typeof(SqlInt64)] = SqlInt64.Null,
+                [typeof(SqlMoney)] = SqlMoney.Null,
                 [typeof(SqlSingle)] = SqlSingle.Null,
                 [typeof(SqlString)] = SqlString.Null
             };
@@ -124,12 +126,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Any numeric type can be implicitly converted to any other. SQL requires a cast between decimal/numeric when precision/scale changes
             // but we don't have precision/scale as part of the data types
-            if ((from == typeof(SqlBoolean) || from == typeof(SqlByte) || from == typeof(SqlInt16) || from == typeof(SqlInt32) || from == typeof(SqlInt64) || from == typeof(SqlDecimal) || from == typeof(SqlSingle) || from == typeof(SqlDouble)) &&
-                (to == typeof(SqlBoolean) || to == typeof(SqlByte) || to == typeof(SqlInt16) || to == typeof(SqlInt32) || to == typeof(SqlInt64) || to == typeof(SqlDecimal) || to == typeof(SqlSingle) || to == typeof(SqlDouble)))
+            if ((from == typeof(SqlBoolean) || from == typeof(SqlByte) || from == typeof(SqlInt16) || from == typeof(SqlInt32) || from == typeof(SqlInt64) || from == typeof(SqlMoney) || from == typeof(SqlDecimal) || from == typeof(SqlSingle) || from == typeof(SqlDouble)) &&
+                (to == typeof(SqlBoolean) || to == typeof(SqlByte) || to == typeof(SqlInt16) || to == typeof(SqlInt32) || to == typeof(SqlInt64)|| to == typeof(SqlMoney) || to == typeof(SqlDecimal) || to == typeof(SqlSingle) || to == typeof(SqlDouble)))
                 return true;
 
             // Any numeric type can be implicitly converted to datetime
-            if ((from == typeof(SqlInt32) || from == typeof(SqlInt64) || from == typeof(SqlDecimal) || from == typeof(SqlSingle) || from == typeof(SqlDouble)) &&
+            if ((from == typeof(SqlInt32) || from == typeof(SqlInt64) || from == typeof(SqlMoney) || from == typeof(SqlDecimal) || from == typeof(SqlSingle) || from == typeof(SqlDouble)) &&
                 to == typeof(SqlDateTime))
                 return true;
 
@@ -318,7 +320,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return new SqlString(str, CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace);
 
             if (value is Money m)
-                return new SqlDecimal(m.Value);
+                return new SqlMoney(m.Value);
 
             if (value is OptionSetValue osv)
                 return new SqlInt32(osv.Value);
