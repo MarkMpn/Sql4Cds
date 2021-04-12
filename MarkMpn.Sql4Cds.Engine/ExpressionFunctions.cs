@@ -607,12 +607,6 @@ namespace MarkMpn.Sql4Cds.Engine
             if (!expr.Type.IsValueType)
                 return expr;
 
-            if (expr.NodeType == ExpressionType.Convert)
-            {
-                var node = (UnaryExpression)expr;
-                return Box(node.Operand);
-            }
-
             return Expression.Convert(expr, typeof(object));
         }
 
