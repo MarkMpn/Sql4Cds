@@ -31,6 +31,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         };
 
         private static readonly IDictionary<Type, object> _nullValues;
+        private static readonly CultureInfo _hijriCulture;
 
         static SqlTypeConverter()
         {
@@ -50,6 +51,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 [typeof(SqlSingle)] = SqlSingle.Null,
                 [typeof(SqlString)] = SqlString.Null
             };
+
+            _hijriCulture = (CultureInfo)CultureInfo.GetCultureInfo("ar-JO").Clone();
+            _hijriCulture.DateTimeFormat.Calendar = new HijriCalendar();
         }
 
         /// <summary>
@@ -198,6 +202,242 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return expr;
+        }
+
+        /// <summary>
+        /// Specialized type conversion from DateTime to String using a style
+        /// </summary>
+        /// <param name="value">The value to convert</param>
+        /// <param name="style">The style to apply</param>
+        /// <returns>The converted string</returns>
+        public static SqlString Convert(SqlDateTime value, SqlInt32 style)
+        {
+            if (value.IsNull || style.IsNull)
+                return SqlString.Null;
+
+            string formatString;
+            var cultureInfo = CultureInfo.InvariantCulture;
+
+            switch (style.Value)
+            {
+                case 0:
+                case 100:
+                    formatString = "MMM dd yyyy hh:mmtt";
+                    break;
+
+                case 1:
+                    formatString = "MM/dd/yy";
+                    break;
+
+                case 101:
+                    formatString = "MM/dd/yyyy";
+                    break;
+
+                case 2:
+                    formatString = "yy.MM.dd";
+                    break;
+
+                case 102:
+                    formatString = "yyyy.MM.dd";
+                    break;
+
+                case 3:
+                    formatString = "dd/MM/yy";
+                    break;
+
+                case 103:
+                    formatString = "dd/MM/yyyy";
+                    break;
+
+                case 4:
+                    formatString = "dd.MM.yy";
+                    break;
+
+                case 104:
+                    formatString = "dd.MM.yyyy";
+                    break;
+
+                case 5:
+                    formatString = "dd-MM-yy";
+                    break;
+
+                case 105:
+                    formatString = "dd-MM-yyyy";
+                    break;
+
+                case 6:
+                    formatString = "dd MMM yy";
+                    break;
+
+                case 106:
+                    formatString = "dd MMM yyyy";
+                    break;
+
+                case 7:
+                    formatString = "MMM dd, yy";
+                    break;
+
+                case 107:
+                    formatString = "MMM dd, yyyy";
+                    break;
+
+                case 8:
+                case 24:
+                case 108:
+                    formatString = "HH:mm:ss";
+                    break;
+
+                case 9:
+                case 109:
+                    formatString = "MMM dd yyyy hh:mm:ss:ffftt";
+                    break;
+
+                case 10:
+                    formatString = "MM-dd-yy";
+                    break;
+
+                case 110:
+                    formatString = "MM-dd-yyyy";
+                    break;
+
+                case 11:
+                    formatString = "yy/MM/dd";
+                    break;
+
+                case 111:
+                    formatString = "yyyy/MM/dd";
+                    break;
+
+                case 12:
+                    formatString = "yyMMdd";
+                    break;
+
+                case 112:
+                    formatString = "yyyyMMdd";
+                    break;
+
+                case 13:
+                case 113:
+                    formatString = "dd MMM yyyy HH:mm:ss:fff";
+                    break;
+
+                case 14:
+                case 114:
+                    formatString = "HH:mm:ss:fff";
+                    break;
+
+                case 20:
+                case 120:
+                    formatString = "yyyy-MM-dd HH:mm:ss";
+                    break;
+
+                case 21:
+                case 25:
+                case 121:
+                    formatString = "yyyy-MM-dd HH:mm:ss.fff";
+                    break;
+
+                case 22:
+                    formatString = "MM/dd/yy hh:mm:ss tt";
+                    break;
+
+                case 23:
+                    formatString = "yyyy-MM-dd";
+                    break;
+
+                case 126:
+                    formatString = "yyyy-MM-ddTHH:mm:ss.FFF";
+                    break;
+
+                case 127:
+                    formatString = "yyyy-MM-ddTHH:mm:ss.FFF\\Z";
+                    break;
+
+                case 130:
+                    formatString = "dd MMMM yyyy hh:mm:ss:ffftt";
+                    cultureInfo = _hijriCulture;
+                    break;
+
+                case 131:
+                    formatString = "dd/MM/yyyy HH:mm:ss:ffftt";
+                    cultureInfo = _hijriCulture;
+                    break;
+
+                default:
+                    throw new QueryExecutionException($"{style.Value} is not a valid style number when converting from datetime to a character string");
+            }
+
+            var formatted = value.Value.ToString(formatString, cultureInfo);
+            return UseDefaultCollation(formatted);
+        }
+
+        /// <summary>
+        /// Specialized type conversion from Double to String using a style
+        /// </summary>
+        /// <param name="value">The value to convert</param>
+        /// <param name="style">The style to apply</param>
+        /// <returns>The converted string</returns>
+        public static SqlString Convert(SqlDouble value, SqlInt32 style)
+        {
+            if (value.IsNull || style.IsNull)
+                return SqlString.Null;
+
+            string formatString;
+
+            switch (style.Value)
+            {
+                case 1:
+                    formatString = "E8";
+                    break;
+
+                case 2:
+                    formatString = "E16";
+                    break;
+
+                case 3:
+                    formatString = "G17";
+                    break;
+
+                default:
+                    formatString = "G6";
+                    break;
+            }
+
+            var formatted = value.Value.ToString(formatString);
+            return UseDefaultCollation(formatted);
+        }
+
+        /// <summary>
+        /// Specialized type conversion from Money to String using a style
+        /// </summary>
+        /// <param name="value">The value to convert</param>
+        /// <param name="style">The style to apply</param>
+        /// <returns>The converted string</returns>
+        public static SqlString Convert(SqlMoney value, SqlInt32 style)
+        {
+            if (value.IsNull || style.IsNull)
+                return SqlString.Null;
+
+            string formatString;
+
+            switch (style.Value)
+            {
+                case 1:
+                    formatString = "N2";
+                    break;
+
+                case 2:
+                case 126:
+                    formatString = "F4";
+                    break;
+
+                default:
+                    formatString = "F2";
+                    break;
+            }
+
+            var formatted = value.Value.ToString(formatString);
+            return UseDefaultCollation(formatted);
         }
 
         /// <summary>

@@ -1204,6 +1204,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!SqlTypeConverter.CanChangeTypeExplicit(sourceType, targetType))
                 throw new NotSupportedQueryFragmentException($"No type conversion available from {sourceType} to {targetType}", convert);
 
+            if (convert.Style != null)
+            {
+                var styleType = convert.Style.GetType(schema, parameterTypes);
+
+                if (!SqlTypeConverter.CanChangeTypeImplicit(styleType, typeof(SqlInt32)))
+                    throw new NotSupportedQueryFragmentException($"No type conversion available from {styleType} to {typeof(SqlInt32)}", convert.Style);
+            }
+
             return targetType;
         }
 
@@ -1218,6 +1226,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 throw new NotSupportedQueryFragmentException("Unknown type name", convert.DataType);
 
             var sourceType = value.Type;
+
+            // Special cases for styles
+            if (convert.Style != null)
+            {
+                var style = convert.Style.ToExpression(schema, parameterTypes, entityParam, parameterParam);
+
+                if (value.Type == typeof(SqlDateTime) && targetType == typeof(SqlString))
+                    value = Expr.Call(() => SqlTypeConverter.Convert(Expr.Arg<SqlDateTime>(), Expr.Arg<SqlInt32>()), value, style);
+                else if ((value.Type == typeof(SqlDouble) || value.Type == typeof(SqlSingle)) && targetType == typeof(SqlString))
+                    value = Expr.Call(() => SqlTypeConverter.Convert(Expr.Arg<SqlDouble>(), Expr.Arg<SqlInt32>()), value, style);
+                else if (value.Type == typeof(SqlMoney) && targetType == typeof(SqlString))
+                    value = Expr.Call(() => SqlTypeConverter.Convert(Expr.Arg<SqlMoney>(), Expr.Arg<SqlInt32>()), value, style);
+            }
 
             if (value.Type != targetType)
                 value = SqlTypeConverter.Convert(value, targetType);
