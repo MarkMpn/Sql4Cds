@@ -46,6 +46,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         bool IQueryExecutionOptions.ColumnComparisonAvailable => true;
 
+        bool IQueryExecutionOptions.UseLocalTimeZone => false;
+
         List<JoinOperator> IQueryExecutionOptions.JoinOperatorsAvailable => _supportedJoins;
 
         bool IQueryExecutionOptions.ConfirmDelete(int count, EntityMetadata meta)

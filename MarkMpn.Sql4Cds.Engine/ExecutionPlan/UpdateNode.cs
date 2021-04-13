@@ -109,6 +109,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 List<Entity> entities;
                 NodeSchema schema;
+                var dateTimeKind = options.UseLocalTimeZone ? DateTimeKind.Local : DateTimeKind.Utc;
 
                 if (Source is IDataExecutionPlanNode dataSource)
                 {
@@ -230,6 +231,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 Expression.New(
                                     typeof(Money).GetConstructor(new[] { typeof(decimal) }),
                                     Expression.Convert(expr, typeof(decimal))
+                                )
+                            );
+                        }
+                        else if (attr is DateTimeAttributeMetadata)
+                        {
+                            expr = Expression.Condition(
+                                SqlTypeConverter.NullCheck(expr),
+                                Expression.Convert(Expression.Constant(null), typeof(DateTime?)),
+                                Expr.Call(() => DateTime.SpecifyKind(Expr.Arg<DateTime>(), Expr.Arg<DateTimeKind>()),
+                                    expr,
+                                    Expression.Constant(dateTimeKind)
                                 )
                             );
                         }

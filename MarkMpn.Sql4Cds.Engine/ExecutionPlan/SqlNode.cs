@@ -44,10 +44,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             try
             {
-                var svc = (CrmServiceClient) org;
+                if (options.UseLocalTimeZone)
+                    throw new QueryExecutionException("Cannot use automatic local time zone conversion with the TDS Endpoint");
+
+                if (!(org is CrmServiceClient svc))
+                    throw new QueryExecutionException($"IOrganizationService implementation needs to be CrmServiceClient for use with the TDS Endpoint, got {org.GetType()}");
 
                 if (svc.CallerId != Guid.Empty)
-                    throw new InvalidOperationException("Cannot use impersonation with the TDS Endpoint");
+                    throw new QueryExecutionException("Cannot use impersonation with the TDS Endpoint");
 
                 using (var con = new SqlConnection("server=" + svc.CrmConnectOrgUriActual.Host))
                 {
@@ -68,6 +72,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         return result;
                     }
                 }
+            }
+            catch (QueryExecutionException ex)
+            {
+                if (ex.Node == null)
+                    ex.Node = this;
+
+                throw;
             }
             catch (Exception ex)
             {

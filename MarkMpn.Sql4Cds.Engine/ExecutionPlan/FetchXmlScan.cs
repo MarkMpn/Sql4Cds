@@ -138,7 +138,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var entity in res.Entities)
             {
-                OnRetrievedEntity(entity, schema);
+                OnRetrievedEntity(entity, schema, options, metadata);
                 yield return entity;
             }
 
@@ -159,7 +159,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 foreach (var entity in nextPage.Entities)
                 {
-                    OnRetrievedEntity(entity, schema);
+                    OnRetrievedEntity(entity, schema, options, metadata);
                     yield return entity;
                 }
 
@@ -168,13 +168,43 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private void OnRetrievedEntity(Entity entity, NodeSchema schema)
+        private void OnRetrievedEntity(Entity entity, NodeSchema schema, IQueryExecutionOptions options, IAttributeMetadataCache metadata)
         {
             // Expose any formatted values for OptionSetValue and EntityReference values
             foreach (var formatted in entity.FormattedValues)
             {
                 if (!entity.Contains(formatted.Key + "name"))
                     entity[formatted.Key + "name"] = formatted.Value;
+            }
+
+            if (options.UseLocalTimeZone)
+            {
+                // For any datetime values, check the metadata to see if they are affected by timezones and convert them
+                foreach (var attribute in entity.Attributes.ToList())
+                {
+                    var entityName = entity.LogicalName;
+                    var attributeName = attribute.Key;
+                    var value = attribute.Value;
+
+                    if (value is AliasedValue alias)
+                    {
+                        entityName = alias.EntityLogicalName;
+                        attributeName = alias.AttributeLogicalName;
+                        value = alias.Value;
+                    }
+
+                    if (value is DateTime dt)
+                    {
+                        var meta = metadata[entityName];
+                        var attrMeta = (DateTimeAttributeMetadata) meta.Attributes.Single(a => a.LogicalName == attributeName);
+
+                        if (attrMeta.DateTimeBehavior == DateTimeBehavior.UserLocal)
+                        {
+                            dt = dt.ToLocalTime();
+                            entity[attribute.Key] = dt;
+                        }
+                    }
+                }
             }
 
             // Prefix all attributes of the main entity with the expected alias

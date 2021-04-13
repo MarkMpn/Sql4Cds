@@ -128,6 +128,8 @@ namespace MarkMpn.Sql4Cds
 
         public bool ColumnComparisonAvailable => new Version(_con.OrganizationVersion) >= new Version("9.1.0.19251");
 
+        public bool UseLocalTimeZone => Settings.Instance.ShowLocalTimes;
+
         public List<JoinOperator> JoinOperatorsAvailable => _joinOperators;
 
         public void RetrievingNextPage()
