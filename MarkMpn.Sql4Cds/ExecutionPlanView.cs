@@ -248,7 +248,17 @@ namespace MarkMpn.Sql4Cds
             var text = node.ToString();
 
             if (Executed)
-                text += "\r\nCost: " + Math.Min(1, Math.Max(0, ((node.Duration.TotalMilliseconds - node.GetSources().Sum(source => source.Duration.TotalMilliseconds)) / Plan.Duration.TotalMilliseconds))).ToString("P0");
+            {
+                var nodeTime = node.Duration.TotalMilliseconds - node.GetSources().Sum(source => source.Duration.TotalMilliseconds);
+                var totalTime = Plan.Duration.TotalMilliseconds;
+
+                var cost = Math.Min(1, Math.Max(0, nodeTime / totalTime));
+
+                if (Double.IsNaN(cost))
+                    cost = 1;
+
+                text += "\r\nCost: " + cost.ToString("P0");
+            }
 
             return text;
         }
