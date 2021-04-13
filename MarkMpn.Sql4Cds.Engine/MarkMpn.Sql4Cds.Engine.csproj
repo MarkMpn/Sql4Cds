@@ -72,6 +72,7 @@
     <Compile Include="ExecutionPlan\ComputeScalarNode.cs" />
     <Compile Include="ExecutionPlan\ConcatenateNode.cs" />
     <Compile Include="ExecutionPlan\ConstantScanNode.cs" />
+    <Compile Include="ExecutionPlan\DeleteNode.cs" />
     <Compile Include="ExecutionPlan\DistinctNode.cs" />
     <Compile Include="ExecutionPlan\ExpressionExtensions.cs" />
     <Compile Include="ExecutionPlan\FetchXmlScan.cs" />
@@ -100,6 +101,7 @@
     <Compile Include="ExecutionPlan\SqlNode.cs" />
     <Compile Include="ExecutionPlan\SqlTypeConverter.cs" />
     <Compile Include="ExecutionPlan\TableSpoolNode.cs" />
+    <Compile Include="ExecutionPlan\Timer.cs" />
     <Compile Include="ExecutionPlan\TopNode.cs" />
     <Compile Include="ExecutionPlan\TryCatchNode.cs" />
     <Compile Include="ExecutionPlan\UpdateNode.cs" />

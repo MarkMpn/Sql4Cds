@@ -82,9 +82,9 @@ namespace MarkMpn.Sql4Cds.Engine
                         plan = ConvertSelectStatement(select);
                     else if (statement is UpdateStatement update)
                         plan = ConvertUpdateStatement(update);
-                    /*else if (statement is DeleteStatement delete)
-                        query = ConvertDeleteStatement(delete);
-                    else if (statement is InsertStatement insert)
+                    else if (statement is DeleteStatement delete)
+                        plan = ConvertDeleteStatement(delete);
+                    /*else if (statement is InsertStatement insert)
                         query = ConvertInsertStatement(insert);
                     else if (statement is ExecuteAsStatement impersonate)
                         query = ConvertExecuteAsStatement(impersonate);
@@ -113,6 +113,101 @@ namespace MarkMpn.Sql4Cds.Engine
                 child.Parent = plan;
                 SetParent(child);
             }
+        }
+
+        private DeleteNode ConvertDeleteStatement(DeleteStatement delete)
+        {
+            if (delete.WithCtesAndXmlNamespaces != null)
+                throw new NotSupportedQueryFragmentException("Unsupported CTE clause", delete.WithCtesAndXmlNamespaces);
+
+            return ConvertDeleteStatement(delete.DeleteSpecification, delete.OptimizerHints);
+        }
+
+        private DeleteNode ConvertDeleteStatement(DeleteSpecification delete, IList<OptimizerHint> hints)
+        {
+            if (delete.OutputClause != null)
+                throw new NotSupportedQueryFragmentException("Unsupported OUTPUT clause", delete.OutputClause);
+
+            if (delete.OutputIntoClause != null)
+                throw new NotSupportedQueryFragmentException("Unsupported OUTPUT INTO clause", delete.OutputIntoClause);
+
+            if (!(delete.Target is NamedTableReference target))
+                throw new NotSupportedQueryFragmentException("Unsupported DELETE target", delete.Target);
+
+            if (delete.WhereClause == null && Options.BlockDeleteWithoutWhere)
+            {
+                throw new NotSupportedQueryFragmentException("DELETE without WHERE is blocked by your settings", delete)
+                {
+                    Suggestion = "Add a WHERE clause to limit the records that will be deleted, or disable the \"Prevent DELETE without WHERE\" option in the settings window"
+                };
+            }
+
+            // Create the SELECT statement that generates the required information
+            var queryExpression = new QuerySpecification
+            {
+                FromClause = delete.FromClause ?? new FromClause { TableReferences = { target } },
+                WhereClause = delete.WhereClause,
+                UniqueRowFilter = UniqueRowFilter.Distinct,
+                TopRowFilter = delete.TopRowFilter
+            };
+
+            var deleteTarget = new UpdateTargetVisitor(target.SchemaObject.BaseIdentifier.Value);
+            queryExpression.FromClause.Accept(deleteTarget);
+
+            if (String.IsNullOrEmpty(deleteTarget.TargetEntityName))
+                throw new NotSupportedQueryFragmentException("Target table not found in FROM clause", target);
+
+            if (deleteTarget.Ambiguous)
+                throw new NotSupportedQueryFragmentException("Target table name is ambiguous", target);
+
+            var targetAlias = deleteTarget.TargetAliasName ?? deleteTarget.TargetEntityName;
+            var targetLogicalName = deleteTarget.TargetEntityName;
+
+            var targetMetadata = Metadata[targetLogicalName];
+            queryExpression.SelectElements.Add(new SelectScalarExpression
+            {
+                Expression = new ColumnReferenceExpression
+                {
+                    MultiPartIdentifier = new MultiPartIdentifier
+                    {
+                        Identifiers =
+                        {
+                            new Identifier { Value = targetAlias },
+                            new Identifier { Value = targetMetadata.PrimaryIdAttribute }
+                        }
+                    }
+                },
+                ColumnName = new IdentifierOrValueExpression
+                {
+                    Identifier = new Identifier { Value = targetMetadata.PrimaryIdAttribute }
+                }
+            });
+
+            var selectStatement = new SelectStatement { QueryExpression = queryExpression };
+
+            foreach (var hint in hints)
+                selectStatement.OptimizerHints.Add(hint);
+
+            var source = ConvertSelectStatement(selectStatement);
+
+            // Add DELETE
+            var deleteNode = new DeleteNode
+            {
+                LogicalName = targetMetadata.LogicalName
+            };
+
+            if (source is SelectNode select)
+            {
+                deleteNode.Source = select.Source;
+                deleteNode.PrimaryIdSource = $"{targetAlias}.{targetMetadata.PrimaryIdAttribute}";
+            }
+            else
+            {
+                deleteNode.Source = source;
+                deleteNode.PrimaryIdSource = targetMetadata.PrimaryIdAttribute;
+            }
+
+            return deleteNode;
         }
 
         private UpdateNode ConvertUpdateStatement(UpdateStatement update)

@@ -11,9 +11,9 @@ using Microsoft.Xrm.Tooling.Connector;
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
     /// <summary>
-    /// Implements an UPDATE operation
+    /// Implements an DELETE operation
     /// </summary>
-    class UpdateNode : BaseDmlNode
+    class DeleteNode : BaseDmlNode
     {
         private int _executionCount;
         private readonly Timer _timer = new Timer();
@@ -23,36 +23,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override TimeSpan Duration => _timer.Duration;
 
         /// <summary>
-        /// The logical name of the entity to update
+        /// The logical name of the entity to delete
         /// </summary>
-        [Category("Update")]
-        [Description("The logical name of the entity to update")]
+        [Category("Delete")]
+        [Description("The logical name of the entity to delete")]
         public string LogicalName { get; set; }
 
         /// <summary>
-        /// The column that contains the primary ID of the records to update
+        /// The column that contains the primary ID of the records to delete
         /// </summary>
-        [Category("Update")]
-        [Description("The column that contains the primary ID of the records to update")]
+        [Category("Delete")]
+        [Description("The column that contains the primary ID of the records to delete")]
         public string PrimaryIdSource { get; set; }
-
-        /// <summary>
-        /// The columns to update and the associated column to take the new value from
-        /// </summary>
-        [Category("Update")]
-        [Description("The columns to update and the associated column to take the new value from")]
-        public IDictionary<string, string> ColumnMappings { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
         {
             if (!requiredColumns.Contains(PrimaryIdSource))
                 requiredColumns.Add(PrimaryIdSource);
-
-            foreach (var col in ColumnMappings.Values)
-            {
-                if (!requiredColumns.Contains(col))
-                    requiredColumns.Add(col);
-            }
 
             Source.AddRequiredColumns(metadata, parameterTypes, requiredColumns);
         }
@@ -71,17 +58,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var meta = metadata[LogicalName];
                 var attributes = meta.Attributes.ToDictionary(a => a.LogicalName);
                 var dateTimeKind = options.UseLocalTimeZone ? DateTimeKind.Local : DateTimeKind.Utc;
-                var fullMappings = new Dictionary<string, string>(ColumnMappings);
-                fullMappings[meta.PrimaryIdAttribute] = PrimaryIdSource;
+                var fullMappings = new Dictionary<string, string>
+                {
+                    [meta.PrimaryIdAttribute] = PrimaryIdSource
+                };
                 var attributeAccessors = CompileColumnMappings(fullMappings, schema, attributes, dateTimeKind);
                 var primaryIdAccessor = attributeAccessors[meta.PrimaryIdAttribute];
 
                 // Check again that the update is allowed. Don't count any UI interaction in the execution time
                 _timer.Pause();
-                if (options.Cancelled || !options.ConfirmUpdate(entities.Count, meta))
-                    throw new OperationCanceledException("UPDATE cancelled by user");
-                _timer.Resume();
+                if (options.Cancelled || !options.ConfirmDelete(entities.Count, meta))
+                    throw new OperationCanceledException("DELETE cancelled by user");
 
+                _timer.Resume();
                 return ExecuteDmlOperation(
                     org,
                     options,
@@ -89,30 +78,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     meta,
                     entity =>
                     {
-                        var update = new Entity(LogicalName, (Guid)primaryIdAccessor(entity));
-
-                        foreach (var attributeAccessor in attributeAccessors)
+                        return new DeleteRequest
                         {
-                            if (attributeAccessor.Key == meta.PrimaryIdAttribute)
-                                continue;
-
-                            var attr = attributes[attributeAccessor.Key];
-
-                            if (!String.IsNullOrEmpty(attr.AttributeOf))
-                                continue;
-
-                            var value = attributeAccessor.Value(entity);
-
-                            update[attr.LogicalName] = value;
-                        }
-
-                        return new UpdateRequest { Target = update };
+                            Target = new EntityReference(LogicalName, (Guid)primaryIdAccessor(entity))
+                        };
                     },
                     new OperationNames
                     {
-                        InProgressUppercase = "Updating",
-                        InProgressLowercase = "updating",
-                        CompletedLowercase = "updated"
+                        InProgressUppercase = "Deleting",
+                        InProgressLowercase = "deleting",
+                        CompletedLowercase = "deleted"
                     });
             }
             finally
@@ -123,7 +98,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override string ToString()
         {
-            return "UPDATE";
+            return "DELETE";
         }
     }
 }
