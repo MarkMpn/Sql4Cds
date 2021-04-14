@@ -104,6 +104,7 @@
     <Compile Include="ExecutionPlan\Timer.cs" />
     <Compile Include="ExecutionPlan\TopNode.cs" />
     <Compile Include="ExecutionPlan\TryCatchNode.cs" />
+    <Compile Include="ExecutionPlan\InsertNode.cs" />
     <Compile Include="ExecutionPlan\UpdateNode.cs" />
     <Compile Include="FetchXmlConditionMethods.cs" />
     <Compile Include="FetchXmlExtensions.cs" />

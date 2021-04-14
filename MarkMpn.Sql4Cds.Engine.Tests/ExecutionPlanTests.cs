@@ -2755,6 +2755,37 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 </fetch>");
         }
 
+        [TestMethod]
+        public void SimpleInsertSelect()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "INSERT INTO account (name) SELECT fullname FROM contact WHERE firstname = 'Mark'";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var insert = AssertNode<InsertNode>(plans[0]);
+            Assert.AreEqual("account", insert.LogicalName);
+            Assert.AreEqual("contact.fullname", insert.ColumnMappings["name"]);
+            var fetch = AssertNode<FetchXmlScan>(insert.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='fullname' />
+                        <filter>
+                            <condition attribute='firstname' operator='eq' value='Mark' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
         private T AssertNode<T>(IExecutionPlanNode node) where T : IExecutionPlanNode
         {
             Assert.IsInstanceOfType(node, typeof(T));

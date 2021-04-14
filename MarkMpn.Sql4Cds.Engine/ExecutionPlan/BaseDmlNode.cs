@@ -159,12 +159,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var columnNullValues = columnSqlTypes.Select(type => SqlTypeConverter.GetNullValue(type)).ToArray();
 
                 // Values will be stored as BCL types, convert them to SqlXxx types for consistency with IDataExecutionPlanNodes
+                // Store the values under the column index as well as name for compatibility with INSERT ... SELECT ...
                 schema = new NodeSchema();
 
                 for (var i = 0; i < dataTable.Columns.Count; i++)
                 {
                     var col = dataTable.Columns[i];
                     schema.Schema[col.ColumnName] = columnSqlTypes[i];
+                    schema.Schema[i.ToString()] = columnSqlTypes[i];
                 }
 
                 entities = dataTable.Rows
@@ -174,7 +176,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         var entity = new Entity();
 
                         for (var i = 0; i < dataTable.Columns.Count; i++)
-                            entity[dataTable.Columns[i].ColumnName] = DBNull.Value.Equals(row[i]) ? columnNullValues[i] : SqlTypeConverter.NetToSqlType(row[i]);
+                        {
+                            var sqlValue = DBNull.Value.Equals(row[i]) ? columnNullValues[i] : SqlTypeConverter.NetToSqlType(row[i]);
+                            entity[dataTable.Columns[i].ColumnName] = sqlValue;
+                            entity[i.ToString()] = sqlValue;
+                        }
 
                         return entity;
                     })

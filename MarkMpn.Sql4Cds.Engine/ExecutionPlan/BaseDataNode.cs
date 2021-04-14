@@ -587,7 +587,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var attrNames = new[] { attrName };
             var ft = filterType.and;
 
-            if (attribute is DateTimeAttributeMetadata && literals != null)
+            if (attribute is DateTimeAttributeMetadata && literals != null &&
+                (op == @operator.eq || op == @operator.ne || op == @operator.neq || op == @operator.gt || op == @operator.ge || op == @operator.lt || op == @operator.le))
             {
                 for (var i = 0; i < literals.Length; i++)
                 {

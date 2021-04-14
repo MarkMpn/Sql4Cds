@@ -84,9 +84,9 @@ namespace MarkMpn.Sql4Cds.Engine
                         plan = ConvertUpdateStatement(update);
                     else if (statement is DeleteStatement delete)
                         plan = ConvertDeleteStatement(delete);
-                    /*else if (statement is InsertStatement insert)
-                        query = ConvertInsertStatement(insert);
-                    else if (statement is ExecuteAsStatement impersonate)
+                    else if (statement is InsertStatement insert)
+                        plan = ConvertInsertStatement(insert);
+                    /*else if (statement is ExecuteAsStatement impersonate)
                         query = ConvertExecuteAsStatement(impersonate);
                     else if (statement is RevertStatement revert)
                         query = ConvertRevertStatement(revert);*/
@@ -113,6 +113,168 @@ namespace MarkMpn.Sql4Cds.Engine
                 child.Parent = plan;
                 SetParent(child);
             }
+        }
+
+        /// <summary>
+        /// Convert an INSERT statement from SQL
+        /// </summary>
+        /// <param name="insert">The parsed INSERT statement</param>
+        /// <returns>The equivalent query converted for execution against CDS</returns>
+        private InsertNode ConvertInsertStatement(InsertStatement insert)
+        {
+            // Check for any DOM elements that don't have an equivalent in CDS
+            if (insert.WithCtesAndXmlNamespaces != null)
+                throw new NotSupportedQueryFragmentException("Unhandled INSERT WITH clause", insert.WithCtesAndXmlNamespaces);
+
+            if (insert.InsertSpecification.Columns == null)
+                throw new NotSupportedQueryFragmentException("Unhandled INSERT without column specification", insert);
+
+            if (insert.InsertSpecification.OutputClause != null)
+                throw new NotSupportedQueryFragmentException("Unhandled INSERT OUTPUT clause", insert.InsertSpecification.OutputClause);
+
+            if (insert.InsertSpecification.OutputIntoClause != null)
+                throw new NotSupportedQueryFragmentException("Unhandled INSERT OUTPUT INTO clause", insert.InsertSpecification.OutputIntoClause);
+
+            if (!(insert.InsertSpecification.Target is NamedTableReference target))
+                throw new NotSupportedQueryFragmentException("Unhandled INSERT target", insert.InsertSpecification.Target);
+
+            // Check if we are inserting constant values or the results of a SELECT statement and perform the appropriate conversion
+            IExecutionPlanNode source;
+            string[] columns;
+
+            if (insert.InsertSpecification.InsertSource is ValuesInsertSource values)
+                source = ConvertInsertValuesSource(values, out columns);
+            else if (insert.InsertSpecification.InsertSource is SelectInsertSource select)
+                source = ConvertInsertSelectSource(select, insert.OptimizerHints, out columns);
+            else
+                throw new NotSupportedQueryFragmentException("Unhandled INSERT source", insert.InsertSpecification.InsertSource);
+
+            return ConvertInsertSpecification(target, insert.InsertSpecification.Columns, source, columns);
+        }
+
+        private ConstantScanNode ConvertInsertValuesSource(ValuesInsertSource values, out string[] columns)
+        {
+            // Convert the values to an InlineDerviedTable
+            var table = new InlineDerivedTable
+            {
+                Alias = new Identifier { Value = $"Expr{++_colNameCounter}" }
+            };
+
+            foreach (var col in values.RowValues[0].ColumnValues)
+                table.Columns.Add(new Identifier { Value = $"Expr{++_colNameCounter}" });
+
+            foreach (var row in values.RowValues)
+                table.RowValues.Add(row);
+
+            columns = table.Columns.Select(col => col.Value).ToArray();
+            return ConvertInlineDerivedTable(table);
+        }
+
+        private IExecutionPlanNode ConvertInsertSelectSource(SelectInsertSource selectSource, IList<OptimizerHint> hints, out string[] columns)
+        {
+            var selectStatement = new SelectStatement { QueryExpression = selectSource.Select };
+            var select = ConvertSelectStatement(selectStatement);
+
+            if (select is SelectNode selectNode)
+            {
+                columns = selectNode.ColumnSet.Select(col => col.SourceColumn).ToArray();
+                return selectNode.Source;
+            }
+
+            if (select is SqlNode sql)
+            {
+                columns = null;
+                return sql;
+            }
+
+            throw new NotSupportedQueryFragmentException("Unhandled INSERT source", selectSource);
+        }
+
+        private InsertNode ConvertInsertSpecification(NamedTableReference target, IList<ColumnReferenceExpression> targetColumns, IExecutionPlanNode source, string[] sourceColumns)
+        {
+            var node = new InsertNode
+            {
+                LogicalName = target.SchemaObject.BaseIdentifier.Value,
+                Source = source
+            };
+
+            // Validate the entity name
+            EntityMetadata metadata;
+
+            try
+            {
+                metadata = Metadata[node.LogicalName];
+            }
+            catch (FaultException ex)
+            {
+                throw new NotSupportedQueryFragmentException(ex.Message, target);
+            }
+
+            var attributes = metadata.Attributes.ToDictionary(attr => attr.LogicalName, StringComparer.OrdinalIgnoreCase);
+            var attributeNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            // Check all target columns are valid for create
+            foreach (var col in targetColumns)
+            {
+                if (!attributes.TryGetValue(col.GetColumnName(), out var attr))
+                    throw new NotSupportedQueryFragmentException("Unknown column", col);
+
+                if (attr.IsValidForCreate == false)
+                    throw new NotSupportedQueryFragmentException("Column is not valid for INSERT", col);
+
+                if (!attributeNames.Add(attr.LogicalName))
+                    throw new NotSupportedQueryFragmentException("Duplicate column name", col);
+            }
+
+            // If any of the insert columns are a polymorphic lookup field, make sure we've got a value for the associated type field too
+            foreach (var col in targetColumns)
+            {
+                var targetAttrName = col.GetColumnName();
+                var targetLookupAttribute = attributes[targetAttrName] as LookupAttributeMetadata;
+
+                if (targetLookupAttribute == null)
+                    continue;
+
+                if (targetLookupAttribute.Targets.Length > 1 && !attributeNames.Contains(targetAttrName + "type"))
+                {
+                    throw new NotSupportedQueryFragmentException("Inserting values into a polymorphic lookup field requires setting the associated type column as well", col)
+                    {
+                        Suggestion = $"Add a value for the {targetLookupAttribute.LogicalName}type column and set it to one of the following values:\r\n{String.Join("\r\n", targetLookupAttribute.Targets.Select(t => $"* {t}"))}"
+                    };
+                }
+            }
+
+            if (sourceColumns == null)
+            {
+                // Source is TDS endpoint so can't validate the columns, assume they are correct
+                for (var i = 0; i < targetColumns.Count; i++)
+                    node.ColumnMappings[targetColumns[i].GetColumnName()] = i.ToString();
+            }
+            else
+            {
+                if (targetColumns.Count != sourceColumns.Length)
+                    throw new NotSupportedQueryFragmentException("Column number mismatch");
+
+                var schema = ((IDataExecutionPlanNode)source).GetSchema(Metadata, null);
+
+                for (var i = 0; i < targetColumns.Count; i++)
+                {
+                    var attr = attributes[targetColumns[i].GetColumnName()];
+                    var targetType = attr.GetAttributeSqlType();
+
+                    if (!schema.ContainsColumn(sourceColumns[i], out var sourceColumn))
+                        throw new NotSupportedQueryFragmentException("Invalid source column");
+
+                    var sourceType = schema.Schema[sourceColumn];
+
+                    if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, targetType))
+                        throw new NotSupportedQueryFragmentException($"No implicit type conversion from {sourceType} to {targetType}", targetColumns[i]);
+
+                    node.ColumnMappings[attr.LogicalName] = sourceColumn;
+                }
+            }
+
+            return node;
         }
 
         private DeleteNode ConvertDeleteStatement(DeleteStatement delete)
@@ -2073,60 +2235,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             if (reference is InlineDerivedTable inlineDerivedTable)
-            {
-                // Check all the rows have the expected number of values and column names are unique
-                var columnNames = inlineDerivedTable.Columns.Select(col => col.Value).ToList();
-
-                for (var i = 1; i < columnNames.Count; i++)
-                {
-                    if (columnNames.Take(i).Any(prevCol => prevCol.Equals(columnNames[i], StringComparison.OrdinalIgnoreCase)))
-                        throw new NotSupportedQueryFragmentException("Duplicate column name", inlineDerivedTable.Columns[i]);
-                }
-
-                var firstMismatchRow = inlineDerivedTable.RowValues.FirstOrDefault(row => row.ColumnValues.Count != columnNames.Count);
-                if (firstMismatchRow != null)
-                    throw new NotSupportedQueryFragmentException($"Expected {columnNames.Count} columns, got {firstMismatchRow.ColumnValues.Count}", firstMismatchRow);
-
-                // Work out the column types
-                var types = inlineDerivedTable.RowValues[0].ColumnValues.Select(val => val.GetType(null, null)).ToList();
-                
-                foreach (var row in inlineDerivedTable.RowValues.Skip(1))
-                {
-                    for (var colIndex = 0; colIndex < types.Count; colIndex++)
-                    {
-                        if (!SqlTypeConverter.CanMakeConsistentTypes(types[colIndex], row.ColumnValues[colIndex].GetType(null, null), out var colType))
-                            throw new NotSupportedQueryFragmentException("No available implicit type conversion", row.ColumnValues[colIndex]);
-
-                        types[colIndex] = colType;
-                    }
-                }
-
-                // Convert the values
-                var constantScan = new ConstantScanNode();
-
-                foreach (var row in inlineDerivedTable.RowValues)
-                {
-                    var entity = new Entity();
-
-                    for (var colIndex = 0; colIndex < types.Count; colIndex++)
-                    {
-                        if (!row.ColumnValues[colIndex].IsConstantValueExpression(null, out var literal))
-                            throw new NotSupportedQueryFragmentException("Literal value expected", row.ColumnValues[colIndex]);
-
-                        entity[columnNames[colIndex]] = SqlTypeConverter.ChangeType(new SqlString(literal.Value, CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace), types[colIndex]);
-                    }
-
-                    constantScan.Values.Add(entity);
-                }
-
-                // Build the schema
-                for (var colIndex = 0; colIndex < types.Count; colIndex++)
-                    constantScan.Schema[inlineDerivedTable.Columns[colIndex].Value] = types[colIndex];
-
-                constantScan.Alias = inlineDerivedTable.Alias.Value;
-
-                return constantScan;
-            }
+                return ConvertInlineDerivedTable(inlineDerivedTable);
 
             if (reference is UnqualifiedJoin unqualifiedJoin)
             {
@@ -2182,6 +2291,62 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             throw new NotSupportedQueryFragmentException("Unhandled table reference", reference);
+        }
+
+        private ConstantScanNode ConvertInlineDerivedTable(InlineDerivedTable inlineDerivedTable)
+        {
+            // Check all the rows have the expected number of values and column names are unique
+            var columnNames = inlineDerivedTable.Columns.Select(col => col.Value).ToList();
+
+            for (var i = 1; i < columnNames.Count; i++)
+            {
+                if (columnNames.Take(i).Any(prevCol => prevCol.Equals(columnNames[i], StringComparison.OrdinalIgnoreCase)))
+                    throw new NotSupportedQueryFragmentException("Duplicate column name", inlineDerivedTable.Columns[i]);
+            }
+
+            var firstMismatchRow = inlineDerivedTable.RowValues.FirstOrDefault(row => row.ColumnValues.Count != columnNames.Count);
+            if (firstMismatchRow != null)
+                throw new NotSupportedQueryFragmentException($"Expected {columnNames.Count} columns, got {firstMismatchRow.ColumnValues.Count}", firstMismatchRow);
+
+            // Work out the column types
+            var types = inlineDerivedTable.RowValues[0].ColumnValues.Select(val => val.GetType(null, null)).ToList();
+
+            foreach (var row in inlineDerivedTable.RowValues.Skip(1))
+            {
+                for (var colIndex = 0; colIndex < types.Count; colIndex++)
+                {
+                    if (!SqlTypeConverter.CanMakeConsistentTypes(types[colIndex], row.ColumnValues[colIndex].GetType(null, null), out var colType))
+                        throw new NotSupportedQueryFragmentException("No available implicit type conversion", row.ColumnValues[colIndex]);
+
+                    types[colIndex] = colType;
+                }
+            }
+
+            // Convert the values
+            var constantScan = new ConstantScanNode();
+
+            foreach (var row in inlineDerivedTable.RowValues)
+            {
+                var entity = new Entity();
+
+                for (var colIndex = 0; colIndex < types.Count; colIndex++)
+                {
+                    if (!row.ColumnValues[colIndex].IsConstantValueExpression(null, out var literal))
+                        throw new NotSupportedQueryFragmentException("Literal value expected", row.ColumnValues[colIndex]);
+
+                    entity[columnNames[colIndex]] = SqlTypeConverter.ChangeType(new SqlString(literal.Value, CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace), types[colIndex]);
+                }
+
+                constantScan.Values.Add(entity);
+            }
+
+            // Build the schema
+            for (var colIndex = 0; colIndex < types.Count; colIndex++)
+                constantScan.Schema[inlineDerivedTable.Columns[colIndex].Value] = types[colIndex];
+
+            constantScan.Alias = inlineDerivedTable.Alias.Value;
+
+            return constantScan;
         }
 
         private string ConvertQueryHints(IList<OptimizerHint> hints)

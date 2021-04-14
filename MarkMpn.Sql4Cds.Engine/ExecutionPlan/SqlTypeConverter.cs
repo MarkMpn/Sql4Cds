@@ -192,7 +192,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (expr.Type != to)
             {
-                if (expr.Type == typeof(object) && typeof(INullable).IsAssignableFrom(to))
+                if (expr.Type == typeof(object) && expr is ConstantExpression constant && constant.Value == null && typeof(INullable).IsAssignableFrom(to))
                     return Expression.Constant(GetNullValue(to));
 
                 expr = Expression.Convert(expr, to);
