@@ -86,10 +86,10 @@ namespace MarkMpn.Sql4Cds.Engine
                         plan = ConvertDeleteStatement(delete);
                     else if (statement is InsertStatement insert)
                         plan = ConvertInsertStatement(insert);
-                    /*else if (statement is ExecuteAsStatement impersonate)
-                        query = ConvertExecuteAsStatement(impersonate);
+                    else if (statement is ExecuteAsStatement impersonate)
+                        plan = ConvertExecuteAsStatement(impersonate);
                     else if (statement is RevertStatement revert)
-                        query = ConvertRevertStatement(revert);*/
+                        plan = ConvertRevertStatement(revert);
                     else
                         throw new NotSupportedQueryFragmentException("Unsupported statement", statement);
 
@@ -113,6 +113,71 @@ namespace MarkMpn.Sql4Cds.Engine
                 child.Parent = plan;
                 SetParent(child);
             }
+        }
+
+        private ExecuteAsNode ConvertExecuteAsStatement(ExecuteAsStatement impersonate)
+        {
+            // Check for any DOM elements we don't support converting
+            if (impersonate.Cookie != null)
+                throw new NotSupportedQueryFragmentException("Unhandled impersonation cookie", impersonate.Cookie);
+
+            if (impersonate.WithNoRevert)
+                throw new NotSupportedQueryFragmentException("Unhandled WITH NO REVERT option", impersonate);
+
+            if (impersonate.ExecuteContext.Kind != ExecuteAsOption.Login &&
+                impersonate.ExecuteContext.Kind != ExecuteAsOption.User)
+                throw new NotSupportedQueryFragmentException("Unhandled impersonation type", impersonate.ExecuteContext);
+
+            if (!(impersonate.ExecuteContext.Principal is StringLiteral user))
+                throw new NotSupportedQueryFragmentException("Unhandled username variable", impersonate.ExecuteContext.Principal);
+
+            // Create a SELECT query to find the user ID
+            var select = new SelectStatement
+            {
+                QueryExpression = new QuerySpecification
+                {
+                    FromClause = new FromClause
+                    {
+                        TableReferences =
+                        {
+                            new NamedTableReference { SchemaObject = new SchemaObjectName { Identifiers = { new Identifier { Value = "systemuser" } } } }
+                        }
+                    },
+                    WhereClause = new WhereClause
+                    {
+                        SearchCondition = new BooleanComparisonExpression
+                        {
+                            FirstExpression = "domainname".ToColumnReference(),
+                            ComparisonType = BooleanComparisonType.Equals,
+                            SecondExpression = user
+                        }
+                    },
+                    SelectElements =
+                    {
+                        new SelectScalarExpression
+                        {
+                            ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = "systemuserid" } },
+                            Expression = "systemuserid".ToColumnReference()
+                        }
+                    }
+                }
+            };
+
+            var source = ConvertSelectStatement(select);
+
+            var executeAs = new ExecuteAsNode { UserIdSource = "systemuserid" };
+
+            if (source is SelectNode selectNode)
+                executeAs.Source = selectNode.Source;
+            else
+                executeAs.Source = source;
+
+            return executeAs;
+        }
+
+        private RevertNode ConvertRevertStatement(RevertStatement revert)
+        {
+            return new RevertNode();
         }
 
         /// <summary>

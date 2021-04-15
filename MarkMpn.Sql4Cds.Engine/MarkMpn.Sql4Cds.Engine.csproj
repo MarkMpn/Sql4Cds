@@ -74,6 +74,7 @@
     <Compile Include="ExecutionPlan\ConstantScanNode.cs" />
     <Compile Include="ExecutionPlan\DeleteNode.cs" />
     <Compile Include="ExecutionPlan\DistinctNode.cs" />
+    <Compile Include="ExecutionPlan\ExecuteAsNode.cs" />
     <Compile Include="ExecutionPlan\ExpressionExtensions.cs" />
     <Compile Include="ExecutionPlan\FetchXmlScan.cs" />
     <Compile Include="ExecutionPlan\FilterNode.cs" />
@@ -96,6 +97,7 @@
     <Compile Include="ExecutionPlan\OffsetFetchNode.cs" />
     <Compile Include="ExecutionPlan\QueryExecutionException.cs" />
     <Compile Include="ExecutionPlan\RetrieveTotalRecordCountNode.cs" />
+    <Compile Include="ExecutionPlan\RevertNode.cs" />
     <Compile Include="ExecutionPlan\SelectNode.cs" />
     <Compile Include="ExecutionPlan\SortNode.cs" />
     <Compile Include="ExecutionPlan\SqlNode.cs" />

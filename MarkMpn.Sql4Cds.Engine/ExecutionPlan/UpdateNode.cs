@@ -115,6 +115,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         CompletedLowercase = "updated"
                     });
             }
+            catch (QueryExecutionException ex)
+            {
+                if (ex.Node == null)
+                    ex.Node = this;
+
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new QueryExecutionException(ex.Message, ex) { Node = this };
+            }
             finally
             {
                 _timer.Pause();

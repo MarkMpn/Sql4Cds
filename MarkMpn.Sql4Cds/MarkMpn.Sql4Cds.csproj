@@ -410,6 +410,10 @@
   <ItemGroup>
     <EmbeddedResource Include="Images\InsertNode.ico" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="Images\ExecuteAsNode.ico" />
+    <Content Include="Images\RevertNode.ico" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>
