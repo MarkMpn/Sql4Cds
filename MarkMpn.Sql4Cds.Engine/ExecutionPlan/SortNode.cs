@@ -260,28 +260,32 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                         // Adding sorts to link-entity forces legacy paging which has a maximum record limit of 50K.
                         // Don't add a sort to a link-entity unless there's also a TOP clause of <= 50K
-                        var top = Parent as TopNode;
-                        var offset = Parent as OffsetFetchNode;
-
-                        if (top == null && offset == null)
-                            return this;
-
-                        if (top != null)
+                        // Doesn't apply to aggregate queries as they can't be paged
+                        if (!fetchXml.FetchXml.aggregate)
                         {
-                            if (!top.Top.IsConstantValueExpression(null, out var topLiteral))
+                            var top = Parent as TopNode;
+                            var offset = Parent as OffsetFetchNode;
+
+                            if (top == null && offset == null)
                                 return this;
 
-                            if (Int32.Parse(topLiteral.Value) > 50000)
-                                return this;
-                        }
-                        else if (offset != null)
-                        {
-                            if (!offset.Offset.IsConstantValueExpression(null, out var offsetLiteral) ||
-                                !offset.Fetch.IsConstantValueExpression(null, out var fetchLiteral))
-                                return this;
+                            if (top != null)
+                            {
+                                if (!top.Top.IsConstantValueExpression(null, out var topLiteral))
+                                    return this;
 
-                            if (Int32.Parse(offsetLiteral.Value) + Int32.Parse(fetchLiteral.Value) > 50000)
-                                return this;
+                                if (Int32.Parse(topLiteral.Value) > 50000)
+                                    return this;
+                            }
+                            else if (offset != null)
+                            {
+                                if (!offset.Offset.IsConstantValueExpression(null, out var offsetLiteral) ||
+                                    !offset.Fetch.IsConstantValueExpression(null, out var fetchLiteral))
+                                    return this;
+
+                                if (Int32.Parse(offsetLiteral.Value) + Int32.Parse(fetchLiteral.Value) > 50000)
+                                    return this;
+                            }
                         }
 
                         linkEntity.AddItem(fetchSort);

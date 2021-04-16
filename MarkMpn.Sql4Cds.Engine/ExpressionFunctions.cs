@@ -16,21 +16,6 @@ namespace MarkMpn.Sql4Cds.Engine
     class ExpressionFunctions
     {
         /// <summary>
-        /// Implements the LIKE operator
-        /// </summary>
-        /// <param name="value">The value to match from</param>
-        /// <param name="pattern">The pattern to match against</param>
-        /// <returns><c>true</c> if the <paramref name="value"/> matches the <paramref name="pattern"/>, or <c>false</c> otherwise</returns>
-        public static bool Like(string value, string pattern)
-        {
-            if (value == null || pattern == null)
-                return false;
-
-            var regex = "^" + Regex.Escape(pattern).Replace("%", ".*").Replace("_", ".") + "$";
-            return Regex.IsMatch(value, regex, RegexOptions.IgnoreCase);
-        }
-
-        /// <summary>
         /// Implements the DATEADD function
         /// </summary>
         /// <param name="datepart">The part of <paramref name="date"/> to which DATEADD adds an integer <paramref name="number"/></param>
@@ -90,7 +75,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="datepart">The SQL name for the datepart argument</param>
         /// <returns>The equivalent <see cref="DateInterval"/> value</returns>
-        public static DateInterval DatePartToInterval(string datepart)
+        internal static DateInterval DatePartToInterval(string datepart)
         {
             switch (datepart.ToLower())
             {
@@ -267,122 +252,6 @@ namespace MarkMpn.Sql4Cds.Engine
         }
 
         /// <summary>
-        /// Implements a case-insensitive string equality comparison to match the standard SQL collation
-        /// </summary>
-        /// <param name="x">The first string to compare</param>
-        /// <param name="y">The second string to compare</param>
-        /// <returns><c>true</c> if the two strings are equal, or <c>false</c> otherwise</returns>
-        public static bool CaseInsensitiveEquals(string x, string y)
-        {
-            return StringComparer.OrdinalIgnoreCase.Equals(x, y);
-        }
-
-        /// <summary>
-        /// Implements a case-insensitive string inequality comparison to match the standard SQL collation
-        /// </summary>
-        /// <param name="x">The first string to compare</param>
-        /// <param name="y">The second string to compare</param>
-        /// <returns><c>true</c> if the two strings are not equal, or <c>false</c> otherwise</returns>
-        public static bool CaseInsensitiveNotEquals(string x, string y)
-        {
-            return !StringComparer.OrdinalIgnoreCase.Equals(x, y);
-        }
-
-        /// <summary>
-        /// Implements equality between <see cref="EntityReference"/> and <see cref="Guid"/>
-        /// </summary>
-        /// <param name="x">The <see cref="EntityReference"/> to compare</param>
-        /// <param name="y">The <see cref="Guid"/> to compare</param>
-        /// <returns><c>true</c> if the ID in the <see cref="EntityReference"/> matches the supplied <see cref="Guid"/>, or <c>false</c> otherwise</returns>
-        public static bool Equal(EntityReference x, Guid y)
-        {
-            return x.Id == y;
-        }
-
-        /// <summary>
-        /// Implements equality between <see cref="EntityReference"/> and <see cref="Guid"/>
-        /// </summary>
-        /// <param name="x">The <see cref="Guid"/> to compare</param>
-        /// <param name="y">The <see cref="EntityReference"/> to compare</param>
-        /// <returns><c>true</c> if the ID in the <see cref="EntityReference"/> matches the supplied <see cref="Guid"/>, or <c>false</c> otherwise</returns>
-        public static bool Equal(Guid x, EntityReference y)
-        {
-            return x == y.Id;
-        }
-
-        /// <summary>
-        /// Implements equality between two <see cref="EntityReference"/>s
-        /// </summary>
-        /// <param name="x">The first <see cref="EntityReference"/> to compare</param>
-        /// <param name="y">The second <see cref="EntityReference"/> to compare</param>
-        /// <returns><c>true</c> if the first <see cref="EntityReference"/> matches the second <see cref="EntityReference"/>, or <c>false</c> otherwise</returns>
-        public static bool Equal(EntityReference x, EntityReference y)
-        {
-            return x.Equals(y);
-        }
-
-        /// <summary>
-        /// Implements inequality between <see cref="EntityReference"/> and <see cref="Guid"/>
-        /// </summary>
-        /// <param name="x">The <see cref="EntityReference"/> to compare</param>
-        /// <param name="y">The <see cref="Guid"/> to compare</param>
-        /// <returns><c>false</c> if the ID in the <see cref="EntityReference"/> matches the supplied <see cref="Guid"/>, or <c>true</c> otherwise</returns>
-        public static bool NotEqual(EntityReference x, Guid y)
-        {
-            return x.Id != y;
-        }
-
-        /// <summary>
-        /// Implements inequality between <see cref="EntityReference"/> and <see cref="Guid"/>
-        /// </summary>
-        /// <param name="x">The <see cref="Guid"/> to compare</param>
-        /// <param name="y">The <see cref="EntityReference"/> to compare</param>
-        /// <returns><c>false</c> if the ID in the <see cref="EntityReference"/> matches the supplied <see cref="Guid"/>, or <c>true</c> otherwise</returns>
-        public static bool NotEqual(Guid x, EntityReference y)
-        {
-            return x != y.Id;
-        }
-
-        /// <summary>
-        /// Implements inequality between two <see cref="EntityReference"/>s
-        /// </summary>
-        /// <param name="x">The first <see cref="EntityReference"/> to compare</param>
-        /// <param name="y">The second <see cref="EntityReference"/> to compare</param>
-        /// <returns><c>false</c> if the first <see cref="EntityReference"/> matches the second <see cref="EntityReference"/>, or <c>true</c> otherwise</returns>
-        public static bool NotEqual(EntityReference x, EntityReference y)
-        {
-            return !x.Equals(y);
-        }
-
-        /// <summary>
-        /// Creates an <see cref="EntityReference"/> value
-        /// </summary>
-        /// <param name="entityType">The logical name of the entity to reference</param>
-        /// <param name="id">The unique identifier of the entity to reference</param>
-        /// <returns>An <see cref="EntityReference"/> with the requested values</returns>
-        public static EntityReference CreateLookup(string entityType, string id)
-        {
-            if (id == null)
-                return null;
-
-            return new EntityReference(entityType, new Guid(id));
-        }
-
-        /// <summary>
-        /// Creates an <see cref="EntityReference"/> value
-        /// </summary>
-        /// <param name="entityType">The logical name of the entity to reference</param>
-        /// <param name="id">The unique identifier of the entity to reference</param>
-        /// <returns>An <see cref="EntityReference"/> with the requested values</returns>
-        public static EntityReference CreatePrimaryKeyLookup(string entityType, Guid? id)
-        {
-            if (id == null)
-                return null;
-
-            return new EntityReference(entityType, id.Value);
-        }
-
-        /// <summary>
         /// Replaces all occurrences of a specified string value with another string value.
         /// </summary>
         /// <param name="input">The string expression to be searched</param>
@@ -395,20 +264,6 @@ namespace MarkMpn.Sql4Cds.Engine
                 return SqlString.Null;
 
             return SqlTypeConverter.UseDefaultCollation(Regex.Replace(input.Value, Regex.Escape(find.Value), replace.Value.Replace("$", "$$"), RegexOptions.IgnoreCase));
-        }
-
-        /// <summary>
-        /// Checks if a multi-select picklist field contains specific values
-        /// </summary>
-        /// <param name="selected">The selected values</param>
-        /// <param name="values">The values to check for</param>
-        /// <returns><c>true</c> if the <paramref name="selected"/> values contain any of the requested <paramref name="values"/></returns>
-        public static bool Contains(OptionSetValueCollection selected, int[] values)
-        {
-            if (selected == null)
-                return false;
-
-            return selected.Any(osv => values.Contains(osv.Value));
         }
 
         /// <summary>

@@ -398,8 +398,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 foreach (var agg in Aggregates)
                 {
                     var col = (ColumnReferenceExpression)agg.Value.SqlExpression;
-                    var colName = col == null ? schema.PrimaryKey : col.GetColumnName();
+                    var colName = col == null ? (fetchXml.Alias + "." + metadata[fetchXml.Entity.name].PrimaryIdAttribute) : col.GetColumnName();
                     schema.ContainsColumn(colName, out colName);
+
+                    var distinct = agg.Value.Distinct ? FetchBoolType.@true : FetchBoolType.@false;
 
                     FetchXml.AggregateType aggregateType;
 
@@ -433,10 +435,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             throw new ArgumentOutOfRangeException();
                     }
 
-                    var attribute = fetchXml.AddAttribute(colName, a => a.aggregate == aggregateType && a.alias == agg.Key, metadata, out _);
+                    var attribute = fetchXml.AddAttribute(colName, a => a.aggregate == aggregateType && a.alias == agg.Key && a.distinct == distinct, metadata, out _);
                     attribute.aggregate = aggregateType;
                     attribute.aggregateSpecified = true;
                     attribute.alias = agg.Key;
+
+                    if (agg.Value.Distinct)
+                    {
+                        attribute.distinct = distinct;
+                        attribute.distinctSpecified = true;
+                    }
                 }
 
                 return new TryCatchNode

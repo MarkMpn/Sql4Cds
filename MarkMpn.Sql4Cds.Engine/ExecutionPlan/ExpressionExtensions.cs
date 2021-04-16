@@ -897,6 +897,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (escape != null && escape.Type != typeof(SqlString))
                 escape = SqlTypeConverter.Convert(escape, typeof(SqlString));
 
+            if (escape == null)
+                escape = Expression.Constant(SqlString.Null);
+
             if (pattern.NodeType == ExpressionType.Constant && (escape == null || escape.NodeType == ExpressionType.Constant))
             {
                 // Do a one-off conversion to regex
@@ -1140,8 +1143,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var whenValue = when.WhenExpression.ToExpression(schema, parameterTypes, entityParam, parameterParam);
                 var returnValue = when.ThenExpression.ToExpression(schema, parameterTypes, entityParam, parameterParam);
 
-                if (returnValue.Type != type)
-                    returnValue = SqlTypeConverter.Convert(returnValue, type);
+                whenValue = SqlTypeConverter.Convert(whenValue, typeof(bool));
+                returnValue = SqlTypeConverter.Convert(returnValue, type);
 
                 result = Expression.Condition(whenValue, returnValue, result);
             }

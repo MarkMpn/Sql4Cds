@@ -83,6 +83,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (metadata[leftFetch.Entity.name].DataProviderId != metadata[rightFetch.Entity.name].DataProviderId)
                     return this;
 
+                // If we're doing a right outer join, switch everything round to do a left outer join
+                if (JoinType == QualifiedJoinType.RightOuter)
+                {
+                    Swap(ref leftFetch, ref rightFetch);
+                    Swap(ref leftEntity, ref rightEntity);
+                    Swap(ref leftAttribute, ref rightAttribute);
+                    Swap(ref leftAttributeParts, ref rightAttributeParts);
+                }
+
                 // If there are any additional join criteria, either they must be able to be translated to FetchXml criteria
                 // in the new link entity or we must be using an inner join so we can use a post-filter node
                 var additionalCriteria = AdditionalJoinCriteria;
@@ -225,6 +234,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return this;
+        }
+
+        private static void Swap<T>(ref T left, ref T right)
+        {
+            var temp = left;
+            left = right;
+            right = temp;
         }
 
         public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)

@@ -168,17 +168,27 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             var attr = fetchXml.AddAttribute(sourceCol, null, metadata, out var added);
 
                             // Check if we can fold the alias down to the FetchXML too. Don't do this if the name isn't valid for FetchXML
+                            if (sourceCol != col.SourceColumn)
+                                parts = col.SourceColumn.Split('.');
+
                             if (col.OutputColumn != parts.Last() && FetchXmlScan.IsValidAlias(col.OutputColumn))
                             {
                                 if (added || (!processedSourceColumns.Contains(col.SourceColumn) && !fetchXml.IsAliasReferenced(attr.alias)))
                                 {
-                                    attr.alias = col.OutputColumn;
-                                    col.SourceColumn = col.OutputColumn;
+                                    // Don't fold the alias if there's also a sort on the same attribute, as it breaks paging
+                                    // https://markcarrington.dev/2019/12/10/inside-fetchxml-pt-4-order/#sorting_&_aliases
+                                    object[] items;
+
+                                    if (parts[0].Equals(fetchXml.Alias, StringComparison.OrdinalIgnoreCase))
+                                        items = fetchXml.Entity.Items;
+                                    else
+                                        items = fetchXml.Entity.FindLinkEntity(parts[0]).Items;
+
+                                    if (items == null || !items.OfType<FetchOrderType>().Any(order => order.attribute == attr.name) || !fetchXml.AllPages)
+                                        attr.alias = col.OutputColumn;
                                 }
-                                else
-                                {
-                                    col.SourceColumn = attr.alias ?? (sourceCol.Split('.')[0] + "." + attr.name);
-                                }
+
+                                col.SourceColumn = sourceCol.Split('.')[0] + "." + (attr.alias ?? attr.name);
                             }
 
                             processedSourceColumns.Add(col.SourceColumn);

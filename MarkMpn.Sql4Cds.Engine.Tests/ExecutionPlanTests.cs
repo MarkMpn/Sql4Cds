@@ -402,7 +402,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 <fetch distinct='true'>
                     <entity name='account'>
                         <attribute name='name' />
-                        <order attribute='accountid' />
+                        <order attribute='name' />
                     </entity>
                 </fetch>");
         }
@@ -1951,15 +1951,15 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, plans.Length);
 
             var select = AssertNode<SelectNode>(plans[0]);
-            var top = AssertNode<TopNode>(select.Source);
-            var filter = AssertNode<FilterNode>(top.Source);
-            var alias = AssertNode<AliasNode>(filter.Source);
-            var fetch = AssertNode<FetchXmlScan>(alias.Source);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
             AssertFetchXml(fetch, @"
-                <fetch>
+                <fetch top='10'>
                     <entity name='account'>
                         <attribute name='accountid' />
                         <attribute name='name' alias='accountname' />
+                        <filter>
+                            <condition attribute='name' operator='eq' value='Data8' />
+                        </filter>
                     </entity>
                 </fetch>");
         }
@@ -2720,6 +2720,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <link-entity name='contact' alias='contact' from='parentcustomerid' to='accountid' link-type='inner'>
                         </link-entity>
                         <order attribute='accountid' />
+                        <order attribute='name' />
                     </entity>
                 </fetch>");
         }
@@ -2794,11 +2795,18 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         private void AssertFetchXml(FetchXmlScan node, string fetchXml)
         {
-            var serializer = new XmlSerializer(typeof(FetchXml.FetchType));
-            using (var reader = new StringReader(fetchXml))
+            try
             {
-                var fetch = (FetchXml.FetchType)serializer.Deserialize(reader);
-                PropertyEqualityAssert.Equals(fetch, node.FetchXml);
+                var serializer = new XmlSerializer(typeof(FetchXml.FetchType));
+                using (var reader = new StringReader(fetchXml))
+                {
+                    var fetch = (FetchXml.FetchType)serializer.Deserialize(reader);
+                    PropertyEqualityAssert.Equals(fetch, node.FetchXml);
+                }
+            }
+            catch (AssertFailedException ex)
+            {
+                Assert.Fail($"Expected:\r\n{fetchXml}\r\n\r\nActual:\r\n{node.FetchXmlString}\r\n\r\n{ex.Message}");
             }
         }
     }

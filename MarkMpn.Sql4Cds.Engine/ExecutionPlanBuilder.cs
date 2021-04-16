@@ -131,48 +131,81 @@ namespace MarkMpn.Sql4Cds.Engine
             if (!(impersonate.ExecuteContext.Principal is StringLiteral user))
                 throw new NotSupportedQueryFragmentException("Unhandled username variable", impersonate.ExecuteContext.Principal);
 
-            // Create a SELECT query to find the user ID
-            var select = new SelectStatement
+            IExecutionPlanNode source;
+
+            if (impersonate.ExecuteContext.Kind == ExecuteAsOption.Login)
             {
-                QueryExpression = new QuerySpecification
+                // Create a SELECT query to find the user ID
+                var selectStatement = new SelectStatement
                 {
-                    FromClause = new FromClause
+                    QueryExpression = new QuerySpecification
                     {
-                        TableReferences =
+                        FromClause = new FromClause
                         {
-                            new NamedTableReference { SchemaObject = new SchemaObjectName { Identifiers = { new Identifier { Value = "systemuser" } } } }
-                        }
-                    },
-                    WhereClause = new WhereClause
-                    {
-                        SearchCondition = new BooleanComparisonExpression
+                            TableReferences =
+                            {
+                                new NamedTableReference { SchemaObject = new SchemaObjectName { Identifiers = { new Identifier { Value = "systemuser" } } } }
+                            }
+                        },
+                        WhereClause = new WhereClause
                         {
-                            FirstExpression = "domainname".ToColumnReference(),
-                            ComparisonType = BooleanComparisonType.Equals,
-                            SecondExpression = user
-                        }
-                    },
-                    SelectElements =
-                    {
-                        new SelectScalarExpression
+                            SearchCondition = new BooleanComparisonExpression
+                            {
+                                FirstExpression = "domainname".ToColumnReference(),
+                                ComparisonType = BooleanComparisonType.Equals,
+                                SecondExpression = user
+                            }
+                        },
+                        SelectElements =
                         {
-                            ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = "systemuserid" } },
-                            Expression = "systemuserid".ToColumnReference()
+                            new SelectScalarExpression
+                            {
+                                Expression = "systemuserid".ToColumnReference()
+                            }
                         }
                     }
-                }
-            };
+                };
 
-            var source = ConvertSelectStatement(select);
+                var select = ConvertSelectStatement(selectStatement);
 
-            var executeAs = new ExecuteAsNode { UserIdSource = "systemuserid" };
-
-            if (source is SelectNode selectNode)
-                executeAs.Source = selectNode.Source;
+                if (select is SelectNode selectNode)
+                    source = selectNode.Source;
+                else
+                    source = select;
+            }
             else
-                executeAs.Source = source;
+            {
+                // User ID is provided directly. Check it's a valid guid
+                if (!Guid.TryParse(user.Value, out var userId))
+                {
+                    throw new NotSupportedQueryFragmentException("Invalid user ID", user)
+                    {
+                        Suggestion = "User GUID must be supplied when using EXECUTE AS USER. To use the user login name (e.g. user@contoso.onmicrosoft.com) to identify the user to impersonate, use EXECUTE AS LOGIN instead"
+                    };
+                }
 
-            return executeAs;
+                source = new ConstantScanNode
+                {
+                    Alias = "systemuser",
+                    Schema =
+                    {
+                        ["systemuserid"] = typeof(SqlString)
+                    },
+                    Values =
+                    {
+                        new Entity
+                        {
+                            ["systemuserid"] = SqlTypeConverter.UseDefaultCollation(new SqlString(user.Value))
+                        }
+                    }
+                };
+            }
+
+            return new ExecuteAsNode
+            {
+                UserIdSource = "systemuser.systemuserid",
+                Source = source
+            };
         }
 
         private RevertNode ConvertRevertStatement(RevertStatement revert)
@@ -657,7 +690,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         private IRootExecutionPlanNode ConvertSelectStatement(SelectStatement select)
         {
-            if (Options.UseTDSEndpoint)
+            if (Options.UseTDSEndpoint && TDSEndpointAvailable)
             {
                 select.ScriptTokenStream = null;
                 return new SqlNode { Sql = select.ToSql() };
@@ -1328,13 +1361,12 @@ namespace MarkMpn.Sql4Cds.Engine
                 else if (aggregate.Expression.Parameters[0] is ColumnReferenceExpression colRef)
                 {
                     if (colRef.ColumnType == ColumnType.Wildcard)
-                    {
                         aggregateName = aggregate.Expression.FunctionName.Value.ToLower();
-                    }
                     else
-                    {
                         aggregateName = colRef.GetColumnName().Replace('.', '_') + "_" + aggregate.Expression.FunctionName.Value.ToLower();
-                    }
+
+                    if (converted.Distinct)
+                        aggregateName += "_distinct";
                 }
                 else
                 {

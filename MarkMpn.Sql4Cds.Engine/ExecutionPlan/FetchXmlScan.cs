@@ -211,6 +211,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             foreach (var attribute in entity.Attributes.Where(attr => !attr.Key.Contains('.') && !(attr.Value is AliasedValue)).ToList())
                 entity[$"{Alias}.{attribute.Key}"] = attribute.Value;
 
+            // Only prefix aliased values if they're not aggregates
+            PrefixAliasedScalarAttributes(entity, Entity.Items, Alias);
+
             // Convert aliased values to the underlying value
             foreach (var attribute in entity.Attributes.Where(attr => attr.Value is AliasedValue).ToList())
                 entity[attribute.Key] = ((AliasedValue)attribute.Value).Value;
@@ -254,6 +257,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 else
                     entity[col.Key] = SqlTypeConverter.GetNullValue(col.Value);
             }
+        }
+
+        private void PrefixAliasedScalarAttributes(Entity entity, object[] items, string alias)
+        {
+            if (items == null)
+                return;
+
+            foreach (var attr in items.OfType<FetchAttributeType>().Where(a => !String.IsNullOrEmpty(a.alias) && a.aggregateSpecified == false))
+            {
+                var value = entity.GetAttributeValue<AliasedValue>(attr.alias);
+
+                if (value != null)
+                    entity[$"{alias}.{attr.alias}"] = value;
+            }
+
+            foreach (var linkEntity in items.OfType<FetchLinkEntityType>())
+                PrefixAliasedScalarAttributes(entity, linkEntity.Items, linkEntity.alias);
         }
 
         private void FindParameterizedConditions()
@@ -339,7 +359,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Add each attribute from the main entity and recurse into link entities
             var entity = FetchXml.Items.OfType<FetchEntityType>().Single();
             var meta = metadata[entity.name];
-            schema.PrimaryKey = $"{Alias}.{meta.PrimaryIdAttribute}";
+
+            if (!FetchXml.aggregate)
+                schema.PrimaryKey = $"{Alias}.{meta.PrimaryIdAttribute}";
+
             AddAttributes(schema, metadata, entity.name, Alias, entity.Items);
             
             return schema;
@@ -366,7 +389,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (Entity.Items != null)
                 {
-                    var existing = Entity.Items.OfType<FetchAttributeType>().FirstOrDefault(a => a.name == attr.name);
+                    var existing = Entity.Items.OfType<FetchAttributeType>().FirstOrDefault(a => a.name == attr.name || a.alias == attr.name);
                     if (existing != null && (predicate == null || predicate(existing)))
                     {
                         added = false;
@@ -386,7 +409,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (linkEntity.Items != null)
                 {
-                    var existing = linkEntity.Items.OfType<FetchAttributeType>().FirstOrDefault(a => a.name == attr.name);
+                    var existing = linkEntity.Items.OfType<FetchAttributeType>().FirstOrDefault(a => a.name == attr.name || a.alias == attr.name);
                     if (existing != null && (predicate == null || predicate(existing)))
                     {
                         added = false;

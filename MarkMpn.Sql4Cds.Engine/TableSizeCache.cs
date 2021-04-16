@@ -51,7 +51,9 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     try
                     {
-                        count = _org.RetrieveMultiple(new FetchExpression(fetch)).Entities[0].GetAliasedAttributeValue<int>("count");
+                        var countEntity = _org.RetrieveMultiple(new FetchExpression(fetch)).Entities[0];
+                        var countValue = countEntity.GetAttributeValue<AliasedValue>("count");
+                        count = (int)countValue.Value;
                     }
                     catch (FaultException<OrganizationServiceFault> fault)
                     {

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
@@ -57,5 +58,337 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Browsable(false)]
         public Type ExpressionType { get; set; }
+    }
+
+    /// <summary>
+    /// Base class for calculating aggregate values
+    /// </summary>
+    abstract class AggregateFunction
+    {
+        private readonly Func<Entity, object> _selector;
+
+        /// <summary>
+        /// Creates a new <see cref="AggregateFunction"/>
+        /// </summary>
+        /// <param name="selector">The function that returns the value to aggregate from the source entity</param>
+        public AggregateFunction(Func<Entity, object> selector)
+        {
+            _selector = selector;
+        }
+
+        /// <summary>
+        /// Updates the aggregate function state based on the next <see cref="Entity"/> in the sequence
+        /// </summary>
+        /// <param name="entity">The <see cref="Entity"/> to take the value from and apply to this aggregation</param>
+        public void NextRecord(Entity entity)
+        {
+            var value = _selector == null ? entity : _selector(entity);
+            Update(value);
+        }
+
+        /// <summary>
+        /// Updates the aggregation state based on a value extracted from the source <see cref="Entity"/>
+        /// </summary>
+        /// <param name="value"></param>
+        protected abstract void Update(object value);
+
+        /// <summary>
+        /// Returns the current value of this aggregation
+        /// </summary>
+        public object Value { get; protected set; }
+
+        /// <summary>
+        /// Returns the name of the column that will store the result of this aggregation in the aggregated dataset
+        /// </summary>
+        public string OutputName { get; set; }
+
+        /// <summary>
+        /// Returns the SQL fragment that this aggregate was converted from
+        /// </summary>
+        public ScalarExpression SqlExpression { get; set; }
+
+        /// <summary>
+        /// Returns the <see cref="SqlExpression"/> being aggregated converted to a <see cref="System.Linq.Expressions.Expression"/>
+        /// </summary>
+        public Expression Expression { get; set; }
+
+        /// <summary>
+        /// Returns the type of value that will be produced by this aggregation
+        /// </summary>
+        public abstract Type Type { get; }
+
+        /// <summary>
+        /// Resets this aggregation ready for the next group
+        /// </summary>
+        public virtual void Reset()
+        {
+            Value = null;
+        }
+    }
+
+    /// <summary>
+    /// Calculates the mean value
+    /// </summary>
+    class Average : AggregateFunction
+    {
+        private decimal _sum;
+        private int _count;
+
+        /// <summary>
+        /// Creates a new <see cref="Average"/>
+        /// </summary>
+        /// <param name="selector">A function that extracts the value to calculate the average from</param>
+        public Average(Func<Entity, object> selector) : base(selector)
+        {
+        }
+
+        protected override void Update(object value)
+        {
+            if (value == null)
+                return;
+
+            _sum += Convert.ToDecimal(value);
+            _count++;
+
+            Value = _sum / _count;
+        }
+
+        public override Type Type => typeof(decimal);
+
+        public override void Reset()
+        {
+            _sum = 0;
+            _count = 0;
+            base.Reset();
+        }
+    }
+
+    /// <summary>
+    /// Counts all records
+    /// </summary>
+    class Count : AggregateFunction
+    {
+        /// <summary>
+        /// Creates a new <see cref="Count"/>
+        /// </summary>
+        /// <param name="selector">Unused</param>
+        public Count(Func<Entity, object> selector) : base(selector)
+        {
+        }
+
+        protected override void Update(object value)
+        {
+            if (Value == null)
+                Value = 1;
+            else
+                Value = (int)Value + 1;
+        }
+
+        public override Type Type => typeof(int);
+
+        public override void Reset()
+        {
+            Value = 0;
+        }
+    }
+
+    /// <summary>
+    /// Counts non-null values
+    /// </summary>
+    class CountColumn : AggregateFunction
+    {
+        /// <summary>
+        /// Creates a new <see cref="CountColumn"/>
+        /// </summary>
+        /// <param name="selector">A function that extracts the value to count non-null instances of</param>
+        public CountColumn(Func<Entity, object> selector) : base(selector)
+        {
+        }
+
+        protected override void Update(object value)
+        {
+            if (value == null)
+                return;
+
+            if (Value == null)
+                Value = 1;
+            else
+                Value = (int)Value + 1;
+        }
+
+        public override Type Type => typeof(int);
+
+        public override void Reset()
+        {
+            Value = 0;
+        }
+    }
+
+    /// <summary>
+    /// Counts distinct values
+    /// </summary>
+    class CountColumnDistinct : AggregateFunction
+    {
+        private HashSet<object> _values = new HashSet<object>();
+        private HashSet<string> _stringValues = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Creates a new <see cref="CountColumnDistinct"/>
+        /// </summary>
+        /// <param name="selector">A function that extracts the values to count non-null distinct instances of</param>
+        public CountColumnDistinct(Func<Entity, object> selector) : base(selector)
+        {
+        }
+
+        protected override void Update(object value)
+        {
+            if (value == null)
+                return;
+
+            if (value is string s)
+                _stringValues.Add(s);
+            else
+                _values.Add(value);
+
+            Value = _values.Count + _stringValues.Count;
+        }
+
+        public override Type Type => typeof(int);
+
+        public override void Reset()
+        {
+            _values.Clear();
+            _stringValues.Clear();
+            Value = 0;
+        }
+    }
+
+    /// <summary>
+    /// Identifies the maximum value
+    /// </summary>
+    class Max : AggregateFunction
+    {
+        /// <summary>
+        /// Creates a new <see cref="Max"/>
+        /// </summary>
+        /// <param name="selector">A function that extracts the value to find the maximum value of</param>
+        public Max(Func<Entity, object> selector, Type type) : base(selector)
+        {
+            Type = type;
+        }
+
+        protected override void Update(object value)
+        {
+            if (value == null)
+                return;
+
+            if (!(value is IComparable))
+                throw new InvalidOperationException("MAX is not valid for values of type " + value.GetType().Name);
+
+            if (Value == null || ((IComparable)Value).CompareTo(value) < 0)
+                Value = value;
+        }
+
+        public override Type Type { get; }
+    }
+
+    /// <summary>
+    /// Identifies the minimum value
+    /// </summary>
+    class Min : AggregateFunction
+    {
+        /// <summary>
+        /// Creates a new <see cref="Min"/>
+        /// </summary>
+        /// <param name="selector">A function that extracts the value to find the minimum value of</param>
+        public Min(Func<Entity, object> selector, Type type) : base(selector)
+        {
+            Type = type;
+        }
+
+        protected override void Update(object value)
+        {
+            if (value == null)
+                return;
+
+            if (!(value is IComparable))
+                throw new InvalidOperationException("MAX is not valid for values of type " + value.GetType().Name);
+
+            if (Value == null || ((IComparable)Value).CompareTo(value) > 0)
+                Value = value;
+        }
+
+        public override Type Type { get; }
+    }
+
+    /// <summary>
+    /// Calculates the sum
+    /// </summary>
+    class Sum : AggregateFunction
+    {
+        private decimal _sumDecimal;
+
+        /// <summary>
+        /// Creates a new <see cref="Sum"/>
+        /// </summary>
+        /// <param name="selector">A function that extracts the value to sum</param>
+        public Sum(Func<Entity, object> selector, Type type) : base(selector)
+        {
+            Type = type;
+        }
+
+        protected override void Update(object value)
+        {
+            if (value == null)
+                return;
+
+            var d = Convert.ToDecimal(value);
+            _sumDecimal += d;
+
+            var targetType = Type;
+
+            if (targetType.IsGenericType && targetType.GetGenericTypeDefinition() == typeof(Nullable<>))
+                targetType = targetType.GetGenericArguments()[0];
+
+            Value = Convert.ChangeType(_sumDecimal, targetType);
+        }
+
+        public override Type Type { get; }
+
+        public override void Reset()
+        {
+            base.Reset();
+            _sumDecimal = 0;
+        }
+    }
+
+    class First : AggregateFunction
+    {
+        private bool _done;
+
+        /// <summary>
+        /// Creates a new <see cref="Sum"/>
+        /// </summary>
+        /// <param name="selector">A function that extracts the value to sum</param>
+        public First(Func<Entity, object> selector, Type type) : base(selector)
+        {
+            Type = type;
+        }
+
+        protected override void Update(object value)
+        {
+            if (_done)
+                return;
+
+            Value = value;
+        }
+
+        public override Type Type { get; }
+
+        public override void Reset()
+        {
+            base.Reset();
+            _done = false;
+        }
     }
 }

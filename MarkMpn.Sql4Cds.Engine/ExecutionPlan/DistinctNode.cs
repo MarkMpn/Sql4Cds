@@ -115,11 +115,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // Ensure there is a sort order applied to avoid paging issues
                 if (fetch.Entity.Items == null || !fetch.Entity.Items.OfType<FetchOrderType>().Any())
                 {
-                    // Sort by the primary key
-                    fetch.Entity.AddItem(new FetchOrderType
+                    // Sort by each distinct attribute
+                    foreach (var column in Columns)
                     {
-                        attribute = metadata[fetch.Entity.name].PrimaryIdAttribute
-                    });
+                        if (!schema.ContainsColumn(column, out var normalized))
+                            continue;
+
+                        var parts = normalized.Split('.');
+                        if (parts.Length != 2)
+                            continue;
+
+                        if (parts[0].Equals(fetch.Alias, StringComparison.OrdinalIgnoreCase))
+                            fetch.Entity.AddItem(new FetchOrderType { attribute = parts[1] });
+                        else
+                            fetch.Entity.FindLinkEntity(parts[0]).AddItem(new FetchOrderType { attribute = parts[1] });
+                    }
                 }
 
                 return fetch;

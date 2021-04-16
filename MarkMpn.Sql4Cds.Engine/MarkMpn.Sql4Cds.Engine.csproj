@@ -58,7 +58,6 @@
   <ItemGroup>
     <Compile Include="AttributeMetadataCache.cs" />
     <Compile Include="DisconnectedException.cs" />
-    <Compile Include="EntityExtensions.cs" />
     <Compile Include="ExecutionPlanBuilder.cs" />
     <Compile Include="ExecutionPlanOptimizer.cs" />
     <Compile Include="ExecutionPlan\Aggregate.cs" />
@@ -114,14 +113,10 @@
     <Compile Include="MetadataExtensions.cs" />
     <Compile Include="MetadataQueryExtensions.cs" />
     <Compile Include="MetaMetadataCache.cs" />
-    <Compile Include="MetaMetadata.cs" />
     <Compile Include="PartialSuccessException.cs" />
-    <Compile Include="QueryExtensions\NoOp.cs" />
     <Compile Include="TableSizeCache.cs" />
     <Compile Include="TSqlEndpoint.cs" />
     <Compile Include="TSqlFragmentExtensions.cs" />
-    <Compile Include="Visitors\AddDefaultColumnAliasesVisitor.cs" />
-    <Compile Include="Visitors\AddDefaultTableAliasesVisitor.cs" />
     <Compile Include="Visitors\AggregateCollectingVisitor.cs" />
     <Compile Include="ExpressionFunctions.cs" />
     <Compile Include="FetchXml.cs">
@@ -138,7 +133,6 @@
     <Compile Include="IAttributeMetadataCache.cs" />
     <Compile Include="IQueryExecutionOptions.cs" />
     <Compile Include="NotSupportedQueryFragmentException.cs" />
-    <Compile Include="PostProcessingRequiredException.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Properties\Resources.Designer.cs">
       <AutoGen>True</AutoGen>
@@ -146,19 +140,9 @@
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
     <Compile Include="Query.cs" />
-    <Compile Include="QueryExtensions\Aggregate.cs" />
-    <Compile Include="QueryExtensions\Distinct.cs" />
-    <Compile Include="QueryExtensions\Having.cs" />
-    <Compile Include="QueryExtensions\Offset.cs" />
-    <Compile Include="QueryExtensions\Projection.cs" />
-    <Compile Include="QueryExtensions\Sort.cs" />
-    <Compile Include="QueryExtensions\Top.cs" />
-    <Compile Include="QueryExtensions\Where.cs" />
-    <Compile Include="QueryExtensions\IQueryExtension.cs" />
     <Compile Include="QueryParseException.cs" />
     <Compile Include="Visitors\ScalarSubqueryVisitor.cs" />
     <Compile Include="Visitors\UpdateTargetVisitor.cs" />
-    <Compile Include="Visitors\QueryTypeVisitor.cs" />
     <Compile Include="Visitors\ReplacePrimaryFunctionsVisitor.cs" />
     <Compile Include="Visitors\RewriteVisitorBase.cs" />
     <Compile Include="Visitors\RewriteVisitor.cs" />

@@ -216,6 +216,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return true;
             }
 
+            if (criteria is BooleanParenthesisExpression paren)
+            {
+                return TranslateFetchXMLCriteria(metadata, options, paren.Expression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out condition, out filter, additionalLinkEntities);
+            }
+
             if (criteria is BooleanComparisonExpression comparison)
             {
                 // Handle most comparison operators (=, <> etc.)
@@ -427,9 +432,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     condition = new condition
                     {
                         entityname = StandardizeAlias(entityAlias, targetEntityAlias, items),
-                        attribute = attrName.ToLowerInvariant(),
+                        attribute = RemoveAttributeAlias(attrName.ToLowerInvariant(), entityAlias, targetEntityAlias, items),
                         @operator = op,
-                        valueof = attrName2.ToLowerInvariant()
+                        valueof = RemoveAttributeAlias(attrName2.ToLowerInvariant(), entityAlias, targetEntityAlias, items)
                     };
                     return true;
                 }
@@ -579,6 +584,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             condition = null;
             filter = null;
+
+            attrName = RemoveAttributeAlias(attrName, entityAlias, targetEntityAlias, items);
 
             var attribute = meta.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase));
             var value = literals == null ? null : literals.Length == 1 ? literals[0] is Literal l ? l.Value : literals[0] is VariableReference v ? v.Name : null : null;
@@ -744,6 +751,34 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 };
             }
             return true;
+        }
+
+        /// <summary>
+        /// Attribute name may actually be an alias - convert it to the underlying attribute name
+        /// </summary>
+        /// <param name="attrName">The attribute name to convert</param>
+        /// <param name="entityAlias">The alias of the entity containing the attribute</param>
+        /// <param name="targetEntityAlias">The alias of the root entity in the FetchXML query</param>
+        /// <param name="items">The child items in the root entity object</param>
+        /// <returns>The underlying attribute name</returns>
+        private string RemoveAttributeAlias(string attrName, string entityAlias, string targetEntityAlias, object[] items)
+        {
+            if (entityAlias != targetEntityAlias)
+            {
+                var entity = new FetchEntityType { Items = items };
+                var linkEntity = entity.FindLinkEntity(entityAlias);
+                items = linkEntity.Items;
+            }
+
+            if (items == null)
+                return attrName;
+
+            var attribute = items.OfType<FetchAttributeType>().SingleOrDefault(a => a.alias != null && a.alias.Equals(attrName, StringComparison.OrdinalIgnoreCase));
+
+            if (attribute != null)
+                return attribute.name;
+
+            return attrName;
         }
 
         /// <summary>
