@@ -2635,14 +2635,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             AssertFetchXml(new[] { queries[0] }, @"
                 <fetch>
-                    <entity name='contact'>
-                        <attribute name='fullname' />
-                        <link-entity name='account' from='accountid' to='parentcustomerid' alias='account' link-type='inner'>
-                            <attribute name='employees' />
-                            <order attribute='employees' />
+                    <entity name='account'>
+                        <attribute name='employees' />
+                        <link-entity name='contact' from='parentcustomerid' to='accountid' alias='contact' link-type='inner'>
+                            <attribute name='fullname' />
+                            <link-entity name='new_customentity' from='new_parentid' to='parentcustomerid' alias='new_customentity' link-type='inner'>
+                            </link-entity>
                         </link-entity>
-                        <link-entity name='new_customentity' from='new_parentid' to='parentcustomerid' alias='new_customentity' link-type='inner'>
-                        </link-entity>
+                        <order attribute='employees' />
                     </entity>
                 </fetch>");
 
