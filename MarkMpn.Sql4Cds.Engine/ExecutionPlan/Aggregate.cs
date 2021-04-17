@@ -1,10 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Linq;
 using System.Linq.Expressions;
-using System.Text;
-using System.Threading.Tasks;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 
@@ -80,7 +77,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// Updates the aggregate function state based on the next <see cref="Entity"/> in the sequence
         /// </summary>
         /// <param name="entity">The <see cref="Entity"/> to take the value from and apply to this aggregation</param>
-        public void NextRecord(Entity entity)
+        public virtual void NextRecord(Entity entity)
         {
             var value = _selector == null ? entity : _selector(entity);
             Update(value);
@@ -225,45 +222,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     }
 
     /// <summary>
-    /// Counts distinct values
-    /// </summary>
-    class CountColumnDistinct : AggregateFunction
-    {
-        private HashSet<object> _values = new HashSet<object>();
-        private HashSet<string> _stringValues = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        /// <summary>
-        /// Creates a new <see cref="CountColumnDistinct"/>
-        /// </summary>
-        /// <param name="selector">A function that extracts the values to count non-null distinct instances of</param>
-        public CountColumnDistinct(Func<Entity, object> selector) : base(selector)
-        {
-        }
-
-        protected override void Update(object value)
-        {
-            if (value == null)
-                return;
-
-            if (value is string s)
-                _stringValues.Add(s);
-            else
-                _values.Add(value);
-
-            Value = _values.Count + _stringValues.Count;
-        }
-
-        public override Type Type => typeof(int);
-
-        public override void Reset()
-        {
-            _values.Clear();
-            _stringValues.Clear();
-            Value = 0;
-        }
-    }
-
-    /// <summary>
     /// Identifies the maximum value
     /// </summary>
     class Max : AggregateFunction
@@ -389,6 +347,49 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             base.Reset();
             _done = false;
+        }
+    }
+
+    class DistinctAggregate : AggregateFunction
+    {
+        private readonly HashSet<object> _distinct;
+        private readonly AggregateFunction _func;
+        private readonly Func<Entity, object> _selector;
+
+        public DistinctAggregate(AggregateFunction func, Func<Entity, object> selector) : base(selector)
+        {
+            _func = func;
+            _distinct = new HashSet<object>(CaseInsensitiveObjectComparer.Instance);
+            _selector = selector;
+
+            Expression = func.Expression;
+            OutputName = func.OutputName;
+            SqlExpression = func.SqlExpression;
+        }
+
+        public override Type Type => _func.Type;
+
+        public override void NextRecord(Entity entity)
+        {
+            var value = _selector(entity);
+
+            if (_distinct.Add(value))
+            {
+                _func.NextRecord(entity);
+                Value = _func.Value;
+            }
+        }
+
+        protected override void Update(object value)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override void Reset()
+        {
+            _distinct.Clear();
+            _func.Reset();
+            Value = _func.Value;
         }
     }
 }

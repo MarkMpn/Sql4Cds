@@ -109,14 +109,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     foreach (var aggregate in Aggregates)
                     {
+                        Func<Entity, object> selector = null;
+
+                        if (aggregate.Value.AggregateType != AggregateType.CountStar)
+                            selector = e => aggregate.Value.Expression(e, parameterValues);
+
                         switch (aggregate.Value.AggregateType)
                         {
                             case AggregateType.Average:
-                                values[aggregate.Key] = new Average(e => aggregate.Value.Expression(e, parameterValues));
+                                values[aggregate.Key] = new Average(selector);
                                 break;
 
                             case AggregateType.Count:
-                                values[aggregate.Key] = new CountColumn(e => aggregate.Value.Expression(e, parameterValues));
+                                values[aggregate.Key] = new CountColumn(selector);
                                 break;
 
                             case AggregateType.CountStar:
@@ -124,24 +129,27 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 break;
 
                             case AggregateType.Max:
-                                values[aggregate.Key] = new Max(e => aggregate.Value.Expression(e, parameterValues), aggregate.Value.ExpressionType);
+                                values[aggregate.Key] = new Max(selector, aggregate.Value.ExpressionType);
                                 break;
 
                             case AggregateType.Min:
-                                values[aggregate.Key] = new Min(e => aggregate.Value.Expression(e, parameterValues), aggregate.Value.ExpressionType);
+                                values[aggregate.Key] = new Min(selector, aggregate.Value.ExpressionType);
                                 break;
 
                             case AggregateType.Sum:
-                                values[aggregate.Key] = new Sum(e => aggregate.Value.Expression(e, parameterValues), aggregate.Value.ExpressionType);
+                                values[aggregate.Key] = new Sum(selector, aggregate.Value.ExpressionType);
                                 break;
 
                             case AggregateType.First:
-                                values[aggregate.Key] = new First(e => aggregate.Value.Expression(e, parameterValues), aggregate.Value.ExpressionType);
+                                values[aggregate.Key] = new First(selector, aggregate.Value.ExpressionType);
                                 break;
 
                             default:
                                 throw new QueryExecutionException("Unknown aggregate type");
                         }
+
+                        if (aggregate.Value.Distinct)
+                            values[aggregate.Key] = new DistinctAggregate(values[aggregate.Key], selector);
                     }
                     
                     groups[key] = values;
