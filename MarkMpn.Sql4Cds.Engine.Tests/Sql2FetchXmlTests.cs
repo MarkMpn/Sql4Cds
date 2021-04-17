@@ -1302,8 +1302,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
 
             Assert.AreEqual(2, ((EntityCollection)queries[0].Result).Entities.Count);
-            Assert.AreEqual(guid2, ((EntityCollection)queries[0].Result).Entities[0].Id);
-            Assert.AreEqual(guid1, ((EntityCollection)queries[0].Result).Entities[1].Id);
+            Assert.AreEqual("Data", ((EntityCollection)queries[0].Result).Entities[0]["firstname"]);
+            Assert.AreEqual("Mark", ((EntityCollection)queries[0].Result).Entities[1]["firstname"]);
         }
 
         [TestMethod]
@@ -1350,8 +1350,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
 
             Assert.AreEqual(2, ((EntityCollection)queries[0].Result).Entities.Count);
-            Assert.AreEqual(guid2, ((EntityCollection)queries[0].Result).Entities[0].Id);
-            Assert.AreEqual(guid1, ((EntityCollection)queries[0].Result).Entities[1].Id);
+            Assert.AreEqual("8, Data", ((EntityCollection)queries[0].Result).Entities[0]["fullname1"]);
+            Assert.AreEqual("Carrington, Mark", ((EntityCollection)queries[0].Result).Entities[1]["fullname1"]);
         }
 
         [TestMethod]
@@ -1398,8 +1398,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
 
             Assert.AreEqual(2, ((EntityCollection)queries[0].Result).Entities.Count);
-            Assert.AreEqual(guid2, ((EntityCollection)queries[0].Result).Entities[0].Id);
-            Assert.AreEqual(guid1, ((EntityCollection)queries[0].Result).Entities[1].Id);
+            Assert.AreEqual("8, Data", ((EntityCollection)queries[0].Result).Entities[0]["fullname"]);
+            Assert.AreEqual("Carrington, Mark", ((EntityCollection)queries[0].Result).Entities[1]["fullname"]);
         }
 
         [TestMethod]
@@ -1412,13 +1412,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var metadata = new AttributeMetadataCache(org);
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
 
-            var query = "SELECT DATEADD(day, 1, createdon) AS nextday, DATEPART(minute, createdon) AS minute FROM contact WHERE DATEDIFF(hour, '2020-01-01', createdon) < 1";
+            var query = "SELECT contactid, DATEADD(day, 1, createdon) AS nextday, DATEPART(minute, createdon) AS minute FROM contact WHERE DATEDIFF(hour, '2020-01-01', createdon) < 1";
 
             var queries = sql2FetchXml.Convert(query);
 
             AssertFetchXml(queries, @"
                 <fetch>
                     <entity name='contact'>
+                        <attribute name='contactid' />
                         <attribute name='createdon' />
                     </entity>
                 </fetch>
@@ -1443,7 +1444,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
 
             Assert.AreEqual(1, ((EntityCollection)queries[0].Result).Entities.Count);
-            Assert.AreEqual(guid2, ((EntityCollection)queries[0].Result).Entities[0].Id);
+            Assert.AreEqual(guid2, ((EntityCollection)queries[0].Result).Entities[0]["contactid"]);
             Assert.AreEqual(new DateTime(2020, 1, 2, 0, 30, 0), ((EntityCollection)queries[0].Result).Entities[0].GetAttributeValue<DateTime>("nextday"));
             Assert.AreEqual(30, ((EntityCollection)queries[0].Result).Entities[0].GetAttributeValue<int>("minute"));
         }
@@ -1465,9 +1466,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             AssertFetchXml(queries, @"
                 <fetch>
                     <entity name='contact'>
+                        <attribute name='contactid' />
                         <attribute name='firstname' />
                         <attribute name='lastname' />
-                        <attribute name='contactid' />
                     </entity>
                 </fetch>
             ");
@@ -1492,11 +1493,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             AssertFetchXml(queries, @"
                 <fetch>
                     <entity name='contact'>
-                        <attribute name='createdon' />
                         <attribute name='lastname' />
                         <attribute name='firstname' />
-                        <attribute name='contactid' />
-                        <order attribute='lastname' />
+                        <attribute name='createdon' />
                     </entity>
                 </fetch>
             ");
@@ -1567,9 +1566,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             AssertFetchXml(queries, @"
                 <fetch>
                     <entity name='contact'>
+                        <attribute name='contactid' />
                         <attribute name='createdon' />
                         <attribute name='lastname' />
-                        <attribute name='contactid' />
                         <order attribute='createdon' />
                     </entity>
                 </fetch>
@@ -1629,10 +1628,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             AssertFetchXml(queries, @"
                 <fetch>
                     <entity name='contact'>
-                        <attribute name='createdon' />
                         <attribute name='lastname' />
-                        <attribute name='contactid' />
-                        <order attribute='lastname' />
+                        <attribute name='createdon' />
                     </entity>
                 </fetch>
             ");

@@ -1143,7 +1143,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var whenValue = when.WhenExpression.ToExpression(schema, parameterTypes, entityParam, parameterParam);
                 var returnValue = when.ThenExpression.ToExpression(schema, parameterTypes, entityParam, parameterParam);
 
-                whenValue = SqlTypeConverter.Convert(whenValue, typeof(bool));
+                whenValue = SqlTypeConverter.Convert(whenValue, typeof(SqlBoolean));
+                whenValue = Expression.IsTrue(whenValue);
+
                 returnValue = SqlTypeConverter.Convert(returnValue, type);
 
                 result = Expression.Condition(whenValue, returnValue, result);
@@ -1392,7 +1394,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (fullText.Value is Literal lit && !_containsParser.IsMatch(lit.Value))
                 throw new NotSupportedQueryFragmentException("Only simple \"word OR word OR word\" patterns are currently supported", lit);
 
-            return typeof(bool);
+            return typeof(SqlBoolean);
         }
 
         private static Expression ToExpression(this FullTextPredicate fullText, NodeSchema schema, IDictionary<string, Type> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam)
@@ -1412,7 +1414,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Expr.Call(() => Contains(Expr.Arg<SqlString>(), Expr.Arg<SqlString>()), col, value);
         }
 
-        private static bool Contains(SqlString col, SqlString value)
+        private static SqlBoolean Contains(SqlString col, SqlString value)
         {
             if (col.IsNull || value.IsNull)
                 return false;
@@ -1421,7 +1423,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Contains(col, words);
         }
 
-        private static bool Contains(SqlString col, Regex[] words)
+        private static SqlBoolean Contains(SqlString col, Regex[] words)
         {
             if (col.IsNull)
                 return false;
