@@ -2327,7 +2327,11 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 [record2] = new Entity("new_customentity", record2)
                 {
                     ["new_optionsetvalue"] = new OptionSetValue((int) Metadata.New_OptionSet.Value1),
-                    ["new_customentityid"] = record2
+                    ["new_customentityid"] = record2,
+                    FormattedValues =
+                    {
+                        ["new_optionsetvalue"] = Metadata.New_OptionSet.Value1.ToString()
+                    }
                 }
             };
 
@@ -2345,7 +2349,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             queries[0].Execute(org, metadata, this);
 
-            select.Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            select.Execute(org, metadata, this);
             var result = (EntityCollection)select.Result;
             Assert.IsNull(result.Entities[0].GetAttributeValue<OptionSetValue>("new_optionsetvalue"));
             Assert.IsNull(result.Entities[0].GetAttributeValue<string>("new_optionsetvaluename"));

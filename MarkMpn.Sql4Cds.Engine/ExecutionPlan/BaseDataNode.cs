@@ -654,6 +654,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         }
                     }
 
+                    attrName = attrNames[0];
                     value = values[0].Value;
                 }
 
@@ -697,9 +698,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         return new condition
                         {
                             entityname = join.alias,
-                            attribute = targetMetadata.PrimaryNameAttribute,
-                            value = usesItems ? null : value,
-                            Items = usesItems ? values : null
+                            attribute = targetMetadata.PrimaryNameAttribute
                         };
                     }).ToArray();
 
@@ -708,12 +707,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     else
                         ft = filterType.or;
 
-                    filter = new filter
+                    attrNames = conditions.Select(c => c.attribute).ToArray();
+                    entityAliases = conditions.Select(c => c.entityname).ToArray();
+
+                    if (entityAliases.Length == 1)
                     {
-                        type = ft,
-                        Items = conditions.Cast<object>().ToArray()
-                    };
-                    return true;
+                        entityAlias = entityAliases[0];
+                        attrName = attrNames[0];
+                    }
+
+                    virtualAttributeHandled = true;
                 }
 
                 if (!virtualAttributeHandled)
