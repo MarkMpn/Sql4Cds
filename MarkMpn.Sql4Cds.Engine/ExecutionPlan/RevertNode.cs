@@ -42,16 +42,27 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public string Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            if (org is Microsoft.Xrm.Sdk.Client.OrganizationServiceProxy svcProxy)
-                svcProxy.CallerId = Guid.Empty;
-            else if (org is Microsoft.Xrm.Sdk.WebServiceClient.OrganizationWebProxyClient webProxy)
-                webProxy.CallerId = Guid.Empty;
-            else if (org is CrmServiceClient svc)
-                svc.CallerId = Guid.Empty;
-            else
-                throw new QueryExecutionException("Unexpected organization service type") { Node = this };
+            _executionCount++;
 
-            return "Reverted impersonation";
+            try
+            {
+                _timer.Resume();
+
+                if (org is Microsoft.Xrm.Sdk.Client.OrganizationServiceProxy svcProxy)
+                    svcProxy.CallerId = Guid.Empty;
+                else if (org is Microsoft.Xrm.Sdk.WebServiceClient.OrganizationWebProxyClient webProxy)
+                    webProxy.CallerId = Guid.Empty;
+                else if (org is CrmServiceClient svc)
+                    svc.CallerId = Guid.Empty;
+                else
+                    throw new QueryExecutionException("Unexpected organization service type") { Node = this };
+
+                return "Reverted impersonation";
+            }
+            finally
+            {
+                _timer.Pause();
+            }
         }
 
         public IRootExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
