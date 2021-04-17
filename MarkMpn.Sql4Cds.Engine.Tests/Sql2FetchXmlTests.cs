@@ -1853,6 +1853,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
+            var lookup = (LookupAttributeMetadata)metadata["account"].Attributes.Single(a => a.LogicalName == "primarycontactid");
+            lookup.Targets = new[] { "contact" };
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
 
             var query = "UPDATE a SET primarycontactid = c.contactid FROM account AS a INNER JOIN contact AS c ON a.accountid = c.parentcustomerid";
@@ -1893,7 +1895,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            update.Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            update.Execute(org, metadata, this);
 
             Assert.AreEqual(new EntityReference("contact", contact1), context.Data["account"][account1].GetAttributeValue<EntityReference>("primarycontactid"));
             Assert.AreEqual(new EntityReference("contact", contact2), context.Data["account"][account2].GetAttributeValue<EntityReference>("primarycontactid"));
@@ -2212,106 +2214,25 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var metadata = new AttributeMetadataCache(org);
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
 
-            var query = "SELECT displayname FROM globaloptionset WHERE name = 'test'";
+            var query = "SELECT displayname FROM metadata.globaloptionset WHERE name = 'test'";
 
             var queries = sql2FetchXml.Convert(query);
 
-            Assert.IsInstanceOfType(queries.Single(), typeof(GlobalOptionSetQuery));
+            Assert.IsInstanceOfType(queries.Single(), typeof(SelectQuery));
 
-            AssertFetchXml(queries, @"
-                <fetch>
-                    <entity name='globaloptionset'>
-                        <attribute name='displayname' />
-                        <filter>
-                            <condition attribute='name' operator='eq' value='test' />
-                        </filter>
-                    </entity>
-                </fetch>");
+            var selectQuery = (SelectQuery)queries[0];
+            var selectNode = (SelectNode)selectQuery.Node;
+            Assert.AreEqual(1, selectNode.ColumnSet.Count);
+            Assert.AreEqual("globaloptionset.displayname", selectNode.ColumnSet[0].SourceColumn);
+            var filterNode = (FilterNode)selectNode.Source;
+            Assert.AreEqual("name = 'test'", filterNode.Filter.ToSql());
+            var optionsetNode = (GlobalOptionSetQueryNode)filterNode.Source;
 
             queries[0].Execute(org, metadata, this);
 
-            var result = (DataTable)queries[0].Result;
+            var result = (EntityCollection)queries[0].Result;
 
-            Assert.AreEqual(1, result.Rows.Count);
-        }
-
-        [TestMethod]
-        public void GlobalOptionSetValues()
-        {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-            context.AddFakeMessageExecutor<RetrieveAllOptionSetsRequest>(new RetrieveAllOptionSetsHandler());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
-            var sql2FetchXml = new Sql2FetchXml(metadata, true);
-
-            var query = "SELECT gos.displayname, o.label FROM globaloptionset gos LEFT OUTER JOIN [option] o ON gos.globaloptionsetid = o.optionsetid AND o.value = 2 WHERE gos.name = 'test'";
-
-            var queries = sql2FetchXml.Convert(query);
-
-            Assert.IsInstanceOfType(queries.Single(), typeof(GlobalOptionSetQuery));
-
-            AssertFetchXml(queries, @"
-                <fetch>
-                    <entity name='globaloptionset'>
-                        <attribute name='displayname' />
-                        <link-entity name='option' from='optionsetid' to='globaloptionsetid' alias='o' link-type='outer'>
-                            <attribute name='label' />
-                            <filter>
-                                <condition attribute='value' operator='eq' value='2' />
-                            </filter>
-                        </link-entity>
-                        <filter>
-                            <condition attribute='name' operator='eq' value='test' />
-                        </filter>
-                    </entity>
-                </fetch>");
-
-            queries[0].Execute(org, metadata, this);
-
-            var result = (DataTable)queries[0].Result;
-
-            Assert.AreEqual(1, result.Rows.Count);
-            Assert.AreEqual("TestGlobalOptionSet", result.Rows[0][0]);
-            Assert.AreEqual("Value2", result.Rows[0][1]);
-        }
-
-        [TestMethod]
-        public void GlobalOptionSetTranslations()
-        {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-            context.AddFakeMessageExecutor<RetrieveAllOptionSetsRequest>(new RetrieveAllOptionSetsHandler());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
-            var sql2FetchXml = new Sql2FetchXml(metadata, true);
-
-            var query = "SELECT gos.displayname, dn.label FROM globaloptionset AS gos INNER JOIN localizedlabel AS dn ON gos.displaynameid = dn.labelid WHERE gos.name = 'test'";
-
-            var queries = sql2FetchXml.Convert(query);
-
-            Assert.IsInstanceOfType(queries.Single(), typeof(GlobalOptionSetQuery));
-
-            AssertFetchXml(queries, @"
-                <fetch>
-                    <entity name='globaloptionset'>
-                        <attribute name='displayname' />
-                        <link-entity name='localizedlabel' from='labelid' to='displaynameid' link-type='inner' alias='dn'>
-                            <attribute name='label' />
-                        </link-entity>
-                        <filter>
-                            <condition attribute='name' operator='eq' value='test' />
-                        </filter>
-                    </entity>
-                </fetch>");
-
-            queries[0].Execute(org, metadata, this);
-
-            var result = (DataTable)queries[0].Result;
-
-            Assert.AreEqual(2, result.Rows.Count);
+            Assert.AreEqual(1, result.Entities.Count);
         }
 
         [TestMethod]
@@ -2329,24 +2250,21 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var queries = sql2FetchXml.Convert(query);
 
-            Assert.IsInstanceOfType(queries.Single(), typeof(EntityMetadataQuery));
+            Assert.IsInstanceOfType(queries.Single(), typeof(SelectQuery));
 
-            AssertFetchXml(queries, @"
-                <fetch>
-                    <entity name='entity'>
-                        <attribute name='logicalname' />
-                        <order attribute='logicalname' />
-                    </entity>
-                </fetch>");
+            var selectQuery = (SelectQuery)queries[0];
+            var selectNode = (SelectNode)selectQuery.Node;
+            var sortNode = (SortNode)selectNode.Source;
+            var metadataNode = (MetadataQueryNode)sortNode.Source;
 
             queries[0].Execute(org, metadata, this);
 
-            var result = (DataTable)queries[0].Result;
+            var result = (EntityCollection)queries[0].Result;
 
-            Assert.AreEqual(3, result.Rows.Count);
-            Assert.AreEqual("account", result.Rows[0]["logicalname"]);
-            Assert.AreEqual("contact", result.Rows[1]["logicalname"]);
-            Assert.AreEqual("new_customentity", result.Rows[2]["logicalname"]);
+            Assert.AreEqual(3, result.Entities.Count);
+            Assert.AreEqual("account", result.Entities[0]["logicalname"]);
+            Assert.AreEqual("contact", result.Entities[1]["logicalname"]);
+            Assert.AreEqual("new_customentity", result.Entities[2]["logicalname"]);
         }
 
         [TestMethod]
@@ -2569,6 +2487,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
+            var lookup = (LookupAttributeMetadata)metadata["account"].Attributes.Single(a => a.LogicalName == "primarycontactid");
+            lookup.Targets = new[] { "contact" };
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
 
             var query = "UPDATE account SET primarycontactid = c.contactid FROM account AS a INNER JOIN contact AS c ON a.name = c.fullname";
@@ -2595,7 +2515,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             }
             catch (NotSupportedQueryFragmentException ex)
             {
-                Assert.AreEqual("Ambiguous table name", ex.Error);
+                Assert.AreEqual("Target table name is ambiguous", ex.Error);
             }
         }
 
@@ -2985,7 +2905,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         expr = Expression.OrElse(expr, filterExpr);
                 }
 
-                return expr;
+                return expr ?? Expression.Constant(true);
             }
 
             private Expression ToExpression(MetadataConditionExpression condition, ParameterExpression param)
