@@ -1310,6 +1310,55 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void OrderByAliasedField()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT firstname, lastname AS surname FROM contact ORDER BY surname";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <attribute name='lastname' />
+                        <order attribute='lastname' />
+                    </entity>
+                </fetch>
+            ");
+
+            var guid1 = Guid.NewGuid();
+            var guid2 = Guid.NewGuid();
+            context.Data["contact"] = new Dictionary<Guid, Entity>
+            {
+                [guid1] = new Entity("contact", guid1)
+                {
+                    ["contactid"] = guid1,
+                    ["firstname"] = "Mark",
+                    ["lastname"] = "Carrington"
+                },
+                [guid2] = new Entity("contact", guid2)
+                {
+                    ["contactid"] = guid2,
+                    ["firstname"] = "Data",
+                    ["lastname"] = "8"
+                }
+            };
+
+            queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+
+            Assert.AreEqual(2, ((EntityCollection)queries[0].Result).Entities.Count);
+            Assert.AreEqual("8", ((EntityCollection)queries[0].Result).Entities[0]["surname"]);
+            Assert.AreEqual("Carrington", ((EntityCollection)queries[0].Result).Entities[1]["surname"]);
+        }
+
+        [TestMethod]
         public void OrderByCalculatedField()
         {
             var context = new XrmFakedContext();
@@ -1353,8 +1402,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
 
             Assert.AreEqual(2, ((EntityCollection)queries[0].Result).Entities.Count);
-            Assert.AreEqual("8, Data", ((EntityCollection)queries[0].Result).Entities[0]["fullname1"]);
-            Assert.AreEqual("Carrington, Mark", ((EntityCollection)queries[0].Result).Entities[1]["fullname1"]);
+            Assert.AreEqual("8, Data", ((EntityCollection)queries[0].Result).Entities[0]["fullname"]);
+            Assert.AreEqual("Carrington, Mark", ((EntityCollection)queries[0].Result).Entities[1]["fullname"]);
         }
 
         [TestMethod]
@@ -2712,12 +2761,12 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             AssertFetchXml(queries, @"
                 <fetch aggregate='true'>
-                    <entity name='contact'>
-                        <attribute name='firstname' groupby='true' alias='firstname' />
-                        <attribute name='contactid' aggregate='count' alias='contactid_count' />
-                        <link-entity name='account' from='accountid' to='parentcustomerid' link-type='inner' alias='account'>
+                    <entity name='account'>
+                        <attribute name='accountid' aggregate='count' alias='count' />
+                        <link-entity name='contact' from='parentcustomerid' to='accountid' link-type='inner' alias='contact'>
+                            <attribute name='firstname' groupby='true' alias='firstname' />
                         </link-entity>
-                        <order alias='contactid_count' />
+                        <order alias='count' />
                     </entity>
                 </fetch>
             ");

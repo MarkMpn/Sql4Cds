@@ -1446,6 +1446,23 @@ namespace MarkMpn.Sql4Cds.Engine
             var schema = source.GetSchema(Metadata, parameterTypes);
             var sort = new SortNode { Source = source };
 
+            // Sorts can use aliases from the SELECT clause
+            if (query is QuerySpecification querySpec)
+            {
+                var rewrites = new Dictionary<ScalarExpression, ScalarExpression>();
+
+                foreach (var select in querySpec.SelectElements.OfType<SelectScalarExpression>())
+                {
+                    if (select.ColumnName == null)
+                        continue;
+
+                    rewrites[select.ColumnName.Value.ToColumnReference()] = select.Expression;
+                }
+
+                if (rewrites.Any())
+                    orderByClause.Accept(new RewriteVisitor(rewrites));
+            }
+
             // Check if any of the order expressions need pre-calculation
             foreach (var orderBy in orderByClause.OrderByElements)
             {
@@ -1465,7 +1482,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     orderBy.Expression = selectList[index];
                 }
 
-                // Anything complex expressoin should be pre-calculated
+                // Anything complex expression should be pre-calculated
                 if (!(orderBy.Expression is ColumnReferenceExpression) &&
                     !(orderBy.Expression is VariableReference) &&
                     !(orderBy.Expression is Literal))
