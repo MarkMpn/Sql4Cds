@@ -9,6 +9,7 @@ using System.Text.RegularExpressions;
 using System.Xml.Serialization;
 using FakeXrmEasy;
 using FakeXrmEasy.FakeMessageExecutors;
+using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
@@ -1910,8 +1911,21 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "DELETE c2 FROM contact c1 INNER JOIN contact c2 ON c1.parentcustomerid = c2.parentcustomerid AND c2.createdon > c1.createdon";
 
-            var ex = Assert.ThrowsException<NotSupportedQueryFragmentException>(() => sql2FetchXml.Convert(query));
-            Assert.IsTrue(ex.Message.Contains("rewrite as WHERE clause"));
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='createdon' />
+                        <link-entity name='contact' to='parentcustomerid' from='parentcustomerid' alias='c2' link-type='inner'>
+                            <attribute name='contactid' />
+                            <attribute name='createdon' />
+                        </link-entity>
+                    </entity>
+                </fetch>");
+
+            var select = (DeleteQuery)queries[0];
+            Assert.AreEqual(1, select.Extensions.Count);
         }
 
         [TestMethod]
@@ -2006,13 +2020,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var queries = sql2FetchXml.Convert(query);
 
-            AssertFetchXml(queries, $@"
-                <fetch aggregate='true'>
-                    <entity name='contact'>
-                        <attribute name='contactid' aggregate='count' alias='contactid_count' />
-                    </entity>
-                </fetch>
-            ");
+            var selectQuery = (SelectQuery)queries[0];
+            var selectNode = (SelectNode)selectQuery.Node;
+            var computeScalarNode = (ComputeScalarNode)selectNode.Source;
+            var count = (RetrieveTotalRecordCountNode)computeScalarNode.Source;
         }
 
         [TestMethod]

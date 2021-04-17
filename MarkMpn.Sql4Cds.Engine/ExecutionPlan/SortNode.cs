@@ -252,12 +252,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         var meta = metadata[entity.name];
                         var attribute = meta.Attributes.SingleOrDefault(a => a.LogicalName == fetchSort.attribute);
 
-                        if (attribute is LookupAttributeMetadata)
-                            return this;
+                        if (attribute != null)
+                        {
+                            if (attribute is LookupAttributeMetadata)
+                                return this;
 
-                        // Sorts on virtual ___name attributes should actually be applied to the underlying field
-                        if (!String.IsNullOrEmpty(attribute.AttributeOf) && attribute.LogicalName == attribute.AttributeOf + "name")
-                            fetchSort.attribute = attribute.AttributeOf;
+                            // Sorts on virtual ___name attributes should actually be applied to the underlying field
+                            if (!String.IsNullOrEmpty(attribute.AttributeOf) && attribute.LogicalName == attribute.AttributeOf + "name")
+                                fetchSort.attribute = attribute.AttributeOf;
+                        }
 
                         entity.AddItem(fetchSort);
                         items = entity.Items;
@@ -271,12 +274,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         var meta = metadata[linkEntity.name];
                         var attribute = meta.Attributes.SingleOrDefault(a => a.LogicalName == fetchSort.attribute);
 
-                        if (attribute is LookupAttributeMetadata)
-                            return this;
+                        if (attribute != null)
+                        {
+                            if (attribute is LookupAttributeMetadata)
+                                return this;
 
-                        // Sorts on virtual ___name attributes should actually be applied to the underlying field
-                        if (!String.IsNullOrEmpty(attribute.AttributeOf) && attribute.LogicalName == attribute.AttributeOf + "name")
-                            fetchSort.attribute = attribute.AttributeOf;
+                            // Sorts on virtual ___name attributes should actually be applied to the underlying field
+                            if (!String.IsNullOrEmpty(attribute.AttributeOf) && attribute.LogicalName == attribute.AttributeOf + "name")
+                                fetchSort.attribute = attribute.AttributeOf;
+                        }
 
                         // Adding sorts to link-entity forces legacy paging which has a maximum record limit of 50K.
                         // Don't add a sort to a link-entity unless there's also a TOP clause of <= 50K

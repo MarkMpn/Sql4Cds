@@ -1319,8 +1319,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     Distinct = aggregate.Expression.UniqueRowFilter == UniqueRowFilter.Distinct
                 };
 
-                if (!(aggregate.Expression.Parameters[0] is ColumnReferenceExpression col) || col.ColumnType != ColumnType.Wildcard)
-                    converted.SqlExpression = aggregate.Expression.Parameters[0];
+                converted.SqlExpression = aggregate.Expression.Parameters[0];
 
                 switch (aggregate.Expression.FunctionName.Value.ToUpper())
                 {
@@ -1329,7 +1328,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         break;
 
                     case "COUNT":
-                        if (converted.SqlExpression == null)
+                        if ((converted.SqlExpression is ColumnReferenceExpression countCol && countCol.ColumnType == ColumnType.Wildcard) || (converted.SqlExpression is Literal && !(converted.SqlExpression is NullLiteral)))
                             converted.AggregateType = AggregateType.CountStar;
                         else
                             converted.AggregateType = AggregateType.Count;
@@ -1344,12 +1343,18 @@ namespace MarkMpn.Sql4Cds.Engine
                         break;
 
                     case "SUM":
-                        converted.AggregateType = AggregateType.Sum;
+                        if (converted.SqlExpression is IntegerLiteral sumLiteral && sumLiteral.Value == "1")
+                            converted.AggregateType = AggregateType.CountStar;
+                        else
+                            converted.AggregateType = AggregateType.Sum;
                         break;
 
                     default:
                         throw new NotSupportedQueryFragmentException("Unknown aggregate function", aggregate.Expression);
                 }
+
+                if (converted.AggregateType == AggregateType.CountStar)
+                    converted.SqlExpression = null;
 
                 // Create a name for the column that holds the aggregate value in the result set.
                 string aggregateName;
