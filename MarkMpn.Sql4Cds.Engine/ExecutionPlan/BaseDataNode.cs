@@ -594,6 +594,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var attrNames = new[] { attrName };
             var ft = filterType.and;
 
+            var usesItems = values != null && values.Length > 1 || op == @operator.@in || op == @operator.notin;
+
             if (attribute is DateTimeAttributeMetadata && literals != null &&
                 (op == @operator.eq || op == @operator.ne || op == @operator.neq || op == @operator.gt || op == @operator.ge || op == @operator.lt || op == @operator.le))
             {
@@ -679,7 +681,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 name = targetMetadata.LogicalName,
                                 from = targetMetadata.PrimaryIdAttribute,
                                 to = baseAttribute.LogicalName,
-                                alias = $"{meta.LogicalName}_{baseAttribute.LogicalName}_{targetType}",
+                                alias = lookupAttr.Targets.Length == 1 ? $"{meta.LogicalName}_{baseAttribute.LogicalName}" : $"{meta.LogicalName}_{baseAttribute.LogicalName}_{targetType}",
                                 linktype = "outer"
                             };
 
@@ -696,18 +698,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         {
                             entityname = join.alias,
                             attribute = targetMetadata.PrimaryNameAttribute,
+                            value = usesItems ? null : value,
+                            Items = usesItems ? values : null
                         };
                     }).ToArray();
 
-                    entityAliases = conditions.Select(c => c.entityname).ToArray();
-                    attrNames = conditions.Select(c => c.attribute).ToArray();
-
-                    if (op == @operator.@null)
+                    if (op == @operator.@null || conditions.Length == 1)
                         ft = filterType.and;
                     else
                         ft = filterType.or;
 
-                    virtualAttributeHandled = true;
+                    filter = new filter
+                    {
+                        type = ft,
+                        Items = conditions.Cast<object>().ToArray()
+                    };
+                    return true;
                 }
 
                 if (!virtualAttributeHandled)
@@ -721,8 +727,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 value = targetMetadata.ObjectTypeCode?.ToString();
             }
-
-            var usesItems = values != null && values.Length > 1 || op == @operator.@in || op == @operator.notin;
 
             if (entityAliases.Length == 1)
             {
