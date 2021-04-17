@@ -171,7 +171,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             if (sourceCol != col.SourceColumn)
                                 parts = col.SourceColumn.Split('.');
 
-                            if (col.OutputColumn != parts.Last() && FetchXmlScan.IsValidAlias(col.OutputColumn))
+                            if (!col.OutputColumn.Equals(parts.Last(), StringComparison.OrdinalIgnoreCase) && FetchXmlScan.IsValidAlias(col.OutputColumn))
                             {
                                 if (added || (!processedSourceColumns.Contains(col.SourceColumn) && !fetchXml.IsAliasReferenced(attr.alias)))
                                 {
