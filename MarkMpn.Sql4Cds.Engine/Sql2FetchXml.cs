@@ -149,7 +149,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var queries = plans.Select(plan =>
                 {
                     Query query;
-                    var fetchNode = FindFirstFetchNode(plan);
+                    var fetchNode = FindFirstNode<FetchXmlScan>(plan);
 
                     if (plan is SqlNode tds)
                     {
@@ -200,7 +200,32 @@ namespace MarkMpn.Sql4Cds.Engine
                             fetchQuery.FetchXml = fetchNode.FetchXml;
                         }
 
-                        AddExtensions(fetchQuery, plan, fetchNode);
+                        if (plan is SelectNode selectNode && selectNode.Source is TryCatchNode tryCatch)
+                        {
+                            AddExtensions(fetchQuery, tryCatch.TrySource, fetchNode);
+
+                            var alternativeFetchNode = FindFirstNode<FetchXmlScan>(tryCatch.CatchSource);
+                            var alternativeSelectNode = new SelectNode { Source = tryCatch.CatchSource };
+                            alternativeSelectNode.ColumnSet.AddRange(selectNode.ColumnSet);
+                            fetchQuery.AggregateAlternative = new SelectQuery
+                            {
+                                ColumnSet = selectNode.ColumnSet.Select(col => col.SourceColumn).Select(col => col.StartsWith($"{fetchNode?.Alias}.") ? col.Substring(fetchNode.Alias.Length + 1) : col).ToArray(),
+                                AllPages = alternativeFetchNode.AllPages,
+                                FetchXml = alternativeFetchNode.FetchXml,
+                                Node = alternativeSelectNode
+                            };
+
+                            AddExtensions(fetchQuery.AggregateAlternative, tryCatch.CatchSource, alternativeFetchNode);
+                        }
+                        else
+                        {
+                            var tdsSource = FindFirstNode<SqlNode>(plan);
+
+                            if (tdsSource != null)
+                                fetchQuery.TSql = tdsSource.Sql;
+                            else
+                                AddExtensions(fetchQuery, plan, fetchNode);
+                        }
                     }
 
                     return query;
@@ -210,7 +235,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return queries;
         }
 
-        private void AddExtensions(FetchXmlQuery fetchQuery, IExecutionPlanNode plan, FetchXmlScan fetchNode)
+        private void AddExtensions(FetchXmlQuery fetchQuery, IExecutionPlanNode plan, IExecutionPlanNode fetchNode)
         {
             foreach (var source in plan.GetSources())
             {
@@ -223,14 +248,14 @@ namespace MarkMpn.Sql4Cds.Engine
             }
         }
 
-        private FetchXmlScan FindFirstFetchNode(IExecutionPlanNode node)
+        private T FindFirstNode<T>(IExecutionPlanNode node) where T: class, IExecutionPlanNode
         {
-            if (node is FetchXmlScan fetch)
+            if (node is T fetch)
                 return fetch;
 
             foreach (var source in node.GetSources())
             {
-                fetch = FindFirstFetchNode(source);
+                fetch = FindFirstNode<T>(source);
 
                 if (fetch != null)
                     return fetch;

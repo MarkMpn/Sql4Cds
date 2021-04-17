@@ -202,7 +202,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
-            if (Source is FetchXmlScan fetchXml)
+            // Allow folding sorts around filters
+            var fetchXml = Source as FetchXmlScan;
+
+            if (fetchXml == null && Source is FilterNode filter)
+                fetchXml = filter.Source as FetchXmlScan;
+
+            if (fetchXml != null)
             {
                 // Remove any existing sorts
                 if (fetchXml.Entity.Items != null)
@@ -243,8 +249,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             return this;
 
                         // Sorting on a lookup Guid column actually sorts by the associated name field, which isn't what we want
-                        if (IsLookupColumn(metadata, entity.name, fetchSort.attribute))
+                        var meta = metadata[entity.name];
+                        var attribute = meta.Attributes.SingleOrDefault(a => a.LogicalName == fetchSort.attribute);
+
+                        if (attribute is LookupAttributeMetadata)
                             return this;
+
+                        // Sorts on virtual ___name attributes should actually be applied to the underlying field
+                        if (!String.IsNullOrEmpty(attribute.AttributeOf) && attribute.LogicalName == attribute.AttributeOf + "name")
+                            fetchSort.attribute = attribute.AttributeOf;
 
                         entity.AddItem(fetchSort);
                         items = entity.Items;
@@ -255,8 +268,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         if (linkEntity == null)
                             return this;
 
-                        if (IsLookupColumn(metadata, linkEntity.name, fetchSort.attribute))
+                        var meta = metadata[linkEntity.name];
+                        var attribute = meta.Attributes.SingleOrDefault(a => a.LogicalName == fetchSort.attribute);
+
+                        if (attribute is LookupAttributeMetadata)
                             return this;
+
+                        // Sorts on virtual ___name attributes should actually be applied to the underlying field
+                        if (!String.IsNullOrEmpty(attribute.AttributeOf) && attribute.LogicalName == attribute.AttributeOf + "name")
+                            fetchSort.attribute = attribute.AttributeOf;
 
                         // Adding sorts to link-entity forces legacy paging which has a maximum record limit of 50K.
                         // Don't add a sort to a link-entity unless there's also a TOP clause of <= 50K
@@ -299,14 +319,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return this;
-        }
-
-        private bool IsLookupColumn(IAttributeMetadataCache metadata, string entityName, string attributeName)
-        {
-            var meta = metadata[entityName];
-            var attribute = meta.Attributes.SingleOrDefault(a => a.LogicalName == attributeName);
-
-            return attribute is LookupAttributeMetadata;
         }
 
         public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)

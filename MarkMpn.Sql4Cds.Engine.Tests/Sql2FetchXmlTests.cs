@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.IO;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using System.Xml.Serialization;
@@ -12,6 +13,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
+using Microsoft.Xrm.Sdk.Metadata.Query;
 using Microsoft.Xrm.Sdk.Query;
 
 namespace MarkMpn.Sql4Cds.Engine.Tests
@@ -1607,8 +1609,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var results = (EntityCollection)queries[0].Result;
             Assert.AreEqual(2, results.Entities.Count);
 
-            Assert.AreEqual(guid1, results.Entities[0].Id);
-            Assert.AreEqual(guid2, results.Entities[1].Id);
+            Assert.AreEqual(guid1, results.Entities[0]["contactid"]);
+            Assert.AreEqual(guid2, results.Entities[1]["contactid"]);
         }
 
         [TestMethod]
@@ -1748,8 +1750,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 <fetch>
                     <entity name='account'>
                         <attribute name='name' />
-                        <attribute name='accountid' />
-                        <order attribute='name' />
                     </entity>
                 </fetch>
             ");
@@ -1961,7 +1961,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             }
             catch (NotSupportedQueryFragmentException ex)
             {
-                Assert.IsTrue(ex.Message.Contains("Did you mean 'mark'?"));
+                Assert.IsTrue(ex.Suggestion == "Did you mean 'mark'?");
             }
         }
 
@@ -2105,13 +2105,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
+            sql2FetchXml.TDSEndpointAvailable = true;
             sql2FetchXml.ForceTDSEndpoint = true;
 
             var query = "SELECT COUNT(*) AS count FROM account WHERE name IS NULL";
 
             var queries = sql2FetchXml.Convert(query);
 
-            Assert.AreEqual("SELECT COUNT(*) AS count FROM account AS account WHERE name IS NULL", Regex.Replace(queries[0].TSql, "\\s+", " "));
+            Assert.AreEqual("SELECT COUNT(*) AS count FROM account WHERE name IS NULL", Regex.Replace(queries[0].TSql, "\\s+", " "));
         }
 
         [TestMethod]
@@ -2186,7 +2187,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var select = queries[0];
             select.Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
             var result = (EntityCollection)select.Result;
-            Assert.AreEqual(account2, result.Entities[0].Id);
+            Assert.AreEqual(account2, result.Entities[0]["accountid"]);
         }
 
         [TestMethod]
@@ -2313,7 +2314,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
             context.AddFakeMessageExecutor<RetrieveMetadataChangesRequest>(new RetrieveMetadataChangesHandler(metadata));
 
-            var query = "SELECT logicalname FROM entity ORDER BY 1";
+            var query = "SELECT logicalname FROM metadata.entity ORDER BY 1";
 
             var queries = sql2FetchXml.Convert(query);
 
@@ -2348,39 +2349,22 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
             context.AddFakeMessageExecutor<RetrieveMetadataChangesRequest>(new RetrieveMetadataChangesHandler(metadata));
 
-            var query = "SELECT e.logicalname, a.logicalname FROM entity e INNER JOIN attribute a ON e.logicalname = a.entitylogicalname WHERE e.logicalname = 'new_customentity' ORDER BY 1, 2";
+            var query = "SELECT e.logicalname, a.logicalname FROM metadata.entity e INNER JOIN metadata.attribute a ON e.logicalname = a.entitylogicalname WHERE e.logicalname = 'new_customentity' ORDER BY 1, 2";
 
             var queries = sql2FetchXml.Convert(query);
 
-            Assert.IsInstanceOfType(queries.Single(), typeof(EntityMetadataQuery));
-
-            AssertFetchXml(queries, @"
-                <fetch>
-                    <entity name='entity'>
-                        <attribute name='logicalname' />
-                        <link-entity name='attribute' from='entitylogicalname' to='logicalname' alias='a' link-type='inner'>
-                            <attribute name='logicalname' />
-                            <order attribute='logicalname' />
-                        </link-entity>
-                        <filter type='and'>
-                            <condition attribute='logicalname' operator='eq' value='new_customentity' />
-                        </filter>
-                        <order attribute='logicalname' />
-                    </entity>
-                </fetch>");
-
             queries[0].Execute(org, metadata, this);
 
-            var result = (DataTable)queries[0].Result;
+            var result = (EntityCollection)queries[0].Result;
 
-            Assert.AreEqual(6, result.Rows.Count);
+            Assert.AreEqual(6, result.Entities.Count);
             var row = 0;
-            Assert.AreEqual("new_boolprop", result.Rows[row++]["a.logicalname"]);
-            Assert.AreEqual("new_customentityid", result.Rows[row++]["a.logicalname"]);
-            Assert.AreEqual("new_name", result.Rows[row++]["a.logicalname"]);
-            Assert.AreEqual("new_optionsetvalue", result.Rows[row++]["a.logicalname"]);
-            Assert.AreEqual("new_optionsetvaluename", result.Rows[row++]["a.logicalname"]);
-            Assert.AreEqual("new_parentid", result.Rows[row++]["a.logicalname"]);
+            Assert.AreEqual("new_boolprop", result.Entities[row++]["logicalname1"]);
+            Assert.AreEqual("new_customentityid", result.Entities[row++]["logicalname1"]);
+            Assert.AreEqual("new_name", result.Entities[row++]["logicalname1"]);
+            Assert.AreEqual("new_optionsetvalue", result.Entities[row++]["logicalname1"]);
+            Assert.AreEqual("new_optionsetvaluename", result.Entities[row++]["logicalname1"]);
+            Assert.AreEqual("new_parentid", result.Entities[row++]["logicalname1"]);
         }
 
         [TestMethod]
@@ -2413,7 +2397,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 },
                 [record2] = new Entity("new_customentity", record2)
                 {
-                    ["new_optionsetvalue"] = Metadata.New_OptionSet.Value1,
+                    ["new_optionsetvalue"] = new OptionSetValue((int) Metadata.New_OptionSet.Value1),
                     ["new_customentityid"] = record2
                 }
             };
@@ -2630,7 +2614,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
 
             var query = @"
-                EXECUTE AS USER = 'test1'
+                EXECUTE AS LOGIN = 'test1'
                 REVERT";
 
             var queries = sql2FetchXml.Convert(query);
@@ -2695,6 +2679,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.Attributes)).SetValue(metadata["contact"], metadata["contact"].Attributes.Concat(new[] { parentcustomeridtype }).ToArray());
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
             sql2FetchXml.TDSEndpointAvailable = true;
+            sql2FetchXml.ForceTDSEndpoint = true;
 
             var query = @"
                 UPDATE c
@@ -2705,7 +2690,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var queries = sql2FetchXml.Convert(query);
 
             Assert.AreEqual(Regex.Replace(@"
-                SELECT
+                SELECT DISTINCT
                     c.contactid AS contactid,
                     account.accountid AS parentcustomerid,
                     'account' AS parentcustomeridtype
@@ -2729,6 +2714,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var metadata = new AttributeMetadataCache(org);
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
             sql2FetchXml.TDSEndpointAvailable = true;
+            sql2FetchXml.ForceTDSEndpoint = true;
 
             var query = @"
                 DELETE c
@@ -2768,8 +2754,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 <fetch aggregate='true'>
                     <entity name='contact'>
                         <attribute name='firstname' groupby='true' alias='firstname' />
-                        <attribute name='contactid' aggregate='count' alias='contactid_count' />
-                        <order alias='contactid_count' />
+                        <attribute name='contactid' aggregate='count' alias='count' />
+                        <order alias='count' />
                     </entity>
                 </fetch>
             ");
@@ -2818,12 +2804,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var select = (SelectQuery)queries[0];
             AssertFetchXml(new[] { select.AggregateAlternative }, @"
                 <fetch>
-                    <entity name='contact'>
-                        <attribute name='contactid'/>
-                        <attribute name='parentcustomerid'/>
-                        <link-entity name='account' from='accountid' to='parentcustomerid' link-type='inner' alias='account'>
-                            <attribute name='name'/>
-                            <attribute name='accountid'/>
+                    <entity name='account'>
+                        <attribute name='name'/>
+                        <link-entity name='contact' from='parentcustomerid' to='accountid' link-type='inner' alias='contact'>
                         </link-entity>
                     </entity>
                 </fetch>
@@ -2939,15 +2922,83 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     }
                 }
 
+                var req = (RetrieveMetadataChangesRequest)request;
+                var metadataParam = Expression.Parameter(typeof(EntityMetadata));
+                var filter = ToExpression(req.Query.Criteria, metadataParam);
+                var filterFunc = (Func<EntityMetadata,bool>) Expression.Lambda(filter, metadataParam).Compile();
+
+                var result = new EntityMetadataCollection();
+
+                foreach (var match in metadata.Where(e => filterFunc(e)))
+                    result.Add(match);
+
                 var response = new RetrieveMetadataChangesResponse
                 {
                     Results = new ParameterCollection
                     {
-                        ["EntityMetadata"] = metadata
+                        ["EntityMetadata"] = result
                     }
                 };
 
                 return response;
+            }
+
+            private Expression ToExpression(MetadataFilterExpression filter, ParameterExpression param)
+            {
+                if (filter == null)
+                    return Expression.Constant(true);
+
+                Expression expr = null;
+
+                foreach (var condition in filter.Conditions)
+                {
+                    var conditionExpr = ToExpression(condition, param);
+
+                    if (expr == null)
+                        expr = conditionExpr;
+                    else if (filter.FilterOperator == LogicalOperator.And)
+                        expr = Expression.AndAlso(expr, conditionExpr);
+                    else
+                        expr = Expression.OrElse(expr, conditionExpr);
+                }
+
+                foreach (var subFilter in filter.Filters)
+                {
+                    var filterExpr = ToExpression(subFilter, param);
+
+                    if (expr == null)
+                        expr = filterExpr;
+                    else if (filter.FilterOperator == LogicalOperator.And)
+                        expr = Expression.AndAlso(expr, filterExpr);
+                    else
+                        expr = Expression.OrElse(expr, filterExpr);
+                }
+
+                return expr;
+            }
+
+            private Expression ToExpression(MetadataConditionExpression condition, ParameterExpression param)
+            {
+                var value = Expression.PropertyOrField(param, condition.PropertyName);
+                var targetValue = Expression.Constant(condition.Value);
+
+                switch (condition.ConditionOperator)
+                {
+                    case MetadataConditionOperator.Equals:
+                        return Expression.Equal(value, targetValue);
+
+                    case MetadataConditionOperator.NotEquals:
+                        return Expression.NotEqual(value, targetValue);
+
+                    case MetadataConditionOperator.LessThan:
+                        return Expression.LessThan(value, targetValue);
+
+                    case MetadataConditionOperator.GreaterThan:
+                        return Expression.GreaterThan(value, targetValue);
+
+                    default:
+                        throw new NotImplementedException();
+                }
             }
 
             public Type GetResponsibleRequestType()

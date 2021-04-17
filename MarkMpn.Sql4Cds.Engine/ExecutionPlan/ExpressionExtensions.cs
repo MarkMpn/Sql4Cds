@@ -207,7 +207,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!schema.ContainsColumn(name, out var normalizedName))
             {
                 if (!schema.Aliases.TryGetValue(name, out var normalized))
-                    throw new NotSupportedQueryFragmentException("Unknown column", col);
+                {
+                    var ex = new NotSupportedQueryFragmentException("Unknown column", col);
+
+                    if (col.MultiPartIdentifier.Identifiers.Count == 1 && col.MultiPartIdentifier.Identifiers[0].QuoteType == QuoteType.DoubleQuote)
+                        ex.Suggestion = $"Did you mean '{name}'?";
+
+                    throw ex;
+                }
 
                 throw new NotSupportedQueryFragmentException("Ambiguous column reference", col)
                 {
