@@ -863,8 +863,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             value = Expression.PropertyOrField(value, nameof(INullable.IsNull));
 
             if (isNull.IsNot)
-                return Expression.Not(value);
+                value = Expression.Not(value);
 
+            value = SqlTypeConverter.Convert(value, typeof(SqlBoolean));
             return value;
         }
 
