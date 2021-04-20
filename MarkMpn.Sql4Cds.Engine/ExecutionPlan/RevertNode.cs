@@ -74,5 +74,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             return Array.Empty<IExecutionPlanNode>();
         }
+
+        public override string ToString()
+        {
+            return "REVERT";
+        }
     }
 }
