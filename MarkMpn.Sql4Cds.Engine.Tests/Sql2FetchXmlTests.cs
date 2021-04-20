@@ -2110,16 +2110,16 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var metadata = new AttributeMetadataCache(org);
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
 
-            var query = "SELECT name FROM account WHERE CONTAINS(name, '1 OR 2')";
+            var query = "SELECT new_name FROM new_customentity WHERE CONTAINS(new_optionsetvaluecollection, '1 OR 2')";
 
             var queries = sql2FetchXml.Convert(query);
 
             AssertFetchXml(queries, $@"
                 <fetch>
-                    <entity name='account'>
-                        <attribute name='name' />
+                    <entity name='new_customentity'>
+                        <attribute name='new_name' />
                         <filter>
-                            <condition attribute='name' operator='contain-values'>
+                            <condition attribute='new_optionsetvaluecollection' operator='contain-values'>
                                 <value>1</value>
                                 <value>2</value>
                             </condition>
@@ -2139,16 +2139,16 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var metadata = new AttributeMetadataCache(org);
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
 
-            var query = "SELECT name FROM account WHERE NOT CONTAINS(name, '1 OR 2')";
+            var query = "SELECT new_name FROM new_customentity WHERE NOT CONTAINS(new_optionsetvaluecollection, '1 OR 2')";
 
             var queries = sql2FetchXml.Convert(query);
 
             AssertFetchXml(queries, $@"
                 <fetch>
-                    <entity name='account'>
-                        <attribute name='name' />
+                    <entity name='new_customentity'>
+                        <attribute name='new_name' />
                         <filter>
-                            <condition attribute='name' operator='not-contain-values'>
+                            <condition attribute='new_optionsetvaluecollection' operator='not-contain-values'>
                                 <value>1</value>
                                 <value>2</value>
                             </condition>
@@ -2335,12 +2335,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var result = (EntityCollection)queries[0].Result;
 
-            Assert.AreEqual(6, result.Entities.Count);
+            Assert.AreEqual(7, result.Entities.Count);
             var row = 0;
             Assert.AreEqual("new_boolprop", result.Entities[row++]["logicalname1"]);
             Assert.AreEqual("new_customentityid", result.Entities[row++]["logicalname1"]);
             Assert.AreEqual("new_name", result.Entities[row++]["logicalname1"]);
             Assert.AreEqual("new_optionsetvalue", result.Entities[row++]["logicalname1"]);
+            Assert.AreEqual("new_optionsetvaluecollection", result.Entities[row++]["logicalname1"]);
             Assert.AreEqual("new_optionsetvaluename", result.Entities[row++]["logicalname1"]);
             Assert.AreEqual("new_parentid", result.Entities[row++]["logicalname1"]);
         }
