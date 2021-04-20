@@ -85,6 +85,7 @@
     <Compile Include="ExecutionPlan\IDmlQueryExecutionPlanNode.cs" />
     <Compile Include="ExecutionPlan\IExecutionPlanNode.cs" />
     <Compile Include="ExecutionPlan\FoldableJoinNode.cs" />
+    <Compile Include="ExecutionPlan\IImpersonateRevertExecutionPlanNode.cs" />
     <Compile Include="ExecutionPlan\IndexSpoolNode.cs" />
     <Compile Include="ExecutionPlan\IRootExecutionPlanNode.cs" />
     <Compile Include="ExecutionPlan\ISingleSourceExecutionPlanNode.cs" />
@@ -173,7 +174,7 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom">
-      <Version>15.0.4200.1</Version>
+      <Version>150.4897.1</Version>
     </PackageReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
