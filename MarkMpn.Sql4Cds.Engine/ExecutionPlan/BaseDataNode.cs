@@ -522,8 +522,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return TranslateFetchXMLCriteriaWithVirtualAttributes(meta, entityAlias, attrName, like.NotDefined ? @operator.notlike : @operator.like, new[] { value }, metadata, options, targetEntityAlias, items, additionalLinkEntities, out condition, out filter);
             }
 
-            if (criteria is FullTextPredicate fullText)
+            if (criteria is FullTextPredicate ||
+                criteria is BooleanNotExpression not && not.Expression is FullTextPredicate)
             {
+                var fullText = criteria as FullTextPredicate;
+                not = criteria as BooleanNotExpression;
+
+                if (fullText == null)
+                    fullText = not.Expression as FullTextPredicate;
+
                 if (fullText.FullTextFunctionType != FullTextFunctionType.Contains)
                     return false;
 
@@ -559,7 +566,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!(attr is MultiSelectPicklistAttributeMetadata))
                     return false;
 
-                return TranslateFetchXMLCriteriaWithVirtualAttributes(meta, entityAlias, attrName, @operator.containvalues, valueParts.Select(v => new IntegerLiteral { Value = v }).ToArray(), metadata, options, targetEntityAlias, items, additionalLinkEntities, out condition, out filter);
+                return TranslateFetchXMLCriteriaWithVirtualAttributes(meta, entityAlias, attrName, not == null ? @operator.containvalues : @operator.notcontainvalues, valueParts.Select(v => new IntegerLiteral { Value = v }).ToArray(), metadata, options, targetEntityAlias, items, additionalLinkEntities, out condition, out filter);
             }
 
             return false;
