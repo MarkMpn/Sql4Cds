@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Data.SqlTypes;
 using System.Linq.Expressions;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
@@ -54,7 +55,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// The type of value produced by the aggregate function
         /// </summary>
         [Browsable(false)]
-        public Type ExpressionType { get; set; }
+        public Type ReturnType { get; set; }
     }
 
     /// <summary>
@@ -128,29 +129,38 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// </summary>
     class Average : AggregateFunction
     {
-        private decimal _sum;
+        private SqlDecimal _sum;
         private int _count;
+        private Func<SqlDecimal, object> _valueSelector;
 
         /// <summary>
         /// Creates a new <see cref="Average"/>
         /// </summary>
         /// <param name="selector">A function that extracts the value to calculate the average from</param>
-        public Average(Func<Entity, object> selector) : base(selector)
+        public Average(Func<Entity, object> selector, Type type) : base(selector)
         {
+            Type = type;
+
+            var valueParam = Expression.Parameter(typeof(SqlDecimal));
+            var conversion = SqlTypeConverter.Convert(valueParam, Type);
+            conversion = Expr.Box(conversion);
+            _valueSelector = (Func<SqlDecimal, object>)Expression.Lambda(conversion, valueParam).Compile();
         }
 
         protected override void Update(object value)
         {
-            if (value == null)
+            var d = (SqlDecimal)value;
+
+            if (d.IsNull)
                 return;
 
-            _sum += Convert.ToDecimal(value);
+            _sum += d;
             _count++;
 
-            Value = _sum / _count;
+            Value = _valueSelector(_sum / _count);
         }
 
-        public override Type Type => typeof(decimal);
+        public override Type Type { get; }
 
         public override void Reset()
         {
@@ -175,17 +185,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override void Update(object value)
         {
-            if (Value == null)
-                Value = 1;
-            else
-                Value = (int)Value + 1;
+            Value = (SqlInt32)Value + 1;
         }
 
-        public override Type Type => typeof(int);
+        public override Type Type => typeof(SqlInt32);
 
         public override void Reset()
         {
-            Value = 0;
+            Value = new SqlInt32(0);
         }
     }
 
@@ -204,20 +211,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override void Update(object value)
         {
-            if (value == null)
+            if (value == null || (value is INullable nullable && nullable.IsNull))
                 return;
 
-            if (Value == null)
-                Value = 1;
-            else
-                Value = (int)Value + 1;
+            Value = (SqlInt32)Value + 1;
         }
 
         public override Type Type => typeof(int);
 
         public override void Reset()
         {
-            Value = 0;
+            Value = new SqlInt32(0);
         }
     }
 
@@ -237,7 +241,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override void Update(object value)
         {
-            if (value == null)
+            if (value == null || (value is INullable nullable && nullable.IsNull))
                 return;
 
             if (!(value is IComparable))
@@ -266,7 +270,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override void Update(object value)
         {
-            if (value == null)
+            if (value == null || (value is INullable nullable && nullable.IsNull))
                 return;
 
             if (!(value is IComparable))
@@ -284,7 +288,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// </summary>
     class Sum : AggregateFunction
     {
-        private decimal _sumDecimal;
+        private SqlDecimal _sumDecimal;
+        private Func<SqlDecimal, object> _valueSelector;
 
         /// <summary>
         /// Creates a new <see cref="Sum"/>
@@ -293,22 +298,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public Sum(Func<Entity, object> selector, Type type) : base(selector)
         {
             Type = type;
+
+            var valueParam = Expression.Parameter(typeof(SqlDecimal));
+            var conversion = SqlTypeConverter.Convert(valueParam, Type);
+            conversion = Expr.Box(conversion);
+            _valueSelector = (Func<SqlDecimal, object>) Expression.Lambda(conversion, valueParam).Compile();
         }
 
         protected override void Update(object value)
         {
-            if (value == null)
+            var d = (SqlDecimal)value;
+
+            if (d.IsNull)
                 return;
 
-            var d = Convert.ToDecimal(value);
             _sumDecimal += d;
 
-            var targetType = Type;
-
-            if (targetType.IsGenericType && targetType.GetGenericTypeDefinition() == typeof(Nullable<>))
-                targetType = targetType.GetGenericArguments()[0];
-
-            Value = Convert.ChangeType(_sumDecimal, targetType);
+            Value = _valueSelector(_sumDecimal);
         }
 
         public override Type Type { get; }
@@ -317,6 +323,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             base.Reset();
             _sumDecimal = 0;
+            Value = _valueSelector(_sumDecimal);
         }
     }
 

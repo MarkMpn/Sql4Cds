@@ -95,8 +95,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var aggregate in Aggregates.Where(agg => agg.Value.SqlExpression != null))
             {
-                aggregate.Value.Expression = aggregate.Value.SqlExpression.Compile(schema, parameterTypes);
-                aggregate.Value.ExpressionType = aggregate.Value.SqlExpression.GetType(schema, parameterTypes);
+                var sourceExpression = aggregate.Value.SqlExpression;
+
+                // Sum and Aggregate need to have Decimal values as input for their calculations to work correctly
+                if (aggregate.Value.AggregateType == AggregateType.Average || aggregate.Value.AggregateType == AggregateType.Sum)
+                    sourceExpression = new ConvertCall { Parameter = sourceExpression, DataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Decimal } };
+
+                aggregate.Value.Expression = sourceExpression.Compile(schema, parameterTypes);
+
+                aggregate.Value.ReturnType = aggregate.Value.SqlExpression.GetType(schema, parameterTypes);
+
+                if (aggregate.Value.AggregateType == AggregateType.Average)
+                {
+                    if (aggregate.Value.ReturnType == typeof(SqlByte) || aggregate.Value.ReturnType == typeof(SqlInt16))
+                        aggregate.Value.ReturnType = typeof(SqlInt32);
+                }
             }
 
             foreach (var entity in Source.Execute(org, metadata, options, parameterTypes, parameterValues))
@@ -117,7 +130,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         switch (aggregate.Value.AggregateType)
                         {
                             case AggregateType.Average:
-                                values[aggregate.Key] = new Average(selector);
+                                values[aggregate.Key] = new Average(selector, aggregate.Value.ReturnType);
                                 break;
 
                             case AggregateType.Count:
@@ -129,19 +142,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 break;
 
                             case AggregateType.Max:
-                                values[aggregate.Key] = new Max(selector, aggregate.Value.ExpressionType);
+                                values[aggregate.Key] = new Max(selector, aggregate.Value.ReturnType);
                                 break;
 
                             case AggregateType.Min:
-                                values[aggregate.Key] = new Min(selector, aggregate.Value.ExpressionType);
+                                values[aggregate.Key] = new Min(selector, aggregate.Value.ReturnType);
                                 break;
 
                             case AggregateType.Sum:
-                                values[aggregate.Key] = new Sum(selector, aggregate.Value.ExpressionType);
+                                values[aggregate.Key] = new Sum(selector, aggregate.Value.ReturnType);
                                 break;
 
                             case AggregateType.First:
-                                values[aggregate.Key] = new First(selector, aggregate.Value.ExpressionType);
+                                values[aggregate.Key] = new First(selector, aggregate.Value.ReturnType);
                                 break;
 
                             default:
@@ -150,6 +163,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                         if (aggregate.Value.Distinct)
                             values[aggregate.Key] = new DistinctAggregate(values[aggregate.Key], selector);
+
+                        values[aggregate.Key].Reset();
                     }
                     
                     groups[key] = values;
@@ -167,7 +182,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     result[groupByCols[i]] = group.Key.Values[i];
 
                 foreach (var aggregate in group.Value)
-                    result[aggregate.Key] = SqlTypeConverter.NetToSqlType(aggregate.Value.Value);
+                    result[aggregate.Key] = aggregate.Value.Value;
 
                 yield return result;
             }
