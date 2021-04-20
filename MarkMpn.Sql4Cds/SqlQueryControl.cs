@@ -585,28 +585,6 @@ namespace MarkMpn.Sql4Cds
             return toolbar;
         }
 
-        private Panel CreatePostProcessingWarning(FetchXmlQuery fxq, bool metadata)
-        {
-            if (!metadata && fxq.Extensions.Count == 0)
-                return null;
-
-            return CreateWarning(
-                $"This query required additional processing. This {(metadata ? "metadata request" : "FetchXML")} gives the required data, but will not give the final results when run outside SQL 4 CDS.",
-                "Learn more",
-                "https://markcarrington.dev/sql-4-cds/additional-processing/");
-        }
-
-        private Panel CreateDistinctWithoutSortWarning(FetchXmlQuery fxq)
-        {
-            if (!fxq.DistinctWithoutSort)
-                return null;
-
-            return CreateWarning(
-                "This DISTINCT query does not have a sort order applied. Unexpected results may be returned when the results are split over multiple pages. Add a sort order to retrieve the correct results.",
-                "Learn more",
-                "https://docs.microsoft.com/powerapps/developer/common-data-service/org-service/paging-behaviors-and-ordering#ordering-with-a-paging-cookie");
-        }
-
         private Panel CreateWarning(string message, string link, string url)
         {
             var panel = new Panel
@@ -980,7 +958,7 @@ namespace MarkMpn.Sql4Cds
                         throw new QueryException(query, ex);
                     }
 
-                    if (query is ImpersonateQuery || query is RevertQuery)
+                    if (query is IImpersonateRevertExecutionPlanNode)
                         Execute(() => SyncUsername());
                 }
             }
@@ -1201,10 +1179,7 @@ namespace MarkMpn.Sql4Cds
                 else if (rowCount == 0 && grid.DataSource == null)
                     grid.DataBindingComplete += (sender, args) => grid.Height = Math.Min(Math.Max(grid.Height, GetMinHeight(grid, max)), max);
 
-                if (rowCount == 0)
-                    return 2 * grid.ColumnHeadersHeight;
-
-                return Math.Min(rowCount * grid.GetRowDisplayRectangle(0, false).Height + grid.ColumnHeadersHeight, max);
+                return Math.Max(2, rowCount + 1) * grid.ColumnHeadersHeight;
             }
 
             if (control is Scintilla scintilla)
@@ -1278,7 +1253,7 @@ namespace MarkMpn.Sql4Cds
 
                 if (dlg.ShowDialog(this) == DialogResult.OK)
                 {
-                    _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = typeof(ImpersonateQuery).Name, ["Source"] = "XrmToolBox" });
+                    _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = "ExecuteAsNode", ["Source"] = "XrmToolBox" });
                     Service.CallerId = dlg.Entity.Id;
                     SyncUsername();
                 }
@@ -1287,7 +1262,7 @@ namespace MarkMpn.Sql4Cds
 
         private void revertToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = typeof(RevertQuery).Name, ["Source"] = "XrmToolBox" });
+            _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = "RevertNode", ["Source"] = "XrmToolBox" });
             Service.CallerId = Guid.Empty;
             SyncUsername();
         }

@@ -9,7 +9,7 @@ using Microsoft.Xrm.Tooling.Connector;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    class RevertNode : BaseNode, IDmlQueryExecutionPlanNode
+    class RevertNode : BaseNode, IImpersonateRevertExecutionPlanNode
     {
         private int _executionCount;
         private readonly Timer _timer = new Timer();
