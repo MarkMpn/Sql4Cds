@@ -46,22 +46,30 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             try
             {
-                _timer.Resume();
+                using (_timer.Run())
+                {
+                    if (org is Microsoft.Xrm.Sdk.Client.OrganizationServiceProxy svcProxy)
+                        svcProxy.CallerId = Guid.Empty;
+                    else if (org is Microsoft.Xrm.Sdk.WebServiceClient.OrganizationWebProxyClient webProxy)
+                        webProxy.CallerId = Guid.Empty;
+                    else if (org is CrmServiceClient svc)
+                        svc.CallerId = Guid.Empty;
+                    else
+                        throw new QueryExecutionException("Unexpected organization service type") { Node = this };
 
-                if (org is Microsoft.Xrm.Sdk.Client.OrganizationServiceProxy svcProxy)
-                    svcProxy.CallerId = Guid.Empty;
-                else if (org is Microsoft.Xrm.Sdk.WebServiceClient.OrganizationWebProxyClient webProxy)
-                    webProxy.CallerId = Guid.Empty;
-                else if (org is CrmServiceClient svc)
-                    svc.CallerId = Guid.Empty;
-                else
-                    throw new QueryExecutionException("Unexpected organization service type") { Node = this };
-
-                return "Reverted impersonation";
+                    return "Reverted impersonation";
+                }
             }
-            finally
+            catch (QueryExecutionException ex)
             {
-                _timer.Pause();
+                if (ex.Node == null)
+                    ex.Node = this;
+
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new QueryExecutionException(ex.Message, ex) { Node = this };
             }
         }
 

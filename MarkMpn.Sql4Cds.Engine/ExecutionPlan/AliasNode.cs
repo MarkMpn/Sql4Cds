@@ -35,6 +35,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("Alias")]
         [Description("The columns that are produced by the subquery")]
+        [DisplayName("Column Set")]
         public List<SelectColumn> ColumnSet { get; } = new List<SelectColumn>();
 
         /// <summary>

@@ -29,6 +29,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("Sort")]
         [Description("The number of sorts that the input is already sorted by")]
+        [DisplayName("Pre-sorted Count")]
         public int PresortedCount { get; set; }
 
         /// <summary>

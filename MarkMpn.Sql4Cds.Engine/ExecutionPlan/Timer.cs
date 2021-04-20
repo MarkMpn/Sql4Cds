@@ -11,29 +11,34 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// </summary>
     class Timer
     {
-        private DateTime? _startTime;
         private TimeSpan _duration;
 
         public Timer()
         {
-            _startTime = DateTime.Now;
         }
 
         public TimeSpan Duration => _duration;
 
-        public void Pause()
+        public IDisposable Run()
         {
-            var endTime = DateTime.Now;
-
-            if (_startTime != null)
-                _duration += (endTime - _startTime.Value);
-
-            _startTime = null;
+            return new TimedRegion(this);
         }
 
-        public void Resume()
+        private class TimedRegion : IDisposable
         {
-            _startTime = DateTime.Now;
+            private Timer _timer;
+            private DateTime _startTime;
+
+            public TimedRegion(Timer timer)
+            {
+                _timer = timer;
+                _startTime = DateTime.Now;
+            }
+
+            public void Dispose()
+            {
+                _timer._duration += DateTime.Now - _startTime;
+            }
         }
     }
 }

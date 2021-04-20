@@ -22,7 +22,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     abstract class BaseDataNode : BaseNode, IDataExecutionPlanNode
     {
         private int _executionCount;
-        private int _tickCount;
+        private Timer _timer = new Timer();
         private int _rowsOut;
 
         /// <summary>
@@ -40,41 +40,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // but gives a large performance penalty.
             IEnumerator<Entity> enumerator;
 
-            var start = Environment.TickCount;
-            try
-            {
-                _executionCount++;
-
-                enumerator = ExecuteInternal(org, metadata, options, parameterTypes, parameterValues).GetEnumerator();
-            }
-            catch (QueryExecutionException ex)
-            {
-                if (ex.Node == null)
-                    ex.Node = this;
-
-                throw;
-            }
-            catch (Exception ex)
-            {
-                throw new QueryExecutionException(ex.Message, ex) { Node = this };
-            }
-            finally
-            {
-                var end = Environment.TickCount;
-                _tickCount += (end - start);
-            }
-
-            while (!options.Cancelled)
-            {
-                Entity current;
-
+            using (_timer.Run())
+            { 
                 try
                 {
-                    start = Environment.TickCount;
-                    if (!enumerator.MoveNext())
-                        break;
+                    _executionCount++;
 
-                    current = enumerator.Current;
+                    enumerator = ExecuteInternal(org, metadata, options, parameterTypes, parameterValues).GetEnumerator();
                 }
                 catch (QueryExecutionException ex)
                 {
@@ -87,10 +59,32 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     throw new QueryExecutionException(ex.Message, ex) { Node = this };
                 }
-                finally
-                {
-                    var end = Environment.TickCount;
-                    _tickCount += (end - start);
+            }
+
+            while (!options.Cancelled)
+            {
+                Entity current;
+
+                using (_timer.Run())
+                { 
+                    try
+                    {
+                        if (!enumerator.MoveNext())
+                            break;
+
+                        current = enumerator.Current;
+                    }
+                    catch (QueryExecutionException ex)
+                    {
+                        if (ex.Node == null)
+                            ex.Node = this;
+
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new QueryExecutionException(ex.Message, ex) { Node = this };
+                    }
                 }
 
                 _rowsOut++;
@@ -115,7 +109,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// Returns the time that the node has taken to execute
         /// </summary>
-        public override TimeSpan Duration => TimeSpan.FromMilliseconds(_tickCount);
+        public override TimeSpan Duration => _timer.Duration;
 
         /// <summary>
         /// Returns the number of rows that the node has generated

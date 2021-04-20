@@ -22,6 +22,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("Join")]
         [Description("The attribute in the outer data source to join on")]
+        [DisplayName("Left Attribute")]
         public ColumnReferenceExpression LeftAttribute { get; set; }
 
         /// <summary>
@@ -29,6 +30,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("Join")]
         [Description("The attribute in the inner data source to join on")]
+        [DisplayName("Right Attribute")]
         public ColumnReferenceExpression RightAttribute { get; set; }
 
         /// <summary>
@@ -36,6 +38,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("Join")]
         [Description("Any additional criteria to apply to the join")]
+        [DisplayName("Additional Join Criteria")]
         public BooleanExpression AdditionalJoinCriteria { get; set; }
 
         public override IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)

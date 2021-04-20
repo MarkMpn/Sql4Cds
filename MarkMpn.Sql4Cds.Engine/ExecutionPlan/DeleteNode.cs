@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
+using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Tooling.Connector;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
@@ -34,6 +35,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("Delete")]
         [Description("The column that contains the primary ID of the records to delete")]
+        [DisplayName("PrimaryId Source")]
         public string PrimaryIdSource { get; set; }
 
         public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
@@ -50,45 +52,51 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             try
             {
-                _timer.Resume();
+                List<Entity> entities;
+                EntityMetadata meta;
+                Func<Entity, object> primaryIdAccessor;
 
-                var entities = GetDmlSourceEntities(org, metadata, options, parameterTypes, parameterValues, out var schema);
-
-                // Precompile mappings with type conversions
-                var meta = metadata[LogicalName];
-                var attributes = meta.Attributes.ToDictionary(a => a.LogicalName);
-                var dateTimeKind = options.UseLocalTimeZone ? DateTimeKind.Local : DateTimeKind.Utc;
-                var fullMappings = new Dictionary<string, string>
+                using (_timer.Run())
                 {
-                    [meta.PrimaryIdAttribute] = PrimaryIdSource
-                };
-                var attributeAccessors = CompileColumnMappings(fullMappings, schema, attributes, dateTimeKind);
-                var primaryIdAccessor = attributeAccessors[meta.PrimaryIdAttribute];
+                    entities = GetDmlSourceEntities(org, metadata, options, parameterTypes, parameterValues, out var schema);
+
+                    // Precompile mappings with type conversions
+                    meta = metadata[LogicalName];
+                    var attributes = meta.Attributes.ToDictionary(a => a.LogicalName);
+                    var dateTimeKind = options.UseLocalTimeZone ? DateTimeKind.Local : DateTimeKind.Utc;
+                    var fullMappings = new Dictionary<string, string>
+                    {
+                        [meta.PrimaryIdAttribute] = PrimaryIdSource
+                    };
+                    var attributeAccessors = CompileColumnMappings(fullMappings, schema, attributes, dateTimeKind);
+                    primaryIdAccessor = attributeAccessors[meta.PrimaryIdAttribute];
+                }
 
                 // Check again that the update is allowed. Don't count any UI interaction in the execution time
-                _timer.Pause();
                 if (options.Cancelled || !options.ConfirmDelete(entities.Count, meta))
                     throw new OperationCanceledException("DELETE cancelled by user");
 
-                _timer.Resume();
-                return ExecuteDmlOperation(
-                    org,
-                    options,
-                    entities,
-                    meta,
-                    entity =>
-                    {
-                        return new DeleteRequest
+                using (_timer.Run())
+                {
+                    return ExecuteDmlOperation(
+                        org,
+                        options,
+                        entities,
+                        meta,
+                        entity =>
                         {
-                            Target = new EntityReference(LogicalName, (Guid)primaryIdAccessor(entity))
-                        };
-                    },
-                    new OperationNames
-                    {
-                        InProgressUppercase = "Deleting",
-                        InProgressLowercase = "deleting",
-                        CompletedLowercase = "deleted"
-                    });
+                            return new DeleteRequest
+                            {
+                                Target = new EntityReference(LogicalName, (Guid)primaryIdAccessor(entity))
+                            };
+                        },
+                        new OperationNames
+                        {
+                            InProgressUppercase = "Deleting",
+                            InProgressLowercase = "deleting",
+                            CompletedLowercase = "deleted"
+                        });
+                }
             }
             catch (QueryExecutionException ex)
             {
@@ -100,10 +108,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             catch (Exception ex)
             {
                 throw new QueryExecutionException(ex.Message, ex) { Node = this };
-            }
-            finally
-            {
-                _timer.Pause();
             }
         }
 

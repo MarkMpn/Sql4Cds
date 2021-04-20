@@ -87,6 +87,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("FetchXML Scan")]
         [Description("The FetchXML query to execute")]
+        [DisplayName("FetchXML")]
         public string FetchXmlString => Serialize(FetchXml);
 
         /// <summary>
@@ -94,6 +95,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("FetchXML Scan")]
         [Description("Indicates if all subsequent pages of results should be returned")]
+        [DisplayName("All Pages")]
         public bool AllPages { get; set; }
 
         /// <summary>

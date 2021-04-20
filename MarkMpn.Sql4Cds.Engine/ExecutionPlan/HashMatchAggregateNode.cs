@@ -68,6 +68,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("Hash Match Aggregate")]
         [Description("The list of columns to group the results by")]
+        [DisplayName("Group By")]
         public List<ColumnReferenceExpression> GroupBy { get; } = new List<ColumnReferenceExpression>();
 
         /// <summary>

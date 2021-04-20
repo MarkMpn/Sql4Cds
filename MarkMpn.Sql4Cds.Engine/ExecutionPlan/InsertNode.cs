@@ -34,6 +34,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("Insert")]
         [Description("The columns to insert and the associated column to take the new value from")]
+        [DisplayName("Column Mappings")]
         public IDictionary<string, string> ColumnMappings { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
@@ -53,52 +54,53 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             try
             {
-                _timer.Resume();
+                using (_timer.Run())
+                {
+                    var entities = GetDmlSourceEntities(org, metadata, options, parameterTypes, parameterValues, out var schema);
 
-                var entities = GetDmlSourceEntities(org, metadata, options, parameterTypes, parameterValues, out var schema);
+                    // Precompile mappings with type conversions
+                    var meta = metadata[LogicalName];
+                    var attributes = meta.Attributes.ToDictionary(a => a.LogicalName);
+                    var dateTimeKind = options.UseLocalTimeZone ? DateTimeKind.Local : DateTimeKind.Utc;
+                    var attributeAccessors = CompileColumnMappings(ColumnMappings, schema, attributes, dateTimeKind);
+                    attributeAccessors.TryGetValue(meta.PrimaryIdAttribute, out var primaryIdAccessor);
 
-                // Precompile mappings with type conversions
-                var meta = metadata[LogicalName];
-                var attributes = meta.Attributes.ToDictionary(a => a.LogicalName);
-                var dateTimeKind = options.UseLocalTimeZone ? DateTimeKind.Local : DateTimeKind.Utc;
-                var attributeAccessors = CompileColumnMappings(ColumnMappings, schema, attributes, dateTimeKind);
-                attributeAccessors.TryGetValue(meta.PrimaryIdAttribute, out var primaryIdAccessor);
-
-                return ExecuteDmlOperation(
-                    org,
-                    options,
-                    entities,
-                    meta,
-                    entity =>
-                    {
-                        var insert = new Entity(LogicalName);
-
-                        if (primaryIdAccessor != null)
-                            insert.Id = (Guid)primaryIdAccessor(entity);
-
-                        foreach (var attributeAccessor in attributeAccessors)
+                    return ExecuteDmlOperation(
+                        org,
+                        options,
+                        entities,
+                        meta,
+                        entity =>
                         {
-                            if (attributeAccessor.Key == meta.PrimaryIdAttribute)
-                                continue;
+                            var insert = new Entity(LogicalName);
 
-                            var attr = attributes[attributeAccessor.Key];
+                            if (primaryIdAccessor != null)
+                                insert.Id = (Guid)primaryIdAccessor(entity);
 
-                            if (!String.IsNullOrEmpty(attr.AttributeOf))
-                                continue;
+                            foreach (var attributeAccessor in attributeAccessors)
+                            {
+                                if (attributeAccessor.Key == meta.PrimaryIdAttribute)
+                                    continue;
 
-                            var value = attributeAccessor.Value(entity);
+                                var attr = attributes[attributeAccessor.Key];
 
-                            insert[attr.LogicalName] = value;
-                        }
+                                if (!String.IsNullOrEmpty(attr.AttributeOf))
+                                    continue;
 
-                        return new CreateRequest { Target = insert };
-                    },
-                    new OperationNames
-                    {
-                        InProgressUppercase = "Inserting",
-                        InProgressLowercase = "inserting",
-                        CompletedLowercase = "inserted"
-                    });
+                                var value = attributeAccessor.Value(entity);
+
+                                insert[attr.LogicalName] = value;
+                            }
+
+                            return new CreateRequest { Target = insert };
+                        },
+                        new OperationNames
+                        {
+                            InProgressUppercase = "Inserting",
+                            InProgressLowercase = "inserting",
+                            CompletedLowercase = "inserted"
+                        });
+                }
             }
             catch (QueryExecutionException ex)
             {
@@ -110,10 +112,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             catch (Exception ex)
             {
                 throw new QueryExecutionException(ex.Message, ex) { Node = this };
-            }
-            finally
-            {
-                _timer.Pause();
             }
         }
 

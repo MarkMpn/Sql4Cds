@@ -23,6 +23,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("Execute As")]
         [Description("The column in the data source that provides the user ID to impersonate")]
+        [DisplayName("UserId Source")]
         public string UserIdSource { get; set; }
 
         public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
@@ -39,34 +40,35 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             try
             {
-                _timer.Resume();
+                using (_timer.Run())
+                {
+                    var entities = GetDmlSourceEntities(org, metadata, options, parameterTypes, parameterValues, out var schema);
 
-                var entities = GetDmlSourceEntities(org, metadata, options, parameterTypes, parameterValues, out var schema);
+                    if (entities.Count == 0)
+                        throw new QueryExecutionException("Cannot find user to impersonate");
 
-                if (entities.Count == 0)
-                    throw new QueryExecutionException("Cannot find user to impersonate");
+                    if (entities.Count > 1)
+                        throw new QueryExecutionException("Ambiguous user");
 
-                if (entities.Count > 1)
-                    throw new QueryExecutionException("Ambiguous user");
+                    // Precompile mappings with type conversions
+                    var meta = metadata["systemuser"];
+                    var attributes = meta.Attributes.ToDictionary(a => a.LogicalName);
+                    var attributeAccessors = CompileColumnMappings(new Dictionary<string, string> { ["systemuserid"] = UserIdSource }, schema, attributes, DateTimeKind.Unspecified);
+                    var userIdAccessor = attributeAccessors["systemuserid"];
 
-                // Precompile mappings with type conversions
-                var meta = metadata["systemuser"];
-                var attributes = meta.Attributes.ToDictionary(a => a.LogicalName);
-                var attributeAccessors = CompileColumnMappings(new Dictionary<string, string> { ["systemuserid"] = UserIdSource }, schema, attributes, DateTimeKind.Unspecified);
-                var userIdAccessor = attributeAccessors["systemuserid"];
+                    var userId = (Guid)userIdAccessor(entities[0]);
 
-                var userId = (Guid)userIdAccessor(entities[0]);
+                    if (org is Microsoft.Xrm.Sdk.Client.OrganizationServiceProxy svcProxy)
+                        svcProxy.CallerId = userId;
+                    else if (org is Microsoft.Xrm.Sdk.WebServiceClient.OrganizationWebProxyClient webProxy)
+                        webProxy.CallerId = userId;
+                    else if (org is CrmServiceClient svc)
+                        svc.CallerId = userId;
+                    else
+                        throw new QueryExecutionException("Unexpected organization service type");
 
-                if (org is Microsoft.Xrm.Sdk.Client.OrganizationServiceProxy svcProxy)
-                    svcProxy.CallerId = userId;
-                else if (org is Microsoft.Xrm.Sdk.WebServiceClient.OrganizationWebProxyClient webProxy)
-                    webProxy.CallerId = userId;
-                else if (org is CrmServiceClient svc)
-                    svc.CallerId = userId;
-                else
-                    throw new QueryExecutionException("Unexpected organization service type");
-
-                return $"Impersonated user {userId}";
+                    return $"Impersonated user {userId}";
+                }
             }
             catch (QueryExecutionException ex)
             {
@@ -78,10 +80,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             catch (Exception ex)
             {
                 throw new QueryExecutionException(ex.Message, ex) { Node = this };
-            }
-            finally
-            {
-                _timer.Pause();
             }
         }
 

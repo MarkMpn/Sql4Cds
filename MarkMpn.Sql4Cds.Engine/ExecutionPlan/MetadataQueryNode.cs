@@ -140,6 +140,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("Metadata Query")]
         [Description("The types of metadata to include in the result")]
+        [DisplayName("Metadata Source")]
         public MetadataSource MetadataSource { get; set; }
 
         /// <summary>
@@ -147,6 +148,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("Metadata Query")]
         [Description("The alias for entity data")]
+        [DisplayName("Entity Alias")]
         public string EntityAlias { get; set; }
 
         /// <summary>
@@ -154,6 +156,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("Metadata Query")]
         [Description("The alias for attribute data")]
+        [DisplayName("Attribute Alias")]
         public string AttributeAlias { get; set; }
 
         /// <summary>
@@ -161,6 +164,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("Metadata Query")]
         [Description("The alias for one-to-many relationship data")]
+        [DisplayName("One-to-Many Relationship Alias")]
         public string OneToManyRelationshipAlias { get; set; }
 
         /// <summary>
@@ -168,6 +172,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("Metadata Query")]
         [Description("The alias for many-to-one relationship data")]
+        [DisplayNameAttribute("Many-to-One Relationship Alias")]
         public string ManyToOneRelationshipAlias { get; set; }
 
         /// <summary>
@@ -175,6 +180,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("Metadata Query")]
         [Description("The alias for many-to-many relationship data")]
+        [DisplayName("Many-to-Many Relationship Alias")]
         public string ManyToManyRelationshipAlias { get; set; }
 
         /// <summary>
@@ -182,6 +188,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("Metadata Query")]
         [Description("The property used to access many-to-many relationship data")]
+        [DisplayName("Many-to-Many Relationship Join")]
         public string ManyToManyRelationshipJoin { get; set; }
 
         /// <summary>

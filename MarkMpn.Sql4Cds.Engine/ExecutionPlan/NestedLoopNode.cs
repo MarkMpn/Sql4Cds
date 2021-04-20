@@ -19,6 +19,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("Join")]
         [Description("The condition that must be true for two records to join")]
+        [DisplayName("Join Condition")]
         public BooleanExpression JoinCondition { get; set; }
 
         /// <summary>
@@ -26,6 +27,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("Join")]
         [Description("Values from the outer query that should be passed as references to the inner query")]
+        [DisplayName("Outer References")]
         public Dictionary<string,string> OuterReferences { get; set; }
 
         protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)

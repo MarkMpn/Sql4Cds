@@ -31,6 +31,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("Join")]
         [Description("The type of join to apply")]
+        [DisplayName("Join Type")]
         public QualifiedJoinType JoinType { get; set; }
 
         /// <summary>
@@ -38,6 +39,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("Join")]
         [Description("Indicates if a semi join should be used (single output row for each row from the left source, ignoring duplicate matches from the right source)")]
+        [DisplayName("Semi Join")]
         public bool SemiJoin { get; set; }
 
         /// <summary>
@@ -45,6 +47,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("Join")]
         [Description("For semi joins, lists individual columns that should be created in the output and their corresponding source from the right input")]
+        [DisplayName("Defined Values")]
         public IDictionary<string, string> DefinedValues { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>

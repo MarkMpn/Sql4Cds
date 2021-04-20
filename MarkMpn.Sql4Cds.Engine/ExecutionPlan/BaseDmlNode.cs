@@ -105,7 +105,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         /// <param name="org">The <see cref="IOrganizationService"/> to use to get the data</param>
         /// <param name="metadata">The <see cref="IAttributeMetadataCache"/> to use to get metadata</param>
-        /// <param name="options"><see cref="IQueryExpressionVisitor"/> to indicate how the query can be executed</param>
+        /// <param name="options"><see cref="IQueryExecutionOptions"/> to indicate how the query can be executed</param>
         /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
         /// <param name="parameterValues">A mapping of parameter names to their current values</param>
         /// <returns>A log message to display</returns>
@@ -115,7 +115,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// Attempts to fold this node into its source to simplify the query
         /// </summary>
         /// <param name="metadata">The <see cref="IAttributeMetadataCache"/> to use to get metadata</param>
-        /// <param name="options"><see cref="IQueryExpressionVisitor"/> to indicate how the query can be executed</param>
+        /// <param name="options"><see cref="IQueryExecutionOptions"/> to indicate how the query can be executed</param>
         /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
         /// <returns>The node that should be used in place of this node</returns>
         public IRootExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)

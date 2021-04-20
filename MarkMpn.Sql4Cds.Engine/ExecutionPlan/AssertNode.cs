@@ -30,6 +30,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("Assert")]
         [Description("The error message that is generated if any record in the source fails to meet the assertion")]
+        [DisplayName("Error Message")]
         public string ErrorMessage { get; set; }
 
         protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string,object> parameterValues)

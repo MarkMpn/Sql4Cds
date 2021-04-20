@@ -23,6 +23,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("Select")]
         [Description("The columns that should be included in the query results")]
+        [DisplayName("Column Set")]
         public List<SelectColumn> ColumnSet { get; } = new List<SelectColumn>();
 
         /// <summary>

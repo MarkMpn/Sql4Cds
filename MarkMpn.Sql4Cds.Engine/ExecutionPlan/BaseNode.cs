@@ -20,6 +20,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("Statistics")]
         [Description("The number of times this node has been executed")]
+        [DisplayName("Execution Count")]
         public abstract int ExecutionCount { get; }
 
         /// <summary>

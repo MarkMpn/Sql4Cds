@@ -23,6 +23,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("Index Spool")]
         [Description("The column in the data source to create an index on")]
+        [DisplayName("Key Column")]
         public string KeyColumn { get; set; }
 
         /// <summary>
@@ -30,6 +31,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("Index Spool")]
         [Description("The name of the parameter to use for seeking in the index")]
+        [DisplayName("Seek Value")]
         public string SeekValue { get; set; }
 
         public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
