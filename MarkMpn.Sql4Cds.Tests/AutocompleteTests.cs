@@ -1,4 +1,5 @@
 ﻿using FakeXrmEasy;
+using MarkMpn.Sql4Cds.Engine;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Microsoft.Xrm.Sdk.Metadata;
 using System;
@@ -8,7 +9,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace MarkMpn.Sql4Cds.Engine.Tests
+namespace MarkMpn.Sql4Cds.Tests
 {
     [TestClass]
     public class AutocompleteTests
