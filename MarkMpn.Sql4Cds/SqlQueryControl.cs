@@ -1009,6 +1009,7 @@ namespace MarkMpn.Sql4Cds
                 grid.ShowEditingIcon = false;
                 grid.ContextMenuStrip = gridContextMenuStrip;
                 grid.DataSource = results;
+
                 grid.CellFormatting += (s, e) =>
                 {
                     if (e.Value is INullable nullable && nullable.IsNull || e.Value is DBNull)
@@ -1018,6 +1019,13 @@ namespace MarkMpn.Sql4Cds
                         e.FormattingApplied = true;
                     }
                 };
+
+                grid.DataBindingComplete += (s, e) =>
+                {
+                    for (var i = 0; i < results.Columns.Count; i++)
+                        grid.Columns[i].HeaderText = results.Columns[i].Caption;
+                };
+
                 grid.HandleCreated += (s, e) =>
                 {
                     if (Settings.Instance.AutoSizeColumns)
