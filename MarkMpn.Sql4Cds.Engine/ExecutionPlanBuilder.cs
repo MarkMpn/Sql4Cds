@@ -745,7 +745,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     concat.ColumnSet.Add(new ConcatenateColumn
                     {
-                        OutputColumn = col.OutputColumn,
+                        OutputColumn = $"Expr{++_colNameCounter}",
                         SourceColumns = { col.SourceColumn }
                     });
                 }
@@ -772,7 +772,7 @@ namespace MarkMpn.Sql4Cds.Engine
             node = ConvertOffsetClause(node, binary.OffsetClause, parameterTypes);
 
             var select = new SelectNode { Source = node };
-            select.ColumnSet.AddRange(concat.ColumnSet.Select(col => new SelectColumn { SourceColumn = col.OutputColumn, OutputColumn = col.OutputColumn }));
+            select.ColumnSet.AddRange(concat.ColumnSet.Select((col, i) => new SelectColumn { SourceColumn = col.OutputColumn, OutputColumn = left.ColumnSet[i].OutputColumn }));
 
             return select;
         }
@@ -883,6 +883,10 @@ namespace MarkMpn.Sql4Cds.Engine
                 var references = new Dictionary<string, string>();
                 var innerQuery = ConvertSelectStatement(inSubquery.Subquery.QueryExpression, hints, schema, references, parameters);
 
+                // Scalar subquery must return exactly one column and one row
+                if (innerQuery.ColumnSet.Count != 1)
+                    throw new NotSupportedQueryFragmentException("IN subquery must return exactly one column", inSubquery.Subquery);
+
                 // Create the join
                 BaseJoinNode join;
                 var testColumn = innerQuery.ColumnSet[0].SourceColumn;
@@ -943,7 +947,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                         // This isn't a correlated subquery, so we can use a foldable join type. Alias the results so there's no conflict with the
                         // same table being used inside the IN subquery and elsewhere
-                        var alias = new AliasNode(innerQuery) { Alias = $"Expr{++_colNameCounter}" };
+                        var alias = new AliasNode(innerQuery, new Identifier { Value = $"Expr{++_colNameCounter}" });
 
                         testColumn = $"{alias.Alias}.{alias.ColumnSet[0].OutputColumn}";
                         join = new MergeJoinNode
@@ -2347,8 +2351,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     throw new NotSupportedQueryFragmentException("Unhandled query derived table column list", queryDerivedTable);
 
                 var select = ConvertSelectStatement(queryDerivedTable.QueryExpression, hints, outerSchema, outerReferences, parameterTypes);
-                var alias = new AliasNode(select);
-                alias.Alias = queryDerivedTable.Alias.Value;
+                var alias = new AliasNode(select, queryDerivedTable.Alias);
 
                 return alias;
             }

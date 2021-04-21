@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
@@ -17,10 +18,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// Creates a new <see cref="AliasNode"/> to wrap the results of a subquery with a different alias
         /// </summary>
         /// <param name="select">The subquery to wrap the results of</param>
-        public AliasNode(SelectNode select)
+        /// <param name="identifier">The alias to use for the subquery</param>
+        public AliasNode(SelectNode select, Identifier identifier)
         {
             ColumnSet.AddRange(select.ColumnSet);
             Source = select.Source;
+            Alias = identifier.Value;
+
+            // Check for duplicate columns
+            var duplicateColumn = select.ColumnSet
+                .GroupBy(col => col.OutputColumn, StringComparer.OrdinalIgnoreCase)
+                .Where(g => g.Count() > 1)
+                .FirstOrDefault();
+
+            if (duplicateColumn != null)
+                throw new NotSupportedQueryFragmentException($"The column '{duplicateColumn.Key}' was specified multiple times", identifier);
         }
 
         /// <summary>
