@@ -1444,9 +1444,12 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, plans.Length);
 
             var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual(1, select.ColumnSet.Count);
+            Assert.AreEqual("name", select.ColumnSet[0].OutputColumn);
+            Assert.AreEqual("Expr1", select.ColumnSet[0].SourceColumn);
             var concat = AssertNode<ConcatenateNode>(select.Source);
             Assert.AreEqual(2, concat.Sources.Count);
-            Assert.AreEqual("name", concat.ColumnSet[0].OutputColumn);
+            Assert.AreEqual("Expr1", concat.ColumnSet[0].OutputColumn);
             Assert.AreEqual("account.name", concat.ColumnSet[0].SourceColumns[0]);
             Assert.AreEqual("contact.fullname", concat.ColumnSet[0].SourceColumns[1]);
             var accountFetch = AssertNode<FetchXmlScan>(concat.Sources[0]);
@@ -1548,6 +1551,29 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <order attribute='firstname' />
                     </entity>
                 </fetch>");
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void SubqueryInFilterMultipleColumnsError()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                SELECT
+                    accountid,
+                    name
+                FROM
+                    account
+                WHERE
+                    name in (SELECT firstname, lastname FROM contact)";
+
+            planBuilder.Build(query);
         }
 
         [TestMethod]
@@ -2785,6 +2811,115 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         </filter>
                     </entity>
                 </fetch>");
+        }
+
+        [TestMethod]
+        public void SelectDuplicateColumnNames()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT fullname, lastname + ', ' + firstname as fullname FROM contact WHERE firstname = 'Mark'";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual(2, select.ColumnSet.Count);
+            Assert.AreEqual("contact.fullname", select.ColumnSet[0].SourceColumn);
+            Assert.AreEqual("fullname", select.ColumnSet[0].OutputColumn);
+            Assert.AreEqual("fullname", select.ColumnSet[0].PhysicalOutputColumn);
+            Assert.AreEqual("Expr1", select.ColumnSet[1].SourceColumn);
+            Assert.AreEqual("fullname", select.ColumnSet[1].OutputColumn);
+            Assert.AreEqual("fullname1", select.ColumnSet[1].PhysicalOutputColumn);
+            var computeScalar = AssertNode<ComputeScalarNode>(select.Source);
+            var fetch = AssertNode<FetchXmlScan>(computeScalar.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='fullname' />
+                        <attribute name='lastname' />
+                        <attribute name='firstname' />
+                        <filter>
+                            <condition attribute='firstname' operator='eq' value='Mark' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void SubQueryDuplicateColumnNamesError()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT * FROM (SELECT fullname, lastname + ', ' + firstname as fullname FROM contact WHERE firstname = 'Mark') a";
+
+            planBuilder.Build(query);
+        }
+
+        [TestMethod]
+        public void UnionDuplicateColumnNames()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"SELECT fullname, lastname + ', ' + firstname as fullname FROM contact WHERE firstname = 'Mark'
+                          UNION
+                          SELECT fullname, lastname + ', ' + firstname as fullname FROM contact WHERE firstname = 'Mark'";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual(2, select.ColumnSet.Count);
+            Assert.AreEqual("Expr3", select.ColumnSet[0].SourceColumn);
+            Assert.AreEqual("fullname", select.ColumnSet[0].OutputColumn);
+            Assert.AreEqual("Expr4", select.ColumnSet[1].SourceColumn);
+            Assert.AreEqual("fullname", select.ColumnSet[1].OutputColumn);
+            var distinct = AssertNode<DistinctNode>(select.Source);
+            var concat = AssertNode<ConcatenateNode>(distinct.Source);
+            Assert.AreEqual(2, concat.ColumnSet.Count);
+            Assert.AreEqual("contact.fullname", concat.ColumnSet[0].SourceColumns[0]);
+            Assert.AreEqual("contact.fullname", concat.ColumnSet[0].SourceColumns[1]);
+            Assert.AreEqual("Expr3", concat.ColumnSet[0].OutputColumn);
+            Assert.AreEqual("Expr1", concat.ColumnSet[1].SourceColumns[0]);
+            Assert.AreEqual("Expr2", concat.ColumnSet[1].SourceColumns[1]);
+            Assert.AreEqual("Expr4", concat.ColumnSet[1].OutputColumn);
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void SubQueryUnionDuplicateColumnNamesError()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var query = @"SELECT * FROM (
+                            SELECT fullname, lastname + ', ' + firstname as fullname FROM contact WHERE firstname = 'Mark'
+                            UNION
+                            SELECT fullname, lastname + ', ' + firstname as fullname FROM contact WHERE firstname = 'Mark'
+                          ) a";
+
+            planBuilder.Build(query);
         }
 
         private T AssertNode<T>(IExecutionPlanNode node) where T : IExecutionPlanNode
