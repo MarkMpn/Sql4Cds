@@ -968,11 +968,6 @@ namespace MarkMpn.Sql4Cds
                 {
                     _ai.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name, ["Source"] = "XrmToolBox" });
                     Execute(() => ShowResult(query, args, null, null, null));
-                    /* TODO:
-                    if (query is IQueryRequiresFinalization finalize)
-                        finalize.FinalizeRequest(Service, options);
-
-                    Execute(() => ShowResult(query, args));*/
                 }
             }
 
@@ -1017,6 +1012,10 @@ namespace MarkMpn.Sql4Cds
                         e.Value = "NULL";
                         e.CellStyle.BackColor = Color.FromArgb(0xff, 0xff, 0xe1);
                         e.FormattingApplied = true;
+                    }
+                    else if (e.Value is SqlBoolean b)
+                    {
+                        e.Value = b.Value ? "1" : "0";
                     }
                 };
 
@@ -1080,58 +1079,16 @@ namespace MarkMpn.Sql4Cds
                 planView.NodeSelected += (s, e) => _properties.SelectObject(planView.Selected);
                 planView.DoubleClick += (s, e) =>
                 {
-                    if (planView.Selected == null)
-                        return;
-
-                    var nodeType = planView.Selected.GetType();
-
-                    if (nodeType.Name == "FetchXmlScan")
-                    {
-                        var fetchXml = (string) nodeType.GetProperty("FetchXmlString").GetValue(planView.Selected);
-
+                    if (planView.Selected is IFetchXmlExecutionPlanNode fetchXml)
+                    { 
                         OutgoingMessageHandler(new MessageBusEventArgs("FetchXML Builder")
                         {
-                            TargetArgument = fetchXml
+                            TargetArgument = fetchXml.FetchXmlString
                         });
                     }
                 };
                 plan.Controls.Add(planView);
                 plan.Controls.Add(fetchLabel);
-                /*
-                if (isMetadata)
-                {
-                    var queryDisplay = CreateXmlEditor();
-                    queryDisplay.Text = SerializeRequest(query.GetType().GetProperty("Request").GetValue(query));
-                    queryDisplay.ReadOnly = true;
-
-                    var metadataInfo = CreatePostProcessingWarning(null, true);
-
-                    fetchXml = new Panel();
-                    fetchXml.Controls.Add(queryDisplay);
-                    fetchXml.Controls.Add(metadataInfo);
-                }
-                else if (query is FetchXmlQuery fxq && fxq.FetchXml != null)
-                {
-                    var xmlDisplay = CreateXmlEditor();
-                    xmlDisplay.Text = fxq.FetchXmlString;
-                    xmlDisplay.ReadOnly = true;
-                    xmlDisplay.Dock = DockStyle.Fill;
-
-                    var postWarning = CreatePostProcessingWarning(fxq, false);
-                    var distinctWithoutSortWarning = CreateDistinctWithoutSortWarning(fxq);
-                    var toolbar = CreateFXBToolbar(xmlDisplay);
-
-                    fetchXml = new Panel();
-                    fetchXml.Controls.Add(xmlDisplay);
-
-                    if (postWarning != null)
-                        fetchXml.Controls.Add(postWarning);
-
-                    if (distinctWithoutSortWarning != null)
-                        fetchXml.Controls.Add(distinctWithoutSortWarning);
-
-                    fetchXml.Controls.Add(toolbar);
-                }*/
             }
 
             AddResult(result, plan, rowCount);

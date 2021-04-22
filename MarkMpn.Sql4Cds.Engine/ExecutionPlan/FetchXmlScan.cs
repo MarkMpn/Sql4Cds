@@ -15,7 +15,7 @@ using Microsoft.Xrm.Sdk.Query;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    class FetchXmlScan : BaseDataNode
+    class FetchXmlScan : BaseDataNode, IFetchXmlExecutionPlanNode
     {
         class ParameterizedCondition
         {
