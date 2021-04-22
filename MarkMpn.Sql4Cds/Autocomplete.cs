@@ -668,7 +668,7 @@ namespace MarkMpn.Sql4Cds
                 _lhs = relationship.ReferencedEntity;
 
                 if (!oneToMany && metadata.TryGetMinimalData(relationship.ReferencingEntity, out _rhs))
-                    _attribute = _rhs.Attributes.Single(a => a.LogicalName == relationship.ReferencingAttribute);
+                    _attribute = _rhs.Attributes.SingleOrDefault(a => a.LogicalName == relationship.ReferencingAttribute);
 
                 _metadata = metadata;
             }
