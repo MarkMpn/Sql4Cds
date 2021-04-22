@@ -893,40 +893,6 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (references.Count == 0)
                 {
-                    /*
-                    // Wrap the query in an alias to prevent column IS NOT NULL filters being incorrectly folded into the outer query if that uses
-                    // the same table name.
-                    var innerSource = new AliasNode(innerQuery);
-                    innerSource.Alias = $"Expr{++_colNameCounter}";
-                    testColumn = $"{innerSource.Alias}.{innerSource.ColumnSet[0].OutputColumn}";
-
-                    if (UseMergeJoin(source, innerSource, references, testColumn, lhsCol.GetColumnName(), out var outputCol, out var merge))
-                    {
-                        testColumn = outputCol;
-                        join = merge;
-                    }
-                    else
-                    {
-                        // We need the inner list to be distinct to avoid creating duplicates during the join
-                        var innerSchema = innerSource.Source.GetSchema(Metadata, parameters);
-                        if (innerSource.ColumnSet[0].SourceColumn != innerSchema.PrimaryKey && !(innerSource.Source is DistinctNode))
-                        {
-                            innerSource.Source = new DistinctNode
-                            {
-                                Source = innerSource.Source,
-                                Columns = { innerSource.ColumnSet[0].SourceColumn }
-                            };
-                        }
-
-                        // This isn't a correlated subquery, so we can use a foldable join type
-                        join = new MergeJoinNode
-                        {
-                            LeftSource = source,
-                            LeftAttribute = lhsCol,
-                            RightSource = innerSource,
-                            RightAttribute = innerSource.ColumnSet[0].SourceColumn.ToColumnReference()
-                        };
-                    }*/
                     if (UseMergeJoin(source, innerQuery.Source, references, testColumn, lhsCol.GetColumnName(), out var outputCol, out var merge))
                     {
                         testColumn = outputCol;
