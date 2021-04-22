@@ -777,11 +777,33 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (prop == null)
                 return false;
 
+            // Only properties that represent simple data types, enumerations, BooleanManagedProperty or AttributeRequiredLevelManagedProperty types can be used in a MetadataFilterExpression. When a BooleanManagedProperty or AttributeRequiredLevelManagedProperty is specified, only the Value property is evaluated.
+            // https://docs.microsoft.com/en-us/dynamics365/customerengagement/on-premises/developer/retrieve-detect-changes-metadata#specify-your-filter-criteria
+
+            var targetValueType = prop.PropertyType;
+
+            // Managed properties and nullable types are handled through their Value property
+            if (targetValueType.BaseType != null &&
+                targetValueType.BaseType.IsGenericType &&
+                targetValueType.BaseType.GetGenericTypeDefinition() == typeof(ManagedProperty<>))
+                targetValueType = targetValueType.BaseType.GetGenericArguments()[0];
+
+            if (targetValueType.IsGenericType &&
+                targetValueType.GetGenericTypeDefinition() == typeof(Nullable<>))
+                targetValueType = targetValueType.GetGenericArguments()[0];
+
+            if (!targetValueType.IsPrimitive &&
+                !targetValueType.IsEnum &&
+                targetValueType != typeof(string) &&
+                targetValueType != typeof(decimal) &&
+                targetValueType != typeof(Guid))
+                return false;
+
             // Convert the property name to the correct case
             filter.Conditions[0].PropertyName = prop.Name;
 
             // Convert the value to the expected type
-            filter.Conditions[0].Value = SqlTypeConverter.ChangeType(SqlTypeConverter.ChangeType(filter.Conditions[0].Value, MetadataQueryNode.GetPropertyType(prop.PropertyType)), prop.PropertyType);
+            filter.Conditions[0].Value = SqlTypeConverter.ChangeType(SqlTypeConverter.ChangeType(filter.Conditions[0].Value, MetadataQueryNode.GetPropertyType(targetValueType)), targetValueType);
 
             if (isEntityFilter)
             {
