@@ -155,18 +155,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             else if (Source is IDataSetExecutionPlanNode dataSetSource)
             {
                 var dataTable = dataSetSource.Execute(org, metadata, options, parameterTypes, parameterValues);
-                var columnSqlTypes = dataTable.Columns.Cast<DataColumn>().Select(col => SqlTypeConverter.NetToSqlType(col.DataType)).ToArray();
-                var columnNullValues = columnSqlTypes.Select(type => SqlTypeConverter.GetNullValue(type)).ToArray();
 
-                // Values will be stored as BCL types, convert them to SqlXxx types for consistency with IDataExecutionPlanNodes
                 // Store the values under the column index as well as name for compatibility with INSERT ... SELECT ...
                 schema = new NodeSchema();
 
                 for (var i = 0; i < dataTable.Columns.Count; i++)
                 {
                     var col = dataTable.Columns[i];
-                    schema.Schema[col.ColumnName] = columnSqlTypes[i];
-                    schema.Schema[i.ToString()] = columnSqlTypes[i];
+                    schema.Schema[col.ColumnName] = col.DataType;
+                    schema.Schema[i.ToString()] = col.DataType;
                 }
 
                 entities = dataTable.Rows
@@ -177,9 +174,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                         for (var i = 0; i < dataTable.Columns.Count; i++)
                         {
-                            var sqlValue = DBNull.Value.Equals(row[i]) ? columnNullValues[i] : SqlTypeConverter.NetToSqlType(row[i]);
-                            entity[dataTable.Columns[i].ColumnName] = sqlValue;
-                            entity[i.ToString()] = sqlValue;
+                            entity[dataTable.Columns[i].ColumnName] = row[i];
+                            entity[i.ToString()] = row[i];
                         }
 
                         return entity;

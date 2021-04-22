@@ -69,7 +69,27 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             adapter.Fill(result);
                         }
 
-                        return result;
+                        var columnSqlTypes = result.Columns.Cast<DataColumn>().Select(col => SqlTypeConverter.NetToSqlType(col.DataType)).ToArray();
+                        var columnNullValues = columnSqlTypes.Select(type => SqlTypeConverter.GetNullValue(type)).ToArray();
+
+                        // Values will be stored as BCL types, convert them to SqlXxx types for consistency with IDataExecutionPlanNodes
+                        var sqlTable = new DataTable();
+
+                        for (var i = 0; i < result.Columns.Count; i++)
+                            sqlTable.Columns.Add(result.Columns[i].ColumnName, columnSqlTypes[i]);
+
+                        foreach (DataRow row in result.Rows)
+                        {
+                            var sqlRow = sqlTable.Rows.Add();
+
+                            for (var i = 0; i < result.Columns.Count; i++)
+                            {
+                                var sqlValue = DBNull.Value.Equals(row[i]) ? columnNullValues[i] : SqlTypeConverter.NetToSqlType(row[i]);
+                                sqlRow[i] = sqlValue;
+                            }
+                        }
+
+                        return sqlTable;
                     }
                 }
             }
