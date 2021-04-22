@@ -1,6 +1,8 @@
-﻿using System.Threading.Tasks;
+﻿using System.Collections.Generic;
+using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine;
 using Microsoft.Xrm.Sdk.Metadata;
+using Microsoft.Xrm.Sdk.Query;
 
 namespace MarkMpn.Sql4Cds.SSMS
 {
@@ -34,6 +36,10 @@ namespace MarkMpn.Sql4Cds.SSMS
         public int MaxDegreeOfParallelism => _options.MaxDegreeOfParallelism;
 
         public bool ColumnComparisonAvailable => true;
+
+        public bool UseLocalTimeZone => false;
+
+        public List<JoinOperator> JoinOperatorsAvailable => new List<JoinOperator>();
 
         public bool ConfirmDelete(int count, EntityMetadata meta)
         {

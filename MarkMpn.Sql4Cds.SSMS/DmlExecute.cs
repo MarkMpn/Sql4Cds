@@ -4,6 +4,7 @@ using System.Linq;
 using EnvDTE;
 using EnvDTE80;
 using MarkMpn.Sql4Cds.Engine;
+using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using Microsoft.SqlServer.Management.QueryExecution;
 using Microsoft.SqlServer.Management.UI.VSIntegration;
 using Microsoft.VisualStudio.Shell;
@@ -74,16 +75,22 @@ namespace MarkMpn.Sql4Cds.SSMS
                 sql.IndexOf("Bypass SQL4CDS", StringComparison.OrdinalIgnoreCase) != -1)
                 return;
 
+            // Store the options being used for these queries so we can cancel them later
+            var options = new QueryExecutionOptions(sqlScriptEditorControl, Package.Settings);
+            var metadata = GetMetadataCache();
+            var org = ConnectCDS();
+
             // We've possibly got a DML statement, so parse the query properly to get the details
-            var quotedIdentifiers = sqlScriptEditorControl.QuotedIdentifiers;
-            var sql2FetchXml = new Sql2FetchXml(GetMetadataCache(), quotedIdentifiers);
-            sql2FetchXml.TDSEndpointAvailable = true;
-            sql2FetchXml.ForceTDSEndpoint = true;
-            Query[] queries;
+            var converter = new ExecutionPlanBuilder(metadata, new TableSizeCache(org, metadata), options)
+            {
+                TDSEndpointAvailable = true,
+                QuotedIdentifiers = sqlScriptEditorControl.QuotedIdentifiers
+            };
+            IRootExecutionPlanNode[] queries;
 
             try
             {
-                queries = sql2FetchXml.Convert(sql);
+                queries = converter.Build(sql);
             }
             catch (Exception ex)
             {
@@ -92,10 +99,11 @@ namespace MarkMpn.Sql4Cds.SSMS
                 return;
             }
 
-            var hasSelect = queries.OfType<SelectQuery>().Count();
-            var hasDml = queries.Length - hasSelect;
+            var dmlQueries = queries.OfType<IDmlQueryExecutionPlanNode>().ToArray();
+            var hasSelect = queries.Length > dmlQueries.Length;
+            var hasDml = dmlQueries.Length > 0;
 
-            if (hasSelect > 0 && hasDml > 0)
+            if (hasSelect && hasDml)
             {
                 // Can't mix SELECT and DML queries as we can't show results in the grid and SSMS can't execute the DML queries
                 CancelDefault = true;
@@ -103,13 +111,11 @@ namespace MarkMpn.Sql4Cds.SSMS
                 return;
             }
 
-            if (hasSelect > 0)
+            if (hasSelect)
                 return;
 
             // We need to execute the DML statements directly
             CancelDefault = true;
-            var org = ConnectCDS();
-            var metadata = GetMetadataCache();
 
             // Show the queries starting to run
             sqlScriptEditorControl.StandardPrepareBeforeExecute();
@@ -117,8 +123,6 @@ namespace MarkMpn.Sql4Cds.SSMS
             sqlScriptEditorControl.ToggleResultsControl(true);
             sqlScriptEditorControl.Results.StartExecution();
 
-            // Store the options being used for these queries so we can cancel them later
-            var options = new QueryExecutionOptions(sqlScriptEditorControl, Package.Settings);
             _options[ActiveDocument] = options;
             var doc = ActiveDocument;
 
@@ -127,7 +131,7 @@ namespace MarkMpn.Sql4Cds.SSMS
             {
                 var resultFlag = 0;
 
-                foreach (var query in queries)
+                foreach (var query in dmlQueries)
                 {
                     if (options.Cancelled)
                         break;
@@ -135,12 +139,9 @@ namespace MarkMpn.Sql4Cds.SSMS
                     try
                     {
                         _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name, ["Source"] = "SSMS" });
-                        query.Execute(org, metadata, options);
+                        var msg = query.Execute(org, metadata, options, null, null);
 
-                        if (query.Result is string msg)
-                            sqlScriptEditorControl.Results.AddStringToMessages(msg + "\r\n\r\n");
-                        else if (query.Result is Exception ex)
-                            throw ex;
+                        sqlScriptEditorControl.Results.AddStringToMessages(msg + "\r\n\r\n");
 
                         resultFlag |= 1; // Success
                     }

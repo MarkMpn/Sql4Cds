@@ -85,6 +85,7 @@
     <Compile Include="ExecutionPlan\IDmlQueryExecutionPlanNode.cs" />
     <Compile Include="ExecutionPlan\IExecutionPlanNode.cs" />
     <Compile Include="ExecutionPlan\FoldableJoinNode.cs" />
+    <Compile Include="ExecutionPlan\IFetchXmlExecutionPlanNode.cs" />
     <Compile Include="ExecutionPlan\IImpersonateRevertExecutionPlanNode.cs" />
     <Compile Include="ExecutionPlan\IndexSpoolNode.cs" />
     <Compile Include="ExecutionPlan\IRootExecutionPlanNode.cs" />
