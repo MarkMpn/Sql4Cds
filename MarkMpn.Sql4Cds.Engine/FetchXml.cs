@@ -579,6 +579,9 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml {
                 this.prefilterparameternameField = value;
             }
         }
+
+        [XmlIgnore]
+        public bool SemiJoin { get; set; }
     }
     
     /// <remarks/>

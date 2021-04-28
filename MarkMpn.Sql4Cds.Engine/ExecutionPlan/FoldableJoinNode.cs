@@ -48,6 +48,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             RightSource = RightSource.FoldQuery(metadata, options, parameterTypes);
             RightSource.Parent = this;
 
+            if (SemiJoin)
+                return this;
+
             var leftSchema = LeftSource.GetSchema(metadata, parameterTypes);
             var rightSchema = RightSource.GetSchema(metadata, parameterTypes);
 

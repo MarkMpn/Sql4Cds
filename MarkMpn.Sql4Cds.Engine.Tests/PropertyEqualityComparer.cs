@@ -1,4 +1,5 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+﻿using MarkMpn.Sql4Cds.Engine.FetchXml;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -38,6 +39,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             foreach (var prop in typeX.GetProperties())
             {
+                if (prop.DeclaringType == typeof(FetchLinkEntityType) && prop.Name == nameof(FetchLinkEntityType.SemiJoin))
+                    continue;
+
                 var propRoute = route + "." + prop.Name;
 
                 var valueX = prop.GetValue(x);

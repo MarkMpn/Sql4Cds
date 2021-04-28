@@ -579,6 +579,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 foreach (var linkEntity in items.OfType<FetchLinkEntityType>())
                 {
+                    if (linkEntity.SemiJoin)
+                        continue;
+
                     if (schema.PrimaryKey != null)
                     {
                         var childMeta = metadata[linkEntity.name];

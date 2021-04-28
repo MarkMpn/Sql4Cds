@@ -144,7 +144,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             fetchXml.Entity.AddItem(new allattributes());
 
                             foreach (var link in fetchXml.Entity.GetLinkEntities())
+                            {
+                                if (link.SemiJoin)
+                                    continue;
+
                                 link.AddItem(new allattributes());
+                            }
                         }
                         else if (!hasStar)
                         {

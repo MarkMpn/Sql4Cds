@@ -924,6 +924,12 @@ namespace MarkMpn.Sql4Cds.Engine
                             RightAttribute = new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = alias.Alias }, new Identifier { Value = alias.ColumnSet[0].OutputColumn } } } }
                         };
                     }
+
+                    // Convert the join to a semi join to ensure requests for wildcard columns aren't folded to the IN subquery
+                    var definedValue = $"Expr{++_colNameCounter}";
+                    join.SemiJoin = true;
+                    join.DefinedValues[definedValue] = testColumn;
+                    testColumn = definedValue;
                 }
                 else
                 {
@@ -1604,6 +1610,9 @@ namespace MarkMpn.Sql4Cds.Engine
                 else if (element is SelectStarExpression star)
                 {
                     var colName = star.Qualifier == null ? null : String.Join(".", star.Qualifier.Identifiers.Select(id => id.Value));
+
+                    if (colName != null && !schema.Schema.Keys.Any(col => col.StartsWith(colName + ".", StringComparison.OrdinalIgnoreCase)))
+                        throw new NotSupportedQueryFragmentException("The column prefix does not match with a table name or alias name used in the query", star);
 
                     select.ColumnSet.Add(new SelectColumn
                     {

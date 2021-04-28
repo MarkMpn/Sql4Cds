@@ -59,156 +59,82 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source = Source.FoldQuery(metadata, options, parameterTypes);
             Source.Parent = this;
 
-            // Find all the data source nodes we could fold this into. Include direct data sources, those from either side of an inner join, or the main side of an outer join
-            foreach (var source in GetFoldableSources(Source))
+            // Foldable correlated IN queries "lefttable.column IN (SELECT righttable.column FROM righttable WHERE ...) are created as:
+            // Filter: Expr2 is not null
+            // -> MergeJoin (LeftOuter SemiJoin) Expr2 = righttable.column in DefinedValues; righttable.column in RightAttribute
+            //    -> FetchXml
+            //    -> FetchXml (Distinct) orderby righttable.column
+
+            // Foldable correlated EXISTS filters "EXISTS (SELECT * FROM righttable WHERE righttable.column = lefttable.column AND ...) are created as:
+            // Filter - @var2 is not null
+            // -> NestedLoop(LeftOuter SemiJoin), null join condition. Outer reference(lefttable.column -> @var1), Defined values(@var2 -> rightttable.primarykey)
+            //   -> FetchXml
+            //   -> Top 1
+            //      -> Index spool, SeekValue @var1, KeyColumn rightttable.column
+            //         -> FetchXml
+            var joins = new List<BaseJoinNode>();
+            var join = Source as BaseJoinNode;
+            while (join != null)
             {
-                var schema = source.GetSchema(metadata, parameterTypes);
+                joins.Add(join);
 
-                if (source is FetchXmlScan fetchXml && !fetchXml.FetchXml.aggregate)
-                {
-                    var additionalLinkEntities = new Dictionary<object, List<FetchLinkEntityType>>();
-
-                    if (TranslateFetchXMLCriteria(metadata, options, Filter, schema, null, fetchXml.Entity.name, fetchXml.Alias, fetchXml.Entity.Items, out var fetchFilter, additionalLinkEntities))
-                    {
-                        fetchXml.Entity.AddItem(fetchFilter);
-
-                        foreach (var kvp in additionalLinkEntities)
-                        {
-                            if (kvp.Key is FetchEntityType e)
-                            {
-                                foreach (var le in kvp.Value)
-                                    fetchXml.Entity.AddItem(le);
-                            }
-                            else
-                            {
-                                foreach (var le in kvp.Value)
-                                    ((FetchLinkEntityType)kvp.Key).AddItem(le);
-                            }
-                        }
-
-                        return Source;
-                    }
-
-                    // If the criteria are ANDed, see if any of the individual conditions can be translated to FetchXML
-                    Filter = ExtractFetchXMLFilters(metadata, options, Filter, schema, null, fetchXml.Entity.name, fetchXml.Alias, fetchXml.Entity.Items, out fetchFilter, additionalLinkEntities);
-
-                    if (fetchFilter != null)
-                    {
-                        fetchXml.Entity.AddItem(fetchFilter);
-
-                        foreach (var kvp in additionalLinkEntities)
-                        {
-                            if (kvp.Key is FetchEntityType e)
-                            {
-                                foreach (var le in kvp.Value)
-                                    fetchXml.Entity.AddItem(le);
-                            }
-                            else
-                            {
-                                foreach (var le in kvp.Value)
-                                    ((FetchLinkEntityType)kvp.Key).AddItem(le);
-                            }
-                        }
-                    }
-                }
-
-                if (source is MetadataQueryNode meta)
-                {
-                    if (TranslateMetadataCriteria(Filter, meta, out var entityFilter, out var attributeFilter, out var relationshipFilter))
-                    {
-                        meta.Query.AddFilter(entityFilter);
-
-                        if (attributeFilter != null && meta.Query.AttributeQuery == null)
-                            meta.Query.AttributeQuery = new AttributeQueryExpression();
-
-                        meta.Query.AttributeQuery.AddFilter(attributeFilter);
-
-                        if (relationshipFilter != null && meta.Query.RelationshipQuery == null)
-                            meta.Query.RelationshipQuery = new RelationshipQueryExpression();
-
-                        meta.Query.RelationshipQuery.AddFilter(relationshipFilter);
-
-                        return Source;
-                    }
-
-                    // If the criteria are ANDed, see if any of the individual conditions can be translated to the metadata query
-                    Filter = ExtractMetadataFilters(Filter, meta, out entityFilter, out attributeFilter, out relationshipFilter);
-
-                    meta.Query.AddFilter(entityFilter);
-
-                    if (attributeFilter != null && meta.Query.AttributeQuery == null)
-                        meta.Query.AttributeQuery = new AttributeQueryExpression();
-
-                    meta.Query.AttributeQuery.AddFilter(attributeFilter);
-
-                    if (relationshipFilter != null && meta.Query.RelationshipQuery == null)
-                        meta.Query.RelationshipQuery = new RelationshipQueryExpression();
-
-                    meta.Query.RelationshipQuery.AddFilter(relationshipFilter);
-                }
+                if (join is MergeJoinNode && join.LeftSource is SortNode sort)
+                    join = sort.Source as BaseJoinNode;
+                else
+                    join = join.LeftSource as BaseJoinNode;
             }
 
-            if (options.JoinOperatorsAvailable.Contains(JoinOperator.Any) || options.JoinOperatorsAvailable.Contains(JoinOperator.Exists))
+            var addedLinks = new List<FetchLinkEntityType>();
+            FetchXmlScan leftFetch;
+
+            if (joins.Count == 0)
             {
-                // Foldable correlated IN queries "lefttable.column IN (SELECT righttable.column FROM righttable WHERE ...) are created as:
-                // Filter: righttable.column is not null
-                // -> MergeJoin (LeftOuter) righttable.column in RightAttribute
-                //    -> FetchXml
-                //    -> FetchXml (Distinct) orderby righttable.column
-
-                // Foldable correlated EXISTS filters "EXISTS (SELECT * FROM righttable WHERE righttable.column = lefttable.column AND ...) are created as:
-                // Filter - @var2 is not null
-                // -> NestedLoop(Left semi join), null join condition. Outer reference(lefttable.column -> @var1), Defined values(@var2 -> rightttable.primarykey)
-                //   -> FetchXml
-                //   -> Top 1
-                //      -> Index spool, SeekValue @var1, KeyColumn rightttable.column
-                //         -> FetchXml
-                var joins = new List<BaseJoinNode>();
-                var join = Source as BaseJoinNode;
-                while (join != null)
-                {
-                    joins.Add(join);
-
-                    if (join is MergeJoinNode && join.LeftSource is SortNode sort)
-                        join = sort.Source as BaseJoinNode;
-                    else
-                        join = join.LeftSource as BaseJoinNode;
-                }
-
-                FetchXmlScan leftFetch;
-
-                if (joins.Count == 0)
-                {
-                    leftFetch = null;
-                }
+                leftFetch = null;
+            }
+            else
+            {
+                var lastJoin = joins.Last();
+                if (lastJoin is MergeJoinNode && lastJoin.LeftSource is SortNode sort)
+                    leftFetch = sort.Source as FetchXmlScan;
                 else
-                {
-                    var lastJoin = joins.Last();
-                    if (lastJoin is MergeJoinNode && lastJoin.LeftSource is SortNode sort)
-                        leftFetch = sort.Source as FetchXmlScan;
-                    else
-                        leftFetch = lastJoin.LeftSource as FetchXmlScan;
-                }
+                    leftFetch = lastJoin.LeftSource as FetchXmlScan;
+            }
 
-                while (leftFetch != null && joins.Count > 0)
-                {
-                    join = joins.Last();
+            while (leftFetch != null && joins.Count > 0)
+            {
+                join = joins.Last();
 
-                    if (join.JoinType != QualifiedJoinType.LeftOuter)
+                if (join.JoinType != QualifiedJoinType.LeftOuter ||
+                    !join.SemiJoin)
+                    break;
+
+                FetchLinkEntityType linkToAdd;
+                string leftAlias;
+
+                if (join is MergeJoinNode merge)
+                {
+                    // Check we meet all the criteria for a foldable correlated IN query
+                    var rightSort = join.RightSource as SortNode;
+                    var rightFetch = (rightSort?.Source ?? join.RightSource) as FetchXmlScan;
+
+                    if (rightFetch == null)
                         break;
 
-                    FetchLinkEntityType linkToAdd;
-                    string leftAlias;
+                    // Sorts could be folded into FetchXML or could be in separate node
+                    string attribute;
 
-                    if (join is MergeJoinNode merge)
+                    if (rightSort != null)
                     {
-                        // Check we meet all the criteria for a foldable correlated IN query
-                        if (!(join.RightSource is FetchXmlScan rightFetch))
+                        if (rightSort.Sorts.Count != 1)
                             break;
 
-                        if (!rightFetch.FetchXml.distinct)
+                        if (!(rightSort.Sorts[0].Expression is ColumnReferenceExpression sortCol))
                             break;
 
+                        attribute = sortCol.GetColumnName();
+                    }
+                    else
+                    {
                         var rightSorts = (rightFetch.Entity.Items ?? Array.Empty<object>()).OfType<FetchOrderType>().ToList();
 
                         if (rightSorts.Count != 1)
@@ -217,13 +143,47 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         if (!String.IsNullOrEmpty(rightSorts[0].alias))
                             break;
 
-                        var attribute = $"{rightFetch.Alias}.{rightSorts[0].attribute}";
+                        attribute = $"{rightFetch.Alias}.{rightSorts[0].attribute}";
+                    }
 
-                        if (!merge.RightAttribute.GetColumnName().Equals(attribute, StringComparison.OrdinalIgnoreCase))
-                            break;
+                    if (!merge.RightAttribute.GetColumnName().Equals(attribute, StringComparison.OrdinalIgnoreCase))
+                        break;
 
-                        var notNullFilter = FindNotNullFilter(Filter, attribute);
-                        if (notNullFilter == null)
+                    var rightSchema = rightFetch.GetSchema(metadata, parameterTypes);
+
+                    // Right values need to be distinct - still allowed if it's the primary key
+                    if (!rightFetch.FetchXml.distinct && rightSchema.PrimaryKey != attribute)
+                        break;
+
+                    var definedValueName = join.DefinedValues.SingleOrDefault(kvp => kvp.Value == attribute).Key;
+
+                    if (definedValueName == null)
+                        break;
+
+                    var notNullFilter = FindNotNullFilter(Filter, definedValueName);
+                    if (notNullFilter == null)
+                        break;
+
+                    // We can fold IN to a simple left outer join where the attribute is the primary key
+                    if (!rightFetch.FetchXml.distinct && rightSchema.PrimaryKey == attribute)
+                    {
+                        // Replace the filter on the defined value name with a filter on the primary key column
+                        notNullFilter.Expression = attribute.ToColumnReference();
+
+                        linkToAdd = new FetchLinkEntityType
+                        {
+                            name = rightFetch.Entity.name,
+                            alias = rightFetch.Alias,
+                            from = merge.RightAttribute.MultiPartIdentifier.Identifiers.Last().Value,
+                            to = merge.LeftAttribute.MultiPartIdentifier.Identifiers.Last().Value,
+                            linktype = "outer",
+                            Items = rightFetch.Entity.Items.Where(i => !(i is FetchOrderType)).ToArray()
+                        };
+                    }
+                    else
+                    {
+                        // We need to use an "in" join type - check that's supported
+                        if (!options.JoinOperatorsAvailable.Contains(JoinOperator.Any))
                             break;
 
                         // Remove the filter and replace with an "in" link-entity
@@ -238,99 +198,107 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             linktype = "in",
                             Items = rightFetch.Entity.Items.Where(i => !(i is FetchOrderType)).ToArray()
                         };
-                        leftAlias = merge.LeftAttribute.MultiPartIdentifier.Identifiers.Reverse().Skip(1).First().Value;
+                    }
 
-                        // Remove the sort that has been merged into the left side too
+                    leftAlias = merge.LeftAttribute.MultiPartIdentifier.Identifiers.Reverse().Skip(1).First().Value;
+
+                    // Remove the sort that has been merged into the left side too
+                    if (leftFetch.Entity.Items != null)
+                    {
                         leftFetch.Entity.Items = leftFetch.Entity
                             .Items
                             .Where(i => !(i is FetchOrderType sort) || !sort.attribute.Equals(merge.LeftAttribute.MultiPartIdentifier.Identifiers.Last().Value, StringComparison.OrdinalIgnoreCase))
                             .ToArray();
                     }
-                    else if (join is NestedLoopNode loop)
-                    {
-                        // Check we meet all the criteria for a foldable correlated IN query
-                        if (!loop.SemiJoin ||
-                            loop.JoinCondition != null ||
-                            loop.OuterReferences.Count != 1 ||
-                            loop.DefinedValues.Count != 1)
-                            break;
-
-                        if (!(join.RightSource is TopNode top))
-                            break;
-
-                        if (!(top.Top is IntegerLiteral topLiteral) ||
-                            topLiteral.Value != "1")
-                            break;
-
-                        if (!(top.Source is IndexSpoolNode indexSpool))
-                            break;
-
-                        if (indexSpool.SeekValue != loop.OuterReferences.Single().Value)
-                            break;
-
-                        if (!(indexSpool.Source is FetchXmlScan rightFetch))
-                            break;
-
-                        if (indexSpool.KeyColumn.Split('.').Length != 2 ||
-                            !indexSpool.KeyColumn.Split('.')[0].Equals(rightFetch.Alias, StringComparison.OrdinalIgnoreCase))
-                            break;
-
-                        var notNullFilter = FindNotNullFilter(Filter, loop.DefinedValues.Single().Key);
-                        if (notNullFilter == null)
-                            break;
-
-                        // Remove the filter and replace with an "in" link-entity
-                        Filter = Filter.RemoveCondition(notNullFilter);
-
-                        linkToAdd = new FetchLinkEntityType
-                        {
-                            name = rightFetch.Entity.name,
-                            alias = rightFetch.Alias,
-                            from = indexSpool.KeyColumn.Split('.')[1],
-                            to = loop.OuterReferences.Single().Key.Split('.')[1],
-                            linktype = "exists",
-                            Items = rightFetch.Entity.Items
-                        };
-                        leftAlias = loop.OuterReferences.Single().Key.Split('.')[0];
-                    }
-                    else
-                    {
-                        // This isn't a type of join we can fold as a correlated IN/EXISTS join
+                }
+                else if (join is NestedLoopNode loop)
+                {
+                    // Check we meet all the criteria for a foldable correlated IN query
+                    if (!options.JoinOperatorsAvailable.Contains(JoinOperator.Exists))
                         break;
-                    }
 
-                    // Remove any attributes from the new linkentity
-                    var tempEntity = new FetchEntityType { Items = new object[] { linkToAdd } };
+                    if (loop.JoinCondition != null ||
+                        loop.OuterReferences.Count != 1 ||
+                        loop.DefinedValues.Count != 1)
+                        break;
 
-                    foreach (var link in tempEntity.GetLinkEntities())
-                        link.Items = (link.Items ?? Array.Empty<object>()).Where(i => !(i is FetchAttributeType) && !(i is allattributes)).ToArray();
+                    if (!(join.RightSource is TopNode top))
+                        break;
 
-                    if (leftAlias.Equals(leftFetch.Alias, StringComparison.OrdinalIgnoreCase))
-                        leftFetch.Entity.AddItem(linkToAdd);
-                    else
-                        leftFetch.Entity.FindLinkEntity(leftAlias).AddItem(linkToAdd);
+                    if (!(top.Top is IntegerLiteral topLiteral) ||
+                        topLiteral.Value != "1")
+                        break;
 
-                    joins.Remove(join);
+                    if (!(top.Source is IndexSpoolNode indexSpool))
+                        break;
 
-                    if (joins.Count == 0)
+                    if (indexSpool.SeekValue != loop.OuterReferences.Single().Value)
+                        break;
+
+                    if (!(indexSpool.Source is FetchXmlScan rightFetch))
+                        break;
+
+                    if (indexSpool.KeyColumn.Split('.').Length != 2 ||
+                        !indexSpool.KeyColumn.Split('.')[0].Equals(rightFetch.Alias, StringComparison.OrdinalIgnoreCase))
+                        break;
+
+                    var notNullFilter = FindNotNullFilter(Filter, loop.DefinedValues.Single().Key);
+                    if (notNullFilter == null)
+                        break;
+
+                    // Remove the filter and replace with an "in" link-entity
+                    Filter = Filter.RemoveCondition(notNullFilter);
+
+                    linkToAdd = new FetchLinkEntityType
                     {
-                        Source = leftFetch;
-                        leftFetch.Parent = this;
+                        name = rightFetch.Entity.name,
+                        alias = rightFetch.Alias,
+                        from = indexSpool.KeyColumn.Split('.')[1],
+                        to = loop.OuterReferences.Single().Key.Split('.')[1],
+                        linktype = "exists",
+                        Items = rightFetch.Entity.Items
+                    };
+                    leftAlias = loop.OuterReferences.Single().Key.Split('.')[0];
+                }
+                else
+                {
+                    // This isn't a type of join we can fold as a correlated IN/EXISTS join
+                    break;
+                }
+
+                // Remove any attributes from the new linkentity
+                var tempEntity = new FetchEntityType { Items = new object[] { linkToAdd } };
+
+                foreach (var link in tempEntity.GetLinkEntities())
+                    link.Items = (link.Items ?? Array.Empty<object>()).Where(i => !(i is FetchAttributeType) && !(i is allattributes)).ToArray();
+
+                if (leftAlias.Equals(leftFetch.Alias, StringComparison.OrdinalIgnoreCase))
+                    leftFetch.Entity.AddItem(linkToAdd);
+                else
+                    leftFetch.Entity.FindLinkEntity(leftAlias).AddItem(linkToAdd);
+
+                addedLinks.Add(linkToAdd);
+
+                joins.Remove(join);
+
+                if (joins.Count == 0)
+                {
+                    Source = leftFetch;
+                    leftFetch.Parent = this;
+                }
+                else
+                {
+                    join = joins.Last();
+
+                    if (join is MergeJoinNode && join.LeftSource is SortNode sort)
+                    {
+                        sort.Source = leftFetch;
+                        leftFetch.Parent = sort;
                     }
                     else
                     {
-                        join = joins.Last();
-
-                        if (join is MergeJoinNode && join.LeftSource is SortNode sort)
-                        {
-                            sort.Source = leftFetch;
-                            leftFetch.Parent = sort;
-                        }
-                        else
-                        {
-                            join.LeftSource = leftFetch;
-                            leftFetch.Parent = join;
-                        }
+                        join.LeftSource = leftFetch;
+                        leftFetch.Parent = join;
                     }
                 }
             }
@@ -365,12 +333,63 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         SeekValue = seekVariable
                     };
 
-                    if (filter == null)
-                        return Source;
-
                     Filter = filter;
                 }
             }
+
+            // Find all the data source nodes we could fold this into. Include direct data sources, those from either side of an inner join, or the main side of an outer join
+            foreach (var source in GetFoldableSources(Source))
+            {
+                var schema = source.GetSchema(metadata, parameterTypes);
+
+                if (source is FetchXmlScan fetchXml && !fetchXml.FetchXml.aggregate)
+                {
+                    var additionalLinkEntities = new Dictionary<object, List<FetchLinkEntityType>>();
+
+                    // If the criteria are ANDed, see if any of the individual conditions can be translated to FetchXML
+                    Filter = ExtractFetchXMLFilters(metadata, options, Filter, schema, null, fetchXml.Entity.name, fetchXml.Alias, fetchXml.Entity.Items, out var fetchFilter, additionalLinkEntities);
+
+                    if (fetchFilter != null)
+                    {
+                        fetchXml.Entity.AddItem(fetchFilter);
+
+                        foreach (var kvp in additionalLinkEntities)
+                        {
+                            if (kvp.Key is FetchEntityType e)
+                            {
+                                foreach (var le in kvp.Value)
+                                    fetchXml.Entity.AddItem(le);
+                            }
+                            else
+                            {
+                                foreach (var le in kvp.Value)
+                                    ((FetchLinkEntityType)kvp.Key).AddItem(le);
+                            }
+                        }
+                    }
+                }
+
+                if (source is MetadataQueryNode meta)
+                {
+                    // If the criteria are ANDed, see if any of the individual conditions can be translated to the metadata query
+                    Filter = ExtractMetadataFilters(Filter, meta, out var entityFilter, out var attributeFilter, out var relationshipFilter);
+
+                    meta.Query.AddFilter(entityFilter);
+
+                    if (attributeFilter != null && meta.Query.AttributeQuery == null)
+                        meta.Query.AttributeQuery = new AttributeQueryExpression();
+
+                    meta.Query.AttributeQuery.AddFilter(attributeFilter);
+
+                    if (relationshipFilter != null && meta.Query.RelationshipQuery == null)
+                        meta.Query.RelationshipQuery = new RelationshipQueryExpression();
+
+                    meta.Query.RelationshipQuery.AddFilter(relationshipFilter);
+                }
+            }
+
+            foreach (var addedLink in addedLinks)
+                addedLink.SemiJoin = true;
 
             if (Filter == null)
                 return Source;

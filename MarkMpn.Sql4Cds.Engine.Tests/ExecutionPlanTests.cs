@@ -1607,7 +1607,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <attribute name='accountid' />
                         <attribute name='name' />
                         <link-entity name='contact' alias='Expr1' from='contactid' to='primarycontactid' link-type='outer'>
-                            <attribute name='contactid' />
                             <filter>
                                 <condition attribute='firstname' operator='eq' value='Mark' />
                             </filter>
@@ -2546,7 +2545,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     <entity name='account'>
                         <attribute name='name' />
                         <link-entity name='contact' alias='Expr1' from='contactid' to='primarycontactid' link-type='outer'>
-                            <attribute name='contactid' />
                             <filter>
                                 <condition attribute='firstname' operator='eq' value='Mark' />
                             </filter>
@@ -2943,6 +2941,72 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 Assert.Fail($"Expected:\r\n{fetchXml}\r\n\r\nActual:\r\n{node.FetchXmlString}\r\n\r\n{ex.Message}");
             }
+        }
+
+        [TestMethod]
+        public void SelectStarInSubquery()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"SELECT * FROM account WHERE accountid IN (SELECT parentcustomerid FROM contact)";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var filter = AssertNode<FilterNode>(select.Source);
+            Assert.AreEqual("Expr2 IS NOT NULL", filter.Filter.ToSql());
+            var join = AssertNode<MergeJoinNode>(filter.Source);
+            Assert.AreEqual(QualifiedJoinType.LeftOuter, join.JoinType);
+            Assert.IsTrue(join.SemiJoin);
+            Assert.AreEqual("Expr1.parentcustomerid", join.DefinedValues["Expr2"]);
+            var accountFetch = AssertNode<FetchXmlScan>(join.LeftSource);
+            Assert.AreEqual("account", accountFetch.Alias);
+            AssertFetchXml(accountFetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                        <attribute name='createdon' />
+                        <attribute name='employees' />
+                        <attribute name='name' />
+                        <attribute name='primarycontactid' />
+                        <attribute name='primarycontactidname' />
+                        <attribute name='turnover' />
+                        <order attribute='accountid' />
+                    </entity>
+                </fetch>");
+            var contactSort = AssertNode<SortNode>(join.RightSource);
+            Assert.AreEqual("Expr1.parentcustomerid", contactSort.Sorts[0].Expression.ToSql());
+            var contactFetch = AssertNode<FetchXmlScan>(contactSort.Source);
+            Assert.AreEqual("Expr1", contactFetch.Alias);
+            AssertFetchXml(contactFetch, @"
+                <fetch distinct='true'>
+                    <entity name='contact'>
+                        <attribute name='parentcustomerid' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void CannotSelectColumnsFromSemiJoin()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"SELECT contact.* FROM account WHERE accountid IN (SELECT parentcustomerid FROM contact)";
+
+            planBuilder.Build(query);
         }
     }
 }
