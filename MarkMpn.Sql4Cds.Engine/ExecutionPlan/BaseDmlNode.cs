@@ -222,7 +222,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var expr = (Expression)Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(sourceColumnName));
 
-                if (sourceType == null)
+                if (sourceType == typeof(object))
                 {
                     // null literal
                     expr = Expression.Constant(null);
