@@ -47,5 +47,10 @@ namespace MarkMpn.Sql4Cds.Engine
         /// The fragment of the query that caused the error
         /// </summary>
         public TSqlFragment Fragment { get; set; }
+
+        /// <summary>
+        /// Returns or sets an optional suggestion to resolve the error
+        /// </summary>
+        public string Suggestion { get; set; }
     }
 }

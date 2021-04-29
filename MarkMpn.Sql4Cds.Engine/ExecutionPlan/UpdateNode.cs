@@ -1,0 +1,147 @@
+﻿using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Messages;
+using Microsoft.Xrm.Sdk.Metadata;
+using Microsoft.Xrm.Tooling.Connector;
+
+namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
+{
+    /// <summary>
+    /// Implements an UPDATE operation
+    /// </summary>
+    class UpdateNode : BaseDmlNode
+    {
+        private int _executionCount;
+        private readonly Timer _timer = new Timer();
+
+        public override int ExecutionCount => _executionCount;
+
+        public override TimeSpan Duration => _timer.Duration;
+
+        /// <summary>
+        /// The logical name of the entity to update
+        /// </summary>
+        [Category("Update")]
+        [Description("The logical name of the entity to update")]
+        public string LogicalName { get; set; }
+
+        /// <summary>
+        /// The column that contains the primary ID of the records to update
+        /// </summary>
+        [Category("Update")]
+        [Description("The column that contains the primary ID of the records to update")]
+        [DisplayName("PrimaryId Source")]
+        public string PrimaryIdSource { get; set; }
+
+        /// <summary>
+        /// The columns to update and the associated column to take the new value from
+        /// </summary>
+        [Category("Update")]
+        [Description("The columns to update and the associated column to take the new value from")]
+        [DisplayName("Column Mappings")]
+        public IDictionary<string, string> ColumnMappings { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        {
+            if (!requiredColumns.Contains(PrimaryIdSource))
+                requiredColumns.Add(PrimaryIdSource);
+
+            foreach (var col in ColumnMappings.Values)
+            {
+                if (!requiredColumns.Contains(col))
+                    requiredColumns.Add(col);
+            }
+
+            Source.AddRequiredColumns(metadata, parameterTypes, requiredColumns);
+        }
+
+        public override string Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        {
+            _executionCount++;
+
+            try
+            {
+                List<Entity> entities;
+                EntityMetadata meta;
+                Dictionary<string, AttributeMetadata> attributes;
+                Dictionary<string, Func<Entity, object>> attributeAccessors;
+                Func<Entity, object> primaryIdAccessor;
+
+                using (_timer.Run())
+                {
+                    entities = GetDmlSourceEntities(org, metadata, options, parameterTypes, parameterValues, out var schema);
+
+                    // Precompile mappings with type conversions
+                    meta = metadata[LogicalName];
+                    attributes = meta.Attributes.ToDictionary(a => a.LogicalName);
+                    var dateTimeKind = options.UseLocalTimeZone ? DateTimeKind.Local : DateTimeKind.Utc;
+                    var fullMappings = new Dictionary<string, string>(ColumnMappings);
+                    fullMappings[meta.PrimaryIdAttribute] = PrimaryIdSource;
+                    attributeAccessors = CompileColumnMappings(fullMappings, schema, attributes, dateTimeKind);
+                    primaryIdAccessor = attributeAccessors[meta.PrimaryIdAttribute];
+                }
+
+                // Check again that the update is allowed. Don't count any UI interaction in the execution time
+                if (options.Cancelled || !options.ConfirmUpdate(entities.Count, meta))
+                    throw new OperationCanceledException("UPDATE cancelled by user");
+
+                using (_timer.Run())
+                {
+                    return ExecuteDmlOperation(
+                        org,
+                        options,
+                        entities,
+                        meta,
+                        entity =>
+                        {
+                            var update = new Entity(LogicalName, (Guid)primaryIdAccessor(entity));
+
+                            foreach (var attributeAccessor in attributeAccessors)
+                            {
+                                if (attributeAccessor.Key == meta.PrimaryIdAttribute)
+                                    continue;
+
+                                var attr = attributes[attributeAccessor.Key];
+
+                                if (!String.IsNullOrEmpty(attr.AttributeOf))
+                                    continue;
+
+                                var value = attributeAccessor.Value(entity);
+
+                                update[attr.LogicalName] = value;
+                            }
+
+                            return new UpdateRequest { Target = update };
+                        },
+                        new OperationNames
+                        {
+                            InProgressUppercase = "Updating",
+                            InProgressLowercase = "updating",
+                            CompletedLowercase = "updated"
+                        });
+                }
+            }
+            catch (QueryExecutionException ex)
+            {
+                if (ex.Node == null)
+                    ex.Node = this;
+
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new QueryExecutionException(ex.Message, ex) { Node = this };
+            }
+        }
+
+        public override string ToString()
+        {
+            return "UPDATE";
+        }
+    }
+}

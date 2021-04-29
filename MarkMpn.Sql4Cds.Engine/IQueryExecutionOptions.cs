@@ -1,4 +1,6 @@
-﻿using Microsoft.Xrm.Sdk.Metadata;
+﻿using System.Collections.Generic;
+using Microsoft.Xrm.Sdk.Metadata;
+using Microsoft.Xrm.Sdk.Query;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
@@ -81,5 +83,25 @@ namespace MarkMpn.Sql4Cds.Engine
         /// The maximum number of worker threads to use to execute DML queries
         /// </summary>
         int MaxDegreeOfParallelism { get; }
+
+        /// <summary>
+        /// Indicates if the server supports column comparison conditions in FetchXML
+        /// </summary>
+        bool ColumnComparisonAvailable { get; }
+
+        /// <summary>
+        /// Indicates if date/time values should be interpreted in the local timezone or in UTC
+        /// </summary>
+        bool UseLocalTimeZone { get; }
+
+        /// <summary>
+        /// Returns a list of join operators that are supported by the server
+        /// </summary>
+        List<JoinOperator> JoinOperatorsAvailable { get; }
+
+        /// <summary>
+        /// A notification that the query is about to retrieve another page of data
+        /// </summary>
+        void RetrievingNextPage();
     }
 }

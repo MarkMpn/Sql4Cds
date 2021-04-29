@@ -579,6 +579,9 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml {
                 this.prefilterparameternameField = value;
             }
         }
+
+        [XmlIgnore]
+        public bool SemiJoin { get; set; }
     }
     
     /// <remarks/>
@@ -1684,6 +1687,9 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml {
                 this.nolockField = value;
             }
         }
+
+        [System.Xml.Serialization.XmlAttributeAttribute("options")]
+        public string options { get; set; }
     }
     
     /// <remarks/>

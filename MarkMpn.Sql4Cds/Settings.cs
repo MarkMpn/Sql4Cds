@@ -30,8 +30,6 @@ namespace MarkMpn.Sql4Cds
 
         public int BatchSize { get; set; } = 100;
 
-        public bool ShowEntityReferenceNames { get; set; }
-
         public bool ShowLocalTimes { get; set; }
 
         public bool QuotedIdentifiers { get; set; } = true;
@@ -47,5 +45,7 @@ namespace MarkMpn.Sql4Cds
         public bool IncludeFetchXml { get; set; }
 
         public bool AutoSizeColumns { get; set; } = true;
+
+        public int MaxRetrievesPerQuery { get; set; } = 100;
     }
 }

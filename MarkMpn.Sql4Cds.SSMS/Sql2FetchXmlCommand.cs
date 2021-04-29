@@ -4,6 +4,8 @@ using System.ComponentModel.Design;
 using System.Linq;
 using EnvDTE80;
 using MarkMpn.Sql4Cds.Engine;
+using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
+using Microsoft.SqlServer.Management.UI.VSIntegration;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using Task = System.Threading.Tasks.Task;
@@ -90,14 +92,24 @@ namespace MarkMpn.Sql4Cds.SSMS
 
             var sql = GetQuery();
 
-            var sql2FetchXml = new Sql2FetchXml(GetMetadataCache(), false);
-            sql2FetchXml.ColumnComparisonAvailable = true;
+            var scriptFactory = new ScriptFactoryWrapper(ServiceCache.ScriptFactory);
+            var sqlScriptEditorControl = scriptFactory.GetCurrentlyActiveFrameDocView(ServiceCache.VSMonitorSelection, false, out _);
+
+            var options = new QueryExecutionOptions(sqlScriptEditorControl, Package.Settings);
+            var metadata = GetMetadataCache();
+            var org = ConnectCDS();
+
+            var converter = new ExecutionPlanBuilder(metadata, new TableSizeCache(org, metadata), options)
+            {
+                TDSEndpointAvailable = false,
+                QuotedIdentifiers = sqlScriptEditorControl.QuotedIdentifiers
+            };
 
             try
             {
-                var queries = sql2FetchXml.Convert(sql);
+                var queries = converter.Build(sql);
 
-                foreach (var query in queries.OfType<FetchXmlQuery>())
+                foreach (var query in queries)
                 {
                     _ai.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name, ["Source"] = "SSMS" });
 
@@ -107,22 +119,22 @@ namespace MarkMpn.Sql4Cds.SSMS
                     editPoint.Insert("<!--\r\nCreated from query:\r\n\r\n");
                     editPoint.Insert(query.Sql);
 
-                    if (query.Extensions.Count > 0)
+                    var nodes = GetAllNodes(query).ToList();
+
+                    if (nodes.Any(node => !(node is IFetchXmlExecutionPlanNode)))
                     {
-                        editPoint.Insert("‼ WARNING ‼\r\n");
+                        editPoint.Insert("\r\n‼ WARNING ‼\r\n");
                         editPoint.Insert("This query requires additional processing. This FetchXML gives the required data, but needs additional processing to format it in the same way as returned by the TDS Endpoint or SQL 4 CDS.\r\n\r\n");
                         editPoint.Insert("Learn more at https://markcarrington.dev/sql-4-cds/additional-processing/\r\n\r\n");
                     }
 
-                    if (query.DistinctWithoutSort)
-                    {
-                        editPoint.Insert("‼ WARNING ‼\r\n");
-                        editPoint.Insert("This DISTINCT query does not have a sort order applied. Unexpected results may be returned when the results are split over multiple pages. Add a sort order to retrieve the correct results.\r\n");
-                        editPoint.Insert("Learn more at https://docs.microsoft.com/powerapps/developer/common-data-service/org-service/paging-behaviors-and-ordering#ordering-with-a-paging-cookie\r\n\r\n");
-                    }
+                    editPoint.Insert("\r\n\r\n-->");
 
-                    editPoint.Insert("\r\n\r\n-->\r\n\r\n");
-                    editPoint.Insert(query.FetchXmlString);
+                    foreach (var fetchXml in nodes.OfType<IFetchXmlExecutionPlanNode>())
+                    {
+                        editPoint.Insert("\r\n\r\n");
+                        editPoint.Insert(fetchXml.FetchXmlString);
+                    }
                 }
             }
             catch (NotSupportedQueryFragmentException ex)
@@ -132,6 +144,17 @@ namespace MarkMpn.Sql4Cds.SSMS
             catch (QueryParseException ex)
             {
                 VsShellUtilities.ShowMessageBox(Package, "The query could not be parsed: " + ex.Message, "Query Parsing Error", OLEMSGICON.OLEMSGICON_CRITICAL, OLEMSGBUTTON.OLEMSGBUTTON_OK, OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
+            }
+        }
+
+        private IEnumerable<IExecutionPlanNode> GetAllNodes(IExecutionPlanNode node)
+        {
+            foreach (var source in node.GetSources())
+            {
+                yield return source;
+
+                foreach (var subSource in GetAllNodes(source))
+                    yield return subSource;
             }
         }
     }

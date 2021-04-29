@@ -11,7 +11,12 @@
     <iconUrl>https://markcarrington.dev/sql4cds-icon/</iconUrl>
     <description>Convert SQL queries to FetchXml and execute them against CDS</description>
     <summary>Convert SQL queries to FetchXml and execute them against CDS</summary>
-    <releaseNotes>Fixed FetchXML to SQL conversion for null numeric attribute conditions</releaseNotes>
+    <releaseNotes>Complete replacement of the SQL conversion engine to support many more query types.
+
+Queries involving UNION, subqueries, more complex joins, data type conversions and more can now be executed without requiring the TDS Endpoint to be available.
+
+The Sql2FetchXml and Query classes are still available but are now deprecated. Please update your code to use the new ExecutionPlanBuilder class instead.
+    </releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>
     <tags>SQL CDS</tags>

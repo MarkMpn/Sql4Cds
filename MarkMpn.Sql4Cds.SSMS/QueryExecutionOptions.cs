@@ -1,6 +1,8 @@
-﻿using System.Threading.Tasks;
+﻿using System.Collections.Generic;
+using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine;
 using Microsoft.Xrm.Sdk.Metadata;
+using Microsoft.Xrm.Sdk.Query;
 
 namespace MarkMpn.Sql4Cds.SSMS
 {
@@ -32,6 +34,12 @@ namespace MarkMpn.Sql4Cds.SSMS
         public int LocaleId => 1033;
 
         public int MaxDegreeOfParallelism => _options.MaxDegreeOfParallelism;
+
+        public bool ColumnComparisonAvailable => true;
+
+        public bool UseLocalTimeZone => false;
+
+        public List<JoinOperator> JoinOperatorsAvailable => new List<JoinOperator>();
 
         public bool ConfirmDelete(int count, EntityMetadata meta)
         {
@@ -71,6 +79,10 @@ namespace MarkMpn.Sql4Cds.SSMS
             _sqlScriptEditorControl.Cancelling();
             Task.ContinueWith(t => _sqlScriptEditorControl.DoCancelExec());
             Cancelled = true;
+        }
+
+        public void RetrievingNextPage()
+        {
         }
     }
 }

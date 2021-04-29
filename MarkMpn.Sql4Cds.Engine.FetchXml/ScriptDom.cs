@@ -10,20 +10,111 @@ using System.Threading.Tasks;
 /// </summary>
 namespace Microsoft.SqlServer.TransactSql.ScriptDom
 {
-    class SelectStatement
+    class TSqlBatch
+    {
+        public List<Statement> Statements { get; } = new List<Statement>();
+
+        public void Accept(TSqlFragmentVisitor visitor)
+        {
+            visitor.ExplicitVisit(this);
+
+            foreach (var statement in Statements)
+                statement.Accept(visitor);
+        }
+
+        public void ToString(StringBuilder buf, int indent)
+        {
+            for (var i = 0; i < Statements.Count; i++)
+            {
+                if (i > 0)
+                    buf.Append("\r\n");
+
+                Statements[i].ToString(buf, indent);
+            }
+        }
+    }
+
+    abstract class Statement
+    {
+        public abstract void Accept(TSqlFragmentVisitor visitor);
+
+        public abstract void ToString(StringBuilder buf, int indent);
+    }
+
+    class DeclareVariableStatement : Statement
+    {
+        public List<DeclareVariableElement> Declarations { get; } = new List<DeclareVariableElement>();
+
+        public override void Accept(TSqlFragmentVisitor visitor)
+        {
+            visitor.ExplicitVisit(this);
+
+            foreach (var declaration in Declarations)
+                declaration.Accept(visitor);
+        }
+
+        public override void ToString(StringBuilder buf, int indent)
+        {
+            buf.Append(' ', indent);
+
+            buf.Append("DECLARE ");
+
+            for (var i = 0; i < Declarations.Count; i++)
+            {
+                if (i > 0)
+                    buf.Append(", ");
+
+                Declarations[i].ToString(buf, indent);
+            }
+
+            buf.Append("\r\n");
+        }
+    }
+
+    class DeclareVariableElement
+    {
+        public Identifier VariableName { get; set; }
+
+        public SqlDataTypeReference DataType { get; set; }
+
+        public ScalarExpression Value { get; set; }
+
+        public void Accept(TSqlFragmentVisitor visitor)
+        {
+            visitor.ExplicitVisit(this);
+            VariableName?.Accept(visitor);
+            DataType?.Accept(visitor);
+            Value?.Accept(visitor);
+        }
+
+        public void ToString(StringBuilder buf, int indent)
+        {
+            VariableName.ToString(buf);
+            buf.Append(" ");
+            DataType.ToString(buf, indent);
+
+            if (Value != null)
+            {
+                buf.Append(" = ");
+                Value.ToString(buf, indent);
+            }
+        }
+    }
+
+    class SelectStatement : Statement
     {
         public QueryExpression QueryExpression { get; set; }
 
         public WithCtesAndXmlNamespaces WithCtesAndXmlNamespaces { get; set; }
 
-        public void Accept(TSqlFragmentVisitor visitor)
+        public override void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
             QueryExpression?.Accept(visitor);
             WithCtesAndXmlNamespaces?.Accept(visitor);
         }
 
-        public void ToString(StringBuilder buf, int indent)
+        public override void ToString(StringBuilder buf, int indent)
         {
             WithCtesAndXmlNamespaces?.ToString(buf, indent);
             QueryExpression?.ToString(buf, indent);
@@ -192,6 +283,19 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         public override void ToString(StringBuilder buf, int indent)
         {
             buf.Append(Value);
+        }
+    }
+
+    class NullLiteral : Literal
+    {
+        public override void Accept(TSqlFragmentVisitor visitor)
+        {
+            visitor.ExplicitVisit(this);
+        }
+
+        public override void ToString(StringBuilder buf, int indent)
+        {
+            buf.Append("NULL");
         }
     }
 
@@ -684,6 +788,8 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
     {
         public SchemaObjectName Name { get; set; }
 
+        public SqlDataTypeOption? SqlDataTypeOption { get; set; }
+
         public void Accept(TSqlFragmentVisitor visitor)
         {
             visitor.ExplicitVisit(this);
@@ -695,6 +801,12 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         {
             Name.ToString(buf, indent);
         }
+    }
+
+    enum SqlDataTypeOption
+    {
+        Float,
+        DateTime
     }
 
     class IdentifierOrValueExpression
@@ -1104,6 +1216,14 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
                     buf.Append(" + ");
                     break;
 
+                case BinaryExpressionType.Subtract:
+                    buf.Append(" - ");
+                    break;
+
+                case BinaryExpressionType.Multiply:
+                    buf.Append(" * ");
+                    break;
+
                 default:
                     throw new NotSupportedException();
             }
@@ -1114,7 +1234,43 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
 
     enum BinaryExpressionType
     {
-        Add
+        Add,
+        Subtract,
+        Multiply
+    }
+
+    class UnaryExpression : ScalarExpression
+    {
+        public ScalarExpression Expression { get; set; }
+
+        public UnaryExpressionType UnaryExpressionType { get; set; }
+
+        public override void Accept(TSqlFragmentVisitor visitor)
+        {
+            visitor.ExplicitVisit(this);
+
+            Expression?.Accept(visitor);
+        }
+
+        public override void ToString(StringBuilder buf, int indent)
+        {
+            switch (UnaryExpressionType)
+            {
+                case UnaryExpressionType.Negative:
+                    buf.Append("-");
+                    break;
+
+                default:
+                    throw new NotSupportedException();
+            }
+
+            Expression.ToString(buf, indent);
+        }
+    }
+
+    enum UnaryExpressionType
+    {
+        Negative
     }
 
     class ScalarSubquery
@@ -1302,6 +1458,18 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
 
     class TSqlFragmentVisitor
     {
+        public virtual void ExplicitVisit(TSqlBatch node)
+        {
+        }
+
+        public virtual void ExplicitVisit(DeclareVariableStatement node)
+        {
+        }
+
+        public virtual void ExplicitVisit(DeclareVariableElement node)
+        {
+        }
+
         public virtual void ExplicitVisit(SelectStatement node)
         {
         }
@@ -1319,6 +1487,10 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         }
 
         public virtual void ExplicitVisit(TopRowFilter topRowFilter)
+        {
+        }
+
+        public virtual void ExplicitVisit(NullLiteral integerLiteral)
         {
         }
 
@@ -1430,57 +1602,61 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         {
         }
 
-        internal void ExplicitVisit(ConvertCall convertCall)
+        public virtual void ExplicitVisit(ConvertCall convertCall)
         {
         }
 
-        internal void ExplicitVisit(SqlDataTypeReference sqlDataTypeReference)
+        public virtual void ExplicitVisit(SqlDataTypeReference sqlDataTypeReference)
         {
         }
 
-        internal void ExplicitVisit(VariableReference variableReference)
+        public virtual void ExplicitVisit(VariableReference variableReference)
         {
         }
 
-        internal void ExplicitVisit(BooleanParenthesisExpression booleanParenthesisExpression)
+        public virtual void ExplicitVisit(BooleanParenthesisExpression booleanParenthesisExpression)
         {
         }
 
-        internal void ExplicitVisit(WithCtesAndXmlNamespaces withCtesAndXmlNamespaces)
+        public virtual void ExplicitVisit(WithCtesAndXmlNamespaces withCtesAndXmlNamespaces)
         {
         }
 
-        internal void ExplicitVisit(CommonTableExpression commonTableExpression)
+        public virtual void ExplicitVisit(CommonTableExpression commonTableExpression)
         {
         }
 
-        internal void ExplicitVisit(ScalarSubquery scalarSubquery)
+        public virtual void ExplicitVisit(ScalarSubquery scalarSubquery)
         {
         }
 
-        internal void ExplicitVisit(BinaryQueryExpression binaryQueryExpression)
+        public virtual void ExplicitVisit(BinaryQueryExpression binaryQueryExpression)
         {
         }
 
-        internal void ExplicitVisit(BinaryExpression binaryExpression)
+        public virtual void ExplicitVisit(BinaryExpression binaryExpression)
         {
         }
 
-        internal void ExplicitVisit(FullTextPredicate fullTextPredicate)
+        public virtual void ExplicitVisit(UnaryExpression unaryExpression)
         {
         }
 
-        internal void ExplicitVisit(BooleanNotExpression notExpression)
+        public virtual void ExplicitVisit(FullTextPredicate fullTextPredicate)
+        {
+        }
+
+        public virtual void ExplicitVisit(BooleanNotExpression notExpression)
         {
         }
     }
 
     class Sql150ScriptGenerator
     {
-        public void GenerateScript(SelectStatement statement, out string sql)
+        public void GenerateScript(TSqlBatch batch, out string sql)
         {
             var buf = new StringBuilder();
-            statement.ToString(buf, 0);
+            batch.ToString(buf, 0);
             sql = buf.ToString().Trim();
         }
 

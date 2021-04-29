@@ -27,10 +27,10 @@ namespace MarkMpn.Sql4Cds.Engine
         public AttributeMetadataCache(IOrganizationService org)
         {
             _org = org;
-            _metadata = new Dictionary<string, EntityMetadata>();
-            _loading = new HashSet<string>();
-            _minimalMetadata = new Dictionary<string, EntityMetadata>();
-            _minimalLoading = new HashSet<string>();
+            _metadata = new Dictionary<string, EntityMetadata>(StringComparer.OrdinalIgnoreCase);
+            _loading = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            _minimalMetadata = new Dictionary<string, EntityMetadata>(StringComparer.OrdinalIgnoreCase);
+            _minimalLoading = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         }
 
         /// <inheritdoc cref="IAttributeMetadataCache.this{string}"/>
@@ -43,7 +43,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 var metadata = (RetrieveEntityResponse)_org.Execute(new RetrieveEntityRequest
                 {
-                    LogicalName = name,
+                    LogicalName = name.ToLowerInvariant(),
                     EntityFilters = EntityFilters.Attributes | EntityFilters.Relationships
                 });
 
@@ -119,7 +119,7 @@ namespace MarkMpn.Sql4Cds.Engine
                             {
                                 Conditions =
                                 {
-                                    new MetadataConditionExpression(nameof(EntityMetadata.LogicalName), MetadataConditionOperator.Equals, logicalName)
+                                    new MetadataConditionExpression(nameof(EntityMetadata.LogicalName), MetadataConditionOperator.Equals, logicalName.ToLowerInvariant())
                                 }
                             },
                             Properties = new MetadataPropertiesExpression

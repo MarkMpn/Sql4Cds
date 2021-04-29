@@ -3,15 +3,19 @@ using System.Collections.Generic;
 using System.Data;
 using System.IO;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using System.Xml.Serialization;
 using FakeXrmEasy;
 using FakeXrmEasy.FakeMessageExecutors;
+using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
+using Microsoft.Xrm.Sdk.Metadata.Query;
+using Microsoft.Xrm.Sdk.Query;
 
 namespace MarkMpn.Sql4Cds.Engine.Tests
 {
@@ -35,6 +39,16 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         int IQueryExecutionOptions.LocaleId => 1033;
 
         int IQueryExecutionOptions.MaxDegreeOfParallelism => 10;
+
+        bool IQueryExecutionOptions.ColumnComparisonAvailable => true;
+
+        bool IQueryExecutionOptions.UseLocalTimeZone => false;
+
+        List<JoinOperator> IQueryExecutionOptions.JoinOperatorsAvailable => new List<JoinOperator> { JoinOperator.Inner, JoinOperator.LeftOuter };
+
+        void IQueryExecutionOptions.RetrievingNextPage()
+        {
+        }
 
         [TestMethod]
         public void SimpleSelect()
@@ -349,7 +363,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 <fetch>
                     <entity name='account'>
                         <attribute name='accountid' />
-                        <attribute name='name' alias='accountname' />
                         <attribute name='name' />
                         <order attribute='name' />
                     </entity>
@@ -467,15 +480,15 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var metadata = new AttributeMetadataCache(org);
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
 
-            var query = "SELECT DISTINCT accountid, name FROM account";
+            var query = "SELECT DISTINCT name FROM account";
 
             var queries = sql2FetchXml.Convert(query);
 
             AssertFetchXml(queries, @"
                 <fetch distinct='true'>
                     <entity name='account'>
-                        <attribute name='accountid' />
                         <attribute name='name' />
+                        <order attribute='name' />
                     </entity>
                 </fetch>
             ");
@@ -590,7 +603,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
-        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
         public void InvalidAdditionalJoinCriteria()
         {
             var context = new XrmFakedContext();
@@ -602,7 +614,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT accountid, name FROM account INNER JOIN contact ON accountid = parentcustomerid OR (firstname = 'Mark' AND lastname = 'Carrington')";
 
-            sql2FetchXml.Convert(query);
+            var queries = sql2FetchXml.Convert(query);
+
+            Assert.AreNotEqual(0, ((SelectQuery)queries[0]).Extensions.Count);
         }
 
         [TestMethod]
@@ -615,12 +629,12 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var metadata = new AttributeMetadataCache(org);
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
 
-            var query = "SELECT accountid, name FROM account INNER JOIN contact ON accountid = parentcustomerid ORDER BY name, firstname";
+            var query = "SELECT TOP 100 accountid, name FROM account INNER JOIN contact ON accountid = parentcustomerid ORDER BY name, firstname";
 
             var queries = sql2FetchXml.Convert(query);
 
             AssertFetchXml(queries, @"
-                <fetch>
+                <fetch top='100'>
                     <entity name='account'>
                         <attribute name='accountid' />
                         <attribute name='name' />
@@ -643,7 +657,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var metadata = new AttributeMetadataCache(org);
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
 
-            var query = "SELECT accountid, name FROM account INNER JOIN contact ON accountid = parentcustomerid ORDER BY firstname, name";
+            var query = "SELECT TOP 100 accountid, name FROM account INNER JOIN contact ON accountid = parentcustomerid ORDER BY firstname, name";
 
             var queries = sql2FetchXml.Convert(query);
 
@@ -660,7 +674,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 </fetch>
             ");
 
-            Assert.AreEqual(1, ((FetchXmlQuery)queries[0]).Extensions.Count);
+            Assert.AreEqual(2, ((FetchXmlQuery)queries[0]).Extensions.Count);
         }
 
         [TestMethod]
@@ -680,9 +694,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             AssertFetchXml(queries, @"
                 <fetch aggregate='true'>
                     <entity name='account'>
-                        <attribute name='accountid' aggregate='count' alias='accountid_count' />
+                        <attribute name='accountid' aggregate='count' alias='count' />
                         <attribute name='name' aggregate='countcolumn' alias='name_count' />
-                        <attribute name='name' aggregate='countcolumn' distinct='true' alias='name_count_2' />
+                        <attribute name='name' aggregate='countcolumn' distinct='true' alias='name_count_distinct' />
                         <attribute name='name' aggregate='max' alias='name_max' />
                         <attribute name='name' aggregate='min' alias='name_min' />
                         <attribute name='name' aggregate='avg' alias='name_avg' />
@@ -709,7 +723,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 <fetch aggregate='true'>
                     <entity name='account'>
                         <attribute name='name' groupby='true' alias='name' />
-                        <attribute name='accountid' aggregate='count' alias='accountid_count' />
+                        <attribute name='accountid' aggregate='count' alias='count' />
                     </entity>
                 </fetch>
             ");
@@ -733,9 +747,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 <fetch aggregate='true'>
                     <entity name='account'>
                         <attribute name='name' groupby='true' alias='name' />
-                        <attribute name='accountid' aggregate='count' alias='accountid_count' />
+                        <attribute name='accountid' aggregate='count' alias='count' />
                         <order alias='name' />
-                        <order alias='accountid_count' />
+                        <order alias='count' />
                     </entity>
                 </fetch>
             ");
@@ -759,7 +773,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 <fetch aggregate='true'>
                     <entity name='account'>
                         <attribute name='name' groupby='true' alias='name' />
-                        <attribute name='accountid' aggregate='count' alias='accountid_count' />
+                        <attribute name='accountid' aggregate='count' alias='count' />
                         <link-entity name='contact' from='parentcustomerid' to='accountid' link-type='inner' alias='contact'>
                             <attribute name='firstname' groupby='true' alias='firstname' />
                             <order alias='firstname' />
@@ -813,10 +827,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var queries = sql2FetchXml.Convert(query);
 
             AssertFetchXml(queries, @"
-                <fetch distinct='true'>
+                <fetch>
                     <entity name='contact'>
                         <attribute name='contactid' />
-                        <order attribute='contactid' />
                     </entity>
                 </fetch>
             ");
@@ -864,7 +877,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(3M, ((EntityCollection)queries[0].Result).Entities[0]["c"]);
             Assert.AreEqual(5M, ((EntityCollection)queries[0].Result).Entities[0]["d"]);
             Assert.AreEqual(4.5M, ((EntityCollection)queries[0].Result).Entities[0]["e"]);
-
         }
 
         [TestMethod]
@@ -884,9 +896,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             AssertFetchXml(queries, @"
                 <fetch>
                     <entity name='contact'>
+                        <attribute name='contactid' />
                         <attribute name='firstname' />
                         <attribute name='lastname' />
-                        <attribute name='contactid' />
                     </entity>
                 </fetch>
             ");
@@ -912,7 +924,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
 
             Assert.AreEqual(1, ((EntityCollection)queries[0].Result).Entities.Count);
-            Assert.AreEqual(guid2, ((EntityCollection)queries[0].Result).Entities[0].Id);
+            Assert.AreEqual(guid2, ((EntityCollection)queries[0].Result).Entities[0]["contactid"]);
         }
 
         [TestMethod]
@@ -932,9 +944,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             AssertFetchXml(queries, @"
                 <fetch>
                     <entity name='contact'>
-                        <attribute name='firstname' />
-                        <attribute name='lastname' />
                         <attribute name='contactid' />
+                        <attribute name='lastname' />
+                        <attribute name='firstname' />
                     </entity>
                 </fetch>
             ");
@@ -960,7 +972,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
 
             Assert.AreEqual(1, ((EntityCollection)queries[0].Result).Entities.Count);
-            Assert.AreEqual(guid1, ((EntityCollection)queries[0].Result).Entities[0].Id);
+            Assert.AreEqual(guid1, ((EntityCollection)queries[0].Result).Entities[0]["contactid"]);
         }
 
         [TestMethod]
@@ -980,8 +992,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             AssertFetchXml(queries, @"
                 <fetch>
                     <entity name='contact'>
-                        <attribute name='firstname' />
                         <attribute name='contactid' />
+                        <attribute name='firstname' />
                     </entity>
                 </fetch>
             ");
@@ -1005,7 +1017,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
 
             Assert.AreEqual(1, ((EntityCollection)queries[0].Result).Entities.Count);
-            Assert.AreEqual(guid2, ((EntityCollection)queries[0].Result).Entities[0].Id);
+            Assert.AreEqual(guid2, ((EntityCollection)queries[0].Result).Entities[0]["contactid"]);
         }
 
         [TestMethod]
@@ -1023,11 +1035,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var queries = sql2FetchXml.Convert(query);
 
             AssertFetchXml(queries, @"
-                <fetch distinct='true'>
+                <fetch>
                     <entity name='contact'>
-                        <attribute name='lastname' />
                         <attribute name='contactid' />
-                        <order attribute='contactid' />
+                        <attribute name='lastname' />
                     </entity>
                 </fetch>
             ");
@@ -1062,11 +1073,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var queries = sql2FetchXml.Convert(query);
 
             AssertFetchXml(queries, @"
-                <fetch distinct='true'>
+                <fetch>
                     <entity name='contact'>
-                        <attribute name='lastname' />
                         <attribute name='contactid' />
-                        <order attribute='contactid' />
+                        <attribute name='lastname' />
                     </entity>
                 </fetch>
             ");
@@ -1101,14 +1111,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var queries = sql2FetchXml.Convert(query);
 
             AssertFetchXml(queries, @"
-                <fetch distinct='true'>
+                <fetch>
                     <entity name='contact'>
-                        <attribute name='firstname' />
                         <attribute name='contactid' />
+                        <attribute name='firstname' />
                         <filter>
                             <condition attribute='lastname' operator='eq' value='Carrington' />
                         </filter>
-                        <order attribute='contactid' />
                     </entity>
                 </fetch>
             ");
@@ -1296,8 +1305,57 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
 
             Assert.AreEqual(2, ((EntityCollection)queries[0].Result).Entities.Count);
-            Assert.AreEqual(guid2, ((EntityCollection)queries[0].Result).Entities[0].Id);
-            Assert.AreEqual(guid1, ((EntityCollection)queries[0].Result).Entities[1].Id);
+            Assert.AreEqual("Data", ((EntityCollection)queries[0].Result).Entities[0]["firstname"]);
+            Assert.AreEqual("Mark", ((EntityCollection)queries[0].Result).Entities[1]["firstname"]);
+        }
+
+        [TestMethod]
+        public void OrderByAliasedField()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT firstname, lastname AS surname FROM contact ORDER BY surname";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <attribute name='lastname' />
+                        <order attribute='lastname' />
+                    </entity>
+                </fetch>
+            ");
+
+            var guid1 = Guid.NewGuid();
+            var guid2 = Guid.NewGuid();
+            context.Data["contact"] = new Dictionary<Guid, Entity>
+            {
+                [guid1] = new Entity("contact", guid1)
+                {
+                    ["contactid"] = guid1,
+                    ["firstname"] = "Mark",
+                    ["lastname"] = "Carrington"
+                },
+                [guid2] = new Entity("contact", guid2)
+                {
+                    ["contactid"] = guid2,
+                    ["firstname"] = "Data",
+                    ["lastname"] = "8"
+                }
+            };
+
+            queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+
+            Assert.AreEqual(2, ((EntityCollection)queries[0].Result).Entities.Count);
+            Assert.AreEqual("8", ((EntityCollection)queries[0].Result).Entities[0]["surname"]);
+            Assert.AreEqual("Carrington", ((EntityCollection)queries[0].Result).Entities[1]["surname"]);
         }
 
         [TestMethod]
@@ -1344,8 +1402,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
 
             Assert.AreEqual(2, ((EntityCollection)queries[0].Result).Entities.Count);
-            Assert.AreEqual(guid2, ((EntityCollection)queries[0].Result).Entities[0].Id);
-            Assert.AreEqual(guid1, ((EntityCollection)queries[0].Result).Entities[1].Id);
+            Assert.AreEqual("8, Data", ((EntityCollection)queries[0].Result).Entities[0]["fullname"]);
+            Assert.AreEqual("Carrington, Mark", ((EntityCollection)queries[0].Result).Entities[1]["fullname"]);
         }
 
         [TestMethod]
@@ -1392,8 +1450,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
 
             Assert.AreEqual(2, ((EntityCollection)queries[0].Result).Entities.Count);
-            Assert.AreEqual(guid2, ((EntityCollection)queries[0].Result).Entities[0].Id);
-            Assert.AreEqual(guid1, ((EntityCollection)queries[0].Result).Entities[1].Id);
+            Assert.AreEqual("8, Data", ((EntityCollection)queries[0].Result).Entities[0]["fullname"]);
+            Assert.AreEqual("Carrington, Mark", ((EntityCollection)queries[0].Result).Entities[1]["fullname"]);
         }
 
         [TestMethod]
@@ -1406,13 +1464,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var metadata = new AttributeMetadataCache(org);
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
 
-            var query = "SELECT DATEADD(day, 1, createdon) AS nextday, DATEPART(minute, createdon) AS minute FROM contact WHERE DATEDIFF(hour, '2020-01-01', createdon) < 1";
+            var query = "SELECT contactid, DATEADD(day, 1, createdon) AS nextday, DATEPART(minute, createdon) AS minute FROM contact WHERE DATEDIFF(hour, '2020-01-01', createdon) < 1";
 
             var queries = sql2FetchXml.Convert(query);
 
             AssertFetchXml(queries, @"
                 <fetch>
                     <entity name='contact'>
+                        <attribute name='contactid' />
                         <attribute name='createdon' />
                     </entity>
                 </fetch>
@@ -1437,7 +1496,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
 
             Assert.AreEqual(1, ((EntityCollection)queries[0].Result).Entities.Count);
-            Assert.AreEqual(guid2, ((EntityCollection)queries[0].Result).Entities[0].Id);
+            Assert.AreEqual(guid2, ((EntityCollection)queries[0].Result).Entities[0]["contactid"]);
             Assert.AreEqual(new DateTime(2020, 1, 2, 0, 30, 0), ((EntityCollection)queries[0].Result).Entities[0].GetAttributeValue<DateTime>("nextday"));
             Assert.AreEqual(30, ((EntityCollection)queries[0].Result).Entities[0].GetAttributeValue<int>("minute"));
         }
@@ -1459,9 +1518,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             AssertFetchXml(queries, @"
                 <fetch>
                     <entity name='contact'>
+                        <attribute name='contactid' />
                         <attribute name='firstname' />
                         <attribute name='lastname' />
-                        <attribute name='contactid' />
                     </entity>
                 </fetch>
             ");
@@ -1486,11 +1545,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             AssertFetchXml(queries, @"
                 <fetch>
                     <entity name='contact'>
-                        <attribute name='createdon' />
                         <attribute name='lastname' />
                         <attribute name='firstname' />
-                        <attribute name='contactid' />
-                        <order attribute='lastname' />
+                        <attribute name='createdon' />
                     </entity>
                 </fetch>
             ");
@@ -1561,9 +1618,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             AssertFetchXml(queries, @"
                 <fetch>
                     <entity name='contact'>
+                        <attribute name='contactid' />
                         <attribute name='createdon' />
                         <attribute name='lastname' />
-                        <attribute name='contactid' />
                         <order attribute='createdon' />
                     </entity>
                 </fetch>
@@ -1602,8 +1659,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var results = (EntityCollection)queries[0].Result;
             Assert.AreEqual(2, results.Entities.Count);
 
-            Assert.AreEqual(guid1, results.Entities[0].Id);
-            Assert.AreEqual(guid2, results.Entities[1].Id);
+            Assert.AreEqual(guid1, results.Entities[0]["contactid"]);
+            Assert.AreEqual(guid2, results.Entities[1]["contactid"]);
         }
 
         [TestMethod]
@@ -1623,10 +1680,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             AssertFetchXml(queries, @"
                 <fetch>
                     <entity name='contact'>
-                        <attribute name='createdon' />
                         <attribute name='lastname' />
-                        <attribute name='contactid' />
-                        <order attribute='lastname' />
+                        <attribute name='createdon' />
                     </entity>
                 </fetch>
             ");
@@ -1745,8 +1800,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 <fetch>
                     <entity name='account'>
                         <attribute name='name' />
-                        <attribute name='accountid' />
-                        <order attribute='name' />
                     </entity>
                 </fetch>
             ");
@@ -1849,6 +1902,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
+            var lookup = (LookupAttributeMetadata)metadata["account"].Attributes.Single(a => a.LogicalName == "primarycontactid");
+            lookup.Targets = new[] { "contact" };
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
 
             var query = "UPDATE a SET primarycontactid = c.contactid FROM account AS a INNER JOIN contact AS c ON a.accountid = c.parentcustomerid";
@@ -1889,7 +1944,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            update.Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            update.Execute(org, metadata, this);
 
             Assert.AreEqual(new EntityReference("contact", contact1), context.Data["account"][account1].GetAttributeValue<EntityReference>("primarycontactid"));
             Assert.AreEqual(new EntityReference("contact", contact2), context.Data["account"][account2].GetAttributeValue<EntityReference>("primarycontactid"));
@@ -1907,8 +1962,21 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "DELETE c2 FROM contact c1 INNER JOIN contact c2 ON c1.parentcustomerid = c2.parentcustomerid AND c2.createdon > c1.createdon";
 
-            var ex = Assert.ThrowsException<NotSupportedQueryFragmentException>(() => sql2FetchXml.Convert(query));
-            Assert.IsTrue(ex.Message.Contains("rewrite as WHERE clause"));
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='createdon' />
+                        <link-entity name='contact' to='parentcustomerid' from='parentcustomerid' alias='c2' link-type='inner'>
+                            <attribute name='contactid' />
+                            <attribute name='createdon' />
+                        </link-entity>
+                    </entity>
+                </fetch>");
+
+            var select = (DeleteQuery)queries[0];
+            Assert.AreEqual(1, select.Extensions.Count);
         }
 
         [TestMethod]
@@ -1958,7 +2026,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             }
             catch (NotSupportedQueryFragmentException ex)
             {
-                Assert.IsTrue(ex.Message.Contains("Did you mean 'mark'?"));
+                Assert.IsTrue(ex.Suggestion == "Did you mean 'mark'?");
             }
         }
 
@@ -2003,13 +2071,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var queries = sql2FetchXml.Convert(query);
 
-            AssertFetchXml(queries, $@"
-                <fetch aggregate='true'>
-                    <entity name='contact'>
-                        <attribute name='contactid' aggregate='count' alias='contactid_count' />
-                    </entity>
-                </fetch>
-            ");
+            var selectQuery = (SelectQuery)queries[0];
+            var selectNode = (SelectNode)selectQuery.Node;
+            var computeScalarNode = (ComputeScalarNode)selectNode.Source;
+            var count = (RetrieveTotalRecordCountNode)computeScalarNode.Source;
         }
 
         [TestMethod]
@@ -2045,16 +2110,16 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var metadata = new AttributeMetadataCache(org);
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
 
-            var query = "SELECT name FROM account WHERE CONTAINS(name, '1 OR 2')";
+            var query = "SELECT new_name FROM new_customentity WHERE CONTAINS(new_optionsetvaluecollection, '1 OR 2')";
 
             var queries = sql2FetchXml.Convert(query);
 
             AssertFetchXml(queries, $@"
                 <fetch>
-                    <entity name='account'>
-                        <attribute name='name' />
+                    <entity name='new_customentity'>
+                        <attribute name='new_name' />
                         <filter>
-                            <condition attribute='name' operator='contain-values'>
+                            <condition attribute='new_optionsetvaluecollection' operator='contain-values'>
                                 <value>1</value>
                                 <value>2</value>
                             </condition>
@@ -2074,16 +2139,16 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var metadata = new AttributeMetadataCache(org);
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
 
-            var query = "SELECT name FROM account WHERE NOT CONTAINS(name, '1 OR 2')";
+            var query = "SELECT new_name FROM new_customentity WHERE NOT CONTAINS(new_optionsetvaluecollection, '1 OR 2')";
 
             var queries = sql2FetchXml.Convert(query);
 
             AssertFetchXml(queries, $@"
                 <fetch>
-                    <entity name='account'>
-                        <attribute name='name' />
+                    <entity name='new_customentity'>
+                        <attribute name='new_name' />
                         <filter>
-                            <condition attribute='name' operator='not-contain-values'>
+                            <condition attribute='new_optionsetvaluecollection' operator='not-contain-values'>
                                 <value>1</value>
                                 <value>2</value>
                             </condition>
@@ -2102,13 +2167,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
+            sql2FetchXml.TDSEndpointAvailable = true;
             sql2FetchXml.ForceTDSEndpoint = true;
 
             var query = "SELECT COUNT(*) AS count FROM account WHERE name IS NULL";
 
             var queries = sql2FetchXml.Convert(query);
 
-            Assert.AreEqual("SELECT COUNT(*) AS count FROM account AS account WHERE name IS NULL", Regex.Replace(queries[0].TSql, "\\s+", " "));
+            Assert.AreEqual("SELECT COUNT(*) AS count FROM account WHERE name IS NULL", Regex.Replace(queries[0].TSql, "\\s+", " "));
         }
 
         [TestMethod]
@@ -2183,7 +2249,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var select = queries[0];
             select.Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
             var result = (EntityCollection)select.Result;
-            Assert.AreEqual(account2, result.Entities[0].Id);
+            Assert.AreEqual(account2, result.Entities[0]["accountid"]);
         }
 
         [TestMethod]
@@ -2197,106 +2263,25 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var metadata = new AttributeMetadataCache(org);
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
 
-            var query = "SELECT displayname FROM globaloptionset WHERE name = 'test'";
+            var query = "SELECT displayname FROM metadata.globaloptionset WHERE name = 'test'";
 
             var queries = sql2FetchXml.Convert(query);
 
-            Assert.IsInstanceOfType(queries.Single(), typeof(GlobalOptionSetQuery));
+            Assert.IsInstanceOfType(queries.Single(), typeof(SelectQuery));
 
-            AssertFetchXml(queries, @"
-                <fetch>
-                    <entity name='globaloptionset'>
-                        <attribute name='displayname' />
-                        <filter>
-                            <condition attribute='name' operator='eq' value='test' />
-                        </filter>
-                    </entity>
-                </fetch>");
+            var selectQuery = (SelectQuery)queries[0];
+            var selectNode = (SelectNode)selectQuery.Node;
+            Assert.AreEqual(1, selectNode.ColumnSet.Count);
+            Assert.AreEqual("globaloptionset.displayname", selectNode.ColumnSet[0].SourceColumn);
+            var filterNode = (FilterNode)selectNode.Source;
+            Assert.AreEqual("name = 'test'", filterNode.Filter.ToSql());
+            var optionsetNode = (GlobalOptionSetQueryNode)filterNode.Source;
 
             queries[0].Execute(org, metadata, this);
 
-            var result = (DataTable)queries[0].Result;
+            var result = (EntityCollection)queries[0].Result;
 
-            Assert.AreEqual(1, result.Rows.Count);
-        }
-
-        [TestMethod]
-        public void GlobalOptionSetValues()
-        {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-            context.AddFakeMessageExecutor<RetrieveAllOptionSetsRequest>(new RetrieveAllOptionSetsHandler());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
-            var sql2FetchXml = new Sql2FetchXml(metadata, true);
-
-            var query = "SELECT gos.displayname, o.label FROM globaloptionset gos LEFT OUTER JOIN [option] o ON gos.globaloptionsetid = o.optionsetid AND o.value = 2 WHERE gos.name = 'test'";
-
-            var queries = sql2FetchXml.Convert(query);
-
-            Assert.IsInstanceOfType(queries.Single(), typeof(GlobalOptionSetQuery));
-
-            AssertFetchXml(queries, @"
-                <fetch>
-                    <entity name='globaloptionset'>
-                        <attribute name='displayname' />
-                        <link-entity name='option' from='optionsetid' to='globaloptionsetid' alias='o' link-type='outer'>
-                            <attribute name='label' />
-                            <filter>
-                                <condition attribute='value' operator='eq' value='2' />
-                            </filter>
-                        </link-entity>
-                        <filter>
-                            <condition attribute='name' operator='eq' value='test' />
-                        </filter>
-                    </entity>
-                </fetch>");
-
-            queries[0].Execute(org, metadata, this);
-
-            var result = (DataTable)queries[0].Result;
-
-            Assert.AreEqual(1, result.Rows.Count);
-            Assert.AreEqual("TestGlobalOptionSet", result.Rows[0][0]);
-            Assert.AreEqual("Value2", result.Rows[0][1]);
-        }
-
-        [TestMethod]
-        public void GlobalOptionSetTranslations()
-        {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-            context.AddFakeMessageExecutor<RetrieveAllOptionSetsRequest>(new RetrieveAllOptionSetsHandler());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
-            var sql2FetchXml = new Sql2FetchXml(metadata, true);
-
-            var query = "SELECT gos.displayname, dn.label FROM globaloptionset AS gos INNER JOIN localizedlabel AS dn ON gos.displaynameid = dn.labelid WHERE gos.name = 'test'";
-
-            var queries = sql2FetchXml.Convert(query);
-
-            Assert.IsInstanceOfType(queries.Single(), typeof(GlobalOptionSetQuery));
-
-            AssertFetchXml(queries, @"
-                <fetch>
-                    <entity name='globaloptionset'>
-                        <attribute name='displayname' />
-                        <link-entity name='localizedlabel' from='labelid' to='displaynameid' link-type='inner' alias='dn'>
-                            <attribute name='label' />
-                        </link-entity>
-                        <filter>
-                            <condition attribute='name' operator='eq' value='test' />
-                        </filter>
-                    </entity>
-                </fetch>");
-
-            queries[0].Execute(org, metadata, this);
-
-            var result = (DataTable)queries[0].Result;
-
-            Assert.AreEqual(2, result.Rows.Count);
+            Assert.AreEqual(1, result.Entities.Count);
         }
 
         [TestMethod]
@@ -2310,28 +2295,25 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
             context.AddFakeMessageExecutor<RetrieveMetadataChangesRequest>(new RetrieveMetadataChangesHandler(metadata));
 
-            var query = "SELECT logicalname FROM entity ORDER BY 1";
+            var query = "SELECT logicalname FROM metadata.entity ORDER BY 1";
 
             var queries = sql2FetchXml.Convert(query);
 
-            Assert.IsInstanceOfType(queries.Single(), typeof(EntityMetadataQuery));
+            Assert.IsInstanceOfType(queries.Single(), typeof(SelectQuery));
 
-            AssertFetchXml(queries, @"
-                <fetch>
-                    <entity name='entity'>
-                        <attribute name='logicalname' />
-                        <order attribute='logicalname' />
-                    </entity>
-                </fetch>");
+            var selectQuery = (SelectQuery)queries[0];
+            var selectNode = (SelectNode)selectQuery.Node;
+            var sortNode = (SortNode)selectNode.Source;
+            var metadataNode = (MetadataQueryNode)sortNode.Source;
 
             queries[0].Execute(org, metadata, this);
 
-            var result = (DataTable)queries[0].Result;
+            var result = (EntityCollection)queries[0].Result;
 
-            Assert.AreEqual(3, result.Rows.Count);
-            Assert.AreEqual("account", result.Rows[0]["logicalname"]);
-            Assert.AreEqual("contact", result.Rows[1]["logicalname"]);
-            Assert.AreEqual("new_customentity", result.Rows[2]["logicalname"]);
+            Assert.AreEqual(3, result.Entities.Count);
+            Assert.AreEqual("account", result.Entities[0]["logicalname"]);
+            Assert.AreEqual("contact", result.Entities[1]["logicalname"]);
+            Assert.AreEqual("new_customentity", result.Entities[2]["logicalname"]);
         }
 
         [TestMethod]
@@ -2345,39 +2327,23 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
             context.AddFakeMessageExecutor<RetrieveMetadataChangesRequest>(new RetrieveMetadataChangesHandler(metadata));
 
-            var query = "SELECT e.logicalname, a.logicalname FROM entity e INNER JOIN attribute a ON e.logicalname = a.entitylogicalname WHERE e.logicalname = 'new_customentity' ORDER BY 1, 2";
+            var query = "SELECT e.logicalname, a.logicalname FROM metadata.entity e INNER JOIN metadata.attribute a ON e.logicalname = a.entitylogicalname WHERE e.logicalname = 'new_customentity' ORDER BY 1, 2";
 
             var queries = sql2FetchXml.Convert(query);
 
-            Assert.IsInstanceOfType(queries.Single(), typeof(EntityMetadataQuery));
-
-            AssertFetchXml(queries, @"
-                <fetch>
-                    <entity name='entity'>
-                        <attribute name='logicalname' />
-                        <link-entity name='attribute' from='entitylogicalname' to='logicalname' alias='a' link-type='inner'>
-                            <attribute name='logicalname' />
-                            <order attribute='logicalname' />
-                        </link-entity>
-                        <filter type='and'>
-                            <condition attribute='logicalname' operator='eq' value='new_customentity' />
-                        </filter>
-                        <order attribute='logicalname' />
-                    </entity>
-                </fetch>");
-
             queries[0].Execute(org, metadata, this);
 
-            var result = (DataTable)queries[0].Result;
+            var result = (EntityCollection)queries[0].Result;
 
-            Assert.AreEqual(6, result.Rows.Count);
+            Assert.AreEqual(7, result.Entities.Count);
             var row = 0;
-            Assert.AreEqual("new_boolprop", result.Rows[row++]["a.logicalname"]);
-            Assert.AreEqual("new_customentityid", result.Rows[row++]["a.logicalname"]);
-            Assert.AreEqual("new_name", result.Rows[row++]["a.logicalname"]);
-            Assert.AreEqual("new_optionsetvalue", result.Rows[row++]["a.logicalname"]);
-            Assert.AreEqual("new_optionsetvaluename", result.Rows[row++]["a.logicalname"]);
-            Assert.AreEqual("new_parentid", result.Rows[row++]["a.logicalname"]);
+            Assert.AreEqual("new_boolprop", result.Entities[row++]["logicalname1"]);
+            Assert.AreEqual("new_customentityid", result.Entities[row++]["logicalname1"]);
+            Assert.AreEqual("new_name", result.Entities[row++]["logicalname1"]);
+            Assert.AreEqual("new_optionsetvalue", result.Entities[row++]["logicalname1"]);
+            Assert.AreEqual("new_optionsetvaluecollection", result.Entities[row++]["logicalname1"]);
+            Assert.AreEqual("new_optionsetvaluename", result.Entities[row++]["logicalname1"]);
+            Assert.AreEqual("new_parentid", result.Entities[row++]["logicalname1"]);
         }
 
         [TestMethod]
@@ -2410,8 +2376,12 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 },
                 [record2] = new Entity("new_customentity", record2)
                 {
-                    ["new_optionsetvalue"] = Metadata.New_OptionSet.Value1,
-                    ["new_customentityid"] = record2
+                    ["new_optionsetvalue"] = new OptionSetValue((int) Metadata.New_OptionSet.Value1),
+                    ["new_customentityid"] = record2,
+                    FormattedValues =
+                    {
+                        ["new_optionsetvalue"] = Metadata.New_OptionSet.Value1.ToString()
+                    }
                 }
             };
 
@@ -2429,7 +2399,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             queries[0].Execute(org, metadata, this);
 
-            select.Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            select.Execute(org, metadata, this);
             var result = (EntityCollection)select.Result;
             Assert.IsNull(result.Entities[0].GetAttributeValue<OptionSetValue>("new_optionsetvalue"));
             Assert.IsNull(result.Entities[0].GetAttributeValue<string>("new_optionsetvaluename"));
@@ -2571,6 +2541,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var org = context.GetOrganizationService();
             var metadata = new AttributeMetadataCache(org);
+            var lookup = (LookupAttributeMetadata)metadata["account"].Attributes.Single(a => a.LogicalName == "primarycontactid");
+            lookup.Targets = new[] { "contact" };
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
 
             var query = "UPDATE account SET primarycontactid = c.contactid FROM account AS a INNER JOIN contact AS c ON a.name = c.fullname";
@@ -2597,7 +2569,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             }
             catch (NotSupportedQueryFragmentException ex)
             {
-                Assert.AreEqual("Ambiguous table name", ex.Error);
+                Assert.AreEqual("Target table name is ambiguous", ex.Error);
             }
         }
 
@@ -2627,7 +2599,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
 
             var query = @"
-                EXECUTE AS USER = 'test1'
+                EXECUTE AS LOGIN = 'test1'
                 REVERT";
 
             var queries = sql2FetchXml.Convert(query);
@@ -2664,14 +2636,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             AssertFetchXml(new[] { queries[0] }, @"
                 <fetch>
-                    <entity name='contact'>
-                        <attribute name='fullname' />
-                        <link-entity name='account' from='accountid' to='parentcustomerid' alias='account' link-type='inner'>
-                            <attribute name='employees' />
-                            <order attribute='employees' />
+                    <entity name='account'>
+                        <attribute name='employees' />
+                        <link-entity name='contact' from='parentcustomerid' to='accountid' alias='contact' link-type='inner'>
+                            <attribute name='fullname' />
+                            <link-entity name='new_customentity' from='new_parentid' to='parentcustomerid' alias='new_customentity' link-type='inner'>
+                            </link-entity>
                         </link-entity>
-                        <link-entity name='new_customentity' from='new_parentid' to='parentcustomerid' alias='new_customentity' link-type='inner'>
-                        </link-entity>
+                        <order attribute='employees' />
                     </entity>
                 </fetch>");
 
@@ -2692,6 +2664,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.Attributes)).SetValue(metadata["contact"], metadata["contact"].Attributes.Concat(new[] { parentcustomeridtype }).ToArray());
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
             sql2FetchXml.TDSEndpointAvailable = true;
+            sql2FetchXml.ForceTDSEndpoint = true;
 
             var query = @"
                 UPDATE c
@@ -2702,7 +2675,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var queries = sql2FetchXml.Convert(query);
 
             Assert.AreEqual(Regex.Replace(@"
-                SELECT
+                SELECT DISTINCT
                     c.contactid AS contactid,
                     account.accountid AS parentcustomerid,
                     'account' AS parentcustomeridtype
@@ -2726,6 +2699,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var metadata = new AttributeMetadataCache(org);
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
             sql2FetchXml.TDSEndpointAvailable = true;
+            sql2FetchXml.ForceTDSEndpoint = true;
 
             var query = @"
                 DELETE c
@@ -2765,8 +2739,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 <fetch aggregate='true'>
                     <entity name='contact'>
                         <attribute name='firstname' groupby='true' alias='firstname' />
-                        <attribute name='contactid' aggregate='count' alias='contactid_count' />
-                        <order alias='contactid_count' />
+                        <attribute name='contactid' aggregate='count' alias='count' />
+                        <order alias='count' />
                     </entity>
                 </fetch>
             ");
@@ -2788,12 +2762,12 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             AssertFetchXml(queries, @"
                 <fetch aggregate='true'>
-                    <entity name='contact'>
-                        <attribute name='firstname' groupby='true' alias='firstname' />
-                        <attribute name='contactid' aggregate='count' alias='contactid_count' />
-                        <link-entity name='account' from='accountid' to='parentcustomerid' link-type='inner' alias='account'>
+                    <entity name='account'>
+                        <attribute name='accountid' aggregate='count' alias='count' />
+                        <link-entity name='contact' from='parentcustomerid' to='accountid' link-type='inner' alias='contact'>
+                            <attribute name='firstname' groupby='true' alias='firstname' />
                         </link-entity>
-                        <order alias='contactid_count' />
+                        <order alias='count' />
                     </entity>
                 </fetch>
             ");
@@ -2815,12 +2789,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var select = (SelectQuery)queries[0];
             AssertFetchXml(new[] { select.AggregateAlternative }, @"
                 <fetch>
-                    <entity name='contact'>
-                        <attribute name='contactid'/>
-                        <attribute name='parentcustomerid'/>
-                        <link-entity name='account' from='accountid' to='parentcustomerid' link-type='inner' alias='account'>
-                            <attribute name='name'/>
-                            <attribute name='accountid'/>
+                    <entity name='account'>
+                        <attribute name='name'/>
+                        <link-entity name='contact' from='parentcustomerid' to='accountid' link-type='inner' alias='contact'>
                         </link-entity>
                     </entity>
                 </fetch>
@@ -2867,11 +2838,18 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, queries.Length);
             Assert.IsInstanceOfType(queries[0], typeof(FetchXmlQuery));
 
-            var serializer = new XmlSerializer(typeof(FetchXml.FetchType));
-            using (var reader = new StringReader(fetchXml))
+            try
             {
-                var fetch = (FetchXml.FetchType)serializer.Deserialize(reader);
-                PropertyEqualityAssert.Equals(fetch, ((FetchXmlQuery)queries[0]).FetchXml);
+                var serializer = new XmlSerializer(typeof(FetchXml.FetchType));
+                using (var reader = new StringReader(fetchXml))
+                {
+                    var fetch = (FetchXml.FetchType)serializer.Deserialize(reader);
+                    PropertyEqualityAssert.Equals(fetch, ((FetchXmlQuery)queries[0]).FetchXml);
+                }
+            }
+            catch (AssertFailedException ex)
+            {
+                Assert.Fail($"Expected:\r\n{fetchXml}\r\n\r\nActual:\r\n{((FetchXmlQuery)queries[0]).FetchXmlString}\r\n\r\n{ex.Message}");
             }
         }
 
@@ -2929,15 +2907,83 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     }
                 }
 
+                var req = (RetrieveMetadataChangesRequest)request;
+                var metadataParam = Expression.Parameter(typeof(EntityMetadata));
+                var filter = ToExpression(req.Query.Criteria, metadataParam);
+                var filterFunc = (Func<EntityMetadata,bool>) Expression.Lambda(filter, metadataParam).Compile();
+
+                var result = new EntityMetadataCollection();
+
+                foreach (var match in metadata.Where(e => filterFunc(e)))
+                    result.Add(match);
+
                 var response = new RetrieveMetadataChangesResponse
                 {
                     Results = new ParameterCollection
                     {
-                        ["EntityMetadata"] = metadata
+                        ["EntityMetadata"] = result
                     }
                 };
 
                 return response;
+            }
+
+            private Expression ToExpression(MetadataFilterExpression filter, ParameterExpression param)
+            {
+                if (filter == null)
+                    return Expression.Constant(true);
+
+                Expression expr = null;
+
+                foreach (var condition in filter.Conditions)
+                {
+                    var conditionExpr = ToExpression(condition, param);
+
+                    if (expr == null)
+                        expr = conditionExpr;
+                    else if (filter.FilterOperator == LogicalOperator.And)
+                        expr = Expression.AndAlso(expr, conditionExpr);
+                    else
+                        expr = Expression.OrElse(expr, conditionExpr);
+                }
+
+                foreach (var subFilter in filter.Filters)
+                {
+                    var filterExpr = ToExpression(subFilter, param);
+
+                    if (expr == null)
+                        expr = filterExpr;
+                    else if (filter.FilterOperator == LogicalOperator.And)
+                        expr = Expression.AndAlso(expr, filterExpr);
+                    else
+                        expr = Expression.OrElse(expr, filterExpr);
+                }
+
+                return expr ?? Expression.Constant(true);
+            }
+
+            private Expression ToExpression(MetadataConditionExpression condition, ParameterExpression param)
+            {
+                var value = Expression.PropertyOrField(param, condition.PropertyName);
+                var targetValue = Expression.Constant(condition.Value);
+
+                switch (condition.ConditionOperator)
+                {
+                    case MetadataConditionOperator.Equals:
+                        return Expression.Equal(value, targetValue);
+
+                    case MetadataConditionOperator.NotEquals:
+                        return Expression.NotEqual(value, targetValue);
+
+                    case MetadataConditionOperator.LessThan:
+                        return Expression.LessThan(value, targetValue);
+
+                    case MetadataConditionOperator.GreaterThan:
+                        return Expression.GreaterThan(value, targetValue);
+
+                    default:
+                        throw new NotImplementedException();
+                }
             }
 
             public Type GetResponsibleRequestType()

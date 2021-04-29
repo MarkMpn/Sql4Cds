@@ -20,9 +20,16 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
     /// </remarks>
     class RewriteVisitor : RewriteVisitorBase
     {
-        private readonly IDictionary<string, string> _mappings;
+        private readonly IDictionary<string, ScalarExpression> _mappings;
 
         public RewriteVisitor(IDictionary<ScalarExpression,string> rewrites)
+        {
+            _mappings = rewrites
+                .GroupBy(kvp => kvp.Key.ToSql())
+                .ToDictionary(g => g.Key, g => (ScalarExpression) new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = g.First().Value } } } });
+        }
+
+        public RewriteVisitor(IDictionary<ScalarExpression,ScalarExpression> rewrites)
         {
             _mappings = rewrites
                 .GroupBy(kvp => kvp.Key.ToSql())
@@ -38,20 +45,8 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
             if (_mappings.TryGetValue(expression.ToSql(), out var column))
             {
-                name = column;
-                return new ColumnReferenceExpression
-                {
-                    MultiPartIdentifier = new MultiPartIdentifier
-                    {
-                        Identifiers =
-                        {
-                            new Identifier
-                            {
-                                Value = column
-                            }
-                        }
-                    }
-                };
+                name = (column as ColumnReferenceExpression)?.MultiPartIdentifier?.Identifiers?.Last()?.Value;
+                return column;
             }
 
             return expression;

@@ -17,21 +17,35 @@ namespace MarkMpn.Sql4Cds
     public partial class PluginControl : MultipleConnectionsPluginControlBase, IMessageBusHost, IGitHubPlugin, IHelpPlugin, ISettingsPlugin, IPayPalPlugin
     {
         private readonly IDictionary<ConnectionDetail, AttributeMetadataCache> _metadata;
+        private readonly IDictionary<ConnectionDetail, TableSizeCache> _tableSize;
         private readonly TelemetryClient _ai;
         private readonly ObjectExplorer _objectExplorer;
+        private readonly PropertiesWindow _properties;
 
         public PluginControl()
         {
             InitializeComponent();
             dockPanel.Theme = new VS2015LightTheme();
             _metadata = new Dictionary<ConnectionDetail, AttributeMetadataCache>();
+            _tableSize = new Dictionary<ConnectionDetail, TableSizeCache>();
             _objectExplorer = new ObjectExplorer(_metadata, WorkAsync, con => CreateQuery(con, "", null));
             _objectExplorer.Show(dockPanel, DockState.DockLeft);
             _objectExplorer.CloseButtonVisible = false;
+            _properties = new PropertiesWindow();
+            _properties.Show(dockPanel, DockState.DockRightAutoHide);
             _ai = new TelemetryClient(new Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration("79761278-a908-4575-afbf-2f4d82560da6"));
 
             TabIcon = Properties.Resources.SQL4CDS_Icon_16;
             PluginIcon = System.Drawing.Icon.FromHandle(Properties.Resources.SQL4CDS_Icon_16.GetHicon());
+            dockPanel.ActiveDocumentChanged += DockPanel_ActiveDocumentChanged;
+        }
+
+        private void DockPanel_ActiveDocumentChanged(object sender, EventArgs e)
+        {
+            if (dockPanel.ActiveDocument is SqlQueryControl sql)
+                _properties.SelectObject(sql.Connection);
+            else
+                _properties.SelectObject(null);
         }
 
         protected override void OnConnectionUpdated(ConnectionUpdatedEventArgs e)
@@ -58,6 +72,7 @@ namespace MarkMpn.Sql4Cds
             var svc = con.ServiceClient;
 
             _metadata[con] = new AttributeMetadataCache(svc);
+            _tableSize[con] = new TableSizeCache(svc, _metadata[con]);
             _objectExplorer.AddConnection(con);
 
             // Start loading the entity list in the background
@@ -108,7 +123,7 @@ namespace MarkMpn.Sql4Cds
 
         private SqlQueryControl CreateQuery(ConnectionDetail con, string sql, string sourcePlugin)
         { 
-            var query = new SqlQueryControl(con, _metadata[con], _ai, SendOutgoingMessage, sourcePlugin, msg => LogError(msg));
+            var query = new SqlQueryControl(con, _metadata[con], _tableSize[con], _ai, SendOutgoingMessage, sourcePlugin, msg => LogError(msg), _properties);
             query.InsertText(sql);
             query.CancellableChanged += SyncStopButton;
             query.BusyChanged += SyncExecuteButton;
@@ -243,6 +258,8 @@ namespace MarkMpn.Sql4Cds
                 tsbIncludeFetchXml.PerformClick();
             else if (keyData == Keys.F5 || keyData == (Keys.Control | Keys.E))
                 tsbExecute.PerformClick();
+            else if (keyData == Keys.F4)
+                dockPanel.ActiveAutoHideContent = _properties;
             else
                 return base.ProcessCmdKey(ref msg, keyData);
 

@@ -58,15 +58,67 @@
   <ItemGroup>
     <Compile Include="AttributeMetadataCache.cs" />
     <Compile Include="DisconnectedException.cs" />
-    <Compile Include="EntityExtensions.cs" />
+    <Compile Include="ExecutionPlanBuilder.cs" />
+    <Compile Include="ExecutionPlanOptimizer.cs" />
+    <Compile Include="ExecutionPlan\Aggregate.cs" />
+    <Compile Include="ExecutionPlan\AliasNode.cs" />
+    <Compile Include="ExecutionPlan\AssertNode.cs" />
+    <Compile Include="ExecutionPlan\BaseDataNode.cs" />
+    <Compile Include="ExecutionPlan\BaseDmlNode.cs" />
+    <Compile Include="ExecutionPlan\BaseJoinNode.cs" />
+    <Compile Include="ExecutionPlan\BaseNode.cs" />
+    <Compile Include="ExecutionPlan\CaseInsensitiveObjectComparer.cs" />
+    <Compile Include="ExecutionPlan\ComputeScalarNode.cs" />
+    <Compile Include="ExecutionPlan\ConcatenateNode.cs" />
+    <Compile Include="ExecutionPlan\ConstantScanNode.cs" />
+    <Compile Include="ExecutionPlan\DeleteNode.cs" />
+    <Compile Include="ExecutionPlan\DistinctNode.cs" />
+    <Compile Include="ExecutionPlan\ExecuteAsNode.cs" />
+    <Compile Include="ExecutionPlan\ExpressionExtensions.cs" />
+    <Compile Include="ExecutionPlan\FetchXmlScan.cs" />
+    <Compile Include="ExecutionPlan\FilterNode.cs" />
+    <Compile Include="ExecutionPlan\GlobalOptionSetQueryNode.cs" />
+    <Compile Include="ExecutionPlan\HashJoinNode.cs" />
+    <Compile Include="ExecutionPlan\HashMatchAggregateNode.cs" />
+    <Compile Include="ExecutionPlan\IDataExecutionPlanNode.cs" />
+    <Compile Include="ExecutionPlan\IDataSetExecutionPlanNode.cs" />
+    <Compile Include="ExecutionPlan\IDmlQueryExecutionPlanNode.cs" />
+    <Compile Include="ExecutionPlan\IExecutionPlanNode.cs" />
+    <Compile Include="ExecutionPlan\FoldableJoinNode.cs" />
+    <Compile Include="ExecutionPlan\IFetchXmlExecutionPlanNode.cs" />
+    <Compile Include="ExecutionPlan\IImpersonateRevertExecutionPlanNode.cs" />
+    <Compile Include="ExecutionPlan\IndexSpoolNode.cs" />
+    <Compile Include="ExecutionPlan\IRootExecutionPlanNode.cs" />
+    <Compile Include="ExecutionPlan\ISingleSourceExecutionPlanNode.cs" />
+    <Compile Include="ExecutionPlan\ITableSizeCache.cs" />
+    <Compile Include="ExecutionPlan\MergeJoinNode.cs" />
+    <Compile Include="ExecutionPlan\MetadataQueryNode.cs" />
+    <Compile Include="ExecutionPlan\NestedLoopNode.cs" />
+    <Compile Include="ExecutionPlan\NodeSchema.cs" />
+    <Compile Include="ExecutionPlan\OffsetFetchNode.cs" />
+    <Compile Include="ExecutionPlan\QueryExecutionException.cs" />
+    <Compile Include="ExecutionPlan\RetrieveTotalRecordCountNode.cs" />
+    <Compile Include="ExecutionPlan\RevertNode.cs" />
+    <Compile Include="ExecutionPlan\SelectNode.cs" />
+    <Compile Include="ExecutionPlan\SortNode.cs" />
+    <Compile Include="ExecutionPlan\SqlNode.cs" />
+    <Compile Include="ExecutionPlan\SqlTypeConverter.cs" />
+    <Compile Include="ExecutionPlan\TableSpoolNode.cs" />
+    <Compile Include="ExecutionPlan\Timer.cs" />
+    <Compile Include="ExecutionPlan\TopNode.cs" />
+    <Compile Include="ExecutionPlan\TryCatchNode.cs" />
+    <Compile Include="ExecutionPlan\InsertNode.cs" />
+    <Compile Include="ExecutionPlan\UpdateNode.cs" />
+    <Compile Include="FetchXmlConditionMethods.cs" />
+    <Compile Include="FetchXmlExtensions.cs" />
+    <Compile Include="JoinConditionVisitor.cs" />
+    <Compile Include="MetadataExtensions.cs" />
+    <Compile Include="MetadataQueryExtensions.cs" />
     <Compile Include="MetaMetadataCache.cs" />
-    <Compile Include="MetaMetadata.cs" />
     <Compile Include="PartialSuccessException.cs" />
-    <Compile Include="QueryExtensions\NoOp.cs" />
+    <Compile Include="TableSizeCache.cs" />
     <Compile Include="TSqlEndpoint.cs" />
     <Compile Include="TSqlFragmentExtensions.cs" />
-    <Compile Include="Visitors\AddDefaultColumnAliasesVisitor.cs" />
-    <Compile Include="Visitors\AddDefaultTableAliasesVisitor.cs" />
     <Compile Include="Visitors\AggregateCollectingVisitor.cs" />
     <Compile Include="ExpressionFunctions.cs" />
     <Compile Include="FetchXml.cs">
@@ -74,12 +126,15 @@
     </Compile>
     <Compile Include="FetchXml2Sql.cs" />
     <Compile Include="FetchXmlElementComparer.cs" />
+    <Compile Include="Visitors\ExistsSubqueryVisitor.cs" />
+    <Compile Include="Visitors\InSubqueryVisitor.cs" />
+    <Compile Include="Visitors\BooleanRewriteVisitor.cs" />
+    <Compile Include="Visitors\VariableCollectingVisitor.cs" />
     <Compile Include="Visitors\ColumnCollectingVisitor.cs" />
     <Compile Include="Visitors\GroupValidationVisitor.cs" />
     <Compile Include="IAttributeMetadataCache.cs" />
     <Compile Include="IQueryExecutionOptions.cs" />
     <Compile Include="NotSupportedQueryFragmentException.cs" />
-    <Compile Include="PostProcessingRequiredException.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Properties\Resources.Designer.cs">
       <AutoGen>True</AutoGen>
@@ -87,18 +142,9 @@
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
     <Compile Include="Query.cs" />
-    <Compile Include="QueryExtensions\Aggregate.cs" />
-    <Compile Include="QueryExtensions\Distinct.cs" />
-    <Compile Include="QueryExtensions\Having.cs" />
-    <Compile Include="QueryExtensions\Offset.cs" />
-    <Compile Include="QueryExtensions\Projection.cs" />
-    <Compile Include="QueryExtensions\Sort.cs" />
-    <Compile Include="QueryExtensions\Top.cs" />
-    <Compile Include="QueryExtensions\Where.cs" />
-    <Compile Include="QueryExtensions\IQueryExtension.cs" />
     <Compile Include="QueryParseException.cs" />
+    <Compile Include="Visitors\ScalarSubqueryVisitor.cs" />
     <Compile Include="Visitors\UpdateTargetVisitor.cs" />
-    <Compile Include="Visitors\QueryTypeVisitor.cs" />
     <Compile Include="Visitors\ReplacePrimaryFunctionsVisitor.cs" />
     <Compile Include="Visitors\RewriteVisitorBase.cs" />
     <Compile Include="Visitors\RewriteVisitor.cs" />
@@ -118,10 +164,10 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.CrmSdk.CoreAssemblies">
-      <Version>9.0.2.21</Version>
+      <Version>9.0.2.28</Version>
     </PackageReference>
     <PackageReference Include="Microsoft.CrmSdk.XrmTooling.CoreAssembly">
-      <Version>9.1.0.26</Version>
+      <Version>9.1.0.68</Version>
     </PackageReference>
     <PackageReference Include="Microsoft.SourceLink.GitHub">
       <Version>1.0.0</Version>
@@ -129,7 +175,7 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom">
-      <Version>15.0.4200.1</Version>
+      <Version>150.4897.1</Version>
     </PackageReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

@@ -262,7 +262,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
                     </entity>
                 </fetch>";
 
-            var converted = FetchXml2Sql.Convert(org, metadata, fetch, new FetchXml2SqlOptions { PreserveFetchXmlOperatorsAsFunctions = false }, out _);
+            var converted = FetchXml2Sql.Convert(org, metadata, fetch, new FetchXml2SqlOptions { ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.Literals }, out _);
 
             Assert.AreEqual($"SELECT firstname, lastname FROM contact WHERE createdon >= '{DateTime.Today.AddDays(-2):s}' AND createdon < '{DateTime.Now:s}'", NormalizeWhitespace(converted));
         }
@@ -286,7 +286,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
                     </entity>
                 </fetch>";
 
-            var converted = FetchXml2Sql.Convert(org, metadata, fetch, new FetchXml2SqlOptions { PreserveFetchXmlOperatorsAsFunctions = false }, out _);
+            var converted = FetchXml2Sql.Convert(org, metadata, fetch, new FetchXml2SqlOptions { ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.Literals }, out _);
 
             Assert.AreEqual($"SELECT firstname, lastname FROM contact WHERE createdon >= '{DateTime.Now:s}' AND createdon < '{DateTime.Today.AddDays(1).AddYears(2):s}'", NormalizeWhitespace(converted));
         }
@@ -414,7 +414,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
                     </entity>
                 </fetch>";
 
-            var converted = FetchXml2Sql.Convert(org, metadata, fetch, new FetchXml2SqlOptions { PreserveFetchXmlOperatorsAsFunctions = false }, out _);
+            var converted = FetchXml2Sql.Convert(org, metadata, fetch, new FetchXml2SqlOptions { ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.Literals }, out _);
 
             Assert.AreEqual($"SELECT firstname, lastname FROM contact WHERE parentcustomerid = '{WhoAmIHandler.BusinessUnitId:D}'", NormalizeWhitespace(converted));
         }

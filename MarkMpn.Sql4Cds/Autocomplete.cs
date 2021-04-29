@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Data.SqlTypes;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -227,7 +228,7 @@ namespace MarkMpn.Sql4Cds
                         // Start loading all the appropriate metadata in the background
                         foreach (var table in tables.Values)
                         {
-                            if (_entities.Any(e => e.LogicalName.Equals(table, StringComparison.OrdinalIgnoreCase)))
+                            if (_entities.Any(e => e.LogicalName.Equals(table, StringComparison.OrdinalIgnoreCase) && e.DataProviderId != MetaMetadataCache.ProviderId))
                                 _metadata.TryGetMinimalData(table, out _);
                         }
                     }
@@ -407,16 +408,16 @@ namespace MarkMpn.Sql4Cds
                                     var expectedType = default(Type);
 
                                     if (attribute.AttributeType == AttributeTypeCode.String || attribute.AttributeType == AttributeTypeCode.Memo)
-                                        expectedType = typeof(string);
+                                        expectedType = typeof(SqlString);
                                     else if (attribute.AttributeType == AttributeTypeCode.DateTime)
-                                        expectedType = typeof(DateTime);
+                                        expectedType = typeof(SqlDateTime);
                                     else if (attribute.AttributeType == AttributeTypeCode.Uniqueidentifier || attribute.AttributeType == AttributeTypeCode.Lookup || attribute.AttributeType == AttributeTypeCode.Owner || attribute.AttributeType == AttributeTypeCode.Customer)
-                                        expectedType = typeof(EntityReference);
+                                        expectedType = typeof(SqlGuid);
                                     else if (attribute.AttributeTypeName == "MultiSelectPicklistType")
-                                        expectedType = typeof(OptionSetValueCollection);
+                                        expectedType = typeof(SqlString);
 
                                     if (expectedType != null)
-                                        items.AddRange(typeof(FunctionMetadata.FetchXmlOperators).GetMethods(BindingFlags.DeclaredOnly | BindingFlags.Instance | BindingFlags.Public).Where(m => m.ReturnType == expectedType).Select(m => new FunctionAutocompleteItem(m, currentLength)));
+                                        items.AddRange(typeof(FetchXmlConditionMethods).GetMethods(BindingFlags.Public | BindingFlags.Static).Where(m => m.GetParameters()[0].ParameterType == expectedType).Select(m => new FunctionAutocompleteItem(m, currentLength)));
                                 }
                             }
 
@@ -625,7 +626,7 @@ namespace MarkMpn.Sql4Cds
             private readonly EntityMetadata _entity;
             private readonly IAttributeMetadataCache _metadata;
 
-            public EntityAutocompleteItem(EntityMetadata entity, IAttributeMetadataCache metadata, int replaceLength) : this(entity, entity.LogicalName, metadata, replaceLength)
+            public EntityAutocompleteItem(EntityMetadata entity, IAttributeMetadataCache metadata, int replaceLength) : this(entity, (entity.DataProviderId == MetaMetadataCache.ProviderId ? "metadata." : "") + entity.LogicalName, metadata, replaceLength)
             {
             }
 
@@ -667,7 +668,7 @@ namespace MarkMpn.Sql4Cds
                 _lhs = relationship.ReferencedEntity;
 
                 if (!oneToMany && metadata.TryGetMinimalData(relationship.ReferencingEntity, out _rhs))
-                    _attribute = _rhs.Attributes.Single(a => a.LogicalName == relationship.ReferencingAttribute);
+                    _attribute = _rhs.Attributes.SingleOrDefault(a => a.LogicalName == relationship.ReferencingAttribute);
 
                 _metadata = metadata;
             }
@@ -750,7 +751,7 @@ namespace MarkMpn.Sql4Cds
         {
             private readonly MethodInfo _method;
 
-            public FunctionAutocompleteItem(MethodInfo method, int replaceLength) : base(method.Name + "(" + (method.GetParameters().Length == 0 ? ")" : ""), replaceLength, GetIconIndex(method))
+            public FunctionAutocompleteItem(MethodInfo method, int replaceLength) : base((method.DeclaringType == typeof(FetchXmlConditionMethods) ? method.Name.ToLowerInvariant() : method.Name.ToUpperInvariant()) + "(" + (method.GetParameters().Length == (method.DeclaringType == typeof(FetchXmlConditionMethods) ? 1 : 0) ? ")" : ""), replaceLength, GetIconIndex(method))
             {
                 _method = method;
                 MenuText = GetSignature(method);
@@ -769,18 +770,18 @@ namespace MarkMpn.Sql4Cds
             private static string GetSignature(MethodInfo method)
             {
                 var sig = new StringBuilder();
-                sig.Append(method.Name);
+                sig.Append(method.DeclaringType == typeof(FetchXmlConditionMethods) ? method.Name.ToLowerInvariant() : method.Name.ToUpperInvariant());
                 sig.Append("(");
 
                 var firstParam = true;
-                foreach (var param in method.GetParameters())
+                foreach (var param in method.GetParameters().Skip(method.DeclaringType == typeof(FetchXmlConditionMethods) ? 1 : 0))
                 {
                     if (firstParam)
                         firstParam = false;
                     else
                         sig.Append(", ");
 
-                    sig.Append(param.Name);
+                    sig.Append(param.Name.ToLowerInvariant());
                 }
 
                 sig.Append(")");
@@ -806,7 +807,7 @@ namespace MarkMpn.Sql4Cds
                 }
             }
 
-            public override string CompareText => _method.Name;
+            public override string CompareText => _method.DeclaringType == typeof(FetchXmlConditionMethods) ? _method.Name.ToLowerInvariant() : _method.Name.ToUpperInvariant();
         }
     }
 }

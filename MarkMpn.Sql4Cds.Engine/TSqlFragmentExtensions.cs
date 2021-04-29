@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
-    static class TSqlFragmentExtensions
+    public static class TSqlFragmentExtensions
     {
         /// <summary>
         /// Converts a <see cref="TSqlFragment"/> to the corresponding SQL string

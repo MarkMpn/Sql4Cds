@@ -60,8 +60,6 @@
             this.autoSizeColumnsCheckBox = new System.Windows.Forms.CheckBox();
             this.localTimesComboBox = new System.Windows.Forms.ComboBox();
             this.label11 = new System.Windows.Forms.Label();
-            this.friendlyNamesComboBox = new System.Windows.Forms.ComboBox();
-            this.label10 = new System.Windows.Forms.Label();
             this.groupBox3 = new System.Windows.Forms.GroupBox();
             this.quotedIdentifiersCheckbox = new System.Windows.Forms.CheckBox();
             this.groupBox4 = new System.Windows.Forms.GroupBox();
@@ -121,7 +119,7 @@
             this.panel2.Controls.Add(this.cancelButton);
             this.panel2.Controls.Add(this.okButton);
             this.panel2.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.panel2.Location = new System.Drawing.Point(0, 540);
+            this.panel2.Location = new System.Drawing.Point(0, 517);
             this.panel2.Margin = new System.Windows.Forms.Padding(2);
             this.panel2.Name = "panel2";
             this.panel2.Size = new System.Drawing.Size(400, 45);
@@ -310,6 +308,8 @@
             // groupBox1
             // 
             this.groupBox1.Controls.Add(this.label12);
+            this.groupBox1.Controls.Add(this.localTimesComboBox);
+            this.groupBox1.Controls.Add(this.label11);
             this.groupBox1.Controls.Add(this.maxDopUpDown);
             this.groupBox1.Controls.Add(this.label13);
             this.groupBox1.Controls.Add(this.retrieveTotalRecordCountCheckbox);
@@ -333,7 +333,7 @@
             this.groupBox1.Margin = new System.Windows.Forms.Padding(2);
             this.groupBox1.Name = "groupBox1";
             this.groupBox1.Padding = new System.Windows.Forms.Padding(2);
-            this.groupBox1.Size = new System.Drawing.Size(382, 263);
+            this.groupBox1.Size = new System.Drawing.Size(382, 290);
             this.groupBox1.TabIndex = 16;
             this.groupBox1.TabStop = false;
             this.groupBox1.Text = "Query Execution";
@@ -388,7 +388,7 @@
             this.tsqlEndpointCheckBox.AutoSize = true;
             this.tsqlEndpointCheckBox.Location = new System.Drawing.Point(13, 217);
             this.tsqlEndpointCheckBox.Name = "tsqlEndpointCheckBox";
-            this.tsqlEndpointCheckBox.Size = new System.Drawing.Size(244, 17);
+            this.tsqlEndpointCheckBox.Size = new System.Drawing.Size(235, 17);
             this.tsqlEndpointCheckBox.TabIndex = 16;
             this.tsqlEndpointCheckBox.Text = "Use TDS Endpoint where possible (Preview)";
             this.tsqlEndpointCheckBox.UseVisualStyleBackColor = true;
@@ -396,15 +396,11 @@
             // groupBox2
             // 
             this.groupBox2.Controls.Add(this.autoSizeColumnsCheckBox);
-            this.groupBox2.Controls.Add(this.localTimesComboBox);
-            this.groupBox2.Controls.Add(this.label11);
-            this.groupBox2.Controls.Add(this.friendlyNamesComboBox);
-            this.groupBox2.Controls.Add(this.label10);
-            this.groupBox2.Location = new System.Drawing.Point(12, 392);
+            this.groupBox2.Location = new System.Drawing.Point(11, 419);
             this.groupBox2.Margin = new System.Windows.Forms.Padding(2);
             this.groupBox2.Name = "groupBox2";
             this.groupBox2.Padding = new System.Windows.Forms.Padding(2);
-            this.groupBox2.Size = new System.Drawing.Size(382, 95);
+            this.groupBox2.Size = new System.Drawing.Size(382, 43);
             this.groupBox2.TabIndex = 17;
             this.groupBox2.TabStop = false;
             this.groupBox2.Text = "Results";
@@ -412,7 +408,7 @@
             // autoSizeColumnsCheckBox
             // 
             this.autoSizeColumnsCheckBox.AutoSize = true;
-            this.autoSizeColumnsCheckBox.Location = new System.Drawing.Point(13, 69);
+            this.autoSizeColumnsCheckBox.Location = new System.Drawing.Point(12, 18);
             this.autoSizeColumnsCheckBox.Name = "autoSizeColumnsCheckBox";
             this.autoSizeColumnsCheckBox.Size = new System.Drawing.Size(158, 17);
             this.autoSizeColumnsCheckBox.TabIndex = 18;
@@ -426,7 +422,7 @@
             this.localTimesComboBox.Items.AddRange(new object[] {
             "UTC times",
             "Local times"});
-            this.localTimesComboBox.Location = new System.Drawing.Point(168, 43);
+            this.localTimesComboBox.Location = new System.Drawing.Point(142, 262);
             this.localTimesComboBox.Margin = new System.Windows.Forms.Padding(2);
             this.localTimesComboBox.Name = "localTimesComboBox";
             this.localTimesComboBox.Size = new System.Drawing.Size(203, 21);
@@ -435,35 +431,12 @@
             // label11
             // 
             this.label11.AutoSize = true;
-            this.label11.Location = new System.Drawing.Point(10, 46);
+            this.label11.Location = new System.Drawing.Point(10, 265);
             this.label11.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
             this.label11.Name = "label11";
-            this.label11.Size = new System.Drawing.Size(123, 13);
+            this.label11.Size = new System.Drawing.Size(128, 13);
             this.label11.TabIndex = 2;
-            this.label11.Text = "Show date/time fields as";
-            // 
-            // friendlyNamesComboBox
-            // 
-            this.friendlyNamesComboBox.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.friendlyNamesComboBox.FormattingEnabled = true;
-            this.friendlyNamesComboBox.Items.AddRange(new object[] {
-            "Raw values (GUID, number)",
-            "Names"});
-            this.friendlyNamesComboBox.Location = new System.Drawing.Point(168, 18);
-            this.friendlyNamesComboBox.Margin = new System.Windows.Forms.Padding(2);
-            this.friendlyNamesComboBox.Name = "friendlyNamesComboBox";
-            this.friendlyNamesComboBox.Size = new System.Drawing.Size(203, 21);
-            this.friendlyNamesComboBox.TabIndex = 1;
-            // 
-            // label10
-            // 
-            this.label10.AutoSize = true;
-            this.label10.Location = new System.Drawing.Point(10, 21);
-            this.label10.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
-            this.label10.Name = "label10";
-            this.label10.Size = new System.Drawing.Size(154, 13);
-            this.label10.TabIndex = 0;
-            this.label10.Text = "Show lookup && picklist fields as";
+            this.label11.Text = "Treat date/time values as";
             // 
             // groupBox3
             // 
@@ -488,7 +461,7 @@
             // groupBox4
             // 
             this.groupBox4.Controls.Add(this.showTooltipsCheckbox);
-            this.groupBox4.Location = new System.Drawing.Point(11, 492);
+            this.groupBox4.Location = new System.Drawing.Point(11, 467);
             this.groupBox4.Name = "groupBox4";
             this.groupBox4.Size = new System.Drawing.Size(382, 43);
             this.groupBox4.TabIndex = 19;
@@ -511,7 +484,7 @@
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.CancelButton = this.cancelButton;
-            this.ClientSize = new System.Drawing.Size(400, 585);
+            this.ClientSize = new System.Drawing.Size(400, 562);
             this.Controls.Add(this.groupBox4);
             this.Controls.Add(this.groupBox3);
             this.Controls.Add(this.groupBox2);
@@ -573,8 +546,6 @@
         private System.Windows.Forms.Label label9;
         private System.Windows.Forms.GroupBox groupBox1;
         private System.Windows.Forms.GroupBox groupBox2;
-        private System.Windows.Forms.ComboBox friendlyNamesComboBox;
-        private System.Windows.Forms.Label label10;
         private System.Windows.Forms.ComboBox localTimesComboBox;
         private System.Windows.Forms.Label label11;
         private System.Windows.Forms.GroupBox groupBox3;

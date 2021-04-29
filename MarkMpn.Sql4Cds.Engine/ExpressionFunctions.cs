@@ -1,6 +1,8 @@
-﻿using Microsoft.VisualBasic;
+﻿using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
+using Microsoft.VisualBasic;
 using Microsoft.Xrm.Sdk;
 using System;
+using System.Data.SqlTypes;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -14,21 +16,6 @@ namespace MarkMpn.Sql4Cds.Engine
     class ExpressionFunctions
     {
         /// <summary>
-        /// Implements the LIKE operator
-        /// </summary>
-        /// <param name="value">The value to match from</param>
-        /// <param name="pattern">The pattern to match against</param>
-        /// <returns><c>true</c> if the <paramref name="value"/> matches the <paramref name="pattern"/>, or <c>false</c> otherwise</returns>
-        public static bool Like(string value, string pattern)
-        {
-            if (value == null || pattern == null)
-                return false;
-
-            var regex = "^" + Regex.Escape(pattern).Replace("%", ".*").Replace("_", ".") + "$";
-            return Regex.IsMatch(value, regex, RegexOptions.IgnoreCase);
-        }
-
-        /// <summary>
         /// Implements the DATEADD function
         /// </summary>
         /// <param name="datepart">The part of <paramref name="date"/> to which DATEADD adds an integer <paramref name="number"/></param>
@@ -36,10 +23,10 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="date">The date value to add to</param>
         /// <returns>The modified date</returns>
         /// <see href="https://docs.microsoft.com/en-us/sql/t-sql/functions/dateadd-transact-sql?view=sql-server-ver15"/>
-        public static DateTime? DateAdd(string datepart, double? number, DateTime? date)
+        public static SqlDateTime DateAdd(string datepart, SqlDouble number, SqlDateTime date)
         {
-            if (number == null || date == null)
-                return null;
+            if (number.IsNull || date.IsNull)
+                return SqlDateTime.Null;
 
             var interval = DatePartToInterval(datepart);
             var value = DateAndTime.DateAdd(interval, number.Value, date.Value);
@@ -59,10 +46,10 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="enddate">The second date to compare to</param>
         /// <returns>The number of whole <paramref name="datepart"/> units between <paramref name="startdate"/> and <paramref name="enddate"/></returns>
         /// <see href="https://docs.microsoft.com/en-us/sql/t-sql/functions/datediff-transact-sql?view=sql-server-ver15"/>
-        public static int? DateDiff(string datepart, DateTime? startdate, DateTime? enddate)
+        public static SqlInt32 DateDiff(string datepart, SqlDateTime startdate, SqlDateTime enddate)
         {
-            if (startdate == null || enddate == null)
-                return null;
+            if (startdate.IsNull || enddate.IsNull)
+                return SqlInt32.Null;
 
             var interval = DatePartToInterval(datepart);
             return (int) DateAndTime.DateDiff(interval, startdate.Value, enddate.Value);
@@ -74,10 +61,10 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="datepart">The specific part of the <paramref name="date"/> argument for which DATEPART will return an integer</param>
         /// <param name="date">The date to extract the <paramref name="datepart"/> from</param>
         /// <returns>The <paramref name="datepart"/> of the <paramref name="date"/></returns>
-        public static int? DatePart(string datepart, DateTime? date)
+        public static SqlInt32 DatePart(string datepart, SqlDateTime date)
         {
-            if (date == null)
-                return null;
+            if (date.IsNull)
+                return SqlInt32.Null;
 
             var interval = DatePartToInterval(datepart);
             return DateAndTime.DatePart(interval, date.Value);
@@ -88,7 +75,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="datepart">The SQL name for the datepart argument</param>
         /// <returns>The equivalent <see cref="DateInterval"/> value</returns>
-        private static DateInterval DatePartToInterval(string datepart)
+        internal static DateInterval DatePartToInterval(string datepart)
         {
             switch (datepart.ToLower())
             {
@@ -150,7 +137,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Gets the current date/time in user-local timezone
         /// </summary>
         /// <returns>The current date/time in user-local timezone</returns>
-        public static DateTime GetDate()
+        public static SqlDateTime GetDate()
         {
             return DateTime.Now;
         }
@@ -159,7 +146,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Gets the current date/time in user-local timezone
         /// </summary>
         /// <returns>The current date/time in user-local timezone</returns>
-        public static DateTime SysDateTime()
+        public static SqlDateTime SysDateTime()
         {
             return DateTime.Now;
         }
@@ -168,7 +155,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Gets the current date/time in user-local timezone
         /// </summary>
         /// <returns>The current date/time in user-local timezone</returns>
-        public static DateTime SysDateTimeOffset()
+        public static SqlDateTime SysDateTimeOffset()
         {
             return DateTime.Now;
         }
@@ -177,7 +164,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Gets the current date/time in UTC timezone
         /// </summary>
         /// <returns>The current date/time in UTC timezone</returns>
-        public static DateTime GetUtcDate()
+        public static SqlDateTime GetUtcDate()
         {
             return DateTime.UtcNow;
         }
@@ -186,7 +173,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Gets the current date/time in UTC timezone
         /// </summary>
         /// <returns>The current date/time in UTC timezone</returns>
-        public static DateTime SysUtcDateTime()
+        public static SqlDateTime SysUtcDateTime()
         {
             return DateTime.UtcNow;
         }
@@ -196,9 +183,12 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="date">The date to get the day number from</param>
         /// <returns>The day of the month</returns>
-        public static int? Day(DateTime? date)
+        public static SqlInt32 Day(SqlDateTime date)
         {
-            return date?.Day;
+            if (date.IsNull)
+                return SqlInt32.Null;
+
+            return date.Value.Day;
         }
 
         /// <summary>
@@ -206,9 +196,12 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="date">The date to get the month number from</param>
         /// <returns>The month number</returns>
-        public static int? Month(DateTime? date)
+        public static SqlInt32 Month(SqlDateTime date)
         {
-            return date?.Month;
+            if (date.IsNull)
+                return SqlInt32.Null;
+
+            return date.Value.Month;
         }
 
         /// <summary>
@@ -216,9 +209,12 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="date">The date to get the year number from</param>
         /// <returns>The year number</returns>
-        public static int? Year(DateTime? date)
+        public static SqlInt32 Year(SqlDateTime date)
         {
-            return date?.Year;
+            if (date.IsNull)
+                return SqlInt32.Null;
+
+            return date.Value.Year;
         }
 
         /// <summary>
@@ -227,15 +223,15 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="s">The string to get the prefix of</param>
         /// <param name="length">The number of characters to return</param>
         /// <returns>The first <paramref name="length"/> characters of the string <paramref name="s"/></returns>
-        public static string Left(string s, int length)
+        public static SqlString Left(SqlString s, SqlInt32 length)
         {
-            if (s == null)
+            if (s.IsNull || length.IsNull)
+                return SqlString.Null;
+
+            if (s.Value.Length <= length)
                 return s;
 
-            if (s.Length <= length)
-                return s;
-
-            return s.Substring(0, length);
+            return SqlTypeConverter.UseDefaultCollation(s.Value.Substring(0, length.Value));
         }
 
         /// <summary>
@@ -244,131 +240,15 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="s">The string to get the suffix of</param>
         /// <param name="length">The number of characters to return</param>
         /// <returns>The last <paramref name="length"/> characters of the string <paramref name="s"/></returns>
-        public static string Right(string s, int length)
+        public static SqlString Right(SqlString s, SqlInt32 length)
         {
-            if (s == null)
+            if (s.IsNull || length.IsNull)
+                return SqlString.Null;
+
+            if (s.Value.Length <= length)
                 return s;
 
-            if (s.Length <= length)
-                return s;
-
-            return s.Substring(s.Length - length, length);
-        }
-
-        /// <summary>
-        /// Implements a case-insensitive string equality comparison to match the standard SQL collation
-        /// </summary>
-        /// <param name="x">The first string to compare</param>
-        /// <param name="y">The second string to compare</param>
-        /// <returns><c>true</c> if the two strings are equal, or <c>false</c> otherwise</returns>
-        public static bool CaseInsensitiveEquals(string x, string y)
-        {
-            return StringComparer.OrdinalIgnoreCase.Equals(x, y);
-        }
-
-        /// <summary>
-        /// Implements a case-insensitive string inequality comparison to match the standard SQL collation
-        /// </summary>
-        /// <param name="x">The first string to compare</param>
-        /// <param name="y">The second string to compare</param>
-        /// <returns><c>true</c> if the two strings are not equal, or <c>false</c> otherwise</returns>
-        public static bool CaseInsensitiveNotEquals(string x, string y)
-        {
-            return !StringComparer.OrdinalIgnoreCase.Equals(x, y);
-        }
-
-        /// <summary>
-        /// Implements equality between <see cref="EntityReference"/> and <see cref="Guid"/>
-        /// </summary>
-        /// <param name="x">The <see cref="EntityReference"/> to compare</param>
-        /// <param name="y">The <see cref="Guid"/> to compare</param>
-        /// <returns><c>true</c> if the ID in the <see cref="EntityReference"/> matches the supplied <see cref="Guid"/>, or <c>false</c> otherwise</returns>
-        public static bool Equal(EntityReference x, Guid y)
-        {
-            return x.Id == y;
-        }
-
-        /// <summary>
-        /// Implements equality between <see cref="EntityReference"/> and <see cref="Guid"/>
-        /// </summary>
-        /// <param name="x">The <see cref="Guid"/> to compare</param>
-        /// <param name="y">The <see cref="EntityReference"/> to compare</param>
-        /// <returns><c>true</c> if the ID in the <see cref="EntityReference"/> matches the supplied <see cref="Guid"/>, or <c>false</c> otherwise</returns>
-        public static bool Equal(Guid x, EntityReference y)
-        {
-            return x == y.Id;
-        }
-
-        /// <summary>
-        /// Implements equality between two <see cref="EntityReference"/>s
-        /// </summary>
-        /// <param name="x">The first <see cref="EntityReference"/> to compare</param>
-        /// <param name="y">The second <see cref="EntityReference"/> to compare</param>
-        /// <returns><c>true</c> if the first <see cref="EntityReference"/> matches the second <see cref="EntityReference"/>, or <c>false</c> otherwise</returns>
-        public static bool Equal(EntityReference x, EntityReference y)
-        {
-            return x.Equals(y);
-        }
-
-        /// <summary>
-        /// Implements inequality between <see cref="EntityReference"/> and <see cref="Guid"/>
-        /// </summary>
-        /// <param name="x">The <see cref="EntityReference"/> to compare</param>
-        /// <param name="y">The <see cref="Guid"/> to compare</param>
-        /// <returns><c>false</c> if the ID in the <see cref="EntityReference"/> matches the supplied <see cref="Guid"/>, or <c>true</c> otherwise</returns>
-        public static bool NotEqual(EntityReference x, Guid y)
-        {
-            return x.Id != y;
-        }
-
-        /// <summary>
-        /// Implements inequality between <see cref="EntityReference"/> and <see cref="Guid"/>
-        /// </summary>
-        /// <param name="x">The <see cref="Guid"/> to compare</param>
-        /// <param name="y">The <see cref="EntityReference"/> to compare</param>
-        /// <returns><c>false</c> if the ID in the <see cref="EntityReference"/> matches the supplied <see cref="Guid"/>, or <c>true</c> otherwise</returns>
-        public static bool NotEqual(Guid x, EntityReference y)
-        {
-            return x != y.Id;
-        }
-
-        /// <summary>
-        /// Implements inequality between two <see cref="EntityReference"/>s
-        /// </summary>
-        /// <param name="x">The first <see cref="EntityReference"/> to compare</param>
-        /// <param name="y">The second <see cref="EntityReference"/> to compare</param>
-        /// <returns><c>false</c> if the first <see cref="EntityReference"/> matches the second <see cref="EntityReference"/>, or <c>true</c> otherwise</returns>
-        public static bool NotEqual(EntityReference x, EntityReference y)
-        {
-            return !x.Equals(y);
-        }
-
-        /// <summary>
-        /// Creates an <see cref="EntityReference"/> value
-        /// </summary>
-        /// <param name="entityType">The logical name of the entity to reference</param>
-        /// <param name="id">The unique identifier of the entity to reference</param>
-        /// <returns>An <see cref="EntityReference"/> with the requested values</returns>
-        public static EntityReference CreateLookup(string entityType, string id)
-        {
-            if (id == null)
-                return null;
-
-            return new EntityReference(entityType, new Guid(id));
-        }
-
-        /// <summary>
-        /// Creates an <see cref="EntityReference"/> value
-        /// </summary>
-        /// <param name="entityType">The logical name of the entity to reference</param>
-        /// <param name="id">The unique identifier of the entity to reference</param>
-        /// <returns>An <see cref="EntityReference"/> with the requested values</returns>
-        public static EntityReference CreatePrimaryKeyLookup(string entityType, Guid? id)
-        {
-            if (id == null)
-                return null;
-
-            return new EntityReference(entityType, id.Value);
+            return SqlTypeConverter.UseDefaultCollation(s.Value.Substring(s.Value.Length - length.Value, length.Value));
         }
 
         /// <summary>
@@ -378,26 +258,12 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="find">The substring to be found</param>
         /// <param name="replace">The replacement string</param>
         /// <returns>Replaces any instances of <paramref name="find"/> with <paramref name="replace"/> in the <paramref name="input"/></returns>
-        public static string Replace(string input, string find, string replace)
+        public static SqlString Replace(SqlString input, SqlString find, SqlString replace)
         {
-            if (input == null || find == null || replace == null)
-                return null;
+            if (input.IsNull || find.IsNull || replace.IsNull)
+                return SqlString.Null;
 
-            return Regex.Replace(input, Regex.Escape(find), replace.Replace("$", "$$"), RegexOptions.IgnoreCase);
-        }
-
-        /// <summary>
-        /// Checks if a multi-select picklist field contains specific values
-        /// </summary>
-        /// <param name="selected">The selected values</param>
-        /// <param name="values">The values to check for</param>
-        /// <returns><c>true</c> if the <paramref name="selected"/> values contain any of the requested <paramref name="values"/></returns>
-        public static bool Contains(OptionSetValueCollection selected, int[] values)
-        {
-            if (selected == null)
-                return false;
-
-            return selected.Any(osv => values.Contains(osv.Value));
+            return SqlTypeConverter.UseDefaultCollation(Regex.Replace(input.Value, Regex.Escape(find.Value), replace.Value.Replace("$", "$$"), RegexOptions.IgnoreCase));
         }
 
         /// <summary>
@@ -405,12 +271,12 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="s">The string expression to be evaluated</param>
         /// <returns></returns>
-        public static int? Len(string s)
+        public static SqlInt32 Len(SqlString s)
         {
-            if (s == null)
-                return null;
+            if (s.IsNull)
+                return SqlInt32.Null;
 
-            return s.TrimEnd().Length;
+            return s.Value.TrimEnd().Length;
         }
 
         /// <summary>
@@ -420,26 +286,26 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="start">An integer that specifies where the returned characters start (the numbering is 1 based, meaning that the first character in the expression is 1)</param>
         /// <param name="length">A positive integer that specifies how many characters of the expression will be returned</param>
         /// <returns></returns>
-        public static string Substring(string expression, int? start, int? length)
+        public static SqlString Substring(SqlString expression, SqlInt32 start, SqlInt32 length)
         {
+            if (expression.IsNull || start.IsNull || length.IsNull)
+                return SqlString.Null;
+
             if (length < 0)
                 throw new ArgumentOutOfRangeException(nameof(length));
-
-            if (expression == null || start == null || length == null)
-                return null;
 
             if (start < 1)
                 start = 1;
 
-            if (start > expression.Length)
-                start = expression.Length;
+            if (start > expression.Value.Length)
+                start = expression.Value.Length;
 
-            start--;
+            start -= 1;
 
-            if (start + length > expression.Length)
-                length = expression.Length - start;
+            if (start + length > expression.Value.Length)
+                length = expression.Value.Length - start;
 
-            return expression.Substring(start.Value, length.Value);
+            return SqlTypeConverter.UseDefaultCollation(expression.Value.Substring(start.Value, length.Value));
         }
 
         /// <summary>
@@ -447,12 +313,12 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="expression">A character expression where characters should be removed</param>
         /// <returns></returns>
-        public static string Trim(string expression)
+        public static SqlString Trim(SqlString expression)
         {
-            if (expression == null)
+            if (expression.IsNull)
                 return expression;
 
-            return expression.Trim(' ');
+            return SqlTypeConverter.UseDefaultCollation(expression.Value.Trim(' '));
         }
 
         /// <summary>
@@ -460,12 +326,12 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="expression">A character expression where characters should be removed</param>
         /// <returns></returns>
-        public static string LTrim(string expression)
+        public static SqlString LTrim(SqlString expression)
         {
-            if (expression == null)
+            if (expression.IsNull)
                 return expression;
 
-            return expression.TrimStart(' ');
+            return SqlTypeConverter.UseDefaultCollation(expression.Value.TrimStart(' '));
         }
 
         /// <summary>
@@ -473,12 +339,12 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="expression">A character expression where characters should be removed</param>
         /// <returns></returns>
-        public static string RTrim(string expression)
+        public static SqlString RTrim(SqlString expression)
         {
-            if (expression == null)
+            if (expression.IsNull)
                 return expression;
 
-            return expression.TrimEnd(' ');
+            return SqlTypeConverter.UseDefaultCollation(expression.Value.TrimEnd(' '));
         }
 
         /// <summary>
@@ -487,7 +353,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="find">A character expression containing the sequence to find</param>
         /// <param name="search">A character expression to search.</param>
         /// <returns></returns>
-        public static int? CharIndex(string find, string search)
+        public static SqlInt32 CharIndex(SqlString find, SqlString search)
         {
             return CharIndex(find, search, 0);
         }
@@ -499,18 +365,18 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="search">A character expression to search.</param>
         /// <param name="startLocation">An integer or bigint expression at which the search starts. If start_location is not specified, has a negative value, or has a zero (0) value, the search starts at the beginning of expressionToSearch.</param>
         /// <returns></returns>
-        public static int? CharIndex(string find, string search, int? startLocation)
+        public static SqlInt32 CharIndex(SqlString find, SqlString search, SqlInt32 startLocation)
         {
-            if (find == null || search == null || startLocation == null)
-                return null;
+            if (find.IsNull || search.IsNull || startLocation.IsNull)
+                return SqlInt32.Null;
 
             if (startLocation <= 0)
                 startLocation = 1;
 
-            if (startLocation > search.Length)
+            if (startLocation > search.Value.Length)
                 return 0;
 
-            return search.IndexOf(find, startLocation.Value - 1, StringComparison.OrdinalIgnoreCase) + 1;
+            return search.Value.IndexOf(find.Value, startLocation.Value - 1, StringComparison.OrdinalIgnoreCase) + 1;
         }
     }
 
@@ -584,6 +450,19 @@ namespace MarkMpn.Sql4Cds.Engine
         public static T Arg<T>()
         {
             throw new NotImplementedException();
+        }
+
+        /// <summary>
+        /// Box an expression
+        /// </summary>
+        /// <param name="expr"></param>
+        /// <returns></returns>
+        public static Expression Box(Expression expr)
+        {
+            if (!expr.Type.IsValueType)
+                return expr;
+
+            return Expression.Convert(expr, typeof(object));
         }
 
         /// <summary>
@@ -661,6 +540,13 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     baseType = baseType.BaseType;
                 }
+            }
+
+            // Check for compatible array types
+            if (expr.Type.IsArray && type.IsArray)
+            {
+                if (type.GetElementType().IsAssignableFrom(expr.Type.GetElementType()))
+                    return expr;
             }
 
             throw new NotSupportedException($"Cannot convert from {expr.Type} to {type}");

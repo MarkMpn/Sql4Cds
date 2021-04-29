@@ -52,8 +52,8 @@ As well as querying data with FetchXML, SQL 4 CDS can also query metadata by tra
 -- Find attributes without a description
 SELECT entity.logicalname,
        attribute.logicalname
-FROM   entity
-       INNER JOIN attribute
+FROM   metadata.entity
+       INNER JOIN metadata.attribute
        ON entity.logicalname = attribute.entitylogicalname
 WHERE  attribute.description IS NULL
 ```

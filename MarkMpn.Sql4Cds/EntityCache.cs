@@ -33,7 +33,6 @@ namespace MarkMpn.Sql4Cds
                         }
                     }
                 })).EntityMetadata
-                .Where(e => !MetaMetadata.GetMetadata().Any(md => e.LogicalName == md.LogicalName))
                 .ToArray();
 
                 _cache[org] = entities;
