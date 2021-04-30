@@ -826,6 +826,9 @@ namespace MarkMpn.Sql4Cds
                 {
                     messageSuffix = "\r\nSee the Execution Plan tab for details of where this error occurred";
                     ShowResult(plan, new ExecuteParams { Execute = true, IncludeFetchXml = true, Sql = plan.Sql }, null, null, queryExecution);
+
+                    if (queryExecution.InnerException != null)
+                        error = queryExecution.InnerException;
                 }
 
                 _ai.TrackException(error, new Dictionary<string, string> { ["Sql"] = _params.Sql, ["Source"] = "XrmToolBox" });
