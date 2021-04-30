@@ -607,7 +607,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     try
                     {
-                        var dt = SqlDateTime.Parse(lit.Value).Value;
+                        DateTime dt;
+
+                        if (lit is StringLiteral)
+                            dt = SqlDateTime.Parse(lit.Value).Value;
+                        else if (lit is IntegerLiteral || lit is NumericLiteral || lit is RealLiteral)
+                            dt = new DateTime(1900, 1, 1).AddDays(Double.Parse(lit.Value));
+                        else
+                            throw new NotSupportedQueryFragmentException("Invalid datetime value", lit);
+
                         DateTimeOffset dto;
 
                         if (options.UseLocalTimeZone)

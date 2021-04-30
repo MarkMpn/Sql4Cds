@@ -190,6 +190,30 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 );
             }
 
+            if ((expr.Type == typeof(SqlBoolean) || expr.Type == typeof(SqlByte) || expr.Type == typeof(SqlInt16) || expr.Type == typeof(SqlInt32) || expr.Type == typeof(SqlInt64) || expr.Type == typeof(SqlDecimal) || expr.Type == typeof(SqlSingle) || expr.Type == typeof(SqlDouble)) && to == typeof(SqlDateTime))
+            {
+                expr = Expression.Condition(
+                    NullCheck(expr),
+                    Expression.Constant(SqlDateTime.Null),
+                    Expression.Convert(
+                        Expression.Call(
+                            Expression.New(
+                                typeof(DateTime).GetConstructor(new[] { typeof(int), typeof(int), typeof(int) }),
+                                Expression.Constant(1900),
+                                Expression.Constant(1),
+                                Expression.Constant(1)
+                            ),
+                            typeof(DateTime).GetMethod(nameof(DateTime.MinValue.AddDays)),
+                            Expression.Convert(
+                                Expression.Convert(expr, typeof(SqlDouble)),
+                                typeof(double)
+                            )
+                        ),
+                        typeof(SqlDateTime)
+                    )
+                );
+            }
+
             if (expr.Type != to)
             {
                 if (expr.Type == typeof(object) && expr is ConstantExpression constant && constant.Value == null && typeof(INullable).IsAssignableFrom(to))
