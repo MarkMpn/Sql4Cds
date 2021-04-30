@@ -423,7 +423,17 @@ namespace MarkMpn.Sql4Cds.Engine
             var targetAlias = deleteTarget.TargetAliasName ?? deleteTarget.TargetEntityName;
             var targetLogicalName = deleteTarget.TargetEntityName;
 
-            var targetMetadata = Metadata[targetLogicalName];
+            EntityMetadata targetMetadata;
+
+            try
+            {
+                targetMetadata = Metadata[targetLogicalName];
+            }
+            catch (FaultException ex)
+            {
+                throw new NotSupportedQueryFragmentException(ex.Message, deleteTarget.Target);
+            }
+
             queryExpression.SelectElements.Add(new SelectScalarExpression
             {
                 Expression = new ColumnReferenceExpression
@@ -518,7 +528,17 @@ namespace MarkMpn.Sql4Cds.Engine
             var targetAlias = updateTarget.TargetAliasName ?? updateTarget.TargetEntityName;
             var targetLogicalName = updateTarget.TargetEntityName;
 
-            var targetMetadata = Metadata[targetLogicalName];
+            EntityMetadata targetMetadata;
+
+            try
+            {
+                targetMetadata = Metadata[targetLogicalName];
+            }
+            catch (FaultException ex)
+            {
+                throw new NotSupportedQueryFragmentException(ex.Message, updateTarget.Target);
+            }
+
             queryExpression.SelectElements.Add(new SelectScalarExpression
             {
                 Expression = new ColumnReferenceExpression
