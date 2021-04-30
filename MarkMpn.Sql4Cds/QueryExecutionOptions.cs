@@ -35,7 +35,11 @@ namespace MarkMpn.Sql4Cds
             };
 
             if (new Version(con.OrganizationVersion) >= new Version("9.1.0.17461"))
-                _joinOperators.Add(JoinOperator.Any); // First documented in SDK Version 9.0.2.25: Updated for 9.1.0.17461 CDS release
+            {
+                // First documented in SDK Version 9.0.2.25: Updated for 9.1.0.17461 CDS release
+                _joinOperators.Add(JoinOperator.Any);
+                _joinOperators.Add(JoinOperator.Exists);
+            }
         }
 
         public bool Cancelled => _worker.CancellationPending;
