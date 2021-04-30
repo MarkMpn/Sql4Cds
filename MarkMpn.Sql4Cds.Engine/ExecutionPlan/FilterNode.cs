@@ -822,7 +822,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             filter.Conditions[0].PropertyName = prop.Name;
 
             // Convert the value to the expected type
-            filter.Conditions[0].Value = SqlTypeConverter.ChangeType(SqlTypeConverter.ChangeType(filter.Conditions[0].Value, MetadataQueryNode.GetPropertyType(targetValueType)), targetValueType);
+            if (filter.Conditions[0].Value != null)
+                filter.Conditions[0].Value = SqlTypeConverter.ChangeType(SqlTypeConverter.ChangeType(filter.Conditions[0].Value, MetadataQueryNode.GetPropertyType(targetValueType)), targetValueType);
 
             if (isEntityFilter)
             {
