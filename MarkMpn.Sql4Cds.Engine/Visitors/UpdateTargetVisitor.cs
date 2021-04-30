@@ -19,9 +19,11 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             _search = search;
         }
 
-        public string TargetEntityName { get; set; }
+        public string TargetEntityName { get; private set; }
 
-        public string TargetAliasName { get; set; }
+        public string TargetAliasName { get; private set; }
+
+        public NamedTableReference Target { get; private set; }
 
         public bool Ambiguous => _ambiguous;
 
@@ -35,6 +37,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
                 TargetEntityName = node.SchemaObject.BaseIdentifier.Value;
                 TargetAliasName = node.Alias.Value;
+                Target = node;
                 _foundAlias = true;
             }
 
@@ -45,6 +48,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
                 TargetEntityName = _search;
                 TargetAliasName = node.Alias?.Value ?? _search;
+                Target = node;
             }
         }
     }
