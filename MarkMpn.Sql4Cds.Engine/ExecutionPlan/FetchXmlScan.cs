@@ -501,7 +501,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var attrMetadata = meta.Attributes.Single(a => a.LogicalName == attribute.name);
                     var attrType = attrMetadata.GetAttributeSqlType();
 
-                    if (attribute.aggregateSpecified && (attribute.aggregate == Engine.FetchXml.AggregateType.count || attribute.aggregate == Engine.FetchXml.AggregateType.countcolumn))
+                    if (attribute.aggregateSpecified && (attribute.aggregate == Engine.FetchXml.AggregateType.count || attribute.aggregate == Engine.FetchXml.AggregateType.countcolumn) ||
+                        attribute.dategroupingSpecified)
                         attrType = typeof(SqlInt32);
 
                     string fullName;
