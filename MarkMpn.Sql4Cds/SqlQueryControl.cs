@@ -800,7 +800,7 @@ namespace MarkMpn.Sql4Cds
                     error = queryException.InnerException;
                 }
 
-                if (error is NotSupportedQueryFragmentException err)
+                if (error is NotSupportedQueryFragmentException err && err.Fragment != null)
                 {
                     _editor.IndicatorFillRange(_params.Offset + err.Fragment.StartOffset, err.Fragment.FragmentLength);
                     index = _params.Offset + err.Fragment.StartOffset;

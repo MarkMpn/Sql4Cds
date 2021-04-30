@@ -172,14 +172,35 @@ namespace MarkMpn.Sql4Cds
                 metadata = _metadata[GetService(parent)][logicalName];
 
             return metadata.Attributes
-                .OrderBy(a => a.LogicalName)
-                .Select(a =>
+                .Where(a => a.AttributeOf == null)
+                .SelectMany(a =>
                 {
                     var node = new TreeNode(a.LogicalName);
                     node.Tag = a;
                     SetIcon(node, GetIconType(a));
-                    return node;
+
+                    var nodes = new List<TreeNode>();
+                    nodes.Add(node);
+
+                    if (a is EnumAttributeMetadata || a is BooleanAttributeMetadata || a is LookupAttributeMetadata)
+                    {
+                        var nameNode = new TreeNode(a.LogicalName + "name");
+                        nameNode.Tag = a;
+                        SetIcon(nameNode, "Text");
+                        nodes.Add(nameNode);
+                    }
+
+                    if (a is LookupAttributeMetadata lookup && lookup.Targets.Length > 1)
+                    {
+                        var typeNode = new TreeNode(a.LogicalName + "type");
+                        typeNode.Tag = a;
+                        SetIcon(typeNode, "Text");
+                        nodes.Add(typeNode);
+                    }
+
+                    return nodes;
                 })
+                .OrderBy(n => n.Text)
                 .ToArray();
         }
 

@@ -322,7 +322,7 @@ namespace MarkMpn.Sql4Cds
                             }
 
                             if (tables.TryGetValue(targetTable, out var tableName) && _metadata.TryGetMinimalData(tableName, out var metadata))
-                                return FilterList(metadata.Attributes.Where(a => a.IsValidForUpdate != false).Select(a => new AttributeAutocompleteItem(a, _metadata, currentLength)).OrderBy(a => a), currentWord);
+                                return FilterList(metadata.Attributes.Where(a => a.IsValidForUpdate != false && a.AttributeOf == null).SelectMany(a => AttributeAutocompleteItem.CreateList(a, _metadata, currentLength, true)).OrderBy(a => a), currentWord);
                         }
 
                         if (currentWord.Contains("."))
@@ -335,12 +335,18 @@ namespace MarkMpn.Sql4Cds
                             if (tables.TryGetValue(alias, out var tableName))
                             {
                                 if (_metadata.TryGetMinimalData(tableName, out var metadata))
-                                    return FilterList(metadata.Attributes.Select(a => new AttributeAutocompleteItem(a, _metadata, currentLength)).OrderBy(a => a), currentWord);
+                                    return FilterList(metadata.Attributes.Where(a => a.IsValidForRead != false && a.AttributeOf == null).SelectMany(a => AttributeAutocompleteItem.CreateList(a, _metadata, currentLength, false)).OrderBy(a => a), currentWord);
                             }
                         }
                         else if (clause == "join")
                         {
                             // Entering a table alias, nothing useful to auto-complete
+                        }
+                        else if (clause == "insert" && tables.Count == 1)
+                        {
+                            var tableName = tables.Single().Value;
+                            if (_metadata.TryGetMinimalData(tableName, out var metadata))
+                                return FilterList(metadata.Attributes.Where(a => a.IsValidForCreate != false && a.AttributeOf == null).SelectMany(a => AttributeAutocompleteItem.CreateList(a, _metadata, currentLength, true)).OrderBy(a => a), currentWord);
                         }
                         else
                         {
@@ -350,8 +356,7 @@ namespace MarkMpn.Sql4Cds
                             // * functions
                             var items = new List<SqlAutocompleteItem>();
 
-                            if (clause != "insert")
-                                items.AddRange(tables.Select(kvp => new { Entity = _entities.SingleOrDefault(e => e.LogicalName == kvp.Value), Alias = kvp.Key }).Where(x => x.Entity != null).Select(x => new EntityAutocompleteItem(x.Entity, x.Alias, _metadata, currentLength)));
+                            items.AddRange(tables.Select(kvp => new { Entity = _entities.SingleOrDefault(e => e.LogicalName == kvp.Value && e.DataProviderId != MetaMetadataCache.ProviderId || ("metadata." + e.LogicalName) == kvp.Value && e.DataProviderId == MetaMetadataCache.ProviderId), Alias = kvp.Key }).Where(x => x.Entity != null).Select(x => new EntityAutocompleteItem(x.Entity, x.Alias, _metadata, currentLength)));
 
                             var attributes = new List<AttributeMetadata>();
 
@@ -361,7 +366,7 @@ namespace MarkMpn.Sql4Cds
                                     attributes.AddRange(metadata.Attributes);
                             }
 
-                            items.AddRange(attributes.GroupBy(x => x.LogicalName).Where(g => g.Count() == 1).Select(g => new AttributeAutocompleteItem(g.Single(), _metadata, currentLength)));
+                            items.AddRange(attributes.Where(a => a.IsValidForRead != false && a.AttributeOf == null).GroupBy(x => x.LogicalName).Where(g => g.Count() == 1).SelectMany(g => AttributeAutocompleteItem.CreateList(g.Single(), _metadata, currentLength, false)));
 
                             items.AddRange(typeof(FunctionMetadata.SqlFunctions).GetMethods(BindingFlags.DeclaredOnly | BindingFlags.Instance | BindingFlags.Public).Select(m => new FunctionAutocompleteItem(m, currentLength)));
 
@@ -426,7 +431,9 @@ namespace MarkMpn.Sql4Cds
                             return additionalSuggestions.Concat(FilterList(items, currentWord)).OrderBy(x => x);
                         }
                     }
-                    else if (prevWord.Equals("update", StringComparison.OrdinalIgnoreCase))
+                    else if (prevWord.Equals("update", StringComparison.OrdinalIgnoreCase) ||
+                        prevWord.Equals("insert", StringComparison.OrdinalIgnoreCase) ||
+                        prevPrevWord.Equals("insert", StringComparison.OrdinalIgnoreCase) && prevWord.Equals("into", StringComparison.OrdinalIgnoreCase))
                     {
                         return FilterList(_entities.Select(e => new EntityAutocompleteItem(e, _metadata, currentLength)), currentWord).OrderBy(x => x);
                     }
@@ -708,19 +715,28 @@ namespace MarkMpn.Sql4Cds
         class AttributeAutocompleteItem : SqlAutocompleteItem
         {
             private readonly AttributeMetadata _attribute;
-            private readonly AttributeMetadata _attributeOf;
+            private readonly string _virtualSuffix;
 
-            public AttributeAutocompleteItem(AttributeMetadata attribute, IAttributeMetadataCache metadata, int replaceLength) : base(attribute.LogicalName, replaceLength, GetIconIndex(attribute))
+            public AttributeAutocompleteItem(AttributeMetadata attribute, IAttributeMetadataCache metadata, int replaceLength, string virtualSuffix = null) : base(attribute.LogicalName + virtualSuffix, replaceLength, virtualSuffix == null ? GetIconIndex(attribute) : 13)
             {
                 _attribute = attribute;
+                _virtualSuffix = virtualSuffix;
+            }
 
-                if (!String.IsNullOrEmpty(_attribute.AttributeOf) && metadata.TryGetMinimalData(attribute.EntityLogicalName, out var entity))
-                    _attributeOf = entity.Attributes.SingleOrDefault(a => a.LogicalName == _attribute.AttributeOf);
+            public static IEnumerable<AttributeAutocompleteItem> CreateList(AttributeMetadata attribute, IAttributeMetadataCache metadata, int replaceLength, bool writeable)
+            {
+                yield return new AttributeAutocompleteItem(attribute, metadata, replaceLength);
+
+                if (!writeable && (attribute is EnumAttributeMetadata || attribute is BooleanAttributeMetadata || attribute is LookupAttributeMetadata))
+                    yield return new AttributeAutocompleteItem(attribute, metadata, replaceLength, "name");
+
+                if (attribute is LookupAttributeMetadata lookup && lookup.Targets?.Length > 1)
+                    yield return new AttributeAutocompleteItem(attribute, metadata, replaceLength, "type");
             }
 
             public override string ToolTipTitle
             {
-                get => (_attributeOf ?? _attribute).DisplayName?.UserLocalizedLabel?.Label;
+                get => _attribute.DisplayName?.UserLocalizedLabel?.Label;
                 set => base.ToolTipTitle = value;
             }
 
@@ -728,18 +744,16 @@ namespace MarkMpn.Sql4Cds
             {
                 get
                 {
-                    var description = (_attributeOf ?? _attribute).Description?.UserLocalizedLabel?.Label;
+                    var description = _attribute.Description?.UserLocalizedLabel?.Label;
 
-                    if (_attribute.AttributeType == AttributeTypeCode.Picklist)
+                    if (_virtualSuffix == "name")
+                        description += $"\r\n\r\nThis attribute holds the display name of the {_attribute.LogicalName} field";
+                    else if (_virtualSuffix == "type")
+                        description += $"\r\n\r\nThis attribute holds the logical name of the type of record referenced by the {_attribute.LogicalName} field";
+                    else if (_attribute.AttributeType == AttributeTypeCode.Picklist)
                         description += "\r\n\r\nThis attribute holds the underlying integer value of the field";
                     else if (_attribute.AttributeType == AttributeTypeCode.Lookup || _attribute.AttributeType == AttributeTypeCode.Customer || _attribute.AttributeType == AttributeTypeCode.Owner)
                         description += "\r\n\r\nThis attribute holds the underlying unique identifier value of the field";
-                    else if (_attributeOf != null && _attribute.LogicalName == _attribute.AttributeOf + "name")
-                        description += $"\r\n\r\nThis attribute holds the display name of the {_attributeOf.LogicalName} field";
-                    else if (_attributeOf != null && _attribute.LogicalName == _attribute.AttributeOf + "yominame")
-                        description += $"\r\n\r\nThis attribute holds the phonetic name of the {_attributeOf.LogicalName} field";
-                    else if (_attributeOf != null && _attribute.LogicalName == _attribute.AttributeOf + "type")
-                        description += $"\r\n\r\nThis attribute holds the logical name of the type of record referenced by the {_attributeOf.LogicalName} field";
 
                     return description;
                 }

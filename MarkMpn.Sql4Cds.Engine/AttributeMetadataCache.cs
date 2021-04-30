@@ -146,7 +146,9 @@ namespace MarkMpn.Sql4Cds.Engine
                                         nameof(AttributeMetadata.Description),
                                         nameof(AttributeMetadata.AttributeType),
                                         nameof(AttributeMetadata.IsValidForUpdate),
-                                        nameof(AttributeMetadata.IsValidForCreate)
+                                        nameof(AttributeMetadata.IsValidForCreate),
+                                        nameof(AttributeMetadata.IsValidForRead),
+                                        nameof(LookupAttributeMetadata.Targets)
                                     }
                                 }
                             },
