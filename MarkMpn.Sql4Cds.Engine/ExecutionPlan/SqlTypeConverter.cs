@@ -592,8 +592,27 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (value is OptionSetValueCollection osvc)
                 return new SqlString(String.Join(",", osvc.Select(v => v.Value)), CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace);
 
+            if (value is EntityCollection coll)
+                return new SqlString(String.Join(",", coll.Entities.Select(e => FormatEntityCollectionEntry(e))), CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace);
+
             // Convert any other complex types (e.g. from metadata queries) to strings
             return new SqlString(value.ToString(), CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace);
+        }
+
+        private static string FormatEntityCollectionEntry(Entity e)
+        {
+            if (e.LogicalName == "activityparty")
+            {
+                // Show the details of the party
+                var partyId = e.GetAttributeValue<EntityReference>("partyid");
+
+                if (partyId != null)
+                    return $"{partyId.LogicalName}:{partyId.Id}";
+
+                return e.GetAttributeValue<string>("addressused");
+            }
+
+            return e.Id.ToString();
         }
 
         /// <summary>
