@@ -848,6 +848,8 @@ namespace MarkMpn.Sql4Cds
             }
 
             BusyChanged?.Invoke(this, EventArgs.Empty);
+
+            _editor.Focus();
         }
 
         private void AddMessage(int index, int length, string message, bool error)
