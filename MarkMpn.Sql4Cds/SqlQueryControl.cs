@@ -800,6 +800,15 @@ namespace MarkMpn.Sql4Cds
                     error = queryException.InnerException;
                 }
 
+                if (error is QueryExecutionException queryExecution)
+                {
+                    messageSuffix = "\r\nSee the Execution Plan tab for details of where this error occurred";
+                    ShowResult(plan, new ExecuteParams { Execute = true, IncludeFetchXml = true, Sql = plan.Sql }, null, null, queryExecution);
+
+                    if (queryExecution.InnerException != null)
+                        error = queryExecution.InnerException;
+                }
+
                 if (error is NotSupportedQueryFragmentException err && err.Fragment != null)
                 {
                     _editor.IndicatorFillRange(_params.Offset + err.Fragment.StartOffset, err.Fragment.FragmentLength);
@@ -821,14 +830,6 @@ namespace MarkMpn.Sql4Cds
                         AddMessage(index, length, msg, false);
 
                     error = partialSuccess.InnerException;
-                }
-                else if (error is QueryExecutionException queryExecution)
-                {
-                    messageSuffix = "\r\nSee the Execution Plan tab for details of where this error occurred";
-                    ShowResult(plan, new ExecuteParams { Execute = true, IncludeFetchXml = true, Sql = plan.Sql }, null, null, queryExecution);
-
-                    if (queryExecution.InnerException != null)
-                        error = queryExecution.InnerException;
                 }
 
                 _ai.TrackException(error, new Dictionary<string, string> { ["Sql"] = _params.Sql, ["Source"] = "XrmToolBox" });
