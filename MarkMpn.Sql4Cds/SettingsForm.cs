@@ -20,6 +20,7 @@ namespace MarkMpn.Sql4Cds
 
             quotedIdentifiersCheckbox.Checked = settings.QuotedIdentifiers;
             selectLimitUpDown.Value = settings.SelectLimit;
+            retriveLimitUpDown.Value = settings.MaxRetrievesPerQuery;
             updateWarnThresholdUpDown.Value = settings.UpdateWarnThreshold;
             blockUpdateWithoutWhereCheckbox.Checked = settings.BlockUpdateWithoutWhere;
             deleteWarnThresholdUpDown.Value = settings.DeleteWarnThreshold;
@@ -44,6 +45,7 @@ namespace MarkMpn.Sql4Cds
             {
                 _settings.QuotedIdentifiers = quotedIdentifiersCheckbox.Checked;
                 _settings.SelectLimit = (int) selectLimitUpDown.Value;
+                _settings.MaxRetrievesPerQuery = (int) retriveLimitUpDown.Value;
                 _settings.UpdateWarnThreshold = (int) updateWarnThresholdUpDown.Value;
                 _settings.BlockUpdateWithoutWhere = blockUpdateWithoutWhereCheckbox.Checked;
                 _settings.DeleteWarnThreshold = (int) deleteWarnThresholdUpDown.Value;

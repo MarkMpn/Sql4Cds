@@ -140,8 +140,8 @@ namespace MarkMpn.Sql4Cds
         {
             _retrievedPages++;
 
-            if (_retrievedPages > Settings.Instance.MaxRetrievesPerQuery)
-                throw new QueryExecutionException("Hit maximum retrieval limit. Try limiting the data to retrieve with WHERE clauses or eliminating subqueries");
+            if (Settings.Instance.MaxRetrievesPerQuery != 0 && _retrievedPages > Settings.Instance.MaxRetrievesPerQuery)
+                throw new QueryExecutionException($"Hit maximum retrieval limit. This limit is in place to protect against excessive API requests. Try restricting the data to retrieve with WHERE clauses or eliminating subqueries.\r\nYour limit of {Settings.Instance.MaxRetrievesPerQuery:N0} retrievals per query can be modified in Settings.");
         }
     }
 }
