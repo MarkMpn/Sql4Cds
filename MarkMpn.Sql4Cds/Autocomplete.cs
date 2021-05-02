@@ -433,7 +433,7 @@ namespace MarkMpn.Sql4Cds
                     }
                     else if (prevWord.Equals("update", StringComparison.OrdinalIgnoreCase) ||
                         prevWord.Equals("insert", StringComparison.OrdinalIgnoreCase) ||
-                        prevPrevWord.Equals("insert", StringComparison.OrdinalIgnoreCase) && prevWord.Equals("into", StringComparison.OrdinalIgnoreCase))
+                        prevPrevWord != null && prevPrevWord.Equals("insert", StringComparison.OrdinalIgnoreCase) && prevWord.Equals("into", StringComparison.OrdinalIgnoreCase))
                     {
                         return FilterList(_entities.Select(e => new EntityAutocompleteItem(e, _metadata, currentLength)), currentWord).OrderBy(x => x);
                     }
