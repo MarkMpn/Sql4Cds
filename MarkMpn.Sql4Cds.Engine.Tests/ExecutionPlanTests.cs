@@ -3008,5 +3008,34 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             planBuilder.Build(query);
         }
+
+        [TestMethod]
+        public void MinAggregateNotFoldedToFetchXmlForOptionset()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"SELECT new_name, min(new_optionsetvalue) FROM new_customentity GROUP BY new_name";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var aggregate = AssertNode<HashMatchAggregateNode>(select.Source);
+            var fetchXml = AssertNode<FetchXmlScan>(aggregate.Source);
+
+            AssertFetchXml(fetchXml, @"
+                <fetch>
+                    <entity name='new_customentity'>
+                        <attribute name='new_name' />
+                        <attribute name='new_optionsetvalue' />
+                    </entity>
+                </fetch>");
+        }
     }
 }

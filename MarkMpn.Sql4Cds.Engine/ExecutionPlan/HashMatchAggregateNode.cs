@@ -13,6 +13,7 @@ using MarkMpn.Sql4Cds.Engine.QueryExtensions;
 using MarkMpn.Sql4Cds.Engine.Visitors;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Metadata;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -458,6 +459,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         default:
                             throw new ArgumentOutOfRangeException();
                     }
+
+                    // min, max, sum and avg are not supported for optionset attributes
+                    var parts = colName.Split('.');
+                    string entityName;
+
+                    if (parts[0] == fetchXml.Alias)
+                        entityName = fetchXml.Entity.name;
+                    else
+                        entityName = fetchXml.Entity.FindLinkEntity(parts[0]).name;
+
+                    var attr = metadata[entityName].Attributes.Single(a => a.LogicalName == parts[1]);
+
+                    if (attr is EnumAttributeMetadata && (aggregateType == FetchXml.AggregateType.avg || aggregateType == FetchXml.AggregateType.max || aggregateType == FetchXml.AggregateType.min || aggregateType == FetchXml.AggregateType.sum))
+                        return this;
 
                     var attribute = fetchXml.AddAttribute(colName, a => a.aggregate == aggregateType && a.alias == agg.Key && a.distinct == distinct, metadata, out _);
                     attribute.aggregate = aggregateType;

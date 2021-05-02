@@ -57,6 +57,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         }
 
         private Dictionary<string, ParameterizedCondition> _parameterizedConditions;
+        private HashSet<string> _entityNameGroupings;
 
         public FetchXmlScan()
         {
@@ -121,6 +122,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         condition.SetValue(param.Value);
                 }
             }
+
+            FindEntityNameGroupings(metadata);
 
             var mainEntity = FetchXml.Items.OfType<FetchEntityType>().Single();
             var name = mainEntity.name;
@@ -218,7 +221,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Convert aliased values to the underlying value
             foreach (var attribute in entity.Attributes.Where(attr => attr.Value is AliasedValue).ToList())
-                entity[attribute.Key] = ((AliasedValue)attribute.Value).Value;
+            {
+                var aliasedValue = (AliasedValue)attribute.Value;
+
+                // When grouping by EntityName attributes the value is converted from the normal string value to an OptionSetValue
+                // Convert it back now for consistency
+                if (_entityNameGroupings.Contains(attribute.Key))
+                {
+                    var otc = ((OptionSetValue)aliasedValue.Value).Value;
+                    var meta = metadata[otc];
+                    entity[attribute.Key] = meta.LogicalName;
+                }
+                else
+                {
+                    entity[attribute.Key] = aliasedValue.Value;
+                }
+            }
 
             // Copy any grouped values to their full names
             if (FetchXml.aggregateSpecified && FetchXml.aggregate)
@@ -295,6 +313,31 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var link in items.OfType<FetchLinkEntityType>())
                 FindParameterizedConditions(null, link.Items);
+        }
+
+        private void FindEntityNameGroupings(IAttributeMetadataCache metadata)
+        {
+            _entityNameGroupings = new HashSet<string>();
+
+            if (FetchXml.aggregateSpecified && FetchXml.aggregate)
+                FindEntityNameGroupings(metadata, Entity.name, Entity.Items);
+        }
+
+        private void FindEntityNameGroupings(IAttributeMetadataCache metadata, string logicalName, object[] items)
+        {
+            if (items == null)
+                return;
+
+            foreach (var attr in items.OfType<FetchAttributeType>().Where(a => a.groupbySpecified && a.groupby == FetchBoolType.@true))
+            {
+                var attributeMetadata = metadata[logicalName].Attributes.Single(a => a.LogicalName == attr.name);
+
+                if (attributeMetadata.AttributeType == AttributeTypeCode.EntityName)
+                    _entityNameGroupings.Add(attr.alias);
+            }
+
+            foreach (var linkEntity in items.OfType<FetchLinkEntityType>())
+                FindEntityNameGroupings(metadata, linkEntity.name, linkEntity.Items);
         }
 
         private bool ContainsSort(object[] items)

@@ -925,7 +925,6 @@ namespace MarkMpn.Sql4Cds
 
             backgroundWorker.ReportProgress(0, "Executing query...");
 
-            //var converter = new Sql2FetchXml(Metadata, Settings.Instance.QuotedIdentifiers);
             var options = new QueryExecutionOptions(_con, Service, backgroundWorker, this);
             var converter = new ExecutionPlanBuilder(Metadata, _tableSize, options);
 
