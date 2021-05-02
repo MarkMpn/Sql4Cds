@@ -27,6 +27,7 @@ Fixed accessing partylist attributes
 Fixed converting numeric values to datetime
 Fixed folding DATEPART calculations into FetchXML
 Fixed folding IS NULL conditions to metadata queries
+Fixed aggregate queries on optionset or entity name attributes
 Improved error reporting
 Allow use of "exists" link entity type for online instances</releaseNotes>
     <copyright>Copyright © 2019 Mark Carrington</copyright>
