@@ -3037,5 +3037,28 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     </entity>
                 </fetch>");
         }
+
+        [TestMethod]
+        public void HelpfulErrorMessageOnMissingGroupBy()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"SELECT new_name, min(new_optionsetvalue) FROM new_customentity";
+
+            try
+            {
+                planBuilder.Build(query);
+                Assert.Fail();
+            }
+            catch (NotSupportedQueryFragmentException ex)
+            {
+                Assert.AreEqual("Column is invalid in the select list because it is not contained in either an aggregate function or the GROUP BY clause: new_name", ex.Message);
+            }
+        }
     }
 }

@@ -105,7 +105,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 aggregate.Value.Expression = sourceExpression.Compile(schema, parameterTypes);
 
-                aggregate.Value.ReturnType = aggregate.Value.SqlExpression.GetType(schema, parameterTypes);
+                aggregate.Value.ReturnType = aggregate.Value.SqlExpression.GetType(schema, null, parameterTypes);
 
                 if (aggregate.Value.AggregateType == AggregateType.Average)
                 {
@@ -225,7 +225,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         break;
 
                     default:
-                        aggregateType = aggregate.Value.SqlExpression.GetType(sourceSchema, parameterTypes);
+                        aggregateType = aggregate.Value.SqlExpression.GetType(sourceSchema, null, parameterTypes);
                         break;
                 }
 
