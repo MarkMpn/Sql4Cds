@@ -35,7 +35,11 @@ namespace MarkMpn.Sql4Cds
             };
 
             if (new Version(con.OrganizationVersion) >= new Version("9.1.0.17461"))
-                _joinOperators.Add(JoinOperator.Any); // First documented in SDK Version 9.0.2.25: Updated for 9.1.0.17461 CDS release
+            {
+                // First documented in SDK Version 9.0.2.25: Updated for 9.1.0.17461 CDS release
+                _joinOperators.Add(JoinOperator.Any);
+                _joinOperators.Add(JoinOperator.Exists);
+            }
         }
 
         public bool Cancelled => _worker.CancellationPending;
@@ -136,8 +140,8 @@ namespace MarkMpn.Sql4Cds
         {
             _retrievedPages++;
 
-            if (_retrievedPages > Settings.Instance.MaxRetrievesPerQuery)
-                throw new QueryExecutionException("Hit maximum retrieval limit. Try limiting the data to retrieve with WHERE clauses or eliminating subqueries");
+            if (Settings.Instance.MaxRetrievesPerQuery != 0 && _retrievedPages > Settings.Instance.MaxRetrievesPerQuery)
+                throw new QueryExecutionException($"Hit maximum retrieval limit. This limit is in place to protect against excessive API requests. Try restricting the data to retrieve with WHERE clauses or eliminating subqueries.\r\nYour limit of {Settings.Instance.MaxRetrievesPerQuery:N0} retrievals per query can be modified in Settings.");
         }
     }
 }

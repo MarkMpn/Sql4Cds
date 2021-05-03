@@ -333,7 +333,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (targetLookupAttribute == null)
                     continue;
 
-                if (targetLookupAttribute.Targets.Length > 1 && !attributeNames.Contains(targetAttrName + "type"))
+                if (targetLookupAttribute.Targets.Length > 1 && !attributeNames.Contains(targetAttrName + "type") && targetLookupAttribute.AttributeType != AttributeTypeCode.PartyList)
                 {
                     throw new NotSupportedQueryFragmentException("Inserting values into a polymorphic lookup field requires setting the associated type column as well", col)
                     {
@@ -423,7 +423,17 @@ namespace MarkMpn.Sql4Cds.Engine
             var targetAlias = deleteTarget.TargetAliasName ?? deleteTarget.TargetEntityName;
             var targetLogicalName = deleteTarget.TargetEntityName;
 
-            var targetMetadata = Metadata[targetLogicalName];
+            EntityMetadata targetMetadata;
+
+            try
+            {
+                targetMetadata = Metadata[targetLogicalName];
+            }
+            catch (FaultException ex)
+            {
+                throw new NotSupportedQueryFragmentException(ex.Message, deleteTarget.Target);
+            }
+
             queryExpression.SelectElements.Add(new SelectScalarExpression
             {
                 Expression = new ColumnReferenceExpression
@@ -518,7 +528,17 @@ namespace MarkMpn.Sql4Cds.Engine
             var targetAlias = updateTarget.TargetAliasName ?? updateTarget.TargetEntityName;
             var targetLogicalName = updateTarget.TargetEntityName;
 
-            var targetMetadata = Metadata[targetLogicalName];
+            EntityMetadata targetMetadata;
+
+            try
+            {
+                targetMetadata = Metadata[targetLogicalName];
+            }
+            catch (FaultException ex)
+            {
+                throw new NotSupportedQueryFragmentException(ex.Message, updateTarget.Target);
+            }
+
             queryExpression.SelectElements.Add(new SelectScalarExpression
             {
                 Expression = new ColumnReferenceExpression
@@ -635,7 +655,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     var sourceColName = select.ColumnSet.Single(col => col.OutputColumn == targetAttribute.LogicalName).SourceColumn;
                     var sourceCol = sourceColName.ToColumnReference();
-                    var sourceType = sourceCol.GetType(schema, null);
+                    var sourceType = sourceCol.GetType(schema, null, null);
                     var targetType = targetAttribute.GetAttributeSqlType();
 
                     if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, targetType))
@@ -672,7 +692,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (targetLookupAttribute == null)
                     continue;
 
-                if (targetLookupAttribute.Targets.Length > 1 && !update.ColumnMappings.ContainsKey(targetAttrName + "type"))
+                if (targetLookupAttribute.Targets.Length > 1 && !update.ColumnMappings.ContainsKey(targetAttrName + "type") && targetLookupAttribute.AttributeType != AttributeTypeCode.PartyList)
                 {
                     // Check we're not just setting the lookup column to null - no need to set the corresponding type then
                     if (assignment.NewValue is NullLiteral)
@@ -768,7 +788,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 node = distinct;
             }
 
-            node = ConvertOrderByClause(node, hints, binary.OrderByClause, concat.ColumnSet.Select(col => new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = col.OutputColumn } } } }).ToArray(), binary, parameterTypes, outerSchema, outerReferences);
+            node = ConvertOrderByClause(node, hints, binary.OrderByClause, concat.ColumnSet.Select(col => new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = col.OutputColumn } } } }).ToArray(), binary, parameterTypes, outerSchema, outerReferences, null);
             node = ConvertOffsetClause(node, binary.OffsetClause, parameterTypes);
 
             var select = new SelectNode { Source = node };
@@ -789,10 +809,12 @@ namespace MarkMpn.Sql4Cds.Engine
             node = ConvertWhereClause(node, hints, querySpec.WhereClause, outerSchema, outerReferences, parameterTypes, querySpec);
 
             // Add aggregates from GROUP BY/SELECT/HAVING/ORDER BY
+            var preGroupByNode = node;
             node = ConvertGroupByAggregates(node, querySpec, parameterTypes, outerSchema, outerReferences);
+            var nonAggregateSchema = preGroupByNode == node ? null : preGroupByNode.GetSchema(Metadata, parameterTypes);
 
             // Add filters from HAVING
-            node = ConvertHavingClause(node, hints, querySpec.HavingClause, parameterTypes, outerSchema, outerReferences, querySpec);
+            node = ConvertHavingClause(node, hints, querySpec.HavingClause, parameterTypes, outerSchema, outerReferences, querySpec, nonAggregateSchema);
 
             // Add sorts from ORDER BY
             var selectFields = new List<ScalarExpression>();
@@ -819,7 +841,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
             }
 
-            node = ConvertOrderByClause(node, hints, querySpec.OrderByClause, selectFields.ToArray(), querySpec, parameterTypes, outerSchema, outerReferences);
+            node = ConvertOrderByClause(node, hints, querySpec.OrderByClause, selectFields.ToArray(), querySpec, parameterTypes, outerSchema, outerReferences, nonAggregateSchema);
 
             // Add DISTINCT
             var distinct = querySpec.UniqueRowFilter == UniqueRowFilter.Distinct ? new DistinctNode { Source = node } : null;
@@ -833,7 +855,7 @@ namespace MarkMpn.Sql4Cds.Engine
             node = ConvertOffsetClause(node, querySpec.OffsetClause, parameterTypes);
 
             // Add SELECT
-            var selectNode = ConvertSelectClause(querySpec.SelectElements, hints, node, distinct, querySpec, parameterTypes, outerSchema, outerReferences);
+            var selectNode = ConvertSelectClause(querySpec.SelectElements, hints, node, distinct, querySpec, parameterTypes, outerSchema, outerReferences, nonAggregateSchema);
 
             return selectNode;
         }
@@ -853,7 +875,7 @@ namespace MarkMpn.Sql4Cds.Engine
             foreach (var inSubquery in visitor.InSubqueries)
             {
                 // Validate the LHS expression
-                inSubquery.Expression.GetType(schema, parameterTypes);
+                inSubquery.Expression.GetType(schema, null, parameterTypes);
 
                 // Each query of the format "col1 IN (SELECT col2 FROM source)" becomes a left outer join:
                 // LEFT JOIN source ON col1 = col2
@@ -1115,7 +1137,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return source;
         }
 
-        private IDataExecutionPlanNode ConvertHavingClause(IDataExecutionPlanNode source, IList<OptimizerHint> hints, HavingClause havingClause, IDictionary<string, Type> parameterTypes, NodeSchema outerSchema, IDictionary<string, string> outerReferences, TSqlFragment query)
+        private IDataExecutionPlanNode ConvertHavingClause(IDataExecutionPlanNode source, IList<OptimizerHint> hints, HavingClause havingClause, IDictionary<string, Type> parameterTypes, NodeSchema outerSchema, IDictionary<string, string> outerReferences, TSqlFragment query, NodeSchema nonAggregateSchema)
         {
             if (havingClause == null)
                 return source;
@@ -1126,7 +1148,7 @@ namespace MarkMpn.Sql4Cds.Engine
             ConvertScalarSubqueries(havingClause.SearchCondition, hints, ref source, computeScalar, parameterTypes, query);
 
             // Validate the final expression
-            havingClause.SearchCondition.GetType(source.GetSchema(Metadata, parameterTypes), parameterTypes);
+            havingClause.SearchCondition.GetType(source.GetSchema(Metadata, parameterTypes), nonAggregateSchema, parameterTypes);
 
             return new FilterNode
             {
@@ -1367,8 +1389,8 @@ namespace MarkMpn.Sql4Cds.Engine
             if (offsetClause == null)
                 return source;
 
-            var offsetType = offsetClause.OffsetExpression.GetType(null, parameterTypes);
-            var fetchType = offsetClause.FetchExpression.GetType(null, parameterTypes);
+            var offsetType = offsetClause.OffsetExpression.GetType(null, null, parameterTypes);
+            var fetchType = offsetClause.FetchExpression.GetType(null, null, parameterTypes);
 
             if (!SqlTypeConverter.CanChangeTypeImplicit(offsetType, typeof(SqlInt32)))
                 throw new NotSupportedQueryFragmentException("Unexpected OFFSET type", offsetClause.OffsetExpression);
@@ -1394,7 +1416,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (topRowFilter.Percent)
                 source = new TableSpoolNode { Source = source };
 
-            var topType = topRowFilter.Expression.GetType(null, parameterTypes);
+            var topType = topRowFilter.Expression.GetType(null, null, parameterTypes);
             var targetType = topRowFilter.Percent ? typeof(SqlSingle) : typeof(SqlInt32);
 
             if (!SqlTypeConverter.CanChangeTypeImplicit(topType, targetType))
@@ -1409,7 +1431,7 @@ namespace MarkMpn.Sql4Cds.Engine
             };
         }
 
-        private IDataExecutionPlanNode ConvertOrderByClause(IDataExecutionPlanNode source, IList<OptimizerHint> hints, OrderByClause orderByClause, ScalarExpression[] selectList, TSqlFragment query, IDictionary<string, Type> parameterTypes, NodeSchema outerSchema, Dictionary<string, string> outerReferences)
+        private IDataExecutionPlanNode ConvertOrderByClause(IDataExecutionPlanNode source, IList<OptimizerHint> hints, OrderByClause orderByClause, ScalarExpression[] selectList, TSqlFragment query, IDictionary<string, Type> parameterTypes, NodeSchema outerSchema, Dictionary<string, string> outerReferences, NodeSchema nonAggregateSchema)
         {
             if (orderByClause == null)
                 return source;
@@ -1463,13 +1485,13 @@ namespace MarkMpn.Sql4Cds.Engine
                     !(orderBy.Expression is VariableReference) &&
                     !(orderBy.Expression is Literal))
                 {
-                    var calculated = ComputeScalarExpression(orderBy.Expression, hints, query, computeScalar, parameterTypes, ref source);
+                    var calculated = ComputeScalarExpression(orderBy.Expression, hints, query, computeScalar, nonAggregateSchema, parameterTypes, ref source);
                     sort.Source = source;
                     schema = source.GetSchema(Metadata, parameterTypes);
                 }
 
                 // Validate the expression
-                orderBy.Expression.GetType(schema, parameterTypes);
+                orderBy.Expression.GetType(schema, nonAggregateSchema, parameterTypes);
 
                 sort.Sorts.Add(orderBy);
             }
@@ -1494,7 +1516,7 @@ namespace MarkMpn.Sql4Cds.Engine
             ConvertScalarSubqueries(whereClause.SearchCondition, hints, ref source, computeScalar, parameterTypes, query);
 
             // Validate the final expression
-            whereClause.SearchCondition.GetType(source.GetSchema(Metadata, parameterTypes), parameterTypes);
+            whereClause.SearchCondition.GetType(source.GetSchema(Metadata, parameterTypes), null, parameterTypes);
 
             return new FilterNode
             {
@@ -1547,7 +1569,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return query;
         }
 
-        private SelectNode ConvertSelectClause(IList<SelectElement> selectElements, IList<OptimizerHint> hints, IDataExecutionPlanNode node, DistinctNode distinct, TSqlFragment query, IDictionary<string, Type> parameterTypes, NodeSchema outerSchema, IDictionary<string,string> outerReferences)
+        private SelectNode ConvertSelectClause(IList<SelectElement> selectElements, IList<OptimizerHint> hints, IDataExecutionPlanNode node, DistinctNode distinct, TSqlFragment query, IDictionary<string, Type> parameterTypes, NodeSchema outerSchema, IDictionary<string,string> outerReferences, NodeSchema nonAggregateSchema)
         {
             var schema = node.GetSchema(Metadata, parameterTypes);
 
@@ -1573,13 +1595,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
                         if (!schema.ContainsColumn(colName, out colName))
                         {
-                            if (!schema.Aliases.TryGetValue(col.GetColumnName(), out var normalized))
-                                throw new NotSupportedQueryFragmentException("Unknown column", col);
-
-                            throw new NotSupportedQueryFragmentException("Ambiguous column reference", col)
-                            {
-                                Suggestion = $"Did you mean:\r\n{String.Join("\r\n", normalized.Select(c => $"* {c}"))}"
-                            };
+                            // Column name isn't valid. Use the expression extensions to throw a consistent error message
+                            col.GetType(schema, nonAggregateSchema, parameterTypes);
                         }
 
                         var alias = scalar.ColumnName?.Value ?? col.MultiPartIdentifier.Identifiers.Last().Value;
@@ -1593,7 +1610,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     else
                     {
                         var scalarSource = distinct?.Source ?? node;
-                        var alias = ComputeScalarExpression(scalar.Expression, hints, query, computeScalar, parameterTypes, ref scalarSource);
+                        var alias = ComputeScalarExpression(scalar.Expression, hints, query, computeScalar, nonAggregateSchema, parameterTypes, ref scalarSource);
 
                         if (distinct != null)
                             distinct.Source = scalarSource;
@@ -1649,7 +1666,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return select;
         }
 
-        private string ComputeScalarExpression(ScalarExpression expression, IList<OptimizerHint> hints, TSqlFragment query, ComputeScalarNode computeScalar, IDictionary<string, Type> parameterTypes, ref IDataExecutionPlanNode node)
+        private string ComputeScalarExpression(ScalarExpression expression, IList<OptimizerHint> hints, TSqlFragment query, ComputeScalarNode computeScalar, NodeSchema nonAggregateSchema, IDictionary<string, Type> parameterTypes, ref IDataExecutionPlanNode node)
         {
             var computedColumn = ConvertScalarSubqueries(expression, hints, ref node, computeScalar, parameterTypes, query);
 
@@ -1657,8 +1674,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 expression = computedColumn;
 
             // Check the type of this expression now so any errors can be reported
-            var computeScalarSchema = computeScalar.GetSchema(Metadata, parameterTypes);
-            expression.GetType(computeScalarSchema, parameterTypes);
+            var computeScalarSchema = computeScalar.Source.GetSchema(Metadata, parameterTypes);
+            expression.GetType(computeScalarSchema, nonAggregateSchema, parameterTypes);
 
             var alias = $"Expr{++_colNameCounter}";
             computeScalar.Columns[alias] = expression;
@@ -2228,7 +2245,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                 lhs = lhsComputeScalar;
                             }
 
-                            var lhsColumn = ComputeScalarExpression(joinConditionVisitor.LhsExpression, hints, query, lhsComputeScalar, parameterTypes, ref lhs);
+                            var lhsColumn = ComputeScalarExpression(joinConditionVisitor.LhsExpression, hints, query, lhsComputeScalar, null, parameterTypes, ref lhs);
                             joinConditionVisitor.LhsKey = new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = lhsColumn } } } };
                         }
 
@@ -2240,7 +2257,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                 rhs = rhsComputeScalar;
                             }
 
-                            var rhsColumn = ComputeScalarExpression(joinConditionVisitor.RhsExpression, hints, query, rhsComputeScalar, parameterTypes, ref lhs);
+                            var rhsColumn = ComputeScalarExpression(joinConditionVisitor.RhsExpression, hints, query, rhsComputeScalar, null, parameterTypes, ref lhs);
                             joinConditionVisitor.RhsKey = new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = rhsColumn } } } };
                         }
                     }
@@ -2315,7 +2332,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 // Validate the join condition
                 var joinSchema = joinNode.GetSchema(Metadata, parameterTypes);
-                join.SearchCondition.GetType(joinSchema, parameterTypes);
+                join.SearchCondition.GetType(joinSchema, null, parameterTypes);
 
                 return joinNode;
             }
@@ -2406,13 +2423,13 @@ namespace MarkMpn.Sql4Cds.Engine
                 throw new NotSupportedQueryFragmentException($"Expected {columnNames.Count} columns, got {firstMismatchRow.ColumnValues.Count}", firstMismatchRow);
 
             // Work out the column types
-            var types = inlineDerivedTable.RowValues[0].ColumnValues.Select(val => val.GetType(null, null)).ToList();
+            var types = inlineDerivedTable.RowValues[0].ColumnValues.Select(val => val.GetType(null, null, null)).ToList();
 
             foreach (var row in inlineDerivedTable.RowValues.Skip(1))
             {
                 for (var colIndex = 0; colIndex < types.Count; colIndex++)
                 {
-                    if (!SqlTypeConverter.CanMakeConsistentTypes(types[colIndex], row.ColumnValues[colIndex].GetType(null, null), out var colType))
+                    if (!SqlTypeConverter.CanMakeConsistentTypes(types[colIndex], row.ColumnValues[colIndex].GetType(null, null, null), out var colType))
                         throw new NotSupportedQueryFragmentException("No available implicit type conversion", row.ColumnValues[colIndex]);
 
                     types[colIndex] = colType;

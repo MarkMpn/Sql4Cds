@@ -225,15 +225,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (sourceType == typeof(object))
                 {
                     // null literal
-                    expr = Expression.Constant(null);
+                    expr = Expression.Constant(null, destType);
                 }
                 else
                 {
                     expr = SqlTypeConverter.Convert(expr, sourceType);
                     expr = SqlTypeConverter.Convert(expr, destSqlType);
-                    expr = SqlTypeConverter.Convert(expr, destType);
+                    var convertedExpr = SqlTypeConverter.Convert(expr, destType);
 
-                    if (attr is LookupAttributeMetadata lookupAttr)
+                    if (attr is LookupAttributeMetadata lookupAttr && lookupAttr.AttributeType != AttributeTypeCode.PartyList)
                     {
                         Expression targetExpr;
 
@@ -251,49 +251,45 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             targetExpr = SqlTypeConverter.Convert(targetExpr, typeof(string));
                         }
 
-                        expr = Expression.Condition(
-                            SqlTypeConverter.NullCheck(expr),
-                            Expression.Convert(Expression.Constant(null), typeof(EntityReference)),
-                            Expression.New(
-                                typeof(EntityReference).GetConstructor(new[] { typeof(string), typeof(Guid) }),
-                                targetExpr,
-                                Expression.Convert(expr, typeof(Guid))
-                            )
-                        ); ;
-                    }
-                    else if (attr is EnumAttributeMetadata)
-                    {
-                        expr = Expression.Condition(
-                            SqlTypeConverter.NullCheck(expr),
-                            Expression.Convert(Expression.Constant(null), typeof(OptionSetValue)),
-                            Expression.New(
-                                typeof(OptionSetValue).GetConstructor(new[] { typeof(int) }),
-                                Expression.Convert(expr, typeof(int))
-                            )
+                        convertedExpr = Expression.New(
+                            typeof(EntityReference).GetConstructor(new[] { typeof(string), typeof(Guid) }),
+                            targetExpr,
+                            Expression.Convert(convertedExpr, typeof(Guid))
                         );
+                        destType = typeof(EntityReference);
+                    }
+                    else if (attr is EnumAttributeMetadata && !(attr is MultiSelectPicklistAttributeMetadata))
+                    {
+                        convertedExpr = Expression.New(
+                            typeof(OptionSetValue).GetConstructor(new[] { typeof(int) }),
+                            Expression.Convert(convertedExpr, typeof(int))
+                        );
+                        destType = typeof(OptionSetValue);
                     }
                     else if (attr is MoneyAttributeMetadata)
                     {
-                        expr = Expression.Condition(
-                            SqlTypeConverter.NullCheck(expr),
-                            Expression.Convert(Expression.Constant(null), typeof(Money)),
-                            Expression.New(
-                                typeof(Money).GetConstructor(new[] { typeof(decimal) }),
-                                Expression.Convert(expr, typeof(decimal))
-                            )
+                        convertedExpr = Expression.New(
+                            typeof(Money).GetConstructor(new[] { typeof(decimal) }),
+                            Expression.Convert(expr, typeof(decimal))
                         );
+                        destType = typeof(Money);
                     }
                     else if (attr is DateTimeAttributeMetadata)
                     {
-                        expr = Expression.Condition(
-                            SqlTypeConverter.NullCheck(expr),
-                            Expression.Convert(Expression.Constant(null), typeof(DateTime?)),
+                        convertedExpr = Expression.Convert(
                             Expr.Call(() => DateTime.SpecifyKind(Expr.Arg<DateTime>(), Expr.Arg<DateTimeKind>()),
                                 expr,
                                 Expression.Constant(dateTimeKind)
-                            )
+                            ),
+                            typeof(DateTime?)
                         );
                     }
+
+                    // Check for null on the value BEFORE converting from the SQL to BCL type to avoid e.g. SqlDateTime.Null being converted to 1900-01-01
+                    expr = Expression.Condition(
+                        SqlTypeConverter.NullCheck(expr),
+                        Expression.Constant(null, destType),
+                        convertedExpr);
 
                     if (expr.Type.IsValueType)
                         expr = SqlTypeConverter.Convert(expr, typeof(object));

@@ -57,6 +57,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         }
 
         private Dictionary<string, ParameterizedCondition> _parameterizedConditions;
+        private HashSet<string> _entityNameGroupings;
 
         public FetchXmlScan()
         {
@@ -121,6 +122,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         condition.SetValue(param.Value);
                 }
             }
+
+            FindEntityNameGroupings(metadata);
 
             var mainEntity = FetchXml.Items.OfType<FetchEntityType>().Single();
             var name = mainEntity.name;
@@ -218,7 +221,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Convert aliased values to the underlying value
             foreach (var attribute in entity.Attributes.Where(attr => attr.Value is AliasedValue).ToList())
-                entity[attribute.Key] = ((AliasedValue)attribute.Value).Value;
+            {
+                var aliasedValue = (AliasedValue)attribute.Value;
+
+                // When grouping by EntityName attributes the value is converted from the normal string value to an OptionSetValue
+                // Convert it back now for consistency
+                if (_entityNameGroupings.Contains(attribute.Key))
+                {
+                    var otc = ((OptionSetValue)aliasedValue.Value).Value;
+                    var meta = metadata[otc];
+                    entity[attribute.Key] = meta.LogicalName;
+                }
+                else
+                {
+                    entity[attribute.Key] = aliasedValue.Value;
+                }
+            }
 
             // Copy any grouped values to their full names
             if (FetchXml.aggregateSpecified && FetchXml.aggregate)
@@ -297,6 +315,31 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 FindParameterizedConditions(null, link.Items);
         }
 
+        private void FindEntityNameGroupings(IAttributeMetadataCache metadata)
+        {
+            _entityNameGroupings = new HashSet<string>();
+
+            if (FetchXml.aggregateSpecified && FetchXml.aggregate)
+                FindEntityNameGroupings(metadata, Entity.name, Entity.Items);
+        }
+
+        private void FindEntityNameGroupings(IAttributeMetadataCache metadata, string logicalName, object[] items)
+        {
+            if (items == null)
+                return;
+
+            foreach (var attr in items.OfType<FetchAttributeType>().Where(a => a.groupbySpecified && a.groupby == FetchBoolType.@true))
+            {
+                var attributeMetadata = metadata[logicalName].Attributes.Single(a => a.LogicalName == attr.name);
+
+                if (attributeMetadata.AttributeType == AttributeTypeCode.EntityName)
+                    _entityNameGroupings.Add(attr.alias);
+            }
+
+            foreach (var linkEntity in items.OfType<FetchLinkEntityType>())
+                FindEntityNameGroupings(metadata, linkEntity.name, linkEntity.Items);
+        }
+
         private bool ContainsSort(object[] items)
         {
             if (items == null)
@@ -365,7 +408,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!FetchXml.aggregate)
                 schema.PrimaryKey = $"{Alias}.{meta.PrimaryIdAttribute}";
 
-            AddAttributes(schema, metadata, entity.name, Alias, entity.Items);
+            AddSchemaAttributes(schema, metadata, entity.name, Alias, entity.Items);
             
             return schema;
         }
@@ -385,9 +428,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (Alias == entityName)
             {
-                var meta = metadata[Entity.name].Attributes.SingleOrDefault(a => a.LogicalName == attr.name);
-                if (meta?.AttributeOf != null)
-                    attr.name = meta.AttributeOf;
+                var meta = metadata[Entity.name].Attributes.SingleOrDefault(a => a.LogicalName == attr.name && a.AttributeOf == null);
+                if (meta == null && (attr.name.EndsWith("name") || attr.name.EndsWith("type")))
+                {
+                    var logicalName = attr.name.Substring(0, attr.name.Length - 4);
+                    meta = metadata[Entity.name].Attributes.SingleOrDefault(a => a.LogicalName == logicalName && a.AttributeOf == null);
+
+                    if (meta != null)
+                        attr.name = logicalName;
+                }
 
                 if (Entity.Items != null)
                 {
@@ -405,9 +454,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 var linkEntity = Entity.FindLinkEntity(entityName);
 
-                var meta = metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName == attr.name);
-                if (meta?.AttributeOf != null)
-                    attr.name = meta.AttributeOf;
+                var meta = metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName == attr.name && a.AttributeOf == null);
+                if (meta == null && (attr.name.EndsWith("name") || attr.name.EndsWith("type")))
+                {
+                    var logicalName = attr.name.Substring(0, attr.name.Length - 4);
+                    meta = metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName == logicalName && a.AttributeOf == null);
+
+                    if (meta != null)
+                        attr.name = logicalName;
+                }
 
                 if (linkEntity.Items != null)
                 {
@@ -468,7 +523,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return false;
         }
 
-        private void AddAttributes(NodeSchema schema, IAttributeMetadataCache metadata, string entityName, string alias, object[] items)
+        private void AddSchemaAttributes(NodeSchema schema, IAttributeMetadataCache metadata, string entityName, string alias, object[] items)
         {
             if (items == null && !ReturnFullSchema)
                 return;
@@ -479,18 +534,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 foreach (var attrMetadata in meta.Attributes)
                 {
-                    var attrType = attrMetadata.GetAttributeSqlType();
+                    if (attrMetadata.IsValidForRead == false)
+                        continue;
+
+                    if (attrMetadata.AttributeOf != null)
+                        continue;
+
                     var fullName = $"{alias}.{attrMetadata.LogicalName}";
-
-                    schema.Schema[fullName] = attrType;
-
-                    if (!schema.Aliases.TryGetValue(attrMetadata.LogicalName, out var simpleColumnNameAliases))
-                    {
-                        simpleColumnNameAliases = new List<string>();
-                        schema.Aliases[attrMetadata.LogicalName] = simpleColumnNameAliases;
-                    }
-
-                    simpleColumnNameAliases.Add(fullName);
+                    var attrType = attrMetadata.GetAttributeSqlType();
+                    AddSchemaAttribute(schema, fullName, attrMetadata.LogicalName, attrType, attrMetadata);
                 }
             }
 
@@ -501,7 +553,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var attrMetadata = meta.Attributes.Single(a => a.LogicalName == attribute.name);
                     var attrType = attrMetadata.GetAttributeSqlType();
 
-                    if (attribute.aggregateSpecified && (attribute.aggregate == Engine.FetchXml.AggregateType.count || attribute.aggregate == Engine.FetchXml.AggregateType.countcolumn))
+                    if (attribute.aggregateSpecified && (attribute.aggregate == Engine.FetchXml.AggregateType.count || attribute.aggregate == Engine.FetchXml.AggregateType.countcolumn) ||
+                        attribute.dategroupingSpecified)
                         attrType = typeof(SqlInt32);
 
                     string fullName;
@@ -526,54 +579,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         attrAlias = attribute.name;
                     }
 
-                    schema.Schema[fullName] = attrType;
-
-                    if (!schema.Aliases.TryGetValue(attrAlias, out var simpleColumnNameAliases))
-                    {
-                        simpleColumnNameAliases = new List<string>();
-                        schema.Aliases[attrAlias] = simpleColumnNameAliases;
-                    }
-
-                    if (!simpleColumnNameAliases.Contains(fullName))
-                        simpleColumnNameAliases.Add(fullName);
-
-                    foreach (var virtualAttrMetadata in meta.Attributes.Where(a => a.AttributeOf == attrMetadata.LogicalName))
-                    {
-                        var virtualAttrType = virtualAttrMetadata.GetAttributeSqlType();
-                        var virtualAttrAlias = attrAlias + virtualAttrMetadata.LogicalName.Substring(attrMetadata.LogicalName.Length);
-                        var virtualAttrFullName = fullName + virtualAttrMetadata.LogicalName.Substring(attrMetadata.LogicalName.Length);
-
-                        schema.Schema[virtualAttrFullName] = virtualAttrType;
-
-                        if (!schema.Aliases.TryGetValue(virtualAttrAlias, out var simpleVirtualColumnNameAliases))
-                        {
-                            simpleVirtualColumnNameAliases = new List<string>();
-                            schema.Aliases[virtualAttrAlias] = simpleVirtualColumnNameAliases;
-                        }
-
-                        if (!simpleVirtualColumnNameAliases.Contains(virtualAttrFullName))
-                            simpleVirtualColumnNameAliases.Add(virtualAttrFullName);
-                    }
+                    AddSchemaAttribute(schema, fullName, attrAlias, attrType, attrMetadata);
                 }
 
                 if (items.OfType<allattributes>().Any())
                 {
                     foreach (var attrMetadata in meta.Attributes)
                     {
+                        if (attrMetadata.IsValidForRead == false)
+                            continue;
+
+                        if (attrMetadata.AttributeOf != null)
+                            continue;
+
                         var attrType = attrMetadata.GetAttributeSqlType();
                         var attrName = attrMetadata.LogicalName;
                         var fullName = $"{alias}.{attrName}";
 
-                        schema.Schema[fullName] = attrType;
-
-                        if (!schema.Aliases.TryGetValue(attrName, out var simpleColumnNameAliases))
-                        {
-                            simpleColumnNameAliases = new List<string>();
-                            schema.Aliases[attrName] = simpleColumnNameAliases;
-                        }
-
-                        if (!simpleColumnNameAliases.Contains(fullName))
-                            simpleColumnNameAliases.Add(fullName);
+                        AddSchemaAttribute(schema, fullName, attrName, attrType, attrMetadata);
                     }
                 }
 
@@ -595,9 +618,41 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         }
                     }
 
-                    AddAttributes(schema, metadata, linkEntity.name, linkEntity.alias, linkEntity.Items);
+                    AddSchemaAttributes(schema, metadata, linkEntity.name, linkEntity.alias, linkEntity.Items);
                 }
             }
+        }
+
+        private void AddSchemaAttribute(NodeSchema schema, string fullName, string simpleName, Type type, AttributeMetadata attrMetadata)
+        {
+            // Add the logical attribute
+            AddSchemaAttribute(schema, fullName, simpleName, type);
+
+            // Add standard virtual attributes
+            if (attrMetadata is EnumAttributeMetadata || attrMetadata is BooleanAttributeMetadata)
+                AddSchemaAttribute(schema, fullName + "name", attrMetadata.LogicalName + "name", typeof(SqlString));
+
+            if (attrMetadata is LookupAttributeMetadata lookup)
+            {
+                AddSchemaAttribute(schema, fullName + "name", attrMetadata.LogicalName + "name", typeof(SqlString));
+
+                if (lookup.Targets?.Length > 1 && lookup.AttributeType != AttributeTypeCode.PartyList)
+                    AddSchemaAttribute(schema, fullName + "type", attrMetadata.LogicalName + "type", typeof(SqlString));
+            }
+        }
+
+        private void AddSchemaAttribute(NodeSchema schema, string fullName, string simpleName, Type type)
+        {
+            schema.Schema[fullName] = type;
+
+            if (!schema.Aliases.TryGetValue(simpleName, out var simpleColumnNameAliases))
+            {
+                simpleColumnNameAliases = new List<string>();
+                schema.Aliases[simpleName] = simpleColumnNameAliases;
+            }
+
+            if (!simpleColumnNameAliases.Contains(fullName))
+                simpleColumnNameAliases.Add(fullName);
         }
 
         public override IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
@@ -630,9 +685,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                     else
                     {
-                        var attrMeta = metadata[Entity.name].Attributes.SingleOrDefault(a => a.LogicalName == ((FetchAttributeType)attr).name);
-                        if (attrMeta?.AttributeOf != null)
-                            ((FetchAttributeType)attr).name = attrMeta.AttributeOf;
+                        var attrName = ((FetchAttributeType)attr).name;
+                        var attrMeta = metadata[Entity.name].Attributes.SingleOrDefault(a => a.LogicalName == attrName && a.AttributeOf == null);
+
+                        if (attrMeta == null && (attrName.EndsWith("name") || attrName.EndsWith("type")))
+                            attrMeta = metadata[Entity.name].Attributes.SingleOrDefault(a => a.LogicalName == attrName.Substring(0, attrName.Length - 4));
+
+                        if (attrMeta == null)
+                            continue;
+
+                        ((FetchAttributeType)attr).name = attrMeta.LogicalName;
 
                         if (Entity.Items == null || (!Entity.Items.OfType<allattributes>().Any() && !Entity.Items.OfType<FetchAttributeType>().Any(a => (a.alias ?? a.name) == ((FetchAttributeType)attr).name)))
                             Entity.AddItem(attr);
@@ -650,9 +712,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         }
                         else
                         {
-                            var attrMeta = metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName == ((FetchAttributeType)attr).name);
-                            if (attrMeta?.AttributeOf != null)
-                                ((FetchAttributeType)attr).name = attrMeta.AttributeOf;
+                            var attrName = ((FetchAttributeType)attr).name;
+                            var attrMeta = metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName == attrName && a.AttributeOf == null);
+
+                            if (attrMeta == null && (attrName.EndsWith("name") || attrName.EndsWith("type")))
+                                attrMeta = metadata[Entity.name].Attributes.SingleOrDefault(a => a.LogicalName == attrName.Substring(0, attrName.Length - 4));
+
+                            if (attrMeta == null)
+                                continue;
+
+                            ((FetchAttributeType)attr).name = attrMeta.LogicalName;
 
                             if (linkEntity.Items == null || (!linkEntity.Items.OfType<allattributes>().Any() && !linkEntity.Items.OfType<FetchAttributeType>().Any(a => (a.alias ?? a.name) == ((FetchAttributeType)attr).name)))
                                 linkEntity.AddItem(attr);

@@ -57,7 +57,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 schema.Aliases.Add(alias);
 
             foreach (var calc in Columns)
-                schema.Schema[calc.Key] = calc.Value.GetType(sourceSchema, parameterTypes);
+                schema.Schema[calc.Key] = calc.Value.GetType(sourceSchema, null, parameterTypes);
 
             return schema;
         }

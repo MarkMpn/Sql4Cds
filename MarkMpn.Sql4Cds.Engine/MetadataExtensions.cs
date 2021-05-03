@@ -45,6 +45,9 @@ namespace MarkMpn.Sql4Cds.Engine
             if (attrMetadata is BigIntAttributeMetadata || typeCode == AttributeTypeCode.BigInt)
                 return typeof(long?);
 
+            if (typeCode == AttributeTypeCode.PartyList)
+                return typeof(EntityCollection);
+
             if (attrMetadata is LookupAttributeMetadata || typeCode == AttributeTypeCode.Lookup || typeCode == AttributeTypeCode.Customer || typeCode == AttributeTypeCode.Owner)
                 return typeof(Guid?);
 
@@ -108,6 +111,9 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (attrMetadata is BigIntAttributeMetadata || typeCode == AttributeTypeCode.BigInt)
                 return typeof(SqlInt64);
+
+            if (typeCode == AttributeTypeCode.PartyList)
+                return typeof(SqlString);
 
             if (attrMetadata is LookupAttributeMetadata || typeCode == AttributeTypeCode.Lookup || typeCode == AttributeTypeCode.Customer || typeCode == AttributeTypeCode.Owner)
                 return typeof(SqlGuid);

@@ -43,9 +43,6 @@ namespace MarkMpn.Sql4Cds
             [Description("Adds a number value to a date value")]
             public abstract DateTime dateadd(string datepart, int number, DateTime date);
 
-            [Description("Creates a lookup value to be used for polymorphic lookup fields in INSERT or UPDATE queries")]
-            public abstract EntityReference createlookup(string entitytype, string id);
-
             [Description("Replaces one string value with another")]
             public abstract string replace(string input, string find, string replace);
 

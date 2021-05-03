@@ -251,6 +251,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
         {
+            if (AdditionalJoinCriteria != null)
+            {
+                foreach (var col in AdditionalJoinCriteria.GetColumns())
+                {
+                    if (!requiredColumns.Contains(col, StringComparer.OrdinalIgnoreCase))
+                        requiredColumns.Add(col);
+                }
+            }
+
             // Work out which columns need to be pushed down to which source
             var leftSchema = LeftSource.GetSchema(metadata, parameterTypes);
             var rightSchema = RightSource.GetSchema(metadata, parameterTypes);

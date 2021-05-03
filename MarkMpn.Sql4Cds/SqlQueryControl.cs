@@ -800,7 +800,16 @@ namespace MarkMpn.Sql4Cds
                     error = queryException.InnerException;
                 }
 
-                if (error is NotSupportedQueryFragmentException err)
+                if (error is QueryExecutionException queryExecution)
+                {
+                    messageSuffix = "\r\nSee the Execution Plan tab for details of where this error occurred";
+                    ShowResult(plan, new ExecuteParams { Execute = true, IncludeFetchXml = true, Sql = plan.Sql }, null, null, queryExecution);
+
+                    if (queryExecution.InnerException != null)
+                        error = queryExecution.InnerException;
+                }
+
+                if (error is NotSupportedQueryFragmentException err && err.Fragment != null)
                 {
                     _editor.IndicatorFillRange(_params.Offset + err.Fragment.StartOffset, err.Fragment.FragmentLength);
                     index = _params.Offset + err.Fragment.StartOffset;
@@ -822,11 +831,6 @@ namespace MarkMpn.Sql4Cds
 
                     error = partialSuccess.InnerException;
                 }
-                else if (error is QueryExecutionException queryExecution)
-                {
-                    messageSuffix = "\r\nSee the Execution Plan tab for details of where this error occurred";
-                    ShowResult(plan, new ExecuteParams { Execute = true, IncludeFetchXml = true, Sql = plan.Sql }, null, null, queryExecution);
-                }
 
                 _ai.TrackException(error, new Dictionary<string, string> { ["Sql"] = _params.Sql, ["Source"] = "XrmToolBox" });
                 _log(e.Error.ToString());
@@ -844,6 +848,8 @@ namespace MarkMpn.Sql4Cds
             }
 
             BusyChanged?.Invoke(this, EventArgs.Empty);
+
+            _editor.Focus();
         }
 
         private void AddMessage(int index, int length, string message, bool error)
@@ -921,7 +927,6 @@ namespace MarkMpn.Sql4Cds
 
             backgroundWorker.ReportProgress(0, "Executing query...");
 
-            //var converter = new Sql2FetchXml(Metadata, Settings.Instance.QuotedIdentifiers);
             var options = new QueryExecutionOptions(_con, Service, backgroundWorker, this);
             var converter = new ExecutionPlanBuilder(Metadata, _tableSize, options);
 

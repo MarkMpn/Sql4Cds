@@ -28,6 +28,7 @@ namespace MarkMpn.Sql4Cds.Tests
             var n = metadata["new_customentity"];
 
             typeof(AttributeMetadata).GetProperty(nameof(AttributeMetadata.IsValidForUpdate)).SetValue(a.Attributes.Single(attr => attr.LogicalName == "primarycontactidname"), false);
+            typeof(AttributeMetadata).GetProperty(nameof(AttributeMetadata.AttributeOf)).SetValue(a.Attributes.Single(attr => attr.LogicalName == "primarycontactidname"), "primarycontactid");
             typeof(AttributeMetadata).GetProperty(nameof(AttributeMetadata.IsValidForUpdate)).SetValue(c.Attributes.Single(attr => attr.LogicalName == "fullname"), false);
 
             _autocomplete = new Autocomplete(new[] { a, c, n }, metadata);
@@ -98,7 +99,7 @@ namespace MarkMpn.Sql4Cds.Tests
             var sql = "SELECT * FROM account a left outer join contact c on a.accountid = c.p";
             var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1).Select(s => s.Text).ToList();
 
-            CollectionAssert.AreEqual(new[] { "parentcustomerid" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "parentcustomerid", "parentcustomeridname" }, suggestions);
         }
 
         [TestMethod]
@@ -107,7 +108,7 @@ namespace MarkMpn.Sql4Cds.Tests
             var sql = "SELECT * FROM account a left outer join contact c on a.accountid = c.parentcustomerid where ";
             var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1).Select(s => s.Text).Where(s => !s.Contains("(")).ToList();
 
-            CollectionAssert.AreEqual(new[] { "a", "accountid", "c", "contactid", "employees", "firstname", "fullname", "lastname", "name", "parentcustomerid", "primarycontactid", "primarycontactidname", "turnover" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "a", "accountid", "c", "contactid", "employees", "firstname", "fullname", "lastname", "name", "parentcustomerid", "parentcustomeridname", "primarycontactid", "primarycontactidname", "turnover" }, suggestions);
         }
 
         [TestMethod]
@@ -136,7 +137,7 @@ namespace MarkMpn.Sql4Cds.Tests
             var sql = sql1 + "\r\n" + sql2;
             var suggestions = _autocomplete.GetSuggestions(sql, sql1.Length + 2 + sql2.IndexOf(" ") + 1).Select(s => s.Text).Where(s => !s.Contains("(")).ToList();
 
-            CollectionAssert.AreEqual(new[] { "account", "accountid", "contact", "contactid", "employees", "firstname", "fullname", "lastname", "name", "parentcustomerid", "primarycontactid", "primarycontactidname", "turnover" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "account", "accountid", "contact", "contactid", "employees", "firstname", "fullname", "lastname", "name", "parentcustomerid", "parentcustomeridname", "primarycontactid", "primarycontactidname", "turnover" }, suggestions);
         }
 
         [TestMethod]
@@ -199,7 +200,7 @@ namespace MarkMpn.Sql4Cds.Tests
             var sql = "INSERT INTO account (";
             var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1).Select(s => s.Text).Where(s => !s.Contains("(")).ToList();
 
-            CollectionAssert.AreEqual(new[] { "accountid", "createdon", "employees", "name", "primarycontactid", "primarycontactidname", "turnover" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "accountid", "createdon", "employees", "name", "primarycontactid", "turnover" }, suggestions);
         }
 
         //[TestMethod]

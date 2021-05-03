@@ -3008,5 +3008,57 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             planBuilder.Build(query);
         }
+
+        [TestMethod]
+        public void MinAggregateNotFoldedToFetchXmlForOptionset()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"SELECT new_name, min(new_optionsetvalue) FROM new_customentity GROUP BY new_name";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var aggregate = AssertNode<HashMatchAggregateNode>(select.Source);
+            var fetchXml = AssertNode<FetchXmlScan>(aggregate.Source);
+
+            AssertFetchXml(fetchXml, @"
+                <fetch>
+                    <entity name='new_customentity'>
+                        <attribute name='new_name' />
+                        <attribute name='new_optionsetvalue' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void HelpfulErrorMessageOnMissingGroupBy()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"SELECT new_name, min(new_optionsetvalue) FROM new_customentity";
+
+            try
+            {
+                planBuilder.Build(query);
+                Assert.Fail();
+            }
+            catch (NotSupportedQueryFragmentException ex)
+            {
+                Assert.AreEqual("Column is invalid in the select list because it is not contained in either an aggregate function or the GROUP BY clause: new_name", ex.Message);
+            }
+        }
     }
 }
