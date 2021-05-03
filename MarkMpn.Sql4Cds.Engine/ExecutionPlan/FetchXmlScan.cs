@@ -636,7 +636,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 AddSchemaAttribute(schema, fullName + "name", attrMetadata.LogicalName + "name", typeof(SqlString));
 
-                if (lookup.Targets?.Length > 1)
+                if (lookup.Targets?.Length > 1 && lookup.AttributeType != AttributeTypeCode.PartyList)
                     AddSchemaAttribute(schema, fullName + "type", attrMetadata.LogicalName + "type", typeof(SqlString));
             }
         }

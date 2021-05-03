@@ -233,7 +233,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     expr = SqlTypeConverter.Convert(expr, destSqlType);
                     var convertedExpr = SqlTypeConverter.Convert(expr, destType);
 
-                    if (attr is LookupAttributeMetadata lookupAttr)
+                    if (attr is LookupAttributeMetadata lookupAttr && lookupAttr.AttributeType != AttributeTypeCode.PartyList)
                     {
                         Expression targetExpr;
 
@@ -258,7 +258,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         );
                         destType = typeof(EntityReference);
                     }
-                    else if (attr is EnumAttributeMetadata)
+                    else if (attr is EnumAttributeMetadata && !(attr is MultiSelectPicklistAttributeMetadata))
                     {
                         convertedExpr = Expression.New(
                             typeof(OptionSetValue).GetConstructor(new[] { typeof(int) }),

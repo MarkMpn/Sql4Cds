@@ -214,6 +214,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 );
             }
 
+            if (expr.Type == typeof(SqlString) && to == typeof(EntityCollection))
+                expr = Expr.Call(() => ParseEntityCollection(Expr.Arg<SqlString>()), expr);
+
+            if (expr.Type == typeof(SqlString) && to == typeof(OptionSetValueCollection))
+                expr = Expr.Call(() => ParseOptionSetValueCollection(Expr.Arg<SqlString>()), expr);
+
             if (expr.Type != to)
             {
                 if (expr.Type == typeof(object) && expr is ConstantExpression constant && constant.Value == null && typeof(INullable).IsAssignableFrom(to))
@@ -226,6 +232,54 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return expr;
+        }
+
+        private static EntityCollection ParseEntityCollection(SqlString value)
+        {
+            if (value.IsNull)
+                return null;
+
+            // Convert the string from the same format used by FormatEntityCollectionEntry
+            // Could be logicalname:guid or email address
+
+            var parts = value.Value.Split(',');
+            var entities = parts
+                .Where(p => !String.IsNullOrEmpty(p))
+                .Select(p =>
+                {
+                    var party = new Entity("activityparty");
+                    var subParts = p.Split(':');
+
+                    if (subParts.Length == 2 && Guid.TryParse(subParts[1], out var id))
+                        party["partyid"] = new EntityReference(subParts[0], id);
+                    else
+                        party["addressused"] = p;
+
+                    return party;
+                })
+                .ToList();
+
+            return new EntityCollection(entities);
+        }
+
+        private static OptionSetValueCollection ParseOptionSetValueCollection(SqlString value)
+        {
+            if (value.IsNull)
+                return null;
+
+            var parts = value.Value.Split(',');
+            var osvs = parts
+                .Where(p => !String.IsNullOrEmpty(p))
+                .Select(p =>
+                {
+                    if (!Int32.TryParse(p, out var v))
+                        throw new QueryExecutionException($"'{p}' is not a valid Choice value. Only integer values are supported");
+
+                    return new OptionSetValue(v);
+                })
+                .ToList();
+
+            return new OptionSetValueCollection(osvs);
         }
 
         /// <summary>

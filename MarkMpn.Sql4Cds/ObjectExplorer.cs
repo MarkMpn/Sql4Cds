@@ -190,7 +190,7 @@ namespace MarkMpn.Sql4Cds
                         nodes.Add(nameNode);
                     }
 
-                    if (a is LookupAttributeMetadata lookup && lookup.Targets.Length > 1)
+                    if (a is LookupAttributeMetadata lookup && lookup.Targets.Length > 1 && lookup.AttributeType != AttributeTypeCode.PartyList)
                     {
                         var typeNode = new TreeNode(a.LogicalName + "type");
                         typeNode.Tag = a;

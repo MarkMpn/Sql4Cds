@@ -730,7 +730,7 @@ namespace MarkMpn.Sql4Cds
                 if (!writeable && (attribute is EnumAttributeMetadata || attribute is BooleanAttributeMetadata || attribute is LookupAttributeMetadata))
                     yield return new AttributeAutocompleteItem(attribute, metadata, replaceLength, "name");
 
-                if (attribute is LookupAttributeMetadata lookup && lookup.Targets?.Length > 1)
+                if (attribute is LookupAttributeMetadata lookup && lookup.Targets?.Length > 1 && lookup.AttributeType != AttributeTypeCode.PartyList)
                     yield return new AttributeAutocompleteItem(attribute, metadata, replaceLength, "type");
             }
 

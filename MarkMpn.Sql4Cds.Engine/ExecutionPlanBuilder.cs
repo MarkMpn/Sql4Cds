@@ -333,7 +333,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (targetLookupAttribute == null)
                     continue;
 
-                if (targetLookupAttribute.Targets.Length > 1 && !attributeNames.Contains(targetAttrName + "type"))
+                if (targetLookupAttribute.Targets.Length > 1 && !attributeNames.Contains(targetAttrName + "type") && targetLookupAttribute.AttributeType != AttributeTypeCode.PartyList)
                 {
                     throw new NotSupportedQueryFragmentException("Inserting values into a polymorphic lookup field requires setting the associated type column as well", col)
                     {
@@ -692,7 +692,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (targetLookupAttribute == null)
                     continue;
 
-                if (targetLookupAttribute.Targets.Length > 1 && !update.ColumnMappings.ContainsKey(targetAttrName + "type"))
+                if (targetLookupAttribute.Targets.Length > 1 && !update.ColumnMappings.ContainsKey(targetAttrName + "type") && targetLookupAttribute.AttributeType != AttributeTypeCode.PartyList)
                 {
                     // Check we're not just setting the lookup column to null - no need to set the corresponding type then
                     if (assignment.NewValue is NullLiteral)
