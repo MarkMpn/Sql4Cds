@@ -2833,6 +2833,37 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(0, result.Entities[0].GetAttributeValue<int>("ci8"));
         }
 
+        [TestMethod]
+        public void CastDateTimeToDate()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT CAST(createdon AS date) AS converted FROM contact";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            var contact1 = Guid.NewGuid();
+
+            context.Data["contact"] = new Dictionary<Guid, Entity>
+            {
+                [contact1] = new Entity("contact", contact1)
+                {
+                    ["createdon"] = new DateTime(2000, 1, 1, 12, 34, 56),
+                    ["contactid"] = contact1
+                }
+            };
+
+            var select = queries[0];
+            select.Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            var result = (EntityCollection)select.Result;
+            Assert.AreEqual(new DateTime(2000, 1, 1), result.Entities[0].GetAttributeValue<DateTime>("converted"));
+        }
+
         private void AssertFetchXml(Query[] queries, string fetchXml)
         {
             Assert.AreEqual(1, queries.Length);

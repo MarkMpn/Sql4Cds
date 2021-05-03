@@ -890,7 +890,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (dataType.SqlDataTypeOption == SqlDataTypeOption.Date)
             {
                 // Remove the time part of the DateTime value
-                value = Expression.Condition(Expression.Equal(value, Expression.Constant(null)), Expression.Constant(null), Expression.Convert(Expression.Property(Expression.Convert(value, typeof(DateTime)), nameof(DateTime.Date)), typeof(object)));
+                value = Expression.Condition(SqlTypeConverter.NullCheck(value), Expression.Constant(SqlDateTime.Null), Expression.Convert(Expression.Property(Expression.Convert(value, typeof(DateTime)), nameof(DateTime.Date)), typeof(SqlDateTime)));
             }
 
             // Truncate results for [n][var]char
