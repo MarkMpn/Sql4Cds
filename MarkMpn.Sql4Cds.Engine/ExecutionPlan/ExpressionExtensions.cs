@@ -1210,7 +1210,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             else if (value is SqlString str)
                 literal = new StringLiteral { Value = str.ToString() };
             else if (value is SqlDateTime dt)
-                literal = new StringLiteral { Value = dt.ToString() };
+                literal = new StringLiteral { Value = dt.Value.ToString("yyyy-MM-ddTHH:mm:ss.fff") };
             else if (value is SqlGuid g)
                 literal = new StringLiteral { Value = g.ToString() };
             else
