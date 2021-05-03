@@ -516,7 +516,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private static Expression ToExpression(this BooleanIsNullExpression isNull, NodeSchema schema, NodeSchema nonAggregateSchema, IDictionary<string, Type> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam)
         {
             var value = isNull.Expression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam);
-            value = Expression.PropertyOrField(value, nameof(INullable.IsNull));
+            value = SqlTypeConverter.NullCheck(value);
 
             if (isNull.IsNot)
                 value = Expression.Not(value);
