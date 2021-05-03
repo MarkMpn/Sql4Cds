@@ -13,7 +13,8 @@
     <summary>Convert SQL queries to FetchXml and execute them against CDS</summary>
     <releaseNotes>Simplified accessing ___name and ___type virtual attributes
 Fixed accessing partylist attributes
-Fixed converting numeric values to datetime
+Fixed updating/inserting partylist and multi-select optionset values
+Fixed converting numeric values to datetime and datetime values to date
 Fixed folding DATEPART calculations into FetchXML
 Fixed folding IS NULL conditions to metadata queries
 Fixed aggregate queries on optionset or entity name attributes
