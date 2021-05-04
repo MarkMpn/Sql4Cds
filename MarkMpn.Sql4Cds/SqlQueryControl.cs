@@ -998,6 +998,7 @@ namespace MarkMpn.Sql4Cds
                 grid.AllowUserToOrderColumns = true;
                 grid.AllowUserToResizeRows = false;
                 grid.AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.WhiteSmoke };
+                grid.AutoGenerateColumns = false;
                 grid.BackgroundColor = SystemColors.Window;
                 grid.BorderStyle = BorderStyle.None;
                 grid.CellBorderStyle = DataGridViewCellBorderStyle.None;
@@ -1009,6 +1010,17 @@ namespace MarkMpn.Sql4Cds
                 grid.ShowEditingIcon = false;
                 grid.ContextMenuStrip = gridContextMenuStrip;
                 grid.DataSource = results;
+
+                foreach (DataColumn col in results.Columns)
+                {
+                    grid.Columns.Add(new DataGridViewColumn
+                    {
+                        DataPropertyName = col.ColumnName,
+                        HeaderText = col.Caption,
+                        ValueType = col.DataType,
+                        FillWeight = 1
+                    });
+                }
 
                 grid.CellFormatting += (s, e) =>
                 {
@@ -1022,12 +1034,6 @@ namespace MarkMpn.Sql4Cds
                     {
                         e.Value = b.Value ? "1" : "0";
                     }
-                };
-
-                grid.DataBindingComplete += (s, e) =>
-                {
-                    for (var i = 0; i < results.Columns.Count; i++)
-                        grid.Columns[i].HeaderText = results.Columns[i].Caption;
                 };
 
                 grid.HandleCreated += (s, e) =>
