@@ -81,22 +81,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (rightAttributeParts.Length != 2)
                     return this;
 
-                // Must be joining to the root entity of the right source, i.e. not a child link-entity
-                if (!rightAttributeParts[0].Equals(rightFetch.Alias))
-                    return this;
-
                 // If the entities are from different virtual entity data providers it's probably not going to work
                 if (metadata[leftFetch.Entity.name].DataProviderId != metadata[rightFetch.Entity.name].DataProviderId)
                     return this;
 
                 // If we're doing a right outer join, switch everything round to do a left outer join
-                if (JoinType == QualifiedJoinType.RightOuter)
+                if (JoinType == QualifiedJoinType.RightOuter ||
+                    JoinType == QualifiedJoinType.Inner && !rightAttributeParts[0].Equals(rightFetch.Alias, StringComparison.OrdinalIgnoreCase))
                 {
                     Swap(ref leftFetch, ref rightFetch);
                     Swap(ref leftEntity, ref rightEntity);
                     Swap(ref leftAttribute, ref rightAttribute);
                     Swap(ref leftAttributeParts, ref rightAttributeParts);
                 }
+
+                // Must be joining to the root entity of the right source, i.e. not a child link-entity
+                if (!rightAttributeParts[0].Equals(rightFetch.Alias, StringComparison.OrdinalIgnoreCase))
+                    return this;
 
                 // If there are any additional join criteria, either they must be able to be translated to FetchXml criteria
                 // in the new link entity or we must be using an inner join so we can use a post-filter node
