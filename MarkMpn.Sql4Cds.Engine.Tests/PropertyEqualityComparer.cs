@@ -47,6 +47,12 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 var valueX = prop.GetValue(x);
                 var valueY = prop.GetValue(y);
 
+                // Treat empty arrays as null
+                if (valueX != null && valueX.GetType().IsArray && ((Array)valueX).Length == 0)
+                    valueX = null;
+                if (valueY != null && valueY.GetType().IsArray && ((Array)valueY).Length == 0)
+                    valueY = null;
+
                 if (valueX == null && valueY == null)
                     continue;
 

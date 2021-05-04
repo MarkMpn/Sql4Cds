@@ -87,7 +87,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
         {
-            return Source.GetSchema(metadata, parameterTypes);
+            var schema = Source.GetSchema(metadata, parameterTypes);
+
+            // If this is a distinct list of one column we know the values in that column will be unique
+            if (Columns.Count == 1)
+                schema.PrimaryKey = Columns[0];
+
+            return schema;
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()

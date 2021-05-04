@@ -915,7 +915,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (references.Count == 0)
                 {
-                    if (UseMergeJoin(source, innerQuery.Source, references, testColumn, lhsCol.GetColumnName(), out var outputCol, out var merge))
+                    if (UseMergeJoin(source, innerQuery.Source, references, testColumn, lhsCol.GetColumnName(), true, out var outputCol, out var merge))
                     {
                         testColumn = outputCol;
                         join = merge;
@@ -938,7 +938,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         var alias = new AliasNode(innerQuery, new Identifier { Value = $"Expr{++_colNameCounter}" });
 
                         testColumn = $"{alias.Alias}.{alias.ColumnSet[0].OutputColumn}";
-                        join = new MergeJoinNode
+                        join = new HashJoinNode
                         {
                             LeftSource = source,
                             LeftAttribute = lhsCol,
@@ -947,11 +947,14 @@ namespace MarkMpn.Sql4Cds.Engine
                         };
                     }
 
-                    // Convert the join to a semi join to ensure requests for wildcard columns aren't folded to the IN subquery
-                    var definedValue = $"Expr{++_colNameCounter}";
-                    join.SemiJoin = true;
-                    join.DefinedValues[definedValue] = testColumn;
-                    testColumn = definedValue;
+                    if (!join.SemiJoin)
+                    {
+                        // Convert the join to a semi join to ensure requests for wildcard columns aren't folded to the IN subquery
+                        var definedValue = $"Expr{++_colNameCounter}";
+                        join.SemiJoin = true;
+                        join.DefinedValues[definedValue] = testColumn;
+                        testColumn = definedValue;
+                    }
                 }
                 else
                 {
@@ -1068,10 +1071,9 @@ namespace MarkMpn.Sql4Cds.Engine
                         }
                     };
                 }
-                else if (UseMergeJoin(source, innerQuery.Source, references, null, null, out _, out var merge))
+                else if (UseMergeJoin(source, innerQuery.Source, references, null, null, true, out testColumn, out var merge))
                 {
                     join = merge;
-                    testColumn = merge.RightAttribute.GetColumnName();
                 }
                 else
                 {
@@ -1711,7 +1713,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 string outputcol;
                 var subqueryCol = subqueryPlan.ColumnSet[0].SourceColumn;
                 BaseJoinNode join = null;
-                if (UseMergeJoin(node, subqueryPlan.Source, outerReferences, subqueryCol, null, out outputcol, out var merge))
+                if (UseMergeJoin(node, subqueryPlan.Source, outerReferences, subqueryCol, null, false, out outputcol, out var merge))
                 {
                     join = merge;
                 }
@@ -1800,7 +1802,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return null;
         }
 
-        private bool UseMergeJoin(IDataExecutionPlanNode node, IDataExecutionPlanNode subqueryPlan, Dictionary<string, string> outerReferences, string subqueryCol, string inPredicateCol, out string outputCol, out MergeJoinNode merge)
+        private bool UseMergeJoin(IDataExecutionPlanNode node, IDataExecutionPlanNode subqueryPlan, Dictionary<string, string> outerReferences, string subqueryCol, string inPredicateCol, bool semiJoin, out string outputCol, out MergeJoinNode merge)
         {
             outputCol = null;
             merge = null;
@@ -1868,19 +1870,26 @@ namespace MarkMpn.Sql4Cds.Engine
             if (outerKey == null)
                 return false;
 
+            var outerSchema = node.GetSchema(Metadata, null);
             var innerSchema = fetch.GetSchema(Metadata, null);
 
-            if (!innerSchema.ContainsColumn(innerKey, out innerKey))
+            if (!outerSchema.ContainsColumn(outerKey, out outerKey) ||
+                !innerSchema.ContainsColumn(innerKey, out innerKey))
                 return false;
 
-            if (innerSchema.PrimaryKey != innerKey)
+            if (outerSchema.PrimaryKey != outerKey &&
+                innerSchema.PrimaryKey != innerKey)
                 return false;
 
-            // Give the inner fetch a unique alias
+            // Give the inner fetch a unique alias and update the name of the inner key
             if (alias != null)
                 fetch.Alias = alias.Alias;
             else
                 fetch.Alias = $"Expr{++_colNameCounter}";
+
+            var rightAttribute = innerKey.ToColumnReference();
+            if (rightAttribute.MultiPartIdentifier.Identifiers.Count == 2)
+                rightAttribute.MultiPartIdentifier.Identifiers[0].Value = fetch.Alias;
 
             // Add the required column with the expected alias (used for scalar subqueries and IN predicates, not for CROSS/OUTER APPLY
             if (subqueryCol != null)
@@ -1890,17 +1899,34 @@ namespace MarkMpn.Sql4Cds.Engine
                 outputCol = fetch.Alias + "." + attr.name;
             }
 
-            // Regenerate the schema after changing the alias
-            innerSchema = fetch.GetSchema(Metadata, null);
-
             merge = new MergeJoinNode
             {
                 LeftSource = node,
                 LeftAttribute = outerKey.ToColumnReference(),
                 RightSource = inPredicateCol != null ? (IDataExecutionPlanNode) filter ?? fetch : fetch,
-                RightAttribute = innerSchema.PrimaryKey.ToColumnReference(),
+                RightAttribute = rightAttribute,
                 JoinType = QualifiedJoinType.LeftOuter
             };
+
+            if (semiJoin)
+            {
+                // Regenerate the schema after changing the alias
+                innerSchema = fetch.GetSchema(Metadata, null);
+
+                if (innerSchema.PrimaryKey != rightAttribute.GetColumnName() && !(merge.RightSource is DistinctNode))
+                {
+                    merge.RightSource = new DistinctNode
+                    {
+                        Source = merge.RightSource,
+                        Columns = { rightAttribute.GetColumnName() }
+                    };
+                }
+
+                merge.SemiJoin = true;
+                var definedValue = $"Expr{++_colNameCounter}";
+                merge.DefinedValues[definedValue] = outputCol ?? rightAttribute.GetColumnName();
+                outputCol = definedValue;
+            }
 
             return true;
         }
@@ -2378,7 +2404,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         var spool = new TableSpoolNode { Source = rhs };
                         rhs = spool;
                     }
-                    else if (UseMergeJoin(lhs, subqueryPlan, lhsReferences, null, null, out _, out var merge))
+                    else if (UseMergeJoin(lhs, subqueryPlan, lhsReferences, null, null, false, out _, out var merge))
                     {
                         if (unqualifiedJoin.UnqualifiedJoinType == UnqualifiedJoinType.CrossApply)
                             merge.JoinType = QualifiedJoinType.Inner;

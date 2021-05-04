@@ -11,6 +11,7 @@ using FakeXrmEasy;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Metadata.Query;
 using Microsoft.Xrm.Sdk.Query;
@@ -1533,14 +1534,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var select = AssertNode<SelectNode>(plans[0]);
             var filter = AssertNode<FilterNode>(select.Source);
-            var hashJoin = AssertNode<MergeJoinNode>(filter.Source);
+            var hashJoin = AssertNode<HashJoinNode>(filter.Source);
             var fetch = AssertNode<FetchXmlScan>(hashJoin.LeftSource);
             AssertFetchXml(fetch, @"
                 <fetch>
                     <entity name='account'>
                         <attribute name='accountid' />
                         <attribute name='name' />
-                        <order attribute='name' />
                     </entity>
                 </fetch>");
             var subFetch = AssertNode<FetchXmlScan>(hashJoin.RightSource);
@@ -1834,31 +1834,26 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var select = AssertNode<SelectNode>(plans[0]);
             var filter = AssertNode<FilterNode>(select.Source);
-            Assert.AreEqual("Expr2 IS NOT NULL", filter.Filter.ToSql());
-            var nestedLoop = AssertNode<NestedLoopNode>(filter.Source);
-            Assert.AreEqual(QualifiedJoinType.LeftOuter, nestedLoop.JoinType);
-            Assert.IsTrue(nestedLoop.SemiJoin);
-            var fetch = AssertNode<FetchXmlScan>(nestedLoop.LeftSource);
+            Assert.AreEqual("Expr3 IS NOT NULL", filter.Filter.ToSql());
+            var join = AssertNode<MergeJoinNode>(filter.Source);
+            Assert.AreEqual(QualifiedJoinType.LeftOuter, join.JoinType);
+            Assert.IsTrue(join.SemiJoin);
+            var fetch = AssertNode<FetchXmlScan>(join.LeftSource);
             AssertFetchXml(fetch, @"
                 <fetch>
                     <entity name='account'>
                         <attribute name='accountid' />
                         <attribute name='name' />
+                        <order attribute='accountid' />
                     </entity>
                 </fetch>");
-            var subTop = AssertNode<TopNode>(nestedLoop.RightSource);
-            var subIndexSpool = AssertNode<IndexSpoolNode>(subTop.Source);
-            Assert.AreEqual("contact.parentcustomerid", subIndexSpool.KeyColumn);
-            Assert.AreEqual("@Expr1", subIndexSpool.SeekValue);
-            var subFetch = AssertNode<FetchXmlScan>(subIndexSpool.Source);
+            var sort = AssertNode<SortNode>(join.RightSource);
+            Assert.AreEqual("Expr2.parentcustomerid ASC", sort.Sorts[0].ToSql());
+            var subFetch = AssertNode<FetchXmlScan>(sort.Source);
             AssertFetchXml(subFetch, @"
-                <fetch>
+                <fetch distinct='true'>
                     <entity name='contact'>
-                        <attribute name='contactid' />
                         <attribute name='parentcustomerid' />
-                        <filter>
-                            <condition attribute='parentcustomerid' operator='not-null' />
-                        </filter>
                     </entity>
                 </fetch>");
         }
@@ -1888,31 +1883,27 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var select = AssertNode<SelectNode>(plans[0]);
             var filter = AssertNode<FilterNode>(select.Source);
-            Assert.AreEqual("NOT Expr2 IS NOT NULL", filter.Filter.ToSql());
-            var nestedLoop = AssertNode<NestedLoopNode>(filter.Source);
-            Assert.AreEqual(QualifiedJoinType.LeftOuter, nestedLoop.JoinType);
-            Assert.IsTrue(nestedLoop.SemiJoin);
-            var fetch = AssertNode<FetchXmlScan>(nestedLoop.LeftSource);
+            Assert.AreEqual("NOT Expr3 IS NOT NULL", filter.Filter.ToSql());
+            var join = AssertNode<MergeJoinNode>(filter.Source);
+            Assert.AreEqual(QualifiedJoinType.LeftOuter, join.JoinType);
+            Assert.IsTrue(join.SemiJoin);
+            var fetch = AssertNode<FetchXmlScan>(join.LeftSource);
             AssertFetchXml(fetch, @"
                 <fetch>
                     <entity name='account'>
                         <attribute name='accountid' />
                         <attribute name='name' />
+                        <order attribute='accountid' />
                     </entity>
                 </fetch>");
-            var subTop = AssertNode<TopNode>(nestedLoop.RightSource);
-            var subIndexSpool = AssertNode<IndexSpoolNode>(subTop.Source);
-            Assert.AreEqual("contact.parentcustomerid", subIndexSpool.KeyColumn);
-            Assert.AreEqual("@Expr1", subIndexSpool.SeekValue);
-            var subFetch = AssertNode<FetchXmlScan>(subIndexSpool.Source);
+            var sort = AssertNode<SortNode>(join.RightSource);
+            Assert.AreEqual("Expr2.parentcustomerid ASC", sort.Sorts[0].ToSql());
+            var subFetch = AssertNode<FetchXmlScan>(sort.Source);
+            Assert.AreEqual("Expr2", subFetch.Alias);
             AssertFetchXml(subFetch, @"
-                <fetch>
+                <fetch distinct='true'>
                     <entity name='contact'>
-                        <attribute name='contactid' />
                         <attribute name='parentcustomerid' />
-                        <filter>
-                            <condition attribute='parentcustomerid' operator='not-null' />
-                        </filter>
                     </entity>
                 </fetch>");
         }
@@ -3059,6 +3050,97 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 Assert.AreEqual("Column is invalid in the select list because it is not contained in either an aggregate function or the GROUP BY clause: new_name", ex.Message);
             }
+        }
+
+        [TestMethod]
+        public void AggregateInSubquery()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"SELECT firstname
+                          FROM   contact
+                          WHERE  firstname IN (SELECT   firstname
+                                               FROM     contact
+                                               GROUP BY firstname
+                                               HAVING   count(*) > 1);";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual("contact.firstname", select.ColumnSet[0].SourceColumn);
+            var filter = AssertNode<FilterNode>(select.Source);
+            Assert.AreEqual("Expr2 IS NOT NULL", filter.Filter.ToSql());
+            var join = AssertNode<HashJoinNode>(filter.Source);
+            Assert.AreEqual("contact.firstname", join.LeftAttribute.GetColumnName());
+            Assert.AreEqual("Expr1.firstname", join.RightAttribute.GetColumnName());
+            Assert.AreEqual(QualifiedJoinType.LeftOuter, join.JoinType);
+            Assert.IsTrue(join.SemiJoin);
+            var outerFetch = AssertNode<FetchXmlScan>(join.LeftSource);
+
+            AssertFetchXml(outerFetch, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                    </entity>
+                </fetch>");
+
+            var innerAlias = AssertNode<AliasNode>(join.RightSource);
+            Assert.AreEqual("Expr1", innerAlias.Alias);
+            var innerDistinct = AssertNode<DistinctNode>(innerAlias.Source);
+            Assert.AreEqual("contact.firstname", innerDistinct.Columns[0]);
+            var innerFilter = AssertNode<FilterNode>(innerDistinct.Source);
+            Assert.AreEqual("count > 1", innerFilter.Filter.ToSql());
+            var innerTry = AssertNode<TryCatchNode>(innerFilter.Source);
+            var innerAggregateFetch = AssertNode<FetchXmlScan>(innerTry.TrySource);
+
+            AssertFetchXml(innerAggregateFetch, @"
+                <fetch aggregate='true'>
+                    <entity name='contact'>
+                        <attribute name='firstname' groupby='true' alias='firstname' />
+                        <attribute name='contactid' aggregate='count' alias='count' />
+                    </entity>
+                </fetch>");
+
+            var innerAggregate = AssertNode<HashMatchAggregateNode>(innerTry.CatchSource);
+            Assert.AreEqual("contact.firstname", innerAggregate.GroupBy[0].GetColumnName());
+            Assert.AreEqual("count", innerAggregate.Aggregates.First().Key);
+            Assert.AreEqual(AggregateType.CountStar, innerAggregate.Aggregates.First().Value.AggregateType);
+            var innerFetch = AssertNode<FetchXmlScan>(innerAggregate.Source);
+
+            AssertFetchXml(innerFetch, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                    </entity>
+                </fetch>");
+
+            context.Data["contact"] = new Dictionary<Guid, Entity>
+            {
+                [Guid.NewGuid()] = new Entity("contact")
+                {
+                    ["firstname"] = "Mark"
+                },
+                [Guid.NewGuid()] = new Entity("contact")
+                {
+                    ["firstname"] = "Mark"
+                },
+                [Guid.NewGuid()] = new Entity("contact")
+                {
+                    ["firstname"] = "Matt"
+                },
+            };
+
+            var result = select.Execute(org, metadata, this, null, null);
+            Assert.AreEqual(2, result.Rows.Count);
+            Assert.AreEqual(SqlTypeConverter.UseDefaultCollation("Mark"), result.Rows[0][0]);
+            Assert.AreEqual(SqlTypeConverter.UseDefaultCollation("Mark"), result.Rows[1][0]);
         }
     }
 }

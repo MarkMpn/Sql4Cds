@@ -289,9 +289,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return Math.Max(leftEstimate, rightEstimate);
         }
 
-        public override NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
+        protected override NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, bool includeSemiJoin)
         {
-            var schema = base.GetSchema(metadata, parameterTypes);
+            var schema = base.GetSchema(metadata, parameterTypes, includeSemiJoin);
 
             if (schema.PrimaryKey == null && JoinType == QualifiedJoinType.Inner)
             {

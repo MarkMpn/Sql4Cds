@@ -28,7 +28,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var rightSchema = RightSource.GetSchema(metadata, parameterTypes);
             var left = LeftSource.Execute(org, metadata, options, parameterTypes, parameterValues).GetEnumerator();
             var right = RightSource.Execute(org, metadata, options, parameterTypes, parameterValues).GetEnumerator();
-            var mergedSchema = GetSchema(metadata, parameterTypes);
+            var mergedSchema = GetSchema(metadata, parameterTypes, true);
             var additionalJoinCriteria = AdditionalJoinCriteria?.Compile(mergedSchema, parameterTypes);
 
             var hasLeft = left.MoveNext();

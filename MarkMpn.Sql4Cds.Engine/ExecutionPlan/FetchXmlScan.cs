@@ -562,7 +562,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     if (!String.IsNullOrEmpty(attribute.alias))
                     {
-                        if (!FetchXml.aggregate || attribute.groupby == FetchBoolType.@true)
+                        if (!FetchXml.aggregate || attribute.groupbySpecified && attribute.groupby == FetchBoolType.@true)
                         {
                             fullName = $"{alias}.{attribute.alias}";
                             attrAlias = attribute.alias;
@@ -628,6 +628,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Add the logical attribute
             AddSchemaAttribute(schema, fullName, simpleName, type);
 
+            if (FetchXml.aggregate)
+                return;
+
             // Add standard virtual attributes
             if (attrMetadata is EnumAttributeMetadata || attrMetadata is BooleanAttributeMetadata)
                 AddSchemaAttribute(schema, fullName + "name", attrMetadata.LogicalName + "name", typeof(SqlString));
@@ -644,6 +647,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private void AddSchemaAttribute(NodeSchema schema, string fullName, string simpleName, Type type)
         {
             schema.Schema[fullName] = type;
+
+            if (simpleName == null)
+                return;
 
             if (!schema.Aliases.TryGetValue(simpleName, out var simpleColumnNameAliases))
             {

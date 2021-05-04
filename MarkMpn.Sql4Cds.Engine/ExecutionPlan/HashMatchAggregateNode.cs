@@ -64,6 +64,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
+        private bool _folded;
+
         /// <summary>
         /// The list of columns to group the results by
         /// </summary>
@@ -242,6 +244,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
+            if (_folded)
+                return this;
+
             Source = Source.FoldQuery(metadata, options, parameterTypes);
             Source.Parent = this;
 
@@ -408,7 +413,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     schema.ContainsColumn(colName, out colName);
 
-                    var attribute = fetchXml.AddAttribute(colName, a => a.groupby == FetchBoolType.@true && a.alias == alias, metadata, out _);
+                    var attribute = fetchXml.AddAttribute(colName, a => a.groupbySpecified && a.groupby == FetchBoolType.@true && a.alias == alias, metadata, out _);
                     attribute.groupby = FetchBoolType.@true;
                     attribute.groupbySpecified = true;
                     attribute.alias = alias;
@@ -485,6 +490,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         attribute.distinctSpecified = true;
                     }
                 }
+
+                // FoldQuery can be called again in some circumstances. Don't repeat the folding operation and create another try/catch
+                _folded = true;
 
                 return new TryCatchNode
                 {
