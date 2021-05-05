@@ -698,18 +698,27 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <returns>The value converted to the requested type</returns>
         public static object ChangeType(object value, Type type)
         {
+            if (value != null && value.GetType() == type)
+                return value;
+
             var expression = (Expression)Expression.Constant(value);
 
             // Special case for converting from string to enum for metadata filters
             if (expression.Type == typeof(SqlString) && type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>) && type.GetGenericArguments()[0].IsEnum)
             {
-                var nullCheck = Expression.PropertyOrField(expression, nameof(INullable.IsNull));
+                var nullCheck = NullCheck(expression);
                 var nullValue = (Expression)Expression.Constant(null);
                 nullValue = Expression.Convert(nullValue, type);
                 var parsedValue = (Expression)Expression.Convert(expression, typeof(string));
-                parsedValue = Expr.Call(() => Enum.Parse(Expr.Arg<Type>(), Expr.Arg<string>()), Expression.Constant(type.GetGenericArguments()[0]), parsedValue);
+                parsedValue = Expr.Call(() => Enum.Parse(Expr.Arg<Type>(), Expr.Arg<string>(), Expr.Arg<bool>()), Expression.Constant(type.GetGenericArguments()[0]), parsedValue, Expression.Constant(true));
                 parsedValue = Expression.Convert(parsedValue, type);
                 expression = Expression.Condition(nullCheck, nullValue, parsedValue);
+            }
+            else if (expression.Type == typeof(SqlString) && type.IsEnum)
+            {
+                expression = (Expression)Expression.Convert(expression, typeof(string));
+                expression = Expr.Call(() => Enum.Parse(Expr.Arg<Type>(), Expr.Arg<string>(), Expr.Arg<bool>()), Expression.Constant(type), expression, Expression.Constant(true));
+                expression = Expression.Convert(expression, type);
             }
             else
             {
