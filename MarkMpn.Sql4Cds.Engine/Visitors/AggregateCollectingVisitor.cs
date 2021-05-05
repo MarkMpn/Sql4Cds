@@ -61,6 +61,11 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             // Do not recuse into SELECT clauses as we've already handled them separately
         }
 
+        public override void ExplicitVisit(ScalarSubquery node)
+        {
+            // Do not recurse into subqueries - they'll be handled separately
+        }
+
         private bool IsAggregate(FunctionCall func)
         {
             if (func.FunctionName.Value.Equals("SUM", StringComparison.OrdinalIgnoreCase) ||

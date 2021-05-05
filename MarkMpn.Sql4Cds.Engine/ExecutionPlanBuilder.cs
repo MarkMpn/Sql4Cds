@@ -799,6 +799,23 @@ namespace MarkMpn.Sql4Cds.Engine
 
         private SelectNode ConvertSelectQuerySpec(QuerySpecification querySpec, IList<OptimizerHint> hints, NodeSchema outerSchema, Dictionary<string,string> outerReferences, IDictionary<string, Type> parameterTypes)
         {
+            // Check for any aggregates in the FROM or WHERE clauses
+            var aggregateCollector = new AggregateCollectingVisitor();
+            if (querySpec.FromClause != null)
+            {
+                querySpec.FromClause.Accept(aggregateCollector);
+
+                if (aggregateCollector.Aggregates.Any())
+                    throw new NotSupportedQueryFragmentException("An aggregate may not appear in the FROM clause", aggregateCollector.Aggregates[0]);
+            }
+            if (querySpec.WhereClause != null)
+            {
+                querySpec.WhereClause.Accept(aggregateCollector);
+
+                if (aggregateCollector.Aggregates.Any())
+                    throw new NotSupportedQueryFragmentException("An aggregate may not appear in the WHERE clause", aggregateCollector.Aggregates[0]);
+            }
+
             // Each table in the FROM clause starts as a separate FetchXmlScan node. Add appropriate join nodes
             var node = querySpec.FromClause == null ? new ConstantScanNode { Values = { new Entity() } } : ConvertFromClause(querySpec.FromClause.TableReferences, hints, querySpec, outerSchema, outerReferences, parameterTypes);
 
