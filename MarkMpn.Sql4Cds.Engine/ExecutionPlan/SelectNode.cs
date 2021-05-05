@@ -154,7 +154,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         else if (!hasStar)
                         {
                             // Only add an all-attributes to the appropriate entity/link-entity
-                            if (col.SourceColumn.Replace(".*", "").Equals(fetchXml.Alias))
+                            if (col.SourceColumn.Replace(".*", "").Equals(fetchXml.Alias, StringComparison.OrdinalIgnoreCase))
                             {
                                 fetchXml.Entity.AddItem(new allattributes());
                             }
