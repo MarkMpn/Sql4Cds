@@ -291,7 +291,7 @@ namespace MarkMpn.Sql4Cds
 
                         var additionalSuggestions = (IEnumerable<SqlAutocompleteItem>) Array.Empty<SqlAutocompleteItem>();
 
-                        if (prevWord.Equals("on", StringComparison.OrdinalIgnoreCase) && _metadata.TryGetMinimalData(tables[prevPrevWord], out var newTableMetadata))
+                        if (prevWord.Equals("on", StringComparison.OrdinalIgnoreCase) && tables.TryGetValue(prevPrevWord, out var joinTableName) && _metadata.TryGetMinimalData(joinTableName, out var newTableMetadata))
                         {
                             // Suggest known relationships from the other entities in the FROM clause, followed by the normal list of attributes
                             additionalSuggestions = new List<SqlAutocompleteItem>();
