@@ -213,6 +213,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     aliases.Add(normalized);
                 }
+
+                if (GroupBy.Count == 1)
+                    schema.PrimaryKey = normalized;
             }
 
             foreach (var aggregate in Aggregates)
