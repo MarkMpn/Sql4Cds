@@ -3093,9 +3093,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var innerAlias = AssertNode<AliasNode>(join.RightSource);
             Assert.AreEqual("Expr1", innerAlias.Alias);
-            var innerDistinct = AssertNode<DistinctNode>(innerAlias.Source);
-            Assert.AreEqual("contact.firstname", innerDistinct.Columns[0]);
-            var innerFilter = AssertNode<FilterNode>(innerDistinct.Source);
+            var innerFilter = AssertNode<FilterNode>(innerAlias.Source);
             Assert.AreEqual("count > 1", innerFilter.Filter.ToSql());
             var innerTry = AssertNode<TryCatchNode>(innerFilter.Source);
             var innerAggregateFetch = AssertNode<FetchXmlScan>(innerTry.TrySource);
