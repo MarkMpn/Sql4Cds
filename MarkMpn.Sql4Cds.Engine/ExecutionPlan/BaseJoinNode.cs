@@ -73,18 +73,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     merged[attr.Key] = SqlTypeConverter.GetNullValue(attr.Value);
             }
 
-            if (!SemiJoin)
+            if (rightEntity != null)
             {
-                if (rightEntity != null)
-                {
-                    foreach (var attr in rightEntity.Attributes)
-                        merged[attr.Key] = attr.Value;
-                }
-                else
-                {
-                    foreach (var attr in rightSchema.Schema)
-                        merged[attr.Key] = SqlTypeConverter.GetNullValue(attr.Value);
-                }
+                foreach (var attr in rightEntity.Attributes)
+                    merged[attr.Key] = attr.Value;
+            }
+            else
+            {
+                foreach (var attr in rightSchema.Schema)
+                    merged[attr.Key] = SqlTypeConverter.GetNullValue(attr.Value);
             }
 
             foreach (var definedValue in DefinedValues)
@@ -106,6 +103,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
         {
+            return GetSchema(metadata, parameterTypes, false);
+        }
+
+        protected virtual NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, bool includeSemiJoin)
+        {
             var outerSchema = LeftSource.GetSchema(metadata, parameterTypes);
             var innerSchema = GetRightSchema(metadata, parameterTypes);
 
@@ -117,7 +119,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             foreach (var subSchema in new[] { outerSchema, innerSchema })
             {
                 // Semi-join does not include data from the right source
-                if (SemiJoin && subSchema == innerSchema)
+                if (SemiJoin && subSchema == innerSchema && !includeSemiJoin)
                     continue;
 
                 foreach (var column in subSchema.Schema)

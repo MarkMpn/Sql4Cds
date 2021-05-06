@@ -171,6 +171,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             Source = Source.FoldQuery(metadata, options, parameterTypes);
+
+            // These sorts will override any previous sort
+            if (Source is SortNode prevSort)
+                Source = prevSort.Source;
+
             Source.Parent = this;
 
             return FoldSorts(metadata, options, parameterTypes);
@@ -233,8 +238,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         return this;
 
                     var parts = sortCol.Split('.');
-                    var entityName = parts[0];
-                    var attrName = parts[1];
+                    string entityName;
+                    string attrName;
+
+                    if (parts.Length == 2)
+                    {
+                        entityName = parts[0];
+                        attrName = parts[1];
+                    }
+                    else
+                    {
+                        attrName = parts[0];
+                        entityName = FindEntityWithAttributeAlias(fetchXml, attrName);
+                    }
 
                     var fetchSort = new FetchOrderType { attribute = attrName.ToLowerInvariant(), descending = sortOrder.SortOrder == SortOrder.Descending };
 
@@ -326,6 +342,30 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return this;
+        }
+
+        private string FindEntityWithAttributeAlias(FetchXmlScan fetchXml, string attrName)
+        {
+            return FindEntityWithAttributeAlias(fetchXml.Alias, fetchXml.Entity.Items, attrName);
+        }
+
+        private string FindEntityWithAttributeAlias(string alias, object[] items, string attrName)
+        {
+            if (items == null)
+                return null;
+
+            if (items.OfType<FetchAttributeType>().Any(a => a.alias != null && a.alias.Equals(attrName, StringComparison.OrdinalIgnoreCase)))
+                return alias;
+
+            foreach (var linkEntity in items.OfType<FetchLinkEntityType>())
+            {
+                var entityName = FindEntityWithAttributeAlias(linkEntity.alias, linkEntity.Items, attrName);
+
+                if (entityName != null)
+                    return entityName;
+            }
+
+            return null;
         }
 
         public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)

@@ -310,36 +310,100 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var attributes = metadata.Attributes.ToDictionary(attr => attr.LogicalName, StringComparer.OrdinalIgnoreCase);
             var attributeNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var virtualTypeAttributes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             // Check all target columns are valid for create
             foreach (var col in targetColumns)
             {
-                if (!attributes.TryGetValue(col.GetColumnName(), out var attr))
+                var colName = col.GetColumnName();
+
+                // Could be a virtual ___type attribute where the "real" virtual attribute uses a different name, e.g.
+                // entityid in listmember has an associated entitytypecode attribute
+                if (colName.EndsWith("type", StringComparison.OrdinalIgnoreCase) &&
+                    attributes.TryGetValue(colName.Substring(0, colName.Length - 4), out var attr) &&
+                    attr is LookupAttributeMetadata lookupAttr &&
+                    lookupAttr.Targets.Length > 1)
+                {
+                    if (!virtualTypeAttributes.Add(colName))
+                        throw new NotSupportedQueryFragmentException("Duplicate column name", col);
+
+                    continue;
+                }
+
+                if (!attributes.TryGetValue(colName, out attr))
                     throw new NotSupportedQueryFragmentException("Unknown column", col);
 
                 if (attr.IsValidForCreate == false)
                     throw new NotSupportedQueryFragmentException("Column is not valid for INSERT", col);
 
-                if (!attributeNames.Add(attr.LogicalName))
+                if (!attributeNames.Add(colName))
                     throw new NotSupportedQueryFragmentException("Duplicate column name", col);
+
+                if (metadata.LogicalName == "listmember" && attr.LogicalName != "listid" && attr.LogicalName != "entityid")
+                    throw new NotSupportedQueryFragmentException("Only the listid and entityid columns can be used when inserting values into the listmember table", col);
+
+                if (metadata.IsIntersect == true && metadata.LogicalName != "listmember")
+                {
+                    var relationship = metadata.ManyToManyRelationships.Single();
+
+                    if (attr.LogicalName != relationship.Entity1IntersectAttribute && attr.LogicalName != relationship.Entity2IntersectAttribute)
+                        throw new NotSupportedQueryFragmentException($"Only the {relationship.Entity1IntersectAttribute} and {relationship.Entity2IntersectAttribute} columns can be used when inserting values into the {metadata.LogicalName} table", col);
+                }
             }
 
             // If any of the insert columns are a polymorphic lookup field, make sure we've got a value for the associated type field too
             foreach (var col in targetColumns)
             {
                 var targetAttrName = col.GetColumnName();
-                var targetLookupAttribute = attributes[targetAttrName] as LookupAttributeMetadata;
 
-                if (targetLookupAttribute == null)
-                    continue;
-
-                if (targetLookupAttribute.Targets.Length > 1 && !attributeNames.Contains(targetAttrName + "type") && targetLookupAttribute.AttributeType != AttributeTypeCode.PartyList)
+                if (attributeNames.Contains(targetAttrName))
                 {
-                    throw new NotSupportedQueryFragmentException("Inserting values into a polymorphic lookup field requires setting the associated type column as well", col)
+                    var targetLookupAttribute = attributes[targetAttrName] as LookupAttributeMetadata;
+
+                    if (targetLookupAttribute == null)
+                        continue;
+
+                    if (targetLookupAttribute.Targets.Length > 1 && !virtualTypeAttributes.Contains(targetAttrName + "type") && targetLookupAttribute.AttributeType != AttributeTypeCode.PartyList)
                     {
-                        Suggestion = $"Add a value for the {targetLookupAttribute.LogicalName}type column and set it to one of the following values:\r\n{String.Join("\r\n", targetLookupAttribute.Targets.Select(t => $"* {t}"))}"
-                    };
+                        // Special case: not required for listmember.entityid
+                        if (metadata.LogicalName == "listmember" && targetLookupAttribute.LogicalName == "entityid")
+                            continue;
+
+                        throw new NotSupportedQueryFragmentException("Inserting values into a polymorphic lookup field requires setting the associated type column as well", col)
+                        {
+                            Suggestion = $"Add a value for the {targetLookupAttribute.LogicalName}type column and set it to one of the following values:\r\n{String.Join("\r\n", targetLookupAttribute.Targets.Select(t => $"* {t}"))}"
+                        };
+                    }
                 }
+                else if (virtualTypeAttributes.Contains(targetAttrName))
+                {
+                    var idAttrName = targetAttrName.Substring(0, targetAttrName.Length - 4);
+
+                    if (!attributeNames.Contains(idAttrName))
+                    {
+                        throw new NotSupportedQueryFragmentException("Inserting values into a polymorphic type field requires setting the associated ID column as well", col)
+                        {
+                            Suggestion = $"Add a value for the {idAttrName} column"
+                        };
+                    }
+                }
+            }
+
+            // Special case: inserting into listmember requires listid and entityid
+            if (metadata.LogicalName == "listmember")
+            {
+                if (!attributeNames.Contains("listid"))
+                    throw new NotSupportedQueryFragmentException("Inserting values into the listmember table requires the listid column to be set", target);
+                if (!attributeNames.Contains("entityid"))
+                    throw new NotSupportedQueryFragmentException("Inserting values into the listmember table requires the entity column to be set", target);
+            }
+            else if (metadata.IsIntersect == true)
+            {
+                var relationship = metadata.ManyToManyRelationships.Single();
+                if (!attributeNames.Contains(relationship.Entity1IntersectAttribute))
+                    throw new NotSupportedQueryFragmentException($"Inserting values into the {metadata.LogicalName} table requires the {relationship.Entity1IntersectAttribute} column to be set", target);
+                if (!attributeNames.Contains(relationship.Entity2IntersectAttribute))
+                    throw new NotSupportedQueryFragmentException($"Inserting values into the {metadata.LogicalName} table requires the {relationship.Entity2IntersectAttribute} column to be set", target);
             }
 
             if (sourceColumns == null)
@@ -357,8 +421,21 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 for (var i = 0; i < targetColumns.Count; i++)
                 {
-                    var attr = attributes[targetColumns[i].GetColumnName()];
-                    var targetType = attr.GetAttributeSqlType();
+                    string targetName;
+                    Type targetType;
+
+                    var colName = targetColumns[i].GetColumnName();
+                    if (virtualTypeAttributes.Contains(colName))
+                    {
+                        targetName = colName;
+                        targetType = typeof(SqlString);
+                    }
+                    else
+                    {
+                        var attr = attributes[colName];
+                        targetName = attr.LogicalName;
+                        targetType = attr.GetAttributeSqlType();
+                    }
 
                     if (!schema.ContainsColumn(sourceColumns[i], out var sourceColumn))
                         throw new NotSupportedQueryFragmentException("Invalid source column");
@@ -368,7 +445,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, targetType))
                         throw new NotSupportedQueryFragmentException($"No implicit type conversion from {sourceType} to {targetType}", targetColumns[i]);
 
-                    node.ColumnMappings[attr.LogicalName] = sourceColumn;
+                    node.ColumnMappings[targetName] = sourceColumn;
                 }
             }
 
@@ -434,6 +511,21 @@ namespace MarkMpn.Sql4Cds.Engine
                 throw new NotSupportedQueryFragmentException(ex.Message, deleteTarget.Target);
             }
 
+            var primaryKey = targetMetadata.PrimaryIdAttribute;
+            string secondaryKey = null;
+
+            if (targetMetadata.LogicalName == "listmember")
+            {
+                primaryKey = "listid";
+                secondaryKey = "entityid";
+            }
+            else if (targetMetadata.IsIntersect == true)
+            {
+                var relationship = targetMetadata.ManyToManyRelationships.Single();
+                primaryKey = relationship.Entity1IntersectAttribute;
+                secondaryKey = relationship.Entity2IntersectAttribute;
+            }
+            
             queryExpression.SelectElements.Add(new SelectScalarExpression
             {
                 Expression = new ColumnReferenceExpression
@@ -443,16 +535,38 @@ namespace MarkMpn.Sql4Cds.Engine
                         Identifiers =
                         {
                             new Identifier { Value = targetAlias },
-                            new Identifier { Value = targetMetadata.PrimaryIdAttribute }
+                            new Identifier { Value = primaryKey }
                         }
                     }
                 },
                 ColumnName = new IdentifierOrValueExpression
                 {
-                    Identifier = new Identifier { Value = targetMetadata.PrimaryIdAttribute }
+                    Identifier = new Identifier { Value = primaryKey }
                 }
             });
 
+            if (secondaryKey != null)
+            {
+                queryExpression.SelectElements.Add(new SelectScalarExpression
+                {
+                    Expression = new ColumnReferenceExpression
+                    {
+                        MultiPartIdentifier = new MultiPartIdentifier
+                        {
+                            Identifiers =
+                        {
+                            new Identifier { Value = targetAlias },
+                            new Identifier { Value = secondaryKey }
+                        }
+                        }
+                    },
+                    ColumnName = new IdentifierOrValueExpression
+                    {
+                        Identifier = new Identifier { Value = secondaryKey }
+                    }
+                });
+            }
+            
             var selectStatement = new SelectStatement { QueryExpression = queryExpression };
 
             foreach (var hint in hints)
@@ -469,12 +583,16 @@ namespace MarkMpn.Sql4Cds.Engine
             if (source is SelectNode select)
             {
                 deleteNode.Source = select.Source;
-                deleteNode.PrimaryIdSource = $"{targetAlias}.{targetMetadata.PrimaryIdAttribute}";
+                deleteNode.PrimaryIdSource = $"{targetAlias}.{primaryKey}";
+
+                if (secondaryKey != null)
+                    deleteNode.SecondaryIdSource = $"{targetAlias}.{secondaryKey}";
             }
             else
             {
                 deleteNode.Source = source;
-                deleteNode.PrimaryIdSource = targetMetadata.PrimaryIdAttribute;
+                deleteNode.PrimaryIdSource = primaryKey;
+                deleteNode.SecondaryIdSource = secondaryKey;
             }
 
             return deleteNode;
@@ -539,6 +657,14 @@ namespace MarkMpn.Sql4Cds.Engine
                 throw new NotSupportedQueryFragmentException(ex.Message, updateTarget.Target);
             }
 
+            if (targetMetadata.IsIntersect == true)
+            {
+                throw new NotSupportedQueryFragmentException("Cannot update many-to-many intersect entities", updateTarget.Target)
+                {
+                    Suggestion = "DELETE any unwanted records and then INSERT the correct values instead"
+                };
+            }
+
             queryExpression.SelectElements.Add(new SelectScalarExpression
             {
                 Expression = new ColumnReferenceExpression
@@ -558,7 +684,9 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
             });
 
+            var attributes = targetMetadata.Attributes.ToDictionary(attr => attr.LogicalName, StringComparer.OrdinalIgnoreCase);
             var attributeNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var virtualTypeAttributes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var set in update.SetClauses)
             {
@@ -604,19 +732,33 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
 
                 // Validate the target attribute
-                var targetAttrName = assignment.Column.MultiPartIdentifier.Identifiers.Last().Value;
-                var targetAttribute = targetMetadata.Attributes.SingleOrDefault(attr => attr.LogicalName.Equals(targetAttrName));
+                var targetAttrName = assignment.Column.MultiPartIdentifier.Identifiers.Last().Value.ToLower();
 
-                if (targetAttribute == null)
-                    throw new NotSupportedQueryFragmentException("Unknown column name", assignment.Column);
+                // Could be a virtual ___type attribute where the "real" virtual attribute uses a different name, e.g.
+                // entityid in listmember has an associated entitytypecode attribute
+                if (targetAttrName.EndsWith("type", StringComparison.OrdinalIgnoreCase) &&
+                    attributes.TryGetValue(targetAttrName.Substring(0, targetAttrName.Length - 4), out var attr) &&
+                    attr is LookupAttributeMetadata lookupAttr &&
+                    lookupAttr.Targets.Length > 1)
+                {
+                    if (!virtualTypeAttributes.Add(targetAttrName))
+                        throw new NotSupportedQueryFragmentException("Duplicate column name", assignment.Column);
+                }
+                else
+                {
+                    if (!attributes.TryGetValue(targetAttrName, out attr))
+                        throw new NotSupportedQueryFragmentException("Unknown column name", assignment.Column);
 
-                if (targetAttribute.IsValidForUpdate == false)
-                    throw new NotSupportedQueryFragmentException("Column cannot be updated", assignment.Column);
+                    if (attr.IsValidForUpdate == false)
+                        throw new NotSupportedQueryFragmentException("Column cannot be updated", assignment.Column);
 
-                if (!attributeNames.Add(targetAttribute.LogicalName))
-                    throw new NotSupportedQueryFragmentException("Duplicate column name", assignment.Column);
+                    if (!attributeNames.Add(attr.LogicalName))
+                        throw new NotSupportedQueryFragmentException("Duplicate column name", assignment.Column);
 
-                queryExpression.SelectElements.Add(new SelectScalarExpression { Expression = assignment.NewValue, ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = targetAttribute.LogicalName } } });
+                    targetAttrName = attr.LogicalName;
+                }
+
+                queryExpression.SelectElements.Add(new SelectScalarExpression { Expression = assignment.NewValue, ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = targetAttrName } } });
             }
 
             var selectStatement = new SelectStatement { QueryExpression = queryExpression };
@@ -627,14 +769,15 @@ namespace MarkMpn.Sql4Cds.Engine
             var source = ConvertSelectStatement(selectStatement);
 
             // Add UPDATE
-            var updateNode = ConvertSetClause(update.SetClauses, source, targetLogicalName, targetAlias);
+            var updateNode = ConvertSetClause(update.SetClauses, source, targetLogicalName, targetAlias, attributeNames, virtualTypeAttributes);
 
             return updateNode;
         }
 
-        private UpdateNode ConvertSetClause(IList<SetClause> setClauses, IExecutionPlanNode node, string targetLogicalName, string targetAlias)
+        private UpdateNode ConvertSetClause(IList<SetClause> setClauses, IExecutionPlanNode node, string targetLogicalName, string targetAlias, HashSet<string> attributeNames, HashSet<string> virtualTypeAttributes)
         {
             var targetMetadata = Metadata[targetLogicalName];
+            var attributes = targetMetadata.Attributes.ToDictionary(attr => attr.LogicalName, StringComparer.OrdinalIgnoreCase);
             var update = new UpdateNode
             {
                 LogicalName = targetMetadata.LogicalName
@@ -651,22 +794,33 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     // Validate the type conversion
                     var targetAttrName = assignment.Column.MultiPartIdentifier.Identifiers.Last().Value;
-                    var targetAttribute = targetMetadata.Attributes.Single(attr => attr.LogicalName.Equals(targetAttrName));
+                    Type targetType;
 
-                    var sourceColName = select.ColumnSet.Single(col => col.OutputColumn == targetAttribute.LogicalName).SourceColumn;
+                    // Could be a virtual ___type attribute where the "real" virtual attribute uses a different name, e.g.
+                    // entityid in listmember has an associated entitytypecode attribute
+                    if (virtualTypeAttributes.Contains(targetAttrName))
+                    {
+                        targetType = typeof(SqlString);
+                    }
+                    else
+                    {
+                        var targetAttribute = attributes[targetAttrName];
+                        targetType = targetAttribute.GetAttributeSqlType();
+                    }
+
+                    var sourceColName = select.ColumnSet.Single(col => col.OutputColumn == targetAttrName.ToLower()).SourceColumn;
                     var sourceCol = sourceColName.ToColumnReference();
                     var sourceType = sourceCol.GetType(schema, null, null);
-                    var targetType = targetAttribute.GetAttributeSqlType();
 
                     if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, targetType))
                         throw new NotSupportedQueryFragmentException($"Cannot convert value of type {sourceType} to {targetType}", assignment);
 
-                    if (update.ColumnMappings.ContainsKey(targetAttribute.LogicalName))
+                    if (update.ColumnMappings.ContainsKey(targetAttrName))
                         throw new NotSupportedQueryFragmentException("Duplicate target column", assignment.Column);
 
                     // Normalize the column name
                     schema.ContainsColumn(sourceColName, out sourceColName);
-                    update.ColumnMappings[targetAttribute.LogicalName] = sourceColName;
+                    update.ColumnMappings[targetAttrName] = sourceColName;
                 }
             }
             else
@@ -677,9 +831,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 foreach (var assignment in setClauses.Cast<AssignmentSetClause>())
                 {
                     var targetAttrName = assignment.Column.MultiPartIdentifier.Identifiers.Last().Value;
-                    var targetAttribute = targetMetadata.Attributes.Single(attr => attr.LogicalName.Equals(targetAttrName));
-
-                    update.ColumnMappings[targetAttribute.LogicalName] = targetAttribute.LogicalName;
+                    update.ColumnMappings[targetAttrName] = targetAttrName;
                 }
             }
 
@@ -687,21 +839,33 @@ namespace MarkMpn.Sql4Cds.Engine
             foreach (var assignment in setClauses.Cast<AssignmentSetClause>())
             {
                 var targetAttrName = assignment.Column.MultiPartIdentifier.Identifiers.Last().Value;
-                var targetLookupAttribute = targetMetadata.Attributes.Single(attr => attr.LogicalName.Equals(targetAttrName)) as LookupAttributeMetadata;
 
-                if (targetLookupAttribute == null)
-                    continue;
-
-                if (targetLookupAttribute.Targets.Length > 1 && !update.ColumnMappings.ContainsKey(targetAttrName + "type") && targetLookupAttribute.AttributeType != AttributeTypeCode.PartyList)
+                if (attributeNames.Contains(targetAttrName))
                 {
-                    // Check we're not just setting the lookup column to null - no need to set the corresponding type then
-                    if (assignment.NewValue is NullLiteral)
+                    var targetLookupAttribute = attributes[targetAttrName] as LookupAttributeMetadata;
+
+                    if (targetLookupAttribute == null)
                         continue;
 
-                    throw new NotSupportedQueryFragmentException("Updating a polymorphic lookup field requires setting the associated type column as well", assignment.Column)
+                    if (targetLookupAttribute.Targets.Length > 1 && !virtualTypeAttributes.Contains(targetAttrName + "type") && targetLookupAttribute.AttributeType != AttributeTypeCode.PartyList)
                     {
-                        Suggestion = $"Add a SET clause for the {targetLookupAttribute.LogicalName}type column and set it to one of the following values:\r\n{String.Join("\r\n", targetLookupAttribute.Targets.Select(t => $"* {t}"))}"
-                    };
+                        throw new NotSupportedQueryFragmentException("Updating a polymorphic lookup field requires setting the associated type column as well", assignment.Column)
+                        {
+                            Suggestion = $"Add a SET clause for the {targetLookupAttribute.LogicalName}type column and set it to one of the following values:\r\n{String.Join("\r\n", targetLookupAttribute.Targets.Select(t => $"* {t}"))}"
+                        };
+                    }
+                }
+                else if (virtualTypeAttributes.Contains(targetAttrName))
+                {
+                    var idAttrName = targetAttrName.Substring(0, targetAttrName.Length - 4);
+
+                    if (!attributeNames.Contains(idAttrName))
+                    {
+                        throw new NotSupportedQueryFragmentException("Updating a polymorphic type field requires setting the associated ID column as well", assignment.Column)
+                        {
+                            Suggestion = $"Add a SET clause for the {idAttrName} column"
+                        };
+                    }
                 }
             }
 
@@ -799,6 +963,23 @@ namespace MarkMpn.Sql4Cds.Engine
 
         private SelectNode ConvertSelectQuerySpec(QuerySpecification querySpec, IList<OptimizerHint> hints, NodeSchema outerSchema, Dictionary<string,string> outerReferences, IDictionary<string, Type> parameterTypes)
         {
+            // Check for any aggregates in the FROM or WHERE clauses
+            var aggregateCollector = new AggregateCollectingVisitor();
+            if (querySpec.FromClause != null)
+            {
+                querySpec.FromClause.Accept(aggregateCollector);
+
+                if (aggregateCollector.Aggregates.Any())
+                    throw new NotSupportedQueryFragmentException("An aggregate may not appear in the FROM clause", aggregateCollector.Aggregates[0]);
+            }
+            if (querySpec.WhereClause != null)
+            {
+                querySpec.WhereClause.Accept(aggregateCollector);
+
+                if (aggregateCollector.Aggregates.Any())
+                    throw new NotSupportedQueryFragmentException("An aggregate may not appear in the WHERE clause", aggregateCollector.Aggregates[0]);
+            }
+
             // Each table in the FROM clause starts as a separate FetchXmlScan node. Add appropriate join nodes
             var node = querySpec.FromClause == null ? new ConstantScanNode { Values = { new Entity() } } : ConvertFromClause(querySpec.FromClause.TableReferences, hints, querySpec, outerSchema, outerReferences, parameterTypes);
 
@@ -915,7 +1096,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 if (references.Count == 0)
                 {
-                    if (UseMergeJoin(source, innerQuery.Source, references, testColumn, lhsCol.GetColumnName(), out var outputCol, out var merge))
+                    if (UseMergeJoin(source, innerQuery.Source, references, testColumn, lhsCol.GetColumnName(), true, out var outputCol, out var merge))
                     {
                         testColumn = outputCol;
                         join = merge;
@@ -938,7 +1119,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         var alias = new AliasNode(innerQuery, new Identifier { Value = $"Expr{++_colNameCounter}" });
 
                         testColumn = $"{alias.Alias}.{alias.ColumnSet[0].OutputColumn}";
-                        join = new MergeJoinNode
+                        join = new HashJoinNode
                         {
                             LeftSource = source,
                             LeftAttribute = lhsCol,
@@ -947,11 +1128,14 @@ namespace MarkMpn.Sql4Cds.Engine
                         };
                     }
 
-                    // Convert the join to a semi join to ensure requests for wildcard columns aren't folded to the IN subquery
-                    var definedValue = $"Expr{++_colNameCounter}";
-                    join.SemiJoin = true;
-                    join.DefinedValues[definedValue] = testColumn;
-                    testColumn = definedValue;
+                    if (!join.SemiJoin)
+                    {
+                        // Convert the join to a semi join to ensure requests for wildcard columns aren't folded to the IN subquery
+                        var definedValue = $"Expr{++_colNameCounter}";
+                        join.SemiJoin = true;
+                        join.DefinedValues[definedValue] = testColumn;
+                        testColumn = definedValue;
+                    }
                 }
                 else
                 {
@@ -1068,10 +1252,9 @@ namespace MarkMpn.Sql4Cds.Engine
                         }
                     };
                 }
-                else if (UseMergeJoin(source, innerQuery.Source, references, null, null, out _, out var merge))
+                else if (UseMergeJoin(source, innerQuery.Source, references, null, null, true, out testColumn, out var merge))
                 {
                     join = merge;
-                    testColumn = merge.RightAttribute.GetColumnName();
                 }
                 else
                 {
@@ -1711,7 +1894,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 string outputcol;
                 var subqueryCol = subqueryPlan.ColumnSet[0].SourceColumn;
                 BaseJoinNode join = null;
-                if (UseMergeJoin(node, subqueryPlan.Source, outerReferences, subqueryCol, null, out outputcol, out var merge))
+                if (UseMergeJoin(node, subqueryPlan.Source, outerReferences, subqueryCol, null, false, out outputcol, out var merge))
                 {
                     join = merge;
                 }
@@ -1800,7 +1983,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return null;
         }
 
-        private bool UseMergeJoin(IDataExecutionPlanNode node, IDataExecutionPlanNode subqueryPlan, Dictionary<string, string> outerReferences, string subqueryCol, string inPredicateCol, out string outputCol, out MergeJoinNode merge)
+        private bool UseMergeJoin(IDataExecutionPlanNode node, IDataExecutionPlanNode subqueryPlan, Dictionary<string, string> outerReferences, string subqueryCol, string inPredicateCol, bool semiJoin, out string outputCol, out MergeJoinNode merge)
         {
             outputCol = null;
             merge = null;
@@ -1868,19 +2051,26 @@ namespace MarkMpn.Sql4Cds.Engine
             if (outerKey == null)
                 return false;
 
+            var outerSchema = node.GetSchema(Metadata, null);
             var innerSchema = fetch.GetSchema(Metadata, null);
 
-            if (!innerSchema.ContainsColumn(innerKey, out innerKey))
+            if (!outerSchema.ContainsColumn(outerKey, out outerKey) ||
+                !innerSchema.ContainsColumn(innerKey, out innerKey))
                 return false;
 
-            if (innerSchema.PrimaryKey != innerKey)
+            if (outerSchema.PrimaryKey != outerKey &&
+                innerSchema.PrimaryKey != innerKey)
                 return false;
 
-            // Give the inner fetch a unique alias
+            // Give the inner fetch a unique alias and update the name of the inner key
             if (alias != null)
                 fetch.Alias = alias.Alias;
             else
                 fetch.Alias = $"Expr{++_colNameCounter}";
+
+            var rightAttribute = innerKey.ToColumnReference();
+            if (rightAttribute.MultiPartIdentifier.Identifiers.Count == 2)
+                rightAttribute.MultiPartIdentifier.Identifiers[0].Value = fetch.Alias;
 
             // Add the required column with the expected alias (used for scalar subqueries and IN predicates, not for CROSS/OUTER APPLY
             if (subqueryCol != null)
@@ -1890,17 +2080,34 @@ namespace MarkMpn.Sql4Cds.Engine
                 outputCol = fetch.Alias + "." + attr.name;
             }
 
-            // Regenerate the schema after changing the alias
-            innerSchema = fetch.GetSchema(Metadata, null);
-
             merge = new MergeJoinNode
             {
                 LeftSource = node,
                 LeftAttribute = outerKey.ToColumnReference(),
                 RightSource = inPredicateCol != null ? (IDataExecutionPlanNode) filter ?? fetch : fetch,
-                RightAttribute = innerSchema.PrimaryKey.ToColumnReference(),
+                RightAttribute = rightAttribute,
                 JoinType = QualifiedJoinType.LeftOuter
             };
+
+            if (semiJoin)
+            {
+                // Regenerate the schema after changing the alias
+                innerSchema = fetch.GetSchema(Metadata, null);
+
+                if (innerSchema.PrimaryKey != rightAttribute.GetColumnName() && !(merge.RightSource is DistinctNode))
+                {
+                    merge.RightSource = new DistinctNode
+                    {
+                        Source = merge.RightSource,
+                        Columns = { rightAttribute.GetColumnName() }
+                    };
+                }
+
+                merge.SemiJoin = true;
+                var definedValue = $"Expr{++_colNameCounter}";
+                merge.DefinedValues[definedValue] = outputCol ?? rightAttribute.GetColumnName();
+                outputCol = definedValue;
+            }
 
             return true;
         }
@@ -2378,7 +2585,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         var spool = new TableSpoolNode { Source = rhs };
                         rhs = spool;
                     }
-                    else if (UseMergeJoin(lhs, subqueryPlan, lhsReferences, null, null, out _, out var merge))
+                    else if (UseMergeJoin(lhs, subqueryPlan, lhsReferences, null, null, false, out _, out var merge))
                     {
                         if (unqualifiedJoin.UnqualifiedJoinType == UnqualifiedJoinType.CrossApply)
                             merge.JoinType = QualifiedJoinType.Inner;

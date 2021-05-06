@@ -198,7 +198,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="attributes">The attributes in the target metadata</param>
         /// <param name="dateTimeKind">The time zone that datetime values are supplied in</param>
         /// <returns></returns>
-        protected Dictionary<string, Func<Entity, object>> CompileColumnMappings(IDictionary<string,string> mappings, NodeSchema schema, IDictionary<string, AttributeMetadata> attributes, DateTimeKind dateTimeKind)
+        protected Dictionary<string, Func<Entity, object>> CompileColumnMappings(EntityMetadata metadata, IDictionary<string,string> mappings, NodeSchema schema, IDictionary<string, AttributeMetadata> attributes, DateTimeKind dateTimeKind)
         {
             var attributeAccessors = new Dictionary<string, Func<Entity, object>>();
             var entityParam = Expression.Parameter(typeof(Entity));
@@ -211,9 +211,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!schema.ContainsColumn(sourceColumnName, out sourceColumnName))
                     throw new QueryExecutionException($"Missing source column {mapping.Value}") { Node = this };
 
-                var attr = attributes[destAttributeName];
-
-                if (attr.AttributeOf != null)
+                // We might be using a virtual ___type attribute that has a different name in the metadata. We can safely
+                // ignore these attributes - the attribute names have already been validated in the ExecutionPlanBuilder
+                if (!attributes.TryGetValue(destAttributeName, out var attr) || attr.AttributeOf != null)
                     continue;
 
                 var sourceType = schema.Schema[sourceColumnName];
@@ -235,28 +235,32 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     if (attr is LookupAttributeMetadata lookupAttr && lookupAttr.AttributeType != AttributeTypeCode.PartyList)
                     {
-                        Expression targetExpr;
-
-                        if (lookupAttr.Targets.Length == 1)
+                        // Special case: intersect attributes can be simple guids
+                        if (metadata.IsIntersect != true)
                         {
-                            targetExpr = Expression.Constant(lookupAttr.Targets[0]);
-                        }
-                        else
-                        {
-                            var sourceTargetColumnName = mappings[destAttributeName + "type"];
-                            var sourceTargetType = schema.Schema[sourceTargetColumnName];
-                            targetExpr = Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(sourceTargetColumnName));
-                            targetExpr = SqlTypeConverter.Convert(targetExpr, sourceTargetType);
-                            targetExpr = SqlTypeConverter.Convert(targetExpr, typeof(SqlString));
-                            targetExpr = SqlTypeConverter.Convert(targetExpr, typeof(string));
-                        }
+                            Expression targetExpr;
 
-                        convertedExpr = Expression.New(
-                            typeof(EntityReference).GetConstructor(new[] { typeof(string), typeof(Guid) }),
-                            targetExpr,
-                            Expression.Convert(convertedExpr, typeof(Guid))
-                        );
-                        destType = typeof(EntityReference);
+                            if (lookupAttr.Targets.Length == 1)
+                            {
+                                targetExpr = Expression.Constant(lookupAttr.Targets[0]);
+                            }
+                            else
+                            {
+                                var sourceTargetColumnName = mappings[destAttributeName + "type"];
+                                var sourceTargetType = schema.Schema[sourceTargetColumnName];
+                                targetExpr = Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(sourceTargetColumnName));
+                                targetExpr = SqlTypeConverter.Convert(targetExpr, sourceTargetType);
+                                targetExpr = SqlTypeConverter.Convert(targetExpr, typeof(SqlString));
+                                targetExpr = SqlTypeConverter.Convert(targetExpr, typeof(string));
+                            }
+
+                            convertedExpr = Expression.New(
+                                typeof(EntityReference).GetConstructor(new[] { typeof(string), typeof(Guid) }),
+                                targetExpr,
+                                Expression.Convert(convertedExpr, typeof(Guid))
+                            );
+                            destType = typeof(EntityReference);
+                        }
                     }
                     else if (attr is EnumAttributeMetadata && !(attr is MultiSelectPicklistAttributeMetadata))
                     {

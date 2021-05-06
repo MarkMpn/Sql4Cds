@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Crm.Sdk.Messages;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
@@ -38,10 +39,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("PrimaryId Source")]
         public string PrimaryIdSource { get; set; }
 
+        /// <summary>
+        /// The column that contains the secondary ID of the records to delete (used for many-to-many intersect tables)
+        /// </summary>
+        [Category("Delete")]
+        [Description("The column that contains the secondary ID of the records to delete (used for many-to-many intersect tables)")]
+        [DisplayName("SecondaryId Source")]
+        public string SecondaryIdSource { get; set; }
+
         public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
         {
             if (!requiredColumns.Contains(PrimaryIdSource))
                 requiredColumns.Add(PrimaryIdSource);
+
+            if (SecondaryIdSource != null && !requiredColumns.Contains(SecondaryIdSource))
+                requiredColumns.Add(SecondaryIdSource);
 
             Source.AddRequiredColumns(metadata, parameterTypes, requiredColumns);
         }
@@ -55,6 +67,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 List<Entity> entities;
                 EntityMetadata meta;
                 Func<Entity, object> primaryIdAccessor;
+                Func<Entity, object> secondaryIdAccessor = null;
 
                 using (_timer.Run())
                 {
@@ -64,12 +77,35 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     meta = metadata[LogicalName];
                     var attributes = meta.Attributes.ToDictionary(a => a.LogicalName);
                     var dateTimeKind = options.UseLocalTimeZone ? DateTimeKind.Local : DateTimeKind.Utc;
+                    var primaryKey = meta.PrimaryIdAttribute;
+                    string secondaryKey = null;
+
+                    // Special cases for the keys used for intersect entities
+                    if (meta.LogicalName == "listmember")
+                    {
+                        primaryKey = "listid";
+                        secondaryKey = "entityid";
+                    }
+                    else if (meta.IsIntersect == true)
+                    {
+                        var relationship = meta.ManyToManyRelationships.Single();
+                        primaryKey = relationship.Entity1IntersectAttribute;
+                        secondaryKey = relationship.Entity2IntersectAttribute;
+                    }
+
                     var fullMappings = new Dictionary<string, string>
                     {
-                        [meta.PrimaryIdAttribute] = PrimaryIdSource
+                        [primaryKey] = PrimaryIdSource
                     };
-                    var attributeAccessors = CompileColumnMappings(fullMappings, schema, attributes, dateTimeKind);
-                    primaryIdAccessor = attributeAccessors[meta.PrimaryIdAttribute];
+
+                    if (secondaryKey != null)
+                        fullMappings[secondaryKey] = SecondaryIdSource;
+
+                    var attributeAccessors = CompileColumnMappings(meta, fullMappings, schema, attributes, dateTimeKind);
+                    primaryIdAccessor = attributeAccessors[primaryKey];
+
+                    if (SecondaryIdSource != null)
+                        secondaryIdAccessor = attributeAccessors[secondaryKey];
                 }
 
                 // Check again that the update is allowed. Don't count any UI interaction in the execution time
@@ -83,13 +119,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         options,
                         entities,
                         meta,
-                        entity =>
-                        {
-                            return new DeleteRequest
-                            {
-                                Target = new EntityReference(LogicalName, (Guid)primaryIdAccessor(entity))
-                            };
-                        },
+                        entity => CreateDeleteRequest(meta, entity, primaryIdAccessor, secondaryIdAccessor),
                         new OperationNames
                         {
                             InProgressUppercase = "Deleting",
@@ -109,6 +139,34 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 throw new QueryExecutionException(ex.Message, ex) { Node = this };
             }
+        }
+
+        private OrganizationRequest CreateDeleteRequest(EntityMetadata meta, Entity entity, Func<Entity,object> primaryIdAccessor, Func<Entity,object> secondaryIdAccessor)
+        {
+            var id = (Guid)primaryIdAccessor(entity);
+
+            // Special case messages for intersect entities
+            if (meta.IsIntersect == true)
+            {
+                var secondaryId = (Guid)secondaryIdAccessor(entity);
+
+                if (meta.LogicalName == "listmember")
+                    return new RemoveMemberListRequest { ListId = id, EntityId = secondaryId };
+
+                var relationship = meta.ManyToManyRelationships.Single();
+
+                return new DisassociateRequest
+                {
+                    Target = new EntityReference(relationship.Entity1LogicalName, id),
+                    RelatedEntities = new EntityReferenceCollection(new[] { new EntityReference(relationship.Entity2LogicalName, secondaryId) }),
+                    Relationship = new Relationship(relationship.SchemaName) { PrimaryEntityRole = EntityRole.Referencing }
+                };
+            }
+
+            return new DeleteRequest
+            {
+                Target = new EntityReference(LogicalName, id)
+            };
         }
 
         public override string ToString()

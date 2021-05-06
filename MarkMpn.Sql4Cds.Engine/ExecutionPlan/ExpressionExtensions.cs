@@ -1135,6 +1135,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             fragment.Accept(visitor);
 
             return visitor.Columns
+                .Where(col => col.ColumnType == ColumnType.Regular)
                 .Select(col => col.GetColumnName())
                 .Distinct();
         }

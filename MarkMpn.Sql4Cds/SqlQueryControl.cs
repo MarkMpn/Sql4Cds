@@ -435,28 +435,6 @@ namespace MarkMpn.Sql4Cds
             }
         }
 
-        private Scintilla CreateXmlEditor()
-        {
-            var scintilla = CreateEditor();
-
-            scintilla.Lexer = Lexer.Xml;
-
-            // Show line numbers
-            scintilla.Margins[0].Width = 20;
-
-            scintilla.StyleClearAll();
-            scintilla.Styles[Style.LineNumber].ForeColor = Color.FromArgb(255, 128, 128, 128);  //Dark Gray
-            scintilla.Styles[Style.LineNumber].BackColor = Color.FromArgb(255, 228, 228, 228);  //Light Gray
-            scintilla.Styles[Style.Xml.Attribute].ForeColor = Color.Red;
-            scintilla.Styles[Style.Xml.Entity].ForeColor = Color.Red;
-            scintilla.Styles[Style.Xml.Comment].ForeColor = Color.Green;
-            scintilla.Styles[Style.Xml.Tag].ForeColor = Color.Blue;
-            scintilla.Styles[Style.Xml.TagEnd].ForeColor = Color.Blue;
-            scintilla.Styles[Style.Xml.DoubleString].ForeColor = Color.DeepPink;
-            scintilla.Styles[Style.Xml.SingleString].ForeColor = Color.DeepPink;
-            return scintilla;
-        }
-
         public void Execute(bool execute, bool includeFetchXml)
         {
             if (backgroundWorker.IsBusy)
@@ -500,20 +478,6 @@ namespace MarkMpn.Sql4Cds
             backgroundWorker.CancelAsync();
         }
 
-        private string SerializeRequest(object request)
-        {
-            using (var stream = new MemoryStream())
-            {
-                using (var writer = XmlWriter.Create(stream, new XmlWriterSettings { Indent = true }))
-                {
-                    var serializer = new DataContractSerializer(request.GetType());
-                    serializer.WriteObject(writer, request);
-                }
-
-                return Encoding.UTF8.GetString(stream.ToArray());
-            }
-        }
-
         private void Grid_CellMouseUp(object sender, DataGridViewCellMouseEventArgs e)
         {
             if (e.Button == MouseButtons.Right)
@@ -541,85 +505,6 @@ namespace MarkMpn.Sql4Cds
                 var grid = (Control)sender;
                 gridContextMenuStrip.Show(grid, grid.PointToClient(Cursor.Position));
             }
-        }
-
-        private ToolStrip CreateFXBToolbar(Scintilla xmlEditor)
-        {
-            var toolbar = new ToolStrip();
-            toolbar.ImageScalingSize = new Size(24, 24);
-            var btn = new ToolStripButton
-            {
-                Text = "Edit in",
-                Image = Properties.Resources.FXB,
-                ImageAlign = ContentAlignment.MiddleRight,
-                TextAlign = ContentAlignment.MiddleLeft,
-                TextImageRelation = TextImageRelation.TextBeforeImage,
-                ToolTipText = "Edit in FetchXML Builder"
-            };
-
-            btn.Click += (sender, e) =>
-            {
-                OutgoingMessageHandler(new MessageBusEventArgs("FetchXML Builder")
-                {
-                    TargetArgument = xmlEditor.Text
-                });
-            };
-            toolbar.Items.Add(btn);
-
-            if (_sourcePlugin != null)
-            {
-                var srcBtn = new ToolStripButton
-                {
-                    Text = "Return to " + _sourcePlugin
-                };
-                srcBtn.Click += (sender, e) =>
-                {
-                    OutgoingMessageHandler(new MessageBusEventArgs(_sourcePlugin)
-                    {
-                        TargetArgument = xmlEditor.Text
-                    });
-                };
-                toolbar.Items.Add(srcBtn);
-            }
-
-            return toolbar;
-        }
-
-        private Panel CreateWarning(string message, string link, string url)
-        {
-            var panel = new Panel
-            {
-                BackColor = SystemColors.Info,
-                BorderStyle = BorderStyle.None,
-                Dock = DockStyle.Top,
-                Padding = new Padding(4),
-                Height = 24
-            };
-            var label = new LinkLabel
-            {
-                Text = message,
-                ForeColor = SystemColors.InfoText,
-                AutoSize = false,
-                Dock = DockStyle.Fill
-            };
-
-            if (!String.IsNullOrEmpty(link))
-            {
-                label.Text += " " + link;
-                label.LinkArea = new LinkArea(label.Text.Length - link.Length, link.Length);
-                label.LinkClicked += (s, e) => Process.Start(url);
-            }
-
-            panel.Controls.Add(label);
-            panel.Controls.Add(new PictureBox
-            {
-                Image = Properties.Resources.StatusWarning_16x,
-                Height = 16,
-                Width = 16,
-                Dock = DockStyle.Left
-            });
-
-            return panel;
         }
 
         private void AddResult(Control results, Control fetchXml, int rowCount)
@@ -998,6 +883,7 @@ namespace MarkMpn.Sql4Cds
                 grid.AllowUserToOrderColumns = true;
                 grid.AllowUserToResizeRows = false;
                 grid.AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.WhiteSmoke };
+                grid.AutoGenerateColumns = false;
                 grid.BackgroundColor = SystemColors.Window;
                 grid.BorderStyle = BorderStyle.None;
                 grid.CellBorderStyle = DataGridViewCellBorderStyle.None;
@@ -1009,6 +895,17 @@ namespace MarkMpn.Sql4Cds
                 grid.ShowEditingIcon = false;
                 grid.ContextMenuStrip = gridContextMenuStrip;
                 grid.DataSource = results;
+
+                foreach (DataColumn col in results.Columns)
+                {
+                    grid.Columns.Add(new DataGridViewTextBoxColumn
+                    {
+                        DataPropertyName = col.ColumnName,
+                        HeaderText = col.Caption,
+                        ValueType = col.DataType,
+                        FillWeight = 1
+                    });
+                }
 
                 grid.CellFormatting += (s, e) =>
                 {
@@ -1022,12 +919,6 @@ namespace MarkMpn.Sql4Cds
                     {
                         e.Value = b.Value ? "1" : "0";
                     }
-                };
-
-                grid.DataBindingComplete += (s, e) =>
-                {
-                    for (var i = 0; i < results.Columns.Count; i++)
-                        grid.Columns[i].HeaderText = results.Columns[i].Caption;
                 };
 
                 grid.HandleCreated += (s, e) =>

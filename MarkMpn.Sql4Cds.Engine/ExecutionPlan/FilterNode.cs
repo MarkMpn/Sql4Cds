@@ -61,7 +61,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Foldable correlated IN queries "lefttable.column IN (SELECT righttable.column FROM righttable WHERE ...) are created as:
             // Filter: Expr2 is not null
-            // -> MergeJoin (LeftOuter SemiJoin) Expr2 = righttable.column in DefinedValues; righttable.column in RightAttribute
+            // -> FoldableJoin (LeftOuter SemiJoin) Expr2 = righttable.column in DefinedValues; righttable.column in RightAttribute
             //    -> FetchXml
             //    -> FetchXml (Distinct) orderby righttable.column
 
@@ -111,7 +111,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 FetchLinkEntityType linkToAdd;
                 string leftAlias;
 
-                if (join is MergeJoinNode merge)
+                if (join is FoldableJoinNode merge)
                 {
                     // Check we meet all the criteria for a foldable correlated IN query
                     var rightSort = join.RightSource as SortNode;
