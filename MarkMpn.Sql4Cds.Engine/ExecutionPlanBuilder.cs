@@ -1935,7 +1935,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         var assert = new AssertNode
                         {
                             Source = aggregate,
-                            Assertion = e => e.GetAttributeValue<int>(rowCountCol) <= 1,
+                            Assertion = e => e.GetAttributeValue<SqlInt32>(rowCountCol).Value <= 1,
                             ErrorMessage = "Subquery produced more than 1 row"
                         };
                         loopRightSource = assert;
