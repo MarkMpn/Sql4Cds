@@ -692,7 +692,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 from = targetMetadata.PrimaryIdAttribute,
                                 to = baseAttribute.LogicalName,
                                 alias = lookupAttr.Targets.Length == 1 ? $"{meta.LogicalName}_{baseAttribute.LogicalName}" : $"{meta.LogicalName}_{baseAttribute.LogicalName}_{targetType}",
-                                linktype = "outer"
+                                linktype = "outer",
+                                SemiJoin = true
                             };
 
                             if (!additionalLinkEntities.TryGetValue(target, out var toAdd))
