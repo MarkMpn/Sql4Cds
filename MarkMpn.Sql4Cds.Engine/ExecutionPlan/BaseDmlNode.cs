@@ -226,6 +226,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     // null literal
                     expr = Expression.Constant(null, destType);
+                    expr = Expr.Box(expr);
                 }
                 else
                 {
