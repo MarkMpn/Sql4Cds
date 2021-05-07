@@ -749,7 +749,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (returnValue.Type != type)
                     returnValue = SqlTypeConverter.Convert(returnValue, type);
 
-                result = Expression.Condition(comparison, returnValue, result);
+                result = Expression.Condition(Expression.IsTrue(comparison), returnValue, result);
             }
 
             return result;
