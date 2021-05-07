@@ -303,9 +303,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             switch (bin.BinaryExpressionType)
             {
                 case BinaryExpressionType.Add:
+                    // Special case for SqlDateTime
+                    if (lhs.Type == typeof(SqlDateTime) && rhs.Type == typeof(SqlDateTime))
+                        return Expr.Call(() => AddSqlDateTime(Expr.Arg<SqlDateTime>(), Expr.Arg<SqlDateTime>()), lhs, rhs);
+
                     return Expression.Add(lhs, rhs);
 
                 case BinaryExpressionType.Subtract:
+                    // Special case for SqlDateTime
+                    if (lhs.Type == typeof(SqlDateTime) && rhs.Type == typeof(SqlDateTime))
+                        return Expr.Call(() => SubtractSqlDateTime(Expr.Arg<SqlDateTime>(), Expr.Arg<SqlDateTime>()), lhs, rhs);
+
                     return Expression.Subtract(lhs, rhs);
 
                 case BinaryExpressionType.Multiply:
@@ -329,6 +337,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 default:
                     throw new NotSupportedQueryFragmentException("Unknown operator", bin);
             }
+        }
+
+        private static SqlDateTime AddSqlDateTime(SqlDateTime lhs, SqlDateTime rhs)
+        {
+            if (lhs.IsNull || rhs.IsNull)
+                return SqlDateTime.Null;
+
+            // Convert the second value to the TimeSpan difference between 1900-01-01 and the given value first
+            var ts = rhs.Value - new DateTime(1900, 1, 1);
+            return lhs + ts;
+        }
+
+        private static SqlDateTime SubtractSqlDateTime(SqlDateTime lhs, SqlDateTime rhs)
+        {
+            if (lhs.IsNull || rhs.IsNull)
+                return SqlDateTime.Null;
+
+            // Convert the second value to the TimeSpan difference between 1900-01-01 and the given value first
+            var ts = rhs.Value - new DateTime(1900, 1, 1);
+            return lhs - ts;
         }
 
         private static MethodInfo GetMethod(FunctionCall func, NodeSchema schema, NodeSchema nonAggregateSchema, IDictionary<string, Type> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, out Expression[] paramExpressions)
