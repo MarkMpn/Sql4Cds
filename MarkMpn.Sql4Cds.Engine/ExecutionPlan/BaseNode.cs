@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using Microsoft.Xrm.Sdk.Metadata;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -43,6 +44,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
         /// <param name="requiredColumns">The names of columns that are required by the parent node</param>
         public abstract void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns);
+
+        /// <summary>
+        /// Gets the name to show for an entity
+        /// </summary>
+        /// <param name="count">The number of records to indicate if the singular or plural name should be returned</param>
+        /// <param name="meta">The metadata for the entity</param>
+        /// <returns>The name to show for the entity</returns>
+        protected string GetDisplayName(int count, EntityMetadata meta)
+        {
+            if (count == 1)
+                return meta.DisplayName?.UserLocalizedLabel?.Label ?? meta.LogicalName;
+
+            return meta.DisplayCollectionName?.UserLocalizedLabel?.Label ??
+                meta.LogicalCollectionName ??
+                meta.LogicalName;
+        }
 
         public override string ToString()
         {

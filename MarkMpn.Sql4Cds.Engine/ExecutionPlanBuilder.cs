@@ -93,12 +93,13 @@ namespace MarkMpn.Sql4Cds.Engine
                     else
                         throw new NotSupportedQueryFragmentException("Unsupported statement", statement);
 
+                    SetParent(plan);
+                    plan = optimizer.Optimize(plan);
+
                     plan.Sql = originalSql;
                     plan.Index = index;
                     plan.Length = length;
 
-                    SetParent(plan);
-                    plan = optimizer.Optimize(plan);
                     queries.Add(plan);
                 }
             }
