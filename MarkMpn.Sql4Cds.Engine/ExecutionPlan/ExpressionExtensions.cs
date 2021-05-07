@@ -215,13 +215,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private static Expression ToExpression(BooleanComparisonExpression cmp, NodeSchema schema, NodeSchema nonAggregateSchema, IDictionary<string, Type> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam)
         {
             // Special case for field = func() where func is defined in FetchXmlConditionMethods
-            if (cmp.FirstExpression is ColumnReferenceExpression col &&
+            if (cmp.FirstExpression is ColumnReferenceExpression &&
                 cmp.ComparisonType == BooleanComparisonType.Equals &&
                 cmp.SecondExpression is FunctionCall func
                 )
             {
                 var parameters = func.Parameters.Select(p => p.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam)).ToList();
-                parameters.Insert(0, col.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam));
+                parameters.Insert(0, cmp.FirstExpression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam));
                 var paramTypes = parameters.Select(p => p.Type).ToArray();
 
                 var fetchXmlComparison = GetMethod(typeof(FetchXmlConditionMethods), func, paramTypes, false);
@@ -240,7 +240,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 lhs = SqlTypeConverter.Convert(lhs, type);
 
             if (rhs.Type != type)
+            {
+                // Special case to give more helpful & earlier error reporting for common problems
+                if (cmp.FirstExpression is ColumnReferenceExpression col &&
+                    cmp.SecondExpression is StringLiteral str &&
+                    (
+                        type == typeof(SqlInt32) && !Int32.TryParse(str.Value, out _)
+                        ||
+                        type == typeof(SqlGuid) && !Guid.TryParse(str.Value, out _)
+                    ) &&
+                    schema.ContainsColumn(col.GetColumnName() + "name", out var nameCol))
+                {
+                    throw new NotSupportedQueryFragmentException($"Cannot convert text value to {type.Name}", str)
+                    {
+                        Suggestion = $"Did you mean to filter on the {nameCol} column instead?\r\n" + new string(' ', 26 + nameCol.Length) + "^^^^"
+                    };
+                }
+
                 rhs = SqlTypeConverter.Convert(rhs, type);
+            }
 
             switch (cmp.ComparisonType)
             {
