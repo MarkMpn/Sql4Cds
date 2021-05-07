@@ -106,6 +106,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source = Source.FoldQuery(metadata, options, parameterTypes);
             Source.Parent = this;
 
+            // Remove any duplicated column names
+            for (var i = Columns.Count - 1; i >= 0; i--)
+            {
+                if (Columns.IndexOf(Columns[i]) < i)
+                    Columns.RemoveAt(i);
+            }
+
             // If one of the fields to include in the DISTINCT calculation is the primary key, there is no possibility of duplicate
             // rows so we can discard the distinct node
             var schema = Source.GetSchema(metadata, parameterTypes);
