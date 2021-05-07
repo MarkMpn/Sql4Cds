@@ -722,7 +722,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             var attrMeta = metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName == attrName && a.AttributeOf == null);
 
                             if (attrMeta == null && (attrName.EndsWith("name") || attrName.EndsWith("type")))
-                                attrMeta = metadata[Entity.name].Attributes.SingleOrDefault(a => a.LogicalName == attrName.Substring(0, attrName.Length - 4));
+                                attrMeta = metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName == attrName.Substring(0, attrName.Length - 4));
 
                             if (attrMeta == null)
                                 continue;
