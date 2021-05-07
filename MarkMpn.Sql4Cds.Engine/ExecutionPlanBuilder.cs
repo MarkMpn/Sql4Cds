@@ -333,21 +333,25 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (!attributes.TryGetValue(colName, out attr))
                     throw new NotSupportedQueryFragmentException("Unknown column", col);
 
-                if (attr.IsValidForCreate == false)
-                    throw new NotSupportedQueryFragmentException("Column is not valid for INSERT", col);
-
                 if (!attributeNames.Add(colName))
                     throw new NotSupportedQueryFragmentException("Duplicate column name", col);
 
-                if (metadata.LogicalName == "listmember" && attr.LogicalName != "listid" && attr.LogicalName != "entityid")
-                    throw new NotSupportedQueryFragmentException("Only the listid and entityid columns can be used when inserting values into the listmember table", col);
-
-                if (metadata.IsIntersect == true && metadata.LogicalName != "listmember")
+                if (metadata.LogicalName == "listmember")
+                {
+                    if (attr.LogicalName != "listid" && attr.LogicalName != "entityid")
+                        throw new NotSupportedQueryFragmentException("Only the listid and entityid columns can be used when inserting values into the listmember table", col);
+                }
+                else if (metadata.IsIntersect == true)
                 {
                     var relationship = metadata.ManyToManyRelationships.Single();
 
                     if (attr.LogicalName != relationship.Entity1IntersectAttribute && attr.LogicalName != relationship.Entity2IntersectAttribute)
                         throw new NotSupportedQueryFragmentException($"Only the {relationship.Entity1IntersectAttribute} and {relationship.Entity2IntersectAttribute} columns can be used when inserting values into the {metadata.LogicalName} table", col);
+                }
+                else
+                {
+                    if (attr.IsValidForCreate == false)
+                        throw new NotSupportedQueryFragmentException("Column is not valid for INSERT", col);
                 }
             }
 
