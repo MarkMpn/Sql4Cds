@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Data.SqlTypes;
 using System.Linq;
 using System.Reflection;
+using System.ServiceModel;
 using System.Text;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
@@ -588,7 +589,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             attrName = RemoveAttributeAlias(attrName, entityAlias, targetEntityAlias, items);
 
-            var attribute = meta.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase));
+            // Handle virtual ___name and ___type attributes
+            var attribute = meta.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null);
+            string attributeSuffix = null;
+
+            if (attribute == null && (attrName.EndsWith("name", StringComparison.OrdinalIgnoreCase) || attrName.EndsWith("type", StringComparison.OrdinalIgnoreCase)))
+            {
+                attribute = meta.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName.Substring(0, attrName.Length - 4), StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null);
+
+                if (attribute != null)
+                {
+                    attributeSuffix = attrName.Substring(attrName.Length - 4).ToLower();
+                    attrName = attribute.LogicalName;
+                }
+            }
+
             var value = literals == null ? null : literals.Length == 1 ? literals[0] is Literal l ? l.Value : literals[0] is VariableReference v ? v.Name : null : null;
             var values = literals == null ? null : literals.Select(lit => new conditionValue { Value = lit is Literal lit1 ? lit1.Value : lit is VariableReference var1 ? var1.Name : null }).ToArray();
             var entityAliases = new[] { entityAlias };
@@ -637,23 +652,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
-            if (!String.IsNullOrEmpty(attribute?.AttributeOf) && meta.Attributes.Any(a => a.LogicalName == attribute.AttributeOf))
+            if (attribute != null && attributeSuffix != null)
             {
-                var baseAttribute = meta.Attributes.Single(a => a.LogicalName == attribute.AttributeOf);
                 var virtualAttributeHandled = false;
 
                 // If filtering on the display name of an optionset attribute, convert it to filtering on the underlying value field
                 // instead where possible.
-                if (attribute.LogicalName == baseAttribute.LogicalName + "name" && baseAttribute is EnumAttributeMetadata enumAttr &&
+                if (attributeSuffix == "name" && attribute is EnumAttributeMetadata enumAttr &&
                     (op == @operator.eq || op == @operator.ne || op == @operator.neq || op == @operator.@in || op == @operator.notin))
                 {
                     for (var i = 0; i < literals.Length; i++)
                     {
-                        var matchingOptions = enumAttr.OptionSet.Options.Where(o => o.Label.UserLocalizedLabel.Label.Equals(values[i].Value, StringComparison.OrdinalIgnoreCase)).ToList();
+                        var matchingOptions = enumAttr.OptionSet.Options.Where(o => o.Label.UserLocalizedLabel.Label.Equals(values[i].Value, StringComparison.InvariantCultureIgnoreCase)).ToList();
 
                         if (matchingOptions.Count == 1)
                         {
-                            attrNames[0] = baseAttribute.LogicalName;
                             values[i] = new conditionValue { Value = matchingOptions[0].Value.ToString() };
                             virtualAttributeHandled = true;
                         }
@@ -663,13 +676,37 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         }
                     }
 
-                    attrName = attrNames[0];
+                    value = values[0].Value;
+                }
+
+                // Same again for boolean attributes
+                if (attributeSuffix == "name" && attribute is BooleanAttributeMetadata boolAttr &&
+                    (op == @operator.eq || op == @operator.ne || op == @operator.neq || op == @operator.@in || op == @operator.notin))
+                {
+                    for (var i = 0; i < literals.Length; i++)
+                    {
+                        if (boolAttr.OptionSet.TrueOption.Label.UserLocalizedLabel.Label.Equals(values[i].Value, StringComparison.InvariantCultureIgnoreCase))
+                        {
+                            values[i] = new conditionValue { Value = "1" };
+                            virtualAttributeHandled = true;
+                        }
+                        else if (boolAttr.OptionSet.FalseOption.Label.UserLocalizedLabel.Label.Equals(values[i].Value, StringComparison.InvariantCultureIgnoreCase))
+                        {
+                            values[i] = new conditionValue { Value = "0" };
+                            virtualAttributeHandled = true;
+                        }
+                        else
+                        {
+                            throw new NotSupportedQueryFragmentException("Unknown optionset value", literals[i]) { Suggestion = "Supported values are:\r\n* " + boolAttr.OptionSet.FalseOption.Label.UserLocalizedLabel.Label + "\r\n* " + boolAttr.OptionSet.TrueOption.Label.UserLocalizedLabel.Label };
+                        }
+                    }
+
                     value = values[0].Value;
                 }
 
                 // If filtering on the display name of a lookup value, add a join to the target type and filter
                 // on the primary name attribute instead.
-                if (attribute.LogicalName == baseAttribute.LogicalName + "name" && baseAttribute is LookupAttributeMetadata lookupAttr)
+                if (attributeSuffix == "name" && attribute is LookupAttributeMetadata lookupAttr)
                 {
                     var entity = additionalLinkEntities.Keys.OfType<FetchEntityType>().SingleOrDefault() ?? new FetchEntityType { Items = items };
                     var target = entityAlias == targetEntityAlias ? (object)entity : entity.FindLinkEntity(entityAlias);
@@ -679,10 +716,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var conditions = lookupAttr.Targets.Select(targetType =>
                     {
                         var targetMetadata = metadata[targetType];
-                        var join = baseItems.OfType<FetchLinkEntityType>().FirstOrDefault(link => link.name == targetMetadata.LogicalName && link.from == targetMetadata.PrimaryIdAttribute && link.to == baseAttribute.LogicalName && link.linktype == "outer");
+                        var join = baseItems.OfType<FetchLinkEntityType>().FirstOrDefault(link => link.name == targetMetadata.LogicalName && link.from == targetMetadata.PrimaryIdAttribute && link.to == attribute.LogicalName && link.linktype == "outer");
 
                         if (join == null && additionalLinkEntities.TryGetValue(target, out var tempLinkEntities))
-                            join = tempLinkEntities.FirstOrDefault(link => link.name == targetMetadata.LogicalName && link.from == targetMetadata.PrimaryIdAttribute && link.to == baseAttribute.LogicalName && link.linktype == "outer");
+                            join = tempLinkEntities.FirstOrDefault(link => link.name == targetMetadata.LogicalName && link.from == targetMetadata.PrimaryIdAttribute && link.to == attribute.LogicalName && link.linktype == "outer");
 
                         if (join == null)
                         {
@@ -690,8 +727,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             {
                                 name = targetMetadata.LogicalName,
                                 from = targetMetadata.PrimaryIdAttribute,
-                                to = baseAttribute.LogicalName,
-                                alias = lookupAttr.Targets.Length == 1 ? $"{meta.LogicalName}_{baseAttribute.LogicalName}" : $"{meta.LogicalName}_{baseAttribute.LogicalName}_{targetType}",
+                                to = attribute.LogicalName,
+                                alias = lookupAttr.Targets.Length == 1 ? $"{meta.LogicalName}_{attribute.LogicalName}" : $"{meta.LogicalName}_{attribute.LogicalName}_{targetType}",
                                 linktype = "outer",
                                 SemiJoin = true
                             };
@@ -733,12 +770,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return false;
             }
 
-            if (!Int32.TryParse(value, out _) && attribute?.AttributeType == AttributeTypeCode.EntityName)
+            if (value != null && !Int32.TryParse(value, out _) && attribute?.AttributeType == AttributeTypeCode.EntityName)
             {
-                // Convert the entity name to the object type code
-                var targetMetadata = metadata[value];
+                if (op != @operator.eq && op != @operator.ne && op != @operator.neq && op != @operator.@in && op != @operator.notin)
+                    return false;
 
-                value = targetMetadata.ObjectTypeCode?.ToString();
+                for (var i = 0; i < values.Length; i++)
+                {
+                    try
+                    {
+                        // Convert the entity name to the object type code
+                        var targetMetadata = metadata[values[i].Value];
+                        values[i].Value = targetMetadata.ObjectTypeCode?.ToString();
+                    }
+                    catch (FaultException ex)
+                    {
+                        throw new NotSupportedQueryFragmentException(ex.Message, literals[i]);
+                    }
+                }
+
+                value = values[0].Value;
             }
 
             if (entityAliases.Length == 1)
