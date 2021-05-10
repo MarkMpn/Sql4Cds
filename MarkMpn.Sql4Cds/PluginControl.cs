@@ -28,7 +28,7 @@ namespace MarkMpn.Sql4Cds
             dockPanel.Theme = new VS2015LightTheme();
             _metadata = new Dictionary<ConnectionDetail, AttributeMetadataCache>();
             _tableSize = new Dictionary<ConnectionDetail, TableSizeCache>();
-            _objectExplorer = new ObjectExplorer(_metadata, WorkAsync, con => CreateQuery(con, "", null));
+            _objectExplorer = new ObjectExplorer(_metadata, WorkAsync, con => CreateQuery(con, ""));
             _objectExplorer.Show(dockPanel, DockState.DockLeft);
             _objectExplorer.CloseButtonVisible = false;
             _properties = new PropertiesWindow();
@@ -118,12 +118,12 @@ namespace MarkMpn.Sql4Cds
             if (_objectExplorer.SelectedConnection == null)
                 return;
             
-            CreateQuery(_objectExplorer.SelectedConnection, "", null);
+            CreateQuery(_objectExplorer.SelectedConnection, "");
         }
 
-        private SqlQueryControl CreateQuery(ConnectionDetail con, string sql, string sourcePlugin)
+        private SqlQueryControl CreateQuery(ConnectionDetail con, string sql)
         { 
-            var query = new SqlQueryControl(con, _metadata[con], _tableSize[con], _ai, SendOutgoingMessage, sourcePlugin, msg => LogError(msg), _properties);
+            var query = new SqlQueryControl(con, _metadata[con], _tableSize[con], _ai, SendOutgoingMessage, msg => LogError(msg), _properties);
             query.InsertText(sql);
             query.CancellableChanged += SyncStopButton;
             query.BusyChanged += SyncExecuteButton;
@@ -192,7 +192,7 @@ namespace MarkMpn.Sql4Cds
             }
             else
             {
-                CreateQuery(con, "-- Imported from " + message.SourcePlugin + "\r\n\r\n" + sql, message.SourcePlugin == "FetchXML Builder" ? null : message.SourcePlugin);
+                CreateQuery(con, "-- Imported from " + message.SourcePlugin + "\r\n\r\n" + sql);
             }
         }
 
@@ -224,7 +224,7 @@ namespace MarkMpn.Sql4Cds
                 if (open.ShowDialog() != DialogResult.OK)
                     return;
 
-                var query = CreateQuery(_objectExplorer.SelectedConnection, File.ReadAllText(open.FileName), null);
+                var query = CreateQuery(_objectExplorer.SelectedConnection, File.ReadAllText(open.FileName));
                 query.Filename = open.FileName;
             }
         }

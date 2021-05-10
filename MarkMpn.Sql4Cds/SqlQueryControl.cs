@@ -66,9 +66,9 @@ namespace MarkMpn.Sql4Cds
         private readonly ConnectionDetail _con;
         private readonly TelemetryClient _ai;
         private readonly Scintilla _editor;
-        private readonly string _sourcePlugin;
         private readonly Action<string> _log;
         private readonly PropertiesWindow _properties;
+        private int _maxLineNumberCharLength;
         private string _displayName;
         private string _filename;
         private bool _modified;
@@ -97,7 +97,7 @@ namespace MarkMpn.Sql4Cds
             _sqlIcon = Icon.FromHandle(Properties.Resources.SQLFile_16x.GetHicon());
         }
 
-        public SqlQueryControl(ConnectionDetail con, AttributeMetadataCache metadata, ITableSizeCache tableSize, TelemetryClient ai, Action<MessageBusEventArgs> outgoingMessageHandler, string sourcePlugin, Action<string> log, PropertiesWindow properties)
+        public SqlQueryControl(ConnectionDetail con, AttributeMetadataCache metadata, ITableSizeCache tableSize, TelemetryClient ai, Action<MessageBusEventArgs> outgoingMessageHandler, Action<string> log, PropertiesWindow properties)
         {
             InitializeComponent();
             _displayName = $"Query {++_queryCounter}";
@@ -107,7 +107,6 @@ namespace MarkMpn.Sql4Cds
             OutgoingMessageHandler = outgoingMessageHandler;
             _editor = CreateSqlEditor();
             _autocomplete = CreateAutocomplete();
-            _sourcePlugin = sourcePlugin;
             _ai = ai;
             _con = con;
             _log = log;
@@ -238,7 +237,7 @@ namespace MarkMpn.Sql4Cds
             scintilla.Lexer = Lexer.Sql;
 
             // Show line numbers
-            scintilla.Margins[0].Width = 20;
+            CalcLineNumberWidth(scintilla);
 
             // Set the Styles
             scintilla.Styles[Style.LineNumber].ForeColor = Color.FromArgb(255, 128, 128, 128);  //Dark Gray
@@ -318,6 +317,8 @@ namespace MarkMpn.Sql4Cds
                     _modified = true;
                     SyncTitle();
                 }
+
+                CalcLineNumberWidth((Scintilla)s);
             };
 
             // Rectangular selections
@@ -376,6 +377,21 @@ namespace MarkMpn.Sql4Cds
             scintilla.MouseDwellTime = (int)TimeSpan.FromSeconds(1).TotalMilliseconds;
 
             return scintilla;
+        }
+
+        private void CalcLineNumberWidth(Scintilla scintilla)
+        {
+            // Did the number of characters in the line number display change?
+            // i.e. nnn VS nn, or nnnn VS nn, etc...
+            var maxLineNumberCharLength = scintilla.Lines.Count.ToString().Length;
+            if (maxLineNumberCharLength == _maxLineNumberCharLength)
+                return;
+
+            // Calculate the width required to display the last line number
+            // and include some padding for good measure.
+            const int padding = 2;
+            scintilla.Margins[0].Width = scintilla.TextWidth(Style.LineNumber, new string('9', maxLineNumberCharLength + 1)) + padding;
+            _maxLineNumberCharLength = maxLineNumberCharLength;
         }
 
         private AutocompleteMenu CreateAutocomplete()
