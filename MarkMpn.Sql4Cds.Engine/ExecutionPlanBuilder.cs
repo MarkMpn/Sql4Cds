@@ -1379,10 +1379,12 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (!(grouping is ExpressionGroupingSpecification exprGroup))
                         throw new NotSupportedQueryFragmentException("Unhandled GROUP BY expression", grouping);
 
+                    // Validate the GROUP BY expression
+                    exprGroup.Expression.GetType(schema, null, parameterTypes);
+
                     if (exprGroup.Expression is ColumnReferenceExpression col)
                     {
-                        if (!schema.ContainsColumn(col.GetColumnName(), out var groupByColName))
-                            throw new NotSupportedQueryFragmentException("Unknown column", col);
+                        schema.ContainsColumn(col.GetColumnName(), out var groupByColName);
 
                         if (col.GetColumnName() != groupByColName)
                         {
@@ -1539,8 +1541,11 @@ namespace MarkMpn.Sql4Cds.Engine
                         throw new NotSupportedQueryFragmentException("Unknown aggregate function", aggregate.Expression);
                 }
 
+                // Validate the aggregate expression
                 if (converted.AggregateType == AggregateType.CountStar)
                     converted.SqlExpression = null;
+                else
+                    converted.SqlExpression.GetType(schema, null, parameterTypes);
 
                 // Create a name for the column that holds the aggregate value in the result set.
                 string aggregateName;
