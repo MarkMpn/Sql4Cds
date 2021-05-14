@@ -3195,5 +3195,32 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     </entity>
                 </fetch>");
         }
+
+        [TestMethod]
+        public void GroupByDatetimeWithoutDatePart()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT createdon, COUNT(*) FROM account GROUP BY createdon";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var aggregate = AssertNode<HashMatchAggregateNode>(select.Source);
+            var fetch = AssertNode<FetchXmlScan>(aggregate.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='createdon' />
+                    </entity>
+                </fetch>");
+        }
     }
 }
