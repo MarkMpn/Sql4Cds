@@ -58,6 +58,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(metadata, parameterTypes, requiredColumns);
         }
 
+        public override IRootExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        {
+            var result = base.FoldQuery(metadata, options, parameterTypes);
+
+            if (result != this)
+                return result;
+
+            // Use bulk delete if requested & possible
+            if (options.UseBulkDelete &&
+                Source is FetchXmlScan fetch &&
+                LogicalName == fetch.Entity.name &&
+                PrimaryIdSource.Equals($"{fetch.Alias}.{metadata[LogicalName].PrimaryIdAttribute}") &&
+                String.IsNullOrEmpty(SecondaryIdSource))
+            {
+                return new BulkDeleteJobNode { FetchXmlString = fetch.FetchXmlString };
+            }
+
+            return this;
+        }
+
         public override string Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             _executionCount++;

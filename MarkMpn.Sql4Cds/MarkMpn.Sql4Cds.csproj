@@ -414,6 +414,9 @@
     <EmbeddedResource Include="Images\ExecuteAsNode.ico" />
     <EmbeddedResource Include="Images\RevertNode.ico" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Images\BulkDeleteJobNode.ico" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>

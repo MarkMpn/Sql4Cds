@@ -85,22 +85,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         protected IDisposable UseParallelConnections() => new ParallelConnectionSettings();
 
         /// <summary>
-        /// Gets the name to show for an entity
-        /// </summary>
-        /// <param name="count">The number of records to indicate if the singular or plural name should be returned</param>
-        /// <param name="meta">The metadata for the entity</param>
-        /// <returns>The name to show for the entity</returns>
-        protected string GetDisplayName(int count, EntityMetadata meta)
-        {
-            if (count == 1)
-                return meta.DisplayName?.UserLocalizedLabel?.Label ?? meta.LogicalName;
-
-            return meta.DisplayCollectionName?.UserLocalizedLabel?.Label ??
-                meta.LogicalCollectionName ??
-                meta.LogicalName;
-        }
-
-        /// <summary>
         /// Executes the DML query and returns an appropriate log message
         /// </summary>
         /// <param name="org">The <see cref="IOrganizationService"/> to use to get the data</param>
@@ -118,7 +102,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="options"><see cref="IQueryExecutionOptions"/> to indicate how the query can be executed</param>
         /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
         /// <returns>The node that should be used in place of this node</returns>
-        public IRootExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public virtual IRootExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             if (Source is IDataExecutionPlanNode dataNode)
                 Source = dataNode.FoldQuery(metadata, options, parameterTypes);
@@ -226,6 +210,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     // null literal
                     expr = Expression.Constant(null, destType);
+                    expr = Expr.Box(expr);
                 }
                 else
                 {

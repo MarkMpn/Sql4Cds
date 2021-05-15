@@ -265,18 +265,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         if (items != entity.Items)
                             return this;
 
-                        // Sorting on a lookup Guid column actually sorts by the associated name field, which isn't what we want
-                        var meta = metadata[entity.name];
-                        var attribute = meta.Attributes.SingleOrDefault(a => a.LogicalName == fetchSort.attribute);
-
-                        if (attribute != null)
+                        if (fetchSort.attribute != null)
                         {
-                            if (attribute is LookupAttributeMetadata)
+                            var meta = metadata[entity.name];
+                            var attribute = meta.Attributes.SingleOrDefault(a => a.LogicalName == fetchSort.attribute && a.AttributeOf == null);
+
+                            // Sorting on a lookup Guid column actually sorts by the associated name field, which isn't what we want
+                            if (attribute is LookupAttributeMetadata || attribute is EnumAttributeMetadata || attribute is BooleanAttributeMetadata)
                                 return this;
 
-                            // Sorts on virtual ___name attributes should actually be applied to the underlying field
-                            if (!String.IsNullOrEmpty(attribute.AttributeOf) && attribute.LogicalName == attribute.AttributeOf + "name")
-                                fetchSort.attribute = attribute.AttributeOf;
+                            // Sorts on the virtual ___name attribute should be applied to the underlying field
+                            if (attribute == null && fetchSort.attribute.EndsWith("name") == true)
+                            {
+                                attribute = meta.Attributes.SingleOrDefault(a => a.LogicalName == fetchSort.attribute.Substring(0, fetchSort.attribute.Length - 4) && a.AttributeOf == null);
+
+                                if (attribute != null)
+                                    fetchSort.attribute = attribute.LogicalName;
+                            }
+
+                            if (attribute == null)
+                                return this;
                         }
 
                         entity.AddItem(fetchSort);
@@ -288,17 +296,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         if (linkEntity == null)
                             return this;
 
-                        var meta = metadata[linkEntity.name];
-                        var attribute = meta.Attributes.SingleOrDefault(a => a.LogicalName == fetchSort.attribute);
-
-                        if (attribute != null)
+                        if (fetchSort.attribute != null)
                         {
-                            if (attribute is LookupAttributeMetadata)
+                            var meta = metadata[linkEntity.name];
+                            var attribute = meta.Attributes.SingleOrDefault(a => a.LogicalName == fetchSort.attribute && a.AttributeOf == null);
+
+                            // Sorting on a lookup Guid column actually sorts by the associated name field, which isn't what we want
+                            if (attribute is LookupAttributeMetadata || attribute is EnumAttributeMetadata || attribute is BooleanAttributeMetadata)
                                 return this;
 
-                            // Sorts on virtual ___name attributes should actually be applied to the underlying field
-                            if (!String.IsNullOrEmpty(attribute.AttributeOf) && attribute.LogicalName == attribute.AttributeOf + "name")
-                                fetchSort.attribute = attribute.AttributeOf;
+                            // Sorts on the virtual ___name attribute should be applied to the underlying field
+                            if (attribute == null && fetchSort.attribute.EndsWith("name") == true)
+                            {
+                                attribute = meta.Attributes.SingleOrDefault(a => a.LogicalName == fetchSort.attribute.Substring(0, fetchSort.attribute.Length - 4) && a.AttributeOf == null);
+
+                                if (attribute != null)
+                                    fetchSort.attribute = attribute.LogicalName;
+                            }
+
+                            if (attribute == null)
+                                return this;
                         }
 
                         // Adding sorts to link-entity forces legacy paging which has a maximum record limit of 50K.

@@ -215,13 +215,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private static Expression ToExpression(BooleanComparisonExpression cmp, NodeSchema schema, NodeSchema nonAggregateSchema, IDictionary<string, Type> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam)
         {
             // Special case for field = func() where func is defined in FetchXmlConditionMethods
-            if (cmp.FirstExpression is ColumnReferenceExpression col &&
+            if (cmp.FirstExpression is ColumnReferenceExpression &&
                 cmp.ComparisonType == BooleanComparisonType.Equals &&
                 cmp.SecondExpression is FunctionCall func
                 )
             {
                 var parameters = func.Parameters.Select(p => p.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam)).ToList();
-                parameters.Insert(0, col.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam));
+                parameters.Insert(0, cmp.FirstExpression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam));
                 var paramTypes = parameters.Select(p => p.Type).ToArray();
 
                 var fetchXmlComparison = GetMethod(typeof(FetchXmlConditionMethods), func, paramTypes, false);
@@ -240,7 +240,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 lhs = SqlTypeConverter.Convert(lhs, type);
 
             if (rhs.Type != type)
+            {
+                // Special case to give more helpful & earlier error reporting for common problems
+                if (cmp.FirstExpression is ColumnReferenceExpression col &&
+                    cmp.SecondExpression is StringLiteral str &&
+                    (
+                        type == typeof(SqlInt32) && !Int32.TryParse(str.Value, out _)
+                        ||
+                        type == typeof(SqlGuid) && !Guid.TryParse(str.Value, out _)
+                    ) &&
+                    schema.ContainsColumn(col.GetColumnName() + "name", out var nameCol))
+                {
+                    throw new NotSupportedQueryFragmentException($"Cannot convert text value to {type.Name}", str)
+                    {
+                        Suggestion = $"Did you mean to filter on the {nameCol} column instead?\r\n" + new string(' ', 26 + nameCol.Length) + "^^^^"
+                    };
+                }
+
                 rhs = SqlTypeConverter.Convert(rhs, type);
+            }
 
             switch (cmp.ComparisonType)
             {
@@ -303,9 +321,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             switch (bin.BinaryExpressionType)
             {
                 case BinaryExpressionType.Add:
+                    // Special case for SqlDateTime
+                    if (lhs.Type == typeof(SqlDateTime) && rhs.Type == typeof(SqlDateTime))
+                        return Expr.Call(() => AddSqlDateTime(Expr.Arg<SqlDateTime>(), Expr.Arg<SqlDateTime>()), lhs, rhs);
+
                     return Expression.Add(lhs, rhs);
 
                 case BinaryExpressionType.Subtract:
+                    // Special case for SqlDateTime
+                    if (lhs.Type == typeof(SqlDateTime) && rhs.Type == typeof(SqlDateTime))
+                        return Expr.Call(() => SubtractSqlDateTime(Expr.Arg<SqlDateTime>(), Expr.Arg<SqlDateTime>()), lhs, rhs);
+
                     return Expression.Subtract(lhs, rhs);
 
                 case BinaryExpressionType.Multiply:
@@ -329,6 +355,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 default:
                     throw new NotSupportedQueryFragmentException("Unknown operator", bin);
             }
+        }
+
+        private static SqlDateTime AddSqlDateTime(SqlDateTime lhs, SqlDateTime rhs)
+        {
+            if (lhs.IsNull || rhs.IsNull)
+                return SqlDateTime.Null;
+
+            // Convert the second value to the TimeSpan difference between 1900-01-01 and the given value first
+            var ts = rhs.Value - new DateTime(1900, 1, 1);
+            return lhs + ts;
+        }
+
+        private static SqlDateTime SubtractSqlDateTime(SqlDateTime lhs, SqlDateTime rhs)
+        {
+            if (lhs.IsNull || rhs.IsNull)
+                return SqlDateTime.Null;
+
+            // Convert the second value to the TimeSpan difference between 1900-01-01 and the given value first
+            var ts = rhs.Value - new DateTime(1900, 1, 1);
+            return lhs - ts;
         }
 
         private static MethodInfo GetMethod(FunctionCall func, NodeSchema schema, NodeSchema nonAggregateSchema, IDictionary<string, Type> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, out Expression[] paramExpressions)
@@ -749,7 +795,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (returnValue.Type != type)
                     returnValue = SqlTypeConverter.Convert(returnValue, type);
 
-                result = Expression.Condition(comparison, returnValue, result);
+                result = Expression.Condition(Expression.IsTrue(comparison), returnValue, result);
             }
 
             return result;

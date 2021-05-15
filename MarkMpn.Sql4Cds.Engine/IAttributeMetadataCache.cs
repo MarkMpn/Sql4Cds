@@ -61,6 +61,7 @@ namespace MarkMpn.Sql4Cds.Engine
         ///             <li>DisplayName</li>
         ///             <li>Description</li>
         ///             <li>IsValidForUpdate</li>
+        ///             <li>IsValidForCreate</li>
         ///         </ul>
         ///     </li>
         ///     <li>
@@ -70,6 +71,13 @@ namespace MarkMpn.Sql4Cds.Engine
         ///             <li>ReferencingEntity</li>
         ///             <li>ReferencedAttribute</li>
         ///             <li>ReferencingAttribute</li>
+        ///         </ul>
+        ///     </li>
+        ///     <li>
+        ///         ManyToManyRelationships
+        ///         <ul>
+        ///             <li>Entity1IntersectAttribute</li>
+        ///             <li>Entity2IntersectAttribute</li>
         ///         </ul>
         ///     </li>
         /// </ul>

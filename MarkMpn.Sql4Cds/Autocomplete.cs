@@ -346,7 +346,24 @@ namespace MarkMpn.Sql4Cds
                         {
                             var tableName = tables.Single().Value;
                             if (_metadata.TryGetMinimalData(tableName, out var metadata))
-                                return FilterList(metadata.Attributes.Where(a => a.IsValidForCreate != false && a.AttributeOf == null).SelectMany(a => AttributeAutocompleteItem.CreateList(a, _metadata, currentLength, true)).OrderBy(a => a), currentWord);
+                            {
+                                Func<AttributeMetadata, bool> attributeFilter;
+
+                                if (metadata.LogicalName == "listmember")
+                                {
+                                    attributeFilter = a => a.LogicalName == "listid" || a.LogicalName == "entityid";
+                                }
+                                else if (metadata.IsIntersect == true)
+                                {
+                                    var relationship = metadata.ManyToManyRelationships.Single();
+                                    attributeFilter = a => a.LogicalName == relationship.Entity1IntersectAttribute || a.LogicalName == relationship.Entity2IntersectAttribute;
+                                }
+                                else
+                                {
+                                    attributeFilter = a => a.IsValidForCreate != false && a.AttributeOf == null;
+                                }
+                                return FilterList(metadata.Attributes.Where(attributeFilter).SelectMany(a => AttributeAutocompleteItem.CreateList(a, _metadata, currentLength, true)).OrderBy(a => a), currentWord);
+                            }
                         }
                         else
                         {
@@ -730,7 +747,7 @@ namespace MarkMpn.Sql4Cds
                 if (!writeable && (attribute is EnumAttributeMetadata || attribute is BooleanAttributeMetadata || attribute is LookupAttributeMetadata))
                     yield return new AttributeAutocompleteItem(attribute, metadata, replaceLength, "name");
 
-                if (attribute is LookupAttributeMetadata lookup && lookup.Targets?.Length > 1 && lookup.AttributeType != AttributeTypeCode.PartyList)
+                if (attribute is LookupAttributeMetadata lookup && lookup.Targets?.Length > 1 && lookup.AttributeType != AttributeTypeCode.PartyList && (lookup.EntityLogicalName != "listmember" || lookup.LogicalName != "entityid"))
                     yield return new AttributeAutocompleteItem(attribute, metadata, replaceLength, "type");
             }
 

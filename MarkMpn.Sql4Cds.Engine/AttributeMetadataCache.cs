@@ -129,9 +129,11 @@ namespace MarkMpn.Sql4Cds.Engine
                                     nameof(EntityMetadata.LogicalName),
                                     nameof(EntityMetadata.DisplayName),
                                     nameof(EntityMetadata.Description),
+                                    nameof(EntityMetadata.IsIntersect),
                                     nameof(EntityMetadata.Attributes),
                                     nameof(EntityMetadata.ManyToOneRelationships),
                                     nameof(EntityMetadata.OneToManyRelationships),
+                                    nameof(EntityMetadata.ManyToManyRelationships),
                                 }
                             },
                             AttributeQuery = new AttributeQueryExpression
@@ -162,6 +164,8 @@ namespace MarkMpn.Sql4Cds.Engine
                                         nameof(OneToManyRelationshipMetadata.ReferencedAttribute),
                                         nameof(OneToManyRelationshipMetadata.ReferencingEntity),
                                         nameof(OneToManyRelationshipMetadata.ReferencingAttribute),
+                                        nameof(ManyToManyRelationshipMetadata.Entity1IntersectAttribute),
+                                        nameof(ManyToManyRelationshipMetadata.Entity2IntersectAttribute)
                                     }
                                 }
                             }
