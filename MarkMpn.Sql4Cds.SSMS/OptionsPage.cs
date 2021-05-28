@@ -35,6 +35,12 @@ namespace MarkMpn.Sql4Cds.SSMS
         [DefaultValue(10)]
         public int MaxDegreeOfParallelism { get; set; } = 10;
 
+        [Category("Behavior")]
+        [DisplayName("Bypass Custom Plugins")]
+        [Description("Skips executing custom plugins in response to INSERT/UPDATE/DELETE operations")]
+        [DefaultValue(false)]
+        public bool BypassCustomPlugins { get; set; }
+
         [Category("Version")]
         [DisplayName("Installed")]
         [Description("Installed version of SQL 4 CDS - SSMS Edition")]

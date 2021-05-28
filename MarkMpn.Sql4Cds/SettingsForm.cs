@@ -27,6 +27,7 @@ namespace MarkMpn.Sql4Cds
             blockDeleteWithoutWhereCheckbox.Checked = settings.BlockDeleteWithoutWhere;
             batchSizeUpDown.Value = settings.BatchSize;
             bulkDeleteCheckbox.Checked = settings.UseBulkDelete;
+            bypassCustomPluginsCheckBox.Checked = settings.BypassCustomPlugins;
             localTimesComboBox.SelectedIndex = settings.ShowLocalTimes ? 1 : 0;
             tsqlEndpointCheckBox.Checked = settings.UseTSQLEndpoint;
             retrieveTotalRecordCountCheckbox.Checked = settings.UseRetrieveTotalRecordCount;
@@ -52,6 +53,7 @@ namespace MarkMpn.Sql4Cds
                 _settings.BlockDeleteWithoutWhere = blockDeleteWithoutWhereCheckbox.Checked;
                 _settings.BatchSize = (int) batchSizeUpDown.Value;
                 _settings.UseBulkDelete = bulkDeleteCheckbox.Checked;
+                _settings.BypassCustomPlugins = bypassCustomPluginsCheckBox.Checked;
                 _settings.ShowLocalTimes = localTimesComboBox.SelectedIndex == 1;
                 _settings.UseTSQLEndpoint = tsqlEndpointCheckBox.Checked;
                 _settings.UseRetrieveTotalRecordCount = retrieveTotalRecordCountCheckbox.Checked;

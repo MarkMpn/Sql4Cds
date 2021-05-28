@@ -51,6 +51,9 @@
             this.batchSizeUpDown = new System.Windows.Forms.NumericUpDown();
             this.label9 = new System.Windows.Forms.Label();
             this.groupBox1 = new System.Windows.Forms.GroupBox();
+            this.label10 = new System.Windows.Forms.Label();
+            this.retriveLimitUpDown = new System.Windows.Forms.NumericUpDown();
+            this.label14 = new System.Windows.Forms.Label();
             this.label12 = new System.Windows.Forms.Label();
             this.localTimesComboBox = new System.Windows.Forms.ComboBox();
             this.label11 = new System.Windows.Forms.Label();
@@ -64,9 +67,7 @@
             this.quotedIdentifiersCheckbox = new System.Windows.Forms.CheckBox();
             this.groupBox4 = new System.Windows.Forms.GroupBox();
             this.showTooltipsCheckbox = new System.Windows.Forms.CheckBox();
-            this.label10 = new System.Windows.Forms.Label();
-            this.retriveLimitUpDown = new System.Windows.Forms.NumericUpDown();
-            this.label14 = new System.Windows.Forms.Label();
+            this.bypassCustomPluginsCheckBox = new System.Windows.Forms.CheckBox();
             this.topPanel.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox)).BeginInit();
             this.panel2.SuspendLayout();
@@ -75,11 +76,11 @@
             ((System.ComponentModel.ISupportInitialize)(this.deleteWarnThresholdUpDown)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.batchSizeUpDown)).BeginInit();
             this.groupBox1.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.retriveLimitUpDown)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.maxDopUpDown)).BeginInit();
             this.groupBox2.SuspendLayout();
             this.groupBox3.SuspendLayout();
             this.groupBox4.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.retriveLimitUpDown)).BeginInit();
             this.SuspendLayout();
             // 
             // topPanel
@@ -123,7 +124,7 @@
             this.panel2.Controls.Add(this.cancelButton);
             this.panel2.Controls.Add(this.okButton);
             this.panel2.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.panel2.Location = new System.Drawing.Point(0, 547);
+            this.panel2.Location = new System.Drawing.Point(0, 578);
             this.panel2.Margin = new System.Windows.Forms.Padding(2);
             this.panel2.Name = "panel2";
             this.panel2.Size = new System.Drawing.Size(400, 45);
@@ -311,6 +312,7 @@
             // 
             // groupBox1
             // 
+            this.groupBox1.Controls.Add(this.bypassCustomPluginsCheckBox);
             this.groupBox1.Controls.Add(this.label10);
             this.groupBox1.Controls.Add(this.retriveLimitUpDown);
             this.groupBox1.Controls.Add(this.label14);
@@ -340,10 +342,40 @@
             this.groupBox1.Margin = new System.Windows.Forms.Padding(2);
             this.groupBox1.Name = "groupBox1";
             this.groupBox1.Padding = new System.Windows.Forms.Padding(2);
-            this.groupBox1.Size = new System.Drawing.Size(382, 320);
+            this.groupBox1.Size = new System.Drawing.Size(382, 346);
             this.groupBox1.TabIndex = 1;
             this.groupBox1.TabStop = false;
             this.groupBox1.Text = "Query Execution";
+            // 
+            // label10
+            // 
+            this.label10.AutoSize = true;
+            this.label10.Location = new System.Drawing.Point(10, 46);
+            this.label10.Name = "label10";
+            this.label10.Size = new System.Drawing.Size(131, 13);
+            this.label10.TabIndex = 3;
+            this.label10.Text = "Stop query execution after";
+            // 
+            // retriveLimitUpDown
+            // 
+            this.retriveLimitUpDown.Location = new System.Drawing.Point(147, 44);
+            this.retriveLimitUpDown.Maximum = new decimal(new int[] {
+            100000,
+            0,
+            0,
+            0});
+            this.retriveLimitUpDown.Name = "retriveLimitUpDown";
+            this.retriveLimitUpDown.Size = new System.Drawing.Size(102, 20);
+            this.retriveLimitUpDown.TabIndex = 4;
+            // 
+            // label14
+            // 
+            this.label14.AutoSize = true;
+            this.label14.Location = new System.Drawing.Point(255, 46);
+            this.label14.Name = "label14";
+            this.label14.Size = new System.Drawing.Size(123, 13);
+            this.label14.TabIndex = 5;
+            this.label14.Text = "retrievals (0 for unlimited)";
             // 
             // label12
             // 
@@ -361,7 +393,7 @@
             this.localTimesComboBox.Items.AddRange(new object[] {
             "UTC times",
             "Local times"});
-            this.localTimesComboBox.Location = new System.Drawing.Point(142, 288);
+            this.localTimesComboBox.Location = new System.Drawing.Point(141, 311);
             this.localTimesComboBox.Margin = new System.Windows.Forms.Padding(2);
             this.localTimesComboBox.Name = "localTimesComboBox";
             this.localTimesComboBox.Size = new System.Drawing.Size(203, 21);
@@ -370,7 +402,7 @@
             // label11
             // 
             this.label11.AutoSize = true;
-            this.label11.Location = new System.Drawing.Point(10, 291);
+            this.label11.Location = new System.Drawing.Point(9, 314);
             this.label11.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
             this.label11.Name = "label11";
             this.label11.Size = new System.Drawing.Size(128, 13);
@@ -406,7 +438,7 @@
             // retrieveTotalRecordCountCheckbox
             // 
             this.retrieveTotalRecordCountCheckbox.AutoSize = true;
-            this.retrieveTotalRecordCountCheckbox.Location = new System.Drawing.Point(13, 266);
+            this.retrieveTotalRecordCountCheckbox.Location = new System.Drawing.Point(12, 289);
             this.retrieveTotalRecordCountCheckbox.Name = "retrieveTotalRecordCountCheckbox";
             this.retrieveTotalRecordCountCheckbox.Size = new System.Drawing.Size(286, 17);
             this.retrieveTotalRecordCountCheckbox.TabIndex = 22;
@@ -416,7 +448,7 @@
             // tsqlEndpointCheckBox
             // 
             this.tsqlEndpointCheckBox.AutoSize = true;
-            this.tsqlEndpointCheckBox.Location = new System.Drawing.Point(13, 243);
+            this.tsqlEndpointCheckBox.Location = new System.Drawing.Point(12, 266);
             this.tsqlEndpointCheckBox.Name = "tsqlEndpointCheckBox";
             this.tsqlEndpointCheckBox.Size = new System.Drawing.Size(235, 17);
             this.tsqlEndpointCheckBox.TabIndex = 21;
@@ -426,7 +458,7 @@
             // groupBox2
             // 
             this.groupBox2.Controls.Add(this.autoSizeColumnsCheckBox);
-            this.groupBox2.Location = new System.Drawing.Point(11, 449);
+            this.groupBox2.Location = new System.Drawing.Point(11, 475);
             this.groupBox2.Margin = new System.Windows.Forms.Padding(2);
             this.groupBox2.Name = "groupBox2";
             this.groupBox2.Padding = new System.Windows.Forms.Padding(2);
@@ -468,7 +500,7 @@
             // groupBox4
             // 
             this.groupBox4.Controls.Add(this.showTooltipsCheckbox);
-            this.groupBox4.Location = new System.Drawing.Point(11, 497);
+            this.groupBox4.Location = new System.Drawing.Point(11, 523);
             this.groupBox4.Name = "groupBox4";
             this.groupBox4.Size = new System.Drawing.Size(382, 43);
             this.groupBox4.TabIndex = 3;
@@ -485,35 +517,15 @@
             this.showTooltipsCheckbox.Text = "Show tooltips";
             this.showTooltipsCheckbox.UseVisualStyleBackColor = true;
             // 
-            // label10
+            // bypassCustomPluginsCheckBox
             // 
-            this.label10.AutoSize = true;
-            this.label10.Location = new System.Drawing.Point(10, 46);
-            this.label10.Name = "label10";
-            this.label10.Size = new System.Drawing.Size(131, 13);
-            this.label10.TabIndex = 3;
-            this.label10.Text = "Stop query execution after";
-            // 
-            // retriveLimitUpDown
-            // 
-            this.retriveLimitUpDown.Location = new System.Drawing.Point(147, 44);
-            this.retriveLimitUpDown.Maximum = new decimal(new int[] {
-            100000,
-            0,
-            0,
-            0});
-            this.retriveLimitUpDown.Name = "retriveLimitUpDown";
-            this.retriveLimitUpDown.Size = new System.Drawing.Size(102, 20);
-            this.retriveLimitUpDown.TabIndex = 4;
-            // 
-            // label14
-            // 
-            this.label14.AutoSize = true;
-            this.label14.Location = new System.Drawing.Point(255, 46);
-            this.label14.Name = "label14";
-            this.label14.Size = new System.Drawing.Size(123, 13);
-            this.label14.TabIndex = 5;
-            this.label14.Text = "retrievals (0 for unlimited)";
+            this.bypassCustomPluginsCheckBox.AutoSize = true;
+            this.bypassCustomPluginsCheckBox.Location = new System.Drawing.Point(13, 243);
+            this.bypassCustomPluginsCheckBox.Name = "bypassCustomPluginsCheckBox";
+            this.bypassCustomPluginsCheckBox.Size = new System.Drawing.Size(133, 17);
+            this.bypassCustomPluginsCheckBox.TabIndex = 25;
+            this.bypassCustomPluginsCheckBox.Text = "Bypass custom plugins";
+            this.bypassCustomPluginsCheckBox.UseVisualStyleBackColor = true;
             // 
             // SettingsForm
             // 
@@ -521,7 +533,7 @@
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.CancelButton = this.cancelButton;
-            this.ClientSize = new System.Drawing.Size(400, 592);
+            this.ClientSize = new System.Drawing.Size(400, 623);
             this.Controls.Add(this.groupBox4);
             this.Controls.Add(this.groupBox3);
             this.Controls.Add(this.groupBox2);
@@ -547,6 +559,7 @@
             ((System.ComponentModel.ISupportInitialize)(this.batchSizeUpDown)).EndInit();
             this.groupBox1.ResumeLayout(false);
             this.groupBox1.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.retriveLimitUpDown)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.maxDopUpDown)).EndInit();
             this.groupBox2.ResumeLayout(false);
             this.groupBox2.PerformLayout();
@@ -554,7 +567,6 @@
             this.groupBox3.PerformLayout();
             this.groupBox4.ResumeLayout(false);
             this.groupBox4.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.retriveLimitUpDown)).EndInit();
             this.ResumeLayout(false);
 
         }
@@ -599,5 +611,6 @@
         private System.Windows.Forms.Label label10;
         private System.Windows.Forms.NumericUpDown retriveLimitUpDown;
         private System.Windows.Forms.Label label14;
+        private System.Windows.Forms.CheckBox bypassCustomPluginsCheckBox;
     }
 }

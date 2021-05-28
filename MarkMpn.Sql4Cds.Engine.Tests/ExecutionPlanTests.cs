@@ -51,6 +51,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         List<JoinOperator> IQueryExecutionOptions.JoinOperatorsAvailable => _supportedJoins;
 
+        bool IQueryExecutionOptions.BypassCustomPlugins => false;
+
         bool IQueryExecutionOptions.ConfirmDelete(int count, EntityMetadata meta)
         {
             return true;

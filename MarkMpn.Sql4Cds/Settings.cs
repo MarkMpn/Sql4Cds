@@ -47,5 +47,7 @@ namespace MarkMpn.Sql4Cds
         public bool AutoSizeColumns { get; set; } = true;
 
         public int MaxRetrievesPerQuery { get; set; } = 100;
+
+        public bool BypassCustomPlugins { get; set; }
     }
 }

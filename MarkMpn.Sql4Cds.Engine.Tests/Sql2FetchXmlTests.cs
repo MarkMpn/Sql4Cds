@@ -46,6 +46,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         List<JoinOperator> IQueryExecutionOptions.JoinOperatorsAvailable => new List<JoinOperator> { JoinOperator.Inner, JoinOperator.LeftOuter };
 
+        bool IQueryExecutionOptions.BypassCustomPlugins => false;
+
         void IQueryExecutionOptions.RetrievingNextPage()
         {
         }

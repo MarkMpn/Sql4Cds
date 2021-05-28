@@ -362,6 +362,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                             var request = requestGenerator(entity);
 
+                            if (options.BypassCustomPlugins)
+                                request.Parameters["BypassCustomPluginExecution"] = true;
+
                             if (options.BatchSize == 1)
                             {
                                 var newCount = Interlocked.Increment(ref inProgressCount);

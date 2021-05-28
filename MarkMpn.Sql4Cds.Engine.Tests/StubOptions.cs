@@ -34,6 +34,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         List<JoinOperator> IQueryExecutionOptions.JoinOperatorsAvailable => new List<JoinOperator> { JoinOperator.Inner, JoinOperator.LeftOuter };
 
+        bool IQueryExecutionOptions.BypassCustomPlugins => false;
+
         bool IQueryExecutionOptions.ConfirmDelete(int count, EntityMetadata meta)
         {
             return true;

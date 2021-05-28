@@ -100,6 +100,11 @@ namespace MarkMpn.Sql4Cds.Engine
         List<JoinOperator> JoinOperatorsAvailable { get; }
 
         /// <summary>
+        /// Indicates if plugins should be bypassed when executing DML operations
+        /// </summary>
+        bool BypassCustomPlugins { get; }
+
+        /// <summary>
         /// A notification that the query is about to retrieve another page of data
         /// </summary>
         void RetrievingNextPage();
