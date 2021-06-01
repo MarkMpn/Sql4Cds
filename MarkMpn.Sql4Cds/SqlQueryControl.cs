@@ -9,6 +9,7 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Runtime.Serialization;
+using System.ServiceModel;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -736,10 +737,7 @@ namespace MarkMpn.Sql4Cds
                 _ai.TrackException(error, new Dictionary<string, string> { ["Sql"] = _params.Sql, ["Source"] = "XrmToolBox" });
                 _log(e.Error.ToString());
 
-                if (error is AggregateException aggregateException)
-                    AddMessage(index, length, String.Join("\r\n", aggregateException.InnerExceptions.Select(ex => ex.Message)) + messageSuffix, true);
-                else
-                    AddMessage(index, length, error.Message + messageSuffix, true);
+                AddMessage(index, length, GetErrorMessage(error) + messageSuffix, true);
 
                 tabControl.SelectedTab = messagesTabPage;
             }
@@ -751,6 +749,42 @@ namespace MarkMpn.Sql4Cds
             BusyChanged?.Invoke(this, EventArgs.Empty);
 
             _editor.Focus();
+        }
+
+        private string GetErrorMessage(Exception error)
+        {
+            string msg;
+
+            if (error is AggregateException aggregateException)
+                msg = String.Join("\r\n", aggregateException.InnerExceptions.Select(ex => GetErrorMessage(ex)));
+            else
+                msg = error.Message;
+
+            while (error.InnerException != null)
+            {
+                if (error.InnerException.Message != error.Message)
+                    msg += "\r\n" + error.InnerException.Message;
+
+                error = error.InnerException;
+            }
+
+            if (error is FaultException<OrganizationServiceFault> faultEx)
+            {
+                var fault = faultEx.Detail;
+
+                if (fault.Message != error.Message)
+                    msg += "\r\n" + fault.Message;
+
+                while (fault.InnerFault != null)
+                {
+                    if (fault.InnerFault.Message != fault.Message)
+                        msg += "\r\n" + fault.InnerFault.Message;
+
+                    fault = fault.InnerFault;
+                }
+            }
+
+            return msg;
         }
 
         private void AddMessage(int index, int length, string message, bool error)
