@@ -220,7 +220,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     var prop = _entityProps[parts[1]];
 
-                    if (!Query.Properties.PropertyNames.Contains(prop.PropertyName))
+                    if (!Query.Properties.AllProperties && !Query.Properties.PropertyNames.Contains(prop.PropertyName))
                         Query.Properties.PropertyNames.Add(prop.PropertyName);
 
                     _entityCols[col] = prop;
@@ -235,7 +235,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     var prop = _attributeProps[parts[1]];
 
-                    if (!Query.AttributeQuery.Properties.PropertyNames.Contains(prop.PropertyName))
+                    if (!Query.AttributeQuery.Properties.AllProperties && !Query.AttributeQuery.Properties.PropertyNames.Contains(prop.PropertyName))
                         Query.AttributeQuery.Properties.PropertyNames.Add(prop.PropertyName);
 
                     _attributeCols[col] = prop;
@@ -250,7 +250,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     var prop = _oneToManyRelationshipProps[parts[1]];
 
-                    if (!Query.RelationshipQuery.Properties.PropertyNames.Contains(prop.PropertyName))
+                    if (!Query.RelationshipQuery.Properties.AllProperties && !Query.RelationshipQuery.Properties.PropertyNames.Contains(prop.PropertyName))
                         Query.RelationshipQuery.Properties.PropertyNames.Add(prop.PropertyName);
 
                     _oneToManyRelationshipCols[col] = prop;
@@ -265,7 +265,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     var prop = _oneToManyRelationshipProps[parts[1]];
 
-                    if (!Query.RelationshipQuery.Properties.PropertyNames.Contains(prop.PropertyName))
+                    if (!Query.RelationshipQuery.Properties.AllProperties && !Query.RelationshipQuery.Properties.PropertyNames.Contains(prop.PropertyName))
                         Query.RelationshipQuery.Properties.PropertyNames.Add(prop.PropertyName);
 
                     _manyToOneRelationshipCols[col] = prop;
@@ -280,7 +280,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     var prop = _manyToManyRelationshipProps[parts[1]];
 
-                    if (!Query.RelationshipQuery.Properties.PropertyNames.Contains(prop.PropertyName))
+                    if (!Query.RelationshipQuery.Properties.AllProperties && !Query.RelationshipQuery.Properties.PropertyNames.Contains(prop.PropertyName))
                         Query.RelationshipQuery.Properties.PropertyNames.Add(prop.PropertyName);
 
                     _manyToManyRelationshipCols[col] = prop;
@@ -308,7 +308,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var entityProps = (IEnumerable<MetadataProperty>) _entityProps.Values;
 
                 if (Query.Properties != null)
-                    entityProps = entityProps.Where(p => Query.Properties.PropertyNames.Contains(p.PropertyName, StringComparer.OrdinalIgnoreCase));
+                    entityProps = entityProps.Where(p => Query.Properties.AllProperties || Query.Properties.PropertyNames.Contains(p.PropertyName, StringComparer.OrdinalIgnoreCase));
 
                 foreach (var prop in entityProps)
                 {
@@ -331,7 +331,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var attributeProps = (IEnumerable<AttributeProperty>) _attributeProps.Values;
 
                 if (Query.AttributeQuery?.Properties != null)
-                    attributeProps = attributeProps.Where(p => Query.AttributeQuery.Properties.PropertyNames.Contains(p.PropertyName, StringComparer.OrdinalIgnoreCase));
+                    attributeProps = attributeProps.Where(p => Query.AttributeQuery.Properties.AllProperties || Query.AttributeQuery.Properties.PropertyNames.Contains(p.PropertyName, StringComparer.OrdinalIgnoreCase));
 
                 foreach (var prop in attributeProps)
                 {
@@ -355,7 +355,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var relationshipProps = (IEnumerable<MetadataProperty>)_oneToManyRelationshipProps.Values;
 
                 if (Query.RelationshipQuery?.Properties != null)
-                    relationshipProps = relationshipProps.Where(p => Query.RelationshipQuery.Properties.PropertyNames.Contains(p.PropertyName, StringComparer.OrdinalIgnoreCase));
+                    relationshipProps = relationshipProps.Where(p => Query.RelationshipQuery.Properties.AllProperties || Query.RelationshipQuery.Properties.PropertyNames.Contains(p.PropertyName, StringComparer.OrdinalIgnoreCase));
 
                 foreach (var prop in relationshipProps)
                 {
@@ -379,7 +379,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var relationshipProps = (IEnumerable<MetadataProperty>)_oneToManyRelationshipProps.Values;
 
                 if (Query.RelationshipQuery?.Properties != null)
-                    relationshipProps = relationshipProps.Where(p => Query.RelationshipQuery.Properties.PropertyNames.Contains(p.PropertyName, StringComparer.OrdinalIgnoreCase));
+                    relationshipProps = relationshipProps.Where(p => Query.RelationshipQuery.Properties.AllProperties || Query.RelationshipQuery.Properties.PropertyNames.Contains(p.PropertyName, StringComparer.OrdinalIgnoreCase));
 
                 foreach (var prop in relationshipProps)
                 {
@@ -403,7 +403,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var relationshipProps = (IEnumerable<MetadataProperty>)_manyToManyRelationshipProps.Values;
 
                 if (Query.RelationshipQuery?.Properties != null)
-                    relationshipProps = relationshipProps.Where(p => Query.RelationshipQuery.Properties.PropertyNames.Contains(p.PropertyName, StringComparer.OrdinalIgnoreCase));
+                    relationshipProps = relationshipProps.Where(p => Query.RelationshipQuery.Properties.AllProperties || Query.RelationshipQuery.Properties.PropertyNames.Contains(p.PropertyName, StringComparer.OrdinalIgnoreCase));
 
                 foreach (var prop in relationshipProps)
                 {
@@ -519,7 +519,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     Query.Properties = new MetadataPropertiesExpression();
 
                 // Ensure the entity metadata contains the attributes
-                if (!Query.Properties.PropertyNames.Contains(nameof(EntityMetadata.Attributes)))
+                if (!Query.Properties.AllProperties && !Query.Properties.PropertyNames.Contains(nameof(EntityMetadata.Attributes)))
                     Query.Properties.PropertyNames.Add(nameof(EntityMetadata.Attributes));
             }
 
@@ -529,7 +529,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     Query.Properties = new MetadataPropertiesExpression();
 
                 // Ensure the entity metadata contains the relationships
-                if (!Query.Properties.PropertyNames.Contains(nameof(EntityMetadata.OneToManyRelationships)))
+                if (!Query.Properties.AllProperties && !Query.Properties.PropertyNames.Contains(nameof(EntityMetadata.OneToManyRelationships)))
                     Query.Properties.PropertyNames.Add(nameof(EntityMetadata.OneToManyRelationships));
             }
 
@@ -539,7 +539,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     Query.Properties = new MetadataPropertiesExpression();
 
                 // Ensure the entity metadata contains the relationships
-                if (!Query.Properties.PropertyNames.Contains(nameof(EntityMetadata.ManyToOneRelationships)))
+                if (!Query.Properties.AllProperties && !Query.Properties.PropertyNames.Contains(nameof(EntityMetadata.ManyToOneRelationships)))
                     Query.Properties.PropertyNames.Add(nameof(EntityMetadata.ManyToOneRelationships));
             }
 
@@ -549,7 +549,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     Query.Properties = new MetadataPropertiesExpression();
 
                 // Ensure the entity metadata contains the relationships
-                if (!Query.Properties.PropertyNames.Contains(nameof(EntityMetadata.ManyToManyRelationships)))
+                if (!Query.Properties.AllProperties && !Query.Properties.PropertyNames.Contains(nameof(EntityMetadata.ManyToManyRelationships)))
                     Query.Properties.PropertyNames.Add(nameof(EntityMetadata.ManyToManyRelationships));
             }
 

@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Metadata.Query;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -100,6 +101,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.Parent = this;
 
             FoldFetchXmlColumns(Source, ColumnSet, metadata, parameterTypes);
+            FoldMetadataColumns(Source, ColumnSet);
 
             ExpandWildcardColumns(metadata, parameterTypes);
 
@@ -203,6 +205,48 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             processedSourceColumns.Add(col.SourceColumn);
                         }
                     }
+                }
+            }
+        }
+
+        private void FoldMetadataColumns(IDataExecutionPlanNode source, List<SelectColumn> columnSet)
+        {
+            if (source is MetadataQueryNode metadata)
+            {
+                // Check if there are any wildcard columns we can apply to the source metadata query
+                var hasStar = columnSet.Any(col => col.AllColumns && col.SourceColumn == null);
+                var aliasStars = new HashSet<string>(columnSet.Where(col => col.AllColumns && col.SourceColumn != null).Select(col => col.SourceColumn.Replace(".*", "")).Distinct(StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase);
+
+                if (metadata.MetadataSource.HasFlag(MetadataSource.Entity) && (hasStar || aliasStars.Contains(metadata.EntityAlias)))
+                {
+                    if (metadata.Query.Properties == null)
+                        metadata.Query.Properties = new MetadataPropertiesExpression();
+
+                    metadata.Query.Properties.AllProperties = true;
+                }
+
+                if (metadata.MetadataSource.HasFlag(MetadataSource.Attribute) && (hasStar || aliasStars.Contains(metadata.AttributeAlias)))
+                {
+                    if (metadata.Query.AttributeQuery == null)
+                        metadata.Query.AttributeQuery = new AttributeQueryExpression();
+
+                    if (metadata.Query.AttributeQuery.Properties == null)
+                        metadata.Query.AttributeQuery.Properties = new MetadataPropertiesExpression();
+
+                    metadata.Query.AttributeQuery.Properties.AllProperties = true;
+                }
+
+                if ((metadata.MetadataSource.HasFlag(MetadataSource.OneToManyRelationship) && (hasStar || aliasStars.Contains(metadata.OneToManyRelationshipAlias))) ||
+                    (metadata.MetadataSource.HasFlag(MetadataSource.ManyToOneRelationship) && (hasStar || aliasStars.Contains(metadata.ManyToOneRelationshipAlias))) ||
+                    (metadata.MetadataSource.HasFlag(MetadataSource.ManyToManyRelationship) && (hasStar || aliasStars.Contains(metadata.ManyToManyRelationshipAlias))))
+                {
+                    if (metadata.Query.RelationshipQuery == null)
+                        metadata.Query.RelationshipQuery = new RelationshipQueryExpression();
+
+                    if (metadata.Query.RelationshipQuery.Properties == null)
+                        metadata.Query.RelationshipQuery.Properties = new MetadataPropertiesExpression();
+
+                    metadata.Query.RelationshipQuery.Properties.AllProperties = true;
                 }
             }
         }
