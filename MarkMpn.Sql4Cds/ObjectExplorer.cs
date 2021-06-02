@@ -13,9 +13,9 @@ using Microsoft.Xrm.Sdk.Metadata.Query;
 
 namespace MarkMpn.Sql4Cds
 {
-    public partial class ObjectExplorer : WeifenLuo.WinFormsUI.Docking.DockContent
+    partial class ObjectExplorer : WeifenLuo.WinFormsUI.Docking.DockContent
     {
-        private readonly IDictionary<ConnectionDetail, AttributeMetadataCache> _metadata;
+        private readonly IDictionary<ConnectionDetail, SharedMetadataCache> _metadata;
         private readonly Action<ConnectionDetail> _newQuery;
 
         class LoaderParam
@@ -24,7 +24,7 @@ namespace MarkMpn.Sql4Cds
             public TreeNode Parent;
         }
 
-        public ObjectExplorer(IDictionary<ConnectionDetail, AttributeMetadataCache> metadata, Action<WorkAsyncInfo> workAsync, Action<ConnectionDetail> newQuery)
+        public ObjectExplorer(IDictionary<ConnectionDetail, SharedMetadataCache> metadata, Action<WorkAsyncInfo> workAsync, Action<ConnectionDetail> newQuery)
         {
             InitializeComponent();
 
@@ -70,7 +70,8 @@ namespace MarkMpn.Sql4Cds
 
         private TreeNode[] LoadEntities(TreeNode parent)
         {
-            var metadata = EntityCache.GetEntities(GetService(parent).ServiceClient);
+            var connection = GetService(parent);
+            var metadata = EntityCache.GetEntities(connection.MetadataCacheLoader, connection.ServiceClient);
 
             return metadata
                 .OrderBy(e => e.LogicalName)
@@ -116,7 +117,7 @@ namespace MarkMpn.Sql4Cds
         {
             var svc = con.ServiceClient;
 
-            EntityCache.TryGetEntities(svc, out _);
+            EntityCache.TryGetEntities(con.MetadataCacheLoader, svc, out _);
 
             var conNode = treeView.Nodes.Add(con.ConnectionName);
             conNode.Tag = con;

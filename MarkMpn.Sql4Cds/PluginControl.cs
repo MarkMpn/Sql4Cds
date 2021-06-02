@@ -16,7 +16,7 @@ namespace MarkMpn.Sql4Cds
 {
     public partial class PluginControl : MultipleConnectionsPluginControlBase, IMessageBusHost, IGitHubPlugin, IHelpPlugin, ISettingsPlugin, IPayPalPlugin
     {
-        private readonly IDictionary<ConnectionDetail, AttributeMetadataCache> _metadata;
+        private readonly IDictionary<ConnectionDetail, SharedMetadataCache> _metadata;
         private readonly IDictionary<ConnectionDetail, TableSizeCache> _tableSize;
         private readonly TelemetryClient _ai;
         private readonly ObjectExplorer _objectExplorer;
@@ -26,7 +26,7 @@ namespace MarkMpn.Sql4Cds
         {
             InitializeComponent();
             dockPanel.Theme = new VS2015LightTheme();
-            _metadata = new Dictionary<ConnectionDetail, AttributeMetadataCache>();
+            _metadata = new Dictionary<ConnectionDetail, SharedMetadataCache>();
             _tableSize = new Dictionary<ConnectionDetail, TableSizeCache>();
             _objectExplorer = new ObjectExplorer(_metadata, WorkAsync, con => CreateQuery(con, ""));
             _objectExplorer.Show(dockPanel, DockState.DockLeft);
@@ -71,12 +71,12 @@ namespace MarkMpn.Sql4Cds
         {
             var svc = con.ServiceClient;
 
-            _metadata[con] = new AttributeMetadataCache(svc);
+            _metadata[con] = new SharedMetadataCache(con);
             _tableSize[con] = new TableSizeCache(svc, _metadata[con]);
             _objectExplorer.AddConnection(con);
 
             // Start loading the entity list in the background
-            EntityCache.TryGetEntities(svc, out _);
+            EntityCache.TryGetEntities(con.MetadataCacheLoader, svc, out _);
         }
 
         private void PluginControl_Load(object sender, EventArgs e)

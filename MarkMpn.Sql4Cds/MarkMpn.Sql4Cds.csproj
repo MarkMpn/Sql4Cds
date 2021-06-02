@@ -286,6 +286,7 @@
     <Compile Include="SettingsForm.Designer.cs">
       <DependentUpon>SettingsForm.cs</DependentUpon>
     </Compile>
+    <Compile Include="SharedMetadataCache.cs" />
     <Compile Include="SqlQueryControl.cs">
       <SubType>Form</SubType>
     </Compile>

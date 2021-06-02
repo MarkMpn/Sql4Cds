@@ -32,7 +32,7 @@ using XrmToolBox.Extensibility;
 
 namespace MarkMpn.Sql4Cds
 {
-    public partial class SqlQueryControl : WeifenLuo.WinFormsUI.Docking.DockContent
+    partial class SqlQueryControl : WeifenLuo.WinFormsUI.Docking.DockContent
     {
         class ExecuteParams
         {
@@ -98,7 +98,7 @@ namespace MarkMpn.Sql4Cds
             _sqlIcon = Icon.FromHandle(Properties.Resources.SQLFile_16x.GetHicon());
         }
 
-        public SqlQueryControl(ConnectionDetail con, AttributeMetadataCache metadata, ITableSizeCache tableSize, TelemetryClient ai, Action<MessageBusEventArgs> outgoingMessageHandler, Action<string> log, PropertiesWindow properties)
+        public SqlQueryControl(ConnectionDetail con, SharedMetadataCache metadata, ITableSizeCache tableSize, TelemetryClient ai, Action<MessageBusEventArgs> outgoingMessageHandler, Action<string> log, PropertiesWindow properties)
         {
             InitializeComponent();
             _displayName = $"Query {++_queryCounter}";
@@ -344,7 +344,7 @@ namespace MarkMpn.Sql4Cds
                 if (!wordEnd.Success)
                     return;
 
-                EntityCache.TryGetEntities(Service, out var entities);
+                EntityCache.TryGetEntities(_con.MetadataCacheLoader, Service, out var entities);
 
                 var metaEntities = MetaMetadataCache.GetMetadata();
 
@@ -428,7 +428,7 @@ namespace MarkMpn.Sql4Cds
                     yield break;
 
                 var text = _control._editor.Text;
-                EntityCache.TryGetEntities(_control.Service, out var entities);
+                EntityCache.TryGetEntities(_control._con.MetadataCacheLoader, _control.Service, out var entities);
 
                 var metaEntities = MetaMetadataCache.GetMetadata();
 
