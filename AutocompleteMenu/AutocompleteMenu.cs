@@ -520,22 +520,14 @@ namespace AutocompleteMenuNS
 
             if (!Host.Visible)
             {
-                switch (e.KeyCode)
+                if ((e.KeyCode < Keys.A || e.KeyCode > Keys.Z) &&
+                    (e.KeyCode < Keys.D0 || e.KeyCode > Keys.D9) &&
+                    (e.KeyCode < Keys.NumPad0 || e.KeyCode > Keys.NumPad9) &&
+                    e.KeyCode != Keys.OemMinus &&
+                    e.KeyCode != Keys.OemPeriod)
                 {
-                    case Keys.Up:
-                    case Keys.Down:
-                    case Keys.PageUp:
-                    case Keys.PageDown:
-                    case Keys.Left:
-                    case Keys.Right:
-                    case Keys.End:
-                    case Keys.Home:
-                    case Keys.ControlKey:
-                    case Keys.Escape:
-                        {
-                            timer.Stop();
-                            return;
-                        }
+                    timer.Stop();
+                    return;
                 }
 
                 if (Control.ModifierKeys == Keys.Control && e.KeyCode == Keys.Space)
