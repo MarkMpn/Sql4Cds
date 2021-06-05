@@ -10,6 +10,7 @@ using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
 using XrmToolBox.Extensibility;
 using Microsoft.Xrm.Sdk.Metadata.Query;
+using Microsoft.Xrm.Tooling.Connector;
 
 namespace MarkMpn.Sql4Cds
 {
@@ -123,6 +124,12 @@ namespace MarkMpn.Sql4Cds
             conNode.Tag = con;
             conNode.ContextMenuStrip = serverContextMenuStrip;
             SetIcon(conNode, "Environment");
+
+            AddConnectionChildNodes(con, svc, conNode);
+        }
+
+        private void AddConnectionChildNodes(ConnectionDetail con, CrmServiceClient svc, TreeNode conNode)
+        {
             var entitiesNode = conNode.Nodes.Add("Entities");
             SetIcon(entitiesNode, "Folder");
             AddVirtualChildNodes(entitiesNode, LoadEntities);
@@ -528,6 +535,40 @@ INNER JOIN {manyToMany.Entity2LogicalName}
                 node = node.Parent;
 
             node.Remove();
+        }
+
+        private void serverContextMenuStrip_Opening(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            var con = GetService(treeView.SelectedNode);
+            refreshToolStripMenuItem.Enabled = con.MetadataCache != null;
+        }
+
+        private void refreshToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var con = GetService(treeView.SelectedNode);
+            var node = treeView.SelectedNode;
+            while (node.Parent != null)
+                node = node.Parent;
+
+            WorkAsync(new WorkAsyncInfo
+            {
+                Message = "Refreshing metadata...",
+                Work = (worker, args) =>
+                {
+                    con.UpdateMetadataCache(false).ConfigureAwait(false).GetAwaiter().GetResult();
+                },
+                PostWorkCallBack = (args) =>
+                {
+                    if (args.Error != null)
+                    {
+                        MessageBox.Show("Error refreshing metadata cache:\r\n\r\n" + args.Error.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        return;
+                    }
+
+                    node.Nodes.Clear();
+                    AddConnectionChildNodes(con, con.ServiceClient, node);
+                }
+            });
         }
     }
 }

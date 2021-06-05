@@ -39,6 +39,8 @@
             this.disconnectToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripMenuItem1 = new System.Windows.Forms.ToolStripSeparator();
             this.newQueryToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.refreshToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.toolStripSeparator1 = new System.Windows.Forms.ToolStripSeparator();
             this.tsqlContextMenuStrip.SuspendLayout();
             this.serverContextMenuStrip.SuspendLayout();
             this.SuspendLayout();
@@ -49,7 +51,7 @@
             this.treeView.ImageIndex = 0;
             this.treeView.ImageList = this.imageList;
             this.treeView.Location = new System.Drawing.Point(0, 0);
-            this.treeView.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
+            this.treeView.Margin = new System.Windows.Forms.Padding(2);
             this.treeView.Name = "treeView";
             this.treeView.SelectedImageIndex = 0;
             this.treeView.Size = new System.Drawing.Size(284, 261);
@@ -118,28 +120,43 @@
             this.serverContextMenuStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.disconnectToolStripMenuItem,
             this.toolStripMenuItem1,
-            this.newQueryToolStripMenuItem});
+            this.newQueryToolStripMenuItem,
+            this.toolStripSeparator1,
+            this.refreshToolStripMenuItem});
             this.serverContextMenuStrip.Name = "serverContextMenuStrip";
-            this.serverContextMenuStrip.Size = new System.Drawing.Size(134, 54);
+            this.serverContextMenuStrip.Size = new System.Drawing.Size(181, 104);
+            this.serverContextMenuStrip.Opening += new System.ComponentModel.CancelEventHandler(this.serverContextMenuStrip_Opening);
             // 
             // disconnectToolStripMenuItem
             // 
             this.disconnectToolStripMenuItem.Name = "disconnectToolStripMenuItem";
-            this.disconnectToolStripMenuItem.Size = new System.Drawing.Size(133, 22);
+            this.disconnectToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
             this.disconnectToolStripMenuItem.Text = "Disconnect";
             this.disconnectToolStripMenuItem.Click += new System.EventHandler(this.disconnectToolStripMenuItem_Click);
             // 
             // toolStripMenuItem1
             // 
             this.toolStripMenuItem1.Name = "toolStripMenuItem1";
-            this.toolStripMenuItem1.Size = new System.Drawing.Size(130, 6);
+            this.toolStripMenuItem1.Size = new System.Drawing.Size(177, 6);
             // 
             // newQueryToolStripMenuItem
             // 
             this.newQueryToolStripMenuItem.Name = "newQueryToolStripMenuItem";
-            this.newQueryToolStripMenuItem.Size = new System.Drawing.Size(133, 22);
+            this.newQueryToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
             this.newQueryToolStripMenuItem.Text = "New Query";
             this.newQueryToolStripMenuItem.Click += new System.EventHandler(this.newQueryToolStripMenuItem_Click);
+            // 
+            // refreshToolStripMenuItem
+            // 
+            this.refreshToolStripMenuItem.Name = "refreshToolStripMenuItem";
+            this.refreshToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
+            this.refreshToolStripMenuItem.Text = "Refresh";
+            this.refreshToolStripMenuItem.Click += new System.EventHandler(this.refreshToolStripMenuItem_Click);
+            // 
+            // toolStripSeparator1
+            // 
+            this.toolStripSeparator1.Name = "toolStripSeparator1";
+            this.toolStripSeparator1.Size = new System.Drawing.Size(177, 6);
             // 
             // ObjectExplorer
             // 
@@ -166,5 +183,7 @@
         private System.Windows.Forms.ToolStripMenuItem newQueryToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem disconnectToolStripMenuItem;
         private System.Windows.Forms.ToolStripSeparator toolStripMenuItem1;
+        private System.Windows.Forms.ToolStripMenuItem refreshToolStripMenuItem;
+        private System.Windows.Forms.ToolStripSeparator toolStripSeparator1;
     }
 }
