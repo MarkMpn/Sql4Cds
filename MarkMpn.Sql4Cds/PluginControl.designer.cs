@@ -30,22 +30,23 @@
         {
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(PluginControl));
             this.toolStripMenu = new System.Windows.Forms.ToolStrip();
-            this.tsbConnect = new System.Windows.Forms.ToolStripButton();
             this.toolStripSeparator = new System.Windows.Forms.ToolStripSeparator();
+            this.toolStripSeparator2 = new System.Windows.Forms.ToolStripSeparator();
+            this.toolStripSeparator3 = new System.Windows.Forms.ToolStripSeparator();
+            this.tssSeparator1 = new System.Windows.Forms.ToolStripSeparator();
+            this.dockPanel = new WeifenLuo.WinFormsUI.Docking.DockPanel();
+            this.tsbConnect = new System.Windows.Forms.ToolStripButton();
+            this.tsbChangeConnection = new System.Windows.Forms.ToolStripButton();
             this.tsbNewQuery = new System.Windows.Forms.ToolStripButton();
             this.tsbOpen = new System.Windows.Forms.ToolStripButton();
             this.tsbSave = new System.Windows.Forms.ToolStripButton();
-            this.toolStripSeparator2 = new System.Windows.Forms.ToolStripSeparator();
             this.tsbExecute = new System.Windows.Forms.ToolStripButton();
             this.tsbStop = new System.Windows.Forms.ToolStripButton();
             this.tsbPreviewFetchXml = new System.Windows.Forms.ToolStripButton();
-            this.toolStripSeparator3 = new System.Windows.Forms.ToolStripSeparator();
             this.tsbIncludeFetchXml = new System.Windows.Forms.ToolStripButton();
-            this.tssSeparator1 = new System.Windows.Forms.ToolStripSeparator();
             this.tsbFormat = new System.Windows.Forms.ToolStripButton();
             this.tsbSettings = new System.Windows.Forms.ToolStripButton();
             this.tslAboutLink = new System.Windows.Forms.ToolStripLabel();
-            this.dockPanel = new WeifenLuo.WinFormsUI.Docking.DockPanel();
             this.toolStripMenu.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -53,6 +54,7 @@
             // 
             this.toolStripMenu.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.tsbConnect,
+            this.tsbChangeConnection,
             this.toolStripSeparator,
             this.tsbNewQuery,
             this.tsbOpen,
@@ -74,20 +76,58 @@
             this.toolStripMenu.TabIndex = 4;
             this.toolStripMenu.Text = "toolStrip1";
             // 
-            // tsbConnect
-            // 
-            this.tsbConnect.Image = ((System.Drawing.Image)(resources.GetObject("tsbConnect.Image")));
-            this.tsbConnect.ImageTransparentColor = System.Drawing.Color.White;
-            this.tsbConnect.Name = "tsbConnect";
-            this.tsbConnect.Size = new System.Drawing.Size(72, 22);
-            this.tsbConnect.Text = "Connect";
-            this.tsbConnect.ToolTipText = "Connect to Environment";
-            this.tsbConnect.Click += new System.EventHandler(this.tsbConnect_Click);
-            // 
             // toolStripSeparator
             // 
             this.toolStripSeparator.Name = "toolStripSeparator";
             this.toolStripSeparator.Size = new System.Drawing.Size(6, 25);
+            // 
+            // toolStripSeparator2
+            // 
+            this.toolStripSeparator2.Name = "toolStripSeparator2";
+            this.toolStripSeparator2.Size = new System.Drawing.Size(6, 25);
+            // 
+            // toolStripSeparator3
+            // 
+            this.toolStripSeparator3.Name = "toolStripSeparator3";
+            this.toolStripSeparator3.Size = new System.Drawing.Size(6, 25);
+            // 
+            // tssSeparator1
+            // 
+            this.tssSeparator1.Name = "tssSeparator1";
+            this.tssSeparator1.Size = new System.Drawing.Size(6, 25);
+            // 
+            // dockPanel
+            // 
+            this.dockPanel.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.dockPanel.DocumentStyle = WeifenLuo.WinFormsUI.Docking.DocumentStyle.DockingWindow;
+            this.dockPanel.Location = new System.Drawing.Point(0, 25);
+            this.dockPanel.Name = "dockPanel";
+            this.dockPanel.Size = new System.Drawing.Size(861, 478);
+            this.dockPanel.TabIndex = 5;
+            this.dockPanel.ActiveDocumentChanged += new System.EventHandler(this.dockPanel_ActiveDocumentChanged);
+            // 
+            // tsbConnect
+            // 
+            this.tsbConnect.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Image;
+            this.tsbConnect.Enabled = false;
+            this.tsbConnect.Image = global::MarkMpn.Sql4Cds.Properties.Resources.ConnectFilled_grey_16x;
+            this.tsbConnect.ImageTransparentColor = System.Drawing.Color.White;
+            this.tsbConnect.Name = "tsbConnect";
+            this.tsbConnect.Size = new System.Drawing.Size(23, 22);
+            this.tsbConnect.Text = "Connect";
+            this.tsbConnect.ToolTipText = "Connect to Environment";
+            this.tsbConnect.Click += new System.EventHandler(this.tsbConnect_Click);
+            // 
+            // tsbChangeConnection
+            // 
+            this.tsbChangeConnection.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Image;
+            this.tsbChangeConnection.Enabled = false;
+            this.tsbChangeConnection.Image = ((System.Drawing.Image)(resources.GetObject("tsbChangeConnection.Image")));
+            this.tsbChangeConnection.ImageTransparentColor = System.Drawing.Color.Magenta;
+            this.tsbChangeConnection.Name = "tsbChangeConnection";
+            this.tsbChangeConnection.Size = new System.Drawing.Size(23, 22);
+            this.tsbChangeConnection.Text = "Change Connection";
+            this.tsbChangeConnection.Click += new System.EventHandler(this.tsbChangeConnection_Click);
             // 
             // tsbNewQuery
             // 
@@ -122,13 +162,9 @@
             this.tsbSave.ToolTipText = "Save File (Ctrl+S)";
             this.tsbSave.Click += new System.EventHandler(this.tsbSave_Click);
             // 
-            // toolStripSeparator2
-            // 
-            this.toolStripSeparator2.Name = "toolStripSeparator2";
-            this.toolStripSeparator2.Size = new System.Drawing.Size(6, 25);
-            // 
             // tsbExecute
             // 
+            this.tsbExecute.Enabled = false;
             this.tsbExecute.Image = ((System.Drawing.Image)(resources.GetObject("tsbExecute.Image")));
             this.tsbExecute.ImageTransparentColor = System.Drawing.Color.White;
             this.tsbExecute.Name = "tsbExecute";
@@ -151,6 +187,7 @@
             // tsbPreviewFetchXml
             // 
             this.tsbPreviewFetchXml.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Image;
+            this.tsbPreviewFetchXml.Enabled = false;
             this.tsbPreviewFetchXml.Image = ((System.Drawing.Image)(resources.GetObject("tsbPreviewFetchXml.Image")));
             this.tsbPreviewFetchXml.ImageTransparentColor = System.Drawing.Color.Magenta;
             this.tsbPreviewFetchXml.Name = "tsbPreviewFetchXml";
@@ -158,11 +195,6 @@
             this.tsbPreviewFetchXml.Text = "Preview FetchXML";
             this.tsbPreviewFetchXml.ToolTipText = "Display FetchXML Without Executing Query (Ctrl+L)";
             this.tsbPreviewFetchXml.Click += new System.EventHandler(this.tsbPreviewFetchXml_Click);
-            // 
-            // toolStripSeparator3
-            // 
-            this.toolStripSeparator3.Name = "toolStripSeparator3";
-            this.toolStripSeparator3.Size = new System.Drawing.Size(6, 25);
             // 
             // tsbIncludeFetchXml
             // 
@@ -176,13 +208,9 @@
             this.tsbIncludeFetchXml.ToolTipText = "Display FetchXML when executing query (Ctrl+M)";
             this.tsbIncludeFetchXml.Click += new System.EventHandler(this.tsbIncludeFetchXml_Click);
             // 
-            // tssSeparator1
-            // 
-            this.tssSeparator1.Name = "tssSeparator1";
-            this.tssSeparator1.Size = new System.Drawing.Size(6, 25);
-            // 
             // tsbFormat
             // 
+            this.tsbFormat.Enabled = false;
             this.tsbFormat.Image = ((System.Drawing.Image)(resources.GetObject("tsbFormat.Image")));
             this.tsbFormat.ImageTransparentColor = System.Drawing.Color.Magenta;
             this.tsbFormat.Name = "tsbFormat";
@@ -210,16 +238,6 @@
             this.tslAboutLink.Text = "SQL 4 CDS by Mark Carrington";
             this.tslAboutLink.ToolTipText = "Documentation";
             this.tslAboutLink.Click += new System.EventHandler(this.tslAboutLink_Click);
-            // 
-            // dockPanel
-            // 
-            this.dockPanel.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.dockPanel.DocumentStyle = WeifenLuo.WinFormsUI.Docking.DocumentStyle.DockingWindow;
-            this.dockPanel.Location = new System.Drawing.Point(0, 25);
-            this.dockPanel.Name = "dockPanel";
-            this.dockPanel.Size = new System.Drawing.Size(861, 478);
-            this.dockPanel.TabIndex = 5;
-            this.dockPanel.ActiveDocumentChanged += new System.EventHandler(this.dockPanel_ActiveDocumentChanged);
             // 
             // PluginControl
             // 
@@ -256,5 +274,6 @@
         private System.Windows.Forms.ToolStripButton tsbStop;
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator3;
         private System.Windows.Forms.ToolStripButton tsbIncludeFetchXml;
+        private System.Windows.Forms.ToolStripButton tsbChangeConnection;
     }
 }

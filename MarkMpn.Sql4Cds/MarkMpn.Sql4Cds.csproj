@@ -439,6 +439,9 @@
   <ItemGroup>
     <EmbeddedResource Include="Images\BulkDeleteJobNode.ico" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\Disconnect_Filled_16x.png" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>

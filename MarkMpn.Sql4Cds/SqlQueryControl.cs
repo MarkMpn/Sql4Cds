@@ -64,7 +64,7 @@ namespace MarkMpn.Sql4Cds
             public int Length { get; }
         }
 
-        private readonly ConnectionDetail _con;
+        private ConnectionDetail _con;
         private readonly TelemetryClient _ai;
         private readonly Scintilla _editor;
         private readonly Action<string> _log;
@@ -86,14 +86,15 @@ namespace MarkMpn.Sql4Cds
         private int _metadataLoadingTasks;
         private string _preMetadataLoadingStatus;
         private Image _preMetadataLoadingImage;
+
         private bool _addingResult;
         private IDictionary<int, TextRange> _messageLocations;
-        private readonly ITableSizeCache _tableSize;
+        private ITableSizeCache _tableSize;
 
         static SqlQueryControl()
         {
             _images = new ImageList();
-            _images.Images.AddRange(new ObjectExplorer(null, null, null).GetImages().ToArray());
+            _images.Images.AddRange(new ObjectExplorer(null, null, null, null).GetImages().ToArray());
 
             _sqlIcon = Icon.FromHandle(Properties.Resources.SQLFile_16x.GetHicon());
         }
@@ -103,24 +104,16 @@ namespace MarkMpn.Sql4Cds
             InitializeComponent();
             _displayName = $"Query {++_queryCounter}";
             _modified = true;
-            Service = con.ServiceClient;
-            Metadata = new MetaMetadataCache(metadata);
             OutgoingMessageHandler = outgoingMessageHandler;
             _editor = CreateSqlEditor();
             _autocomplete = CreateAutocomplete();
             _ai = ai;
-            _con = con;
             _log = log;
             _properties = properties;
             _stopwatch = new Stopwatch();
-            _tableSize = tableSize;
-            SyncTitle();
             BusyChanged += (s, e) => SyncTitle();
 
             // Populate the status bar and add separators between each field
-            hostLabel.Text = new Uri(_con.OrganizationServiceUrl).Host;
-            SyncUsername();
-            orgNameLabel.Text = _con.Organization;
             for (var i = statusStrip.Items.Count - 1; i > 1; i--)
                 statusStrip.Items.Insert(i, new ToolStripSeparator());
 
@@ -128,14 +121,14 @@ namespace MarkMpn.Sql4Cds
             _progressHost = new ToolStripControlHost(progressImage) { Visible = false };
             statusStrip.Items.Insert(0, _progressHost);
 
-            metadata.MetadataLoading += MetadataLoading;
-
             splitContainer.Panel1.Controls.Add(_editor);
             Icon = _sqlIcon;
+
+            ChangeConnection(con, metadata, tableSize);
         }
 
-        public CrmServiceClient Service { get; }
-        public IAttributeMetadataCache Metadata { get; }
+        public CrmServiceClient Service { get; private set; }
+        public IAttributeMetadataCache Metadata { get; private set; }
         public Action<MessageBusEventArgs> OutgoingMessageHandler { get; }
         public string Filename
         {
@@ -150,14 +143,55 @@ namespace MarkMpn.Sql4Cds
         }
         public ConnectionDetail Connection => _con;
 
+        internal void ChangeConnection(ConnectionDetail con, SharedMetadataCache metadata, ITableSizeCache tableSize)
+        {
+            _con = con;
+            _tableSize = tableSize;
+
+            if (con != null)
+            {
+                Service = con.ServiceClient;
+                Metadata = new MetaMetadataCache(metadata);
+
+                hostLabel.Text = new Uri(_con.OrganizationServiceUrl).Host;
+                orgNameLabel.Text = _con.Organization;
+
+                metadata.MetadataLoading += MetadataLoading;
+
+                toolStripStatusLabel.Text = "Connected";
+                toolStripStatusLabel.Image = Properties.Resources.ConnectFilled_grey_16x;
+            }
+            else
+            {
+                Service = null;
+                Metadata = null;
+                hostLabel.Text = "";
+                orgNameLabel.Text = "";
+
+                toolStripStatusLabel.Text = "Disconnected";
+                toolStripStatusLabel.Image = Properties.Resources.Disconnect_Filled_16x;
+            }
+
+            SyncUsername();
+            SyncTitle();
+        }
+
         private void SyncTitle()
         {
-            var busySuffix = Busy ? " Executing..." : "";
+            var text = _displayName;
+
+            if (Busy)
+                text += " Executing...";
 
             if (_modified)
-                Text = $"{_displayName}{busySuffix} * ({_con.ConnectionName})";
+                text += " *";
+
+            if (_con != null)
+                text += $" ({_con.ConnectionName})";
             else
-                Text = $"{_displayName}{busySuffix} ({_con.ConnectionName})";
+                text += " (Disconnected)";
+
+            Text = text;
         }
 
         public void SetFocus()
@@ -454,6 +488,9 @@ namespace MarkMpn.Sql4Cds
 
         public void Execute(bool execute, bool includeFetchXml)
         {
+            if (Service == null)
+                return;
+
             if (backgroundWorker.IsBusy)
                 return;
 
@@ -1138,7 +1175,13 @@ namespace MarkMpn.Sql4Cds
 
         private void SyncUsername()
         {
-            if (Service.CallerId == Guid.Empty)
+            if (Service == null)
+            {
+                usernameDropDownButton.Text = "";
+                usernameDropDownButton.Image = null;
+                revertToolStripMenuItem.Enabled = false;
+            }
+            else if (Service.CallerId == Guid.Empty)
             {
                 usernameDropDownButton.Text = _con.UserName;
                 usernameDropDownButton.Image = null;

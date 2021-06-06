@@ -11,6 +11,7 @@ using Microsoft.Xrm.Sdk.Metadata;
 using XrmToolBox.Extensibility;
 using Microsoft.Xrm.Sdk.Metadata.Query;
 using Microsoft.Xrm.Tooling.Connector;
+using System.Threading.Tasks;
 
 namespace MarkMpn.Sql4Cds
 {
@@ -18,6 +19,7 @@ namespace MarkMpn.Sql4Cds
     {
         private readonly IDictionary<ConnectionDetail, SharedMetadataCache> _metadata;
         private readonly Action<ConnectionDetail> _newQuery;
+        private readonly Action _connect;
 
         class LoaderParam
         {
@@ -25,13 +27,14 @@ namespace MarkMpn.Sql4Cds
             public TreeNode Parent;
         }
 
-        public ObjectExplorer(IDictionary<ConnectionDetail, SharedMetadataCache> metadata, Action<WorkAsyncInfo> workAsync, Action<ConnectionDetail> newQuery)
+        public ObjectExplorer(IDictionary<ConnectionDetail, SharedMetadataCache> metadata, Action<WorkAsyncInfo> workAsync, Action<ConnectionDetail> newQuery, Action connect)
         {
             InitializeComponent();
 
             _metadata = metadata;
             WorkAsync = workAsync;
             _newQuery = newQuery;
+            _connect = connect;
         }
 
         public Action<WorkAsyncInfo> WorkAsync { get; }
@@ -569,7 +572,7 @@ INNER JOIN {manyToMany.Entity2LogicalName}
                 Message = "Refreshing metadata...",
                 Work = (worker, args) =>
                 {
-                    con.UpdateMetadataCache(false).ConfigureAwait(false).GetAwaiter().GetResult();
+                    con.UpdateMetadataCache(con.MetadataCacheLoader.IsFaulted).ConfigureAwait(false).GetAwaiter().GetResult();
                 },
                 PostWorkCallBack = (args) =>
                 {
@@ -583,6 +586,11 @@ INNER JOIN {manyToMany.Entity2LogicalName}
                     AddConnectionChildNodes(con, con.ServiceClient, node);
                 }
             });
+        }
+
+        private void tsbConnect_Click(object sender, EventArgs e)
+        {
+            _connect();
         }
     }
 }

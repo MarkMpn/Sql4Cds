@@ -121,6 +121,9 @@
   <data name="ConnectFilled_grey_16x" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\ConnectFilled_grey_16x.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
+  <data name="Disconnect_Filled_16x" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\Disconnect_Filled_16x.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
   <data name="ExecutionPlan_16x" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\ExecutionPlan_16x.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
