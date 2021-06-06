@@ -540,7 +540,21 @@ INNER JOIN {manyToMany.Entity2LogicalName}
         private void serverContextMenuStrip_Opening(object sender, System.ComponentModel.CancelEventArgs e)
         {
             var con = GetService(treeView.SelectedNode);
-            refreshToolStripMenuItem.Enabled = con.MetadataCache != null;
+
+            switch (con.MetadataCacheLoader.Status)
+            {
+                case TaskStatus.RanToCompletion:
+                    refreshToolStripMenuItem.Enabled = con.MetadataCache != null;
+                    break;
+
+                case TaskStatus.Faulted:
+                    refreshToolStripMenuItem.Enabled = true;
+                    break;
+
+                default:
+                    refreshToolStripMenuItem.Enabled = false;
+                    break;
+            }
         }
 
         private void refreshToolStripMenuItem_Click(object sender, EventArgs e)

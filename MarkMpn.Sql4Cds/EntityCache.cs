@@ -17,7 +17,16 @@ namespace MarkMpn.Sql4Cds
 
         public static EntityMetadata[] GetEntities(Task<MetadataCache> cacheLoader, IOrganizationService org)
         {
-            var sharedCache = cacheLoader.ConfigureAwait(false).GetAwaiter().GetResult();
+            MetadataCache sharedCache;
+
+            try
+            {
+                sharedCache = cacheLoader.ConfigureAwait(false).GetAwaiter().GetResult();
+            }
+            catch
+            {
+                sharedCache = null;
+            }
 
             if (sharedCache != null)
                 return sharedCache.EntityMetadata;
@@ -55,7 +64,7 @@ namespace MarkMpn.Sql4Cds
                 return false;
             }
 
-            entities = cacheLoader.Result?.EntityMetadata;
+            entities = cacheLoader.Status == TaskStatus.RanToCompletion ? cacheLoader.Result?.EntityMetadata : null;
             if (entities != null)
                 return true;
 

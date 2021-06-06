@@ -21,6 +21,7 @@ namespace MarkMpn.Sql4Cds
         private readonly TelemetryClient _ai;
         private readonly ObjectExplorer _objectExplorer;
         private readonly PropertiesWindow _properties;
+        private bool _connectObjectExplorer;
 
         public PluginControl()
         {
@@ -28,24 +29,16 @@ namespace MarkMpn.Sql4Cds
             dockPanel.Theme = new VS2015LightTheme();
             _metadata = new Dictionary<ConnectionDetail, SharedMetadataCache>();
             _tableSize = new Dictionary<ConnectionDetail, TableSizeCache>();
-            _objectExplorer = new ObjectExplorer(_metadata, WorkAsync, con => CreateQuery(con, ""));
+            _objectExplorer = new ObjectExplorer(_metadata, WorkAsync, con => CreateQuery(con, ""), () => { _connectObjectExplorer = true; AddAdditionalOrganization(); });
             _objectExplorer.Show(dockPanel, DockState.DockLeft);
             _objectExplorer.CloseButtonVisible = false;
             _properties = new PropertiesWindow();
             _properties.Show(dockPanel, DockState.DockRightAutoHide);
             _ai = new TelemetryClient(new Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration("79761278-a908-4575-afbf-2f4d82560da6"));
+            _connectObjectExplorer = true;
 
             TabIcon = Properties.Resources.SQL4CDS_Icon_16;
             PluginIcon = System.Drawing.Icon.FromHandle(Properties.Resources.SQL4CDS_Icon_16.GetHicon());
-            dockPanel.ActiveDocumentChanged += DockPanel_ActiveDocumentChanged;
-        }
-
-        private void DockPanel_ActiveDocumentChanged(object sender, EventArgs e)
-        {
-            if (dockPanel.ActiveDocument is SqlQueryControl sql)
-                _properties.SelectObject(sql.Connection);
-            else
-                _properties.SelectObject(null);
         }
 
         protected override void OnConnectionUpdated(ConnectionUpdatedEventArgs e)
@@ -53,8 +46,15 @@ namespace MarkMpn.Sql4Cds
             AddConnection(e.ConnectionDetail);
 
             if (dockPanel.ActiveDocument == null)
+            {
                 tsbNewQuery_Click(this, EventArgs.Empty);
-            
+            }
+            else if (!_connectObjectExplorer)
+            {
+                var query = (SqlQueryControl)dockPanel.ActiveDocument;
+                query.ChangeConnection(e.ConnectionDetail, _metadata[e.ConnectionDetail], _tableSize[e.ConnectionDetail]);
+            }
+
             base.OnConnectionUpdated(e);
         }
 
@@ -62,8 +62,13 @@ namespace MarkMpn.Sql4Cds
         {
             if (e.Action == NotifyCollectionChangedAction.Add)
             {
-                foreach (var con in e.NewItems)
-                    AddConnection((ConnectionDetail) con);
+                foreach (ConnectionDetail con in e.NewItems)
+                {
+                    AddConnection(con);
+
+                    if (!_connectObjectExplorer && dockPanel.ActiveDocument != null)
+                        ((SqlQueryControl)dockPanel.ActiveDocument).ChangeConnection(con, _metadata[con], _tableSize[con]);
+                }
             }
         }
 
@@ -71,9 +76,14 @@ namespace MarkMpn.Sql4Cds
         {
             var svc = con.ServiceClient;
 
-            _metadata[con] = new SharedMetadataCache(con);
-            _tableSize[con] = new TableSizeCache(svc, _metadata[con]);
-            _objectExplorer.AddConnection(con);
+            if (!_metadata.ContainsKey(con))
+                _metadata[con] = new SharedMetadataCache(con);
+            
+            if (!_tableSize.ContainsKey(con))
+                _tableSize[con] = new TableSizeCache(svc, _metadata[con]);
+
+            if (_connectObjectExplorer)
+                _objectExplorer.AddConnection(con);
 
             // Start loading the entity list in the background
             EntityCache.TryGetEntities(con.MetadataCacheLoader, svc, out _);
@@ -110,6 +120,13 @@ namespace MarkMpn.Sql4Cds
 
         private void tsbConnect_Click(object sender, EventArgs e)
         {
+            _connectObjectExplorer = false;
+            AddAdditionalOrganization();
+        }
+
+        private void tsbChangeConnection_Click(object sender, EventArgs e)
+        {
+            _connectObjectExplorer = false;
             AddAdditionalOrganization();
         }
 
@@ -239,9 +256,18 @@ namespace MarkMpn.Sql4Cds
 
         private void dockPanel_ActiveDocumentChanged(object sender, EventArgs e)
         {
-            tsbSave.Enabled = dockPanel.ActiveDocument != null;
+            var query = (SqlQueryControl)dockPanel.ActiveDocument;
+            tsbSave.Enabled = query != null;
+            tsbConnect.Enabled = query.Connection == null;
+            tsbChangeConnection.Enabled = query.Connection != null;
+            tsbFormat.Enabled = query != null;
             SyncStopButton(sender, e);
             SyncExecuteButton(sender, e);
+
+            if (dockPanel.ActiveDocument is SqlQueryControl sql)
+                _properties.SelectObject(sql.Connection);
+            else
+                _properties.SelectObject(null);
         }
 
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
@@ -285,7 +311,9 @@ namespace MarkMpn.Sql4Cds
                 return;
             }
 
-            tsbExecute.Enabled = !((SqlQueryControl)dockPanel.ActiveDocument).Busy;
+            var query = (SqlQueryControl)dockPanel.ActiveDocument;
+            tsbExecute.Enabled = query.Connection != null && !query.Busy;
+            tsbPreviewFetchXml.Enabled = query.Connection != null && !query.Busy;
         }
 
         private void tsbStop_Click(object sender, EventArgs e)
