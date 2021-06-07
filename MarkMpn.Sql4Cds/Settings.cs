@@ -49,5 +49,16 @@ namespace MarkMpn.Sql4Cds
         public int MaxRetrievesPerQuery { get; set; } = 100;
 
         public bool BypassCustomPlugins { get; set; }
+
+        public bool RememberSession { get; set; } = true;
+
+        public TabContent[] Session { get; set; }
+    }
+
+    public class TabContent
+    {
+        public string Filename { get; set; }
+
+        public string Query { get; set; }
     }
 }

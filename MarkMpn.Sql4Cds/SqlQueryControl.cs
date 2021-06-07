@@ -414,6 +414,32 @@ namespace MarkMpn.Sql4Cds
             return scintilla;
         }
 
+        internal TabContent GetSessionDetails()
+        {
+            return new TabContent
+            {
+                Filename = Filename,
+                Query = _modified ? _editor.Text : null
+            };
+        }
+
+        internal void RestoreSessionDetails(TabContent tab)
+        {
+            var content = tab.Query;
+
+            if (!String.IsNullOrEmpty(tab.Filename))
+            {
+                Filename = tab.Filename;
+
+                if (content == null && !String.IsNullOrEmpty(tab.Filename))
+                    content = File.ReadAllText(tab.Filename);
+            }
+
+            _editor.Text = content;
+            _modified = tab.Query != null;
+            SyncTitle();
+        }
+
         private void CalcLineNumberWidth(Scintilla scintilla)
         {
             // Did the number of characters in the line number display change?
@@ -456,6 +482,9 @@ namespace MarkMpn.Sql4Cds
 
             public IEnumerator<AutocompleteItem> GetEnumerator()
             {
+                if (_control._con == null)
+                    yield break;
+
                 var pos = _control._editor.CurrentPosition - 1;
 
                 if (pos == 0)

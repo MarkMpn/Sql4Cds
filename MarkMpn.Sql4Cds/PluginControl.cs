@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Windows.Forms;
 using System.Xml.Serialization;
 using MarkMpn.Sql4Cds.Engine;
@@ -45,11 +46,7 @@ namespace MarkMpn.Sql4Cds
         {
             AddConnection(e.ConnectionDetail);
 
-            if (dockPanel.ActiveDocument == null)
-            {
-                tsbNewQuery_Click(this, EventArgs.Empty);
-            }
-            else if (!_connectObjectExplorer)
+            if (dockPanel.ActiveDocument != null && !_connectObjectExplorer)
             {
                 var query = (SqlQueryControl)dockPanel.ActiveDocument;
                 query.ChangeConnection(e.ConnectionDetail, _metadata[e.ConnectionDetail], _tableSize[e.ConnectionDetail]);
@@ -98,6 +95,30 @@ namespace MarkMpn.Sql4Cds
             Settings.Instance = settings;
 
             tsbIncludeFetchXml.Checked = settings.IncludeFetchXml;
+
+            if (settings.RememberSession && settings.Session != null)
+            {
+                foreach (var doc in dockPanel.Documents.OfType<SqlQueryControl>().ToArray())
+                    doc.Close();
+
+                foreach (var tab in settings.Session)
+                {
+                    var query = CreateQuery(null, null);
+
+                    try
+                    {
+                        query.RestoreSessionDetails(tab);
+                    }
+                    catch
+                    {
+                        query.Close();
+                    }
+                }
+            }
+            else
+            {
+                tsbNewQuery_Click(this, EventArgs.Empty);
+            }
         }
 
         private void tsbExecute_Click(object sender, EventArgs e)
@@ -140,7 +161,7 @@ namespace MarkMpn.Sql4Cds
 
         private SqlQueryControl CreateQuery(ConnectionDetail con, string sql)
         { 
-            var query = new SqlQueryControl(con, _metadata[con], _tableSize[con], _ai, SendOutgoingMessage, msg => LogError(msg), _properties);
+            var query = new SqlQueryControl(con, con == null ? null : _metadata[con], con == null ? null : _tableSize[con], _ai, SendOutgoingMessage, msg => LogError(msg), _properties);
             query.InsertText(sql);
             query.CancellableChanged += SyncStopButton;
             query.BusyChanged += SyncExecuteButton;
@@ -258,8 +279,8 @@ namespace MarkMpn.Sql4Cds
         {
             var query = (SqlQueryControl)dockPanel.ActiveDocument;
             tsbSave.Enabled = query != null;
-            tsbConnect.Enabled = query.Connection == null;
-            tsbChangeConnection.Enabled = query.Connection != null;
+            tsbConnect.Enabled = query != null && query.Connection == null;
+            tsbChangeConnection.Enabled = query != null && query.Connection != null;
             tsbFormat.Enabled = query != null;
             SyncStopButton(sender, e);
             SyncExecuteButton(sender, e);
@@ -345,8 +366,32 @@ namespace MarkMpn.Sql4Cds
             using (var form = new SettingsForm(Settings.Instance))
             {
                 if (form.ShowDialog(this) == DialogResult.OK)
-                    SettingsManager.Instance.Save(GetType(), Settings.Instance);
+                    SaveSettings();
             }
+        }
+
+        private void SaveSettings()
+        {
+            if (Settings.Instance.RememberSession)
+                Settings.Instance.Session = dockPanel.Documents.OfType<SqlQueryControl>().Select(query => query.GetSessionDetails()).ToArray();
+            else
+                Settings.Instance.Session = null;
+
+            SettingsManager.Instance.Save(GetType(), Settings.Instance);
+        }
+
+        public override void ClosingPlugin(PluginCloseInfo info)
+        {
+            if (Settings.Instance.RememberSession)
+                SaveSettings();
+
+            base.ClosingPlugin(info);
+        }
+
+        private void saveSessionTimer_Tick(object sender, EventArgs e)
+        {
+            if (Settings.Instance.RememberSession)
+                SaveSettings();
         }
     }
 }
