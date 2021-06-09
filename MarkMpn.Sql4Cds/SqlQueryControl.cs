@@ -368,6 +368,9 @@ namespace MarkMpn.Sql4Cds
             {
                 _tooltip.Hide(scintilla);
 
+                if (_con == null)
+                    return;
+
                 if (!Settings.Instance.ShowIntellisenseTooltips)
                     return;
 
