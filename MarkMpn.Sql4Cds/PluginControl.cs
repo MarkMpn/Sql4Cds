@@ -103,7 +103,7 @@ namespace MarkMpn.Sql4Cds
 
                 foreach (var tab in settings.Session)
                 {
-                    var query = CreateQuery(null, null);
+                    var query = CreateQuery(_objectExplorer.SelectedConnection, null);
 
                     try
                     {
