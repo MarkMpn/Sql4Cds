@@ -246,7 +246,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (notNullFilter == null)
                         break;
 
-                    // Remove the filter and replace with an "in" link-entity
+                    // Remove the filter and replace with an "exists" link-entity
                     Filter = Filter.RemoveCondition(notNullFilter);
 
                     linkToAdd = new FetchLinkEntityType

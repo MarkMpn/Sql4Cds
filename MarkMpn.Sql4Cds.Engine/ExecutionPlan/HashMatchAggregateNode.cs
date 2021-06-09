@@ -437,7 +437,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     var col = (ColumnReferenceExpression)agg.Value.SqlExpression;
                     var colName = col == null ? (fetchXml.Alias + "." + metadata[fetchXml.Entity.name].PrimaryIdAttribute) : col.GetColumnName();
-                    schema.ContainsColumn(colName, out colName);
+
+                    if (!schema.ContainsColumn(colName, out colName))
+                        return this;
 
                     var distinct = agg.Value.Distinct ? FetchBoolType.@true : FetchBoolType.@false;
 
