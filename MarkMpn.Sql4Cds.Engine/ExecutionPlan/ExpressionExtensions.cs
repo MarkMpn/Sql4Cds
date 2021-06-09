@@ -133,9 +133,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var name = col.GetColumnName();
 
-            if (!schema.ContainsColumn(name, out var normalizedName))
+            if (schema == null || !schema.ContainsColumn(name, out var normalizedName))
             {
-                if (!schema.Aliases.TryGetValue(name, out var normalized))
+                if (schema == null || !schema.Aliases.TryGetValue(name, out var normalized))
                 {
                     if (nonAggregateSchema != null && nonAggregateSchema.ContainsColumn(name, out _))
                         throw new NotSupportedQueryFragmentException("Column is invalid in the select list because it is not contained in either an aggregate function or the GROUP BY clause", col);
@@ -144,6 +144,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     if (col.MultiPartIdentifier.Identifiers.Count == 1 && col.MultiPartIdentifier.Identifiers[0].QuoteType == QuoteType.DoubleQuote)
                         ex.Suggestion = $"Did you mean '{name}'?";
+                    else if (name.Equals("false", StringComparison.OrdinalIgnoreCase))
+                        ex.Suggestion = "Did you mean '0'?";
+                    else if (name.Equals("true", StringComparison.OrdinalIgnoreCase))
+                        ex.Suggestion = "Did you mean '1'?";
 
                     throw ex;
                 }
