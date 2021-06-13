@@ -442,6 +442,9 @@
   <ItemGroup>
     <None Include="Resources\Disconnect_Filled_16x.png" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\StatusHelp_16x.png" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>

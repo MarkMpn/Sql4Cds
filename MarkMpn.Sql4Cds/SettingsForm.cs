@@ -64,5 +64,10 @@ namespace MarkMpn.Sql4Cds
                 _settings.RememberSession = rememberSessionCheckbox.Checked;
             }
         }
+
+        private void helpIcon_Click(object sender, EventArgs e)
+        {
+            System.Diagnostics.Process.Start((string) ((Control)sender).Tag);
+        }
     }
 }
