@@ -86,8 +86,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return this;
 
                 // If we're doing a right outer join, switch everything round to do a left outer join
+                // Also switch join order for inner joins to use N:1 relationships instead of 1:N to avoid problems with paging
                 if (JoinType == QualifiedJoinType.RightOuter ||
-                    JoinType == QualifiedJoinType.Inner && !rightAttributeParts[0].Equals(rightFetch.Alias, StringComparison.OrdinalIgnoreCase))
+                    JoinType == QualifiedJoinType.Inner && !rightAttributeParts[0].Equals(rightFetch.Alias, StringComparison.OrdinalIgnoreCase) ||
+                    JoinType == QualifiedJoinType.Inner && leftAttribute == leftSchema.PrimaryKey && rightAttribute != rightSchema.PrimaryKey)
                 {
                     Swap(ref leftFetch, ref rightFetch);
                     Swap(ref leftEntity, ref rightEntity);

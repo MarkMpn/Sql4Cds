@@ -531,7 +531,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var metadata = new AttributeMetadataCache(org);
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
 
-            var query = "SELECT accountid, name FROM account INNER JOIN contact ON accountid = parentcustomerid";
+            var query = "SELECT accountid, name FROM account INNER JOIN contact ON primarycontactid = contactid";
 
             var queries = sql2FetchXml.Convert(query);
 
@@ -540,7 +540,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     <entity name='account'>
                         <attribute name='accountid' />
                         <attribute name='name' />
-                        <link-entity name='contact' from='parentcustomerid' to='accountid' link-type='inner' alias='contact'>
+                        <link-entity name='contact' from='contactid' to='primarycontactid' link-type='inner' alias='contact'>
                         </link-entity>
                     </entity>
                 </fetch>
@@ -590,15 +590,15 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             AssertFetchXml(queries, @"
                 <fetch>
-                    <entity name='account'>
-                        <attribute name='accountid' />
-                        <attribute name='name' />
-                        <link-entity name='contact' from='parentcustomerid' to='accountid' link-type='inner' alias='contact'>
-                            <filter type='or'>
-                                <condition attribute='firstname' operator='eq' value='Mark' />
-                                <condition attribute='lastname' operator='eq' value='Carrington' />
-                            </filter>
+                    <entity name='contact'>
+                        <link-entity name='account' from='accountid' to='parentcustomerid' link-type='inner' alias='account'>
+                            <attribute name='accountid' />
+                            <attribute name='name' />
                         </link-entity>
+                        <filter type='or'>
+                            <condition attribute='firstname' operator='eq' value='Mark' />
+                            <condition attribute='lastname' operator='eq' value='Carrington' />
+                        </filter>
                     </entity>
                 </fetch>
             ");
@@ -631,7 +631,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var metadata = new AttributeMetadataCache(org);
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
 
-            var query = "SELECT TOP 100 accountid, name FROM account INNER JOIN contact ON accountid = parentcustomerid ORDER BY name, firstname";
+            var query = "SELECT TOP 100 accountid, name FROM account INNER JOIN contact ON primarycontactid = contactid ORDER BY name, firstname";
 
             var queries = sql2FetchXml.Convert(query);
 
@@ -640,7 +640,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     <entity name='account'>
                         <attribute name='accountid' />
                         <attribute name='name' />
-                        <link-entity name='contact' from='parentcustomerid' to='accountid' link-type='inner' alias='contact'>
+                        <link-entity name='contact' from='contactid' to='primarycontactid' link-type='inner' alias='contact'>
                             <order attribute='firstname' />
                         </link-entity>
                         <order attribute='name' />
@@ -659,18 +659,18 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var metadata = new AttributeMetadataCache(org);
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
 
-            var query = "SELECT TOP 100 accountid, name FROM account INNER JOIN contact ON accountid = parentcustomerid ORDER BY firstname, name";
+            var query = "SELECT TOP 100 accountid, name FROM account INNER JOIN contact ON accountid = parentcustomerid ORDER BY name, firstname";
 
             var queries = sql2FetchXml.Convert(query);
 
             AssertFetchXml(queries, @"
                 <fetch>
-                    <entity name='account'>
-                        <attribute name='accountid' />
-                        <attribute name='name' />
-                        <link-entity name='contact' from='parentcustomerid' to='accountid' alias='contact' link-type='inner'>
-                            <attribute name='firstname' />
-                            <order attribute='firstname' />
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <link-entity name='account' from='accountid' to='parentcustomerid' alias='account' link-type='inner'>
+                            <attribute name='accountid' />
+                            <attribute name='name' />
+                            <order attribute='name' />
                         </link-entity>
                     </entity>
                 </fetch>
@@ -767,20 +767,20 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var metadata = new AttributeMetadataCache(org);
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
 
-            var query = "SELECT name, firstname, count(*) FROM account INNER JOIN contact ON parentcustomerid = account.accountid GROUP BY name, firstname ORDER BY name, firstname";
+            var query = "SELECT name, firstname, count(*) FROM account INNER JOIN contact ON parentcustomerid = account.accountid GROUP BY name, firstname ORDER BY firstname, name";
 
             var queries = sql2FetchXml.Convert(query);
 
             AssertFetchXml(queries, @"
                 <fetch aggregate='true'>
-                    <entity name='account'>
-                        <attribute name='name' groupby='true' alias='name' />
-                        <attribute name='accountid' aggregate='count' alias='count' />
-                        <link-entity name='contact' from='parentcustomerid' to='accountid' link-type='inner' alias='contact'>
-                            <attribute name='firstname' groupby='true' alias='firstname' />
-                            <order alias='firstname' />
+                    <entity name='contact'>
+                        <attribute name='firstname' groupby='true' alias='firstname' />
+                        <attribute name='contactid' aggregate='count' alias='count' />
+                        <link-entity name='account' from='accountid' to='parentcustomerid' link-type='inner' alias='account'>
+                            <attribute name='name' groupby='true' alias='name' />
+                            <order alias='name' />
                         </link-entity>
-                        <order alias='name' />
+                        <order alias='firstname' />
                     </entity>
                 </fetch>
             ");
@@ -802,11 +802,11 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             AssertFetchXml(queries, @"
                 <fetch aggregate='true'>
-                    <entity name='account'>
-                        <attribute name='name' groupby='true' alias='name' />
-                        <attribute name='accountid' aggregate='count' alias='count' />
-                        <link-entity name='contact' from='parentcustomerid' to='accountid' link-type='inner' alias='contact'>
-                            <attribute name='firstname' groupby='true' alias='firstname' />
+                    <entity name='contact'>
+                        <attribute name='firstname' groupby='true' alias='firstname' />
+                        <attribute name='contactid' aggregate='count' alias='count' />
+                        <link-entity name='account' from='accountid' to='parentcustomerid' link-type='inner' alias='account'>
+                            <attribute name='name' groupby='true' alias='name' />
                         </link-entity>
                         <order alias='count' />
                     </entity>
@@ -2631,7 +2631,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = @"
                 SELECT contact.fullname
-                FROM contact INNER JOIN account ON contact.parentcustomerid = account.accountid INNER JOIN new_customentity ON contact.parentcustomerid = new_customentity.new_parentid
+                FROM contact INNER JOIN account ON contact.contactid = account.primarycontactid INNER JOIN new_customentity ON contact.parentcustomerid = new_customentity.new_parentid
                 ORDER BY account.employees, contact.fullname";
 
             var queries = sql2FetchXml.Convert(query);
@@ -2640,7 +2640,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 <fetch>
                     <entity name='account'>
                         <attribute name='employees' />
-                        <link-entity name='contact' from='parentcustomerid' to='accountid' alias='contact' link-type='inner'>
+                        <link-entity name='contact' from='contactid' to='primarycontactid' alias='contact' link-type='inner'>
                             <attribute name='fullname' />
                             <link-entity name='new_customentity' from='new_parentid' to='parentcustomerid' alias='new_customentity' link-type='inner'>
                             </link-entity>
@@ -2764,10 +2764,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             AssertFetchXml(queries, @"
                 <fetch aggregate='true'>
-                    <entity name='account'>
-                        <attribute name='accountid' aggregate='count' alias='count' />
-                        <link-entity name='contact' from='parentcustomerid' to='accountid' link-type='inner' alias='contact'>
-                            <attribute name='firstname' groupby='true' alias='firstname' />
+                    <entity name='contact'>
+                        <attribute name='firstname' groupby='true' alias='firstname' />
+                        <attribute name='contactid' aggregate='count' alias='count' />
+                        <link-entity name='account' from='accountid' to='parentcustomerid' link-type='inner' alias='account'>
                         </link-entity>
                         <order alias='count' />
                     </entity>
@@ -2791,9 +2791,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var select = (SelectQuery)queries[0];
             AssertFetchXml(new[] { select.AggregateAlternative }, @"
                 <fetch>
-                    <entity name='account'>
-                        <attribute name='name'/>
-                        <link-entity name='contact' from='parentcustomerid' to='accountid' link-type='inner' alias='contact'>
+                    <entity name='contact'>
+                        <link-entity name='account' from='accountid' to='parentcustomerid' link-type='inner' alias='account'>
+                            <attribute name='name'/>
                         </link-entity>
                     </entity>
                 </fetch>

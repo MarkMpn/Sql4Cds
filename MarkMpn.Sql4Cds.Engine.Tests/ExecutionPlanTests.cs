@@ -159,10 +159,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var fetch = AssertNode<FetchXmlScan>(select.Source);
             AssertFetchXml(fetch, @"
                 <fetch>
-                    <entity name='account'>
-                        <attribute name='accountid' />
-                        <attribute name='name' />
-                        <link-entity name='contact' alias='contact' from='parentcustomerid' to='accountid' link-type='inner'>
+                    <entity name='contact'>
+                        <link-entity name='account' alias='account' from='accountid' to='parentcustomerid' link-type='inner'>
+                            <attribute name='accountid' />
+                            <attribute name='name' />
                         </link-entity>
                     </entity>
                 </fetch>");
@@ -194,14 +194,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var fetch = AssertNode<FetchXmlScan>(select.Source);
             AssertFetchXml(fetch, @"
                 <fetch>
-                    <entity name='account'>
-                        <attribute name='accountid' />
-                        <attribute name='name' />
-                        <link-entity name='contact' alias='contact' from='parentcustomerid' to='accountid' link-type='inner'>
-                            <filter>
-                                <condition attribute='firstname' operator='eq' value='Mark' />
-                            </filter>
+                    <entity name='contact'>
+                        <link-entity name='account' alias='account' from='accountid' to='parentcustomerid' link-type='inner'>
+                            <attribute name='accountid' />
+                            <attribute name='name' />
                         </link-entity>
+                        <filter>
+                            <condition attribute='firstname' operator='eq' value='Mark' />
+                        </filter>
                     </entity>
                 </fetch>");
         }
@@ -755,8 +755,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     account
                     INNER JOIN contact ON account.accountid = contact.parentcustomerid
                 ORDER BY
-                    name,
                     firstname,
+                    name,
                     accountid";
 
             var plans = planBuilder.Build(query);
@@ -768,13 +768,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var fetch = AssertNode<FetchXmlScan>(order.Source);
             AssertFetchXml(fetch, @"
                 <fetch>
-                    <entity name='account'>
-                        <attribute name='name' />
-                        <attribute name='accountid' />
-                        <link-entity name='contact' alias='contact' from='parentcustomerid' to='accountid' link-type='inner'>
-                            <attribute name='firstname' />
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <link-entity name='account' alias='account' from='accountid' to='parentcustomerid' link-type='inner'>
+                            <attribute name='name' />
+                            <attribute name='accountid' />
                         </link-entity>
-                        <order attribute='name' />
+                        <order attribute='firstname' />
                     </entity>
                 </fetch>");
         }
@@ -797,8 +797,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     account
                     INNER JOIN contact ON account.accountid = contact.parentcustomerid
                 ORDER BY
-                    name,
                     firstname,
+                    name,
                     accountid";
 
             var plans = planBuilder.Build(query);
@@ -811,14 +811,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var fetch = AssertNode<FetchXmlScan>(order.Source);
             AssertFetchXml(fetch, @"
                 <fetch>
-                    <entity name='account'>
-                        <attribute name='name' />
-                        <attribute name='accountid' />
-                        <link-entity name='contact' alias='contact' from='parentcustomerid' to='accountid' link-type='inner'>
-                            <attribute name='firstname' />
-                            <order attribute='firstname' />
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <link-entity name='account' alias='account' from='accountid' to='parentcustomerid' link-type='inner'>
+                            <attribute name='name' />
+                            <attribute name='accountid' />
+                            <order attribute='name' />
                         </link-entity>
-                        <order attribute='name' />
+                        <order attribute='firstname' />
                     </entity>
                 </fetch>");
         }
@@ -2394,11 +2394,12 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var fetch = AssertNode<FetchXmlScan>(computeScalar.Source);
             AssertFetchXml(fetch, @"
                 <fetch>
-                    <entity name='account'>
-                        <attribute name='accountid' />
-                        <link-entity name='contact' alias='c' from='parentcustomerid' to='accountid' link-type='inner' />
+                    <entity name='contact'>
+                        <link-entity name='account' alias='a' from='accountid' to='parentcustomerid' link-type='inner'>
+                            <attribute name='accountid' />
+                        </link-entity>
                         <filter>
-                            <condition attribute='name' operator='eq' value='bar' />
+                            <condition entityname='a' attribute='name' operator='eq' value='bar' />
                         </filter>
                     </entity>
                 </fetch>");
@@ -2617,17 +2618,17 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 var fetch = AssertNode<FetchXmlScan>(select.Source);
                 AssertFetchXml(fetch, @"
                 <fetch>
-                    <entity name='account'>
-                        <attribute name='name' />
-                        <link-entity name='contact' alias='contact' from='parentcustomerid' to='accountid' link-type='inner'>
-                            <link-entity name='contact' alias='Expr1' from='createdon' to='createdon' link-type='in'>
-                                <filter>
-                                    <condition attribute='firstname' operator='eq' value='Mark' />
-                                </filter>
-                            </link-entity>
+                    <entity name='contact'>
+                        <link-entity name='account' alias='account' from='accountid' to='parentcustomerid' link-type='inner'>
+                            <attribute name='name' />
+                        </link-entity>
+                        <link-entity name='contact' alias='Expr1' from='createdon' to='createdon' link-type='in'>
+                            <filter>
+                                <condition attribute='firstname' operator='eq' value='Mark' />
+                            </filter>
                         </link-entity>
                         <filter>
-                            <condition attribute='name' operator='like' value='Data8%' />
+                            <condition entityname='account' attribute='name' operator='like' value='Data8%' />
                         </filter>
                     </entity>
                 </fetch>");
@@ -2731,13 +2732,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var fetch = AssertNode<FetchXmlScan>(select.Source);
             AssertFetchXml(fetch, @"
                 <fetch distinct='true'>
-                    <entity name='account'>
-                        <attribute name='accountid' />
-                        <attribute name='name' />
-                        <link-entity name='contact' alias='contact' from='parentcustomerid' to='accountid' link-type='inner'>
+                    <entity name='contact'>
+                        <link-entity name='account' alias='account' from='accountid' to='parentcustomerid' link-type='inner'>
+                            <attribute name='accountid' />
+                            <attribute name='name' />
+                            <order attribute='accountid' />
+                            <order attribute='name' />
                         </link-entity>
-                        <order attribute='accountid' />
-                        <order attribute='name' />
                     </entity>
                 </fetch>");
         }
@@ -3163,9 +3164,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var fetch = AssertNode<FetchXmlScan>(select.Source);
             AssertFetchXml(fetch, @"
                 <fetch>
-                    <entity name='account'>
-                        <link-entity name='contact' alias='contact' from='parentcustomerid' to='accountid' link-type='inner'>
-                            <attribute name='parentcustomerid' />
+                    <entity name='contact'>
+                        <attribute name='parentcustomerid' />
+                        <link-entity name='account' alias='account' from='accountid' to='parentcustomerid' link-type='inner'>
                         </link-entity>
                     </entity>
                 </fetch>");
