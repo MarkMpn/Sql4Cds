@@ -14,6 +14,7 @@ namespace MarkMpn.Sql4Cds
     {
         private readonly ConnectionDetail _connection;
         private readonly AttributeMetadataCache _innerCache;
+        private static readonly bool _metadataCacheSupported = typeof(ConnectionDetail).Assembly.GetName().Version > new Version("1.2021.5.42");
 
         public SharedMetadataCache(ConnectionDetail connection)
         {
@@ -25,7 +26,7 @@ namespace MarkMpn.Sql4Cds
         {
             get
             {
-                if (_connection.MetadataCache == null)
+                if (!_metadataCacheSupported || _connection.MetadataCache == null)
                     return _innerCache[name];
 
                 var meta = _connection.MetadataCache.SingleOrDefault(e => e.LogicalName == name.ToLowerInvariant());
@@ -41,7 +42,7 @@ namespace MarkMpn.Sql4Cds
         {
             get
             {
-                if (_connection.MetadataCache == null)
+                if (!_metadataCacheSupported || _connection.MetadataCache == null)
                     return _innerCache[otc];
 
                 var meta = _connection.MetadataCache.SingleOrDefault(e => e.ObjectTypeCode == otc);
@@ -55,7 +56,7 @@ namespace MarkMpn.Sql4Cds
 
         public bool TryGetMinimalData(string logicalName, out EntityMetadata metadata)
         {
-            if (_connection.MetadataCache == null)
+            if (!_metadataCacheSupported || _connection.MetadataCache == null)
                 return _innerCache.TryGetMinimalData(logicalName, out metadata);
 
             metadata = _connection.MetadataCache.SingleOrDefault(e => e.LogicalName == logicalName.ToLowerInvariant());
@@ -64,7 +65,7 @@ namespace MarkMpn.Sql4Cds
 
         public bool TryGetValue(string logicalName, out EntityMetadata metadata)
         {
-            if (_connection.MetadataCache == null)
+            if (!_metadataCacheSupported || _connection.MetadataCache == null)
                 return _innerCache.TryGetValue(logicalName, out metadata);
 
             metadata = _connection.MetadataCache.SingleOrDefault(e => e.LogicalName == logicalName.ToLowerInvariant());
