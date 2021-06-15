@@ -152,6 +152,7 @@
   <ItemGroup>
     <Compile Include="ExecutionPlanNodeTests.cs" />
     <Compile Include="ExecutionPlanTests.cs" />
+    <Compile Include="FakeXrmEasyTestsBase.cs" />
     <Compile Include="Metadata\New_CustomEntity.cs" />
     <Compile Include="Metadata\Contact.cs" />
     <Compile Include="Metadata\Account.cs" />

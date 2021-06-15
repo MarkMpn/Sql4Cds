@@ -12,17 +12,13 @@ using System.Threading.Tasks;
 namespace MarkMpn.Sql4Cds.Tests
 {
     [TestClass]
-    public class AutocompleteTests
+    public class AutocompleteTests : FakeXrmEasyTestsBase
     {
-        private Autocomplete _autocomplete;
+        private readonly Autocomplete _autocomplete;
 
         public AutocompleteTests()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var a = metadata["account"];
             var c = metadata["contact"];
             var n = metadata["new_customentity"];

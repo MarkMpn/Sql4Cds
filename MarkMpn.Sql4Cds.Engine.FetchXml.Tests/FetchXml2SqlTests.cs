@@ -11,16 +11,12 @@ using Microsoft.Xrm.Sdk;
 namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
 {
     [TestClass]
-    public class FetchXml2SqlTests
+    public class FetchXml2SqlTests : FakeXrmEasyTestsBase
     {
         [TestMethod]
         public void SimpleSelect()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var fetch = @"
                 <fetch>
                     <entity name='contact'>
@@ -29,7 +25,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
                     </entity>
                 </fetch>";
 
-            var converted = FetchXml2Sql.Convert(org, metadata, fetch, new FetchXml2SqlOptions(), out _);
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions(), out _);
 
             Assert.AreEqual("SELECT firstname, lastname FROM contact", NormalizeWhitespace(converted));
         }
@@ -37,11 +33,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
         [TestMethod]
         public void Filter()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var fetch = @"
                 <fetch>
                     <entity name='contact'>
@@ -53,7 +45,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
                     </entity>
                 </fetch>";
 
-            var converted = FetchXml2Sql.Convert(org, metadata, fetch, new FetchXml2SqlOptions(), out _);
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions(), out _);
 
             Assert.AreEqual("SELECT firstname, lastname FROM contact WHERE firstname = 'Mark'", NormalizeWhitespace(converted));
         }
@@ -61,11 +53,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
         [TestMethod]
         public void Joins()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var fetch = @"
                 <fetch>
                     <entity name='contact'>
@@ -77,7 +65,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
                     </entity>
                 </fetch>";
 
-            var converted = FetchXml2Sql.Convert(org, metadata, fetch, new FetchXml2SqlOptions(), out _);
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions(), out _);
 
             Assert.AreEqual("SELECT contact.firstname, contact.lastname, account.name FROM contact INNER JOIN account ON contact.parentcustomerid = account.accountid", NormalizeWhitespace(converted));
         }
@@ -85,11 +73,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
         [TestMethod]
         public void JoinFilter()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var fetch = @"
                 <fetch>
                     <entity name='contact'>
@@ -107,7 +91,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
                     </entity>
                 </fetch>";
 
-            var converted = FetchXml2Sql.Convert(org, metadata, fetch, new FetchXml2SqlOptions(), out _);
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions(), out _);
 
             Assert.AreEqual("SELECT contact.firstname, contact.lastname, account.name FROM contact INNER JOIN account ON contact.parentcustomerid = account.accountid AND account.name = 'data8' WHERE contact.firstname = 'Mark'", NormalizeWhitespace(converted));
         }
@@ -115,11 +99,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
         [TestMethod]
         public void Order()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var fetch = @"
                 <fetch>
                     <entity name='contact'>
@@ -129,7 +109,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
                     </entity>
                 </fetch>";
 
-            var converted = FetchXml2Sql.Convert(org, metadata, fetch, new FetchXml2SqlOptions(), out _);
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions(), out _);
 
             Assert.AreEqual("SELECT firstname, lastname FROM contact ORDER BY firstname ASC", NormalizeWhitespace(converted));
         }
@@ -137,11 +117,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
         [TestMethod]
         public void OrderDescending()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var fetch = @"
                 <fetch>
                     <entity name='contact'>
@@ -151,7 +127,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
                     </entity>
                 </fetch>";
 
-            var converted = FetchXml2Sql.Convert(org, metadata, fetch, new FetchXml2SqlOptions(), out _);
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions(), out _);
 
             Assert.AreEqual("SELECT firstname, lastname FROM contact ORDER BY firstname DESC", NormalizeWhitespace(converted));
         }
@@ -159,11 +135,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
         [TestMethod]
         public void NoLock()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var fetch = @"
                 <fetch no-lock='true'>
                     <entity name='contact'>
@@ -172,7 +144,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
                     </entity>
                 </fetch>";
 
-            var converted = FetchXml2Sql.Convert(org, metadata, fetch, new FetchXml2SqlOptions(), out _);
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions(), out _);
 
             Assert.AreEqual("SELECT firstname, lastname FROM contact WITH (NOLOCK)", NormalizeWhitespace(converted));
         }
@@ -180,11 +152,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
         [TestMethod]
         public void Top()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var fetch = @"
                 <fetch top='10'>
                     <entity name='contact'>
@@ -193,7 +161,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
                     </entity>
                 </fetch>";
 
-            var converted = FetchXml2Sql.Convert(org, metadata, fetch, new FetchXml2SqlOptions(), out _);
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions(), out _);
 
             Assert.AreEqual("SELECT TOP 10 firstname, lastname FROM contact", NormalizeWhitespace(converted));
         }
@@ -201,11 +169,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
         [TestMethod]
         public void Distinct()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var fetch = @"
                 <fetch distinct='true'>
                     <entity name='contact'>
@@ -214,7 +178,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
                     </entity>
                 </fetch>";
 
-            var converted = FetchXml2Sql.Convert(org, metadata, fetch, new FetchXml2SqlOptions(), out _);
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions(), out _);
 
             Assert.AreEqual("SELECT DISTINCT firstname, lastname FROM contact", NormalizeWhitespace(converted));
         }
@@ -222,11 +186,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
         [TestMethod]
         public void CustomOperator()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var fetch = @"
                 <fetch>
                     <entity name='contact'>
@@ -238,7 +198,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
                     </entity>
                 </fetch>";
 
-            var converted = FetchXml2Sql.Convert(org, metadata, fetch, new FetchXml2SqlOptions(), out _);
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions(), out _);
 
             Assert.AreEqual("SELECT firstname, lastname FROM contact WHERE createdon = lastxdays(2)", NormalizeWhitespace(converted));
         }
@@ -246,11 +206,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
         [TestMethod]
         public void LastXDaysConversion()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var fetch = @"
                 <fetch>
                     <entity name='contact'>
@@ -262,7 +218,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
                     </entity>
                 </fetch>";
 
-            var converted = FetchXml2Sql.Convert(org, metadata, fetch, new FetchXml2SqlOptions { ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.Literals }, out _);
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions { ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.Literals }, out _);
 
             Assert.AreEqual($"SELECT firstname, lastname FROM contact WHERE createdon >= '{DateTime.Today.AddDays(-2):s}' AND createdon < '{DateTime.Now:s}'", NormalizeWhitespace(converted));
         }
@@ -270,11 +226,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
         [TestMethod]
         public void NextXYearsConversion()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var fetch = @"
                 <fetch>
                     <entity name='contact'>
@@ -286,7 +238,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
                     </entity>
                 </fetch>";
 
-            var converted = FetchXml2Sql.Convert(org, metadata, fetch, new FetchXml2SqlOptions { ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.Literals }, out _);
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions { ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.Literals }, out _);
 
             Assert.AreEqual($"SELECT firstname, lastname FROM contact WHERE createdon >= '{DateTime.Now:s}' AND createdon < '{DateTime.Today.AddDays(1).AddYears(2):s}'", NormalizeWhitespace(converted));
         }
@@ -294,11 +246,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
         [TestMethod]
         public void ParameterConversion()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var fetch = @"
                 <fetch>
                     <entity name='contact'>
@@ -310,7 +258,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
                     </entity>
                 </fetch>";
 
-            var converted = FetchXml2Sql.Convert(org, metadata, fetch, new FetchXml2SqlOptions { UseParametersForLiterals = true }, out var parameters);
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions { UseParametersForLiterals = true }, out var parameters);
 
             Assert.AreEqual("SELECT firstname, lastname FROM contact WHERE firstname = @firstname", NormalizeWhitespace(converted));
             Assert.AreEqual("Mark", parameters["@firstname"]);
@@ -319,11 +267,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
         [TestMethod]
         public void AndOr()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var fetch = @"
                 <fetch>
                     <entity name='contact'>
@@ -339,7 +283,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
                     </entity>
                 </fetch>";
 
-            var converted = FetchXml2Sql.Convert(org, metadata, fetch, new FetchXml2SqlOptions(), out _);
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions(), out _);
 
             Assert.AreEqual("SELECT firstname, lastname FROM contact WHERE firstname = 'Mark' AND (lastname = 'Carrington' OR lastname = 'Twain')", NormalizeWhitespace(converted));
         }
@@ -347,11 +291,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
         [TestMethod]
         public void JoinFilterOr()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var fetch = @"
                 <fetch>
                     <entity name='contact'>
@@ -366,7 +306,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
                     </entity>
                 </fetch>";
 
-            var converted = FetchXml2Sql.Convert(org, metadata, fetch, new FetchXml2SqlOptions(), out _);
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions(), out _);
 
             Assert.AreEqual("SELECT contact.firstname, contact.lastname FROM contact INNER JOIN account ON contact.parentcustomerid = account.accountid AND (account.name = 'Data8' OR account.name = 'Microsoft')", NormalizeWhitespace(converted));
         }
@@ -397,12 +337,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
         [TestMethod]
         public void EqBusinessId()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-            context.AddFakeMessageExecutor<WhoAmIRequest>(new WhoAmIHandler());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var fetch = @"
                 <fetch>
                     <entity name='contact'>
@@ -414,7 +349,7 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
                     </entity>
                 </fetch>";
 
-            var converted = FetchXml2Sql.Convert(org, metadata, fetch, new FetchXml2SqlOptions { ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.Literals }, out _);
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions { ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.Literals }, out _);
 
             Assert.AreEqual($"SELECT firstname, lastname FROM contact WHERE parentcustomerid = '{WhoAmIHandler.BusinessUnitId:D}'", NormalizeWhitespace(converted));
         }
@@ -422,36 +357,6 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
         private static string NormalizeWhitespace(string s)
         {
             return Regex.Replace(s, "\\s+", " ");
-        }
-
-        private class WhoAmIHandler : IFakeMessageExecutor
-        {
-            public static readonly Guid OrganizationId = new Guid("{79E88435-F8FA-44DD-946B-3BA82D3108E2}");
-            public static readonly Guid BusinessUnitId = new Guid("{87A741C8-5344-4A8E-B594-AF5A88E0CFB8}");
-            public static readonly Guid UserId = new Guid("{CE1FE91F-605C-4E84-94FB-5AD94BE5996C}");
-
-            public bool CanExecute(OrganizationRequest request)
-            {
-                return true;
-            }
-
-            public OrganizationResponse Execute(OrganizationRequest request, XrmFakedContext ctx)
-            {
-                return new WhoAmIResponse
-                {
-                    Results = new ParameterCollection
-                    {
-                        [nameof(OrganizationId)] = OrganizationId,
-                        [nameof(BusinessUnitId)] = BusinessUnitId,
-                        [nameof(UserId)] = UserId
-                    }
-                };
-            }
-
-            public Type GetResponsibleRequestType()
-            {
-                return typeof(WhoAmIRequest);
-            }
         }
     }
 }

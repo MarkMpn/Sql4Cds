@@ -15,18 +15,13 @@ using Microsoft.Xrm.Sdk;
 namespace MarkMpn.Sql4Cds.Engine.Tests
 {
     [TestClass]
-    public class ExecutionPlanNodeTests
+    public class ExecutionPlanNodeTests : FakeXrmEasyTestsBase
     {
-        private readonly IOrganizationService _org;
         private readonly IAttributeMetadataCache _metadata;
 
         public ExecutionPlanNodeTests()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            _org = context.GetOrganizationService();
-            _metadata = new AttributeMetadataCache(_org);
+            _metadata = new AttributeMetadataCache(_service);
         }
 
         [TestMethod]
@@ -47,7 +42,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var results = node.Execute(_org, _metadata, new StubOptions(), null, null).ToArray();
+            var results = node.Execute(_service, _metadata, new StubOptions(), null, null).ToArray();
 
             Assert.AreEqual(1, results.Length);
             Assert.AreEqual("Mark", ((SqlString)results[0]["firstname"]).Value);
@@ -87,7 +82,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var results = node.Execute(_org, _metadata, new StubOptions(), null, null).ToArray();
+            var results = node.Execute(_service, _metadata, new StubOptions(), null, null).ToArray();
 
             Assert.AreEqual(1, results.Length);
             Assert.AreEqual("Mark", ((SqlString)results[0]["firstname"]).Value);
@@ -142,7 +137,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 JoinType = QualifiedJoinType.Inner
             };
 
-            var results = node.Execute(_org, _metadata, new StubOptions(), null, null).ToArray();
+            var results = node.Execute(_service, _metadata, new StubOptions(), null, null).ToArray();
 
             Assert.AreEqual(2, results.Length);
             Assert.AreEqual("Mark", ((SqlString)results[0]["f.firstname"]).Value);
@@ -202,7 +197,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 JoinType = QualifiedJoinType.LeftOuter
             };
 
-            var results = node.Execute(_org, _metadata, new StubOptions(), null, null).ToArray();
+            var results = node.Execute(_service, _metadata, new StubOptions(), null, null).ToArray();
 
             Assert.AreEqual(3, results.Length);
             Assert.AreEqual("Mark", ((SqlString)results[0]["f.firstname"]).Value);
@@ -264,7 +259,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 JoinType = QualifiedJoinType.RightOuter
             };
 
-            var results = node.Execute(_org, _metadata, new StubOptions(), null, null).ToArray();
+            var results = node.Execute(_service, _metadata, new StubOptions(), null, null).ToArray();
 
             Assert.AreEqual(3, results.Length);
             Assert.AreEqual("Mark", ((SqlString)results[0]["f.firstname"]).Value);
@@ -292,7 +287,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 ErrorMessage = "Only Mark is allowed"
             };
 
-            var results = node.Execute(_org, _metadata, new StubOptions(), null, null).GetEnumerator();
+            var results = node.Execute(_service, _metadata, new StubOptions(), null, null).GetEnumerator();
 
             Assert.IsTrue(results.MoveNext());
             Assert.AreEqual("Mark", results.Current.GetAttributeValue<SqlString>("name").Value);
@@ -342,7 +337,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var results = node.Execute(_org, _metadata, new StubOptions(), null, null)
+            var results = node.Execute(_service, _metadata, new StubOptions(), null, null)
                 .Select(e => e.GetAttributeValue<SqlInt32>("mul").Value)
                 .ToArray();
 
@@ -371,7 +366,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var results = node.Execute(_org, _metadata, new StubOptions(), null, null)
+            var results = node.Execute(_service, _metadata, new StubOptions(), null, null)
                 .Select(e => e.GetAttributeValue<SqlInt32>("value1").Value)
                 .ToArray();
 
@@ -400,7 +395,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var results = node.Execute(_org, _metadata, new StubOptions(), null, null)
+            var results = node.Execute(_service, _metadata, new StubOptions(), null, null)
                 .Select(e => e.GetAttributeValue<SqlString>("value1").Value)
                 .ToArray();
 
@@ -442,7 +437,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var results = node.Execute(_org, _metadata, new StubOptions(), null, null)
+            var results = node.Execute(_service, _metadata, new StubOptions(), null, null)
                 .Select(e => e.GetAttributeValue<SqlInt32>("expectedorder").Value)
                 .ToArray();
 
@@ -486,7 +481,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var results = node.Execute(_org, _metadata, new StubOptions(), null, null)
+            var results = node.Execute(_service, _metadata, new StubOptions(), null, null)
                 .Select(e => e.GetAttributeValue<SqlInt32>("expectedorder").Value)
                 .ToArray();
 
@@ -511,11 +506,11 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var spool = new TableSpoolNode { Source = source };
 
-            var results1 = spool.Execute(_org, _metadata, new StubOptions(), null, null)
+            var results1 = spool.Execute(_service, _metadata, new StubOptions(), null, null)
                 .Select(e => e.GetAttributeValue<SqlInt32>("value1").Value)
                 .ToArray();
 
-            var results2 = spool.Execute(_org, _metadata, new StubOptions(), null, null)
+            var results2 = spool.Execute(_service, _metadata, new StubOptions(), null, null)
                 .Select(e => e.GetAttributeValue<SqlInt32>("value1").Value)
                 .ToArray();
 

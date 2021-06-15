@@ -119,6 +119,7 @@
     <Reference Include="System.Xml.Linq" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="FakeXrmEasyTestsBase.cs" />
     <Compile Include="FetchXml2SqlTests.cs" />
     <Compile Include="Metadata\Account.cs" />
     <Compile Include="Metadata\Contact.cs" />
