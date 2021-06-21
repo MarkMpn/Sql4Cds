@@ -49,6 +49,7 @@
             this.tslAboutLink = new System.Windows.Forms.ToolStripLabel();
             this.dockPanel = new WeifenLuo.WinFormsUI.Docking.DockPanel();
             this.saveSessionTimer = new System.Windows.Forms.Timer(this.components);
+            this.tsbFetchXMLBuilder = new System.Windows.Forms.ToolStripButton();
             this.toolStripMenu.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -65,6 +66,7 @@
             this.tsbExecute,
             this.tsbStop,
             this.tsbPreviewFetchXml,
+            this.tsbFetchXMLBuilder,
             this.toolStripSeparator3,
             this.tsbIncludeFetchXml,
             this.tssSeparator1,
@@ -246,6 +248,17 @@
             this.saveSessionTimer.Interval = 60000;
             this.saveSessionTimer.Tick += new System.EventHandler(this.saveSessionTimer_Tick);
             // 
+            // tsbFetchXMLBuilder
+            // 
+            this.tsbFetchXMLBuilder.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Image;
+            this.tsbFetchXMLBuilder.Enabled = false;
+            this.tsbFetchXMLBuilder.Image = global::MarkMpn.Sql4Cds.Properties.Resources.FXB;
+            this.tsbFetchXMLBuilder.ImageTransparentColor = System.Drawing.Color.Magenta;
+            this.tsbFetchXMLBuilder.Name = "tsbFetchXMLBuilder";
+            this.tsbFetchXMLBuilder.Size = new System.Drawing.Size(23, 22);
+            this.tsbFetchXMLBuilder.Text = "Edit in FetchXML Builder";
+            this.tsbFetchXMLBuilder.Click += new System.EventHandler(this.tsbFetchXMLBuilder_Click);
+            // 
             // PluginControl
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -283,5 +296,6 @@
         private System.Windows.Forms.ToolStripButton tsbIncludeFetchXml;
         private System.Windows.Forms.ToolStripButton tsbChangeConnection;
         private System.Windows.Forms.Timer saveSessionTimer;
+        private System.Windows.Forms.ToolStripButton tsbFetchXMLBuilder;
     }
 }

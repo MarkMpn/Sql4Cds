@@ -32,7 +32,7 @@ using XrmToolBox.Extensibility;
 
 namespace MarkMpn.Sql4Cds
 {
-    partial class SqlQueryControl : WeifenLuo.WinFormsUI.Docking.DockContent
+    partial class SqlQueryControl : WeifenLuo.WinFormsUI.Docking.DockContent, IDocumentWindow
     {
         class ExecuteParams
         {
@@ -99,12 +99,12 @@ namespace MarkMpn.Sql4Cds
             _sqlIcon = Icon.FromHandle(Properties.Resources.SQLFile_16x.GetHicon());
         }
 
-        public SqlQueryControl(ConnectionDetail con, SharedMetadataCache metadata, ITableSizeCache tableSize, TelemetryClient ai, Action<MessageBusEventArgs> outgoingMessageHandler, Action<string> log, PropertiesWindow properties)
+        public SqlQueryControl(ConnectionDetail con, SharedMetadataCache metadata, ITableSizeCache tableSize, TelemetryClient ai, Action<string> showFetchXml, Action<string> log, PropertiesWindow properties)
         {
             InitializeComponent();
             _displayName = $"Query {++_queryCounter}";
             _modified = true;
-            OutgoingMessageHandler = outgoingMessageHandler;
+            ShowFetchXML = showFetchXml;
             _editor = CreateSqlEditor();
             _autocomplete = CreateAutocomplete();
             _ai = ai;
@@ -129,7 +129,7 @@ namespace MarkMpn.Sql4Cds
 
         public CrmServiceClient Service { get; private set; }
         public IAttributeMetadataCache Metadata { get; private set; }
-        public Action<MessageBusEventArgs> OutgoingMessageHandler { get; }
+        public Action<string> ShowFetchXML { get; }
         public string Filename
         {
             get { return _filename; }
@@ -417,16 +417,17 @@ namespace MarkMpn.Sql4Cds
             return scintilla;
         }
 
-        internal TabContent GetSessionDetails()
+        TabContent IDocumentWindow.GetSessionDetails()
         {
             return new TabContent
             {
+                Type = "SQL",
                 Filename = Filename,
                 Query = _modified ? _editor.Text : null
             };
         }
 
-        internal void RestoreSessionDetails(TabContent tab)
+        void IDocumentWindow.RestoreSessionDetails(TabContent tab)
         {
             var content = tab.Query;
 
@@ -1095,12 +1096,7 @@ namespace MarkMpn.Sql4Cds
                 planView.DoubleClick += (s, e) =>
                 {
                     if (planView.Selected is IFetchXmlExecutionPlanNode fetchXml)
-                    { 
-                        OutgoingMessageHandler(new MessageBusEventArgs("FetchXML Builder")
-                        {
-                            TargetArgument = fetchXml.FetchXmlString
-                        });
-                    }
+                        ShowFetchXML(fetchXml.FetchXmlString);
                 };
                 plan.Controls.Add(planView);
                 plan.Controls.Add(fetchLabel);

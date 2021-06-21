@@ -252,7 +252,14 @@
     <Compile Include="ExecutionPlanView.cs">
       <SubType>Component</SubType>
     </Compile>
+    <Compile Include="FetchXmlControl.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="FetchXmlControl.Designer.cs">
+      <DependentUpon>FetchXmlControl.cs</DependentUpon>
+    </Compile>
     <Compile Include="FunctionMetadata.cs" />
+    <Compile Include="IDocumentWindow.cs" />
     <Compile Include="PropertiesWindow.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -302,6 +309,9 @@
     </None>
   </ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="FetchXmlControl.resx">
+      <DependentUpon>FetchXmlControl.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="PropertiesWindow.resx">
       <DependentUpon>PropertiesWindow.cs</DependentUpon>
     </EmbeddedResource>
