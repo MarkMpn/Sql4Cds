@@ -22,15 +22,18 @@ plugins or integrations by writing familiar SQL and converting it.
 
 Using the preview TDS Endpoint, SELECT queries can also be run that aren't convertible to FetchXML.</description>
     <summary>Convert SQL queries to FetchXML and execute them against CDS</summary>
-    <releaseNotes>Simplified accessing ___name and ___type virtual attributes
-Fixed accessing partylist attributes
-Fixed updating/inserting partylist and multi-select optionset values
-Fixed converting numeric values to datetime and datetime values to date
-Fixed folding DATEPART calculations into FetchXML
-Fixed folding IS NULL conditions to metadata queries
-Fixed aggregate queries on optionset or entity name attributes
-Improved error reporting
-Allow use of "exists" link entity type for online instances</releaseNotes>
+    <releaseNotes>Performance updates for bulk INSERT/UPDATE/DELETE:
+- Disable affinity cookie
+- Allow bypassing plugins
+
+Improved error reporting on nested errors
+Use shared metadata cache from XrmToolBox for improved performance
+Save &amp; restore session details
+Fixed COUNT(*) with IN subqueries
+Reordered joins in FetchXML to avoid paging issues
+Added help links to Settings dialog
+Autocomplete improvements
+Show FetchXML in main document window</releaseNotes>
     <copyright>Copyright © 2019 Mark Carrington</copyright>
     <language>en-GB</language>
     <tags>XrmToolBox SQL CDS</tags>
