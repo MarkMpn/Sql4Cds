@@ -14,7 +14,9 @@ namespace MarkMpn.Sql4Cds
     {
         private readonly ConnectionDetail _connection;
         private readonly AttributeMetadataCache _innerCache;
-        private static readonly bool _metadataCacheSupported = typeof(ConnectionDetail).Assembly.GetName().Version > new Version("1.2021.5.42");
+
+        // Metadata cache updating was broken in first release, make sure we're only using it on later versions
+        private static readonly bool _metadataCacheSupported = typeof(ConnectionDetail).Assembly.GetName().Version >= new Version("1.2021.6.44");
 
         public SharedMetadataCache(ConnectionDetail connection)
         {
