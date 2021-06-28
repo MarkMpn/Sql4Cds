@@ -67,7 +67,28 @@ namespace MarkMpn.Sql4Cds
 
         private void helpIcon_Click(object sender, EventArgs e)
         {
-            System.Diagnostics.Process.Start((string) ((Control)sender).Tag);
+            var url = (string)((Control)sender).Tag;
+            const string token = "WT.mc_id=DX-MVP-5004203";
+
+            var anchor = url.IndexOf('#');
+            var query = url.IndexOf('?');
+
+            if (anchor == -1)
+            {
+                if (query == -1)
+                    url += "?" + token;
+                else
+                    url += "&" + token;
+            }
+            else
+            {
+                if (query == -1)
+                    url = url.Insert(anchor, "?" + token);
+                else
+                    url = url.Insert(anchor, "&" + token);
+            }
+
+            System.Diagnostics.Process.Start(url);
         }
     }
 }
