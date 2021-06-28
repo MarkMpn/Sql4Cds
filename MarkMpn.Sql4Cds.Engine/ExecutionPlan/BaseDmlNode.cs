@@ -335,13 +335,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 svc = null;
             }
 
+            var useAffinityCookie = maxDop == 1 || entities.Count < 100;
+
             try
             {
                 using (UseParallelConnections())
                 {
                     Parallel.ForEach(entities,
                         new ParallelOptions { MaxDegreeOfParallelism = maxDop },
-                        () => new { Service = svc?.Clone() ?? org, EMR = default(ExecuteMultipleRequest) },
+                        () =>
+                        {
+                            var service = svc?.Clone() ?? org;
+
+                            if (!useAffinityCookie && service is CrmServiceClient crmService)
+                                crmService.EnableAffinityCookie = false;
+
+                            return new { Service = service, EMR = default(ExecuteMultipleRequest) };
+                        },
                         (entity, loopState, index, threadLocalState) =>
                         {
                             if (options.Cancelled)
@@ -351,6 +361,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             }
 
                             var request = requestGenerator(entity);
+
+                            if (options.BypassCustomPlugins)
+                                request.Parameters["BypassCustomPluginExecution"] = true;
 
                             if (options.BatchSize == 1)
                             {

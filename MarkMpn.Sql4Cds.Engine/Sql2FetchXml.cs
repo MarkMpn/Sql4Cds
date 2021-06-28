@@ -61,6 +61,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
             public List<JoinOperator> JoinOperatorsAvailable => new List<JoinOperator> { JoinOperator.Inner, JoinOperator.LeftOuter };
 
+            public bool BypassCustomPlugins => false;
+
             public bool ConfirmDelete(int count, EntityMetadata meta)
             {
                 throw new NotImplementedException();

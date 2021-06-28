@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Windows.Forms;
 using System.Xml.Serialization;
 using MarkMpn.Sql4Cds.Engine;
@@ -16,45 +17,38 @@ namespace MarkMpn.Sql4Cds
 {
     public partial class PluginControl : MultipleConnectionsPluginControlBase, IMessageBusHost, IGitHubPlugin, IHelpPlugin, ISettingsPlugin, IPayPalPlugin
     {
-        private readonly IDictionary<ConnectionDetail, AttributeMetadataCache> _metadata;
+        private readonly IDictionary<ConnectionDetail, SharedMetadataCache> _metadata;
         private readonly IDictionary<ConnectionDetail, TableSizeCache> _tableSize;
         private readonly TelemetryClient _ai;
         private readonly ObjectExplorer _objectExplorer;
         private readonly PropertiesWindow _properties;
+        private bool _connectObjectExplorer;
 
         public PluginControl()
         {
             InitializeComponent();
             dockPanel.Theme = new VS2015LightTheme();
-            _metadata = new Dictionary<ConnectionDetail, AttributeMetadataCache>();
+            _metadata = new Dictionary<ConnectionDetail, SharedMetadataCache>();
             _tableSize = new Dictionary<ConnectionDetail, TableSizeCache>();
-            _objectExplorer = new ObjectExplorer(_metadata, WorkAsync, con => CreateQuery(con, ""));
+            _objectExplorer = new ObjectExplorer(_metadata, WorkAsync, con => CreateQuery(con, ""), () => { _connectObjectExplorer = true; AddAdditionalOrganization(); });
             _objectExplorer.Show(dockPanel, DockState.DockLeft);
             _objectExplorer.CloseButtonVisible = false;
             _properties = new PropertiesWindow();
             _properties.Show(dockPanel, DockState.DockRightAutoHide);
             _ai = new TelemetryClient(new Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration("79761278-a908-4575-afbf-2f4d82560da6"));
+            _connectObjectExplorer = true;
 
             TabIcon = Properties.Resources.SQL4CDS_Icon_16;
             PluginIcon = System.Drawing.Icon.FromHandle(Properties.Resources.SQL4CDS_Icon_16.GetHicon());
-            dockPanel.ActiveDocumentChanged += DockPanel_ActiveDocumentChanged;
-        }
-
-        private void DockPanel_ActiveDocumentChanged(object sender, EventArgs e)
-        {
-            if (dockPanel.ActiveDocument is SqlQueryControl sql)
-                _properties.SelectObject(sql.Connection);
-            else
-                _properties.SelectObject(null);
         }
 
         protected override void OnConnectionUpdated(ConnectionUpdatedEventArgs e)
         {
             AddConnection(e.ConnectionDetail);
 
-            if (dockPanel.ActiveDocument == null)
-                tsbNewQuery_Click(this, EventArgs.Empty);
-            
+            if (dockPanel.ActiveDocument is SqlQueryControl query && !_connectObjectExplorer)
+                query.ChangeConnection(e.ConnectionDetail, _metadata[e.ConnectionDetail], _tableSize[e.ConnectionDetail]);
+
             base.OnConnectionUpdated(e);
         }
 
@@ -62,8 +56,13 @@ namespace MarkMpn.Sql4Cds
         {
             if (e.Action == NotifyCollectionChangedAction.Add)
             {
-                foreach (var con in e.NewItems)
-                    AddConnection((ConnectionDetail) con);
+                foreach (ConnectionDetail con in e.NewItems)
+                {
+                    AddConnection(con);
+
+                    if (!_connectObjectExplorer && dockPanel.ActiveDocument is SqlQueryControl query)
+                        query.ChangeConnection(con, _metadata[con], _tableSize[con]);
+                }
             }
         }
 
@@ -71,12 +70,17 @@ namespace MarkMpn.Sql4Cds
         {
             var svc = con.ServiceClient;
 
-            _metadata[con] = new AttributeMetadataCache(svc);
-            _tableSize[con] = new TableSizeCache(svc, _metadata[con]);
-            _objectExplorer.AddConnection(con);
+            if (!_metadata.ContainsKey(con))
+                _metadata[con] = new SharedMetadataCache(con);
+            
+            if (!_tableSize.ContainsKey(con))
+                _tableSize[con] = new TableSizeCache(svc, _metadata[con]);
+
+            if (_connectObjectExplorer)
+                _objectExplorer.AddConnection(con);
 
             // Start loading the entity list in the background
-            EntityCache.TryGetEntities(svc, out _);
+            EntityCache.TryGetEntities(con.MetadataCacheLoader, svc, out _);
         }
 
         private void PluginControl_Load(object sender, EventArgs e)
@@ -88,6 +92,44 @@ namespace MarkMpn.Sql4Cds
             Settings.Instance = settings;
 
             tsbIncludeFetchXml.Checked = settings.IncludeFetchXml;
+
+            if (settings.RememberSession && settings.Session != null)
+            {
+                foreach (var doc in dockPanel.Documents.OfType<Form>().ToArray())
+                    doc.Close();
+
+                foreach (var tab in settings.Session)
+                {
+                    IDocumentWindow query = null;
+
+                    switch (tab.Type)
+                    {
+                        case "SQL":
+                            query = CreateQuery(_objectExplorer.SelectedConnection, null);
+                            break;
+
+                        case "FetchXML":
+                            query = CreateFetchXML(null);
+                            break;
+
+                        default:
+                            continue;
+                    }
+
+                    try
+                    {
+                        query.RestoreSessionDetails(tab);
+                    }
+                    catch
+                    {
+                        ((Form)query).Close();
+                    }
+                }
+            }
+            else
+            {
+                tsbNewQuery_Click(this, EventArgs.Empty);
+            }
         }
 
         private void tsbExecute_Click(object sender, EventArgs e)
@@ -110,6 +152,13 @@ namespace MarkMpn.Sql4Cds
 
         private void tsbConnect_Click(object sender, EventArgs e)
         {
+            _connectObjectExplorer = false;
+            AddAdditionalOrganization();
+        }
+
+        private void tsbChangeConnection_Click(object sender, EventArgs e)
+        {
+            _connectObjectExplorer = false;
             AddAdditionalOrganization();
         }
 
@@ -122,13 +171,24 @@ namespace MarkMpn.Sql4Cds
         }
 
         private SqlQueryControl CreateQuery(ConnectionDetail con, string sql)
-        { 
-            var query = new SqlQueryControl(con, _metadata[con], _tableSize[con], _ai, SendOutgoingMessage, msg => LogError(msg), _properties);
+        {
+            var query = new SqlQueryControl(con, con == null ? null : _metadata[con], con == null ? null : _tableSize[con], _ai, xml => CreateFetchXML(xml), msg => LogError(msg), _properties);
             query.InsertText(sql);
             query.CancellableChanged += SyncStopButton;
             query.BusyChanged += SyncExecuteButton;
 
-            query.Show(dockPanel, WeifenLuo.WinFormsUI.Docking.DockState.Document);
+            query.Show(dockPanel, DockState.Document);
+            query.SetFocus();
+
+            return query;
+        }
+
+        private FetchXmlControl CreateFetchXML(string xml)
+        {
+            var query = new FetchXmlControl();
+            query.FetchXml = xml;
+
+            query.Show(dockPanel, DockState.Document);
             query.SetFocus();
 
             return query;
@@ -139,7 +199,7 @@ namespace MarkMpn.Sql4Cds
             if (dockPanel.ActiveDocument == null)
                 return;
 
-            var query = (SqlQueryControl)dockPanel.ActiveDocument;
+            var query = (IDocumentWindow)dockPanel.ActiveDocument;
             query.Format();
         }
 
@@ -206,12 +266,6 @@ namespace MarkMpn.Sql4Cds
             }
         }
 
-        public void SendOutgoingMessage(MessageBusEventArgs args)
-        {
-            _ai.TrackEvent("Outgoing message", new Dictionary<string, string> { ["TargetPlugin"] = args.TargetPlugin, ["Source"] = "XrmToolBox" });
-            OnOutgoingMessage(this, args);
-        }
-
         private void tsbOpen_Click(object sender, EventArgs e)
         {
             if (_objectExplorer.SelectedConnection == null)
@@ -234,14 +288,26 @@ namespace MarkMpn.Sql4Cds
             if (dockPanel.ActiveDocument == null)
                 return;
 
-            ((SqlQueryControl)dockPanel.ActiveDocument).Save();
+            ((IDocumentWindow)dockPanel.ActiveDocument).Save();
         }
 
         private void dockPanel_ActiveDocumentChanged(object sender, EventArgs e)
         {
-            tsbSave.Enabled = dockPanel.ActiveDocument != null;
+            var doc = (IDocumentWindow)dockPanel.ActiveDocument;
+            var sql = doc as SqlQueryControl;
+            var xml = doc as FetchXmlControl;
+            tsbSave.Enabled = doc != null;
+            tsbConnect.Enabled = sql != null && sql.Connection == null;
+            tsbChangeConnection.Enabled = sql != null && sql.Connection != null;
+            tsbFetchXMLBuilder.Enabled = xml != null;
+            tsbFormat.Enabled = doc != null;
             SyncStopButton(sender, e);
             SyncExecuteButton(sender, e);
+
+            if (sql != null)
+                _properties.SelectObject(sql.Connection);
+            else
+                _properties.SelectObject(null);
         }
 
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
@@ -268,24 +334,26 @@ namespace MarkMpn.Sql4Cds
 
         private void SyncStopButton(object sender, EventArgs e)
         {
-            if (dockPanel.ActiveDocument == null)
+            if (!(dockPanel.ActiveDocument is SqlQueryControl query))
             {
                 tsbStop.Enabled = false;
                 return;
             }
 
-            tsbStop.Enabled = ((SqlQueryControl)dockPanel.ActiveDocument).Cancellable;
+            tsbStop.Enabled = query.Cancellable;
         }
 
         private void SyncExecuteButton(object sender, EventArgs e)
         {
-            if (dockPanel.ActiveDocument == null)
+            if (!(dockPanel.ActiveDocument is SqlQueryControl query))
             {
                 tsbExecute.Enabled = false;
+                tsbPreviewFetchXml.Enabled = false;
                 return;
             }
 
-            tsbExecute.Enabled = !((SqlQueryControl)dockPanel.ActiveDocument).Busy;
+            tsbExecute.Enabled = query.Connection != null && !query.Busy;
+            tsbPreviewFetchXml.Enabled = query.Connection != null && !query.Busy;
         }
 
         private void tsbStop_Click(object sender, EventArgs e)
@@ -317,8 +385,39 @@ namespace MarkMpn.Sql4Cds
             using (var form = new SettingsForm(Settings.Instance))
             {
                 if (form.ShowDialog(this) == DialogResult.OK)
-                    SettingsManager.Instance.Save(GetType(), Settings.Instance);
+                    SaveSettings();
             }
+        }
+
+        private void SaveSettings()
+        {
+            if (Settings.Instance.RememberSession)
+                Settings.Instance.Session = dockPanel.Documents.OfType<IDocumentWindow>().Select(query => query.GetSessionDetails()).ToArray();
+            else
+                Settings.Instance.Session = null;
+
+            SettingsManager.Instance.Save(GetType(), Settings.Instance);
+        }
+
+        public override void ClosingPlugin(PluginCloseInfo info)
+        {
+            if (Settings.Instance.RememberSession)
+                SaveSettings();
+
+            base.ClosingPlugin(info);
+        }
+
+        private void saveSessionTimer_Tick(object sender, EventArgs e)
+        {
+            if (Settings.Instance.RememberSession)
+                SaveSettings();
+        }
+
+        private void tsbFetchXMLBuilder_Click(object sender, EventArgs e)
+        {
+            var args = new MessageBusEventArgs("FetchXML Builder") { TargetArgument = ((FetchXmlControl)dockPanel.ActiveDocument).FetchXml };
+            _ai.TrackEvent("Outgoing message", new Dictionary<string, string> { ["TargetPlugin"] = args.TargetPlugin, ["Source"] = "XrmToolBox" });
+            OnOutgoingMessage(this, args);
         }
     }
 }

@@ -73,6 +73,16 @@ namespace MarkMpn.Sql4Cds.Properties {
         /// <summary>
         ///   Looks up a localized resource of type System.Drawing.Bitmap.
         /// </summary>
+        internal static System.Drawing.Bitmap Disconnect_Filled_16x {
+            get {
+                object obj = ResourceManager.GetObject("Disconnect_Filled_16x", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Bitmap.
+        /// </summary>
         internal static System.Drawing.Bitmap ExecutionPlan_16x {
             get {
                 object obj = ResourceManager.GetObject("ExecutionPlan_16x", resourceCulture);
@@ -126,6 +136,16 @@ namespace MarkMpn.Sql4Cds.Properties {
         internal static System.Drawing.Bitmap SQLFile_16x {
             get {
                 object obj = ResourceManager.GetObject("SQLFile_16x", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Bitmap.
+        /// </summary>
+        internal static System.Drawing.Bitmap StatusHelp_16x {
+            get {
+                object obj = ResourceManager.GetObject("StatusHelp_16x", resourceCulture);
                 return ((System.Drawing.Bitmap)(obj));
             }
         }

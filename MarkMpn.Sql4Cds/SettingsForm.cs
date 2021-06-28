@@ -27,12 +27,14 @@ namespace MarkMpn.Sql4Cds
             blockDeleteWithoutWhereCheckbox.Checked = settings.BlockDeleteWithoutWhere;
             batchSizeUpDown.Value = settings.BatchSize;
             bulkDeleteCheckbox.Checked = settings.UseBulkDelete;
+            bypassCustomPluginsCheckBox.Checked = settings.BypassCustomPlugins;
             localTimesComboBox.SelectedIndex = settings.ShowLocalTimes ? 1 : 0;
             tsqlEndpointCheckBox.Checked = settings.UseTSQLEndpoint;
             retrieveTotalRecordCountCheckbox.Checked = settings.UseRetrieveTotalRecordCount;
             showTooltipsCheckbox.Checked = settings.ShowIntellisenseTooltips;
             maxDopUpDown.Value = settings.MaxDegreeOfPaallelism;
             autoSizeColumnsCheckBox.Checked = settings.AutoSizeColumns;
+            rememberSessionCheckbox.Checked = settings.RememberSession;
 
             _settings = settings;
         }
@@ -52,13 +54,41 @@ namespace MarkMpn.Sql4Cds
                 _settings.BlockDeleteWithoutWhere = blockDeleteWithoutWhereCheckbox.Checked;
                 _settings.BatchSize = (int) batchSizeUpDown.Value;
                 _settings.UseBulkDelete = bulkDeleteCheckbox.Checked;
+                _settings.BypassCustomPlugins = bypassCustomPluginsCheckBox.Checked;
                 _settings.ShowLocalTimes = localTimesComboBox.SelectedIndex == 1;
                 _settings.UseTSQLEndpoint = tsqlEndpointCheckBox.Checked;
                 _settings.UseRetrieveTotalRecordCount = retrieveTotalRecordCountCheckbox.Checked;
                 _settings.ShowIntellisenseTooltips = showTooltipsCheckbox.Checked;
                 _settings.MaxDegreeOfPaallelism = (int) maxDopUpDown.Value;
                 _settings.AutoSizeColumns = autoSizeColumnsCheckBox.Checked;
+                _settings.RememberSession = rememberSessionCheckbox.Checked;
             }
+        }
+
+        private void helpIcon_Click(object sender, EventArgs e)
+        {
+            var url = (string)((Control)sender).Tag;
+            const string token = "WT.mc_id=DX-MVP-5004203";
+
+            var anchor = url.IndexOf('#');
+            var query = url.IndexOf('?');
+
+            if (anchor == -1)
+            {
+                if (query == -1)
+                    url += "?" + token;
+                else
+                    url += "&" + token;
+            }
+            else
+            {
+                if (query == -1)
+                    url = url.Insert(anchor, "?" + token);
+                else
+                    url = url.Insert(anchor, "&" + token);
+            }
+
+            System.Diagnostics.Process.Start(url);
         }
     }
 }

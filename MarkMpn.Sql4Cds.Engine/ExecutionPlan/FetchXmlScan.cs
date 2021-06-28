@@ -382,16 +382,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        protected string GetDisplayName(int count, EntityMetadata meta)
-        {
-            if (count == 1)
-                return meta.DisplayName?.UserLocalizedLabel?.Label ?? meta.LogicalName;
-
-            return meta.DisplayCollectionName?.UserLocalizedLabel?.Label ??
-                meta.LogicalCollectionName ??
-                meta.LogicalName;
-        }
-
         public override IEnumerable<IExecutionPlanNode> GetSources()
         {
             return Array.Empty<IDataExecutionPlanNode>();

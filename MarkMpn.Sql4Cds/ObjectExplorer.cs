@@ -10,13 +10,16 @@ using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
 using XrmToolBox.Extensibility;
 using Microsoft.Xrm.Sdk.Metadata.Query;
+using Microsoft.Xrm.Tooling.Connector;
+using System.Threading.Tasks;
 
 namespace MarkMpn.Sql4Cds
 {
-    public partial class ObjectExplorer : WeifenLuo.WinFormsUI.Docking.DockContent
+    partial class ObjectExplorer : WeifenLuo.WinFormsUI.Docking.DockContent
     {
-        private readonly IDictionary<ConnectionDetail, AttributeMetadataCache> _metadata;
+        private readonly IDictionary<ConnectionDetail, SharedMetadataCache> _metadata;
         private readonly Action<ConnectionDetail> _newQuery;
+        private readonly Action _connect;
 
         class LoaderParam
         {
@@ -24,13 +27,14 @@ namespace MarkMpn.Sql4Cds
             public TreeNode Parent;
         }
 
-        public ObjectExplorer(IDictionary<ConnectionDetail, AttributeMetadataCache> metadata, Action<WorkAsyncInfo> workAsync, Action<ConnectionDetail> newQuery)
+        public ObjectExplorer(IDictionary<ConnectionDetail, SharedMetadataCache> metadata, Action<WorkAsyncInfo> workAsync, Action<ConnectionDetail> newQuery, Action connect)
         {
             InitializeComponent();
 
             _metadata = metadata;
             WorkAsync = workAsync;
             _newQuery = newQuery;
+            _connect = connect;
         }
 
         public Action<WorkAsyncInfo> WorkAsync { get; }
@@ -70,7 +74,8 @@ namespace MarkMpn.Sql4Cds
 
         private TreeNode[] LoadEntities(TreeNode parent)
         {
-            var metadata = EntityCache.GetEntities(GetService(parent).ServiceClient);
+            var connection = GetService(parent);
+            var metadata = EntityCache.GetEntities(connection.MetadataCacheLoader, connection.ServiceClient);
 
             return metadata
                 .OrderBy(e => e.LogicalName)
@@ -116,12 +121,18 @@ namespace MarkMpn.Sql4Cds
         {
             var svc = con.ServiceClient;
 
-            EntityCache.TryGetEntities(svc, out _);
+            EntityCache.TryGetEntities(con.MetadataCacheLoader, svc, out _);
 
             var conNode = treeView.Nodes.Add(con.ConnectionName);
             conNode.Tag = con;
             conNode.ContextMenuStrip = serverContextMenuStrip;
             SetIcon(conNode, "Environment");
+
+            AddConnectionChildNodes(con, svc, conNode);
+        }
+
+        private void AddConnectionChildNodes(ConnectionDetail con, CrmServiceClient svc, TreeNode conNode)
+        {
             var entitiesNode = conNode.Nodes.Add("Entities");
             SetIcon(entitiesNode, "Folder");
             AddVirtualChildNodes(entitiesNode, LoadEntities);
@@ -527,6 +538,59 @@ INNER JOIN {manyToMany.Entity2LogicalName}
                 node = node.Parent;
 
             node.Remove();
+        }
+
+        private void serverContextMenuStrip_Opening(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            var con = GetService(treeView.SelectedNode);
+
+            switch (con.MetadataCacheLoader.Status)
+            {
+                case TaskStatus.RanToCompletion:
+                    refreshToolStripMenuItem.Enabled = con.MetadataCache != null;
+                    break;
+
+                case TaskStatus.Faulted:
+                    refreshToolStripMenuItem.Enabled = true;
+                    break;
+
+                default:
+                    refreshToolStripMenuItem.Enabled = false;
+                    break;
+            }
+        }
+
+        private void refreshToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var con = GetService(treeView.SelectedNode);
+            var node = treeView.SelectedNode;
+            while (node.Parent != null)
+                node = node.Parent;
+
+            WorkAsync(new WorkAsyncInfo
+            {
+                Message = "Refreshing metadata...",
+                Work = (worker, args) =>
+                {
+                    con.UpdateMetadataCache(con.MetadataCacheLoader.IsFaulted).ConfigureAwait(false).GetAwaiter().GetResult();
+                },
+                PostWorkCallBack = (args) =>
+                {
+                    if (args.Error != null)
+                    {
+                        MessageBox.Show("Error refreshing metadata cache:\r\n\r\n" + args.Error.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        return;
+                    }
+
+                    node.Nodes.Clear();
+                    AddConnectionChildNodes(con, con.ServiceClient, node);
+                }
+            });
+        }
+
+        private void tsbConnect_Click(object sender, EventArgs e)
+        {
+            _connect();
         }
     }
 }

@@ -19,7 +19,7 @@ using Microsoft.Xrm.Sdk.Query;
 namespace MarkMpn.Sql4Cds.Engine.Tests
 {
     [TestClass]
-    public class ExecutionPlanTests : IQueryExecutionOptions
+    public class ExecutionPlanTests : FakeXrmEasyTestsBase, IQueryExecutionOptions
     {
         private List<JoinOperator> _supportedJoins = new List<JoinOperator>
         {
@@ -51,6 +51,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         List<JoinOperator> IQueryExecutionOptions.JoinOperatorsAvailable => _supportedJoins;
 
+        bool IQueryExecutionOptions.BypassCustomPlugins => false;
+
         bool IQueryExecutionOptions.ConfirmDelete(int count, EntityMetadata meta)
         {
             return true;
@@ -77,11 +79,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleSelect()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = "SELECT accountid, name FROM account";
@@ -104,11 +102,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleSelectStar()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = "SELECT * FROM account";
@@ -140,11 +134,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void Join()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = "SELECT accountid, name FROM account INNER JOIN contact ON account.accountid = contact.parentcustomerid";
@@ -157,10 +147,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var fetch = AssertNode<FetchXmlScan>(select.Source);
             AssertFetchXml(fetch, @"
                 <fetch>
-                    <entity name='account'>
-                        <attribute name='accountid' />
-                        <attribute name='name' />
-                        <link-entity name='contact' alias='contact' from='parentcustomerid' to='accountid' link-type='inner'>
+                    <entity name='contact'>
+                        <link-entity name='account' alias='account' from='accountid' to='parentcustomerid' link-type='inner'>
+                            <attribute name='accountid' />
+                            <attribute name='name' />
                         </link-entity>
                     </entity>
                 </fetch>");
@@ -169,11 +159,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void JoinWithExtraCondition()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -192,14 +178,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var fetch = AssertNode<FetchXmlScan>(select.Source);
             AssertFetchXml(fetch, @"
                 <fetch>
-                    <entity name='account'>
-                        <attribute name='accountid' />
-                        <attribute name='name' />
-                        <link-entity name='contact' alias='contact' from='parentcustomerid' to='accountid' link-type='inner'>
-                            <filter>
-                                <condition attribute='firstname' operator='eq' value='Mark' />
-                            </filter>
+                    <entity name='contact'>
+                        <link-entity name='account' alias='account' from='accountid' to='parentcustomerid' link-type='inner'>
+                            <attribute name='accountid' />
+                            <attribute name='name' />
                         </link-entity>
+                        <filter>
+                            <condition attribute='firstname' operator='eq' value='Mark' />
+                        </filter>
                     </entity>
                 </fetch>");
         }
@@ -207,11 +193,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void NonUniqueJoin()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = "SELECT accountid, name FROM account INNER JOIN contact ON account.name = contact.fullname";
@@ -236,11 +218,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void NonUniqueJoinExpression()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = "SELECT accountid, name FROM account INNER JOIN contact ON account.name = (contact.firstname + ' ' + contact.lastname)";
@@ -273,11 +251,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleWhere()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -310,11 +284,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleSort()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -345,11 +315,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleSortIndex()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -380,11 +346,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleDistinct()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -411,11 +373,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleTop()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -443,11 +401,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleOffset()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -478,11 +432,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleGroupAggregate()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -520,11 +470,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void AliasedAggregate()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -562,11 +508,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void AliasedGroupingAggregate()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -604,11 +546,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleAlias()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = "SELECT accountid, name AS test FROM account";
@@ -631,11 +569,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleHaving()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -689,11 +623,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void GroupByDatePart()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -738,11 +668,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void PartialOrdering()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -753,8 +679,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     account
                     INNER JOIN contact ON account.accountid = contact.parentcustomerid
                 ORDER BY
-                    name,
                     firstname,
+                    name,
                     accountid";
 
             var plans = planBuilder.Build(query);
@@ -766,13 +692,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var fetch = AssertNode<FetchXmlScan>(order.Source);
             AssertFetchXml(fetch, @"
                 <fetch>
-                    <entity name='account'>
-                        <attribute name='name' />
-                        <attribute name='accountid' />
-                        <link-entity name='contact' alias='contact' from='parentcustomerid' to='accountid' link-type='inner'>
-                            <attribute name='firstname' />
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <link-entity name='account' alias='account' from='accountid' to='parentcustomerid' link-type='inner'>
+                            <attribute name='name' />
+                            <attribute name='accountid' />
                         </link-entity>
-                        <order attribute='name' />
+                        <order attribute='firstname' />
                     </entity>
                 </fetch>");
         }
@@ -780,11 +706,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void PartialOrderingAvoidingLegacyPagingWithTop()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -795,8 +717,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     account
                     INNER JOIN contact ON account.accountid = contact.parentcustomerid
                 ORDER BY
-                    name,
                     firstname,
+                    name,
                     accountid";
 
             var plans = planBuilder.Build(query);
@@ -809,14 +731,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var fetch = AssertNode<FetchXmlScan>(order.Source);
             AssertFetchXml(fetch, @"
                 <fetch>
-                    <entity name='account'>
-                        <attribute name='name' />
-                        <attribute name='accountid' />
-                        <link-entity name='contact' alias='contact' from='parentcustomerid' to='accountid' link-type='inner'>
-                            <attribute name='firstname' />
-                            <order attribute='firstname' />
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <link-entity name='account' alias='account' from='accountid' to='parentcustomerid' link-type='inner'>
+                            <attribute name='name' />
+                            <attribute name='accountid' />
+                            <order attribute='name' />
                         </link-entity>
-                        <order attribute='name' />
+                        <order attribute='firstname' />
                     </entity>
                 </fetch>");
         }
@@ -824,11 +746,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void PartialWhere()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -865,11 +783,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void RetrieveTotalRecordCountRequest()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -890,11 +804,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void ComputeScalarSelect()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -924,11 +834,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void ComputeScalarFilter()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -955,11 +861,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SelectSubqueryWithMergeJoin()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -993,11 +895,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SelectSubqueryWithNestedLoop()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -1047,11 +945,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SelectSubqueryWithSmallNestedLoop()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -1097,11 +991,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SelectSubqueryWithNonCorrelatedNestedLoop()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -1144,11 +1034,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SelectSubqueryWithCorrelatedSpooledNestedLoop()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -1199,11 +1085,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SelectSubqueryWithPartiallyCorrelatedSpooledNestedLoop()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -1257,11 +1139,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SelectSubqueryUsingOuterReferenceInSelectClause()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var tableSize = new StubTableSizeCache();
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
@@ -1311,11 +1189,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SelectSubqueryUsingOuterReferenceInOrderByClause()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -1356,11 +1230,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void WhereSubquery()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -1393,11 +1263,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void ComputeScalarDistinct()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -1428,11 +1294,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void UnionAll()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -1472,11 +1334,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleInFilter()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -1512,11 +1370,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SubqueryInFilterUncorrelated()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -1557,11 +1411,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [ExpectedException(typeof(NotSupportedQueryFragmentException))]
         public void SubqueryInFilterMultipleColumnsError()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -1579,11 +1429,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SubqueryInFilterUncorrelatedPrimaryKey()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -1622,11 +1468,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SubqueryInFilterCorrelated()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -1675,11 +1517,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SubqueryNotInFilterCorrelated()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -1728,11 +1566,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void ExistsFilterUncorrelated()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -1772,11 +1606,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void ExistsFilterCorrelatedPrimaryKey()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -1812,11 +1642,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void ExistsFilterCorrelated()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -1861,11 +1687,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void NotExistsFilterCorrelated()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -1911,11 +1733,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void QueryDerivedTableSimple()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -1947,11 +1765,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void QueryDerivedTableAlias()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -1983,11 +1797,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void QueryDerivedTableValues()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -2015,11 +1825,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void NoLockTableHint()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -2050,11 +1856,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void CrossJoin()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -2094,11 +1896,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void CrossApply()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -2136,11 +1934,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void OuterApply()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -2178,11 +1972,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void OuterApplyNestedLoop()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -2241,11 +2031,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void FetchXmlNativeWhere()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -2278,11 +2064,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleMetadataSelect()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -2304,11 +2086,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleMetadataWhere()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"
@@ -2335,11 +2113,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleUpdate()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = "UPDATE account SET name = 'foo' WHERE name = 'bar'";
@@ -2369,11 +2143,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void UpdateFromJoin()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = "UPDATE a SET name = 'foo' FROM account a INNER JOIN contact c ON a.accountid = c.parentcustomerid WHERE name = 'bar'";
@@ -2392,11 +2162,12 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var fetch = AssertNode<FetchXmlScan>(computeScalar.Source);
             AssertFetchXml(fetch, @"
                 <fetch>
-                    <entity name='account'>
-                        <attribute name='accountid' />
-                        <link-entity name='contact' alias='c' from='parentcustomerid' to='accountid' link-type='inner' />
+                    <entity name='contact'>
+                        <link-entity name='account' alias='a' from='accountid' to='parentcustomerid' link-type='inner'>
+                            <attribute name='accountid' />
+                        </link-entity>
                         <filter>
-                            <condition attribute='name' operator='eq' value='bar' />
+                            <condition entityname='a' attribute='name' operator='eq' value='bar' />
                         </filter>
                     </entity>
                 </fetch>");
@@ -2405,11 +2176,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void QueryHints()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = "SELECT accountid, name FROM account OPTION (OPTIMIZE FOR UNKNOWN, FORCE ORDER, RECOMPILE, USE HINT('DISABLE_OPTIMIZER_ROWGOAL'), USE HINT('ENABLE_QUERY_OPTIMIZER_HOTFIXES'), LOOP JOIN, MERGE JOIN, HASH JOIN, NO_PERFORMANCE_SPOOL, MAXRECURSION 2)";
@@ -2432,11 +2199,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void AggregateSort()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = "SELECT name, count(*) from account group by name order by 2 desc";
@@ -2474,11 +2237,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void FoldFilterWithNonFoldedJoin()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = "SELECT name from account INNER JOIN contact ON left(name, 4) = left(firstname, 4) where name like 'Data8%' and firstname like 'Mark%'";
@@ -2516,11 +2275,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void FoldFilterWithInClause()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = "SELECT name from account where name like 'Data8%' and primarycontactid in (select contactid from contact where firstname = 'Mark')";
@@ -2555,11 +2310,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             try
             {
-                var context = new XrmFakedContext();
-                context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-                var org = context.GetOrganizationService();
-                var metadata = new AttributeMetadataCache(org);
+                var metadata = new AttributeMetadataCache(_service);
                 var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
                 var query = "SELECT name from account where name like 'Data8%' and createdon in (select createdon from contact where firstname = 'Mark')";
@@ -2598,11 +2349,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             try
             {
-                var context = new XrmFakedContext();
-                context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-                var org = context.GetOrganizationService();
-                var metadata = new AttributeMetadataCache(org);
+                var metadata = new AttributeMetadataCache(_service);
                 var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
                 var query = "SELECT name from account inner join contact on account.accountid = contact.parentcustomerid where name like 'Data8%' and contact.createdon in (select createdon from contact where firstname = 'Mark')";
@@ -2615,17 +2362,17 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 var fetch = AssertNode<FetchXmlScan>(select.Source);
                 AssertFetchXml(fetch, @"
                 <fetch>
-                    <entity name='account'>
-                        <attribute name='name' />
-                        <link-entity name='contact' alias='contact' from='parentcustomerid' to='accountid' link-type='inner'>
-                            <link-entity name='contact' alias='Expr1' from='createdon' to='createdon' link-type='in'>
-                                <filter>
-                                    <condition attribute='firstname' operator='eq' value='Mark' />
-                                </filter>
-                            </link-entity>
+                    <entity name='contact'>
+                        <link-entity name='account' alias='account' from='accountid' to='parentcustomerid' link-type='inner'>
+                            <attribute name='name' />
+                        </link-entity>
+                        <link-entity name='contact' alias='Expr1' from='createdon' to='createdon' link-type='in'>
+                            <filter>
+                                <condition attribute='firstname' operator='eq' value='Mark' />
+                            </filter>
                         </link-entity>
                         <filter>
-                            <condition attribute='name' operator='like' value='Data8%' />
+                            <condition entityname='account' attribute='name' operator='like' value='Data8%' />
                         </filter>
                     </entity>
                 </fetch>");
@@ -2643,11 +2390,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             try
             {
-                var context = new XrmFakedContext();
-                context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-                var org = context.GetOrganizationService();
-                var metadata = new AttributeMetadataCache(org);
+                var metadata = new AttributeMetadataCache(_service);
                 var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
                 var query = "SELECT name from account where name like 'Data8%' and exists (select * from contact where firstname = 'Mark' and createdon = account.createdon)";
@@ -2685,11 +2428,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void DistinctNotRequiredWithPrimaryKey()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = "SELECT DISTINCT accountid, name from account";
@@ -2712,11 +2451,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void DistinctRequiredWithoutPrimaryKey()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = "SELECT DISTINCT accountid, name from account INNER JOIN contact ON account.accountid = contact.parentcustomerid";
@@ -2729,13 +2464,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var fetch = AssertNode<FetchXmlScan>(select.Source);
             AssertFetchXml(fetch, @"
                 <fetch distinct='true'>
-                    <entity name='account'>
-                        <attribute name='accountid' />
-                        <attribute name='name' />
-                        <link-entity name='contact' alias='contact' from='parentcustomerid' to='accountid' link-type='inner'>
+                    <entity name='contact'>
+                        <link-entity name='account' alias='account' from='accountid' to='parentcustomerid' link-type='inner'>
+                            <attribute name='accountid' />
+                            <attribute name='name' />
+                            <order attribute='accountid' />
+                            <order attribute='name' />
                         </link-entity>
-                        <order attribute='accountid' />
-                        <order attribute='name' />
                     </entity>
                 </fetch>");
         }
@@ -2743,11 +2478,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleDelete()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = "DELETE FROM account WHERE name = 'bar'";
@@ -2774,11 +2505,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SimpleInsertSelect()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = "INSERT INTO account (name) SELECT fullname FROM contact WHERE firstname = 'Mark'";
@@ -2805,11 +2532,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SelectDuplicateColumnNames()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = "SELECT fullname, lastname + ', ' + firstname as fullname FROM contact WHERE firstname = 'Mark'";
@@ -2845,11 +2568,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [ExpectedException(typeof(NotSupportedQueryFragmentException))]
         public void SubQueryDuplicateColumnNamesError()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = "SELECT * FROM (SELECT fullname, lastname + ', ' + firstname as fullname FROM contact WHERE firstname = 'Mark') a";
@@ -2860,11 +2579,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void UnionDuplicateColumnNames()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"SELECT fullname, lastname + ', ' + firstname as fullname FROM contact WHERE firstname = 'Mark'
@@ -2896,11 +2611,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [ExpectedException(typeof(NotSupportedQueryFragmentException))]
         public void SubQueryUnionDuplicateColumnNamesError()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
             var query = @"SELECT * FROM (
                             SELECT fullname, lastname + ', ' + firstname as fullname FROM contact WHERE firstname = 'Mark'
@@ -2937,11 +2648,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SelectStarInSubquery()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"SELECT * FROM account WHERE accountid IN (SELECT parentcustomerid FROM contact)";
@@ -2988,11 +2695,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [ExpectedException(typeof(NotSupportedQueryFragmentException))]
         public void CannotSelectColumnsFromSemiJoin()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"SELECT contact.* FROM account WHERE accountid IN (SELECT parentcustomerid FROM contact)";
@@ -3003,11 +2706,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void MinAggregateNotFoldedToFetchXmlForOptionset()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"SELECT new_name, min(new_optionsetvalue) FROM new_customentity GROUP BY new_name";
@@ -3032,11 +2731,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void HelpfulErrorMessageOnMissingGroupBy()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"SELECT new_name, min(new_optionsetvalue) FROM new_customentity";
@@ -3055,11 +2750,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void AggregateInSubquery()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = @"SELECT firstname
@@ -3119,7 +2810,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     </entity>
                 </fetch>");
 
-            context.Data["contact"] = new Dictionary<Guid, Entity>
+            _context.Data["contact"] = new Dictionary<Guid, Entity>
             {
                 [Guid.NewGuid()] = new Entity("contact")
                 {
@@ -3135,7 +2826,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 },
             };
 
-            var result = select.Execute(org, metadata, this, null, null);
+            var result = select.Execute(_service, metadata, this, null, null);
             Assert.AreEqual(2, result.Rows.Count);
             Assert.AreEqual(SqlTypeConverter.UseDefaultCollation("Mark"), result.Rows[0][0]);
             Assert.AreEqual(SqlTypeConverter.UseDefaultCollation("Mark"), result.Rows[1][0]);
@@ -3144,11 +2835,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SelectVirtualNameAttributeFromLinkEntity()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = "SELECT parentcustomeridname FROM account INNER JOIN contact ON account.accountid = contact.parentcustomerid";
@@ -3161,9 +2848,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var fetch = AssertNode<FetchXmlScan>(select.Source);
             AssertFetchXml(fetch, @"
                 <fetch>
-                    <entity name='account'>
-                        <link-entity name='contact' alias='contact' from='parentcustomerid' to='accountid' link-type='inner'>
-                            <attribute name='parentcustomerid' />
+                    <entity name='contact'>
+                        <attribute name='parentcustomerid' />
+                        <link-entity name='account' alias='account' from='accountid' to='parentcustomerid' link-type='inner'>
                         </link-entity>
                     </entity>
                 </fetch>");
@@ -3172,11 +2859,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void DuplicatedDistinctColumns()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = "SELECT DISTINCT name AS n1, name AS n2 FROM account";
@@ -3199,11 +2882,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void GroupByDatetimeWithoutDatePart()
         {
-            var context = new XrmFakedContext();
-            context.InitializeMetadata(Assembly.GetExecutingAssembly());
-
-            var org = context.GetOrganizationService();
-            var metadata = new AttributeMetadataCache(org);
+            var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
             var query = "SELECT createdon, COUNT(*) FROM account GROUP BY createdon";

@@ -136,6 +136,8 @@ namespace MarkMpn.Sql4Cds
 
         public List<JoinOperator> JoinOperatorsAvailable => _joinOperators;
 
+        public bool BypassCustomPlugins => Settings.Instance.BypassCustomPlugins;
+
         public void RetrievingNextPage()
         {
             _retrievedPages++;

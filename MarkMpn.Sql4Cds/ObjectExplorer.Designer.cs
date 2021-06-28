@@ -39,8 +39,14 @@
             this.disconnectToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripMenuItem1 = new System.Windows.Forms.ToolStripSeparator();
             this.newQueryToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.toolStripSeparator1 = new System.Windows.Forms.ToolStripSeparator();
+            this.refreshToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.toolStrip1 = new System.Windows.Forms.ToolStrip();
+            this.tsbConnect = new System.Windows.Forms.ToolStripButton();
+            this.tsbDisconnect = new System.Windows.Forms.ToolStripButton();
             this.tsqlContextMenuStrip.SuspendLayout();
             this.serverContextMenuStrip.SuspendLayout();
+            this.toolStrip1.SuspendLayout();
             this.SuspendLayout();
             // 
             // treeView
@@ -48,11 +54,11 @@
             this.treeView.Dock = System.Windows.Forms.DockStyle.Fill;
             this.treeView.ImageIndex = 0;
             this.treeView.ImageList = this.imageList;
-            this.treeView.Location = new System.Drawing.Point(0, 0);
-            this.treeView.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
+            this.treeView.Location = new System.Drawing.Point(0, 25);
+            this.treeView.Margin = new System.Windows.Forms.Padding(2);
             this.treeView.Name = "treeView";
             this.treeView.SelectedImageIndex = 0;
-            this.treeView.Size = new System.Drawing.Size(284, 261);
+            this.treeView.Size = new System.Drawing.Size(284, 236);
             this.treeView.TabIndex = 1;
             this.treeView.BeforeExpand += new System.Windows.Forms.TreeViewCancelEventHandler(this.treeView_BeforeExpand);
             this.treeView.NodeMouseClick += new System.Windows.Forms.TreeNodeMouseClickEventHandler(this.treeView_NodeMouseClick);
@@ -118,9 +124,12 @@
             this.serverContextMenuStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.disconnectToolStripMenuItem,
             this.toolStripMenuItem1,
-            this.newQueryToolStripMenuItem});
+            this.newQueryToolStripMenuItem,
+            this.toolStripSeparator1,
+            this.refreshToolStripMenuItem});
             this.serverContextMenuStrip.Name = "serverContextMenuStrip";
-            this.serverContextMenuStrip.Size = new System.Drawing.Size(134, 54);
+            this.serverContextMenuStrip.Size = new System.Drawing.Size(134, 82);
+            this.serverContextMenuStrip.Opening += new System.ComponentModel.CancelEventHandler(this.serverContextMenuStrip_Opening);
             // 
             // disconnectToolStripMenuItem
             // 
@@ -141,17 +150,64 @@
             this.newQueryToolStripMenuItem.Text = "New Query";
             this.newQueryToolStripMenuItem.Click += new System.EventHandler(this.newQueryToolStripMenuItem_Click);
             // 
+            // toolStripSeparator1
+            // 
+            this.toolStripSeparator1.Name = "toolStripSeparator1";
+            this.toolStripSeparator1.Size = new System.Drawing.Size(130, 6);
+            // 
+            // refreshToolStripMenuItem
+            // 
+            this.refreshToolStripMenuItem.Name = "refreshToolStripMenuItem";
+            this.refreshToolStripMenuItem.Size = new System.Drawing.Size(133, 22);
+            this.refreshToolStripMenuItem.Text = "Refresh";
+            this.refreshToolStripMenuItem.Click += new System.EventHandler(this.refreshToolStripMenuItem_Click);
+            // 
+            // toolStrip1
+            // 
+            this.toolStrip1.GripStyle = System.Windows.Forms.ToolStripGripStyle.Hidden;
+            this.toolStrip1.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.tsbConnect,
+            this.tsbDisconnect});
+            this.toolStrip1.Location = new System.Drawing.Point(0, 0);
+            this.toolStrip1.Name = "toolStrip1";
+            this.toolStrip1.Size = new System.Drawing.Size(284, 25);
+            this.toolStrip1.TabIndex = 2;
+            this.toolStrip1.Text = "toolStrip1";
+            // 
+            // tsbConnect
+            // 
+            this.tsbConnect.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Image;
+            this.tsbConnect.Image = global::MarkMpn.Sql4Cds.Properties.Resources.ConnectFilled_grey_16x;
+            this.tsbConnect.ImageTransparentColor = System.Drawing.Color.Magenta;
+            this.tsbConnect.Name = "tsbConnect";
+            this.tsbConnect.Size = new System.Drawing.Size(23, 22);
+            this.tsbConnect.Text = "Connect";
+            this.tsbConnect.Click += new System.EventHandler(this.tsbConnect_Click);
+            // 
+            // tsbDisconnect
+            // 
+            this.tsbDisconnect.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Image;
+            this.tsbDisconnect.Image = ((System.Drawing.Image)(resources.GetObject("tsbDisconnect.Image")));
+            this.tsbDisconnect.ImageTransparentColor = System.Drawing.Color.Magenta;
+            this.tsbDisconnect.Name = "tsbDisconnect";
+            this.tsbDisconnect.Size = new System.Drawing.Size(23, 22);
+            this.tsbDisconnect.Text = "Disconnect";
+            // 
             // ObjectExplorer
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(284, 261);
             this.Controls.Add(this.treeView);
+            this.Controls.Add(this.toolStrip1);
             this.Name = "ObjectExplorer";
             this.Text = "Object Explorer";
             this.tsqlContextMenuStrip.ResumeLayout(false);
             this.serverContextMenuStrip.ResumeLayout(false);
+            this.toolStrip1.ResumeLayout(false);
+            this.toolStrip1.PerformLayout();
             this.ResumeLayout(false);
+            this.PerformLayout();
 
         }
 
@@ -166,5 +222,10 @@
         private System.Windows.Forms.ToolStripMenuItem newQueryToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem disconnectToolStripMenuItem;
         private System.Windows.Forms.ToolStripSeparator toolStripMenuItem1;
+        private System.Windows.Forms.ToolStripMenuItem refreshToolStripMenuItem;
+        private System.Windows.Forms.ToolStripSeparator toolStripSeparator1;
+        private System.Windows.Forms.ToolStrip toolStrip1;
+        private System.Windows.Forms.ToolStripButton tsbConnect;
+        private System.Windows.Forms.ToolStripButton tsbDisconnect;
     }
 }

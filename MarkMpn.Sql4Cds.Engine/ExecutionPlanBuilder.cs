@@ -12,6 +12,7 @@ using MarkMpn.Sql4Cds.Engine.Visitors;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
+using SelectColumn = MarkMpn.Sql4Cds.Engine.ExecutionPlan.SelectColumn;
 
 namespace MarkMpn.Sql4Cds.Engine
 {

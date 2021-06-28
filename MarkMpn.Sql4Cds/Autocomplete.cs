@@ -307,7 +307,15 @@ namespace MarkMpn.Sql4Cds
 
                         if (prevWord.Equals("update", StringComparison.OrdinalIgnoreCase) ||
                             prevWord.Equals("delete", StringComparison.OrdinalIgnoreCase))
-                            return FilterList(tables.Select(kvp => new { Entity = _entities.SingleOrDefault(e => e.LogicalName == kvp.Value), Alias = kvp.Key }).Where(e => e.Entity != null).Select(x => new EntityAutocompleteItem(x.Entity, x.Alias, _metadata, currentLength)).OrderBy(x => x), currentWord);
+                        {
+                            if (foundFrom)
+                                return FilterList(tables.Select(kvp => new { Entity = _entities.SingleOrDefault(e => e.LogicalName == kvp.Value), Alias = kvp.Key }).Where(e => e.Entity != null).Select(x => new EntityAutocompleteItem(x.Entity, x.Alias, _metadata, currentLength)).OrderBy(x => x), currentWord);
+
+                            if (_entities != null)
+                                return FilterList(_entities.Select(x => new EntityAutocompleteItem(x, _metadata, currentLength)).OrderBy(x => x), currentWord);
+
+                            return Array.Empty<SqlAutocompleteItem>();
+                        }
 
                         if (clause == "set" && (prevWord.Equals("set", StringComparison.OrdinalIgnoreCase) || prevWord == ","))
                         {

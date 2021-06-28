@@ -2,6 +2,7 @@
 using System.Linq;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine;
+using McTools.Xrm.Connection;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
@@ -14,8 +15,22 @@ namespace MarkMpn.Sql4Cds
         private static IDictionary<IOrganizationService, EntityMetadata[]> _cache = new Dictionary<IOrganizationService, EntityMetadata[]>();
         private static ISet<IOrganizationService> _loading = new HashSet<IOrganizationService>();
 
-        public static EntityMetadata[] GetEntities(IOrganizationService org)
+        public static EntityMetadata[] GetEntities(Task<MetadataCache> cacheLoader, IOrganizationService org)
         {
+            MetadataCache sharedCache;
+
+            try
+            {
+                sharedCache = cacheLoader.ConfigureAwait(false).GetAwaiter().GetResult();
+            }
+            catch
+            {
+                sharedCache = null;
+            }
+
+            if (sharedCache != null)
+                return sharedCache.EntityMetadata;
+
             if (!_cache.TryGetValue(org, out var entities))
             {
                 entities = ((RetrieveMetadataChangesResponse) org.Execute(new RetrieveMetadataChangesRequest
@@ -41,13 +56,23 @@ namespace MarkMpn.Sql4Cds
             return entities;
         }
 
-        public static bool TryGetEntities(IOrganizationService org, out EntityMetadata[] entities)
+        public static bool TryGetEntities(Task<MetadataCache> cacheLoader, IOrganizationService org, out EntityMetadata[] entities)
         {
+            if (!cacheLoader.IsCompleted)
+            {
+                entities = null;
+                return false;
+            }
+
+            entities = cacheLoader.Status == TaskStatus.RanToCompletion ? cacheLoader.Result?.EntityMetadata : null;
+            if (entities != null)
+                return true;
+
             if (_cache.TryGetValue(org, out entities))
                 return true;
 
             if (_loading.Add(org))
-                Task.Run(() => GetEntities(org));
+                Task.Run(() => GetEntities(cacheLoader, org));
 
             return false;
         }

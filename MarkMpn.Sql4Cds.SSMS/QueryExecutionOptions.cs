@@ -41,6 +41,8 @@ namespace MarkMpn.Sql4Cds.SSMS
 
         public List<JoinOperator> JoinOperatorsAvailable => new List<JoinOperator>();
 
+        public bool BypassCustomPlugins => _options.BypassCustomPlugins;
+
         public bool ConfirmDelete(int count, EntityMetadata meta)
         {
             if (count == 1)
