@@ -7,6 +7,7 @@ using System.Linq;
 using System.Windows.Forms;
 using System.Xml.Serialization;
 using MarkMpn.Sql4Cds.Engine;
+using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using McTools.Xrm.Connection;
 using Microsoft.ApplicationInsights;
 using WeifenLuo.WinFormsUI.Docking;
@@ -35,6 +36,7 @@ namespace MarkMpn.Sql4Cds
             _objectExplorer.CloseButtonVisible = false;
             _properties = new PropertiesWindow();
             _properties.Show(dockPanel, DockState.DockRightAutoHide);
+            _properties.SelectedObjectChanged += OnSelectedObjectChanged;
             _ai = new TelemetryClient(new Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration("79761278-a908-4575-afbf-2f4d82560da6"));
             _connectObjectExplorer = true;
 
@@ -291,6 +293,11 @@ namespace MarkMpn.Sql4Cds
             ((IDocumentWindow)dockPanel.ActiveDocument).Save();
         }
 
+        private void OnSelectedObjectChanged(object sender, EventArgs e)
+        {
+            tsbFetchXMLBuilder.Enabled = dockPanel.ActiveDocument is FetchXmlControl || _properties.SelectedObject is IFetchXmlExecutionPlanNode;
+        }
+
         private void dockPanel_ActiveDocumentChanged(object sender, EventArgs e)
         {
             var doc = (IDocumentWindow)dockPanel.ActiveDocument;
@@ -305,9 +312,9 @@ namespace MarkMpn.Sql4Cds
             SyncExecuteButton(sender, e);
 
             if (sql != null)
-                _properties.SelectObject(sql.Connection);
+                _properties.SelectedObject = sql.Connection;
             else
-                _properties.SelectObject(null);
+                _properties.SelectedObject = null;
         }
 
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
@@ -415,7 +422,14 @@ namespace MarkMpn.Sql4Cds
 
         private void tsbFetchXMLBuilder_Click(object sender, EventArgs e)
         {
-            var args = new MessageBusEventArgs("FetchXML Builder") { TargetArgument = ((FetchXmlControl)dockPanel.ActiveDocument).FetchXml };
+            string fetchXml;
+
+            if (dockPanel.ActiveDocument is FetchXmlControl xml)
+                fetchXml = xml.FetchXml;
+            else
+                fetchXml = ((IFetchXmlExecutionPlanNode) _properties.SelectedObject).FetchXmlString;
+
+            var args = new MessageBusEventArgs("FetchXML Builder") { TargetArgument = fetchXml };
             _ai.TrackEvent("Outgoing message", new Dictionary<string, string> { ["TargetPlugin"] = args.TargetPlugin, ["Source"] = "XrmToolBox" });
             OnOutgoingMessage(this, args);
         }

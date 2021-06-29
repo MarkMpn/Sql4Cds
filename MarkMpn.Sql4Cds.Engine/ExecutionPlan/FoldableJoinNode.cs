@@ -95,6 +95,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     Swap(ref leftEntity, ref rightEntity);
                     Swap(ref leftAttribute, ref rightAttribute);
                     Swap(ref leftAttributeParts, ref rightAttributeParts);
+                    Swap(ref leftSchema, ref rightSchema);
                 }
 
                 // Must be joining to the root entity of the right source, i.e. not a child link-entity
@@ -106,7 +107,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var additionalCriteria = AdditionalJoinCriteria;
                 var additionalLinkEntities = new Dictionary<object, List<FetchLinkEntityType>>();
 
-                if (TranslateFetchXMLCriteria(metadata, options,additionalCriteria, rightSchema, rightFetch.Alias, rightEntity.name, rightFetch.Alias, rightEntity.Items, out var filter, additionalLinkEntities))
+                if (TranslateFetchXMLCriteria(metadata, options, additionalCriteria, rightSchema, rightFetch.Alias, rightEntity.name, rightFetch.Alias, rightEntity.Items, out var filter, additionalLinkEntities))
                 {
                     rightEntity.AddItem(filter);
 
