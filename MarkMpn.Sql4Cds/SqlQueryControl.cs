@@ -1092,7 +1092,7 @@ namespace MarkMpn.Sql4Cds
                 };
                 var planView = new ExecutionPlanView { Dock = DockStyle.Fill, Executed = args.Execute, Exception = ex, Metadata = Metadata, TableSizeCache = _tableSize };
                 planView.Plan = query;
-                planView.NodeSelected += (s, e) => _properties.SelectObject(planView.Selected);
+                planView.NodeSelected += (s, e) => _properties.SelectedObject = planView.Selected;
                 planView.DoubleClick += (s, e) =>
                 {
                     if (planView.Selected is IFetchXmlExecutionPlanNode fetchXml)

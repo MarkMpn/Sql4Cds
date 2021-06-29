@@ -14,19 +14,29 @@ namespace MarkMpn.Sql4Cds
 {
     public partial class PropertiesWindow : WeifenLuo.WinFormsUI.Docking.DockContent
     {
+        private object _obj;
 
         public PropertiesWindow()
         {
             InitializeComponent();
         }
 
-        public void SelectObject(object obj)
+        public object SelectedObject
         {
-            if (obj != null)
-                obj = new WrappedTypeDescriptor(obj);
+            get { return _obj; }
+            set
+            {
+                _obj = value;
 
-            propertyGrid.SelectedObject = obj;
+                if (value != null)
+                    value = new WrappedTypeDescriptor(value);
+
+                propertyGrid.SelectedObject = value;
+                SelectedObjectChanged?.Invoke(this, EventArgs.Empty);
+            }
         }
+
+        public event EventHandler SelectedObjectChanged;
     }
 
     class WrappedTypeDescriptor : CustomTypeDescriptor
