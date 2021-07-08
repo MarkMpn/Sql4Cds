@@ -823,7 +823,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Convert the value to the expected type
             if (filter.Conditions[0].Value != null)
-                filter.Conditions[0].Value = SqlTypeConverter.ChangeType(SqlTypeConverter.ChangeType(filter.Conditions[0].Value, MetadataQueryNode.GetPropertyType(targetValueType)), targetValueType);
+            {
+                var propertyType = MetadataQueryNode.GetPropertyType(targetValueType);
+
+                if (filter.Conditions[0].ConditionOperator == MetadataConditionOperator.In ||
+                    filter.Conditions[0].ConditionOperator == MetadataConditionOperator.NotIn)
+                {
+                    var array = (Array)filter.Conditions[0].Value;
+                    var targetArray = Array.CreateInstance(targetValueType, array.Length);
+
+                    for (var i = 0; i < array.Length; i++)
+                        targetArray.SetValue(SqlTypeConverter.ChangeType(SqlTypeConverter.ChangeType(array.GetValue(i), propertyType), targetValueType), i);
+
+                    filter.Conditions[0].Value = targetArray;
+                }
+                else
+                {
+                    filter.Conditions[0].Value = SqlTypeConverter.ChangeType(SqlTypeConverter.ChangeType(filter.Conditions[0].Value, propertyType), targetValueType);
+                }
+            }
 
             if (isEntityFilter)
             {
