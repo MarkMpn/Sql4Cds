@@ -312,7 +312,7 @@ namespace MarkMpn.Sql4Cds
             SyncExecuteButton(sender, e);
 
             if (sql != null)
-                _properties.SelectedObject = sql.Connection;
+                _properties.SelectedObject = new ConnectionPropertiesWrapper(sql.Connection);
             else
                 _properties.SelectedObject = null;
         }
