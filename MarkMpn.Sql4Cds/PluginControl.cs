@@ -10,20 +10,20 @@ using MarkMpn.Sql4Cds.Engine;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using McTools.Xrm.Connection;
 using Microsoft.ApplicationInsights;
+using Microsoft.Xrm.Sdk;
 using WeifenLuo.WinFormsUI.Docking;
 using XrmToolBox.Extensibility;
 using XrmToolBox.Extensibility.Interfaces;
 
 namespace MarkMpn.Sql4Cds
 {
-    public partial class PluginControl : MultipleConnectionsPluginControlBase, IMessageBusHost, IGitHubPlugin, IHelpPlugin, ISettingsPlugin, IPayPalPlugin
+    public partial class PluginControl : PluginControlBase, IMessageBusHost, IGitHubPlugin, IHelpPlugin, ISettingsPlugin, IPayPalPlugin
     {
         private readonly IDictionary<ConnectionDetail, SharedMetadataCache> _metadata;
         private readonly IDictionary<ConnectionDetail, TableSizeCache> _tableSize;
         private readonly TelemetryClient _ai;
         private readonly ObjectExplorer _objectExplorer;
         private readonly PropertiesWindow _properties;
-        private bool _connectObjectExplorer;
 
         public PluginControl()
         {
@@ -31,40 +31,45 @@ namespace MarkMpn.Sql4Cds
             dockPanel.Theme = new VS2015LightTheme();
             _metadata = new Dictionary<ConnectionDetail, SharedMetadataCache>();
             _tableSize = new Dictionary<ConnectionDetail, TableSizeCache>();
-            _objectExplorer = new ObjectExplorer(_metadata, WorkAsync, con => CreateQuery(con, ""), () => { _connectObjectExplorer = true; AddAdditionalOrganization(); });
+            _objectExplorer = new ObjectExplorer(_metadata, WorkAsync, con => CreateQuery(con, ""), ConnectObjectExplorer);
             _objectExplorer.Show(dockPanel, DockState.DockLeft);
             _objectExplorer.CloseButtonVisible = false;
             _properties = new PropertiesWindow();
             _properties.Show(dockPanel, DockState.DockRightAutoHide);
             _properties.SelectedObjectChanged += OnSelectedObjectChanged;
             _ai = new TelemetryClient(new Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration("79761278-a908-4575-afbf-2f4d82560da6"));
-            _connectObjectExplorer = true;
 
             TabIcon = Properties.Resources.SQL4CDS_Icon_16;
             PluginIcon = System.Drawing.Icon.FromHandle(Properties.Resources.SQL4CDS_Icon_16.GetHicon());
         }
 
-        protected override void OnConnectionUpdated(ConnectionUpdatedEventArgs e)
+        private void ConnectObjectExplorer()
         {
-            AddConnection(e.ConnectionDetail);
-
-            if (dockPanel.ActiveDocument is SqlQueryControl query && !_connectObjectExplorer)
-                query.ChangeConnection(e.ConnectionDetail, _metadata[e.ConnectionDetail], _tableSize[e.ConnectionDetail]);
-
-            base.OnConnectionUpdated(e);
+            var args = new RequestConnectionEventArgs { ActionName = "ConnectObjectExplorer", Control = this };
+            OnConnectionRequested(this, args);
         }
 
-        protected override void ConnectionDetailsUpdated(NotifyCollectionChangedEventArgs e)
+        public override void UpdateConnection(IOrganizationService newService, ConnectionDetail detail, string actionName, object parameter)
         {
-            if (e.Action == NotifyCollectionChangedAction.Add)
-            {
-                foreach (ConnectionDetail con in e.NewItems)
-                {
-                    AddConnection(con);
+            AddConnection(detail);
 
-                    if (!_connectObjectExplorer && dockPanel.ActiveDocument is SqlQueryControl query)
-                        query.ChangeConnection(con, _metadata[con], _tableSize[con]);
-                }
+            if (actionName == "ChangeConnection")
+            {
+                if (dockPanel.ActiveDocument is SqlQueryControl query)
+                    query.ChangeConnection(detail, _metadata[detail], _tableSize[detail]);
+            }
+            else if (actionName == "ConnectObjectExplorer")
+            {
+                _objectExplorer.AddConnection(detail);
+            }
+            else if (String.IsNullOrEmpty(actionName))
+            {
+                _objectExplorer.AddConnection(detail);
+                CreateQuery(detail, "");
+            }
+            else
+            {
+                base.UpdateConnection(newService, detail, actionName, parameter);
             }
         }
 
@@ -77,9 +82,6 @@ namespace MarkMpn.Sql4Cds
             
             if (!_tableSize.ContainsKey(con))
                 _tableSize[con] = new TableSizeCache(svc, _metadata[con]);
-
-            if (_connectObjectExplorer)
-                _objectExplorer.AddConnection(con);
 
             // Start loading the entity list in the background
             EntityCache.TryGetEntities(con.MetadataCacheLoader, svc, out _);
@@ -154,14 +156,14 @@ namespace MarkMpn.Sql4Cds
 
         private void tsbConnect_Click(object sender, EventArgs e)
         {
-            _connectObjectExplorer = false;
-            AddAdditionalOrganization();
+            var args = new RequestConnectionEventArgs { ActionName = "ChangeConnection", Control = this };
+            OnConnectionRequested(this, args);
         }
 
         private void tsbChangeConnection_Click(object sender, EventArgs e)
         {
-            _connectObjectExplorer = false;
-            AddAdditionalOrganization();
+            var args = new RequestConnectionEventArgs { ActionName = "ChangeConnection", Control = this };
+            OnConnectionRequested(this, args);
         }
 
         private void tsbNewQuery_Click(object sender, EventArgs e)
