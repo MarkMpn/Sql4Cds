@@ -9,7 +9,7 @@
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <projectUrl>https://markcarrington.dev/sql-4-cds/</projectUrl>
     <iconUrl>http://markcarrington.dev/sql4cds-icon/</iconUrl>
-    <description>SQL 4 CDS allows you to use standard SQL syntax to query and manipulate your data and metadata in CDS / D365.
+    <description>SQL 4 CDS allows you to use standard SQL syntax to query and manipulate your data and metadata in Dataverse / D365.
 
 Supports
 - SELECT
@@ -21,19 +21,11 @@ Where possible the queries are converted to FetchXML, allowing you to generate F
 plugins or integrations by writing familiar SQL and converting it.
 
 Using the preview TDS Endpoint, SELECT queries can also be run that aren't convertible to FetchXML.</description>
-    <summary>Convert SQL queries to FetchXML and execute them against CDS</summary>
-    <releaseNotes>Performance updates for bulk INSERT/UPDATE/DELETE:
-- Disable affinity cookie
-- Allow bypassing plugins
-
-Improved error reporting on nested errors
-Use shared metadata cache from XrmToolBox for improved performance
-Save &amp; restore session details
-Fixed COUNT(*) with IN subqueries
-Reordered joins in FetchXML to avoid paging issues
-Added help links to Settings dialog
-Autocomplete improvements
-Show FetchXML in main document window</releaseNotes>
+    <summary>Convert SQL queries to FetchXML and execute them against Dataverse / D365</summary>
+    <releaseNotes>Fixed IN queries on metadata
+Fixed "Aggregates are not supported" when using audit table
+Fixed adding connection to Object Explorer after using Change Connection toolbar button
+Improved performance of adding new connection by limiting properties shown in properties window</releaseNotes>
     <copyright>Copyright © 2019 Mark Carrington</copyright>
     <language>en-GB</language>
     <tags>XrmToolBox SQL CDS</tags>
