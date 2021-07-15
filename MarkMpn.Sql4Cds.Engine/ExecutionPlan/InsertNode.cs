@@ -56,17 +56,30 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             try
             {
+                List<Entity> entities;
+                EntityMetadata meta;
+                Dictionary<string, AttributeMetadata> attributes;
+                Dictionary<string, Func<Entity, object>> attributeAccessors;
+                Func<Entity, object> primaryIdAccessor;
+
                 using (_timer.Run())
                 {
-                    var entities = GetDmlSourceEntities(org, metadata, options, parameterTypes, parameterValues, out var schema);
+                    entities = GetDmlSourceEntities(org, metadata, options, parameterTypes, parameterValues, out var schema);
 
                     // Precompile mappings with type conversions
-                    var meta = metadata[LogicalName];
-                    var attributes = meta.Attributes.ToDictionary(a => a.LogicalName);
+                    meta = metadata[LogicalName];
+                    attributes = meta.Attributes.ToDictionary(a => a.LogicalName);
                     var dateTimeKind = options.UseLocalTimeZone ? DateTimeKind.Local : DateTimeKind.Utc;
-                    var attributeAccessors = CompileColumnMappings(meta, ColumnMappings, schema, attributes, dateTimeKind);
-                    attributeAccessors.TryGetValue(meta.PrimaryIdAttribute, out var primaryIdAccessor);
+                    attributeAccessors = CompileColumnMappings(meta, ColumnMappings, schema, attributes, dateTimeKind);
+                    attributeAccessors.TryGetValue(meta.PrimaryIdAttribute, out primaryIdAccessor);
+                }
 
+                // Check again that the update is allowed. Don't count any UI interaction in the execution time
+                if (options.Cancelled || !options.ConfirmInsert(entities.Count, meta))
+                    throw new OperationCanceledException("INSERT cancelled by user");
+
+                using (_timer.Run())
+                {
                     return ExecuteDmlOperation(
                         org,
                         options,

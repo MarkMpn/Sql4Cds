@@ -44,6 +44,14 @@ namespace MarkMpn.Sql4Cds.Engine
         bool UseBulkDelete { get; }
 
         /// <summary>
+        /// Checks if an INSERT query should be executed
+        /// </summary>
+        /// <param name="count">The number of records that the INSERT will apply to</param>
+        /// <param name="meta">The metadata of the entity type that will be affected</param>
+        /// <returns><c>true</c> if the entities should be inserted, or <c>false</c> otherwise</returns>
+        bool ConfirmInsert(int count, EntityMetadata meta);
+
+        /// <summary>
         /// Checks if an UPDATE query should be executed
         /// </summary>
         /// <param name="count">The number of records that the UPDATE will apply to</param>

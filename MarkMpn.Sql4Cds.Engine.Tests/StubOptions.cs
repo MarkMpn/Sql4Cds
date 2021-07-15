@@ -36,6 +36,11 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         bool IQueryExecutionOptions.BypassCustomPlugins => false;
 
+        bool IQueryExecutionOptions.ConfirmInsert(int count, EntityMetadata meta)
+        {
+            return true;
+        }
+
         bool IQueryExecutionOptions.ConfirmDelete(int count, EntityMetadata meta)
         {
             return true;

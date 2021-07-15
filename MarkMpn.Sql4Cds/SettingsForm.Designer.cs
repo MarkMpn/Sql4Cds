@@ -66,6 +66,9 @@
             this.showTooltipsCheckbox = new System.Windows.Forms.CheckBox();
             this.tabControl1 = new System.Windows.Forms.TabControl();
             this.tabPage1 = new System.Windows.Forms.TabPage();
+            this.pictureBox6 = new System.Windows.Forms.PictureBox();
+            this.pictureBox5 = new System.Windows.Forms.PictureBox();
+            this.pictureBox4 = new System.Windows.Forms.PictureBox();
             this.pictureBox2 = new System.Windows.Forms.PictureBox();
             this.pictureBox1 = new System.Windows.Forms.PictureBox();
             this.bulkDeleteHelp = new System.Windows.Forms.PictureBox();
@@ -73,9 +76,9 @@
             this.pictureBox3 = new System.Windows.Forms.PictureBox();
             this.tabPage3 = new System.Windows.Forms.TabPage();
             this.rememberSessionCheckbox = new System.Windows.Forms.CheckBox();
-            this.pictureBox4 = new System.Windows.Forms.PictureBox();
-            this.pictureBox5 = new System.Windows.Forms.PictureBox();
-            this.pictureBox6 = new System.Windows.Forms.PictureBox();
+            this.label15 = new System.Windows.Forms.Label();
+            this.insertWarnThresholdUpDown = new System.Windows.Forms.NumericUpDown();
+            this.label16 = new System.Windows.Forms.Label();
             this.topPanel.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox)).BeginInit();
             this.panel2.SuspendLayout();
@@ -87,15 +90,16 @@
             ((System.ComponentModel.ISupportInitialize)(this.maxDopUpDown)).BeginInit();
             this.tabControl1.SuspendLayout();
             this.tabPage1.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.pictureBox6)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.pictureBox5)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.pictureBox4)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox2)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.bulkDeleteHelp)).BeginInit();
             this.tabPage2.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox3)).BeginInit();
             this.tabPage3.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.pictureBox4)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.pictureBox5)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.pictureBox6)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.insertWarnThresholdUpDown)).BeginInit();
             this.SuspendLayout();
             // 
             // topPanel
@@ -198,15 +202,15 @@
             // label4
             // 
             this.label4.AutoSize = true;
-            this.label4.Location = new System.Drawing.Point(274, 60);
+            this.label4.Location = new System.Drawing.Point(274, 86);
             this.label4.Name = "label4";
             this.label4.Size = new System.Drawing.Size(42, 13);
-            this.label4.TabIndex = 8;
+            this.label4.TabIndex = 11;
             this.label4.Text = "records";
             // 
             // updateWarnThresholdUpDown
             // 
-            this.updateWarnThresholdUpDown.Location = new System.Drawing.Point(166, 58);
+            this.updateWarnThresholdUpDown.Location = new System.Drawing.Point(166, 84);
             this.updateWarnThresholdUpDown.Maximum = new decimal(new int[] {
             100000,
             0,
@@ -214,29 +218,29 @@
             0});
             this.updateWarnThresholdUpDown.Name = "updateWarnThresholdUpDown";
             this.updateWarnThresholdUpDown.Size = new System.Drawing.Size(102, 20);
-            this.updateWarnThresholdUpDown.TabIndex = 7;
+            this.updateWarnThresholdUpDown.TabIndex = 10;
             // 
             // label5
             // 
             this.label5.AutoSize = true;
-            this.label5.Location = new System.Drawing.Point(4, 60);
+            this.label5.Location = new System.Drawing.Point(4, 86);
             this.label5.Name = "label5";
             this.label5.Size = new System.Drawing.Size(156, 13);
-            this.label5.TabIndex = 6;
+            this.label5.TabIndex = 9;
             this.label5.Text = "Warn when updating more than";
             // 
             // label6
             // 
             this.label6.AutoSize = true;
-            this.label6.Location = new System.Drawing.Point(274, 109);
+            this.label6.Location = new System.Drawing.Point(274, 135);
             this.label6.Name = "label6";
             this.label6.Size = new System.Drawing.Size(42, 13);
-            this.label6.TabIndex = 12;
+            this.label6.TabIndex = 15;
             this.label6.Text = "records";
             // 
             // deleteWarnThresholdUpDown
             // 
-            this.deleteWarnThresholdUpDown.Location = new System.Drawing.Point(166, 107);
+            this.deleteWarnThresholdUpDown.Location = new System.Drawing.Point(166, 133);
             this.deleteWarnThresholdUpDown.Maximum = new decimal(new int[] {
             100000,
             0,
@@ -244,34 +248,34 @@
             0});
             this.deleteWarnThresholdUpDown.Name = "deleteWarnThresholdUpDown";
             this.deleteWarnThresholdUpDown.Size = new System.Drawing.Size(102, 20);
-            this.deleteWarnThresholdUpDown.TabIndex = 11;
+            this.deleteWarnThresholdUpDown.TabIndex = 14;
             // 
             // label7
             // 
             this.label7.AutoSize = true;
-            this.label7.Location = new System.Drawing.Point(4, 109);
+            this.label7.Location = new System.Drawing.Point(4, 135);
             this.label7.Name = "label7";
             this.label7.Size = new System.Drawing.Size(152, 13);
-            this.label7.TabIndex = 10;
+            this.label7.TabIndex = 13;
             this.label7.Text = "Warn when deleting more than";
             // 
             // blockUpdateWithoutWhereCheckbox
             // 
             this.blockUpdateWithoutWhereCheckbox.AutoSize = true;
-            this.blockUpdateWithoutWhereCheckbox.Location = new System.Drawing.Point(6, 84);
+            this.blockUpdateWithoutWhereCheckbox.Location = new System.Drawing.Point(6, 110);
             this.blockUpdateWithoutWhereCheckbox.Name = "blockUpdateWithoutWhereCheckbox";
             this.blockUpdateWithoutWhereCheckbox.Size = new System.Drawing.Size(191, 17);
-            this.blockUpdateWithoutWhereCheckbox.TabIndex = 9;
+            this.blockUpdateWithoutWhereCheckbox.TabIndex = 12;
             this.blockUpdateWithoutWhereCheckbox.Text = "Prevent UPDATE without WHERE";
             this.blockUpdateWithoutWhereCheckbox.UseVisualStyleBackColor = true;
             // 
             // blockDeleteWithoutWhereCheckbox
             // 
             this.blockDeleteWithoutWhereCheckbox.AutoSize = true;
-            this.blockDeleteWithoutWhereCheckbox.Location = new System.Drawing.Point(6, 133);
+            this.blockDeleteWithoutWhereCheckbox.Location = new System.Drawing.Point(6, 159);
             this.blockDeleteWithoutWhereCheckbox.Name = "blockDeleteWithoutWhereCheckbox";
             this.blockDeleteWithoutWhereCheckbox.Size = new System.Drawing.Size(189, 17);
-            this.blockDeleteWithoutWhereCheckbox.TabIndex = 13;
+            this.blockDeleteWithoutWhereCheckbox.TabIndex = 16;
             this.blockDeleteWithoutWhereCheckbox.Text = "Prevent DELETE without WHERE";
             this.blockDeleteWithoutWhereCheckbox.UseVisualStyleBackColor = true;
             // 
@@ -515,6 +519,45 @@
             this.tabPage1.Text = "Query Execution";
             this.tabPage1.UseVisualStyleBackColor = true;
             // 
+            // pictureBox6
+            // 
+            this.pictureBox6.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.pictureBox6.Image = global::MarkMpn.Sql4Cds.Properties.Resources.StatusHelp_16x;
+            this.pictureBox6.Location = new System.Drawing.Point(334, 52);
+            this.pictureBox6.Name = "pictureBox6";
+            this.pictureBox6.Size = new System.Drawing.Size(16, 16);
+            this.pictureBox6.TabIndex = 31;
+            this.pictureBox6.TabStop = false;
+            this.pictureBox6.Tag = "https://docs.microsoft.com/powerapps/developer/data-platform/api-limits#how-to-ma" +
+    "ximize-throughput";
+            this.pictureBox6.Click += new System.EventHandler(this.helpIcon_Click);
+            // 
+            // pictureBox5
+            // 
+            this.pictureBox5.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.pictureBox5.Image = global::MarkMpn.Sql4Cds.Properties.Resources.StatusHelp_16x;
+            this.pictureBox5.Location = new System.Drawing.Point(301, 145);
+            this.pictureBox5.Name = "pictureBox5";
+            this.pictureBox5.Size = new System.Drawing.Size(16, 16);
+            this.pictureBox5.TabIndex = 30;
+            this.pictureBox5.TabStop = false;
+            this.pictureBox5.Tag = "https://docs.microsoft.com/powerapps/developer/data-platform/use-fetchxml-aggrega" +
+    "tion#limitations";
+            this.pictureBox5.Click += new System.EventHandler(this.helpIcon_Click);
+            // 
+            // pictureBox4
+            // 
+            this.pictureBox4.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.pictureBox4.Image = global::MarkMpn.Sql4Cds.Properties.Resources.StatusHelp_16x;
+            this.pictureBox4.Location = new System.Drawing.Point(124, 6);
+            this.pictureBox4.Name = "pictureBox4";
+            this.pictureBox4.Size = new System.Drawing.Size(16, 16);
+            this.pictureBox4.TabIndex = 29;
+            this.pictureBox4.TabStop = false;
+            this.pictureBox4.Tag = "https://docs.microsoft.com/sql/t-sql/statements/set-quoted-identifier-transact-sq" +
+    "l";
+            this.pictureBox4.Click += new System.EventHandler(this.helpIcon_Click);
+            // 
             // pictureBox2
             // 
             this.pictureBox2.Cursor = System.Windows.Forms.Cursors.Hand;
@@ -554,6 +597,9 @@
             // 
             // tabPage2
             // 
+            this.tabPage2.Controls.Add(this.label15);
+            this.tabPage2.Controls.Add(this.insertWarnThresholdUpDown);
+            this.tabPage2.Controls.Add(this.label16);
             this.tabPage2.Controls.Add(this.pictureBox3);
             this.tabPage2.Controls.Add(this.label2);
             this.tabPage2.Controls.Add(this.label10);
@@ -612,44 +658,35 @@
             this.rememberSessionCheckbox.Text = "Remember session details";
             this.rememberSessionCheckbox.UseVisualStyleBackColor = true;
             // 
-            // pictureBox4
+            // label15
             // 
-            this.pictureBox4.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.pictureBox4.Image = global::MarkMpn.Sql4Cds.Properties.Resources.StatusHelp_16x;
-            this.pictureBox4.Location = new System.Drawing.Point(124, 6);
-            this.pictureBox4.Name = "pictureBox4";
-            this.pictureBox4.Size = new System.Drawing.Size(16, 16);
-            this.pictureBox4.TabIndex = 29;
-            this.pictureBox4.TabStop = false;
-            this.pictureBox4.Tag = "https://docs.microsoft.com/sql/t-sql/statements/set-quoted-identifier-transact-sq" +
-    "l";
-            this.pictureBox4.Click += new System.EventHandler(this.helpIcon_Click);
+            this.label15.AutoSize = true;
+            this.label15.Location = new System.Drawing.Point(274, 60);
+            this.label15.Name = "label15";
+            this.label15.Size = new System.Drawing.Size(42, 13);
+            this.label15.TabIndex = 8;
+            this.label15.Text = "records";
             // 
-            // pictureBox5
+            // insertWarnThresholdUpDown
             // 
-            this.pictureBox5.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.pictureBox5.Image = global::MarkMpn.Sql4Cds.Properties.Resources.StatusHelp_16x;
-            this.pictureBox5.Location = new System.Drawing.Point(301, 145);
-            this.pictureBox5.Name = "pictureBox5";
-            this.pictureBox5.Size = new System.Drawing.Size(16, 16);
-            this.pictureBox5.TabIndex = 30;
-            this.pictureBox5.TabStop = false;
-            this.pictureBox5.Tag = "https://docs.microsoft.com/powerapps/developer/data-platform/use-fetchxml-aggrega" +
-    "tion#limitations";
-            this.pictureBox5.Click += new System.EventHandler(this.helpIcon_Click);
+            this.insertWarnThresholdUpDown.Location = new System.Drawing.Point(166, 58);
+            this.insertWarnThresholdUpDown.Maximum = new decimal(new int[] {
+            100000,
+            0,
+            0,
+            0});
+            this.insertWarnThresholdUpDown.Name = "insertWarnThresholdUpDown";
+            this.insertWarnThresholdUpDown.Size = new System.Drawing.Size(102, 20);
+            this.insertWarnThresholdUpDown.TabIndex = 7;
             // 
-            // pictureBox6
+            // label16
             // 
-            this.pictureBox6.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.pictureBox6.Image = global::MarkMpn.Sql4Cds.Properties.Resources.StatusHelp_16x;
-            this.pictureBox6.Location = new System.Drawing.Point(334, 52);
-            this.pictureBox6.Name = "pictureBox6";
-            this.pictureBox6.Size = new System.Drawing.Size(16, 16);
-            this.pictureBox6.TabIndex = 31;
-            this.pictureBox6.TabStop = false;
-            this.pictureBox6.Tag = "https://docs.microsoft.com/powerapps/developer/data-platform/api-limits#how-to-ma" +
-    "ximize-throughput";
-            this.pictureBox6.Click += new System.EventHandler(this.helpIcon_Click);
+            this.label16.AutoSize = true;
+            this.label16.Location = new System.Drawing.Point(4, 60);
+            this.label16.Name = "label16";
+            this.label16.Size = new System.Drawing.Size(154, 13);
+            this.label16.TabIndex = 6;
+            this.label16.Text = "Warn when inserting more than";
             // 
             // SettingsForm
             // 
@@ -683,6 +720,9 @@
             this.tabControl1.ResumeLayout(false);
             this.tabPage1.ResumeLayout(false);
             this.tabPage1.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.pictureBox6)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.pictureBox5)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.pictureBox4)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox2)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.bulkDeleteHelp)).EndInit();
@@ -691,9 +731,7 @@
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox3)).EndInit();
             this.tabPage3.ResumeLayout(false);
             this.tabPage3.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.pictureBox4)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.pictureBox5)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.pictureBox6)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.insertWarnThresholdUpDown)).EndInit();
             this.ResumeLayout(false);
 
         }
@@ -747,5 +785,8 @@
         private System.Windows.Forms.PictureBox pictureBox6;
         private System.Windows.Forms.PictureBox pictureBox5;
         private System.Windows.Forms.PictureBox pictureBox4;
+        private System.Windows.Forms.Label label15;
+        private System.Windows.Forms.NumericUpDown insertWarnThresholdUpDown;
+        private System.Windows.Forms.Label label16;
     }
 }

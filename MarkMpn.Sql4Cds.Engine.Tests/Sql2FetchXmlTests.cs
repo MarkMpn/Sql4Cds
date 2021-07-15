@@ -2895,6 +2895,11 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             return true;
         }
 
+        bool IQueryExecutionOptions.ConfirmInsert(int count, EntityMetadata meta)
+        {
+            return true;
+        }
+
         bool IQueryExecutionOptions.ConfirmUpdate(int count, EntityMetadata meta)
         {
             return true;

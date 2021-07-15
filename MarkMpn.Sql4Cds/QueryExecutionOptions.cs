@@ -50,11 +50,32 @@ namespace MarkMpn.Sql4Cds
 
         public bool UseBulkDelete => Settings.Instance.UseBulkDelete;
 
+        public bool ConfirmInsert(int count, EntityMetadata meta)
+        {
+            if (count > Settings.Instance.InsertWarnThreshold || BypassCustomPlugins)
+            {
+                var msg = $"Insert will affect {count:N0} {GetDisplayName(count, meta)}.";
+                if (BypassCustomPlugins)
+                    msg += "\r\n\r\nThis operation will bypass any custom plugins.";
+
+                var result = MessageBox.Show(_host, msg + "\r\n\r\nDo you want to proceed?", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+
+                if (result == DialogResult.No)
+                    return false;
+            }
+
+            return true;
+        }
+
         public bool ConfirmUpdate(int count, EntityMetadata meta)
         {
-            if (count > Settings.Instance.UpdateWarnThreshold)
+            if (count > Settings.Instance.UpdateWarnThreshold || BypassCustomPlugins)
             {
-                var result = MessageBox.Show(_host, $"Update will affect {count:N0} {GetDisplayName(count, meta)}. Do you want to proceed?", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+                var msg = $"Update will affect {count:N0} {GetDisplayName(count, meta)}.";
+                if (BypassCustomPlugins)
+                    msg += "\r\n\r\nThis operation will bypass any custom plugins.";
+
+                var result = MessageBox.Show(_host, msg + "\r\n\r\nDo you want to proceed?", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
 
                 if (result == DialogResult.No)
                     return false;
@@ -65,9 +86,13 @@ namespace MarkMpn.Sql4Cds
 
         public bool ConfirmDelete(int count, EntityMetadata meta)
         {
-            if (count > Settings.Instance.DeleteWarnThreshold)
+            if (count > Settings.Instance.DeleteWarnThreshold || BypassCustomPlugins)
             {
-                var result = MessageBox.Show(_host, $"Delete will affect {count:N0} {GetDisplayName(count, meta)}. Do you want to proceed?", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+                var msg = $"Delete will affect {count:N0} {GetDisplayName(count, meta)}.";
+                if (BypassCustomPlugins)
+                    msg += "\r\n\r\nThis operation will bypass any custom plugins.";
+
+                var result = MessageBox.Show(_host, msg + "\r\n\r\nDo you want to proceed?", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
 
                 if (result == DialogResult.No)
                     return false;

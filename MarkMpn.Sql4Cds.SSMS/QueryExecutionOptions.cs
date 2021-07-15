@@ -43,6 +43,16 @@ namespace MarkMpn.Sql4Cds.SSMS
 
         public bool BypassCustomPlugins => _options.BypassCustomPlugins;
 
+        public bool ConfirmInsert(int count, EntityMetadata meta)
+        {
+            if (count == 1)
+                _sqlScriptEditorControl.Results.AddStringToMessages($"Inserting 1 {meta.DisplayName?.UserLocalizedLabel?.Label ?? meta.LogicalName}...\r\n");
+            else
+                _sqlScriptEditorControl.Results.AddStringToMessages($"Inserting {count:N0} {meta.DisplayCollectionName?.UserLocalizedLabel?.Label ?? meta.LogicalCollectionName ?? meta.LogicalName}...\r\n");
+
+            return true;
+        }
+
         public bool ConfirmDelete(int count, EntityMetadata meta)
         {
             if (count == 1)
