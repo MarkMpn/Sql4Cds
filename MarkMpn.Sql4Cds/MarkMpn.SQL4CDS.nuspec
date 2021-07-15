@@ -31,7 +31,7 @@ Improved performance of adding new connection by limiting properties shown in pr
     <language>en-GB</language>
     <tags>XrmToolBox SQL CDS</tags>
     <dependencies>
-      <dependency id="XrmToolBox" version="1.2020.12.43" />
+      <dependency id="XrmToolBox" version="1.2021.6.51" />
     </dependencies>
   </metadata>
   <files>
