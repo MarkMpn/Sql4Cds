@@ -9,15 +9,10 @@
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <projectUrl>https://markcarrington.dev/sql-4-cds/</projectUrl>
     <iconUrl>https://markcarrington.dev/sql4cds-icon/</iconUrl>
-    <description>Convert SQL queries to FetchXml and execute them against CDS</description>
-    <summary>Convert SQL queries to FetchXml and execute them against CDS</summary>
-    <releaseNotes>Performance updates for bulk INSERT/UPDATE/DELETE:
-- Disable affinity cookie
-- Allow bypassing plugins
-
-Improved error reporting on nested errors
-Fixed COUNT(*) with IN subqueries
-Reordered joins in FetchXML to avoid paging issues
+    <description>Convert SQL queries to FetchXml and execute them against Dataverse / D365</description>
+    <summary>Convert SQL queries to FetchXml and execute them against Dataverse / D365</summary>
+    <releaseNotes>Fixed IN queries on metadata
+Fixed "Aggregates are not supported" when using audit table
     </releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>

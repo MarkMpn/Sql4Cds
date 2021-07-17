@@ -248,6 +248,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Autocomplete.cs" />
+    <Compile Include="ConnectionPropertiesWrapper.cs" />
     <Compile Include="EntityCache.cs" />
     <Compile Include="ExecutionPlanView.cs">
       <SubType>Component</SubType>

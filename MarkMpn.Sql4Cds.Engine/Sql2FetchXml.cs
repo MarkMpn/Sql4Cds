@@ -63,6 +63,11 @@ namespace MarkMpn.Sql4Cds.Engine
 
             public bool BypassCustomPlugins => false;
 
+            public bool ConfirmInsert(int count, EntityMetadata meta)
+            {
+                throw new NotImplementedException();
+            }
+
             public bool ConfirmDelete(int count, EntityMetadata meta)
             {
                 throw new NotImplementedException();

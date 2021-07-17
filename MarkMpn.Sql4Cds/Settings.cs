@@ -18,6 +18,8 @@ namespace MarkMpn.Sql4Cds
 
         public int SelectLimit { get; set; }
 
+        public int InsertWarnThreshold { get; set; } = 1;
+
         public int UpdateWarnThreshold { get; set; }
 
         public bool BlockUpdateWithoutWhere { get; set; } = true;

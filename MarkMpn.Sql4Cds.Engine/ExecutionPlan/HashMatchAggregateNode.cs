@@ -508,7 +508,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     TrySource = fetchXml,
                     CatchSource = this,
-                    ExceptionFilter = IsAggregateQueryRecordLimitExceededException
+                    ExceptionFilter = IsAggregateQueryRetryableException
                 };
             }
 
@@ -528,20 +528,31 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(metadata, parameterTypes, scalarRequiredColumns);
         }
 
-        private bool IsAggregateQueryRecordLimitExceededException(Exception ex)
+        private bool IsAggregateQueryRetryableException(Exception ex)
         {
             if (ex is QueryExecutionException qee)
                 ex = qee.InnerException;
 
-            if (!(ex is FaultException<OrganizationServiceFault> fault))
+            if (!(ex is FaultException<OrganizationServiceFault> faultEx))
                 return false;
+
+            var fault = faultEx.Detail;
+            while (fault.InnerFault != null)
+                fault = fault.InnerFault;
 
             /*
              * 0x8004E023 / -2147164125	
              * Name: AggregateQueryRecordLimitExceeded
              * Message: The maximum record limit is exceeded. Reduce the number of records.
              */
-            return fault.Detail.ErrorCode == -2147164125;
+            if (fault.ErrorCode == -2147164125)
+                return true;
+
+            // Triggered when trying to use aggregates on log storage tables
+            if (fault.ErrorCode == -2147220970 && fault.Message == "Aggregates are not supported")
+                return true;
+
+            return false;
         }
 
         public override int EstimateRowsOut(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, ITableSizeCache tableSize)
