@@ -69,12 +69,14 @@ namespace MarkMpn.Sql4Cds.Engine
             }
         }
 
-        public static FetchAttributeType FindAliasedAttribute(this FetchEntityType entity, string colName, Func<FetchAttributeType, bool> predicate)
+        public static FetchAttributeType FindAliasedAttribute(this FetchEntityType entity, string colName, Func<FetchAttributeType, bool> predicate, out FetchLinkEntityType linkEntity)
         {
-            return FindAliasedAttribute(entity.Items, colName, predicate);
+            linkEntity = null;
+
+            return FindAliasedAttribute(entity.Items, colName, predicate, ref linkEntity);
         }
 
-        private static FetchAttributeType FindAliasedAttribute(object[] items, string colName, Func<FetchAttributeType, bool> predicate)
+        private static FetchAttributeType FindAliasedAttribute(object[] items, string colName, Func<FetchAttributeType, bool> predicate, ref FetchLinkEntityType linkEntity)
         {
             if (items == null)
                 return null;
@@ -86,12 +88,17 @@ namespace MarkMpn.Sql4Cds.Engine
             if (match != null)
                 return match;
 
-            foreach (var linkEntity in items.OfType<FetchLinkEntityType>())
+            foreach (var le in items.OfType<FetchLinkEntityType>())
             {
-                match = FindAliasedAttribute(linkEntity.Items, colName, predicate);
+                match = FindAliasedAttribute(le.Items, colName, predicate, ref linkEntity);
 
                 if (match != null)
+                {
+                    if (linkEntity == null)
+                        linkEntity = le;
+
                     return match;
+                }
             }
 
             return null;

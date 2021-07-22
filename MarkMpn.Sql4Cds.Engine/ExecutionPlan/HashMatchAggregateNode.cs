@@ -416,7 +416,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     schema.ContainsColumn(colName, out colName);
 
-                    var attribute = fetchXml.AddAttribute(colName, a => a.groupbySpecified && a.groupby == FetchBoolType.@true && a.alias == alias, metadata, out _);
+                    var attribute = fetchXml.AddAttribute(colName, a => a.groupbySpecified && a.groupby == FetchBoolType.@true && a.alias == alias, metadata, out _, out var linkEntity);
                     attribute.groupby = FetchBoolType.@true;
                     attribute.groupbySpecified = true;
                     attribute.alias = alias;
@@ -430,6 +430,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         // Can't group on datetime columns without a DATEPART specification
                         return this;
+                    }
+
+                    // Add a sort order for each grouping to allow consistent paging
+                    var items = linkEntity?.Items ?? fetchXml.Entity.Items;
+                    var sort = items.OfType<FetchOrderType>().FirstOrDefault(order => order.alias == alias);
+                    if (sort == null)
+                    {
+                        if (linkEntity == null)
+                            fetchXml.Entity.AddItem(new FetchOrderType { alias = alias });
+                        else
+                            linkEntity.AddItem(new FetchOrderType { alias = alias });
                     }
                 }
 
@@ -489,7 +500,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (attr is EnumAttributeMetadata && (aggregateType == FetchXml.AggregateType.avg || aggregateType == FetchXml.AggregateType.max || aggregateType == FetchXml.AggregateType.min || aggregateType == FetchXml.AggregateType.sum))
                         return this;
 
-                    var attribute = fetchXml.AddAttribute(colName, a => a.aggregate == aggregateType && a.alias == agg.Key && a.distinct == distinct, metadata, out _);
+                    var attribute = fetchXml.AddAttribute(colName, a => a.aggregate == aggregateType && a.alias == agg.Key && a.distinct == distinct, metadata, out _, out _);
                     attribute.aggregate = aggregateType;
                     attribute.aggregateSpecified = true;
                     attribute.alias = agg.Key;

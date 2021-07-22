@@ -726,6 +726,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     <entity name='account'>
                         <attribute name='name' groupby='true' alias='name' />
                         <attribute name='accountid' aggregate='count' alias='count' />
+                        <order alias='name' />
                     </entity>
                 </fetch>
             ");

@@ -403,14 +403,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return schema;
         }
 
-        internal FetchAttributeType AddAttribute(string colName, Func<FetchAttributeType, bool> predicate, IAttributeMetadataCache metadata, out bool added)
+        internal FetchAttributeType AddAttribute(string colName, Func<FetchAttributeType, bool> predicate, IAttributeMetadataCache metadata, out bool added, out FetchLinkEntityType linkEntity)
         {
             var parts = colName.Split('.');
 
             if (parts.Length == 1)
             {
                 added = false;
-                return Entity.FindAliasedAttribute(colName, predicate);
+                return Entity.FindAliasedAttribute(colName, predicate, out linkEntity);
             }
 
             var entityName = parts[0];
@@ -418,6 +418,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (Alias == entityName)
             {
+                linkEntity = null;
+
                 var meta = metadata[Entity.name].Attributes.SingleOrDefault(a => a.LogicalName == attr.name && a.AttributeOf == null);
                 if (meta == null && (attr.name.EndsWith("name") || attr.name.EndsWith("type")))
                 {
@@ -442,7 +444,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
             else
             {
-                var linkEntity = Entity.FindLinkEntity(entityName);
+                linkEntity = Entity.FindLinkEntity(entityName);
 
                 var meta = metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName == attr.name && a.AttributeOf == null);
                 if (meta == null && (attr.name.EndsWith("name") || attr.name.EndsWith("type")))

@@ -15,6 +15,7 @@ using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Metadata.Query;
 using Microsoft.Xrm.Sdk.Query;
+using Microsoft.Xrm.Tooling.Connector;
 
 namespace MarkMpn.Sql4Cds.Engine.Tests
 {
@@ -460,6 +461,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     <entity name='account'>
                         <attribute name='name' groupby='true' alias='name' />
                         <attribute name='accountid' aggregate='count' alias='count' />
+                        <order alias='name' />
                     </entity>
                 </fetch>");
             var aggregate = AssertNode<HashMatchAggregateNode>(tryCatch.CatchSource);
@@ -498,6 +500,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     <entity name='account'>
                         <attribute name='name' groupby='true' alias='name' />
                         <attribute name='accountid' aggregate='count' alias='test' />
+                        <order alias='name' />
                     </entity>
                 </fetch>");
             var aggregate = AssertNode<HashMatchAggregateNode>(tryCatch.CatchSource);
@@ -536,6 +539,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     <entity name='account'>
                         <attribute name='name' groupby='true' alias='name' />
                         <attribute name='accountid' aggregate='count' alias='count' />
+                        <order alias='name' />
                     </entity>
                 </fetch>");
             var aggregate = AssertNode<HashMatchAggregateNode>(tryCatch.CatchSource);
@@ -611,6 +615,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     <entity name='account'>
                         <attribute name='name' groupby='true' alias='name' />
                         <attribute name='accountid' aggregate='count' alias='count' />
+                        <order alias='name' />
                     </entity>
                 </fetch>");
             var aggregate = AssertNode<HashMatchAggregateNode>(tryCatch.CatchSource);
@@ -653,6 +658,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     <entity name='account'>
                         <attribute name='createdon' groupby='true' alias='createdon_month' dategrouping='month' />
                         <attribute name='accountid' aggregate='count' alias='count' />
+                        <order alias='createdon_month' />
                     </entity>
                 </fetch>");
             var aggregate = AssertNode<HashMatchAggregateNode>(tryCatch.CatchSource);
@@ -2799,6 +2805,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     <entity name='contact'>
                         <attribute name='firstname' groupby='true' alias='firstname' />
                         <attribute name='contactid' aggregate='count' alias='count' />
+                        <order alias='firstname' />
                     </entity>
                 </fetch>");
 
