@@ -13,6 +13,7 @@
     <summary>Convert SQL queries to FetchXml and execute them against Dataverse / D365</summary>
     <releaseNotes>Fixed IN queries on metadata
 Fixed "Aggregates are not supported" when using audit table
+Fixed paging issues with aggregates
     </releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>
