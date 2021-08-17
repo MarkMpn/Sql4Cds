@@ -610,7 +610,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var attrNames = new[] { attrName };
             var ft = filterType.and;
 
-            var usesItems = values != null && values.Length > 1 || op == @operator.@in || op == @operator.notin;
+            var usesItems = values != null && values.Length > 1 || op == @operator.@in || op == @operator.notin || op == @operator.containvalues || op == @operator.notcontainvalues;
 
             if (attribute is DateTimeAttributeMetadata && literals != null &&
                 (op == @operator.eq || op == @operator.ne || op == @operator.neq || op == @operator.gt || op == @operator.ge || op == @operator.lt || op == @operator.le))

@@ -2104,6 +2104,62 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void ContainsValues1()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT new_name FROM new_customentity WHERE CONTAINS(new_optionsetvaluecollection, '1')";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, $@"
+                <fetch>
+                    <entity name='new_customentity'>
+                        <attribute name='new_name' />
+                        <filter>
+                            <condition attribute='new_optionsetvaluecollection' operator='contain-values'>
+                                <value>1</value>
+                            </condition>
+                        </filter>
+                    </entity>
+                </fetch>
+            ");
+        }
+
+        [TestMethod]
+        public void ContainsValuesFunction1()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT new_name FROM new_customentity WHERE new_optionsetvaluecollection = containvalues(1)";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, $@"
+                <fetch>
+                    <entity name='new_customentity'>
+                        <attribute name='new_name' />
+                        <filter>
+                            <condition attribute='new_optionsetvaluecollection' operator='contain-values'>
+                                <value>1</value>
+                            </condition>
+                        </filter>
+                    </entity>
+                </fetch>
+            ");
+        }
+
+        [TestMethod]
         public void ContainsValues()
         {
             var context = new XrmFakedContext();
@@ -2114,6 +2170,35 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var sql2FetchXml = new Sql2FetchXml(metadata, true);
 
             var query = "SELECT new_name FROM new_customentity WHERE CONTAINS(new_optionsetvaluecollection, '1 OR 2')";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            AssertFetchXml(queries, $@"
+                <fetch>
+                    <entity name='new_customentity'>
+                        <attribute name='new_name' />
+                        <filter>
+                            <condition attribute='new_optionsetvaluecollection' operator='contain-values'>
+                                <value>1</value>
+                                <value>2</value>
+                            </condition>
+                        </filter>
+                    </entity>
+                </fetch>
+            ");
+        }
+
+        [TestMethod]
+        public void ContainsValuesFunction()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT new_name FROM new_customentity WHERE new_optionsetvaluecollection = containvalues(1, 2)";
 
             var queries = sql2FetchXml.Convert(query);
 
