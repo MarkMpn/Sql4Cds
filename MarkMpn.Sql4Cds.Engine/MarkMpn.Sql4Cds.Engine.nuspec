@@ -14,6 +14,7 @@
     <releaseNotes>Fixed IN queries on metadata
 Fixed "Aggregates are not supported" when using audit table
 Fixed paging issues with aggregates
+Fixed handling of "containvalues" filters on choices columns
     </releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>

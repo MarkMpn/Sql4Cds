@@ -27,7 +27,8 @@ Fixed IN queries on metadata
 Fixed "Aggregates are not supported" when using audit table
 Fixed adding connection to Object Explorer after using Change Connection toolbar button
 Improved performance of adding new connection by limiting properties shown in properties window
-Fixed paging issues with aggregates</releaseNotes>
+Fixed paging issues with aggregates
+Fixed handling of "containvalues" filters on choices columns</releaseNotes>
     <copyright>Copyright © 2019 Mark Carrington</copyright>
     <language>en-GB</language>
     <tags>XrmToolBox SQL CDS</tags>
