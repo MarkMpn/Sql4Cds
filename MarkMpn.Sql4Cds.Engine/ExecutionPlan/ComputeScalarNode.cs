@@ -94,13 +94,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
         {
+            var schema = Source.GetSchema(metadata, parameterTypes);
+
             var calcSourceColumns = Columns.Values
-                   .SelectMany(expr => expr.GetColumns());
+                .SelectMany(expr => expr.GetColumns());
 
             foreach (var col in calcSourceColumns)
             {
-                if (!requiredColumns.Contains(col, StringComparer.OrdinalIgnoreCase))
-                    requiredColumns.Add(col);
+                if (!schema.ContainsColumn(col, out var normalized))
+                    continue;
+
+                if (!requiredColumns.Contains(normalized, StringComparer.OrdinalIgnoreCase))
+                    requiredColumns.Add(normalized);
             }
 
             Source.AddRequiredColumns(metadata, parameterTypes, requiredColumns);
