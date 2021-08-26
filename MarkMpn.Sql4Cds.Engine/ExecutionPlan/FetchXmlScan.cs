@@ -490,12 +490,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (items == null)
                 return false;
 
-            var hasSort = items.OfType<FetchOrderType>().Any(sort => sort.alias.Equals(alias, StringComparison.OrdinalIgnoreCase));
+            var hasSort = items.OfType<FetchOrderType>().Any(sort => sort.alias != null && sort.alias.Equals(alias, StringComparison.OrdinalIgnoreCase));
 
             if (hasSort)
                 return true;
 
-            var hasCondition = items.OfType<condition>().Any(condition => condition.alias.Equals(alias, StringComparison.OrdinalIgnoreCase));
+            var hasCondition = items.OfType<condition>().Any(condition => condition.alias != null && condition.alias.Equals(alias, StringComparison.OrdinalIgnoreCase));
 
             if (hasCondition)
                 return true;
