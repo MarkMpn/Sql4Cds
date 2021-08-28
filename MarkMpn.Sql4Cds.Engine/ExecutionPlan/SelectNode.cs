@@ -184,7 +184,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                             if (!col.OutputColumn.Equals(parts.Last(), StringComparison.OrdinalIgnoreCase) && FetchXmlScan.IsValidAlias(col.OutputColumn))
                             {
-                                if (added || (!processedSourceColumns.Contains(col.SourceColumn) && !fetchXml.IsAliasReferenced(attr.alias)))
+                                if (added || (!processedSourceColumns.Contains(sourceCol) && !fetchXml.IsAliasReferenced(attr.alias)))
                                 {
                                     // Don't fold the alias if there's also a sort on the same attribute, as it breaks paging
                                     // https://markcarrington.dev/2019/12/10/inside-fetchxml-pt-4-order/#sorting_&_aliases
@@ -197,7 +197,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 col.SourceColumn = sourceCol.Split('.')[0] + "." + (attr.alias ?? attr.name);
                             }
 
-                            processedSourceColumns.Add(col.SourceColumn);
+                            processedSourceColumns.Add(sourceCol);
                         }
                     }
                 }

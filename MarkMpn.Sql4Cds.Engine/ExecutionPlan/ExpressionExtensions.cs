@@ -459,7 +459,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 var paramType = parameters[i].ParameterType;
 
-                if (i == parameters.Length - 1 && paramTypes.Length > parameters.Length && paramType.IsArray)
+                if (i == parameters.Length - 1 && paramTypes.Length >= parameters.Length && paramType.IsArray)
                     paramType = paramType.GetElementType();
 
                 if (!SqlTypeConverter.CanChangeTypeImplicit(paramTypes[i], paramType))

@@ -2913,5 +2913,59 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     </entity>
                 </fetch>");
         }
+
+        [TestMethod]
+        public void MetadataExpressions()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT collectionschemaname + '.' + entitysetname FROM metadata.entity WHERE description LIKE '%test%'";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual("Expr1", select.ColumnSet[0].SourceColumn);
+
+            var computeScalar = AssertNode<ComputeScalarNode>(select.Source);
+            Assert.AreEqual("collectionschemaname + '.' + entitysetname", computeScalar.Columns["Expr1"].ToSql());
+
+            var filter = AssertNode<FilterNode>(computeScalar.Source);
+            Assert.AreEqual("description LIKE '%test%'", filter.Filter.ToSql());
+
+            var metadataQuery = AssertNode<MetadataQueryNode>(filter.Source);
+            Assert.AreEqual(MetadataSource.Entity, metadataQuery.MetadataSource);
+            CollectionAssert.AreEquivalent(new[] { "CollectionSchemaName", "EntitySetName", "Description" }, metadataQuery.Query.Properties.PropertyNames);
+        }
+
+        [TestMethod]
+        public void MultipleAliases()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT name AS n1, name AS n2 FROM account WHERE name = 'test'";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual("account.n1", select.ColumnSet[0].SourceColumn);
+            Assert.AreEqual("account.n1", select.ColumnSet[1].SourceColumn);
+
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' alias='n1' />
+                        <filter>
+                            <condition attribute='name' operator='eq' value='test' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
     }
 }

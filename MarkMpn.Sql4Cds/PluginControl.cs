@@ -75,16 +75,14 @@ namespace MarkMpn.Sql4Cds
 
         private void AddConnection(ConnectionDetail con)
         {
-            var svc = con.ServiceClient;
-
             if (!_metadata.ContainsKey(con))
                 _metadata[con] = new SharedMetadataCache(con);
             
             if (!_tableSize.ContainsKey(con))
-                _tableSize[con] = new TableSizeCache(svc, _metadata[con]);
+                _tableSize[con] = new TableSizeCache(con.GetCrmServiceClient(true), _metadata[con]);
 
             // Start loading the entity list in the background
-            EntityCache.TryGetEntities(con.MetadataCacheLoader, svc, out _);
+            EntityCache.TryGetEntities(con.MetadataCacheLoader, con.GetCrmServiceClient(true), out _);
         }
 
         private void PluginControl_Load(object sender, EventArgs e)

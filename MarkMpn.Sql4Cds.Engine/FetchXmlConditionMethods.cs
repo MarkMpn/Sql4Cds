@@ -213,10 +213,10 @@ namespace MarkMpn.Sql4Cds.Engine
         public static SqlBoolean EqOrAbove(SqlGuid field, SqlGuid value) => ThrowException();
 
         [Description("Matches a multi-select picklist value that contains any of the specified values")]
-        public static SqlBoolean ContainValues(OptionSetValueCollection field, SqlInt32[] value) => ThrowException();
+        public static SqlBoolean ContainValues(SqlString field, SqlInt32[] value) => ThrowException();
 
         [Description("Matches a multi-select picklist value that doesn't contains any of the specified values")]
-        public static SqlBoolean NotContainValues(OptionSetValueCollection field, SqlInt32[] value) => ThrowException();
+        public static SqlBoolean NotContainValues(SqlString field, SqlInt32[] value) => ThrowException();
 
         private static SqlBoolean ThrowException()
         {

@@ -2,6 +2,7 @@
 using Microsoft.VisualBasic;
 using Microsoft.Xrm.Sdk;
 using System;
+using System.Collections.Generic;
 using System.Data.SqlTypes;
 using System.Linq;
 using System.Linq.Expressions;
@@ -408,14 +409,34 @@ namespace MarkMpn.Sql4Cds.Engine
         public static MethodCallExpression Call(MethodInfo method, params Expression[] args)
         {
             var parameters = method.GetParameters();
+            var converted = new Expression[parameters.Length];
 
             for (var i = 0; i < parameters.Length; i++)
             {
-                if (parameters[i].ParameterType != args[i].Type)
-                    args[i] = Convert(args[i], parameters[i].ParameterType);
+                if (parameters[i].ParameterType == args[i].Type)
+                {
+                    converted[i] = args[i];
+                }
+                else
+                {
+                    if (i == parameters.Length - 1 && parameters[i].ParameterType.IsArray && !args[i].Type.IsArray)
+                    {
+                        var elementType = parameters[i].ParameterType.GetElementType();
+                        var elements = new List<Expression>();
+
+                        for (var j = i; j < args.Length; j++)
+                            elements.Add(Convert(args[j], elementType));
+
+                        converted[i] = Expression.NewArrayInit(elementType, elements.ToArray());
+                    }
+                    else
+                    {
+                        converted[i] = Convert(args[i], parameters[i].ParameterType);
+                    }
+                }
             }
 
-            return Expression.Call(method, args);
+            return Expression.Call(method, converted);
         }
 
         /// <summary>
