@@ -79,10 +79,27 @@ namespace MarkMpn.Sql4Cds
                 _metadata[con] = new SharedMetadataCache(con);
             
             if (!_tableSize.ContainsKey(con))
-                _tableSize[con] = new TableSizeCache(con.GetCrmServiceClient(true), _metadata[con]);
+                _tableSize[con] = new TableSizeCache(GetNewServiceClient(con), _metadata[con]);
 
             // Start loading the entity list in the background
-            EntityCache.TryGetEntities(con.MetadataCacheLoader, con.GetCrmServiceClient(true), out _);
+            EntityCache.TryGetEntities(con.MetadataCacheLoader, GetNewServiceClient(con), out _);
+        }
+
+        private IOrganizationService GetNewServiceClient(ConnectionDetail con)
+        {
+            var svc = con.ServiceClient;
+
+            if (svc.ActiveAuthenticationType == Microsoft.Xrm.Tooling.Connector.AuthenticationType.OAuth)
+                return svc.Clone();
+
+            try
+            {
+                return con.GetCrmServiceClient(true);
+            }
+            catch
+            {
+                return svc;
+            }
         }
 
         private void PluginControl_Load(object sender, EventArgs e)
