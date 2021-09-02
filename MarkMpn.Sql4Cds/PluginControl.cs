@@ -52,6 +52,7 @@ namespace MarkMpn.Sql4Cds
         public override void UpdateConnection(IOrganizationService newService, ConnectionDetail detail, string actionName, object parameter)
         {
             AddConnection(detail);
+            ConnectionDetail = detail;
 
             if (actionName == "ChangeConnection")
             {
