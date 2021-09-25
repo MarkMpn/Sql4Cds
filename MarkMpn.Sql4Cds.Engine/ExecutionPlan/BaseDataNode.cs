@@ -638,7 +638,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         else
                             dto = new DateTimeOffset(dt, TimeSpan.Zero);
 
-                        var formatted = dto.ToString("yyyy-MM-ddTHH:mm:ss.FFFzzz");
+                        var formatted = dto.ToString("yyyy-MM-ddTHH':'mm':'ss.FFFzzz");
 
                         if (literals.Length == 1)
                             value = formatted;
