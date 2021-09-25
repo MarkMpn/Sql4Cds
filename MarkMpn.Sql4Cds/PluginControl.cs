@@ -243,9 +243,14 @@ namespace MarkMpn.Sql4Cds
 
             if (param == null)
             {
-                var xml = message.TargetArgument as string;
+                var str = message.TargetArgument as string;
                 param = new Dictionary<string, object>();
-                param["FetchXml"] = xml;
+
+                if (str.StartsWith("<"))
+                    param["FetchXml"] = str;
+                else
+                    param["SQL"] = str;
+
                 param["ConvertOnly"] = false;
             }
 
@@ -255,24 +260,31 @@ namespace MarkMpn.Sql4Cds
             var con = _objectExplorer.SelectedConnection;
             var metadata = _metadata[con];
 
-            var fetch = DeserializeFetchXml((string)param["FetchXml"]);
-            var options = new FetchXml2SqlOptions();
-
-            if ((bool)param["ConvertOnly"])
-                options.ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.SqlCalculations;
-
-            _ai.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = "FetchXML", ["Source"] = "XrmToolBox" });
-
-            var sql = FetchXml2Sql.Convert(con.ServiceClient, metadata, fetch, options, out _);
-
-            if ((bool)param["ConvertOnly"])
+            if (param.TryGetValue("FetchXml", out var xml) && xml is string xmlStr && !String.IsNullOrEmpty(xmlStr))
             {
-                param["Sql"] = sql;
-                OnOutgoingMessage(this, new MessageBusEventArgs(message.SourcePlugin) { TargetArgument = null });
+                var fetch = DeserializeFetchXml(xmlStr);
+                var options = new FetchXml2SqlOptions();
+
+                if ((bool)param["ConvertOnly"])
+                    options.ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.SqlCalculations;
+
+                _ai.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = "FetchXML", ["Source"] = "XrmToolBox" });
+
+                var sql = FetchXml2Sql.Convert(con.ServiceClient, metadata, fetch, options, out _);
+
+                if ((bool)param["ConvertOnly"])
+                {
+                    param["Sql"] = sql;
+                    OnOutgoingMessage(this, new MessageBusEventArgs(message.SourcePlugin) { TargetArgument = null });
+                }
+                else
+                {
+                    CreateQuery(con, "-- Imported from " + message.SourcePlugin + "\r\n\r\n" + sql);
+                }
             }
-            else
+            else if (param.TryGetValue("SQL", out var sql) && sql is string sqlStr && !String.IsNullOrEmpty(sqlStr))
             {
-                CreateQuery(con, "-- Imported from " + message.SourcePlugin + "\r\n\r\n" + sql);
+                CreateQuery(con, "-- Imported from " + message.SourcePlugin + "\r\n\r\n" + sqlStr);
             }
         }
 
