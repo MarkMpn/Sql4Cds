@@ -77,7 +77,7 @@ namespace MarkMpn.Sql4Cds
         private void AddConnection(ConnectionDetail con)
         {
             if (!_metadata.ContainsKey(con))
-                _metadata[con] = new SharedMetadataCache(con);
+                _metadata[con] = new SharedMetadataCache(con, GetNewServiceClient(con));
             
             if (!_tableSize.ContainsKey(con))
                 _tableSize[con] = new TableSizeCache(GetNewServiceClient(con), _metadata[con]);

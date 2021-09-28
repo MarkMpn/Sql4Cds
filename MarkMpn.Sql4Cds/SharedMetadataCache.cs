@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine;
 using McTools.Xrm.Connection;
+using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
 
 namespace MarkMpn.Sql4Cds
@@ -18,10 +19,10 @@ namespace MarkMpn.Sql4Cds
         // Metadata cache updating was broken in first release, make sure we're only using it on later versions
         private static readonly bool _metadataCacheSupported = typeof(ConnectionDetail).Assembly.GetName().Version >= new Version("1.2021.6.44");
 
-        public SharedMetadataCache(ConnectionDetail connection)
+        public SharedMetadataCache(ConnectionDetail connection, IOrganizationService org)
         {
             _connection = connection;
-            _innerCache = new AttributeMetadataCache(connection.ServiceClient);
+            _innerCache = new AttributeMetadataCache(org);
         }
 
         public EntityMetadata this[string name]
