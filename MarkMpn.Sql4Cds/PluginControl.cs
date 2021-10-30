@@ -132,6 +132,10 @@ namespace MarkMpn.Sql4Cds
                             query = CreateFetchXML(null);
                             break;
 
+                        case "M":
+                            query = CreateM(null);
+                            break;
+
                         default:
                             continue;
                     }
@@ -207,6 +211,17 @@ namespace MarkMpn.Sql4Cds
         {
             var query = new FetchXmlControl();
             query.FetchXml = xml;
+
+            query.Show(dockPanel, DockState.Document);
+            query.SetFocus();
+
+            return query;
+        }
+
+        private MQueryControl CreateM(string m)
+        {
+            var query = new MQueryControl();
+            query.M = m;
 
             query.Show(dockPanel, DockState.Document);
             query.SetFocus();
@@ -386,11 +401,13 @@ namespace MarkMpn.Sql4Cds
             {
                 tsbExecute.Enabled = false;
                 tsbPreviewFetchXml.Enabled = false;
+                tsbPowerBi.Enabled = false;
                 return;
             }
 
             tsbExecute.Enabled = query.Connection != null && !query.Busy;
             tsbPreviewFetchXml.Enabled = query.Connection != null && !query.Busy;
+            tsbPowerBi.Enabled = query.Connection != null && !query.Busy;
         }
 
         private void tsbStop_Click(object sender, EventArgs e)
@@ -462,6 +479,30 @@ namespace MarkMpn.Sql4Cds
             var args = new MessageBusEventArgs("FetchXML Builder") { TargetArgument = fetchXml };
             _ai.TrackEvent("Outgoing message", new Dictionary<string, string> { ["TargetPlugin"] = args.TargetPlugin, ["Source"] = "XrmToolBox" });
             OnOutgoingMessage(this, args);
+        }
+
+        private void tsbPowerBi_Click(object sender, EventArgs e)
+        {
+            if (!(dockPanel.ActiveDocument is SqlQueryControl sql))
+                return;
+
+            _ai.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = "M", ["Source"] = "XrmToolBox" });
+
+            var m = $@"/*
+Query converted to M format by SQL 4 CDS
+To use in Power BI:
+1. Click New Source
+2. Click Blank Query
+3. Click Advanced Editor
+4. Copy & paste in this query
+*/
+
+let
+  Source = CommonDataService.Database(""{new Uri(sql.Connection.OriginalUrl).Host}"")
+  DataverseSQL = Value.NativeQuery(Source, ""{sql.Sql.Replace("\"", "\"\"").Replace("\r\n", " ").Trim()}"", null, [EnableFolding=true])
+in
+  DataverseSQL";
+            CreateM(m);
         }
     }
 }

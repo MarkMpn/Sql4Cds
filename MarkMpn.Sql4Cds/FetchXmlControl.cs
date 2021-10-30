@@ -35,7 +35,7 @@ namespace MarkMpn.Sql4Cds
         {
             InitializeComponent();
 
-            Text = $"* FetchXML {++_queryCounter}";
+            Text = $"FetchXML {++_queryCounter} *";
 
             // Ref: https://gist.github.com/anonymous/63036aa8c1cefcfcb013
 
