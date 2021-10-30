@@ -57,6 +57,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AttributeMetadataCache.cs" />
+    <Compile Include="DataSource.cs" />
     <Compile Include="DisconnectedException.cs" />
     <Compile Include="ExecutionPlanBuilder.cs" />
     <Compile Include="ExecutionPlanOptimizer.cs" />

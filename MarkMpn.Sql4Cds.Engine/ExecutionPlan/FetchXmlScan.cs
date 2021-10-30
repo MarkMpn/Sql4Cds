@@ -65,6 +65,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         }
 
         /// <summary>
+        /// The instance that this node will be executed against
+        /// </summary>
+        public DataSource DataSource { get; set; }
+
+        /// <summary>
         /// The FetchXML query
         /// </summary>
         [Browsable(false)]

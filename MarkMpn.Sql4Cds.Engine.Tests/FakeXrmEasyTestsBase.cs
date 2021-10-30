@@ -13,6 +13,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
     {
         protected readonly IOrganizationService _service;
         protected readonly XrmFakedContext _context;
+        protected readonly IOrganizationService _service2;
+        protected readonly XrmFakedContext _context2;
 
         public FakeXrmEasyTestsBase()
         {
@@ -20,6 +22,11 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             _context.InitializeMetadata(Assembly.GetExecutingAssembly());
 
             _service = _context.GetOrganizationService();
+
+            _context2 = new XrmFakedContext();
+            _context2.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            _service2 = _context2.GetOrganizationService();
         }
     }
 }

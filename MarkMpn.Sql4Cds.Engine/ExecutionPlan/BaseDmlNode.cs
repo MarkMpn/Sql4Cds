@@ -79,6 +79,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public IExecutionPlanNode Source { get; set; }
 
         /// <summary>
+        /// The instance that this node will be executed against
+        /// </summary>
+        public DataSource DataSource { get; set; }
+
+        /// <summary>
         /// Changes system settings to optimise for parallel connections
         /// </summary>
         /// <returns>An object to dispose of to reset the settings to their original values</returns>

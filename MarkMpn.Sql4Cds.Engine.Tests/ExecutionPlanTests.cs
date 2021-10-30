@@ -2967,5 +2967,47 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     </entity>
                 </fetch>");
         }
+
+        [TestMethod]
+        public void CrossInstanceJoin()
+        {
+            var metadata1 = new AttributeMetadataCache(_service);
+            var metadata2 = new AttributeMetadataCache(_service2);
+            var datasources = new []
+            {
+                new DataSource
+                {
+                    Name = "uat",
+                    Connection = _context.GetOrganizationService(),
+                    Metadata = metadata1,
+                    TableSizeCache = new StubTableSizeCache()
+                },
+                new DataSource
+                {
+                    Name = "prod",
+                    Connection = _context2.GetOrganizationService(),
+                    Metadata = metadata2,
+                    TableSizeCache = new StubTableSizeCache()
+                }
+            };
+            var planBuilder = new ExecutionPlanBuilder(datasources, "uat", this);
+
+            var query = "SELECT uat.name, prod.name FROM uat.dbo.account AS uat INNER JOIN prod.dbo.account AS prod ON uat.accountid = prod.accountid WHERE uat.name <> prod.name AND uat.name LIKE '%test%'";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+
+            var filter = AssertNode<FilterNode>(select.Source);
+
+            var join = AssertNode<MergeJoinNode>(filter.Source);
+
+            var uatFetch = AssertNode<FetchXmlScan>(join.LeftSource);
+
+
+            var prodFetch = AssertNode<FetchXmlScan>(join.RightSource);
+        }
     }
 }

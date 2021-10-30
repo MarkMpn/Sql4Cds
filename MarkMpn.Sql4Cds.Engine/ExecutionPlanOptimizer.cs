@@ -17,13 +17,13 @@ namespace MarkMpn.Sql4Cds.Engine
     /// </summary>
     class ExecutionPlanOptimizer
     {
-        public ExecutionPlanOptimizer(IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        public ExecutionPlanOptimizer(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options)
         {
-            Metadata = metadata;
+            DataSources = dataSources;
             Options = options;
         }
 
-        public IAttributeMetadataCache Metadata { get; }
+        public IDictionary<string, DataSource> DataSources { get; }
 
         public IQueryExecutionOptions Options { get; }
 

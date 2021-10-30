@@ -21,21 +21,26 @@ namespace MarkMpn.Sql4Cds.Engine
         private int _colNameCounter;
 
         public ExecutionPlanBuilder(IAttributeMetadataCache metadata, ITableSizeCache tableSize, IQueryExecutionOptions options)
+            : this(new[] { new DataSource { Name = "local", Metadata = metadata, TableSizeCache = tableSize } }, "local", options)
         {
-            Metadata = metadata;
-            TableSize = tableSize;
+        }
+
+        public ExecutionPlanBuilder(IEnumerable<DataSource> dataSources, string primaryDataSource, IQueryExecutionOptions options)
+        {
+            DataSources = dataSources.ToDictionary(ds => ds.Name, StringComparer.OrdinalIgnoreCase);
+            PrimaryDataSource = primaryDataSource;
             Options = options;
         }
 
         /// <summary>
-        /// Returns the metadata cache that will be used by this conversion
+        /// The connections that will be used by this conversion
         /// </summary>
-        public IAttributeMetadataCache Metadata { get; set; }
+        public IDictionary<string, DataSource> DataSources { get; }
 
         /// <summary>
-        /// Returns the size of each table
+        /// The name of the connection that will be used by default
         /// </summary>
-        public ITableSizeCache TableSize { get; set; }
+        public string PrimaryDataSource { get; set; }
 
         /// <summary>
         /// Returns or sets a value indicating if SQL will be parsed using quoted identifiers
@@ -66,7 +71,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var script = (TSqlScript)fragment;
             script.Accept(new ReplacePrimaryFunctionsVisitor());
-            var optimizer = new ExecutionPlanOptimizer(Metadata, Options);
+            var optimizer = new ExecutionPlanOptimizer(DataSources, Options);
 
             // Convert each statement in turn to the appropriate query type
             foreach (var batch in script.Batches)
@@ -290,20 +295,35 @@ namespace MarkMpn.Sql4Cds.Engine
             throw new NotSupportedQueryFragmentException("Unhandled INSERT source", selectSource);
         }
 
+        private DataSource SelectDataSource(SchemaObjectName schemaObject)
+        {
+            var databaseName = schemaObject.DatabaseIdentifier?.Value ?? PrimaryDataSource;
+            
+            if (!DataSources.TryGetValue(databaseName, out var dataSource))
+                throw new NotSupportedQueryFragmentException("Invalid database name", schemaObject) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n*", DataSources.Keys.OrderBy(k => k))}" };
+
+            return dataSource;
+        }
+
         private InsertNode ConvertInsertSpecification(NamedTableReference target, IList<ColumnReferenceExpression> targetColumns, IExecutionPlanNode source, string[] sourceColumns)
         {
             var node = new InsertNode
             {
+                DataSource = SelectDataSource(target.SchemaObject),
                 LogicalName = target.SchemaObject.BaseIdentifier.Value,
                 Source = source
             };
+
+            if (!String.IsNullOrEmpty(target.SchemaObject.SchemaIdentifier?.Value) &&
+                !target.SchemaObject.SchemaIdentifier.Value.Equals("dbo", StringComparison.OrdinalIgnoreCase))
+                throw new NotSupportedQueryFragmentException("Invalid schema name", target.SchemaObject.SchemaIdentifier) { Suggestion = "All data tables are in the 'dbo' schema" };
 
             // Validate the entity name
             EntityMetadata metadata;
 
             try
             {
-                metadata = Metadata[node.LogicalName];
+                metadata = node.DataSource.Metadata[node.LogicalName];
             }
             catch (FaultException ex)
             {
@@ -423,7 +443,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (targetColumns.Count != sourceColumns.Length)
                     throw new NotSupportedQueryFragmentException("Column number mismatch");
 
-                var schema = ((IDataExecutionPlanNode)source).GetSchema(Metadata, null);
+                var schema = ((IDataExecutionPlanNode)source).GetSchema(DataSources, null);
 
                 for (var i = 0; i < targetColumns.Count; i++)
                 {
@@ -485,6 +505,10 @@ namespace MarkMpn.Sql4Cds.Engine
                 };
             }
 
+            if (!String.IsNullOrEmpty(target.SchemaObject.SchemaIdentifier?.Value) &&
+                !target.SchemaObject.SchemaIdentifier.Value.Equals("dbo", StringComparison.OrdinalIgnoreCase))
+                throw new NotSupportedQueryFragmentException("Invalid schema name", target.SchemaObject.SchemaIdentifier) { Suggestion = "All data tables are in the 'dbo' schema" };
+
             // Create the SELECT statement that generates the required information
             var queryExpression = new QuerySpecification
             {
@@ -494,7 +518,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 TopRowFilter = delete.TopRowFilter
             };
 
-            var deleteTarget = new UpdateTargetVisitor(target.SchemaObject.BaseIdentifier.Value);
+            var deleteTarget = new UpdateTargetVisitor(target.SchemaObject, PrimaryDataSource);
             queryExpression.FromClause.Accept(deleteTarget);
 
             if (String.IsNullOrEmpty(deleteTarget.TargetEntityName))
@@ -503,6 +527,9 @@ namespace MarkMpn.Sql4Cds.Engine
             if (deleteTarget.Ambiguous)
                 throw new NotSupportedQueryFragmentException("Target table name is ambiguous", target);
 
+            if (!DataSources.TryGetValue(deleteTarget.TargetDataSource, out var dataSource))
+                throw new NotSupportedQueryFragmentException("Invalid database name", target.SchemaObject.DatabaseIdentifier) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n*", DataSources.Keys.OrderBy(k => k))}" };
+
             var targetAlias = deleteTarget.TargetAliasName ?? deleteTarget.TargetEntityName;
             var targetLogicalName = deleteTarget.TargetEntityName;
 
@@ -510,7 +537,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             try
             {
-                targetMetadata = Metadata[targetLogicalName];
+                targetMetadata = dataSource.Metadata[targetLogicalName];
             }
             catch (FaultException ex)
             {
@@ -583,7 +610,8 @@ namespace MarkMpn.Sql4Cds.Engine
             // Add DELETE
             var deleteNode = new DeleteNode
             {
-                LogicalName = targetMetadata.LogicalName
+                LogicalName = targetMetadata.LogicalName,
+                DataSource = dataSource
             };
 
             if (source is SelectNode select)
@@ -631,6 +659,10 @@ namespace MarkMpn.Sql4Cds.Engine
                 };
             }
 
+            if (!String.IsNullOrEmpty(target.SchemaObject.SchemaIdentifier?.Value) &&
+                !target.SchemaObject.SchemaIdentifier.Value.Equals("dbo", StringComparison.OrdinalIgnoreCase))
+                throw new NotSupportedQueryFragmentException("Invalid schema name", target.SchemaObject.SchemaIdentifier) { Suggestion = "All data tables are in the 'dbo' schema" };
+
             // Create the SELECT statement that generates the required information
             var queryExpression = new QuerySpecification
             {
@@ -640,7 +672,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 TopRowFilter = update.TopRowFilter
             };
 
-            var updateTarget = new UpdateTargetVisitor(target.SchemaObject.BaseIdentifier.Value);
+            var updateTarget = new UpdateTargetVisitor(target.SchemaObject, PrimaryDataSource);
             queryExpression.FromClause.Accept(updateTarget);
 
             if (String.IsNullOrEmpty(updateTarget.TargetEntityName))
@@ -649,6 +681,9 @@ namespace MarkMpn.Sql4Cds.Engine
             if (updateTarget.Ambiguous)
                 throw new NotSupportedQueryFragmentException("Target table name is ambiguous", target);
 
+            if (!DataSources.TryGetValue(updateTarget.TargetDataSource, out var dataSource))
+                throw new NotSupportedQueryFragmentException("Invalid database name", target.SchemaObject.DatabaseIdentifier) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n*", DataSources.Keys.OrderBy(k => k))}" };
+
             var targetAlias = updateTarget.TargetAliasName ?? updateTarget.TargetEntityName;
             var targetLogicalName = updateTarget.TargetEntityName;
 
@@ -656,7 +691,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             try
             {
-                targetMetadata = Metadata[targetLogicalName];
+                targetMetadata = dataSource.Metadata[targetLogicalName];
             }
             catch (FaultException ex)
             {
@@ -775,18 +810,19 @@ namespace MarkMpn.Sql4Cds.Engine
             var source = ConvertSelectStatement(selectStatement);
 
             // Add UPDATE
-            var updateNode = ConvertSetClause(update.SetClauses, source, targetLogicalName, targetAlias, attributeNames, virtualTypeAttributes);
+            var updateNode = ConvertSetClause(update.SetClauses, dataSource, source, targetLogicalName, targetAlias, attributeNames, virtualTypeAttributes);
 
             return updateNode;
         }
 
-        private UpdateNode ConvertSetClause(IList<SetClause> setClauses, IExecutionPlanNode node, string targetLogicalName, string targetAlias, HashSet<string> attributeNames, HashSet<string> virtualTypeAttributes)
+        private UpdateNode ConvertSetClause(IList<SetClause> setClauses, DataSource dataSource, IExecutionPlanNode node, string targetLogicalName, string targetAlias, HashSet<string> attributeNames, HashSet<string> virtualTypeAttributes)
         {
-            var targetMetadata = Metadata[targetLogicalName];
+            var targetMetadata = dataSource.Metadata[targetLogicalName];
             var attributes = targetMetadata.Attributes.ToDictionary(attr => attr.LogicalName, StringComparer.OrdinalIgnoreCase);
             var update = new UpdateNode
             {
-                LogicalName = targetMetadata.LogicalName
+                LogicalName = targetMetadata.LogicalName,
+                DataSource = dataSource
             };
 
             if (node is SelectNode select)
@@ -794,7 +830,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 update.Source = select.Source;
                 update.PrimaryIdSource = $"{targetAlias}.{targetMetadata.PrimaryIdAttribute}";
 
-                var schema = select.Source.GetSchema(Metadata, null);
+                var schema = select.Source.GetSchema(DataSources, null);
 
                 foreach (var assignment in setClauses.Cast<AssignmentSetClause>())
                 {
@@ -998,14 +1034,14 @@ namespace MarkMpn.Sql4Cds.Engine
             // Add aggregates from GROUP BY/SELECT/HAVING/ORDER BY
             var preGroupByNode = node;
             node = ConvertGroupByAggregates(node, querySpec, parameterTypes, outerSchema, outerReferences);
-            var nonAggregateSchema = preGroupByNode == node ? null : preGroupByNode.GetSchema(Metadata, parameterTypes);
+            var nonAggregateSchema = preGroupByNode == node ? null : preGroupByNode.GetSchema(DataSources, parameterTypes);
 
             // Add filters from HAVING
             node = ConvertHavingClause(node, hints, querySpec.HavingClause, parameterTypes, outerSchema, outerReferences, querySpec, nonAggregateSchema);
 
             // Add sorts from ORDER BY
             var selectFields = new List<ScalarExpression>();
-            var preOrderSchema = node.GetSchema(Metadata, parameterTypes);
+            var preOrderSchema = node.GetSchema(DataSources, parameterTypes);
             foreach (var el in querySpec.SelectElements)
             {
                 if (el is SelectScalarExpression expr)
@@ -1057,7 +1093,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var computeScalar = source as ComputeScalarNode;
             var rewrites = new Dictionary<BooleanExpression, BooleanExpression>();
-            var schema = source.GetSchema(Metadata, parameterTypes);
+            var schema = source.GetSchema(DataSources, parameterTypes);
 
             foreach (var inSubquery in visitor.InSubqueries)
             {
@@ -1110,7 +1146,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     else
                     {
                         // We need the inner list to be distinct to avoid creating duplicates during the join
-                        var innerSchema = innerQuery.Source.GetSchema(Metadata, parameters);
+                        var innerSchema = innerQuery.Source.GetSchema(DataSources, parameters);
                         if (innerQuery.ColumnSet[0].SourceColumn != innerSchema.PrimaryKey && !(innerQuery.Source is DistinctNode))
                         {
                             innerQuery.Source = new DistinctNode
@@ -1198,7 +1234,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 return source;
 
             var rewrites = new Dictionary<BooleanExpression, BooleanExpression>();
-            var schema = source.GetSchema(Metadata, parameterTypes);
+            var schema = source.GetSchema(DataSources, parameterTypes);
 
             foreach (var existsSubquery in visitor.ExistsSubqueries)
             {
@@ -1206,7 +1242,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 var parameters = parameterTypes == null ? new Dictionary<string, Type>() : new Dictionary<string, Type>(parameterTypes);
                 var references = new Dictionary<string, string>();
                 var innerQuery = ConvertSelectStatement(existsSubquery.Subquery.QueryExpression, hints, schema, references, parameters);
-                var innerSchema = innerQuery.Source.GetSchema(Metadata, parameters);
+                var innerSchema = innerQuery.Source.GetSchema(DataSources, parameters);
 
                 // Create the join
                 BaseJoinNode join;
@@ -1337,7 +1373,7 @@ namespace MarkMpn.Sql4Cds.Engine
             ConvertScalarSubqueries(havingClause.SearchCondition, hints, ref source, computeScalar, parameterTypes, query);
 
             // Validate the final expression
-            havingClause.SearchCondition.GetType(source.GetSchema(Metadata, parameterTypes), nonAggregateSchema, parameterTypes);
+            havingClause.SearchCondition.GetType(source.GetSchema(DataSources, parameterTypes), nonAggregateSchema, parameterTypes);
 
             return new FilterNode
             {
@@ -1365,7 +1401,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     throw new NotSupportedQueryFragmentException("Unhandled GROUP BY option", querySpec.GroupByClause);
             }
 
-            var schema = source.GetSchema(Metadata, parameterTypes);
+            var schema = source.GetSchema(DataSources, parameterTypes);
 
             // Create the grouping expressions. Grouping is done on single columns only - if a grouping is a more complex expression,
             // create a new calculated column using a Compute Scalar node first.
@@ -1635,7 +1671,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var computeScalar = new ComputeScalarNode { Source = source };
             ConvertScalarSubqueries(orderByClause, hints, ref source, computeScalar, parameterTypes, query);
 
-            var schema = source.GetSchema(Metadata, parameterTypes);
+            var schema = source.GetSchema(DataSources, parameterTypes);
             var sort = new SortNode { Source = source };
 
             // Sorts can use aliases from the SELECT clause
@@ -1681,7 +1717,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     var calculated = ComputeScalarExpression(orderBy.Expression, hints, query, computeScalar, nonAggregateSchema, parameterTypes, ref source);
                     sort.Source = source;
-                    schema = source.GetSchema(Metadata, parameterTypes);
+                    schema = source.GetSchema(DataSources, parameterTypes);
                 }
 
                 // Validate the expression
@@ -1710,7 +1746,7 @@ namespace MarkMpn.Sql4Cds.Engine
             ConvertScalarSubqueries(whereClause.SearchCondition, hints, ref source, computeScalar, parameterTypes, query);
 
             // Validate the final expression
-            whereClause.SearchCondition.GetType(source.GetSchema(Metadata, parameterTypes), null, parameterTypes);
+            whereClause.SearchCondition.GetType(source.GetSchema(DataSources, parameterTypes), null, parameterTypes);
 
             return new FilterNode
             {
@@ -1727,7 +1763,7 @@ namespace MarkMpn.Sql4Cds.Engine
             // We're in a subquery. Check if any columns in the WHERE clause are from the outer query
             // so we know which columns to pass through and rewrite the filter to use parameters
             var rewrites = new Dictionary<ScalarExpression, ScalarExpression>();
-            var innerSchema = source.GetSchema(Metadata, parameterTypes);
+            var innerSchema = source.GetSchema(DataSources, parameterTypes);
             var columns = query.GetColumns();
 
             foreach (var column in columns)
@@ -1765,7 +1801,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         private SelectNode ConvertSelectClause(IList<SelectElement> selectElements, IList<OptimizerHint> hints, IDataExecutionPlanNode node, DistinctNode distinct, TSqlFragment query, IDictionary<string, Type> parameterTypes, NodeSchema outerSchema, IDictionary<string,string> outerReferences, NodeSchema nonAggregateSchema)
         {
-            var schema = node.GetSchema(Metadata, parameterTypes);
+            var schema = node.GetSchema(DataSources, parameterTypes);
 
             var select = new SelectNode
             {
@@ -1847,7 +1883,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     if (col.AllColumns)
                     {
-                        var distinctSchema = distinct.GetSchema(Metadata, parameterTypes);
+                        var distinctSchema = distinct.GetSchema(DataSources, parameterTypes);
                         distinct.Columns.AddRange(distinctSchema.Schema.Keys.Where(k => col.SourceColumn == null || (k.Split('.')[0] + ".*") == col.SourceColumn));
                     }
                     else
@@ -1868,7 +1904,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 expression = computedColumn;
 
             // Check the type of this expression now so any errors can be reported
-            var computeScalarSchema = computeScalar.Source.GetSchema(Metadata, parameterTypes);
+            var computeScalarSchema = computeScalar.Source.GetSchema(DataSources, parameterTypes);
             expression.GetType(computeScalarSchema, nonAggregateSchema, parameterTypes);
 
             var alias = $"Expr{++_colNameCounter}";
@@ -1893,7 +1929,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             foreach (var subquery in subqueryVisitor.Subqueries)
             {
-                var outerSchema = node.GetSchema(Metadata, parameterTypes);
+                var outerSchema = node.GetSchema(DataSources, parameterTypes);
                 var outerReferences = new Dictionary<string, string>();
                 var innerParameterTypes = parameterTypes == null ? new Dictionary<string, Type>() : new Dictionary<string, Type>(parameterTypes);
                 var subqueryPlan = ConvertSelectStatement(subquery.QueryExpression, hints, outerSchema, outerReferences, innerParameterTypes);
@@ -2062,8 +2098,8 @@ namespace MarkMpn.Sql4Cds.Engine
             if (outerKey == null)
                 return false;
 
-            var outerSchema = node.GetSchema(Metadata, null);
-            var innerSchema = fetch.GetSchema(Metadata, null);
+            var outerSchema = node.GetSchema(DataSources, null);
+            var innerSchema = fetch.GetSchema(DataSources, null);
 
             if (!outerSchema.ContainsColumn(outerKey, out outerKey) ||
                 !innerSchema.ContainsColumn(innerKey, out innerKey))
@@ -2103,7 +2139,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (semiJoin)
             {
                 // Regenerate the schema after changing the alias
-                innerSchema = fetch.GetSchema(Metadata, null);
+                innerSchema = fetch.GetSchema(DataSources, null);
 
                 if (innerSchema.PrimaryKey != rightAttribute.GetColumnName() && !(merge.RightSource is DistinctNode))
                 {
@@ -2235,8 +2271,8 @@ namespace MarkMpn.Sql4Cds.Engine
             // Check the estimated counts for the outer loop and the source at the point we'd insert the spool
             // If the outer loop is non-trivial (>= 100 rows) or the inner loop is small (<= 5000 records) then we want
             // to use the spool.
-            var outerCount = outerSource.EstimateRowsOut(Metadata, parameterTypes, TableSize);
-            var innerCount = outerCount >= 100 ? -1 : lastCorrelatedStep.Source.EstimateRowsOut(Metadata, parameterTypes, TableSize);
+            var outerCount = outerSource.EstimateRowsOut(DataSources, parameterTypes);
+            var innerCount = outerCount >= 100 ? -1 : lastCorrelatedStep.Source.EstimateRowsOut(DataSources, parameterTypes);
 
             if (outerCount >= 100 || innerCount <= 5000)
             {
@@ -2324,6 +2360,7 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             if (reference is NamedTableReference table)
             {
+                var dataSource = SelectDataSource(table.SchemaObject);
                 var entityName = table.SchemaObject.BaseIdentifier.Value;
 
                 if (table.SchemaObject.SchemaIdentifier?.Value?.Equals("metadata", StringComparison.OrdinalIgnoreCase) == true)
@@ -2333,6 +2370,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         return new MetadataQueryNode
                         {
+                            DataSource = dataSource,
                             MetadataSource = MetadataSource.Entity,
                             EntityAlias = table.Alias?.Value ?? entityName
                         };
@@ -2342,6 +2380,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         return new MetadataQueryNode
                         {
+                            DataSource = dataSource,
                             MetadataSource = MetadataSource.Attribute,
                             AttributeAlias = table.Alias?.Value ?? entityName
                         };
@@ -2351,6 +2390,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         return new MetadataQueryNode
                         {
+                            DataSource = dataSource,
                             MetadataSource = MetadataSource.OneToManyRelationship,
                             OneToManyRelationshipAlias = table.Alias?.Value ?? entityName
                         };
@@ -2360,6 +2400,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         return new MetadataQueryNode
                         {
+                            DataSource = dataSource,
                             MetadataSource = MetadataSource.ManyToOneRelationship,
                             ManyToOneRelationshipAlias = table.Alias?.Value ?? entityName
                         };
@@ -2369,6 +2410,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         return new MetadataQueryNode
                         {
+                            DataSource = dataSource,
                             MetadataSource = MetadataSource.ManyToManyRelationship,
                             ManyToManyRelationshipAlias = table.Alias?.Value ?? entityName
                         };
@@ -2378,6 +2420,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         return new GlobalOptionSetQueryNode
                         {
+                            DataSource = dataSource,
                             Alias = table.Alias?.Value ?? entityName
                         };
                     }
@@ -2393,7 +2436,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 try
                 {
-                    meta = Metadata[entityName];
+                    meta = dataSource.Metadata[entityName];
                 }
                 catch (FaultException ex)
                 {
@@ -2413,6 +2456,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 // Convert to a simple FetchXML source
                 return new FetchXmlScan
                 {
+                    DataSource = dataSource,
                     FetchXml = new FetchXml.FetchType
                     {
                         nolock = table.TableHints.Any(hint => hint.HintKind == TableHintKind.NoLock),
@@ -2436,8 +2480,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 // Otherwise use a nested loop join
                 var lhs = ConvertTableReference(join.FirstTableReference, hints, query, outerSchema, outerReferences, parameterTypes);
                 var rhs = ConvertTableReference(join.SecondTableReference, hints, query, outerSchema, outerReferences, parameterTypes);
-                var lhsSchema = lhs.GetSchema(Metadata, parameterTypes);
-                var rhsSchema = rhs.GetSchema(Metadata, parameterTypes);
+                var lhsSchema = lhs.GetSchema(DataSources, parameterTypes);
+                var rhsSchema = rhs.GetSchema(DataSources, parameterTypes);
 
                 var joinConditionVisitor = new JoinConditionVisitor(lhsSchema, rhsSchema);
                 join.SearchCondition.Accept(joinConditionVisitor);
@@ -2549,7 +2593,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
 
                 // Validate the join condition
-                var joinSchema = joinNode.GetSchema(Metadata, parameterTypes);
+                var joinSchema = joinNode.GetSchema(DataSources, parameterTypes);
                 join.SearchCondition.GetType(joinSchema, null, parameterTypes);
 
                 return joinNode;
@@ -2583,7 +2627,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 else
                 {
                     // CROSS APPLY / OUTER APPLY - treat the second table as a correlated subquery
-                    var lhsSchema = lhs.GetSchema(Metadata, parameterTypes);
+                    var lhsSchema = lhs.GetSchema(DataSources, parameterTypes);
                     lhsReferences = new Dictionary<string, string>();
                     var innerParameterTypes = parameterTypes == null ? new Dictionary<string, Type>() : new Dictionary<string, Type>(parameterTypes);
                     var subqueryPlan = ConvertTableReference(unqualifiedJoin.SecondTableReference, hints, query, lhsSchema, lhsReferences, innerParameterTypes);
