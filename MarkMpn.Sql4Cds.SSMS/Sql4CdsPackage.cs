@@ -69,6 +69,7 @@ namespace MarkMpn.Sql4Cds.SSMS
             var dte = (DTE2)await GetServiceAsync(typeof(EnvDTE.DTE));
             await Sql2FetchXmlCommand.InitializeAsync(this, dte);
             await FetchXml2SqlCommand.InitializeAsync(this, dte);
+            await Sql2MCommand.InitializeAsync(this, dte);
 
             // Intercept query execution
             DmlExecute.Initialize(this, dte);

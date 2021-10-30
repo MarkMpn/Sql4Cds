@@ -142,6 +142,7 @@ namespace MarkMpn.Sql4Cds
             }
         }
         public ConnectionDetail Connection => _con;
+        public string Sql => String.IsNullOrEmpty(_editor.SelectedText) ? _editor.Text : _editor.SelectedText;
 
         internal void ChangeConnection(ConnectionDetail con, SharedMetadataCache metadata, ITableSizeCache tableSize)
         {
