@@ -1828,7 +1828,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var filter = AssertNode<FilterNode>(top.Source);
             var constant = AssertNode<ConstantScanNode>(filter.Source);
 
-            var schema = constant.GetSchema(metadata, null);
+            var schema = constant.GetSchema(_dataSources, null);
             Assert.AreEqual(typeof(SqlInt32), schema.Schema["a.ID"]);
             Assert.AreEqual(typeof(SqlString), schema.Schema["a.name"]);
         }
@@ -2838,7 +2838,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 },
             };
 
-            var result = select.Execute(_service, metadata, this, null, null);
+            var result = select.Execute(_localDataSource, this, null, null);
             Assert.AreEqual(2, result.Rows.Count);
             Assert.AreEqual(SqlTypeConverter.UseDefaultCollation("Mark"), result.Rows[0][0]);
             Assert.AreEqual(SqlTypeConverter.UseDefaultCollation("Mark"), result.Rows[1][0]);
@@ -3001,13 +3001,36 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var select = AssertNode<SelectNode>(plans[0]);
 
             var filter = AssertNode<FilterNode>(select.Source);
+            Assert.AreEqual("uat.name <> prod.name", filter.Filter.ToSql());
 
             var join = AssertNode<MergeJoinNode>(filter.Source);
+            Assert.AreEqual("uat.accountid", join.LeftAttribute.ToSql());
+            Assert.AreEqual("prod.accountid", join.RightAttribute.ToSql());
 
             var uatFetch = AssertNode<FetchXmlScan>(join.LeftSource);
-
+            Assert.AreEqual("uat", uatFetch.DataSource);
+            AssertFetchXml(uatFetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <attribute name='accountid' />
+                        <filter>
+                            <condition attribute='name' operator='like' value='%test%' />
+                        </filter>
+                        <order attribute='accountid' />
+                    </entity>
+                </fetch>");
 
             var prodFetch = AssertNode<FetchXmlScan>(join.RightSource);
+            Assert.AreEqual("prod", prodFetch.DataSource);
+            AssertFetchXml(prodFetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <attribute name='accountid' />
+                        <order attribute='accountid' />
+                    </entity>
+                </fetch>");
         }
     }
 }

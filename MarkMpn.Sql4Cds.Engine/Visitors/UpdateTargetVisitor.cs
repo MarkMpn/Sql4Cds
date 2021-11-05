@@ -11,14 +11,13 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
     class UpdateTargetVisitor : TSqlFragmentVisitor
     {
         private readonly SchemaObjectName _search;
-        private readonly string _primaryDataSource;
         private bool _foundAlias;
         private bool _ambiguous;
 
         public UpdateTargetVisitor(SchemaObjectName search, string primaryDataSource)
         {
             _search = search;
-            _primaryDataSource = primaryDataSource;
+            PrimaryDataSource = primaryDataSource;
         }
 
         public string PrimaryDataSource { get; private set; }

@@ -27,7 +27,16 @@ namespace MarkMpn.Sql4Cds.Tests
             typeof(AttributeMetadata).GetProperty(nameof(AttributeMetadata.AttributeOf)).SetValue(a.Attributes.Single(attr => attr.LogicalName == "primarycontactidname"), "primarycontactid");
             typeof(AttributeMetadata).GetProperty(nameof(AttributeMetadata.IsValidForUpdate)).SetValue(c.Attributes.Single(attr => attr.LogicalName == "fullname"), false);
 
-            _autocomplete = new Autocomplete(new[] { a, c, n }, metadata);
+            var dataSources = new Dictionary<string, AutocompleteDataSource>
+            {
+                ["local"] = new AutocompleteDataSource
+                {
+                    Name = "local",
+                    Entities = new[] { a, c, n },
+                    Metadata = metadata
+                }
+            };
+            _autocomplete = new Autocomplete(dataSources, "local");
         }
 
         [TestMethod]

@@ -22,17 +22,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private IDictionary<object, List<OuterRecord>> _hashTable;
 
-        protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             _hashTable = new Dictionary<object, List<OuterRecord>>(CaseInsensitiveObjectComparer.Instance);
-            var mergedSchema = GetSchema(metadata, parameterTypes, true);
+            var mergedSchema = GetSchema(dataSources, parameterTypes, true);
             var additionalJoinCriteria = AdditionalJoinCriteria?.Compile(mergedSchema, parameterTypes);
 
             // Build the hash table
-            var leftSchema = LeftSource.GetSchema(metadata, parameterTypes);
+            var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
             leftSchema.ContainsColumn(LeftAttribute.GetColumnName(), out var leftCol);
 
-            foreach (var entity in LeftSource.Execute(org, metadata, options, parameterTypes, parameterValues))
+            foreach (var entity in LeftSource.Execute(dataSources, options, parameterTypes, parameterValues))
             {
                 var key = entity[leftCol];
 
@@ -46,10 +46,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             // Probe the hash table using the right source
-            var rightSchema = RightSource.GetSchema(metadata, parameterTypes);
+            var rightSchema = RightSource.GetSchema(dataSources, parameterTypes);
             rightSchema.ContainsColumn(RightAttribute.GetColumnName(), out var rightCol);
 
-            foreach (var entity in RightSource.Execute(org, metadata, options, parameterTypes, parameterValues))
+            foreach (var entity in RightSource.Execute(dataSources, options, parameterTypes, parameterValues))
             {
                 var key = entity[rightCol];
                 var matched = false;

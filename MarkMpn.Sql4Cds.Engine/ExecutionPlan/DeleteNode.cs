@@ -47,7 +47,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("SecondaryId Source")]
         public string SecondaryIdSource { get; set; }
 
-        public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
         {
             if (!requiredColumns.Contains(PrimaryIdSource))
                 requiredColumns.Add(PrimaryIdSource);
@@ -55,35 +55,41 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (SecondaryIdSource != null && !requiredColumns.Contains(SecondaryIdSource))
                 requiredColumns.Add(SecondaryIdSource);
 
-            Source.AddRequiredColumns(metadata, parameterTypes, requiredColumns);
+            Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        public override IRootExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IRootExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            var result = base.FoldQuery(metadata, options, parameterTypes);
+            var result = base.FoldQuery(dataSources, options, parameterTypes);
 
             if (result != this)
                 return result;
+
+            if (!dataSources.TryGetValue(DataSource, out var dataSource))
+                throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
 
             // Use bulk delete if requested & possible
             if (options.UseBulkDelete &&
                 Source is FetchXmlScan fetch &&
                 LogicalName == fetch.Entity.name &&
-                PrimaryIdSource.Equals($"{fetch.Alias}.{metadata[LogicalName].PrimaryIdAttribute}") &&
+                PrimaryIdSource.Equals($"{fetch.Alias}.{dataSource.Metadata[LogicalName].PrimaryIdAttribute}") &&
                 String.IsNullOrEmpty(SecondaryIdSource))
             {
-                return new BulkDeleteJobNode { FetchXmlString = fetch.FetchXmlString };
+                return new BulkDeleteJobNode { DataSource = DataSource, FetchXmlString = fetch.FetchXmlString };
             }
 
             return this;
         }
 
-        public override string Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        public override string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             _executionCount++;
 
             try
             {
+                if (!dataSources.TryGetValue(DataSource, out var dataSource))
+                    throw new QueryExecutionException("Missing datasource " + DataSource);
+
                 List<Entity> entities;
                 EntityMetadata meta;
                 Func<Entity, object> primaryIdAccessor;
@@ -91,10 +97,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 using (_timer.Run())
                 {
-                    entities = GetDmlSourceEntities(org, metadata, options, parameterTypes, parameterValues, out var schema);
+                    entities = GetDmlSourceEntities(dataSources, options, parameterTypes, parameterValues, out var schema);
 
                     // Precompile mappings with type conversions
-                    meta = metadata[LogicalName];
+                    meta = dataSource.Metadata[LogicalName];
                     var attributes = meta.Attributes.ToDictionary(a => a.LogicalName);
                     var dateTimeKind = options.UseLocalTimeZone ? DateTimeKind.Local : DateTimeKind.Utc;
                     var primaryKey = meta.PrimaryIdAttribute;
@@ -135,7 +141,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 using (_timer.Run())
                 {
                     return ExecuteDmlOperation(
-                        org,
+                        dataSource.Connection,
                         options,
                         entities,
                         meta,

@@ -30,9 +30,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("Outer References")]
         public Dictionary<string,string> OuterReferences { get; set; }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            var leftSchema = LeftSource.GetSchema(metadata, parameterTypes);
+            var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
             var innerParameterTypes = GetInnerParameterTypes(leftSchema, parameterTypes);
             if (OuterReferences != null)
             {
@@ -45,11 +45,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     innerParameterTypes[kvp.Value] = leftSchema.Schema[kvp.Key];
             }
 
-            var rightSchema = RightSource.GetSchema(metadata, innerParameterTypes);
-            var mergedSchema = GetSchema(metadata, parameterTypes, true);
+            var rightSchema = RightSource.GetSchema(dataSources, innerParameterTypes);
+            var mergedSchema = GetSchema(dataSources, parameterTypes, true);
             var joinCondition = JoinCondition?.Compile(mergedSchema, parameterTypes);
 
-            foreach (var left in LeftSource.Execute(org, metadata, options, parameterTypes, parameterValues))
+            foreach (var left in LeftSource.Execute(dataSources, options, parameterTypes, parameterValues))
             {
                 var innerParameters = parameterValues;
 
@@ -69,7 +69,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var hasRight = false;
 
-                foreach (var right in RightSource.Execute(org, metadata, options, innerParameterTypes, innerParameters))
+                foreach (var right in RightSource.Execute(dataSources, options, innerParameterTypes, innerParameters))
                 {
                     var merged = Merge(left, leftSchema, right, rightSchema);
 
@@ -105,19 +105,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return innerParameterTypes;
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            var leftSchema = LeftSource.GetSchema(metadata, parameterTypes);
-            LeftSource = LeftSource.FoldQuery(metadata, options, parameterTypes);
+            var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
+            LeftSource = LeftSource.FoldQuery(dataSources, options, parameterTypes);
             LeftSource.Parent = this;
 
             var innerParameterTypes = GetInnerParameterTypes(leftSchema, parameterTypes);
-            RightSource = RightSource.FoldQuery(metadata, options, innerParameterTypes);
+            RightSource = RightSource.FoldQuery(dataSources, options, innerParameterTypes);
             RightSource.Parent = this;
             return this;
         }
 
-        public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
         {
             if (JoinCondition != null)
             {
@@ -128,40 +128,40 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
-            var leftSchema = LeftSource.GetSchema(metadata, parameterTypes);
+            var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
             var leftColumns = requiredColumns
                 .Where(col => leftSchema.ContainsColumn(col, out _))
                 .Concat((IEnumerable<string>) OuterReferences?.Keys ?? Array.Empty<string>())
                 .Distinct()
                 .ToList();
             var innerParameterTypes = GetInnerParameterTypes(leftSchema, parameterTypes);
-            var rightSchema = RightSource.GetSchema(metadata, innerParameterTypes);
+            var rightSchema = RightSource.GetSchema(dataSources, innerParameterTypes);
             var rightColumns = requiredColumns
                 .Where(col => rightSchema.ContainsColumn(col, out _))
                 .Concat(DefinedValues.Values)
                 .Distinct()
                 .ToList();
 
-            LeftSource.AddRequiredColumns(metadata, parameterTypes, leftColumns);
-            RightSource.AddRequiredColumns(metadata, parameterTypes, rightColumns);
+            LeftSource.AddRequiredColumns(dataSources, parameterTypes, leftColumns);
+            RightSource.AddRequiredColumns(dataSources, parameterTypes, rightColumns);
         }
 
-        protected override NodeSchema GetRightSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
+        protected override NodeSchema GetRightSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
         {
-            var leftSchema = LeftSource.GetSchema(metadata, parameterTypes);
+            var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
             var innerParameterTypes = GetInnerParameterTypes(leftSchema, parameterTypes);
-            return RightSource.GetSchema(metadata, innerParameterTypes);
+            return RightSource.GetSchema(dataSources, innerParameterTypes);
         }
 
-        public override int EstimateRowsOut(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, ITableSizeCache tableSize)
+        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
         {
-            var leftEstimate = LeftSource.EstimateRowsOut(metadata, parameterTypes, tableSize);
+            var leftEstimate = LeftSource.EstimateRowsOut(dataSources, parameterTypes);
 
             // We tend to use a nested loop with an assert node for scalar subqueries - we'll return one record for each record in the outer loop
             if (RightSource is AssertNode)
                 return leftEstimate;
 
-            var rightEstimate = RightSource.EstimateRowsOut(metadata, parameterTypes, tableSize);
+            var rightEstimate = RightSource.EstimateRowsOut(dataSources, parameterTypes);
 
             if (JoinType == QualifiedJoinType.Inner)
                 return Math.Min(leftEstimate, rightEstimate);

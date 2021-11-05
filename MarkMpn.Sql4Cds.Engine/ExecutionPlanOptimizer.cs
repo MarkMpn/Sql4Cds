@@ -35,10 +35,10 @@ namespace MarkMpn.Sql4Cds.Engine
         public IRootExecutionPlanNode Optimize(IRootExecutionPlanNode node)
         {
             // Move any additional operators down to the FetchXml
-            node = node.FoldQuery(Metadata, Options, null);
+            node = node.FoldQuery(DataSources, Options, null);
 
             // Ensure all required columns are added to the FetchXML
-            node.AddRequiredColumns(Metadata, null, new List<string>());
+            node.AddRequiredColumns(DataSources, null, new List<string>());
 
             //Sort the items in the FetchXml nodes to match examples in documentation
             SortFetchXmlElements(node);

@@ -211,13 +211,17 @@ namespace MarkMpn.Sql4Cds.Engine
             return new ExecuteAsNode
             {
                 UserIdSource = "systemuser.systemuserid",
-                Source = source
+                Source = source,
+                DataSource = PrimaryDataSource
             };
         }
 
         private RevertNode ConvertRevertStatement(RevertStatement revert)
         {
-            return new RevertNode();
+            return new RevertNode
+            {
+                DataSource = PrimaryDataSource
+            };
         }
 
         /// <summary>
@@ -307,9 +311,11 @@ namespace MarkMpn.Sql4Cds.Engine
 
         private InsertNode ConvertInsertSpecification(NamedTableReference target, IList<ColumnReferenceExpression> targetColumns, IExecutionPlanNode source, string[] sourceColumns)
         {
+            var dataSource = SelectDataSource(target.SchemaObject);
+
             var node = new InsertNode
             {
-                DataSource = SelectDataSource(target.SchemaObject),
+                DataSource = dataSource.Name,
                 LogicalName = target.SchemaObject.BaseIdentifier.Value,
                 Source = source
             };
@@ -323,7 +329,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             try
             {
-                metadata = node.DataSource.Metadata[node.LogicalName];
+                metadata = dataSource.Metadata[node.LogicalName];
             }
             catch (FaultException ex)
             {
@@ -611,7 +617,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var deleteNode = new DeleteNode
             {
                 LogicalName = targetMetadata.LogicalName,
-                DataSource = dataSource
+                DataSource = dataSource.Name
             };
 
             if (source is SelectNode select)
@@ -822,7 +828,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var update = new UpdateNode
             {
                 LogicalName = targetMetadata.LogicalName,
-                DataSource = dataSource
+                DataSource = dataSource.Name
             };
 
             if (node is SelectNode select)
@@ -919,7 +925,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (Options.UseTDSEndpoint && TDSEndpointAvailable)
             {
                 select.ScriptTokenStream = null;
-                return new SqlNode { Sql = select.ToSql() };
+                return new SqlNode { DataSource = PrimaryDataSource, Sql = select.ToSql() };
             }
 
             if (select.ComputeClauses != null && select.ComputeClauses.Count > 0)
@@ -2370,7 +2376,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         return new MetadataQueryNode
                         {
-                            DataSource = dataSource,
+                            DataSource = dataSource.Name,
                             MetadataSource = MetadataSource.Entity,
                             EntityAlias = table.Alias?.Value ?? entityName
                         };
@@ -2380,7 +2386,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         return new MetadataQueryNode
                         {
-                            DataSource = dataSource,
+                            DataSource = dataSource.Name,
                             MetadataSource = MetadataSource.Attribute,
                             AttributeAlias = table.Alias?.Value ?? entityName
                         };
@@ -2390,7 +2396,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         return new MetadataQueryNode
                         {
-                            DataSource = dataSource,
+                            DataSource = dataSource.Name,
                             MetadataSource = MetadataSource.OneToManyRelationship,
                             OneToManyRelationshipAlias = table.Alias?.Value ?? entityName
                         };
@@ -2400,7 +2406,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         return new MetadataQueryNode
                         {
-                            DataSource = dataSource,
+                            DataSource = dataSource.Name,
                             MetadataSource = MetadataSource.ManyToOneRelationship,
                             ManyToOneRelationshipAlias = table.Alias?.Value ?? entityName
                         };
@@ -2410,7 +2416,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         return new MetadataQueryNode
                         {
-                            DataSource = dataSource,
+                            DataSource = dataSource.Name,
                             MetadataSource = MetadataSource.ManyToManyRelationship,
                             ManyToManyRelationshipAlias = table.Alias?.Value ?? entityName
                         };
@@ -2420,7 +2426,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         return new GlobalOptionSetQueryNode
                         {
-                            DataSource = dataSource,
+                            DataSource = dataSource.Name,
                             Alias = table.Alias?.Value ?? entityName
                         };
                     }
@@ -2456,7 +2462,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 // Convert to a simple FetchXML source
                 return new FetchXmlScan
                 {
-                    DataSource = dataSource,
+                    DataSource = dataSource.Name,
                     FetchXml = new FetchXml.FetchType
                     {
                         nolock = table.TableHints.Any(hint => hint.HintKind == TableHintKind.NoLock),

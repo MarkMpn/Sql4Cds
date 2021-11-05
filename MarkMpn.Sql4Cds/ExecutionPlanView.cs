@@ -13,7 +13,7 @@ using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 
 namespace MarkMpn.Sql4Cds
 {
-    public class ExecutionPlanView : ScrollableControl
+    class ExecutionPlanView : ScrollableControl
     {
         class Line
         {
@@ -42,9 +42,7 @@ namespace MarkMpn.Sql4Cds
 
         public bool Executed { get; set; }
 
-        public IAttributeMetadataCache Metadata { get; set; }
-
-        public ITableSizeCache TableSizeCache { get; set; }
+        public IDictionary<string, DataSource> DataSources { get; set; }
 
         public IExecutionPlanNode Plan
         {
@@ -108,7 +106,7 @@ namespace MarkMpn.Sql4Cds
 
                 _nodeLocations[child] = fullRect;
 
-                var rows = child is IDataExecutionPlanNode dataChild ? Executed ? dataChild.RowsOut : dataChild.EstimateRowsOut(Metadata, null, TableSizeCache) : 1;
+                var rows = child is IDataExecutionPlanNode dataChild ? Executed ? dataChild.RowsOut : dataChild.EstimateRowsOut(DataSources.Values.Cast<Engine.DataSource>().ToDictionary(ds => ds.Name, StringComparer.OrdinalIgnoreCase), null) : 1;
                 var width = rows == 0 ? 1 : (int)Math.Log10(rows);
                 _lines.Add(new Line { Source = child, Start = new Point(iconRect.Left, parentIconRect.Top == iconRect.Top ? (parentIconRect.Top + (i + 1) * lineYSpacing) : (iconRect.Top + iconRect.Height / 2)), End = new Point(parentIconRect.Right, parentIconRect.Top + (i + 1) * lineYSpacing), Width = width });
 

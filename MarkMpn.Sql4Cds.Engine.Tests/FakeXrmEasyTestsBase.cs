@@ -13,8 +13,12 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
     {
         protected readonly IOrganizationService _service;
         protected readonly XrmFakedContext _context;
+        protected readonly DataSource _dataSource;
         protected readonly IOrganizationService _service2;
         protected readonly XrmFakedContext _context2;
+        protected readonly DataSource _dataSource2;
+        protected readonly IDictionary<string, DataSource> _dataSources;
+        protected readonly IDictionary<string, DataSource> _localDataSource;
 
         public FakeXrmEasyTestsBase()
         {
@@ -22,11 +26,19 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             _context.InitializeMetadata(Assembly.GetExecutingAssembly());
 
             _service = _context.GetOrganizationService();
+            _dataSource = new DataSource { Name = "uat", Connection = _service, Metadata = new AttributeMetadataCache(_service), TableSizeCache = new StubTableSizeCache() };
 
             _context2 = new XrmFakedContext();
             _context2.InitializeMetadata(Assembly.GetExecutingAssembly());
 
             _service2 = _context2.GetOrganizationService();
+            _dataSource2 = new DataSource { Name = "prod", Connection = _service2, Metadata = new AttributeMetadataCache(_service2), TableSizeCache = new StubTableSizeCache() };
+
+            _dataSources = new[] { _dataSource, _dataSource2 }.ToDictionary(ds => ds.Name);
+            _localDataSource = new Dictionary<string, DataSource>
+            {
+                ["local"] = _dataSource
+            };
         }
     }
 }

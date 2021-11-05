@@ -32,12 +32,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public IDataExecutionPlanNode Source { get; set; }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            var schema = Source.GetSchema(metadata, parameterTypes);
+            var schema = Source.GetSchema(dataSources, parameterTypes);
             var filter = Filter.Compile(schema, parameterTypes);
 
-            foreach (var entity in Source.Execute(org, metadata, options, parameterTypes, parameterValues))
+            foreach (var entity in Source.Execute(dataSources, options, parameterTypes, parameterValues))
             {
                 if (filter(entity, parameterValues))
                     yield return entity;
@@ -49,14 +49,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        public override NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
+        public override NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
         {
-            return Source.GetSchema(metadata, parameterTypes);
+            return Source.GetSchema(dataSources, parameterTypes);
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            Source = Source.FoldQuery(metadata, options, parameterTypes);
+            Source = Source.FoldQuery(dataSources, options, parameterTypes);
             Source.Parent = this;
 
             // Foldable correlated IN queries "lefttable.column IN (SELECT righttable.column FROM righttable WHERE ...) are created as:
@@ -120,6 +120,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (rightFetch == null)
                         break;
 
+                    if (!leftFetch.DataSource.Equals(rightFetch.DataSource, StringComparison.OrdinalIgnoreCase))
+                        break;
+
                     // Sorts could be folded into FetchXML or could be in separate node
                     string attribute;
 
@@ -149,7 +152,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (!merge.RightAttribute.GetColumnName().Equals(attribute, StringComparison.OrdinalIgnoreCase))
                         break;
 
-                    var rightSchema = rightFetch.GetSchema(metadata, parameterTypes);
+                    var rightSchema = rightFetch.GetSchema(dataSources, parameterTypes);
 
                     // Right values need to be distinct - still allowed if it's the primary key
                     if (!rightFetch.FetchXml.distinct && rightSchema.PrimaryKey != attribute)
@@ -306,7 +309,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // If we've got a filter matching a column and a variable (key lookup in a nested loop) from a table spool, replace it with a index spool
             if (Source is TableSpoolNode tableSpool)
             {
-                var schema = Source.GetSchema(metadata, parameterTypes);
+                var schema = Source.GetSchema(dataSources, parameterTypes);
 
                 if (ExtractKeyLookupFilter(Filter, out var filter, out var indexColumn, out var seekVariable) && schema.ContainsColumn(indexColumn, out indexColumn))
                 {
@@ -323,7 +326,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 Expression = indexColumn.ToColumnReference(),
                                 IsNot = true
                             }
-                        }.FoldQuery(metadata, options, parameterTypes);
+                        }.FoldQuery(dataSources, options, parameterTypes);
                     }
 
                     Source = new IndexSpoolNode
@@ -340,14 +343,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Find all the data source nodes we could fold this into. Include direct data sources, those from either side of an inner join, or the main side of an outer join
             foreach (var source in GetFoldableSources(Source))
             {
-                var schema = source.GetSchema(metadata, parameterTypes);
+                var schema = source.GetSchema(dataSources, parameterTypes);
 
                 if (source is FetchXmlScan fetchXml && !fetchXml.FetchXml.aggregate)
                 {
+                    if (!dataSources.TryGetValue(fetchXml.DataSource, out var dataSource))
+                        throw new NotSupportedQueryFragmentException("Missing datasource " + fetchXml.DataSource);
+
                     var additionalLinkEntities = new Dictionary<object, List<FetchLinkEntityType>>();
 
                     // If the criteria are ANDed, see if any of the individual conditions can be translated to FetchXML
-                    Filter = ExtractFetchXMLFilters(metadata, options, Filter, schema, null, fetchXml.Entity.name, fetchXml.Alias, fetchXml.Entity.Items, out var fetchFilter, additionalLinkEntities);
+                    Filter = ExtractFetchXMLFilters(dataSource.Metadata, options, Filter, schema, null, fetchXml.Entity.name, fetchXml.Alias, fetchXml.Entity.Items, out var fetchFilter, additionalLinkEntities);
 
                     if (fetchFilter != null)
                     {
@@ -520,9 +526,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return false;
         }
 
-        public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
         {
-            var schema = Source.GetSchema(metadata, parameterTypes);
+            var schema = Source.GetSchema(dataSources, parameterTypes);
 
             foreach (var col in Filter.GetColumns())
             {
@@ -533,7 +539,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     requiredColumns.Add(normalized);
             }
 
-            Source.AddRequiredColumns(metadata, parameterTypes, requiredColumns);
+            Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
         private BooleanExpression ExtractFetchXMLFilters(IAttributeMetadataCache metadata, IQueryExecutionOptions options, BooleanExpression criteria, NodeSchema schema, string allowedPrefix, string targetEntityName, string targetEntityAlias, object[] items, out filter filter, IDictionary<object, List<FetchLinkEntityType>> additionalLinkEntities)
@@ -864,9 +870,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return false;
         }
 
-        public override int EstimateRowsOut(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, ITableSizeCache tableSize)
+        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
         {
-            return Source.EstimateRowsOut(metadata, parameterTypes, tableSize) * 8 / 10;
+            return Source.EstimateRowsOut(dataSources, parameterTypes) * 8 / 10;
         }
     }
 }

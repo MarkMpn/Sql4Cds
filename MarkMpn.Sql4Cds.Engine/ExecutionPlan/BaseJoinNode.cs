@@ -101,15 +101,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return RightSource;
         }
 
-        public override NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
+        public override NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
         {
-            return GetSchema(metadata, parameterTypes, false);
+            return GetSchema(dataSources, parameterTypes, false);
         }
 
-        protected virtual NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, bool includeSemiJoin)
+        protected virtual NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, bool includeSemiJoin)
         {
-            var outerSchema = LeftSource.GetSchema(metadata, parameterTypes);
-            var innerSchema = GetRightSchema(metadata, parameterTypes);
+            var outerSchema = LeftSource.GetSchema(dataSources, parameterTypes);
+            var innerSchema = GetRightSchema(dataSources, parameterTypes);
 
             var schema = new NodeSchema();
 
@@ -143,9 +143,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return schema;
         }
 
-        protected virtual NodeSchema GetRightSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
+        protected virtual NodeSchema GetRightSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
         {
-            return RightSource.GetSchema(metadata, parameterTypes);
+            return RightSource.GetSchema(dataSources, parameterTypes);
         }
     }
 }

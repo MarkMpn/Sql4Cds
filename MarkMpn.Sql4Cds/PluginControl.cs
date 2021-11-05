@@ -19,8 +19,7 @@ namespace MarkMpn.Sql4Cds
 {
     public partial class PluginControl : PluginControlBase, IMessageBusHost, IGitHubPlugin, IHelpPlugin, ISettingsPlugin, IPayPalPlugin
     {
-        private readonly IDictionary<ConnectionDetail, SharedMetadataCache> _metadata;
-        private readonly IDictionary<ConnectionDetail, TableSizeCache> _tableSize;
+        private readonly IDictionary<string, DataSource> _dataSources;
         private readonly TelemetryClient _ai;
         private readonly ObjectExplorer _objectExplorer;
         private readonly PropertiesWindow _properties;
@@ -29,9 +28,8 @@ namespace MarkMpn.Sql4Cds
         {
             InitializeComponent();
             dockPanel.Theme = new VS2015LightTheme();
-            _metadata = new Dictionary<ConnectionDetail, SharedMetadataCache>();
-            _tableSize = new Dictionary<ConnectionDetail, TableSizeCache>();
-            _objectExplorer = new ObjectExplorer(_metadata, WorkAsync, con => CreateQuery(con, ""), ConnectObjectExplorer);
+            _dataSources = new Dictionary<string, DataSource>(StringComparer.OrdinalIgnoreCase);
+            _objectExplorer = new ObjectExplorer(_dataSources, WorkAsync, con => CreateQuery(con, ""), ConnectObjectExplorer);
             _objectExplorer.Show(dockPanel, DockState.DockLeft);
             _objectExplorer.CloseButtonVisible = false;
             _properties = new PropertiesWindow();
@@ -57,7 +55,7 @@ namespace MarkMpn.Sql4Cds
             if (actionName == "ChangeConnection")
             {
                 if (dockPanel.ActiveDocument is SqlQueryControl query)
-                    query.ChangeConnection(detail, _metadata[detail], _tableSize[detail]);
+                    query.ChangeConnection(detail);
             }
             else if (actionName == "ConnectObjectExplorer")
             {
@@ -76,11 +74,19 @@ namespace MarkMpn.Sql4Cds
 
         private void AddConnection(ConnectionDetail con)
         {
-            if (!_metadata.ContainsKey(con))
-                _metadata[con] = new SharedMetadataCache(con, GetNewServiceClient(con));
-            
-            if (!_tableSize.ContainsKey(con))
-                _tableSize[con] = new TableSizeCache(GetNewServiceClient(con), _metadata[con]);
+            if (!_dataSources.ContainsKey(con.ConnectionName))
+            {
+                var metadata = new SharedMetadataCache(con, GetNewServiceClient(con));
+
+                _dataSources[con.ConnectionName] = new DataSource
+                {
+                    ConnectionDetail = con,
+                    Connection = GetNewServiceClient(con),
+                    Metadata = metadata,
+                    TableSizeCache = new TableSizeCache(GetNewServiceClient(con), metadata),
+                    Name = con.ConnectionName
+                };
+            }
 
             // Start loading the entity list in the background
             EntityCache.TryGetEntities(con.MetadataCacheLoader, GetNewServiceClient(con), out _);
@@ -192,7 +198,7 @@ namespace MarkMpn.Sql4Cds
 
         private SqlQueryControl CreateQuery(ConnectionDetail con, string sql)
         {
-            var query = new SqlQueryControl(con, con == null ? null : _metadata[con], con == null ? null : _tableSize[con], _ai, xml => CreateFetchXML(xml), msg => LogError(msg), _properties);
+            var query = new SqlQueryControl(con, _dataSources, _ai, xml => CreateFetchXML(xml), msg => LogError(msg), _properties);
             query.InsertText(sql);
             query.CancellableChanged += SyncStopButton;
             query.BusyChanged += SyncExecuteButton;
@@ -258,7 +264,7 @@ namespace MarkMpn.Sql4Cds
                 return;
 
             var con = _objectExplorer.SelectedConnection;
-            var metadata = _metadata[con];
+            var metadata = _dataSources[con.ConnectionName].Metadata;
 
             if (param.TryGetValue("FetchXml", out var xml) && xml is string xmlStr && !String.IsNullOrEmpty(xmlStr))
             {
