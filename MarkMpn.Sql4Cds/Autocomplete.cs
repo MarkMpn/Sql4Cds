@@ -80,18 +80,7 @@ namespace MarkMpn.Sql4Cds
                 case "from":
                 case "insert":
                 case "into":
-                    var list = new List<SqlAutocompleteItem>();
-
-                    // If there's multiple instances, show them
-                    if (_dataSources.Count > 1)
-                        list.AddRange(_dataSources.Values.Select(x => new InstanceAutocompleteItem(x, currentLength)));
-
-                    // Show table list
-                    if (_dataSources.TryGetValue(_primaryDataSource, out var ds) && ds.Entities != null)
-                        list.AddRange(ds.Entities.Select(x => new EntityAutocompleteItem(x, ds.Metadata, currentLength)));
-
-                    list.Sort();
-                    return FilterList(list, currentWord);
+                    return AutocompleteTableName(currentWord);
 
                 default:
                     // Find the FROM clause
@@ -211,7 +200,8 @@ namespace MarkMpn.Sql4Cds
                         for (var i = 0; i < words.Count; i++)
                         {
                             var tableName = words[i];
-                            var alias = tableName.Split('.').Last();
+                            if (!TryParseTableName(tableName, out _, out _, out var alias))
+                                alias = tableName;
 
                             if (i < words.Count - 1)
                             {
@@ -236,12 +226,8 @@ namespace MarkMpn.Sql4Cds
                         // Start loading all the appropriate metadata in the background
                         foreach (var table in tables.Values)
                         {
-                            var tableParts = table.Split('.');
-                            var instance = tableParts.Length == 1 ? _primaryDataSource : tableParts[0];
-                            var tableName = tableParts.Last();
-
-                            if (_dataSources.TryGetValue(instance, out var dataSource) && dataSource.Entities.Any(e => e.LogicalName.Equals(table, StringComparison.OrdinalIgnoreCase) && e.DataProviderId != MetaMetadataCache.ProviderId))
-                                dataSource.Metadata.TryGetMinimalData(table, out _);
+                            if (TryParseTableName(table, out var instanceName, out _, out var tableName) && _dataSources.TryGetValue(instanceName, out var instance) && instance.Entities.Any(e => e.LogicalName.Equals(tableName, StringComparison.OrdinalIgnoreCase) && e.DataProviderId != MetaMetadataCache.ProviderId))
+                                instance.Metadata.TryGetMinimalData(table, out _);
                         }
                     }
 
@@ -285,11 +271,7 @@ namespace MarkMpn.Sql4Cds
 
                             foreach (var table in tables)
                             {
-                                var tableParts = table.Value.Split('.');
-                                var instanceName = tableParts.Length == 1 ? _primaryDataSource : tableParts[0];
-                                var tableName = tableParts.Last();
-
-                                if (_dataSources.TryGetValue(instanceName, out var instance) && instance.Metadata.TryGetMinimalData(table.Value, out var metadata))
+                                if (TryParseTableName(table.Value, out var instanceName, out _, out var tableName) && _dataSources.TryGetValue(instanceName, out var instance) && instance.Metadata.TryGetMinimalData(tableName, out var metadata))
                                 {
                                     if (metadata.OneToManyRelationships != null)
                                         joinSuggestions.AddRange(metadata.OneToManyRelationships.Select(rel => new JoinAutocompleteItem(rel, $"{rel.ReferencingEntity}{GetUniqueTableAlias(rel.ReferencingEntity, tables)} ON {table.Key}.{rel.ReferencedAttribute} = {GetUniqueTableName(rel.ReferencingEntity, tables)}.{rel.ReferencingAttribute}", true, instance.Entities, instance.Metadata, currentLength)));
@@ -301,23 +283,14 @@ namespace MarkMpn.Sql4Cds
 
                             joinSuggestions.Sort();
 
-                            joinSuggestions.AddRange(_dataSources[_primaryDataSource].Entities.Select(e => new EntityAutocompleteItem(e, _dataSources[_primaryDataSource], _primaryDataSource, currentLength)).OrderBy(name => name));
-
-                            foreach (var dataSource in _dataSources.Values.Where(d => !d.Name.Equals(_primaryDataSource, StringComparison.OrdinalIgnoreCase)))
-                                joinSuggestions.Add(new InstanceAutocompleteItem(dataSource, currentLength));
-
-                            return FilterList(joinSuggestions, currentWord);
+                            return FilterList(joinSuggestions, currentWord).Concat(AutocompleteTableName(currentWord));
                         }
 
                         var additionalSuggestions = (IEnumerable<SqlAutocompleteItem>) Array.Empty<SqlAutocompleteItem>();
 
                         if (prevWord.Equals("on", StringComparison.OrdinalIgnoreCase) && tables.TryGetValue(prevPrevWord, out var joinTableName))
                         {
-                            var tableParts = joinTableName.Split('.');
-                            var instanceName = tableParts.Length == 1 ? _primaryDataSource : tableParts[0];
-                            joinTableName = tableParts.Last();
-
-                            if (_dataSources.TryGetValue(instanceName, out var instance) && instance.Metadata.TryGetMinimalData(joinTableName, out var newTableMetadata))
+                            if (TryParseTableName(joinTableName, out var instanceName, out _, out joinTableName) && _dataSources.TryGetValue(instanceName, out var instance) && instance.Metadata.TryGetMinimalData(joinTableName, out var newTableMetadata))
                             {
                                 // Suggest known relationships from the other entities in the FROM clause, followed by the normal list of attributes
                                 additionalSuggestions = new List<SqlAutocompleteItem>();
@@ -341,11 +314,7 @@ namespace MarkMpn.Sql4Cds
 
                                 foreach (var table in tables)
                                 {
-                                    var tableParts = table.Value.Split('.');
-                                    var instanceName = tableParts.Length == 1 ? _primaryDataSource : tableParts[0];
-                                    var tableName = tableParts.Last();
-
-                                    if (_dataSources.TryGetValue(instanceName, out var instance))
+                                    if (TryParseTableName(table.Value, out var instanceName, out _, out var tableName) && _dataSources.TryGetValue(instanceName, out var instance))
                                     {
                                         var entity = instance.Entities.SingleOrDefault(e => e.LogicalName == tableName);
 
@@ -358,10 +327,7 @@ namespace MarkMpn.Sql4Cds
                                 return FilterList(suggestions, currentWord);
                             }
 
-                            if (_dataSources[_primaryDataSource].Entities != null)
-                                return FilterList(_dataSources[_primaryDataSource].Entities.Select(x => new EntityAutocompleteItem(x, _dataSources[_primaryDataSource].Metadata, currentLength)).OrderBy(x => x), currentWord);
-
-                            return Array.Empty<SqlAutocompleteItem>();
+                            return AutocompleteTableName(currentWord);
                         }
 
                         if (clause == "set" && (prevWord.Equals("set", StringComparison.OrdinalIgnoreCase) || prevWord == ","))
@@ -378,11 +344,7 @@ namespace MarkMpn.Sql4Cds
 
                             if (tables.TryGetValue(targetTable, out var tableName))
                             {
-                                var tableParts = tableName.Split('.');
-                                var instanceName = tableParts.Length == 1 ? _primaryDataSource : tableParts[0];
-                                tableName = tableParts.Last();
-
-                                if (_dataSources.TryGetValue(instanceName, out var instance) && instance.Metadata.TryGetMinimalData(tableName, out var metadata))
+                                if (TryParseTableName(tableName, out var instanceName, out _, out tableName) && _dataSources.TryGetValue(instanceName, out var instance) && instance.Metadata.TryGetMinimalData(tableName, out var metadata))
                                     return FilterList(metadata.Attributes.Where(a => a.IsValidForUpdate != false && a.AttributeOf == null).SelectMany(a => AttributeAutocompleteItem.CreateList(a, currentLength, true)).OrderBy(a => a), currentWord);
                             }
                         }
@@ -397,11 +359,7 @@ namespace MarkMpn.Sql4Cds
 
                             if (tables.TryGetValue(alias, out var tableName))
                             {
-                                var tableParts = tableName.Split('.');
-                                var instanceName = tableParts.Length == 1 ? _primaryDataSource : tableParts[0];
-                                tableName = tableParts.Last();
-
-                                if (_dataSources.TryGetValue(instanceName, out var instance) && instance.Metadata.TryGetMinimalData(tableName, out var metadata))
+                                if (TryParseTableName(tableName, out var instanceName, out _, out tableName) && _dataSources.TryGetValue(instanceName, out var instance) && instance.Metadata.TryGetMinimalData(tableName, out var metadata))
                                     return FilterList(metadata.Attributes.Where(a => a.IsValidForRead != false && a.AttributeOf == null).SelectMany(a => AttributeAutocompleteItem.CreateList(a, currentLength, false)).OrderBy(a => a), currentWord);
                             }
                         }
@@ -412,11 +370,8 @@ namespace MarkMpn.Sql4Cds
                         else if (clause == "insert" && tables.Count == 1)
                         {
                             var tableName = tables.Single().Value;
-                            var tableParts = tableName.Split('.');
-                            var instanceName = tableParts.Length == 1 ? _primaryDataSource : tableParts[0];
-                            tableName = tableParts.Last();
-
-                            if (_dataSources.TryGetValue(instanceName, out var instance) && instance.Metadata.TryGetMinimalData(tableName, out var metadata))
+                            
+                            if (TryParseTableName(tableName, out var instanceName, out _, out tableName) && _dataSources.TryGetValue(instanceName, out var instance) && instance.Metadata.TryGetMinimalData(tableName, out var metadata))
                             {
                                 Func<AttributeMetadata, bool> attributeFilter;
 
@@ -447,11 +402,7 @@ namespace MarkMpn.Sql4Cds
 
                             foreach (var table in tables)
                             {
-                                var tableParts = table.Value.Split('.');
-                                var instanceName = tableParts.Length == 1 ? _primaryDataSource : tableParts[0];
-                                var tableName = tableParts.Last();
-
-                                if (_dataSources.TryGetValue(instanceName, out var instance))
+                                if (TryParseTableName(table.Value, out var instanceName, out _, out var tableName) && _dataSources.TryGetValue(instanceName, out var instance))
                                 {
                                     var entity = instance.Entities.SingleOrDefault(e => e.LogicalName == tableName && e.DataProviderId != MetaMetadataCache.ProviderId || ("metadata." + e.LogicalName) == table.Value && e.DataProviderId == MetaMetadataCache.ProviderId);
 
@@ -477,11 +428,7 @@ namespace MarkMpn.Sql4Cds
                                 {
                                     if (tables.TryGetValue(identifiers[0], out var tableName))
                                     {
-                                        var tableParts = tableName.Split('.');
-                                        var instanceName = tableParts.Length == 1 ? _primaryDataSource : tableParts[0];
-                                        tableName = tableParts.Last();
-
-                                        if (_dataSources.TryGetValue(instanceName, out var instance) && instance.Metadata.TryGetMinimalData(tableName, out var entity))
+                                        if (TryParseTableName(tableName, out var instanceName, out _, out tableName) && _dataSources.TryGetValue(instanceName, out var instance) && instance.Metadata.TryGetMinimalData(tableName, out var entity))
                                         {
                                             attribute = entity.Attributes.SingleOrDefault(a => a.LogicalName.Equals(identifiers[1], StringComparison.OrdinalIgnoreCase));
                                         }
@@ -491,11 +438,7 @@ namespace MarkMpn.Sql4Cds
                                 {
                                     foreach (var table in tables.Values)
                                     {
-                                        var tableParts = table.Split('.');
-                                        var instanceName = tableParts.Length == 1 ? _primaryDataSource : tableParts[0];
-                                        var tableName = tableParts.Last();
-
-                                        if (_dataSources.TryGetValue(instanceName, out var instance) && instance.Metadata.TryGetMinimalData(tableName, out var entity))
+                                        if (TryParseTableName(table, out var instanceName, out _, out var tableName) && _dataSources.TryGetValue(instanceName, out var instance) && instance.Metadata.TryGetMinimalData(tableName, out var entity))
                                         {
                                             var tableAttribute = entity.Attributes.SingleOrDefault(a => a.LogicalName.Equals(identifiers[0], StringComparison.OrdinalIgnoreCase));
 
@@ -542,13 +485,162 @@ namespace MarkMpn.Sql4Cds
                         prevWord.Equals("insert", StringComparison.OrdinalIgnoreCase) ||
                         prevPrevWord != null && prevPrevWord.Equals("insert", StringComparison.OrdinalIgnoreCase) && prevWord.Equals("into", StringComparison.OrdinalIgnoreCase))
                     {
-                        return FilterList(_dataSources[_primaryDataSource].Entities.Select(e => new EntityAutocompleteItem(e, _dataSources[_primaryDataSource].Metadata, currentLength)), currentWord).OrderBy(x => x);
+                        return AutocompleteTableName(currentWord);
                     }
 
                     break;
             }
 
             return Array.Empty<SqlAutocompleteItem>();
+        }
+
+        private IEnumerable<SqlAutocompleteItem> AutocompleteTableName(string currentWord)
+        {
+            var currentLength = currentWord.Length;
+            var list = new List<SqlAutocompleteItem>();
+
+            if (String.IsNullOrEmpty(currentWord))
+            {
+                // If there's multiple instances, show them
+                if (_dataSources.Count > 1)
+                    list.AddRange(_dataSources.Values.Select(x => new InstanceAutocompleteItem(x, currentLength)));
+
+                // Show table list
+                if (_dataSources.TryGetValue(_primaryDataSource, out var ds) && ds.Entities != null)
+                    list.AddRange(ds.Entities.Select(x => new EntityAutocompleteItem(x, ds.Metadata, currentLength, false)));
+            }
+            else if (TryParseTableName(currentWord, out var instanceName, out var schemaName, out var tableName, out var parts, out var lastPartLength))
+            {
+                var lastPart = tableName;
+
+                if (parts == 1)
+                {
+                    // Could be an instance name
+                    list.AddRange(_dataSources.Values.Where(x => x.Name.StartsWith(lastPart, StringComparison.OrdinalIgnoreCase)).Select(x => new InstanceAutocompleteItem(x, lastPartLength)));
+                }
+
+                if (parts == 1 || parts == 2)
+                {
+                    // Could be a schema name
+                    if ("dbo".StartsWith(lastPart, StringComparison.OrdinalIgnoreCase))
+                        list.Add(new SchemaAutocompleteItem("dbo", lastPartLength));
+
+                    if ("metadata".StartsWith(lastPart, StringComparison.OrdinalIgnoreCase))
+                        list.Add(new SchemaAutocompleteItem("metadata", lastPartLength));
+                }
+
+                // Could be a table name
+                if (_dataSources.TryGetValue(instanceName, out var instance) && instance.Entities != null)
+                {
+                    IEnumerable<EntityMetadata> entities;
+
+                    if (schemaName.Equals("metadata", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Suggest metadata tables
+                        entities = instance.Entities.Where(e => e.DataProviderId == MetaMetadataCache.ProviderId);
+                    }
+                    else if (String.IsNullOrEmpty(schemaName) || schemaName.Equals("dbo", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Suggest entity tables
+                        entities = instance.Entities.Where(e => e.DataProviderId != MetaMetadataCache.ProviderId);
+                    }
+                    else
+                    {
+                        entities = Array.Empty<EntityMetadata>();
+                    }
+
+                    entities = entities.Where(e => e.LogicalName.StartsWith(lastPart, StringComparison.OrdinalIgnoreCase));
+
+                    list.AddRange(entities.Select(e => new EntityAutocompleteItem(e, instance.Metadata, lastPartLength, true)));
+                }
+            }
+
+            list.Sort();
+            return list;
+        }
+
+        private bool TryParseTableName(string input, out string instanceName, out string schemaName, out string tableName)
+        {
+            return TryParseTableName(input, out instanceName, out schemaName, out tableName, out _, out _);
+        }
+
+        private bool TryParseTableName(string input, out string instanceName, out string schemaName, out string tableName, out int parts, out int lastPartLength)
+        {
+            var identifierRegex = new System.Text.RegularExpressions.Regex("(\\[(([^\\]])|(\\]\\]))*\\]?)|(([^\\[.])+)|(\\.)");
+            var matches = identifierRegex.Matches(input);
+            var identifiers = new List<string>();
+            var lastBlank = false;
+            lastPartLength = 0;
+
+            foreach (System.Text.RegularExpressions.Match match in matches)
+            {
+                var identifier = match.Value;
+
+                if (identifier == ".")
+                {
+                    if (lastBlank)
+                    {
+                        identifiers.Add("");
+                        lastPartLength = 0;
+                    }
+
+                    lastBlank = true;
+                }
+                else
+                {
+                    lastPartLength = identifier.Length;
+
+                    if (identifier.StartsWith("["))
+                    {
+                        identifier = identifier.Substring(1);
+
+                        if (identifier.EndsWith("]"))
+                            identifier = identifier.Substring(0, identifier.Length - 1);
+                        
+                        identifier = identifier.Replace("]]", "]");
+                    }
+
+                    identifiers.Add(identifier);
+                    lastBlank = false;
+                }
+            }
+
+            if (lastBlank)
+            {
+                identifiers.Add("");
+                lastPartLength = 0;
+            }
+
+            parts = identifiers.Count;
+
+            if (identifiers.Count == 1)
+            {
+                instanceName = _primaryDataSource;
+                schemaName = "dbo";
+                tableName = identifiers[0];
+                return true;
+            }
+            
+            if (identifiers.Count == 2)
+            {
+                instanceName = _primaryDataSource;
+                schemaName = identifiers[0];
+                tableName = identifiers[1];
+                return true;
+            }
+
+            if (identifiers.Count == 3)
+            {
+                instanceName = identifiers[0];
+                schemaName = identifiers[1];
+                tableName = identifiers[2];
+                return true;
+            }
+
+            instanceName = null;
+            schemaName = null;
+            tableName = null;
+            return false;
         }
 
         private bool InStringLiteral(string text, int pos)
@@ -569,7 +661,7 @@ namespace MarkMpn.Sql4Cds
 
         private IEnumerable<SqlAutocompleteItem> FilterList(IEnumerable<SqlAutocompleteItem> list, string currentWord)
         {
-            var startsWith = list.Where(obj => obj.Text.StartsWith(currentWord, StringComparison.OrdinalIgnoreCase)).ToList();
+            var startsWith = list.Where(obj => obj.Text.StartsWith(currentWord.Substring(currentWord.Length - obj.ReplaceLength, obj.ReplaceLength), StringComparison.OrdinalIgnoreCase)).ToList();
 
             if (startsWith.Any())
                 return startsWith;
@@ -953,7 +1045,7 @@ namespace MarkMpn.Sql4Cds
         {
             private readonly AutocompleteDataSource _dataSource;
 
-            public InstanceAutocompleteItem(AutocompleteDataSource dataSource, int replaceLength) : base(EscapeIdentifier(dataSource.Name), replaceLength, 4)
+            public InstanceAutocompleteItem(AutocompleteDataSource dataSource, int replaceLength) : base(EscapeIdentifier(dataSource.Name), replaceLength, 5)
             {
                 _dataSource = dataSource;
             }
@@ -971,12 +1063,31 @@ namespace MarkMpn.Sql4Cds
             }
         }
 
+        class SchemaAutocompleteItem : SqlAutocompleteItem
+        {
+            public SchemaAutocompleteItem(string schema, int replaceLength) : base(schema, replaceLength, 15)
+            {
+            }
+
+            public override string ToolTipTitle
+            {
+                get => Text + " Schema";
+                set => base.ToolTipTitle = value;
+            }
+
+            public override string ToolTipText
+            {
+                get => Text == "metadata" ? "Schema containing the metadata information" : "Schema containing the data tables";
+                set => base.ToolTipText = value;
+            }
+        }
+
         class EntityAutocompleteItem : SqlAutocompleteItem
         {
             private readonly EntityMetadata _entity;
             private readonly IAttributeMetadataCache _metadata;
 
-            public EntityAutocompleteItem(EntityMetadata entity, IAttributeMetadataCache metadata, int replaceLength) : this(entity, (entity.DataProviderId == MetaMetadataCache.ProviderId ? "metadata." : "") + entity.LogicalName, metadata, replaceLength)
+            public EntityAutocompleteItem(EntityMetadata entity, IAttributeMetadataCache metadata, int replaceLength, bool tableNameOnly) : this(entity, (!tableNameOnly && entity.DataProviderId == MetaMetadataCache.ProviderId ? "metadata." : "") + entity.LogicalName, metadata, replaceLength)
             {
             }
 
@@ -984,28 +1095,6 @@ namespace MarkMpn.Sql4Cds
             {
                 _entity = entity;
                 _metadata = metadata;
-            }
-
-            public EntityAutocompleteItem(EntityMetadata entity, AutocompleteDataSource dataSource, string primaryDataSource, int replaceLength) : base(GetTableName(dataSource, primaryDataSource, entity), replaceLength, 4)
-            {
-                _entity = entity;
-                _metadata = dataSource.Metadata;
-            }
-
-            private static string GetTableName(AutocompleteDataSource dataSource, string primaryDataSource, EntityMetadata entity)
-            {
-                if (dataSource.Name != primaryDataSource)
-                {
-                    if (entity.DataProviderId == MetaMetadataCache.ProviderId)
-                        return $"{EscapeIdentifier(dataSource.Name)}.metadata.{entity.LogicalName}";
-
-                    return $"{EscapeIdentifier(dataSource.Name)}..{entity.LogicalName}";
-                }
-
-                if (entity.DataProviderId == MetaMetadataCache.ProviderId)
-                    return $"metadata.{entity.LogicalName}";
-
-                return entity.LogicalName;
             }
 
             public override string ToolTipTitle
