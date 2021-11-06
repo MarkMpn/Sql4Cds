@@ -1616,7 +1616,15 @@ namespace MarkMpn.Sql4Cds.Engine
                 aggregateRewrites[aggregate.Expression] = aggregateName;
             }
 
-            querySpec.Accept(new RewriteVisitor(aggregateRewrites));
+            // Use the calculated aggregate values in later parts of the query
+            var visitor = new RewriteVisitor(aggregateRewrites);
+            foreach (var select in querySpec.SelectElements)
+                select.Accept(visitor);
+            querySpec.OrderByClause?.Accept(visitor);
+            querySpec.HavingClause?.Accept(visitor);
+            querySpec.TopRowFilter?.Accept(visitor);
+            querySpec.OffsetClause?.Accept(visitor);
+
             return hashMatch;
         }
 

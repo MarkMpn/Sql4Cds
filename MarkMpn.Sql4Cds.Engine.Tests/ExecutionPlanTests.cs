@@ -3032,5 +3032,50 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     </entity>
                 </fetch>");
         }
+
+        [TestMethod]
+        public void FilterOnGroupByExpression()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+            SELECT
+                DAY(a.createdon),
+                MONTH(a.createdon),
+                YEAR(a.createdon),
+                COUNT(*)
+            FROM
+                account a
+            WHERE
+                YEAR(a.createdon) = 2021 AND MONTH(a.createdon) = 11
+            GROUP BY
+                DAY(a.createdon),
+                MONTH(a.createdon),
+                YEAR(a.createdon)";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var grouping = AssertNode<HashMatchAggregateNode>(select.Source);
+            Assert.AreEqual("Expr1", grouping.GroupBy[0].ToSql());
+            Assert.AreEqual("Expr2", grouping.GroupBy[1].ToSql());
+            Assert.AreEqual("Expr3", grouping.GroupBy[2].ToSql());
+            var calc = AssertNode<ComputeScalarNode>(grouping.Source);
+            Assert.AreEqual("DAY(a.createdon)", calc.Columns["Expr1"].ToSql());
+            Assert.AreEqual("MONTH(a.createdon)", calc.Columns["Expr2"].ToSql());
+            Assert.AreEqual("YEAR(a.createdon)", calc.Columns["Expr3"].ToSql());
+            var filter = AssertNode<FilterNode>(calc.Source);
+            Assert.AreEqual("YEAR(a.createdon) = 2021 AND MONTH(a.createdon) = 11", filter.Filter.ToSql());
+            var fetch = AssertNode<FetchXmlScan>(filter.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='createdon' />
+                    </entity>
+                </fetch>");
+        }
     }
 }
