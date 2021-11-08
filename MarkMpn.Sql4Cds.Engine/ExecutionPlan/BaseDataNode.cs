@@ -100,7 +100,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
         /// <param name="tableSize">A cache of the number of records in each table</param>
         /// <returns>The number of rows the node is estimated to return</returns>
-        public abstract int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes);
+        public abstract int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes);
 
         /// <summary>
         /// Returns the number of times the node has been executed
@@ -270,7 +270,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 // If we still couldn't find the column name and value, this isn't a pattern we can support in FetchXML
-                if (field == null || (literal == null && func == null && variable == null && (field2 == null || !options.ColumnComparisonAvailable) && !expr.IsConstantValueExpression(schema, out literal)))
+                if (field == null || (literal == null && func == null && variable == null && (field2 == null || !options.ColumnComparisonAvailable) && !expr.IsConstantValueExpression(schema, options, out literal)))
                     return false;
 
                 // Select the correct FetchXML operator
@@ -371,7 +371,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
                 else if (func != null)
                 {
-                    if (func.IsConstantValueExpression(schema, out literal))
+                    if (func.IsConstantValueExpression(schema, options, out literal))
                         values = new[] { literal };
                     else
                         throw new NotSupportedQueryFragmentException("Unsupported FetchXML function", func);

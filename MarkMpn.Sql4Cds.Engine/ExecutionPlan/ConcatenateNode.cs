@@ -85,9 +85,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            return Sources.Sum(s => s.EstimateRowsOut(dataSources, parameterTypes));
+            return Sources.Sum(s => s.EstimateRowsOut(dataSources, options, parameterTypes));
         }
     }
 

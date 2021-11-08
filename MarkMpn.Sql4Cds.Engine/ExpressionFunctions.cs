@@ -379,6 +379,11 @@ namespace MarkMpn.Sql4Cds.Engine
 
             return search.Value.IndexOf(find.Value, startLocation.Value - 1, StringComparison.OrdinalIgnoreCase) + 1;
         }
+
+        public static SqlGuid User_Name(IQueryExecutionOptions options)
+        {
+            return options.UserId;
+        }
     }
 
     /// <summary>

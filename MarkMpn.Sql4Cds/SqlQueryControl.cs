@@ -889,7 +889,10 @@ namespace MarkMpn.Sql4Cds
                     }
 
                     if (query is IImpersonateRevertExecutionPlanNode)
+                    {
+                        options.SyncUserId();
                         Execute(() => SyncUsername());
+                    }
                 }
             }
             else
@@ -959,6 +962,10 @@ namespace MarkMpn.Sql4Cds
                     {
                         e.Value = b.Value ? "1" : "0";
                     }
+                    else if (e.Value is SqlDateTime dt)
+                    {
+                        e.Value = dt.Value.ToString("yyyy-MM-dd HH:mm:ss.fff");
+                    }
                 };
 
                 grid.HandleCreated += (s, e) =>
@@ -1010,7 +1017,8 @@ namespace MarkMpn.Sql4Cds
                     AutoEllipsis = true,
                     UseMnemonic = false
                 };
-                var planView = new ExecutionPlanView { Dock = DockStyle.Fill, Executed = args.Execute, Exception = ex, DataSources = DataSources };
+                var options = new QueryExecutionOptions(_con, DataSources[_con.ConnectionName].Connection, backgroundWorker, this);
+                var planView = new ExecutionPlanView { Dock = DockStyle.Fill, Executed = args.Execute, Exception = ex, DataSources = DataSources, Options = options };
                 planView.Plan = query;
                 planView.NodeSelected += (s, e) => _properties.SelectedObject = planView.Selected;
                 planView.DoubleClick += (s, e) =>

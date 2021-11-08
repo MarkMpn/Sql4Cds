@@ -100,9 +100,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             CatchSource.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            return TrySource.EstimateRowsOut(dataSources, parameterTypes);
+            return TrySource.EstimateRowsOut(dataSources, options, parameterTypes);
         }
     }
 }

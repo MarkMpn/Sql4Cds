@@ -51,18 +51,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 IOrderedEnumerable<Entity> sortedSource;
 
                 if (Sorts[0].SortOrder == SortOrder.Descending)
-                    sortedSource = source.OrderByDescending(e => expressions[0](e, parameterValues), CaseInsensitiveObjectComparer.Instance);
+                    sortedSource = source.OrderByDescending(e => expressions[0](e, parameterValues, options), CaseInsensitiveObjectComparer.Instance);
                 else
-                    sortedSource = source.OrderBy(e => expressions[0](e, parameterValues), CaseInsensitiveObjectComparer.Instance);
+                    sortedSource = source.OrderBy(e => expressions[0](e, parameterValues, options), CaseInsensitiveObjectComparer.Instance);
 
                 for (var i = 1; i < Sorts.Count; i++)
                 {
                     var expr = expressions[i];
 
                     if (Sorts[i].SortOrder == SortOrder.Descending)
-                        sortedSource = sortedSource.ThenByDescending(e => expr(e, parameterValues), CaseInsensitiveObjectComparer.Instance);
+                        sortedSource = sortedSource.ThenByDescending(e => expr(e, parameterValues, options), CaseInsensitiveObjectComparer.Instance);
                     else
-                        sortedSource = sortedSource.ThenBy(e => expr(e, parameterValues), CaseInsensitiveObjectComparer.Instance);
+                        sortedSource = sortedSource.ThenBy(e => expr(e, parameterValues, options), CaseInsensitiveObjectComparer.Instance);
                 }
 
                 foreach (var entity in sortedSource)
@@ -82,7 +82,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     // Get the other values to sort on from this next record
                     var nextSortedValues = expressions
                         .Take(PresortedCount)
-                        .Select(expr => expr(next, parameterValues))
+                        .Select(expr => expr(next, parameterValues, options))
                         .ToList();
 
                     // If we've already got a subset to work on, check if this fits in the same subset
@@ -98,7 +98,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             {
                                 // A value is different, so this record doesn't fit in the same subset. Sort the subset
                                 // by the remaining sorts and return the values from it
-                                SortSubset(subset, schema, parameterTypes, parameterValues, expressions);
+                                SortSubset(subset, schema, parameterTypes, parameterValues, expressions, options);
 
                                 foreach (var entity in subset)
                                     yield return entity;
@@ -118,14 +118,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 // Sort and return the final subset
-                SortSubset(subset, schema, parameterTypes, parameterValues, expressions);
+                SortSubset(subset, schema, parameterTypes, parameterValues, expressions, options);
 
                 foreach (var entity in subset)
                     yield return entity;
             }
         }
 
-        private void SortSubset(List<Entity> subset, NodeSchema schema, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues, List<Func<Entity, IDictionary<string, object>, object>> expressions)
+        private void SortSubset(List<Entity> subset, NodeSchema schema, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues, List<Func<Entity, IDictionary<string, object>, IQueryExecutionOptions, object>> expressions, IQueryExecutionOptions options)
         {
             // Simple case if there's no need to do any further sorting
             if (subset.Count <= 1)
@@ -133,7 +133,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Precalculate the sort keys for the remaining sorts
             var sortKeys = subset
-                .ToDictionary(entity => entity, entity => expressions.Skip(PresortedCount).Select(expr => expr(entity, parameterValues)).ToList());
+                .ToDictionary(entity => entity, entity => expressions.Skip(PresortedCount).Select(expr => expr(entity, parameterValues, options)).ToList());
 
             // Sort the list according to these sort keys
             subset.Sort((x, y) =>
@@ -334,7 +334,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                             if (top != null)
                             {
-                                if (!top.Top.IsConstantValueExpression(null, out var topLiteral))
+                                if (!top.Top.IsConstantValueExpression(null, options, out var topLiteral))
                                     return this;
 
                                 if (Int32.Parse(topLiteral.Value) > 50000)
@@ -342,8 +342,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             }
                             else if (offset != null)
                             {
-                                if (!offset.Offset.IsConstantValueExpression(null, out var offsetLiteral) ||
-                                    !offset.Fetch.IsConstantValueExpression(null, out var fetchLiteral))
+                                if (!offset.Offset.IsConstantValueExpression(null, options, out var offsetLiteral) ||
+                                    !offset.Fetch.IsConstantValueExpression(null, options, out var fetchLiteral))
                                     return this;
 
                                 if (Int32.Parse(offsetLiteral.Value) + Int32.Parse(fetchLiteral.Value) > 50000)
@@ -401,9 +401,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            return Source.EstimateRowsOut(dataSources, parameterTypes);
+            return Source.EstimateRowsOut(dataSources, options, parameterTypes);
         }
     }
 }

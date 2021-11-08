@@ -38,7 +38,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             foreach (var entity in Source.Execute(dataSources, options, parameterTypes, parameterValues))
             {
                 foreach (var col in columns)
-                    entity[col.Name] = col.Expression(entity, parameterValues);
+                    entity[col.Name] = col.Expression(entity, parameterValues, options);
 
                 yield return entity;
             }
@@ -111,9 +111,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            return Source.EstimateRowsOut(dataSources, parameterTypes);
+            return Source.EstimateRowsOut(dataSources, options, parameterTypes);
         }
     }
 }

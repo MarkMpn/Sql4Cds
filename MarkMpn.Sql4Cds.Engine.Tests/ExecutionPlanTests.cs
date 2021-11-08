@@ -82,6 +82,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
         }
 
+        Guid IQueryExecutionOptions.UserId => Guid.NewGuid();
+
         [TestMethod]
         public void SimpleSelect()
         {
@@ -3076,6 +3078,23 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <attribute name='createdon' />
                     </entity>
                 </fetch>");
+        }
+
+        [TestMethod]
+        public void SystemFunctions()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT CURRENT_TIMESTAMP, CURRENT_USER, GETDATE(), USER_NAME()";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var calc = AssertNode<ComputeScalarNode>(select.Source);
+            var constant = AssertNode<ConstantScanNode>(calc.Source);
         }
     }
 }

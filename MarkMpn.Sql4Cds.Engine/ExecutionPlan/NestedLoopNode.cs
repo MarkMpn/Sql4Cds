@@ -73,7 +73,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     var merged = Merge(left, leftSchema, right, rightSchema);
 
-                    if (joinCondition == null || joinCondition(merged, parameterValues))
+                    if (joinCondition == null || joinCondition(merged, parameterValues, options))
                         yield return merged;
 
                     hasRight = true;
@@ -153,15 +153,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return RightSource.GetSchema(dataSources, innerParameterTypes);
         }
 
-        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            var leftEstimate = LeftSource.EstimateRowsOut(dataSources, parameterTypes);
+            var leftEstimate = LeftSource.EstimateRowsOut(dataSources, options, parameterTypes);
 
             // We tend to use a nested loop with an assert node for scalar subqueries - we'll return one record for each record in the outer loop
             if (RightSource is AssertNode)
                 return leftEstimate;
 
-            var rightEstimate = RightSource.EstimateRowsOut(dataSources, parameterTypes);
+            var rightEstimate = RightSource.EstimateRowsOut(dataSources, options, parameterTypes);
 
             if (JoinType == QualifiedJoinType.Inner)
                 return Math.Min(leftEstimate, rightEstimate);

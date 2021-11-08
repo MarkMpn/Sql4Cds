@@ -34,7 +34,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// Estimates the number of rows that will be returned by this node
         /// </summary>
-        int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes);
+        int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes);
 
         /// <summary>
         /// Returns the total number of rows returned by this node

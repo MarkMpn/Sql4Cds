@@ -33,8 +33,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            var offset = SqlTypeConverter.ChangeType<int>(Offset.Compile(null, parameterTypes)(null, parameterValues));
-            var fetch = SqlTypeConverter.ChangeType<int>(Fetch.Compile(null, parameterTypes)(null, parameterValues));
+            var offset = SqlTypeConverter.ChangeType<int>(Offset.Compile(null, parameterTypes)(null, parameterValues, options));
+            var fetch = SqlTypeConverter.ChangeType<int>(Fetch.Compile(null, parameterTypes)(null, parameterValues, options));
 
             if (offset < 0)
                 throw new QueryExecutionException("The offset specified in a OFFSET clause may not be negative.");
@@ -63,14 +63,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source = Source.FoldQuery(dataSources, options, parameterTypes);
             Source.Parent = this;
 
-            if (!Offset.IsConstantValueExpression(null, out var offsetLiteral) ||
-                !Fetch.IsConstantValueExpression(null, out var fetchLiteral))
+            if (!Offset.IsConstantValueExpression(null, options, out var offsetLiteral) ||
+                !Fetch.IsConstantValueExpression(null, options, out var fetchLiteral))
                 return this;
 
             if (Source is FetchXmlScan fetchXml)
             {
-                var offset = SqlTypeConverter.ChangeType<int>(offsetLiteral.Compile(null, null)(null, null));
-                var count = SqlTypeConverter.ChangeType<int>(fetchLiteral.Compile(null, null)(null, null));
+                var offset = SqlTypeConverter.ChangeType<int>(offsetLiteral.Compile(null, null)(null, null, options));
+                var count = SqlTypeConverter.ChangeType<int>(fetchLiteral.Compile(null, null)(null, null, options));
                 var page = offset / count;
 
                 if (page * count == offset && count <= 5000)
@@ -90,12 +90,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            var sourceCount = Source.EstimateRowsOut(dataSources, parameterTypes);
+            var sourceCount = Source.EstimateRowsOut(dataSources, options, parameterTypes);
 
-            if (!Offset.IsConstantValueExpression(null, out var offsetLiteral) ||
-                !Fetch.IsConstantValueExpression(null, out var fetchLiteral))
+            if (!Offset.IsConstantValueExpression(null, options, out var offsetLiteral) ||
+                !Fetch.IsConstantValueExpression(null, options, out var fetchLiteral))
                 return sourceCount;
 
             var offset = Int32.Parse(offsetLiteral.Value);

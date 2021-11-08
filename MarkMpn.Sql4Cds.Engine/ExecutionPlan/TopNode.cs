@@ -44,7 +44,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (WithTies)
                 throw new NotImplementedException();
 
-            var topCount = Top.Compile(null, parameterTypes)(null, parameterValues);
+            var topCount = Top.Compile(null, parameterTypes)(null, parameterValues, options);
 
             if (!Percent)
             {
@@ -76,7 +76,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source = Source.FoldQuery(dataSources, options, parameterTypes);
             Source.Parent = this;
 
-            if (!Top.IsConstantValueExpression(null, out var literal))
+            if (!Top.IsConstantValueExpression(null, options, out var literal))
                 return this;
 
             // FetchXML can support TOP directly provided it's for no more than 5,000 records
@@ -108,11 +108,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            var sourceCount = Source.EstimateRowsOut(dataSources, parameterTypes);
+            var sourceCount = Source.EstimateRowsOut(dataSources, options, parameterTypes);
 
-            if (!Top.IsConstantValueExpression(null, out var topLiteral))
+            if (!Top.IsConstantValueExpression(null, options, out var topLiteral))
                 return sourceCount;
 
             var top = Int32.Parse(topLiteral.Value);

@@ -52,6 +52,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
         }
 
+        Guid IQueryExecutionOptions.UserId => Guid.NewGuid();
+
         [TestMethod]
         public void SimpleSelect()
         {

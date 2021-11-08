@@ -2285,8 +2285,8 @@ namespace MarkMpn.Sql4Cds.Engine
             // Check the estimated counts for the outer loop and the source at the point we'd insert the spool
             // If the outer loop is non-trivial (>= 100 rows) or the inner loop is small (<= 5000 records) then we want
             // to use the spool.
-            var outerCount = outerSource.EstimateRowsOut(DataSources, parameterTypes);
-            var innerCount = outerCount >= 100 ? -1 : lastCorrelatedStep.Source.EstimateRowsOut(DataSources, parameterTypes);
+            var outerCount = outerSource.EstimateRowsOut(DataSources, Options, parameterTypes);
+            var innerCount = outerCount >= 100 ? -1 : lastCorrelatedStep.Source.EstimateRowsOut(DataSources, Options, parameterTypes);
 
             if (outerCount >= 100 || innerCount <= 5000)
             {
@@ -2721,7 +2721,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 for (var colIndex = 0; colIndex < types.Count; colIndex++)
                 {
-                    if (!row.ColumnValues[colIndex].IsConstantValueExpression(null, out var literal))
+                    if (!row.ColumnValues[colIndex].IsConstantValueExpression(null, Options, out var literal))
                         throw new NotSupportedQueryFragmentException("Literal value expected", row.ColumnValues[colIndex]);
 
                     entity[columnNames[colIndex]] = SqlTypeConverter.ChangeType(new SqlString(literal.Value, CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace), types[colIndex]);

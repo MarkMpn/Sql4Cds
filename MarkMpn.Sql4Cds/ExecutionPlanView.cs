@@ -44,6 +44,8 @@ namespace MarkMpn.Sql4Cds
 
         public IDictionary<string, DataSource> DataSources { get; set; }
 
+        public IQueryExecutionOptions Options { get; set; }
+
         public IExecutionPlanNode Plan
         {
             get { return _plan; }
@@ -106,7 +108,7 @@ namespace MarkMpn.Sql4Cds
 
                 _nodeLocations[child] = fullRect;
 
-                var rows = child is IDataExecutionPlanNode dataChild ? Executed ? dataChild.RowsOut : dataChild.EstimateRowsOut(DataSources.Values.Cast<Engine.DataSource>().ToDictionary(ds => ds.Name, StringComparer.OrdinalIgnoreCase), null) : 1;
+                var rows = child is IDataExecutionPlanNode dataChild ? Executed ? dataChild.RowsOut : dataChild.EstimateRowsOut(DataSources.Values.Cast<Engine.DataSource>().ToDictionary(ds => ds.Name, StringComparer.OrdinalIgnoreCase), Options, null) : 1;
                 var width = rows == 0 ? 1 : (int)Math.Log10(rows);
                 _lines.Add(new Line { Source = child, Start = new Point(iconRect.Left, parentIconRect.Top == iconRect.Top ? (parentIconRect.Top + (i + 1) * lineYSpacing) : (iconRect.Top + iconRect.Height / 2)), End = new Point(parentIconRect.Right, parentIconRect.Top + (i + 1) * lineYSpacing), Width = width });
 

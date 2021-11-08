@@ -129,7 +129,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         Func<Entity, object> selector = null;
 
                         if (aggregate.Value.AggregateType != AggregateType.CountStar)
-                            selector = e => aggregate.Value.Expression(e, parameterValues);
+                            selector = e => aggregate.Value.Expression(e, parameterValues, options);
 
                         switch (aggregate.Value.AggregateType)
                         {
@@ -569,12 +569,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return false;
         }
 
-        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             if (GroupBy.Count == 0)
                 return 1;
 
-            return Source.EstimateRowsOut(dataSources, parameterTypes) * 4 / 10;
+            return Source.EstimateRowsOut(dataSources, options, parameterTypes) * 4 / 10;
         }
     }
 }

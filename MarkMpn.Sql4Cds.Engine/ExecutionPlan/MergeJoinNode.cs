@@ -62,9 +62,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // Compare key values
                 var merged = Merge(hasLeft ? left.Current : null, leftSchema, hasRight ? right.Current : null, rightSchema);
 
-                var isLt = lt(merged, parameterValues);
-                var isEq = eq(merged, parameterValues);
-                var isGt = gt(merged, parameterValues);
+                var isLt = lt(merged, parameterValues, options);
+                var isEq = eq(merged, parameterValues, options);
+                var isGt = gt(merged, parameterValues, options);
 
                 if (isLt || (hasLeft && !hasRight))
                 {
@@ -76,7 +76,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
                 else if (isEq)
                 {
-                    if ((!leftMatched || !SemiJoin) && (additionalJoinCriteria == null || additionalJoinCriteria(merged, parameterValues) == true))
+                    if ((!leftMatched || !SemiJoin) && (additionalJoinCriteria == null || additionalJoinCriteria(merged, parameterValues, options) == true))
                         yield return merged;
 
                     leftMatched = true;

@@ -63,7 +63,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                         var merged = Merge(left.Entity, leftSchema, entity, rightSchema);
 
-                        if (additionalJoinCriteria == null || additionalJoinCriteria(merged, parameterValues))
+                        if (additionalJoinCriteria == null || additionalJoinCriteria(merged, parameterValues, options))
                         {
                             yield return merged;
                             left.Used = true;
