@@ -672,10 +672,11 @@ namespace MarkMpn.Sql4Cds
         private IEnumerable<string> Words(string text, int start)
         {
             var inWord = false;
+            var inQuote = false;
 
             for (var i = start; i < text.Length; i++)
             {
-                if (Char.IsWhiteSpace(text[i]))
+                if (!inQuote && Char.IsWhiteSpace(text[i]))
                 {
                     if (inWord)
                     {
@@ -686,10 +687,19 @@ namespace MarkMpn.Sql4Cds
                         inWord = false;
                     }
                 }
+                else if (inQuote && text[i] == ']')
+                {
+                    inQuote = false;
+                }
                 else if (!inWord)
                 {
                     start = i;
                     inWord = true;
+                    inQuote = text[i] == '[';
+                }
+                else if (!inQuote&& text[i] == '[')
+                {
+                    inQuote = true;
                 }
             }
 
