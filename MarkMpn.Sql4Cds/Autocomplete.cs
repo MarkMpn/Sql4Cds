@@ -1229,7 +1229,7 @@ namespace MarkMpn.Sql4Cds
         {
             private readonly MethodInfo _method;
 
-            public FunctionAutocompleteItem(MethodInfo method, int replaceLength) : base((method.DeclaringType == typeof(FetchXmlConditionMethods) ? method.Name.ToLowerInvariant() : method.Name.ToUpperInvariant()) + "(" + (method.GetParameters().Length == (method.DeclaringType == typeof(FetchXmlConditionMethods) ? 1 : 0) ? ")" : ""), replaceLength, GetIconIndex(method))
+            public FunctionAutocompleteItem(MethodInfo method, int replaceLength) : base(GetInsertText(method), replaceLength, GetIconIndex(method))
             {
                 _method = method;
                 MenuText = GetSignature(method);
@@ -1245,24 +1245,45 @@ namespace MarkMpn.Sql4Cds
                 return 23;
             }
 
+            private static string GetInsertText(MethodInfo method)
+            {
+                var text = new StringBuilder();
+                text.Append(method.DeclaringType == typeof(FetchXmlConditionMethods) ? method.Name.ToLowerInvariant() : method.Name.ToUpperInvariant());
+
+                if (method.GetCustomAttribute<ParameterlessCallAttribute>() == null)
+                {
+                    text.Append("(");
+
+                    if (method.GetParameters().Length == (method.DeclaringType == typeof(FetchXmlConditionMethods) ? 1 : 0))
+                        text.Append(")");
+                }
+
+                return text.ToString();
+            }
+
             private static string GetSignature(MethodInfo method)
             {
                 var sig = new StringBuilder();
                 sig.Append(method.DeclaringType == typeof(FetchXmlConditionMethods) ? method.Name.ToLowerInvariant() : method.Name.ToUpperInvariant());
-                sig.Append("(");
 
-                var firstParam = true;
-                foreach (var param in method.GetParameters().Skip(method.DeclaringType == typeof(FetchXmlConditionMethods) ? 1 : 0))
+                if (method.GetCustomAttribute<ParameterlessCallAttribute>() == null)
                 {
-                    if (firstParam)
-                        firstParam = false;
-                    else
-                        sig.Append(", ");
+                    sig.Append("(");
 
-                    sig.Append(param.Name.ToLowerInvariant());
+                    var firstParam = true;
+                    foreach (var param in method.GetParameters().Skip(method.DeclaringType == typeof(FetchXmlConditionMethods) ? 1 : 0))
+                    {
+                        if (firstParam)
+                            firstParam = false;
+                        else
+                            sig.Append(", ");
+
+                        sig.Append(param.Name.ToLowerInvariant());
+                    }
+
+                    sig.Append(")");
                 }
 
-                sig.Append(")");
                 return sig.ToString();
             }
 

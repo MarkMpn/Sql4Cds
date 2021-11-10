@@ -137,6 +137,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 "createdon",
                 "employees",
                 "name",
+                "ownerid",
+                "owneridname",
                 "primarycontactid",
                 "primarycontactidname",
                 "turnover"
@@ -171,6 +173,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 "createdon",
                 "employees",
                 "name",
+                "ownerid",
+                "owneridname",
                 "primarycontactid",
                 "primarycontactidname",
                 "turnover",

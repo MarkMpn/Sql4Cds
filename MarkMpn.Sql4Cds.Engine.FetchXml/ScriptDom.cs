@@ -1273,6 +1273,34 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         Negative
     }
 
+    class ParameterlessCall : ScalarExpression
+    {
+        public ParameterlessCallType ParameterlessCallType { get; set; }
+
+        public override void Accept(TSqlFragmentVisitor visitor)
+        {
+            visitor.ExplicitVisit(this);
+        }
+
+        public override void ToString(StringBuilder buf, int indent)
+        {
+            switch (ParameterlessCallType)
+            {
+                case ParameterlessCallType.CurrentUser:
+                    buf.Append("CURRENT_USER");
+                    break;
+
+                default:
+                    throw new NotSupportedException();
+            }
+        }
+    }
+
+    enum ParameterlessCallType
+    {
+        CurrentUser
+    }
+
     class ScalarSubquery
     {
         public QueryExpression QueryExpression { get; set; }
@@ -1639,6 +1667,10 @@ namespace Microsoft.SqlServer.TransactSql.ScriptDom
         }
 
         public virtual void ExplicitVisit(UnaryExpression unaryExpression)
+        {
+        }
+
+        public virtual void ExplicitVisit(ParameterlessCall unaryExpression)
         {
         }
 

@@ -126,6 +126,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 "createdon",
                 "employees",
                 "name",
+                "ownerid",
+                "owneridname",
                 "primarycontactid",
                 "primarycontactidname",
                 "turnover"
@@ -2686,6 +2688,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <attribute name='createdon' />
                         <attribute name='employees' />
                         <attribute name='name' />
+                        <attribute name='ownerid' />
+                        <attribute name='owneridname' />
                         <attribute name='primarycontactid' />
                         <attribute name='primarycontactidname' />
                         <attribute name='turnover' />
@@ -3095,6 +3099,31 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var select = AssertNode<SelectNode>(plans[0]);
             var calc = AssertNode<ComputeScalarNode>(select.Source);
             var constant = AssertNode<ConstantScanNode>(calc.Source);
+        }
+
+        [TestMethod]
+        public void FoldEqualsCurrentUser()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT name FROM account WHERE ownerid = CURRENT_USER";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <filter>
+                            <condition attribute='ownerid' operator='eq-userid' />
+                        </filter>
+                    </entity>
+                </fetch>");
         }
     }
 }

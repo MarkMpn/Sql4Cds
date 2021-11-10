@@ -227,6 +227,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var func = comparison.SecondExpression as FunctionCall;
                 var field2 = comparison.SecondExpression as ColumnReferenceExpression;
                 var variable = comparison.SecondExpression as VariableReference;
+                var parameterless = comparison.SecondExpression as ParameterlessCall;
                 var expr = comparison.SecondExpression;
                 var type = comparison.ComparisonType;
 
@@ -239,12 +240,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 // If we couldn't find the pattern `column = value` or `column = func()`, try looking in the opposite order
-                if (field == null && literal == null && func == null && variable == null)
+                if (field == null && literal == null && func == null && variable == null && parameterless == null)
                 {
                     field = comparison.SecondExpression as ColumnReferenceExpression;
                     literal = comparison.FirstExpression as Literal;
                     func = comparison.FirstExpression as FunctionCall;
                     variable = comparison.FirstExpression as VariableReference;
+                    parameterless = comparison.FirstExpression as ParameterlessCall;
                     expr = comparison.FirstExpression;
                     field2 = null;
 
@@ -270,7 +272,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 // If we still couldn't find the column name and value, this isn't a pattern we can support in FetchXML
-                if (field == null || (literal == null && func == null && variable == null && (field2 == null || !options.ColumnComparisonAvailable) && !expr.IsConstantValueExpression(schema, options, out literal)))
+                if (field == null || (literal == null && func == null && variable == null && parameterless == null && (field2 == null || !options.ColumnComparisonAvailable) && !expr.IsConstantValueExpression(schema, options, out literal)))
                     return false;
 
                 // Select the correct FetchXML operator
@@ -375,6 +377,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         values = new[] { literal };
                     else
                         throw new NotSupportedQueryFragmentException("Unsupported FetchXML function", func);
+                }
+                else if (parameterless != null)
+                {
+                    if (parameterless.IsConstantValueExpression(schema, options, out literal))
+                    {
+                        values = new[] { literal };
+                    }
+                    else if (parameterless.ParameterlessCallType != ParameterlessCallType.CurrentTimestamp && op == @operator.eq)
+                    {
+                        op = @operator.equserid;
+                    }
+                    else if (parameterless.ParameterlessCallType != ParameterlessCallType.CurrentTimestamp && op == @operator.ne)
+                    {
+                        op = @operator.neuserid;
+                    }
+                    else
+                    {
+                        return false;
+                    }
                 }
 
                 // Find the entity that the condition applies to, which may be different to the entity that the condition FetchXML element will be 

@@ -380,6 +380,11 @@ namespace MarkMpn.Sql4Cds.Engine
             return search.Value.IndexOf(find.Value, startLocation.Value - 1, StringComparison.OrdinalIgnoreCase) + 1;
         }
 
+        /// <summary>
+        /// Returns the identifier of the user
+        /// </summary>
+        /// <param name="options">The options that provide access to the user details</param>
+        /// <returns></returns>
         public static SqlGuid User_Name(IQueryExecutionOptions options)
         {
             return options.UserId;

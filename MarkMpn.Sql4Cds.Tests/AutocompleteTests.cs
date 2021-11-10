@@ -111,7 +111,7 @@ namespace MarkMpn.Sql4Cds.Tests
         public void UniqueAttributeName()
         {
             var sql = "SELECT * FROM account a left outer join contact c on a.accountid = c.parentcustomerid where ";
-            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1).Select(s => s.Text).Where(s => !s.Contains("(")).ToList();
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1).Where(s => s.GetType().Name != "FunctionAutocompleteItem").Select(s => s.Text).ToList();
 
             CollectionAssert.AreEqual(new[] { "a", "accountid", "c", "contactid", "employees", "firstname", "fullname", "lastname", "name", "parentcustomerid", "parentcustomeridname", "primarycontactid", "primarycontactidname", "turnover" }, suggestions);
         }
@@ -140,7 +140,7 @@ namespace MarkMpn.Sql4Cds.Tests
             var sql1 = "SELECT * FROM account a left outer join contact c on a.accountid = c.parentcustomerid";
             var sql2 = "SELECT  FROM account left outer join contact on account.accountid = contact.parentcustomerid";
             var sql = sql1 + "\r\n" + sql2;
-            var suggestions = _autocomplete.GetSuggestions(sql, sql1.Length + 2 + sql2.IndexOf(" ") + 1).Select(s => s.Text).Where(s => !s.Contains("(")).ToList();
+            var suggestions = _autocomplete.GetSuggestions(sql, sql1.Length + 2 + sql2.IndexOf(" ") + 1).Where(s => s.GetType().Name != "FunctionAutocompleteItem").Select(s => s.Text).ToList();
 
             CollectionAssert.AreEqual(new[] { "account", "accountid", "contact", "contactid", "employees", "firstname", "fullname", "lastname", "name", "parentcustomerid", "parentcustomeridname", "primarycontactid", "primarycontactidname", "turnover" }, suggestions);
         }
@@ -149,7 +149,7 @@ namespace MarkMpn.Sql4Cds.Tests
         public void Function()
         {
             var sql = "SELECT count( FROM account";
-            var suggestions = _autocomplete.GetSuggestions(sql, sql.IndexOf("(")).Select(s => s.Text).Where(s => !s.Contains("(")).ToList();
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.IndexOf("(")).Where(s => s.GetType().Name != "FunctionAutocompleteItem").Select(s => s.Text).ToList();
 
             CollectionAssert.AreEqual(new[] { "account", "accountid", "createdon", "employees", "name", "primarycontactid", "primarycontactidname", "turnover" }, suggestions);
         }
