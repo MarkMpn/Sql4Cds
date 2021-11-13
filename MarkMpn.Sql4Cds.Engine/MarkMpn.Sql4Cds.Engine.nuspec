@@ -11,7 +11,8 @@
     <iconUrl>https://markcarrington.dev/sql4cds-icon/</iconUrl>
     <description>Convert SQL queries to FetchXml and execute them against Dataverse / D365</description>
     <summary>Convert SQL queries to FetchXml and execute them against Dataverse / D365</summary>
-    <releaseNotes>Fixed datetime filtering with non-English regional settings
+    <releaseNotes>Allow queries across multiple instances
+Support CURRENT_TIMESTAMP and CURRENT_USER syntax
     </releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>
