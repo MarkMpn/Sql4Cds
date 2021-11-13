@@ -254,6 +254,12 @@
     <Compile Include="ExecutionPlanView.cs">
       <SubType>Component</SubType>
     </Compile>
+    <Compile Include="MQueryControl.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="MQueryControl.Designer.cs">
+      <DependentUpon>MQueryControl.cs</DependentUpon>
+    </Compile>
     <Compile Include="FetchXmlControl.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -311,6 +317,9 @@
     </None>
   </ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="MQueryControl.resx">
+      <DependentUpon>MQueryControl.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="FetchXmlControl.resx">
       <DependentUpon>FetchXmlControl.cs</DependentUpon>
     </EmbeddedResource>
