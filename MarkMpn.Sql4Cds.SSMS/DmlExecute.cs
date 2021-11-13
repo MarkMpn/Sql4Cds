@@ -79,9 +79,10 @@ namespace MarkMpn.Sql4Cds.SSMS
             var options = new QueryExecutionOptions(sqlScriptEditorControl, Package.Settings);
             var metadata = GetMetadataCache();
             var org = ConnectCDS();
+            var dataSource = new DataSource { Name = "local", Metadata = metadata, TableSizeCache = new TableSizeCache(org, metadata) };
 
             // We've possibly got a DML statement, so parse the query properly to get the details
-            var converter = new ExecutionPlanBuilder(metadata, new TableSizeCache(org, metadata), options)
+            var converter = new ExecutionPlanBuilder(new[] { dataSource }, dataSource.Name, options)
             {
                 TDSEndpointAvailable = true,
                 QuotedIdentifiers = sqlScriptEditorControl.QuotedIdentifiers
@@ -139,7 +140,7 @@ namespace MarkMpn.Sql4Cds.SSMS
                     try
                     {
                         _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name, ["Source"] = "SSMS" });
-                        var msg = query.Execute(org, metadata, options, null, null);
+                        var msg = query.Execute(new Dictionary<string, DataSource>(StringComparer.OrdinalIgnoreCase) { [dataSource.Name] = dataSource }, options, null, null);
 
                         sqlScriptEditorControl.Results.AddStringToMessages(msg + "\r\n\r\n");
 

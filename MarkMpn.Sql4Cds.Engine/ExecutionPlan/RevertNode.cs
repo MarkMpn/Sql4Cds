@@ -14,6 +14,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private int _executionCount;
         private readonly Timer _timer = new Timer();
 
+        public string DataSource { get; set; }
+
         /// <summary>
         /// The SQL string that the query was converted from
         /// </summary>
@@ -36,11 +38,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override TimeSpan Duration => _timer.Duration;
 
-        public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
         {
         }
 
-        public string Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        public string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             _executionCount++;
 
@@ -48,11 +50,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 using (_timer.Run())
                 {
-                    if (org is Microsoft.Xrm.Sdk.Client.OrganizationServiceProxy svcProxy)
+                    if (!dataSources.TryGetValue(DataSource, out var dataSource))
+                        throw new QueryExecutionException("Missing datasource " + DataSource);
+
+                    if (dataSource.Connection is Microsoft.Xrm.Sdk.Client.OrganizationServiceProxy svcProxy)
                         svcProxy.CallerId = Guid.Empty;
-                    else if (org is Microsoft.Xrm.Sdk.WebServiceClient.OrganizationWebProxyClient webProxy)
+                    else if (dataSource.Connection is Microsoft.Xrm.Sdk.WebServiceClient.OrganizationWebProxyClient webProxy)
                         webProxy.CallerId = Guid.Empty;
-                    else if (org is CrmServiceClient svc)
+                    else if (dataSource.Connection is CrmServiceClient svc)
                         svc.CallerId = Guid.Empty;
                     else
                         throw new QueryExecutionException("Unexpected organization service type") { Node = this };
@@ -73,7 +78,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public IRootExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public IRootExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             return this;
         }

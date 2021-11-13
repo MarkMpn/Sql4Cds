@@ -136,6 +136,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         }
 
         /// <summary>
+        /// The instance that this node will be executed against
+        /// </summary>
+        public string DataSource { get; set; }
+
+        /// <summary>
         /// The types of metadata to include in the result
         /// </summary>
         [Category("Metadata Query")]
@@ -198,7 +203,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Description("The metadata query to be executed")]
         public EntityQueryExpression Query { get; } = new EntityQueryExpression();
 
-        public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
         {
             _entityCols = new Dictionary<string, MetadataProperty>();
             _attributeCols = new Dictionary<string, AttributeProperty>();
@@ -288,17 +293,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public override int EstimateRowsOut(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, ITableSizeCache tableSize)
+        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             return 100;
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             return this;
         }
 
-        public override NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
+        public override NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
         {
             var schema = new NodeSchema();
             var childCount = 0;
@@ -511,7 +516,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Array.Empty<IDataExecutionPlanNode>();
         }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             if (MetadataSource.HasFlag(MetadataSource.Attribute))
             {
@@ -553,7 +558,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     Query.Properties.PropertyNames.Add(nameof(EntityMetadata.ManyToManyRelationships));
             }
 
-            var resp = (RetrieveMetadataChangesResponse) org.Execute(new RetrieveMetadataChangesRequest { Query = Query });
+            if (!dataSources.TryGetValue(DataSource, out var dataSource))
+                throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
+
+            var resp = (RetrieveMetadataChangesResponse) dataSource.Connection.Execute(new RetrieveMetadataChangesRequest { Query = Query });
             var entityProps = typeof(EntityMetadata).GetProperties().ToDictionary(p => p.Name);
             var oneToManyRelationshipProps = typeof(OneToManyRelationshipMetadata).GetProperties().ToDictionary(p => p.Name);
             var manyToManyRelationshipProps = typeof(ManyToManyRelationshipMetadata).GetProperties().ToDictionary(p => p.Name);

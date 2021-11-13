@@ -63,5 +63,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         void IQueryExecutionOptions.RetrievingNextPage()
         {
         }
+
+        Guid IQueryExecutionOptions.UserId => Guid.NewGuid();
     }
 }

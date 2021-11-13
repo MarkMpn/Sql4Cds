@@ -27,13 +27,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("Column Set")]
         public List<ConcatenateColumn> ColumnSet { get; } = new List<ConcatenateColumn>();
 
-        protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             for (var i = 0; i < Sources.Count; i++)
             {
                 var source = Sources[i];
 
-                foreach (var entity in source.Execute(org, metadata, options, parameterTypes, parameterValues))
+                foreach (var entity in source.Execute(dataSources, options, parameterTypes, parameterValues))
                 {
                     var result = new Entity(entity.LogicalName, entity.Id);
 
@@ -45,10 +45,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public override NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
+        public override NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
         {
             var schema = new NodeSchema();
-            var sourceSchema = Sources[0].GetSchema(metadata, parameterTypes);
+            var sourceSchema = Sources[0].GetSchema(dataSources, parameterTypes);
 
             foreach (var col in ColumnSet)
                 schema.Schema[col.OutputColumn] = sourceSchema.Schema[col.SourceColumns[0]];
@@ -61,18 +61,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Sources;
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             for (var i = 0; i < Sources.Count; i++)
             {
-                Sources[i] = Sources[i].FoldQuery(metadata, options, parameterTypes);
+                Sources[i] = Sources[i].FoldQuery(dataSources, options, parameterTypes);
                 Sources[i].Parent = this;
             }
 
             return this;
         }
 
-        public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
         {
             for (var i = 0; i < Sources.Count; i++)
             {
@@ -81,13 +81,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     .Distinct()
                     .ToList();
 
-                Sources[i].AddRequiredColumns(metadata, parameterTypes, sourceRequiredColumns);
+                Sources[i].AddRequiredColumns(dataSources, parameterTypes, sourceRequiredColumns);
             }
         }
 
-        public override int EstimateRowsOut(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, ITableSizeCache tableSize)
+        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            return Sources.Sum(s => s.EstimateRowsOut(metadata, parameterTypes, tableSize));
+            return Sources.Sum(s => s.EstimateRowsOut(dataSources, options, parameterTypes));
         }
     }
 

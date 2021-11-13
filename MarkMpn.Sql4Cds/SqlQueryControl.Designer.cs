@@ -41,8 +41,6 @@
             this.gridContextMenuStrip = new System.Windows.Forms.ContextMenuStrip(this.components);
             this.copyToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.copyWithHeadersToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.openRecordToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.createSELECTQueryToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.statusStrip = new System.Windows.Forms.StatusStrip();
             this.toolStripStatusLabel = new System.Windows.Forms.ToolStripStatusLabel();
             this.hostLabel = new System.Windows.Forms.ToolStripStatusLabel();
@@ -166,12 +164,9 @@
             // 
             this.gridContextMenuStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.copyToolStripMenuItem,
-            this.copyWithHeadersToolStripMenuItem,
-            this.openRecordToolStripMenuItem,
-            this.createSELECTQueryToolStripMenuItem});
+            this.copyWithHeadersToolStripMenuItem});
             this.gridContextMenuStrip.Name = "gridContextMenuStrip";
             this.gridContextMenuStrip.Size = new System.Drawing.Size(183, 92);
-            this.gridContextMenuStrip.Opening += new System.ComponentModel.CancelEventHandler(this.gridContextMenuStrip_Opening);
             // 
             // copyToolStripMenuItem
             // 
@@ -186,20 +181,6 @@
             this.copyWithHeadersToolStripMenuItem.Size = new System.Drawing.Size(182, 22);
             this.copyWithHeadersToolStripMenuItem.Text = "Copy with Headers";
             this.copyWithHeadersToolStripMenuItem.Click += new System.EventHandler(this.copyWithHeadersToolStripMenuItem_Click);
-            // 
-            // openRecordToolStripMenuItem
-            // 
-            this.openRecordToolStripMenuItem.Name = "openRecordToolStripMenuItem";
-            this.openRecordToolStripMenuItem.Size = new System.Drawing.Size(182, 22);
-            this.openRecordToolStripMenuItem.Text = "Open Record";
-            this.openRecordToolStripMenuItem.Click += new System.EventHandler(this.openRecordToolStripMenuItem_Click);
-            // 
-            // createSELECTQueryToolStripMenuItem
-            // 
-            this.createSELECTQueryToolStripMenuItem.Name = "createSELECTQueryToolStripMenuItem";
-            this.createSELECTQueryToolStripMenuItem.Size = new System.Drawing.Size(182, 22);
-            this.createSELECTQueryToolStripMenuItem.Text = "Create SELECT query";
-            this.createSELECTQueryToolStripMenuItem.Click += new System.EventHandler(this.createSELECTQueryToolStripMenuItem_Click);
             // 
             // statusStrip
             // 
@@ -327,8 +308,6 @@
         private System.Windows.Forms.ContextMenuStrip gridContextMenuStrip;
         private System.Windows.Forms.ToolStripMenuItem copyToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem copyWithHeadersToolStripMenuItem;
-        private System.Windows.Forms.ToolStripMenuItem openRecordToolStripMenuItem;
-        private System.Windows.Forms.ToolStripMenuItem createSELECTQueryToolStripMenuItem;
         private System.Windows.Forms.StatusStrip statusStrip;
         private System.Windows.Forms.ToolStripStatusLabel toolStripStatusLabel;
         private System.Windows.Forms.ToolStripStatusLabel hostLabel;

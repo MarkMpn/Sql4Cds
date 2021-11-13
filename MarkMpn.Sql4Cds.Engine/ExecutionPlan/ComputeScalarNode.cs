@@ -28,26 +28,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public IDataExecutionPlanNode Source { get; set; }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            var schema = Source.GetSchema(metadata, parameterTypes);
+            var schema = Source.GetSchema(dataSources, parameterTypes);
             var columns = Columns
                 .Select(kvp => new { Name = kvp.Key, Expression = kvp.Value.Compile(schema, parameterTypes) })
                 .ToList();
 
-            foreach (var entity in Source.Execute(org, metadata, options, parameterTypes, parameterValues))
+            foreach (var entity in Source.Execute(dataSources, options, parameterTypes, parameterValues))
             {
                 foreach (var col in columns)
-                    entity[col.Name] = col.Expression(entity, parameterValues);
+                    entity[col.Name] = col.Expression(entity, parameterValues, options);
 
                 yield return entity;
             }
         }
 
-        public override NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
+        public override NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
         {
             // Copy the source schema and add in the additional computed columns
-            var sourceSchema = Source.GetSchema(metadata, parameterTypes);
+            var sourceSchema = Source.GetSchema(dataSources, parameterTypes);
             var schema = new NodeSchema { PrimaryKey = sourceSchema.PrimaryKey };
 
             foreach (var col in sourceSchema.Schema)
@@ -67,9 +67,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            Source = Source.FoldQuery(metadata, options, parameterTypes);
+            Source = Source.FoldQuery(dataSources, options, parameterTypes);
 
             // Combine multiple ComputeScalar nodes. Calculations in this node might be dependent on those in the previous node, so rewrite any references
             // to the earlier computed columns
@@ -92,9 +92,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return this;
         }
 
-        public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
         {
-            var schema = Source.GetSchema(metadata, parameterTypes);
+            var schema = Source.GetSchema(dataSources, parameterTypes);
 
             var calcSourceColumns = Columns.Values
                 .SelectMany(expr => expr.GetColumns());
@@ -108,12 +108,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     requiredColumns.Add(normalized);
             }
 
-            Source.AddRequiredColumns(metadata, parameterTypes, requiredColumns);
+            Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        public override int EstimateRowsOut(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, ITableSizeCache tableSize)
+        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            return Source.EstimateRowsOut(metadata, parameterTypes, tableSize);
+            return Source.EstimateRowsOut(dataSources, options, parameterTypes);
         }
     }
 }

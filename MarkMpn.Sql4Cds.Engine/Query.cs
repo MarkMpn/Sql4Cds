@@ -51,14 +51,14 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <remarks>
         /// After calling this method, the results can be retrieved from the <see cref="Result"/> property.
         /// </remarks>
-        public void Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options)
+        public void Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options)
         {
             try
             {
                 if (Node is IDataSetExecutionPlanNode dataSet)
-                    Result = DataTableToEntityCollection(dataSet.Execute(org, metadata, options, null, null));
+                    Result = DataTableToEntityCollection(dataSet.Execute(dataSources, options, null, null));
                 else if (Node is IDmlQueryExecutionPlanNode dml)
-                    Result = dml.Execute(org, metadata, options, null, null);
+                    Result = dml.Execute(dataSources, options, null, null);
                 else
                     throw new ApplicationException("Unexpected execution plan node type");
             }

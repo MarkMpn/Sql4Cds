@@ -1409,7 +1409,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                 {
                                     FirstExpression = field,
                                     ComparisonType = BooleanComparisonType.Equals,
-                                    SecondExpression = new StringLiteral { Value = ((WhoAmIResponse)org.Execute(new WhoAmIRequest())).UserId.ToString("D") }
+                                    SecondExpression = options.ConvertFetchXmlOperatorsTo == FetchXmlOperatorConversion.Literals ? (ScalarExpression) new StringLiteral { Value = ((WhoAmIResponse)org.Execute(new WhoAmIRequest())).UserId.ToString("D") } : new ParameterlessCall { ParameterlessCallType = ParameterlessCallType.CurrentUser }
                                 };
 
                             case @operator.nebusinessid:
@@ -1435,7 +1435,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                     {
                                         FirstExpression = field,
                                         ComparisonType = BooleanComparisonType.NotEqualToBrackets,
-                                        SecondExpression = new StringLiteral { Value = ((WhoAmIResponse)org.Execute(new WhoAmIRequest())).UserId.ToString("D") }
+                                        SecondExpression = options.ConvertFetchXmlOperatorsTo == FetchXmlOperatorConversion.Literals ? (ScalarExpression) new StringLiteral { Value = ((WhoAmIResponse)org.Execute(new WhoAmIRequest())).UserId.ToString("D") } : new ParameterlessCall { ParameterlessCallType = ParameterlessCallType.CurrentUser }
                                     },
                                     BinaryExpressionType = BooleanBinaryExpressionType.Or,
                                     SecondExpression = new BooleanIsNullExpression

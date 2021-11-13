@@ -38,10 +38,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public IDataExecutionPlanNode Source { get; set; }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            var source = Source.Execute(org, metadata, options, parameterTypes, parameterValues);
-            var schema = GetSchema(metadata, parameterTypes);
+            var source = Source.Execute(dataSources, options, parameterTypes, parameterValues);
+            var schema = GetSchema(dataSources, parameterTypes);
             var expressions = Sorts.Select(sort => sort.Expression.Compile(schema, parameterTypes)).ToList();
 
             if (PresortedCount == 0)
@@ -51,18 +51,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 IOrderedEnumerable<Entity> sortedSource;
 
                 if (Sorts[0].SortOrder == SortOrder.Descending)
-                    sortedSource = source.OrderByDescending(e => expressions[0](e, parameterValues), CaseInsensitiveObjectComparer.Instance);
+                    sortedSource = source.OrderByDescending(e => expressions[0](e, parameterValues, options), CaseInsensitiveObjectComparer.Instance);
                 else
-                    sortedSource = source.OrderBy(e => expressions[0](e, parameterValues), CaseInsensitiveObjectComparer.Instance);
+                    sortedSource = source.OrderBy(e => expressions[0](e, parameterValues, options), CaseInsensitiveObjectComparer.Instance);
 
                 for (var i = 1; i < Sorts.Count; i++)
                 {
                     var expr = expressions[i];
 
                     if (Sorts[i].SortOrder == SortOrder.Descending)
-                        sortedSource = sortedSource.ThenByDescending(e => expr(e, parameterValues), CaseInsensitiveObjectComparer.Instance);
+                        sortedSource = sortedSource.ThenByDescending(e => expr(e, parameterValues, options), CaseInsensitiveObjectComparer.Instance);
                     else
-                        sortedSource = sortedSource.ThenBy(e => expr(e, parameterValues), CaseInsensitiveObjectComparer.Instance);
+                        sortedSource = sortedSource.ThenBy(e => expr(e, parameterValues, options), CaseInsensitiveObjectComparer.Instance);
                 }
 
                 foreach (var entity in sortedSource)
@@ -82,7 +82,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     // Get the other values to sort on from this next record
                     var nextSortedValues = expressions
                         .Take(PresortedCount)
-                        .Select(expr => expr(next, parameterValues))
+                        .Select(expr => expr(next, parameterValues, options))
                         .ToList();
 
                     // If we've already got a subset to work on, check if this fits in the same subset
@@ -98,7 +98,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             {
                                 // A value is different, so this record doesn't fit in the same subset. Sort the subset
                                 // by the remaining sorts and return the values from it
-                                SortSubset(subset, schema, parameterTypes, parameterValues, expressions);
+                                SortSubset(subset, schema, parameterTypes, parameterValues, expressions, options);
 
                                 foreach (var entity in subset)
                                     yield return entity;
@@ -118,14 +118,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 // Sort and return the final subset
-                SortSubset(subset, schema, parameterTypes, parameterValues, expressions);
+                SortSubset(subset, schema, parameterTypes, parameterValues, expressions, options);
 
                 foreach (var entity in subset)
                     yield return entity;
             }
         }
 
-        private void SortSubset(List<Entity> subset, NodeSchema schema, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues, List<Func<Entity, IDictionary<string, object>, object>> expressions)
+        private void SortSubset(List<Entity> subset, NodeSchema schema, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues, List<Func<Entity, IDictionary<string, object>, IQueryExecutionOptions, object>> expressions, IQueryExecutionOptions options)
         {
             // Simple case if there's no need to do any further sorting
             if (subset.Count <= 1)
@@ -133,7 +133,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Precalculate the sort keys for the remaining sorts
             var sortKeys = subset
-                .ToDictionary(entity => entity, entity => expressions.Skip(PresortedCount).Select(expr => expr(entity, parameterValues)).ToList());
+                .ToDictionary(entity => entity, entity => expressions.Skip(PresortedCount).Select(expr => expr(entity, parameterValues, options)).ToList());
 
             // Sort the list according to these sort keys
             subset.Sort((x, y) =>
@@ -163,14 +163,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        public override NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
+        public override NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
         {
-            return Source.GetSchema(metadata, parameterTypes);
+            return Source.GetSchema(dataSources, parameterTypes);
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            Source = Source.FoldQuery(metadata, options, parameterTypes);
+            Source = Source.FoldQuery(dataSources, options, parameterTypes);
 
             // These sorts will override any previous sort
             if (Source is SortNode prevSort)
@@ -178,10 +178,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             Source.Parent = this;
 
-            return FoldSorts(metadata, options, parameterTypes);
+            return FoldSorts(dataSources, options, parameterTypes);
         }
 
-        private IDataExecutionPlanNode FoldSorts(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        private IDataExecutionPlanNode FoldSorts(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             if (Source is TryCatchNode tryCatch && tryCatch.TrySource is FetchXmlScan tryFetch && tryFetch.FetchXml.aggregate)
             {
@@ -190,7 +190,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var fetchAggregateSort = new SortNode { Source = tryFetch };
                 fetchAggregateSort.Sorts.AddRange(Sorts);
 
-                var sortedFetchResult = fetchAggregateSort.FoldSorts(metadata, options, parameterTypes);
+                var sortedFetchResult = fetchAggregateSort.FoldSorts(dataSources, options, parameterTypes);
 
                 // If we managed to fold any of the sorts in to the FetchXML, do the same for the non-FetchXML version and remove this node
                 if (sortedFetchResult == tryFetch || (sortedFetchResult == fetchAggregateSort && fetchAggregateSort.PresortedCount > 0))
@@ -201,7 +201,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var nonFetchAggregateSort = new SortNode { Source = tryCatch.CatchSource };
                     nonFetchAggregateSort.Sorts.AddRange(Sorts);
 
-                    var sortedNonFetchResult = nonFetchAggregateSort.FoldSorts(metadata, options, parameterTypes);
+                    var sortedNonFetchResult = nonFetchAggregateSort.FoldSorts(dataSources, options, parameterTypes);
                     tryCatch.CatchSource = sortedNonFetchResult;
                     sortedNonFetchResult.Parent = tryCatch;
                     return tryCatch;
@@ -216,6 +216,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (fetchXml != null)
             {
+                if (!dataSources.TryGetValue(fetchXml.DataSource, out var dataSource))
+                    throw new QueryExecutionException("Missing datasource " + fetchXml.DataSource);
+
                 // Remove any existing sorts
                 if (fetchXml.Entity.Items != null)
                 {
@@ -225,7 +228,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         linkEntity.Items = linkEntity.Items.Where(i => !(i is FetchOrderType)).ToArray();
                 }
 
-                var schema = Source.GetSchema(metadata, parameterTypes);
+                var schema = Source.GetSchema(dataSources, parameterTypes);
                 var entity = fetchXml.Entity;
                 var items = entity.Items;
 
@@ -267,7 +270,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                         if (fetchSort.attribute != null)
                         {
-                            var meta = metadata[entity.name];
+                            var meta = dataSource.Metadata[entity.name];
                             var attribute = meta.Attributes.SingleOrDefault(a => a.LogicalName == fetchSort.attribute && a.AttributeOf == null);
 
                             // Sorting on a lookup Guid column actually sorts by the associated name field, which isn't what we want
@@ -298,7 +301,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                         if (fetchSort.attribute != null)
                         {
-                            var meta = metadata[linkEntity.name];
+                            var meta = dataSource.Metadata[linkEntity.name];
                             var attribute = meta.Attributes.SingleOrDefault(a => a.LogicalName == fetchSort.attribute && a.AttributeOf == null);
 
                             // Sorting on a lookup Guid column actually sorts by the associated name field, which isn't what we want
@@ -331,7 +334,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                             if (top != null)
                             {
-                                if (!top.Top.IsConstantValueExpression(null, out var topLiteral))
+                                if (!top.Top.IsConstantValueExpression(null, options, out var topLiteral))
                                     return this;
 
                                 if (Int32.Parse(topLiteral.Value) > 50000)
@@ -339,8 +342,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             }
                             else if (offset != null)
                             {
-                                if (!offset.Offset.IsConstantValueExpression(null, out var offsetLiteral) ||
-                                    !offset.Fetch.IsConstantValueExpression(null, out var fetchLiteral))
+                                if (!offset.Offset.IsConstantValueExpression(null, options, out var offsetLiteral) ||
+                                    !offset.Fetch.IsConstantValueExpression(null, options, out var fetchLiteral))
                                     return this;
 
                                 if (Int32.Parse(offsetLiteral.Value) + Int32.Parse(fetchLiteral.Value) > 50000)
@@ -385,7 +388,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return null;
         }
 
-        public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
         {
             var sortColumns = Sorts.SelectMany(s => s.Expression.GetColumns()).Distinct();
 
@@ -395,12 +398,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     requiredColumns.Add(col);
             }
 
-            Source.AddRequiredColumns(metadata, parameterTypes, requiredColumns);
+            Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        public override int EstimateRowsOut(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, ITableSizeCache tableSize)
+        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            return Source.EstimateRowsOut(metadata, parameterTypes, tableSize);
+            return Source.EstimateRowsOut(dataSources, options, parameterTypes);
         }
     }
 }

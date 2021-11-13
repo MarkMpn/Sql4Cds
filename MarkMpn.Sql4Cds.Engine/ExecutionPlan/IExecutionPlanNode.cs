@@ -36,7 +36,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="metadata"></param>
         /// <param name="parameterTypes"></param>
         /// <param name="requiredColumns"></param>
-        void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns);
+        void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns);
 
         /// <summary>
         /// Returns the number of times this node has been executed

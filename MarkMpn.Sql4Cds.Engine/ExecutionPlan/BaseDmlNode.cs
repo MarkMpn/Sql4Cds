@@ -79,6 +79,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public IExecutionPlanNode Source { get; set; }
 
         /// <summary>
+        /// The instance that this node will be executed against
+        /// </summary>
+        public string DataSource { get; set; }
+
+        /// <summary>
         /// Changes system settings to optimise for parallel connections
         /// </summary>
         /// <returns>An object to dispose of to reset the settings to their original values</returns>
@@ -93,7 +98,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
         /// <param name="parameterValues">A mapping of parameter names to their current values</param>
         /// <returns>A log message to display</returns>
-        public abstract string Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues);
+        public abstract string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues);
 
         /// <summary>
         /// Attempts to fold this node into its source to simplify the query
@@ -102,12 +107,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="options"><see cref="IQueryExecutionOptions"/> to indicate how the query can be executed</param>
         /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
         /// <returns>The node that should be used in place of this node</returns>
-        public virtual IRootExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public virtual IRootExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             if (Source is IDataExecutionPlanNode dataNode)
-                Source = dataNode.FoldQuery(metadata, options, parameterTypes);
+                Source = dataNode.FoldQuery(dataSources, options, parameterTypes);
             else if (Source is IDataSetExecutionPlanNode dataSetNode)
-                Source = dataSetNode.FoldQuery(metadata, options, parameterTypes);
+                Source = dataSetNode.FoldQuery(dataSources, options, parameterTypes);
 
             return this;
         }
@@ -127,18 +132,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="parameterValues">A mapping of parameter names to their current values</param>
         /// <param name="schema">The schema of the data source</param>
         /// <returns>The entities to perform the DML operation on</returns>
-        protected List<Entity> GetDmlSourceEntities(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues, out NodeSchema schema)
+        protected List<Entity> GetDmlSourceEntities(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues, out NodeSchema schema)
         {
             List<Entity> entities;
 
             if (Source is IDataExecutionPlanNode dataSource)
             {
-                schema = dataSource.GetSchema(metadata, parameterTypes);
-                entities = dataSource.Execute(org, metadata, options, parameterTypes, parameterValues).ToList();
+                schema = dataSource.GetSchema(dataSources, parameterTypes);
+                entities = dataSource.Execute(dataSources, options, parameterTypes, parameterValues).ToList();
             }
             else if (Source is IDataSetExecutionPlanNode dataSetSource)
             {
-                var dataTable = dataSetSource.Execute(org, metadata, options, parameterTypes, parameterValues);
+                var dataTable = dataSetSource.Execute(dataSources, options, parameterTypes, parameterValues);
 
                 // Store the values under the column index as well as name for compatibility with INSERT ... SELECT ...
                 schema = new NodeSchema();

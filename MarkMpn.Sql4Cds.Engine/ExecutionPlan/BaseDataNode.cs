@@ -35,7 +35,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
         /// <param name="parameterValues">A mapping of parameter names to their current values</param>
         /// <returns>A stream of <see cref="Entity"/> records</returns>
-        public IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        public IEnumerable<Entity> Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             // Track execution times roughly using Environment.TickCount. Stopwatch provides more accurate results
             // but gives a large performance penalty.
@@ -47,7 +47,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     _executionCount++;
 
-                    enumerator = ExecuteInternal(org, metadata, options, parameterTypes, parameterValues).GetEnumerator();
+                    enumerator = ExecuteInternal(dataSources, options, parameterTypes, parameterValues).GetEnumerator();
                 }
                 catch (QueryExecutionException ex)
                 {
@@ -100,7 +100,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
         /// <param name="tableSize">A cache of the number of records in each table</param>
         /// <returns>The number of rows the node is estimated to return</returns>
-        public abstract int EstimateRowsOut(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, ITableSizeCache tableSize);
+        public abstract int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes);
 
         /// <summary>
         /// Returns the number of times the node has been executed
@@ -128,7 +128,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
         /// <param name="parameterValues">A mapping of parameter names to their current values</param>
         /// <returns>A stream of <see cref="Entity"/> records</returns>
-        protected abstract IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues);
+        protected abstract IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues);
 
         /// <summary>
         /// Gets the details of columns produced by the node
@@ -136,7 +136,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="metadata">The <see cref="IAttributeMetadataCache"/> to use to get metadata</param>
         /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
         /// <returns>Details of the columns produced by the node</returns>
-        public abstract NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes);
+        public abstract NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes);
 
         /// <summary>
         /// Attempts to fold this node into its source to simplify the query
@@ -145,7 +145,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="options"><see cref="IQueryExpressionVisitor"/> to indicate how the query can be executed</param>
         /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
         /// <returns>The node that should be used in place of this node</returns>
-        public abstract IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes);
+        public abstract IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes);
 
         /// <summary>
         /// Translates filter criteria from ScriptDom to FetchXML
@@ -227,6 +227,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var func = comparison.SecondExpression as FunctionCall;
                 var field2 = comparison.SecondExpression as ColumnReferenceExpression;
                 var variable = comparison.SecondExpression as VariableReference;
+                var parameterless = comparison.SecondExpression as ParameterlessCall;
                 var expr = comparison.SecondExpression;
                 var type = comparison.ComparisonType;
 
@@ -239,12 +240,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 // If we couldn't find the pattern `column = value` or `column = func()`, try looking in the opposite order
-                if (field == null && literal == null && func == null && variable == null)
+                if (field == null && literal == null && func == null && variable == null && parameterless == null)
                 {
                     field = comparison.SecondExpression as ColumnReferenceExpression;
                     literal = comparison.FirstExpression as Literal;
                     func = comparison.FirstExpression as FunctionCall;
                     variable = comparison.FirstExpression as VariableReference;
+                    parameterless = comparison.FirstExpression as ParameterlessCall;
                     expr = comparison.FirstExpression;
                     field2 = null;
 
@@ -270,7 +272,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 // If we still couldn't find the column name and value, this isn't a pattern we can support in FetchXML
-                if (field == null || (literal == null && func == null && variable == null && (field2 == null || !options.ColumnComparisonAvailable) && !expr.IsConstantValueExpression(schema, out literal)))
+                if (field == null || (literal == null && func == null && variable == null && parameterless == null && (field2 == null || !options.ColumnComparisonAvailable) && !expr.IsConstantValueExpression(schema, options, out literal)))
                     return false;
 
                 // Select the correct FetchXML operator
@@ -371,10 +373,29 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
                 else if (func != null)
                 {
-                    if (func.IsConstantValueExpression(schema, out literal))
+                    if (func.IsConstantValueExpression(schema, options, out literal))
                         values = new[] { literal };
                     else
                         throw new NotSupportedQueryFragmentException("Unsupported FetchXML function", func);
+                }
+                else if (parameterless != null)
+                {
+                    if (parameterless.IsConstantValueExpression(schema, options, out literal))
+                    {
+                        values = new[] { literal };
+                    }
+                    else if (parameterless.ParameterlessCallType != ParameterlessCallType.CurrentTimestamp && op == @operator.eq)
+                    {
+                        op = @operator.equserid;
+                    }
+                    else if (parameterless.ParameterlessCallType != ParameterlessCallType.CurrentTimestamp && op == @operator.ne)
+                    {
+                        op = @operator.neuserid;
+                    }
+                    else
+                    {
+                        return false;
+                    }
                 }
 
                 // Find the entity that the condition applies to, which may be different to the entity that the condition FetchXML element will be 

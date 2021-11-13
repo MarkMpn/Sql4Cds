@@ -56,7 +56,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public IDataExecutionPlanNode Source { get; set; }
 
-        public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
         {
             var mappings = ColumnSet.Where(col => !col.AllColumns).ToDictionary(col => col.OutputColumn, col => col.SourceColumn);
             ColumnSet.Clear();
@@ -81,16 +81,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
-            Source.AddRequiredColumns(metadata, parameterTypes, requiredColumns);
+            Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            Source = Source.FoldQuery(metadata, options, parameterTypes);
+            Source = Source.FoldQuery(dataSources, options, parameterTypes);
             Source.Parent = this;
 
-            SelectNode.FoldFetchXmlColumns(Source, ColumnSet, metadata, parameterTypes);
-            SelectNode.ExpandWildcardColumns(Source, ColumnSet, metadata, parameterTypes);
+            SelectNode.FoldFetchXmlColumns(Source, ColumnSet, dataSources, parameterTypes);
+            SelectNode.ExpandWildcardColumns(Source, ColumnSet, dataSources, parameterTypes);
 
             if (Source is FetchXmlScan fetchXml)
             {
@@ -105,10 +105,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return this;
         }
 
-        public override NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
+        public override NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
         {
             // Map the base names to the alias names
-            var sourceSchema = Source.GetSchema(metadata, parameterTypes);
+            var sourceSchema = Source.GetSchema(dataSources, parameterTypes);
             var schema = new NodeSchema();
 
             foreach (var col in ColumnSet)
@@ -155,9 +155,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             aliases.Add(mapped);
         }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            foreach (var entity in Source.Execute(org, metadata, options, parameterTypes, parameterValues))
+            foreach (var entity in Source.Execute(dataSources, options, parameterTypes, parameterValues))
             {
                 foreach (var col in ColumnSet)
                 {
@@ -174,9 +174,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return "Subquery Alias";
         }
 
-        public override int EstimateRowsOut(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, ITableSizeCache tableSize)
+        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            return Source.EstimateRowsOut(metadata, parameterTypes, tableSize);
+            return Source.EstimateRowsOut(dataSources, options, parameterTypes);
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()

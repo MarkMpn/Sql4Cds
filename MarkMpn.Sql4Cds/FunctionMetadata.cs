@@ -15,6 +15,11 @@ namespace MarkMpn.Sql4Cds
         {
         }
 
+        [AttributeUsage(AttributeTargets.Method)]
+        public class ParameterlessCallAttribute : Attribute
+        {
+        }
+
         public abstract class SqlFunctions
         {
             [Aggregate]
@@ -79,6 +84,10 @@ namespace MarkMpn.Sql4Cds
             [Description("Gets the current date & time")]
             public abstract DateTime getdate();
 
+            [ParameterlessCall]
+            [Description("Gets the current date & time")]
+            public abstract DateTime current_timestamp();
+
             [Description("Gets the current date & time")]
             public abstract DateTime sysdatetime();
 
@@ -93,6 +102,21 @@ namespace MarkMpn.Sql4Cds
 
             [Description("Extracts the requested part of a date value")]
             public abstract int datepart(string datepart, DateTime date);
+
+            [Description("Returns the unique identifier of the current user")]
+            public abstract Guid user_name();
+
+            [ParameterlessCall]
+            [Description("Returns the unique identifier of the current user")]
+            public abstract Guid current_user();
+
+            [ParameterlessCall]
+            [Description("Returns the unique identifier of the current user")]
+            public abstract Guid session_user();
+
+            [ParameterlessCall]
+            [Description("Returns the unique identifier of the current user")]
+            public abstract Guid system_user();
         }
     }
 }

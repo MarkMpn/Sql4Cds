@@ -57,6 +57,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AttributeMetadataCache.cs" />
+    <Compile Include="DataSource.cs" />
     <Compile Include="DisconnectedException.cs" />
     <Compile Include="ExecutionPlanBuilder.cs" />
     <Compile Include="ExecutionPlanOptimizer.cs" />
@@ -130,6 +131,7 @@
     <Compile Include="Visitors\ExistsSubqueryVisitor.cs" />
     <Compile Include="Visitors\InSubqueryVisitor.cs" />
     <Compile Include="Visitors\BooleanRewriteVisitor.cs" />
+    <Compile Include="Visitors\ParameterlessCollectingVisitor.cs" />
     <Compile Include="Visitors\VariableCollectingVisitor.cs" />
     <Compile Include="Visitors\ColumnCollectingVisitor.cs" />
     <Compile Include="Visitors\GroupValidationVisitor.cs" />
