@@ -878,7 +878,7 @@ namespace MarkMpn.Sql4Cds
                         }
                         else if (query is IDmlQueryExecutionPlanNode dmlQuery)
                         {
-                            var result = dmlQuery.Execute(DataSources.Cast<Engine.DataSource>().ToDictionary(ds => ds.Name, StringComparer.OrdinalIgnoreCase), options, null, null);
+                            var result = dmlQuery.Execute(DataSources.Values.Cast<Engine.DataSource>().ToDictionary(ds => ds.Name, StringComparer.OrdinalIgnoreCase), options, null, null);
 
                             Execute(() => ShowResult(query, args, null, result, null));
                         }
