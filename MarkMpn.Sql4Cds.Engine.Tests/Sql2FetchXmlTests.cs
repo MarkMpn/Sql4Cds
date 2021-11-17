@@ -2981,6 +2981,52 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(new DateTime(2000, 1, 1), result.Entities[0].GetAttributeValue<DateTime>("converted"));
         }
 
+        [TestMethod]
+        public void GroupByPrimaryFunction()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT left(firstname, 1) AS initial, count(*) AS count FROM contact GROUP BY left(firstname, 1) ORDER BY 2 DESC";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            var contact1 = Guid.NewGuid();
+            var contact2 = Guid.NewGuid();
+            var contact3 = Guid.NewGuid();
+
+            context.Data["contact"] = new Dictionary<Guid, Entity>
+            {
+                [contact1] = new Entity("contact", contact1)
+                {
+                    ["firstname"] = "Mark",
+                    ["contactid"] = contact1
+                },
+                [contact2] = new Entity("contact", contact2)
+                {
+                    ["firstname"] = "Matt",
+                    ["contactid"] = contact2
+                },
+                [contact3] = new Entity("contact", contact3)
+                {
+                    ["firstname"] = "Rich",
+                    ["contactid"] = contact3
+                }
+            };
+
+            var select = queries[0];
+            select.Execute(GetDataSources(context), this);
+            var result = (EntityCollection)select.Result;
+            Assert.AreEqual("M", result.Entities[0].GetAttributeValue<string>("initial"));
+            Assert.AreEqual(2, result.Entities[0].GetAttributeValue<int>("count"));
+            Assert.AreEqual("R", result.Entities[1].GetAttributeValue<string>("initial"));
+            Assert.AreEqual(1, result.Entities[1].GetAttributeValue<int>("count"));
+        }
+
         private void AssertFetchXml(Query[] queries, string fetchXml)
         {
             Assert.AreEqual(1, queries.Length);
