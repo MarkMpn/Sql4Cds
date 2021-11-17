@@ -402,9 +402,22 @@ namespace MarkMpn.Sql4Cds
 
                             foreach (var table in tables)
                             {
-                                if (TryParseTableName(table.Value, out var instanceName, out _, out var tableName) && _dataSources.TryGetValue(instanceName, out var instance))
+                                if (TryParseTableName(table.Value, out var instanceName, out var schemaName, out var tableName) && _dataSources.TryGetValue(instanceName, out var instance))
                                 {
-                                    var entity = instance.Entities.SingleOrDefault(e => e.LogicalName == tableName && e.DataProviderId != MetaMetadataCache.ProviderId || ("metadata." + e.LogicalName) == table.Value && e.DataProviderId == MetaMetadataCache.ProviderId);
+                                    var entity = instance.Entities.SingleOrDefault(e => 
+                                        e.LogicalName == tableName && 
+                                        (
+                                            (
+                                                (schemaName == "dbo" || schemaName == "") && 
+                                                e.DataProviderId != MetaMetadataCache.ProviderId
+                                            )
+                                            || 
+                                            (
+                                                schemaName == "metadata" && 
+                                                e.DataProviderId == MetaMetadataCache.ProviderId
+                                            )
+                                        )
+                                    );
 
                                     if (entity != null)
                                         items.Add(new EntityAutocompleteItem(entity, table.Key, instance.Metadata, currentLength));
