@@ -951,6 +951,14 @@ namespace MarkMpn.Sql4Cds.Engine
             if (query is BinaryQueryExpression binary)
                 return ConvertBinaryQuery(binary, hints, outerSchema, outerReferences, parameterTypes);
 
+            if (query is QueryParenthesisExpression paren)
+            {
+                paren.QueryExpression.ForClause = paren.ForClause;
+                paren.QueryExpression.OffsetClause = paren.OffsetClause;
+                paren.QueryExpression.OrderByClause = paren.OrderByClause;
+                return ConvertSelectStatement(paren.QueryExpression, hints, outerSchema, outerReferences, parameterTypes);
+            }
+
             throw new NotSupportedQueryFragmentException("Unhandled SELECT query expression", query);
         }
 
