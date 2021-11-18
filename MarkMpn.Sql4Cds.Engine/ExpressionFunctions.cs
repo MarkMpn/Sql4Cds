@@ -389,6 +389,22 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             return options.UserId;
         }
+
+        /// <summary>
+        /// The value of <paramref name="check"/> is returned if it is not NULL; otherwise, <paramref name="replacement"/> is returned
+        /// </summary>
+        /// <typeparam name="T">The type of values being compared</typeparam>
+        /// <param name="check">The expression to be checked for NULL</param>
+        /// <param name="replacement">The value to be returned if <paramref name="check"/> is NULL</param>
+        /// <returns></returns>
+        public static T IsNull<T>(T check, T replacement)
+            where T:INullable
+        {
+            if (!check.IsNull)
+                return check;
+
+            return replacement;
+        }
     }
 
     /// <summary>

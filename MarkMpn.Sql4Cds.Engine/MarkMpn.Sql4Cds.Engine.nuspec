@@ -14,6 +14,8 @@
     <releaseNotes>Allow queries across multiple instances
 Support CURRENT_TIMESTAMP and CURRENT_USER syntax
 Support primary functions (LEFT, COALESCE etc.) in GROUP BY clause
+Support ISNULL function
+Improved support for virtual table queries
     </releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>

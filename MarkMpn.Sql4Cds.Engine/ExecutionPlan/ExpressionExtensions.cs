@@ -463,8 +463,29 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (correctParameterCount.Count > 1)
                 throw new NotSupportedQueryFragmentException("Ambiguous method", func);
 
-            // Check parameter types can be converted
+            var method = correctParameterCount[0].Method;
             var parameters = correctParameterCount[0].Parameters;
+
+            if (correctParameterCount[0].Method.IsGenericMethodDefinition)
+            {
+                // Create the generic method based on the type of the generic arguments
+                var genericArguments = correctParameterCount[0].Method.GetGenericArguments();
+                var genericArgumentValues = new Type[genericArguments.Length];
+
+                foreach (var param in correctParameterCount[0].Parameters)
+                {
+                    for (var i = 0; i < genericArguments.Length; i++)
+                    {
+                        if (param.ParameterType == genericArguments[i] && genericArgumentValues[i] == null)
+                            genericArgumentValues[i] = paramTypes[i];
+                    }
+                }
+
+                method = method.MakeGenericMethod(genericArgumentValues);
+                parameters = method.GetParameters();
+            }
+
+            // Check parameter types can be converted
             var paramOffset = targetType == typeof(FetchXmlConditionMethods) ? 1 : 0;
 
             for (var i = 0; i < parameters.Length; i++)
@@ -495,7 +516,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     throw new NotSupportedQueryFragmentException($"Cannot convert {paramTypes[i]} to {paramType}", i < paramOffset ? func : func.Parameters[i - paramOffset]);
             }
 
-            return correctParameterCount[0].Method;
+            return method;
         }
 
         private static Expression ToExpression(this FunctionCall func, NodeSchema schema, NodeSchema nonAggregateSchema, IDictionary<string, Type> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)

@@ -117,6 +117,9 @@ namespace MarkMpn.Sql4Cds
             [ParameterlessCall]
             [Description("Returns the unique identifier of the current user")]
             public abstract Guid system_user();
+
+            [Description("Replaces NULL with the specified replacement value")]
+            public abstract object isnull(object check, object replacement);
         }
     }
 }
