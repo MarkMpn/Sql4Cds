@@ -290,7 +290,7 @@ namespace MarkMpn.Sql4Cds
 
                         if (prevWord.Equals("on", StringComparison.OrdinalIgnoreCase) && tables.TryGetValue(prevPrevWord, out var joinTableName))
                         {
-                            if (TryParseTableName(joinTableName, out var instanceName, out _, out joinTableName) && _dataSources.TryGetValue(instanceName, out var instance) && instance.Metadata.TryGetMinimalData(joinTableName, out var newTableMetadata))
+                            if (TryParseTableName(joinTableName, out var instanceName, out var schemaName, out joinTableName) && _dataSources.TryGetValue(instanceName, out var instance) && instance.Metadata.TryGetMinimalData((schemaName == "metadata" ? "metadata." : "") + joinTableName, out var newTableMetadata))
                             {
                                 // Suggest known relationships from the other entities in the FROM clause, followed by the normal list of attributes
                                 additionalSuggestions = new List<SqlAutocompleteItem>();
