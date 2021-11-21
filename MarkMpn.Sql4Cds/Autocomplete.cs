@@ -271,7 +271,7 @@ namespace MarkMpn.Sql4Cds
 
                             foreach (var table in tables)
                             {
-                                if (TryParseTableName(table.Value, out var instanceName, out _, out var tableName) && _dataSources.TryGetValue(instanceName, out var instance) && instance.Metadata.TryGetMinimalData(tableName, out var metadata))
+                                if (TryParseTableName(table.Value, out var instanceName, out var schemaName, out var tableName) && _dataSources.TryGetValue(instanceName, out var instance) && instance.Metadata.TryGetMinimalData((schemaName == "metadata" ? "metadata." : "") + tableName, out var metadata))
                                 {
                                     if (metadata.OneToManyRelationships != null)
                                         joinSuggestions.AddRange(metadata.OneToManyRelationships.Select(rel => new JoinAutocompleteItem(rel, $"{rel.ReferencingEntity}{GetUniqueTableAlias(rel.ReferencingEntity, tables)} ON {table.Key}.{rel.ReferencedAttribute} = {GetUniqueTableName(rel.ReferencingEntity, tables)}.{rel.ReferencingAttribute}", true, instance.Entities, instance.Metadata, currentLength)));
@@ -359,7 +359,7 @@ namespace MarkMpn.Sql4Cds
 
                             if (tables.TryGetValue(alias, out var tableName))
                             {
-                                if (TryParseTableName(tableName, out var instanceName, out _, out tableName) && _dataSources.TryGetValue(instanceName, out var instance) && instance.Metadata.TryGetMinimalData(tableName, out var metadata))
+                                if (TryParseTableName(tableName, out var instanceName, out var schemaName, out tableName) && _dataSources.TryGetValue(instanceName, out var instance) && instance.Metadata.TryGetMinimalData((schemaName == "metadata" ? "metadata." : "") + tableName, out var metadata))
                                     return FilterList(metadata.Attributes.Where(a => a.IsValidForRead != false && a.AttributeOf == null).SelectMany(a => AttributeAutocompleteItem.CreateList(a, currentLength, false)).OrderBy(a => a), currentWord);
                             }
                         }
@@ -422,7 +422,7 @@ namespace MarkMpn.Sql4Cds
                                     if (entity != null)
                                         items.Add(new EntityAutocompleteItem(entity, table.Key, instance.Metadata, currentLength));
 
-                                    if (instance.Metadata.TryGetMinimalData(tableName, out var metadata))
+                                    if (instance.Metadata.TryGetMinimalData((schemaName == "metadata" ? "metadata." : "") + tableName, out var metadata))
                                         attributes.AddRange(metadata.Attributes);
                                 }
                             }
@@ -816,7 +816,7 @@ namespace MarkMpn.Sql4Cds
         {
             var alias = GetUniqueTableName(name, tables);
 
-            if (name == alias)
+            if (name.Split('.').Last() == alias)
                 return null;
 
             return " AS " + alias;
@@ -824,6 +824,8 @@ namespace MarkMpn.Sql4Cds
 
         private string GetUniqueTableName(string name, IDictionary<string,string> tables)
         {
+            name = name.Split('.').Last();
+
             if (!tables.ContainsKey(name))
                 return name;
 
@@ -1183,7 +1185,9 @@ namespace MarkMpn.Sql4Cds
 
             public override string GetTextForReplace()
             {
-                _metadata.TryGetMinimalData(_rhs.LogicalName, out _);
+                if (_rhs != null)
+                    _metadata.TryGetMinimalData(_rhs.LogicalName, out _);
+
                 _metadata.TryGetMinimalData(_lhs, out _);
                 return base.GetTextForReplace();
             }

@@ -382,7 +382,7 @@ namespace MarkMpn.Sql4Cds
                         else
                             entities = entities.Concat(metaEntities).ToArray();
 
-                        return new AutocompleteDataSource { Name = ds.Name, Entities = entities, Metadata = ds.Metadata };
+                        return new AutocompleteDataSource { Name = ds.Name, Entities = entities, Metadata = new MetaMetadataCache(ds.Metadata) };
                     })
                     .ToDictionary(ds => ds.Name, StringComparer.OrdinalIgnoreCase);
 
@@ -504,7 +504,7 @@ namespace MarkMpn.Sql4Cds
                         else
                             entities = entities.Concat(metaEntities).ToArray();
 
-                        return new AutocompleteDataSource { Name = ds.Name, Entities = entities, Metadata = ds.Metadata };
+                        return new AutocompleteDataSource { Name = ds.Name, Entities = entities, Metadata = new MetaMetadataCache(ds.Metadata) };
                     })
                     .ToDictionary(ds => ds.Name, StringComparer.OrdinalIgnoreCase);
 
