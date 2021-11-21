@@ -858,7 +858,7 @@ namespace MarkMpn.Sql4Cds
                 return CompareText.CompareTo(other.CompareText);
             }
 
-            protected static string EscapeIdentifier(string identifier)
+            public static string EscapeIdentifier(string identifier)
             {
                 var id = new Microsoft.SqlServer.TransactSql.ScriptDom.Identifier { Value = identifier };
                 id.QuoteType = RequiresQuote(id.Value) ? Microsoft.SqlServer.TransactSql.ScriptDom.QuoteType.SquareBracket : Microsoft.SqlServer.TransactSql.ScriptDom.QuoteType.NotQuoted;

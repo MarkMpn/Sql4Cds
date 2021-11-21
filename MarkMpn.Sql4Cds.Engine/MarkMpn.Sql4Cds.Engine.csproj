@@ -118,6 +118,7 @@
     <Compile Include="MetadataQueryExtensions.cs" />
     <Compile Include="MetaMetadataCache.cs" />
     <Compile Include="PartialSuccessException.cs" />
+    <Compile Include="SqlEntityReference.cs" />
     <Compile Include="TableSizeCache.cs" />
     <Compile Include="TSqlEndpoint.cs" />
     <Compile Include="TSqlFragmentExtensions.cs" />

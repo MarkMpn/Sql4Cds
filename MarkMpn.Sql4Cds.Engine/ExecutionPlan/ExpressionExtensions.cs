@@ -246,7 +246,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var rhs = cmp.SecondExpression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
 
             if (!SqlTypeConverter.CanMakeConsistentTypes(lhs.Type, rhs.Type, out var type))
-                throw new NotSupportedQueryFragmentException($"No implicit conversion exists for types {lhs} and {rhs}", cmp);
+            {
+                // Special case - we can filter on entity reference types by string
+                if (lhs.Type == typeof(SqlEntityReference) && rhs.Type == typeof(SqlString) ||
+                    lhs.Type == typeof(SqlString) && rhs.Type == typeof(SqlEntityReference))
+                {
+                    type = typeof(SqlGuid);
+                }
+                else
+                {
+                    throw new NotSupportedQueryFragmentException($"No implicit conversion exists for types {lhs.Type.Name} and {rhs.Type.Name}", cmp);
+                }
+            }
 
             if (lhs.Type != type)
                 lhs = SqlTypeConverter.Convert(lhs, type);

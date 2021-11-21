@@ -115,8 +115,8 @@ namespace MarkMpn.Sql4Cds.Engine
             if (typeCode == AttributeTypeCode.PartyList)
                 return typeof(SqlString);
 
-            if (attrMetadata is LookupAttributeMetadata || typeCode == AttributeTypeCode.Lookup || typeCode == AttributeTypeCode.Customer || typeCode == AttributeTypeCode.Owner)
-                return typeof(SqlGuid);
+            if (attrMetadata is LookupAttributeMetadata || attrMetadata.IsPrimaryId == true || typeCode == AttributeTypeCode.Lookup || typeCode == AttributeTypeCode.Customer || typeCode == AttributeTypeCode.Owner)
+                return typeof(SqlEntityReference);
 
             if (attrMetadata is MemoAttributeMetadata || typeCode == AttributeTypeCode.Memo)
                 return typeof(SqlString);

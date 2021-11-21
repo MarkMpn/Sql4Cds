@@ -339,6 +339,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var attributes = metadata.Attributes.ToDictionary(attr => attr.LogicalName, StringComparer.OrdinalIgnoreCase);
             var attributeNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var virtualTypeAttributes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var schema = sourceColumns == null ? null : ((IDataExecutionPlanNode)source).GetSchema(DataSources, null);
 
             // Check all target columns are valid for create
             foreach (var col in targetColumns)
@@ -383,44 +384,6 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
             }
 
-            // If any of the insert columns are a polymorphic lookup field, make sure we've got a value for the associated type field too
-            foreach (var col in targetColumns)
-            {
-                var targetAttrName = col.GetColumnName();
-
-                if (attributeNames.Contains(targetAttrName))
-                {
-                    var targetLookupAttribute = attributes[targetAttrName] as LookupAttributeMetadata;
-
-                    if (targetLookupAttribute == null)
-                        continue;
-
-                    if (targetLookupAttribute.Targets.Length > 1 && !virtualTypeAttributes.Contains(targetAttrName + "type") && targetLookupAttribute.AttributeType != AttributeTypeCode.PartyList)
-                    {
-                        // Special case: not required for listmember.entityid
-                        if (metadata.LogicalName == "listmember" && targetLookupAttribute.LogicalName == "entityid")
-                            continue;
-
-                        throw new NotSupportedQueryFragmentException("Inserting values into a polymorphic lookup field requires setting the associated type column as well", col)
-                        {
-                            Suggestion = $"Add a value for the {targetLookupAttribute.LogicalName}type column and set it to one of the following values:\r\n{String.Join("\r\n", targetLookupAttribute.Targets.Select(t => $"* {t}"))}"
-                        };
-                    }
-                }
-                else if (virtualTypeAttributes.Contains(targetAttrName))
-                {
-                    var idAttrName = targetAttrName.Substring(0, targetAttrName.Length - 4);
-
-                    if (!attributeNames.Contains(idAttrName))
-                    {
-                        throw new NotSupportedQueryFragmentException("Inserting values into a polymorphic type field requires setting the associated ID column as well", col)
-                        {
-                            Suggestion = $"Add a value for the {idAttrName} column"
-                        };
-                    }
-                }
-            }
-
             // Special case: inserting into listmember requires listid and entityid
             if (metadata.LogicalName == "listmember")
             {
@@ -449,8 +412,6 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (targetColumns.Count != sourceColumns.Length)
                     throw new NotSupportedQueryFragmentException("Column number mismatch");
 
-                var schema = ((IDataExecutionPlanNode)source).GetSchema(DataSources, null);
-
                 for (var i = 0; i < targetColumns.Count; i++)
                 {
                     string targetName;
@@ -478,6 +439,47 @@ namespace MarkMpn.Sql4Cds.Engine
                         throw new NotSupportedQueryFragmentException($"No implicit type conversion from {sourceType} to {targetType}", targetColumns[i]);
 
                     node.ColumnMappings[targetName] = sourceColumn;
+                }
+            }
+
+            // If any of the insert columns are a polymorphic lookup field, make sure we've got a value for the associated type field too
+            foreach (var col in targetColumns)
+            {
+                var targetAttrName = col.GetColumnName();
+
+                if (attributeNames.Contains(targetAttrName))
+                {
+                    var targetLookupAttribute = attributes[targetAttrName] as LookupAttributeMetadata;
+
+                    if (targetLookupAttribute == null)
+                        continue;
+
+                    if (targetLookupAttribute.Targets.Length > 1 &&
+                        !virtualTypeAttributes.Contains(targetAttrName + "type") &&
+                        targetLookupAttribute.AttributeType != AttributeTypeCode.PartyList &&
+                        (schema == null || node.ColumnMappings[targetAttrName].ToColumnReference().GetType(schema, null, null) != typeof(SqlEntityReference)))
+                    {
+                        // Special case: not required for listmember.entityid
+                        if (metadata.LogicalName == "listmember" && targetLookupAttribute.LogicalName == "entityid")
+                            continue;
+
+                        throw new NotSupportedQueryFragmentException("Inserting values into a polymorphic lookup field requires setting the associated type column as well", col)
+                        {
+                            Suggestion = $"Add a value for the {targetLookupAttribute.LogicalName}type column and set it to one of the following values:\r\n{String.Join("\r\n", targetLookupAttribute.Targets.Select(t => $"* {t}"))}"
+                        };
+                    }
+                }
+                else if (virtualTypeAttributes.Contains(targetAttrName))
+                {
+                    var idAttrName = targetAttrName.Substring(0, targetAttrName.Length - 4);
+
+                    if (!attributeNames.Contains(idAttrName))
+                    {
+                        throw new NotSupportedQueryFragmentException("Inserting values into a polymorphic type field requires setting the associated ID column as well", col)
+                        {
+                            Suggestion = $"Add a value for the {idAttrName} column"
+                        };
+                    }
                 }
             }
 
@@ -825,6 +827,8 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             var targetMetadata = dataSource.Metadata[targetLogicalName];
             var attributes = targetMetadata.Attributes.ToDictionary(attr => attr.LogicalName, StringComparer.OrdinalIgnoreCase);
+            var sourceTypes = new Dictionary<string, Type>();
+
             var update = new UpdateNode
             {
                 LogicalName = targetMetadata.LogicalName,
@@ -854,6 +858,12 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         var targetAttribute = attributes[targetAttrName];
                         targetType = targetAttribute.GetAttributeSqlType();
+
+                        // If we're updating a lookup field, the field type will be a SqlEntityReference. Change this to
+                        // a SqlGuid so we can accept any guid values, including from TDS endpoint where SqlEntityReference
+                        // values will not be available
+                        if (targetType == typeof(SqlEntityReference))
+                            targetType = typeof(SqlGuid);
                     }
 
                     var sourceColName = select.ColumnSet.Single(col => col.OutputColumn == targetAttrName.ToLower()).SourceColumn;
@@ -865,6 +875,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     if (update.ColumnMappings.ContainsKey(targetAttrName))
                         throw new NotSupportedQueryFragmentException("Duplicate target column", assignment.Column);
+
+                    sourceTypes[targetAttrName] = sourceType;
 
                     // Normalize the column name
                     schema.ContainsColumn(sourceColName, out sourceColName);
@@ -895,7 +907,10 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (targetLookupAttribute == null)
                         continue;
 
-                    if (targetLookupAttribute.Targets.Length > 1 && !virtualTypeAttributes.Contains(targetAttrName + "type") && targetLookupAttribute.AttributeType != AttributeTypeCode.PartyList)
+                    if (targetLookupAttribute.Targets.Length > 1 &&
+                        !virtualTypeAttributes.Contains(targetAttrName + "type") &&
+                        targetLookupAttribute.AttributeType != AttributeTypeCode.PartyList &&
+                        (!sourceTypes.TryGetValue(targetAttrName, out var sourceType) || sourceType != typeof(SqlEntityReference)))
                     {
                         throw new NotSupportedQueryFragmentException("Updating a polymorphic lookup field requires setting the associated type column as well", assignment.Column)
                         {

@@ -89,7 +89,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                             for (var i = 0; i < result.Columns.Count; i++)
                             {
-                                var sqlValue = DBNull.Value.Equals(row[i]) ? columnNullValues[i] : SqlTypeConverter.NetToSqlType(row[i]);
+                                var sqlValue = DBNull.Value.Equals(row[i]) ? columnNullValues[i] : SqlTypeConverter.NetToSqlType(DataSource, row[i]);
                                 sqlRow[i] = sqlValue;
                             }
                         }
