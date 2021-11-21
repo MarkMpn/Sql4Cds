@@ -1197,9 +1197,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return new SqlDateTime(DateTime.UtcNow);
         }
 
-        private static SqlGuid GetCurrentUser(IQueryExecutionOptions options)
+        private static SqlEntityReference GetCurrentUser(IQueryExecutionOptions options)
         {
-            return options.UserId;
+            return new SqlEntityReference(options.PrimaryDataSource, "systemuser", options.UserId);
         }
 
         /// <summary>

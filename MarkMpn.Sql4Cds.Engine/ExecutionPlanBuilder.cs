@@ -21,14 +21,13 @@ namespace MarkMpn.Sql4Cds.Engine
         private int _colNameCounter;
 
         public ExecutionPlanBuilder(IAttributeMetadataCache metadata, ITableSizeCache tableSize, IQueryExecutionOptions options)
-            : this(new[] { new DataSource { Name = "local", Metadata = metadata, TableSizeCache = tableSize } }, "local", options)
+            : this(new[] { new DataSource { Name = "local", Metadata = metadata, TableSizeCache = tableSize } }, options)
         {
         }
 
-        public ExecutionPlanBuilder(IEnumerable<DataSource> dataSources, string primaryDataSource, IQueryExecutionOptions options)
+        public ExecutionPlanBuilder(IEnumerable<DataSource> dataSources, IQueryExecutionOptions options)
         {
             DataSources = dataSources.ToDictionary(ds => ds.Name, StringComparer.OrdinalIgnoreCase);
-            PrimaryDataSource = primaryDataSource;
             Options = options;
         }
 
@@ -36,11 +35,6 @@ namespace MarkMpn.Sql4Cds.Engine
         /// The connections that will be used by this conversion
         /// </summary>
         public IDictionary<string, DataSource> DataSources { get; }
-
-        /// <summary>
-        /// The name of the connection that will be used by default
-        /// </summary>
-        public string PrimaryDataSource { get; set; }
 
         /// <summary>
         /// Returns or sets a value indicating if SQL will be parsed using quoted identifiers
@@ -212,7 +206,7 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 UserIdSource = "systemuser.systemuserid",
                 Source = source,
-                DataSource = PrimaryDataSource
+                DataSource = Options.PrimaryDataSource
             };
         }
 
@@ -220,7 +214,7 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             return new RevertNode
             {
-                DataSource = PrimaryDataSource
+                DataSource = Options.PrimaryDataSource
             };
         }
 
@@ -301,7 +295,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         private DataSource SelectDataSource(SchemaObjectName schemaObject)
         {
-            var databaseName = schemaObject.DatabaseIdentifier?.Value ?? PrimaryDataSource;
+            var databaseName = schemaObject.DatabaseIdentifier?.Value ?? Options.PrimaryDataSource;
             
             if (!DataSources.TryGetValue(databaseName, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Invalid database name", schemaObject) { Suggestion = $"Available database names:\r\n* {String.Join("\r\n*", DataSources.Keys.OrderBy(k => k))}" };
@@ -526,7 +520,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 TopRowFilter = delete.TopRowFilter
             };
 
-            var deleteTarget = new UpdateTargetVisitor(target.SchemaObject, PrimaryDataSource);
+            var deleteTarget = new UpdateTargetVisitor(target.SchemaObject, Options.PrimaryDataSource);
             queryExpression.FromClause.Accept(deleteTarget);
 
             if (String.IsNullOrEmpty(deleteTarget.TargetEntityName))
@@ -680,7 +674,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 TopRowFilter = update.TopRowFilter
             };
 
-            var updateTarget = new UpdateTargetVisitor(target.SchemaObject, PrimaryDataSource);
+            var updateTarget = new UpdateTargetVisitor(target.SchemaObject, Options.PrimaryDataSource);
             queryExpression.FromClause.Accept(updateTarget);
 
             if (String.IsNullOrEmpty(updateTarget.TargetEntityName))
@@ -940,7 +934,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (Options.UseTDSEndpoint && TDSEndpointAvailable)
             {
                 select.ScriptTokenStream = null;
-                return new SqlNode { DataSource = PrimaryDataSource, Sql = select.ToSql() };
+                return new SqlNode { DataSource = Options.PrimaryDataSource, Sql = select.ToSql() };
             }
 
             if (select.ComputeClauses != null && select.ComputeClauses.Count > 0)

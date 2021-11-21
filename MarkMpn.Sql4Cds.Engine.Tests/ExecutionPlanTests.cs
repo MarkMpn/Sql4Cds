@@ -82,6 +82,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
         }
 
+        string IQueryExecutionOptions.PrimaryDataSource => "local";
+
         Guid IQueryExecutionOptions.UserId => Guid.NewGuid();
 
         [TestMethod]
@@ -2996,7 +2998,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     TableSizeCache = new StubTableSizeCache()
                 }
             };
-            var planBuilder = new ExecutionPlanBuilder(datasources, "uat", this);
+            var planBuilder = new ExecutionPlanBuilder(datasources, this);
 
             var query = "SELECT uat.name, prod.name FROM uat.dbo.account AS uat INNER JOIN prod.dbo.account AS prod ON uat.accountid = prod.accountid WHERE uat.name <> prod.name AND uat.name LIKE '%test%'";
 

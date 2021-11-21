@@ -119,6 +119,11 @@ namespace MarkMpn.Sql4Cds.Engine
         void RetrievingNextPage();
 
         /// <summary>
+        /// Returns the name of the primary data source the query is being executed in
+        /// </summary>
+        string PrimaryDataSource { get; }
+
+        /// <summary>
         /// Returns the unique identifier of the current user
         /// </summary>
         Guid UserId { get; }

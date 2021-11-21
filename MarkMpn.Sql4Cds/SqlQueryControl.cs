@@ -854,7 +854,7 @@ namespace MarkMpn.Sql4Cds
             backgroundWorker.ReportProgress(0, "Executing query...");
 
             var options = new QueryExecutionOptions(_con, DataSources[_con.ConnectionName].Connection, backgroundWorker, this);
-            var converter = new ExecutionPlanBuilder(DataSources.Values, _con.ConnectionName, options);
+            var converter = new ExecutionPlanBuilder(DataSources.Values, options);
 
             if (Settings.Instance.UseTSQLEndpoint &&
                 args.Execute &&

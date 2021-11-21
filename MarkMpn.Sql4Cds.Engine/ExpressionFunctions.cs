@@ -385,9 +385,9 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="options">The options that provide access to the user details</param>
         /// <returns></returns>
-        public static SqlGuid User_Name(IQueryExecutionOptions options)
+        public static SqlEntityReference User_Name(IQueryExecutionOptions options)
         {
-            return options.UserId;
+            return new SqlEntityReference(options.PrimaryDataSource, "systemuser", options.UserId);
         }
 
         /// <summary>
