@@ -18,6 +18,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private int _executionCount;
         private readonly Timer _timer = new Timer();
 
+        [Category("Data Source")]
+        [Description("The data source this query is executed against")]
         public string DataSource { get; set; }
 
         [Browsable(false)]

@@ -23,6 +23,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override TimeSpan Duration => _duration;
 
+        [Category("Data Source")]
+        [Description("The data source this query is executed against")]
         public string DataSource { get; set; }
 
         [Category("TDS Endpoint")]

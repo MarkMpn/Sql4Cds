@@ -81,6 +81,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// The instance that this node will be executed against
         /// </summary>
+        [Category("Data Source")]
+        [Description("The data source this query is executed against")]
         public string DataSource { get; set; }
 
         /// <summary>
