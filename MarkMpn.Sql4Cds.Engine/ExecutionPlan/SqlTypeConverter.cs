@@ -51,7 +51,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 [typeof(SqlInt64)] = SqlInt64.Null,
                 [typeof(SqlMoney)] = SqlMoney.Null,
                 [typeof(SqlSingle)] = SqlSingle.Null,
-                [typeof(SqlString)] = SqlString.Null
+                [typeof(SqlString)] = SqlString.Null,
+                [typeof(object)] = null
             };
 
             _hijriCulture = (CultureInfo)CultureInfo.GetCultureInfo("ar-JO").Clone();
