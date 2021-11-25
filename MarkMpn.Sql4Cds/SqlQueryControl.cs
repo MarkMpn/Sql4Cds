@@ -382,7 +382,7 @@ namespace MarkMpn.Sql4Cds
                         else
                             entities = entities.Concat(metaEntities).ToArray();
 
-                        return new AutocompleteDataSource { Name = ds.Name, Entities = entities, Metadata = ds.Metadata };
+                        return new AutocompleteDataSource { Name = ds.Name, Entities = entities, Metadata = new MetaMetadataCache(ds.Metadata) };
                     })
                     .ToDictionary(ds => ds.Name, StringComparer.OrdinalIgnoreCase);
 
@@ -504,7 +504,7 @@ namespace MarkMpn.Sql4Cds
                         else
                             entities = entities.Concat(metaEntities).ToArray();
 
-                        return new AutocompleteDataSource { Name = ds.Name, Entities = entities, Metadata = ds.Metadata };
+                        return new AutocompleteDataSource { Name = ds.Name, Entities = entities, Metadata = new MetaMetadataCache(ds.Metadata) };
                     })
                     .ToDictionary(ds => ds.Name, StringComparer.OrdinalIgnoreCase);
 
@@ -854,7 +854,7 @@ namespace MarkMpn.Sql4Cds
             backgroundWorker.ReportProgress(0, "Executing query...");
 
             var options = new QueryExecutionOptions(_con, DataSources[_con.ConnectionName].Connection, backgroundWorker, this);
-            var converter = new ExecutionPlanBuilder(DataSources.Values, _con.ConnectionName, options);
+            var converter = new ExecutionPlanBuilder(DataSources.Values, options);
 
             if (Settings.Instance.UseTSQLEndpoint &&
                 args.Execute &&
@@ -951,6 +951,8 @@ namespace MarkMpn.Sql4Cds
                     });
                 }
 
+                var linkFont = new Font(grid.Font, grid.Font.Style | FontStyle.Underline);
+
                 grid.CellFormatting += (s, e) =>
                 {
                     if (e.Value is INullable nullable && nullable.IsNull || e.Value is DBNull)
@@ -967,6 +969,60 @@ namespace MarkMpn.Sql4Cds
                     {
                         e.Value = dt.Value.ToString("yyyy-MM-dd HH:mm:ss.fff");
                     }
+                    else if (e.Value is SqlEntityReference)
+                    {
+                        e.CellStyle.ForeColor = SystemColors.HotTrack;
+                        e.CellStyle.Font = linkFont;
+                    }
+                };
+
+                grid.CellMouseEnter += (s, e) =>
+                {
+                    if (e.RowIndex < 0 || e.ColumnIndex < 0)
+                        return;
+
+                    var gv = (DataGridView)s;
+                    var cell = gv.Rows[e.RowIndex].Cells[e.ColumnIndex];
+
+                    if (cell.Value is SqlEntityReference er && !er.IsNull)
+                        gv.Cursor = Cursors.Hand;
+                    else
+                        gv.Cursor = Cursors.Default;
+                };
+
+                grid.CellMouseLeave += (s, e) =>
+                {
+                    var gv = (DataGridView)s;
+                    gv.Cursor = Cursors.Default;
+                };
+
+                grid.CellMouseDown += (s, e) =>
+                {
+                    if (e.RowIndex < 0 || e.ColumnIndex < 0)
+                        return;
+
+                    if (e.Button != MouseButtons.Right)
+                        return;
+
+                    var gv = (DataGridView)s;
+                    var cell = gv.Rows[e.RowIndex].Cells[e.ColumnIndex];
+
+                    if (cell.Selected)
+                        return;
+
+                    gv.CurrentCell = cell;
+                };
+
+                grid.CellContentDoubleClick += (s, e) =>
+                {
+                    if (e.RowIndex < 0 || e.ColumnIndex < 0)
+                        return;
+
+                    var gv = (DataGridView)s;
+                    var cell = gv.Rows[e.RowIndex].Cells[e.ColumnIndex];
+
+                    if (cell.Value is SqlEntityReference er && !er.IsNull)
+                        OpenRecord(er);
                 };
 
                 grid.HandleCreated += (s, e) =>
@@ -1032,6 +1088,15 @@ namespace MarkMpn.Sql4Cds
             }
 
             AddResult(result, plan, rowCount);
+        }
+
+        private void OpenRecord(SqlEntityReference entityReference)
+        {
+            if (!DataSources.TryGetValue(entityReference.DataSource, out var dataSource))
+                return;
+
+            var url = dataSource.ConnectionDetail.GetEntityReferenceUrl(entityReference);
+            Process.Start(url);
         }
 
         private void backgroundWorker_ProgressChanged(object sender, ProgressChangedEventArgs e)
@@ -1154,6 +1219,49 @@ namespace MarkMpn.Sql4Cds
             _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = "RevertNode", ["Source"] = "XrmToolBox" });
             service.CallerId = Guid.Empty;
             SyncUsername();
+        }
+
+        private void gridContextMenuStrip_Opening(object sender, CancelEventArgs e)
+        {
+            var grid = (DataGridView)gridContextMenuStrip.SourceControl;
+
+            openRecordToolStripMenuItem.Enabled = false;
+            createSELECTStatementToolStripMenuItem.Enabled = false;
+
+            if (grid.CurrentCell?.Value is SqlEntityReference er && !er.IsNull)
+            {
+                openRecordToolStripMenuItem.Enabled = true;
+                createSELECTStatementToolStripMenuItem.Enabled = true;
+            }
+        }
+
+        private void openRecordToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var grid = (DataGridView)gridContextMenuStrip.SourceControl;
+
+            if (grid.CurrentCell?.Value is SqlEntityReference er && !er.IsNull)
+                OpenRecord(er);
+        }
+
+        private void createSELECTStatementToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var grid = (DataGridView)gridContextMenuStrip.SourceControl;
+
+            if (grid.CurrentCell?.Value is SqlEntityReference er && !er.IsNull && DataSources.TryGetValue(er.DataSource, out var dataSource))
+            {
+                var select = "\r\n\r\nSELECT * FROM ";
+
+                if (er.DataSource != _con.ConnectionName)
+                    select += $"{Autocomplete.SqlAutocompleteItem.EscapeIdentifier(er.DataSource)}.dbo.";
+
+                select += Autocomplete.SqlAutocompleteItem.EscapeIdentifier(er.LogicalName);
+
+                var metadata = dataSource.Metadata[er.LogicalName];
+
+                select += $" WHERE {Autocomplete.SqlAutocompleteItem.EscapeIdentifier(metadata.PrimaryIdAttribute)} = '{er.Id}'";
+
+                _editor.AppendText(select);
+            }
         }
     }
 }

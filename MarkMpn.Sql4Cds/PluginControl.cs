@@ -363,9 +363,14 @@ namespace MarkMpn.Sql4Cds
             SyncExecuteButton(sender, e);
 
             if (sql != null)
+            {
+                _properties.Connections = sql.DataSources;
                 _properties.SelectedObject = new ConnectionPropertiesWrapper(sql.Connection);
+            }
             else
+            {
                 _properties.SelectedObject = null;
+            }
         }
 
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)

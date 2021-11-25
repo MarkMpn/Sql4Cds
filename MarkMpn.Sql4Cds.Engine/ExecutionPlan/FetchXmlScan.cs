@@ -58,6 +58,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private Dictionary<string, ParameterizedCondition> _parameterizedConditions;
         private HashSet<string> _entityNameGroupings;
+        private Dictionary<string, string> _primaryKeyColumns;
 
         public FetchXmlScan()
         {
@@ -67,6 +68,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// The instance that this node will be executed against
         /// </summary>
+        [Category("Data Source")]
+        [Description("The data source this query is executed against")]
         public string DataSource { get; set; }
 
         /// <summary>
@@ -274,16 +277,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!entity.Contains(attribute.Key + "type"))
                     entity[attribute.Key + "type"] = ((EntityReference)attribute.Value).LogicalName;
 
-                entity[attribute.Key] = ((EntityReference)attribute.Value).Id;
+                //entity[attribute.Key] = ((EntityReference)attribute.Value).Id;
             }
 
             // Convert values to SQL types
             foreach (var col in schema.Schema)
             {
+                object sqlValue;
+
                 if (entity.Attributes.TryGetValue(col.Key, out var value) && value != null)
-                    entity[col.Key] = SqlTypeConverter.NetToSqlType(value);
+                    sqlValue = SqlTypeConverter.NetToSqlType(DataSource, value);
                 else
-                    entity[col.Key] = SqlTypeConverter.GetNullValue(col.Value);
+                    sqlValue = SqlTypeConverter.GetNullValue(col.Value);
+
+                if (_primaryKeyColumns.TryGetValue(col.Key, out var logicalName) && sqlValue is SqlGuid guid)
+                    sqlValue = new SqlEntityReference(DataSource, logicalName, guid);
+
+                entity[col.Key] = sqlValue;
             }
         }
 
@@ -400,6 +410,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!dataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
 
+            _primaryKeyColumns = new Dictionary<string, string>();
             var schema = new NodeSchema();
 
             // Add each attribute from the main entity and recurse into link entities
@@ -630,6 +641,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             // Add the logical attribute
             AddSchemaAttribute(schema, fullName, simpleName, type);
+
+            if (attrMetadata.IsPrimaryId == true)
+                _primaryKeyColumns[fullName] = attrMetadata.EntityLogicalName;
 
             if (FetchXml.aggregate)
                 return;

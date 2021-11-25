@@ -15,6 +15,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// </summary>
     class RetrieveTotalRecordCountNode : BaseDataNode
     {
+        [Category("Data Source")]
+        [Description("The data source this query is executed against")]
         public string DataSource { get; set; }
 
         /// <summary>

@@ -44,6 +44,8 @@ namespace MarkMpn.Sql4Cds.SSMS
 
         public bool BypassCustomPlugins => _options.BypassCustomPlugins;
 
+        public string PrimaryDataSource => "local";
+
         public Guid UserId => Guid.Empty;
 
         public bool ConfirmInsert(int count, EntityMetadata meta)

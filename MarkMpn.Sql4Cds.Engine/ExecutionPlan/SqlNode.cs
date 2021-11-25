@@ -23,6 +23,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override TimeSpan Duration => _duration;
 
+        [Category("Data Source")]
+        [Description("The data source this query is executed against")]
         public string DataSource { get; set; }
 
         [Category("TDS Endpoint")]
@@ -74,8 +76,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             adapter.Fill(result);
                         }
 
-                        var columnSqlTypes = result.Columns.Cast<DataColumn>().Select(col => SqlTypeConverter.NetToSqlType(col.DataType)).ToArray();
-                        var columnNullValues = columnSqlTypes.Select(type => SqlTypeConverter.GetNullValue(type)).ToArray();
+                        // SQL doesn't know the data type of NULL, so SELECT NULL will be returned with a schema type
+                        // of SqlInt32. This causes problems trying to convert it to other types for updates/inserts,
+                        // so change all-null columns to object
+                        // https://github.com/MarkMpn/Sql4Cds/issues/122
+                        var nullColumns = result.Columns
+                            .Cast<DataColumn>()
+                            .Select((col, colIndex) => result.Rows
+                                .Cast<DataRow>()
+                                .Select(row => DBNull.Value.Equals(row[colIndex]))
+                                .All(isNull => isNull)
+                                )
+                            .ToArray();
+
+                        var columnSqlTypes = result.Columns
+                            .Cast<DataColumn>()
+                            .Select((col, colIndex) => nullColumns[colIndex] ? typeof(object) : SqlTypeConverter.NetToSqlType(col.DataType))
+                            .ToArray();
+                        var columnNullValues = columnSqlTypes
+                            .Select(type => SqlTypeConverter.GetNullValue(type))
+                            .ToArray();
 
                         // Values will be stored as BCL types, convert them to SqlXxx types for consistency with IDataExecutionPlanNodes
                         var sqlTable = new DataTable();
@@ -89,7 +109,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                             for (var i = 0; i < result.Columns.Count; i++)
                             {
-                                var sqlValue = DBNull.Value.Equals(row[i]) ? columnNullValues[i] : SqlTypeConverter.NetToSqlType(row[i]);
+                                var sqlValue = DBNull.Value.Equals(row[i]) ? columnNullValues[i] : SqlTypeConverter.NetToSqlType(DataSource, row[i]);
                                 sqlRow[i] = sqlValue;
                             }
                         }

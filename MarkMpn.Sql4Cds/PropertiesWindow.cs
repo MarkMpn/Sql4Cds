@@ -9,6 +9,7 @@ using System.Reflection;
 using System.Runtime.Serialization;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
+using McTools.Xrm.Connection;
 
 namespace MarkMpn.Sql4Cds
 {
@@ -21,6 +22,8 @@ namespace MarkMpn.Sql4Cds
             InitializeComponent();
         }
 
+        internal IDictionary<string, DataSource> Connections { get; set; }
+
         public object SelectedObject
         {
             get { return _obj; }
@@ -29,7 +32,7 @@ namespace MarkMpn.Sql4Cds
                 _obj = value;
 
                 if (value != null)
-                    value = new WrappedTypeDescriptor(value);
+                    value = new WrappedTypeDescriptor(value, Connections);
 
                 propertyGrid.SelectedObject = value;
                 SelectedObjectChanged?.Invoke(this, EventArgs.Empty);
@@ -42,10 +45,12 @@ namespace MarkMpn.Sql4Cds
     class WrappedTypeDescriptor : CustomTypeDescriptor
     {
         private readonly object _obj;
+        private readonly IDictionary<string, DataSource> _connections;
 
-        public WrappedTypeDescriptor(object obj)
+        public WrappedTypeDescriptor(object obj, IDictionary<string, DataSource> connections)
         {
             _obj = obj;
+            _connections = connections;
         }
 
         public override AttributeCollection GetAttributes()
@@ -63,7 +68,7 @@ namespace MarkMpn.Sql4Cds
                 .Where(p => p.PropertyType != typeof(IExecutionPlanNode))
                 .Where(p => p.DeclaringType != typeof(TSqlFragment))
                 .Where(p => p.GetCustomAttribute<BrowsableAttribute>()?.Browsable != false)
-                .Select(p => new WrappedPropertyDescriptor(_obj, p))
+                .Select(p => new WrappedPropertyDescriptor(_obj, p, _connections))
                 .ToArray());
         }
 
@@ -78,12 +83,20 @@ namespace MarkMpn.Sql4Cds
         private readonly object _target;
         private readonly PropertyInfo _prop;
         private readonly object _value;
+        private readonly IDictionary<string, DataSource> _connections;
 
-        public WrappedPropertyDescriptor(object target, PropertyInfo prop) : base(prop.Name, GetAttributes(target, prop))
+        public WrappedPropertyDescriptor(object target, PropertyInfo prop, IDictionary<string, DataSource> connections) : base(prop.Name, GetAttributes(target, prop, connections))
         {
             _target = target;
             _prop = prop;
             _value = prop.GetValue(target);
+            _connections = connections;
+
+            if (prop.Name == "DataSource" && Category == "Data Source" && PropertyType == typeof(string) && connections != null && connections.TryGetValue((string) _value, out var dataSource))
+            {
+                _prop = null;
+                _value = new ConnectionPropertiesWrapper(dataSource.ConnectionDetail);
+            }
         }
 
         public WrappedPropertyDescriptor(object target, string name, object value) : base(name, GetAttributes(value.GetType()))
@@ -92,10 +105,13 @@ namespace MarkMpn.Sql4Cds
             _value = value;
         }
 
-        private static Attribute[] GetAttributes(object target, PropertyInfo prop)
+        private static Attribute[] GetAttributes(object target, PropertyInfo prop, IDictionary<string, DataSource> connections)
         {
             var baseAttributes = Attribute.GetCustomAttributes(prop);
             var value = prop.GetValue(target);
+
+            if (prop.Name == "DataSource" && baseAttributes.OfType<CategoryAttribute>().FirstOrDefault()?.Category == "Data Source" && prop.PropertyType == typeof(string) && connections != null && connections.TryGetValue((string)value, out var dataSource))
+                value = dataSource;
 
             if (value != null)
                 return GetAttributes(value.GetType()).Concat(baseAttributes).ToArray();
@@ -156,7 +172,7 @@ namespace MarkMpn.Sql4Cds
                     if (typeof(MultiPartIdentifier).IsAssignableFrom(type))
                         return new MultiPartIdentifierConverter();
 
-                    return new SimpleNameExpandableObjectConverter(_prop == null || (_value != null && _prop != null && type != _prop.PropertyType) ? $"({type.Name})" : $"({Name})");
+                    return new SimpleNameExpandableObjectConverter(_value is ConnectionPropertiesWrapper con ? con.ConnectionName : _prop == null || (_value != null && _prop != null && type != _prop.PropertyType) ? $"({type.Name})" : $"({Name})");
                 }
 
                 return base.Converter;
@@ -182,7 +198,7 @@ namespace MarkMpn.Sql4Cds
             var type = _value.GetType();
 
             if (type.IsClass && type != typeof(string))
-                return new WrappedTypeDescriptor(_value);
+                return new WrappedTypeDescriptor(_value, _connections);
 
             return _value;
         }

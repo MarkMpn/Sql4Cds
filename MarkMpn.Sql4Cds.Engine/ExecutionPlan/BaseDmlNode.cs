@@ -81,6 +81,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// The instance that this node will be executed against
         /// </summary>
+        [Category("Data Source")]
+        [Description("The data source this query is executed against")]
         public string DataSource { get; set; }
 
         /// <summary>
@@ -210,6 +212,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var destSqlType = SqlTypeConverter.NetToSqlType(destType);
 
                 var expr = (Expression)Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(sourceColumnName));
+                var originalExpr = expr;
 
                 if (sourceType == typeof(object))
                 {
@@ -228,27 +231,36 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         // Special case: intersect attributes can be simple guids
                         if (metadata.IsIntersect != true)
                         {
-                            Expression targetExpr;
-
-                            if (lookupAttr.Targets.Length == 1)
+                            if (sourceType == typeof(SqlEntityReference))
                             {
-                                targetExpr = Expression.Constant(lookupAttr.Targets[0]);
+                                expr = SqlTypeConverter.Convert(originalExpr, sourceType);
+                                convertedExpr = SqlTypeConverter.Convert(expr, typeof(EntityReference));
                             }
                             else
                             {
-                                var sourceTargetColumnName = mappings[destAttributeName + "type"];
-                                var sourceTargetType = schema.Schema[sourceTargetColumnName];
-                                targetExpr = Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(sourceTargetColumnName));
-                                targetExpr = SqlTypeConverter.Convert(targetExpr, sourceTargetType);
-                                targetExpr = SqlTypeConverter.Convert(targetExpr, typeof(SqlString));
-                                targetExpr = SqlTypeConverter.Convert(targetExpr, typeof(string));
+                                Expression targetExpr;
+
+                                if (lookupAttr.Targets.Length == 1)
+                                {
+                                    targetExpr = Expression.Constant(lookupAttr.Targets[0]);
+                                }
+                                else
+                                {
+                                    var sourceTargetColumnName = mappings[destAttributeName + "type"];
+                                    var sourceTargetType = schema.Schema[sourceTargetColumnName];
+                                    targetExpr = Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(sourceTargetColumnName));
+                                    targetExpr = SqlTypeConverter.Convert(targetExpr, sourceTargetType);
+                                    targetExpr = SqlTypeConverter.Convert(targetExpr, typeof(SqlString));
+                                    targetExpr = SqlTypeConverter.Convert(targetExpr, typeof(string));
+                                }
+
+                                convertedExpr = Expression.New(
+                                    typeof(EntityReference).GetConstructor(new[] { typeof(string), typeof(Guid) }),
+                                    targetExpr,
+                                    Expression.Convert(convertedExpr, typeof(Guid))
+                                );
                             }
 
-                            convertedExpr = Expression.New(
-                                typeof(EntityReference).GetConstructor(new[] { typeof(string), typeof(Guid) }),
-                                targetExpr,
-                                Expression.Convert(convertedExpr, typeof(Guid))
-                            );
                             destType = typeof(EntityReference);
                         }
                     }

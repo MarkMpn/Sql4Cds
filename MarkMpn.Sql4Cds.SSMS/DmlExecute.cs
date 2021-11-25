@@ -79,10 +79,10 @@ namespace MarkMpn.Sql4Cds.SSMS
             var options = new QueryExecutionOptions(sqlScriptEditorControl, Package.Settings);
             var metadata = GetMetadataCache();
             var org = ConnectCDS();
-            var dataSource = new DataSource { Name = "local", Metadata = metadata, TableSizeCache = new TableSizeCache(org, metadata) };
+            var dataSource = new DataSource { Name = "local", Metadata = metadata, TableSizeCache = new TableSizeCache(org, metadata), Connection = org };
 
             // We've possibly got a DML statement, so parse the query properly to get the details
-            var converter = new ExecutionPlanBuilder(new[] { dataSource }, dataSource.Name, options)
+            var converter = new ExecutionPlanBuilder(new[] { dataSource }, options)
             {
                 TDSEndpointAvailable = true,
                 QuotedIdentifiers = sqlScriptEditorControl.QuotedIdentifiers

@@ -174,6 +174,8 @@ namespace MarkMpn.Sql4Cds
                 throw new QueryExecutionException($"Hit maximum retrieval limit. This limit is in place to protect against excessive API requests. Try restricting the data to retrieve with WHERE clauses or eliminating subqueries.\r\nYour limit of {Settings.Instance.MaxRetrievesPerQuery:N0} retrievals per query can be modified in Settings.");
         }
 
+        public string PrimaryDataSource => _con.ConnectionName;
+
         public Guid UserId
         {
             get
