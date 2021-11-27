@@ -290,7 +290,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (Source is FetchXmlScan || Source is ComputeScalarNode computeScalar && computeScalar.Source is FetchXmlScan)
             {
                 // Check if all the aggregates & groupings can be done in FetchXML. Can only convert them if they can ALL
-                // be handled - if any one needs to be calculated manually, we need to calculate them all
+                // be handled - if any one needs to be calculated manually, we need to calculate them all. Also track if
+                // we can partition the query for larger source data sets. We can't partition DISTINCT aggregates, and need
+                // to transform AVG(field) to SUM(field) / COUNT(field)
+                var canPartition = true;
+
                 foreach (var agg in Aggregates)
                 {
                     if (agg.Value.SqlExpression != null && !(agg.Value.SqlExpression is ColumnReferenceExpression))
@@ -301,6 +305,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     if (agg.Value.AggregateType == AggregateType.First)
                         return this;
+
+                    if (agg.Value.Distinct)
+                        canPartition = false;
                 }
 
                 var fetchXml = Source as FetchXmlScan;
@@ -518,10 +525,47 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // FoldQuery can be called again in some circumstances. Don't repeat the folding operation and create another try/catch
                 _folded = true;
 
+                IDataExecutionPlanNode fallback = this;
+
+                if (canPartition)
+                {
+                    // Create a clone of the aggregate FetchXML query
+                    var partitionedFetchXml = new FetchXmlScan
+                    {
+                        DataSource = fetchXml.DataSource,
+                        Alias = fetchXml.Alias,
+                        AllPages = fetchXml.AllPages,
+                        FetchXml = (FetchXml.FetchType)serializer.Deserialize(new StringReader(fetchXml.FetchXmlString)),
+                        ReturnFullSchema = fetchXml.ReturnFullSchema
+                    };
+
+                    var partitionedAggregates = new PartitionedFetchXmlAggregateNode
+                    {
+                        Source = partitionedFetchXml
+                    };
+
+                    var tryPartitioned = new TryCatchNode
+                    {
+                        TrySource = partitionedAggregates,
+                        CatchSource = fallback,
+                        ExceptionFilter = IsAggregateQueryRetryableException
+                    };
+                    fallback = tryPartitioned;
+
+                    partitionedAggregates.GroupBy.AddRange(GroupBy);
+
+                    foreach (var aggregate in Aggregates)
+                    {
+                        // TODO: Clone the aggregate
+                        // TODO: Rewrite AVG
+                        partitionedAggregates.Aggregates[aggregate.Key] = aggregate.Value;
+                    }
+                }
+
                 return new TryCatchNode
                 {
                     TrySource = fetchXml,
-                    CatchSource = this,
+                    CatchSource = fallback,
                     ExceptionFilter = IsAggregateQueryRetryableException
                 };
             }

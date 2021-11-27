@@ -85,10 +85,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         }
 
         /// <summary>
+        /// Updates the aggregate function state based on the aggregate values for a partition
+        /// </summary>
+        /// <param name="entity">The <see cref="Entity"/> that contains aggregated values from a partition of the available records</param>
+        public virtual void NextPartition(Entity entity)
+        {
+            var value = _selector(entity);
+            UpdatePartition(value);
+        }
+
+        /// <summary>
         /// Updates the aggregation state based on a value extracted from the source <see cref="Entity"/>
         /// </summary>
         /// <param name="value"></param>
         protected abstract void Update(object value);
+        
+        /// <summary>
+        /// Updates the aggregation state based on a value extracted from the partition <see cref="Entity"/>
+        /// </summary>
+        /// <param name="value"></param>
+        protected abstract void UpdatePartition(object value);
 
         /// <summary>
         /// Returns the current value of this aggregation
@@ -160,6 +176,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Value = _valueSelector(_sum / _count);
         }
 
+        protected override void UpdatePartition(object value)
+        {
+            throw new InvalidOperationException();
+        }
+
         public override Type Type { get; }
 
         public override void Reset()
@@ -186,6 +207,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         protected override void Update(object value)
         {
             Value = (SqlInt32)Value + 1;
+        }
+
+        protected override void UpdatePartition(object value)
+        {
+            Value = (SqlInt32)Value + (SqlInt32)value;
         }
 
         public override Type Type => typeof(SqlInt32);
@@ -215,6 +241,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return;
 
             Value = (SqlInt32)Value + 1;
+        }
+
+        protected override void UpdatePartition(object value)
+        {
+            Value = (SqlInt32)Value + (SqlInt32)value;
         }
 
         public override Type Type => typeof(int);
@@ -251,6 +282,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Value = value;
         }
 
+        protected override void UpdatePartition(object value)
+        {
+            Update(value);
+        }
+
         public override Type Type { get; }
     }
 
@@ -278,6 +314,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (Value == null || ((IComparable)Value).CompareTo(value) > 0)
                 Value = value;
+        }
+
+        protected override void UpdatePartition(object value)
+        {
+            Update(value);
         }
 
         public override Type Type { get; }
@@ -317,6 +358,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Value = _valueSelector(_sumDecimal);
         }
 
+        protected override void UpdatePartition(object value)
+        {
+            Update(value);
+        }
+
         public override Type Type { get; }
 
         public override void Reset()
@@ -346,6 +392,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return;
 
             Value = value;
+        }
+
+        protected override void UpdatePartition(object value)
+        {
+            throw new InvalidOperationException();
         }
 
         public override Type Type { get; }
@@ -385,6 +436,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 _func.NextRecord(entity);
                 Value = _func.Value;
             }
+        }
+
+        protected override void UpdatePartition(object value)
+        {
+            throw new InvalidOperationException();
         }
 
         protected override void Update(object value)
