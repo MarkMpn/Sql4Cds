@@ -37,7 +37,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 };
             }
 
-            public void SetValue(object value)
+            public void SetValue(object value, IQueryExecutionOptions options)
             {
                 if (value == null)
                 {
@@ -51,7 +51,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (!_filter.Items.Contains(_condition))
                         _filter.Items = _filter.Items.Except(new[] { _contradiction }).Concat(new[] { _condition }).ToArray();
 
-                    _condition.value = value.ToString();
+                    var formatted = value.ToString();
+
+                    if (value is SqlDateTime dt)
+                    {
+                        DateTimeOffset dto;
+
+                        if (options.UseLocalTimeZone)
+                            dto = new DateTimeOffset(dt.Value, TimeZone.CurrentTimeZone.GetUtcOffset(dt.Value));
+                        else
+                            dto = new DateTimeOffset(dt.Value, TimeSpan.Zero);
+
+                        formatted = dto.ToString("yyyy-MM-ddTHH':'mm':'ss.FFFzzz");
+                    }
+
+                    _condition.value = formatted;
                 }
             }
         }
@@ -130,7 +144,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 foreach (var param in parameterValues)
                 {
                     if (_parameterizedConditions.TryGetValue(param.Key, out var condition))
-                        condition.SetValue(param.Value);
+                        condition.SetValue(param.Value, options);
                 }
             }
 
@@ -139,7 +153,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var mainEntity = FetchXml.Items.OfType<FetchEntityType>().Single();
             var name = mainEntity.name;
             var meta = dataSource.Metadata[name];
-            options.Progress(0, $"Retrieving {GetDisplayName(0, meta)}...");
+
+            if (!(Parent is PartitionedAggregateNode))
+                options.Progress(0, $"Retrieving {GetDisplayName(0, meta)}...");
 
             // Get the first page of results
             options.RetrievingNextPage();
@@ -161,7 +177,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Move on to subsequent pages
             while (AllPages && res.MoreRecords && options.ContinueRetrieve(count))
             {
-                options.Progress(0, $"Retrieved {count:N0} {GetDisplayName(count, meta)}...");
+                if (!(Parent is PartitionedAggregateNode))
+                    options.Progress(0, $"Retrieved {count:N0} {GetDisplayName(count, meta)}...");
 
                 if (FetchXml.page == null)
                     FetchXml.page = "2";

@@ -235,19 +235,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
-        {
-            // Columns required by previous nodes must be derived from this node, so no need to pass them through.
-            // Just calculate the columns that are required to calculate the groups & aggregates
-            var scalarRequiredColumns = new List<string>();
-            if (GroupBy != null)
-                scalarRequiredColumns.AddRange(GroupBy.Select(g => g.GetColumnName()));
-
-            scalarRequiredColumns.AddRange(Aggregates.Where(agg => agg.Value.SqlExpression != null).SelectMany(agg => agg.Value.SqlExpression.GetColumns()).Distinct());
-
-            Source.AddRequiredColumns(dataSources, parameterTypes, scalarRequiredColumns);
-        }
-
         protected bool GetOrganizationServiceFault(Exception ex, out OrganizationServiceFault fault)
         {
             fault = null;

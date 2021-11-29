@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using System.Xml.Serialization;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Metadata;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -20,11 +21,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// </summary>
     class PartitionedAggregateNode : BaseAggregateNode
     {
+        class Partition
+        {
+            public SqlDateTime MinValue { get; set; }
+            public SqlDateTime MaxValue { get; set; }
+            public double Percentage { get; set; }
+        }
+
+        private double _progress;
+        private Queue<Partition> _queue;
+
         public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             Source = Source.FoldQuery(dataSources, options, parameterTypes);
             Source.Parent = this;
             return this;
+        }
+
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        {
+            // All required columns must already have been added during the original folding of the HashMatchAggregateNode
         }
 
         protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
@@ -37,6 +53,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var fetchXmlNode = (FetchXmlScan)Source;
 
+            var name = fetchXmlNode.Entity.name;
+            var meta = dataSources[fetchXmlNode.DataSource].Metadata[name];
+            options.Progress(0, $"Partitioning {GetDisplayName(0, meta)}...");
+
             // Get the minimum and maximum primary keys from the source
             var minKey = GetMinMaxKey(fetchXmlNode, dataSources, options, parameterTypes, parameterValues, false);
             var maxKey = GetMinMaxKey(fetchXmlNode, dataSources, options, parameterTypes, parameterValues, true);
@@ -45,23 +65,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 throw new QueryExecutionException("Cannot partition query");
 
             // Add the filter to the FetchXML to partition the results
-            var metadata = dataSources[fetchXmlNode.DataSource].Metadata[fetchXmlNode.Entity.name];
             fetchXmlNode.Entity.AddItem(new filter
             {
                 Items = new object[]
                 {
-                    new condition { attribute = metadata.PrimaryIdAttribute, @operator = @operator.ge, value = "@PartitionStart" },
-                    new condition { attribute = metadata.PrimaryIdAttribute, @operator = @operator.le, value = "@PartitionEnd" }
+                    new condition { attribute = "createdon", @operator = @operator.gt, value = "@PartitionStart" },
+                    new condition { attribute = "createdon", @operator = @operator.le, value = "@PartitionEnd" }
                 }
             });
 
             var partitionParameterTypes = new Dictionary<string, Type>
             {
-                ["@PartitionStart"] = typeof(SqlGuid),
-                ["@PartitionEnd"] = typeof(SqlGuid)
+                ["@PartitionStart"] = typeof(SqlDateTime),
+                ["@PartitionEnd"] = typeof(SqlDateTime)
             };
 
-            var partionParameterValues = new Dictionary<string, object>
+            var partitionParameterValues = new Dictionary<string, object>
             {
                 ["@PartitionStart"] = minKey,
                 ["@PartitionEnd"] = maxKey
@@ -76,17 +95,47 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (parameterValues != null)
             {
                 foreach (var kvp in parameterValues)
-                    partionParameterValues[kvp.Key] = kvp.Value;
+                    partitionParameterValues[kvp.Key] = kvp.Value;
             }
 
-            var minValue = GuidToNumber(minKey.Value);
-            var maxValue = GuidToNumber(maxKey.Value);
-
-            if (minValue > maxValue)
+            if (minKey > maxKey)
                 throw new QueryExecutionException("Cannot partition query");
 
             // Split recursively, add up values below & above split value if query returns successfully, or re-split on error
-            PartitionAggregate(dataSources, options, partitionParameterTypes, partionParameterValues, groups, groupByCols, fetchXmlNode, minValue, maxValue);
+            // Range is >MinValue AND <= MaxValue, so start from just before first record to ensure the first record is counted
+            var fullRange = new Partition
+            {
+                MinValue = minKey.Value.AddSeconds(-1),
+                MaxValue = maxKey,
+                Percentage = 1
+            };
+
+            _queue = new Queue<Partition>();
+            SplitPartition(fullRange);
+
+            while (_queue.Count > 0)
+            {
+                var partition = _queue.Dequeue();
+
+                try
+                {
+                    // Execute the query with the partition minValue -> split
+                    ExecuteAggregate(dataSources, options, partitionParameterTypes, partitionParameterValues, groups, groupByCols, fetchXmlNode, partition.MinValue, partition.MaxValue);
+
+                    _progress += partition.Percentage;
+                    options.Progress(0, $"Partitioning {GetDisplayName(0, meta)} ({_progress:P0})...");
+                }
+                catch (Exception ex)
+                {
+                    if (!GetOrganizationServiceFault(ex, out var fault))
+                        throw;
+
+                    if (!IsAggregateQueryLimitExceeded(fault))
+                        throw;
+
+                    SplitPartition(partition);
+                }
+            }
 
             foreach (var group in groups)
             {
@@ -102,48 +151,29 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private void PartitionAggregate(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues, Dictionary<GroupingKey, Dictionary<string, AggregateFunction>> groups, List<string> groupByCols, FetchXmlScan fetchXmlNode, BigInteger minValue, BigInteger maxValue)
+        private void SplitPartition(Partition partition)
         {
-            // Repeatedly split the primary key space until an aggregate query returns without error
-            var split = minValue + (maxValue - minValue) / 2;
+            var split = partition.MinValue.Value + TimeSpan.FromSeconds((partition.MaxValue.Value - partition.MinValue.Value).TotalSeconds / 2);
 
-            try
+            _queue.Enqueue(new Partition
             {
-                // Execute the query with the partition minValue -> split
-                ExecuteAggregate(dataSources, options, parameterTypes, parameterValues, groups, groupByCols, fetchXmlNode, minValue, split);
-            }
-            catch (Exception ex)
+                MinValue = partition.MinValue,
+                MaxValue = split,
+                Percentage = partition.Percentage / 2
+            });
+
+            _queue.Enqueue(new Partition
             {
-                if (!GetOrganizationServiceFault(ex, out var fault))
-                    throw;
-
-                if (!IsAggregateQueryLimitExceeded(fault))
-                    throw;
-
-                PartitionAggregate(dataSources, options, parameterTypes, parameterValues, groups, groupByCols, fetchXmlNode, minValue, split);
-            }
-
-            try
-            {
-                // Execute the query with the partition split + 1 -> maxValue
-                ExecuteAggregate(dataSources, options, parameterTypes, parameterValues, groups, groupByCols, fetchXmlNode, split + 1, maxValue);
-            }
-            catch (Exception ex)
-            {
-                if (!GetOrganizationServiceFault(ex, out var fault))
-                    throw;
-
-                if (!IsAggregateQueryLimitExceeded(fault))
-                    throw;
-
-                PartitionAggregate(dataSources, options, parameterTypes, parameterValues, groups, groupByCols, fetchXmlNode, split + 1, maxValue);
-            }
+                MinValue = split,
+                MaxValue = partition.MaxValue,
+                Percentage = partition.Percentage / 2
+            });
         }
 
-        private void ExecuteAggregate(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues, Dictionary<GroupingKey, Dictionary<string, AggregateFunction>> groups, List<string> groupByCols, FetchXmlScan fetchXmlNode, BigInteger minValue, BigInteger maxValue)
+        private void ExecuteAggregate(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues, Dictionary<GroupingKey, Dictionary<string, AggregateFunction>> groups, List<string> groupByCols, FetchXmlScan fetchXmlNode, SqlDateTime minValue, SqlDateTime maxValue)
         {
-            parameterValues["@PartitionStart"] = new SqlGuid(NumberToGuid(minValue));
-            parameterValues["@PartitionEnd"] = new SqlGuid(NumberToGuid(maxValue));
+            parameterValues["@PartitionStart"] = minValue;
+            parameterValues["@PartitionEnd"] = maxValue;
 
             var results = fetchXmlNode.Execute(dataSources, options, parameterTypes, parameterValues);
 
@@ -163,52 +193,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private static readonly int[] _guidOrder = new []
-        {
-            3,
-            2,
-            1,
-            0,
-            5,
-            4,
-            7,
-            6,
-            9,
-            8,
-            15,
-            14,
-            13,
-            12,
-            11,
-            10
-        };
-
-        public BigInteger GuidToNumber(Guid guid)
-        {
-            var bytes = guid.ToByteArray();
-
-            // Shuffle the bytes into order of their significance. BigInteger uses little-endian
-            var shuffled = new byte[17];
-            for (var i = 0; i < 16; i++)
-                shuffled[i] = bytes[_guidOrder[i]];
-
-            var value = new BigInteger(shuffled);
-            return value;
-        }
-
-        public Guid NumberToGuid(BigInteger integer)
-        {
-            var bytes = integer.ToByteArray();
-
-            var shuffled = new byte[16];
-            for (var i = 0; i < 16 && i < bytes.Length; i++)
-                shuffled[_guidOrder[i]] = bytes[i];
-
-            var value = new Guid(shuffled);
-            return value;
-        }
-
-        private SqlGuid GetMinMaxKey(FetchXmlScan fetchXmlNode, IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues, bool max)
+        private SqlDateTime GetMinMaxKey(FetchXmlScan fetchXmlNode, IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues, bool max)
         {
             // Create a new FetchXmlScan node with a copy of the original query
             var minMaxNode = new FetchXmlScan
@@ -223,11 +208,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             RemoveAttributes(minMaxNode.Entity);
 
             // Add the primary key attribute of the root entity
-            var metadata = dataSources[minMaxNode.DataSource].Metadata[minMaxNode.Entity.name];
-            minMaxNode.Entity.AddItem(new FetchAttributeType { name = metadata.PrimaryIdAttribute });
+            minMaxNode.Entity.AddItem(new FetchAttributeType { name = "createdon" });
 
             // Sort by the primary key
-            minMaxNode.Entity.AddItem(new FetchOrderType { attribute = metadata.PrimaryIdAttribute, descending = max });
+            minMaxNode.Entity.AddItem(new FetchOrderType { attribute = "createdon", descending = max });
 
             // Only need to retrieve the first item
             minMaxNode.FetchXml.top = "1";
@@ -235,9 +219,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var result = minMaxNode.Execute(dataSources, options, parameterTypes, parameterValues).FirstOrDefault();
 
             if (result == null)
-                return SqlGuid.Null;
+                return SqlDateTime.Null;
 
-            return (SqlEntityReference)result[$"minmax.{metadata.PrimaryIdAttribute}"];
+            return (SqlDateTime)result["minmax.createdon"];
         }
 
         private void RemoveAttributes(FetchEntityType entity)

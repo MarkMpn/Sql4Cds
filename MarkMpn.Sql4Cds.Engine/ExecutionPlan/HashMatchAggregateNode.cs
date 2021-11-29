@@ -340,7 +340,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // FoldQuery can be called again in some circumstances. Don't repeat the folding operation and create another try/catch
                 _folded = true;
 
-                IDataExecutionPlanNode fallback = this;
+                IDataExecutionPlanNode firstTry = fetchXml;
+
+                // If the main aggregate query fails due to having over 50K records, check if we can retry with partitioning. We
+                // need a createdon field to be available for this to work.
+                if (canPartition)
+                    canPartition = metadata[fetchXml.Entity.name].Attributes.Any(a => a.LogicalName == "createdon");
 
                 if (canPartition)
                 {
@@ -358,14 +363,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         Source = partitionedFetchXml
                     };
+                    partitionedFetchXml.Parent = partitionedAggregates;
 
                     var tryPartitioned = new TryCatchNode
                     {
-                        TrySource = partitionedAggregates,
-                        CatchSource = fallback,
-                        ExceptionFilter = ex => GetOrganizationServiceFault(ex, out var fault) && IsAggregateQueryRetryable(fault)
+                        TrySource = firstTry,
+                        CatchSource = partitionedAggregates,
+                        ExceptionFilter = ex => GetOrganizationServiceFault(ex, out var fault) && IsAggregateQueryLimitExceeded(fault)
                     };
-                    fallback = tryPartitioned;
+                    partitionedAggregates.Parent = tryPartitioned;
+                    firstTry.Parent = tryPartitioned;
+                    firstTry = tryPartitioned;
 
                     partitionedAggregates.GroupBy.AddRange(GroupBy);
 
@@ -377,15 +385,32 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                 }
 
-                return new TryCatchNode
+                var tryCatch = new TryCatchNode
                 {
-                    TrySource = fetchXml,
-                    CatchSource = fallback,
-                    ExceptionFilter = ex => GetOrganizationServiceFault(ex, out var fault) && IsAggregateQueryLimitExceeded(fault)
+                    TrySource = firstTry,
+                    CatchSource = this,
+                    ExceptionFilter = ex => GetOrganizationServiceFault(ex, out var fault) && IsAggregateQueryRetryable(fault)
                 };
+
+                firstTry.Parent = tryCatch;
+                Parent = tryCatch;
+                return tryCatch;
             }
 
             return this;
+        }
+
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        {
+            // Columns required by previous nodes must be derived from this node, so no need to pass them through.
+            // Just calculate the columns that are required to calculate the groups & aggregates
+            var scalarRequiredColumns = new List<string>();
+            if (GroupBy != null)
+                scalarRequiredColumns.AddRange(GroupBy.Select(g => g.GetColumnName()));
+
+            scalarRequiredColumns.AddRange(Aggregates.Where(agg => agg.Value.SqlExpression != null).SelectMany(agg => agg.Value.SqlExpression.GetColumns()).Distinct());
+
+            Source.AddRequiredColumns(dataSources, parameterTypes, scalarRequiredColumns);
         }
     }
 }
