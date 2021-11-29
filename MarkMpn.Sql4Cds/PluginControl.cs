@@ -498,7 +498,7 @@ To use in Power BI:
 */
 
 let
-  Source = CommonDataService.Database(""{new Uri(sql.Connection.OriginalUrl).Host}"")
+  Source = CommonDataService.Database(""{new Uri(sql.Connection.OriginalUrl).Host}""),
   DataverseSQL = Value.NativeQuery(Source, ""{sql.Sql.Replace("\"", "\"\"").Replace("\r\n", " ").Trim()}"", null, [EnableFolding=true])
 in
   DataverseSQL";
