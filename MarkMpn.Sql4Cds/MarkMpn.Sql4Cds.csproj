@@ -313,6 +313,7 @@
   <ItemGroup>
     <None Include="app.config" />
     <None Include="ILMergeConfig.json" />
+    <EmbeddedResource Include="Images\PartitionedAggregateNode.ico" />
     <None Include="packages.config">
       <SubType>Designer</SubType>
     </None>

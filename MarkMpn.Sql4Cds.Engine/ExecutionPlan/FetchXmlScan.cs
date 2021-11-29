@@ -759,6 +759,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
+            // TODO: Improve estimate for aggregate queries
             return EstimateRowsOut(Entity.name, Entity.Items, dataSources);
         }
 

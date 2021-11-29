@@ -65,6 +65,7 @@
     <Compile Include="ExecutionPlan\Aggregate.cs" />
     <Compile Include="ExecutionPlan\AliasNode.cs" />
     <Compile Include="ExecutionPlan\AssertNode.cs" />
+    <Compile Include="ExecutionPlan\BaseAggregateNode.cs" />
     <Compile Include="ExecutionPlan\BaseDataNode.cs" />
     <Compile Include="ExecutionPlan\BaseDmlNode.cs" />
     <Compile Include="ExecutionPlan\BaseJoinNode.cs" />
@@ -99,7 +100,7 @@
     <Compile Include="ExecutionPlan\NestedLoopNode.cs" />
     <Compile Include="ExecutionPlan\NodeSchema.cs" />
     <Compile Include="ExecutionPlan\OffsetFetchNode.cs" />
-    <Compile Include="ExecutionPlan\PartitionedFetchXmlAggregateNode.cs" />
+    <Compile Include="ExecutionPlan\PartitionedAggregateNode.cs" />
     <Compile Include="ExecutionPlan\QueryExecutionException.cs" />
     <Compile Include="ExecutionPlan\RetrieveTotalRecordCountNode.cs" />
     <Compile Include="ExecutionPlan\RevertNode.cs" />

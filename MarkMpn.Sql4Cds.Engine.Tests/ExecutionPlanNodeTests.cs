@@ -511,5 +511,34 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             CollectionAssert.AreEqual(new[] { 1, 2 }, results2);
             Assert.AreEqual(1, source.ExecutionCount);
         }
+
+        [TestMethod]
+        public void GuidPartitioning()
+        {
+            var partition = new PartitionedAggregateNode();
+
+            var guids = Enumerable.Range(0, 16)
+                .Select(i =>
+                {
+                    var bytes = new byte[16];
+                    bytes[i] = 0xff;
+                    return new Guid(bytes);
+                })
+                .ToArray();
+
+            var sortedByNumber = guids
+                .Select(g => partition.GuidToNumber(g))
+                .OrderBy(n => n)
+                .Select(n => partition.NumberToGuid(n))
+                .ToArray();
+
+            var sortedByGuid = guids
+                .Select(g => new SqlGuid(g))
+                .OrderBy(g => g)
+                .Select(g => g.Value)
+                .ToArray();
+
+            CollectionAssert.AreEqual(sortedByGuid, sortedByNumber);
+        }
     }
 }
