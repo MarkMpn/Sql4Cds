@@ -364,25 +364,106 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         Source = partitionedFetchXml
                     };
                     partitionedFetchXml.Parent = partitionedAggregates;
-
-                    var tryPartitioned = new TryCatchNode
-                    {
-                        TrySource = firstTry,
-                        CatchSource = partitionedAggregates,
-                        ExceptionFilter = ex => GetOrganizationServiceFault(ex, out var fault) && IsAggregateQueryLimitExceeded(fault)
-                    };
-                    partitionedAggregates.Parent = tryPartitioned;
-                    firstTry.Parent = tryPartitioned;
-                    firstTry = tryPartitioned;
+                    var partitionedResults = (IDataExecutionPlanNode)partitionedAggregates;
 
                     partitionedAggregates.GroupBy.AddRange(GroupBy);
 
                     foreach (var aggregate in Aggregates)
                     {
-                        // TODO: Clone the aggregate
-                        // TODO: Rewrite AVG
-                        partitionedAggregates.Aggregates[aggregate.Key] = aggregate.Value;
+                        if (aggregate.Value.AggregateType != AggregateType.Average)
+                        {
+                            partitionedAggregates.Aggregates[aggregate.Key] = aggregate.Value;
+                        }
+                        else
+                        {
+                            // Rewrite AVG as SUM / COUNT
+                            partitionedAggregates.Aggregates[aggregate.Key + "_sum"] = new Aggregate
+                            {
+                                AggregateType = AggregateType.Sum,
+                                SqlExpression = aggregate.Value.SqlExpression
+                            };
+                            partitionedAggregates.Aggregates[aggregate.Key + "_count"] = new Aggregate
+                            {
+                                AggregateType = AggregateType.Count,
+                                SqlExpression = aggregate.Value.SqlExpression
+                            };
+
+                            if (partitionedResults == partitionedAggregates)
+                            {
+                                partitionedResults = new ComputeScalarNode { Source = partitionedAggregates };
+                                partitionedAggregates.Parent = partitionedResults;
+                            }
+
+                            // Handle count = 0 => null
+                            ((ComputeScalarNode)partitionedResults).Columns[aggregate.Key] = new SearchedCaseExpression
+                            {
+                                WhenClauses =
+                                {
+                                    new SearchedWhenClause
+                                    {
+                                        WhenExpression = new BooleanComparisonExpression
+                                        {
+                                            FirstExpression = (aggregate.Key + "_count").ToColumnReference(),
+                                            ComparisonType = BooleanComparisonType.Equals,
+                                            SecondExpression = new IntegerLiteral { Value = "0" }
+                                        },
+                                        ThenExpression = new NullLiteral()
+                                    }
+                                },
+                                ElseExpression = new BinaryExpression
+                                {
+                                    FirstExpression = (aggregate.Key + "_sum").ToColumnReference(),
+                                    BinaryExpressionType = BinaryExpressionType.Divide,
+                                    SecondExpression = (aggregate.Key + "_count").ToColumnReference()
+                                }
+                            };
+
+                            // Find the AVG expression in the FetchXML and replace with _sum and _count
+                            var avg = partitionedFetchXml.Entity.FindAliasedAttribute(aggregate.Key, null, out var linkEntity);
+                            var sumCount = new object[]
+                            {
+                                new FetchAttributeType
+                                {
+                                    name = avg.name,
+                                    alias = avg.alias + "_sum",
+                                    aggregateSpecified = true,
+                                    aggregate = FetchXml.AggregateType.sum
+                                },
+                                new FetchAttributeType
+                                {
+                                    name = avg.name,
+                                    alias = avg.alias + "_count",
+                                    aggregateSpecified = true,
+                                    aggregate = FetchXml.AggregateType.countcolumn
+                                }
+                            };
+
+                            if (linkEntity == null)
+                            {
+                                partitionedFetchXml.Entity.Items = partitionedFetchXml.Entity.Items
+                                    .Except(new[] { avg })
+                                    .Concat(sumCount)
+                                    .ToArray();
+                            }
+                            else
+                            {
+                                linkEntity.Items = linkEntity.Items
+                                    .Except(new[] { avg })
+                                    .Concat(sumCount)
+                                    .ToArray();
+                            }
+                        }
                     }
+
+                    var tryPartitioned = new TryCatchNode
+                    {
+                        TrySource = firstTry,
+                        CatchSource = partitionedResults,
+                        ExceptionFilter = ex => GetOrganizationServiceFault(ex, out var fault) && IsAggregateQueryLimitExceeded(fault)
+                    };
+                    partitionedResults.Parent = tryPartitioned;
+                    firstTry.Parent = tryPartitioned;
+                    firstTry = tryPartitioned;
                 }
 
                 var tryCatch = new TryCatchNode
