@@ -21,6 +21,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// </summary>
     class PartitionedAggregateNode : BaseAggregateNode
     {
+        public class PartitionOverflowException : Exception
+        {
+        }
+
         class Partition
         {
             public SqlDateTime MinValue { get; set; }
@@ -102,7 +106,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 throw new QueryExecutionException("Cannot partition query");
 
             // Split recursively, add up values below & above split value if query returns successfully, or re-split on error
-            // Range is >MinValue AND <= MaxValue, so start from just before first record to ensure the first record is counted
+            // Range is > MinValue AND <= MaxValue, so start from just before first record to ensure the first record is counted
             var fullRange = new Partition
             {
                 MinValue = minKey.Value.AddSeconds(-1),
@@ -153,6 +157,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private void SplitPartition(Partition partition)
         {
+            // Fail if we get stuck on a particularly dense partition. If there's > 50K records in a 10 second window we probably
+            // won't be able to split it successfully
+            if (partition.MaxValue.Value < partition.MinValue.Value.AddSeconds(10))
+                throw new PartitionOverflowException();
+
             var split = partition.MinValue.Value + TimeSpan.FromSeconds((partition.MaxValue.Value - partition.MinValue.Value).TotalSeconds / 2);
 
             _queue.Enqueue(new Partition

@@ -776,8 +776,28 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            // TODO: Improve estimate for aggregate queries
+            if (FetchXml.aggregateSpecified && FetchXml.aggregate)
+            {
+                var hasGroups = HasGroups(Entity.Items);
+
+                if (!hasGroups)
+                    return 1;
+
+                return EstimateRowsOut(Entity.name, Entity.Items, dataSources) * 4 / 10;
+            }
+
             return EstimateRowsOut(Entity.name, Entity.Items, dataSources);
+        }
+
+        private bool HasGroups(object[] items)
+        {
+            if (items == null)
+                return false;
+
+            if (items.OfType<FetchAttributeType>().Any(a => a.groupbySpecified && a.groupby == FetchBoolType.@true))
+                return true;
+
+            return items.OfType<FetchLinkEntityType>().Any(link => HasGroups(link.Items));
         }
 
         private int EstimateRowsOut(string name, object[] items, IDictionary<string, DataSource> dataSources)

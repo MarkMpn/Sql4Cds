@@ -389,7 +389,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     TrySource = firstTry,
                     CatchSource = this,
-                    ExceptionFilter = ex => GetOrganizationServiceFault(ex, out var fault) && IsAggregateQueryRetryable(fault)
+                    ExceptionFilter = ex => (ex is QueryExecutionException qee && qee.InnerException is PartitionedAggregateNode.PartitionOverflowException) || (GetOrganizationServiceFault(ex, out var fault) && IsAggregateQueryRetryable(fault))
                 };
 
                 firstTry.Parent = tryCatch;
