@@ -177,12 +177,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private static Expression ToExpression(IntegerLiteral i, NodeSchema schema, NodeSchema nonAggregateSchema, IDictionary<string, Type> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
         {
-            return Expression.Constant(new SqlInt32(Int32.Parse(i.Value)));
+            return Expression.Constant(new SqlInt32(Int32.Parse(i.Value, CultureInfo.InvariantCulture)));
         }
 
         private static Expression ToExpression(MoneyLiteral money, NodeSchema schema, NodeSchema nonAggregateSchema, IDictionary<string, Type> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
         {
-            return Expression.Constant(new SqlDecimal(Decimal.Parse(money.Value)));
+            return Expression.Constant(new SqlDecimal(Decimal.Parse(money.Value, CultureInfo.InvariantCulture)));
         }
 
         private static Expression ToExpression(NullLiteral n, NodeSchema schema, NodeSchema nonAggregateSchema, IDictionary<string, Type> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
@@ -192,12 +192,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private static Expression ToExpression(NumericLiteral num, NodeSchema schema, NodeSchema nonAggregateSchema, IDictionary<string, Type> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
         {
-            return Expression.Constant(new SqlDecimal(Decimal.Parse(num.Value)));
+            return Expression.Constant(new SqlDecimal(Decimal.Parse(num.Value, CultureInfo.InvariantCulture)));
         }
 
         private static Expression ToExpression(RealLiteral real, NodeSchema schema, NodeSchema nonAggregateSchema, IDictionary<string, Type> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
         {
-            return Expression.Constant(new SqlSingle(Single.Parse(real.Value)));
+            return Expression.Constant(new SqlSingle(Single.Parse(real.Value, CultureInfo.InvariantCulture)));
         }
 
         private static Expression ToExpression(StringLiteral str, NodeSchema schema, NodeSchema nonAggregateSchema, IDictionary<string, Type> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)

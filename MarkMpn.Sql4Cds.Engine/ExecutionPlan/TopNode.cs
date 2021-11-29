@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data.SqlTypes;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -115,7 +116,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!Top.IsConstantValueExpression(null, options, out var topLiteral))
                 return sourceCount;
 
-            var top = Int32.Parse(topLiteral.Value);
+            var top = Int32.Parse(topLiteral.Value, CultureInfo.InvariantCulture);
 
             return Math.Max(0, Math.Min(top, sourceCount));
         }

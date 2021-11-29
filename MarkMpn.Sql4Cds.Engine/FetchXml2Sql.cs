@@ -6,6 +6,7 @@ using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -97,8 +98,8 @@ namespace MarkMpn.Sql4Cds.Engine
             // OFFSET
             if (!String.IsNullOrEmpty(fetch.page) && fetch.page != "1")
             {
-                var page = Int32.Parse(fetch.page);
-                var pageSize = Int32.Parse(fetch.count);
+                var page = Int32.Parse(fetch.page, CultureInfo.InvariantCulture);
+                var pageSize = Int32.Parse(fetch.count, CultureInfo.InvariantCulture);
 
                 query.OffsetClause = new OffsetClause
                 {
@@ -679,7 +680,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 attr.AttributeType == AttributeTypeCode.Status)
             {
                 value = new IntegerLiteral { Value = condition.value };
-                parameterValue = Int32.Parse(condition.value);
+                parameterValue = Int32.Parse(condition.value, CultureInfo.InvariantCulture);
             }
             else if (attr.AttributeType == AttributeTypeCode.Boolean)
             {
@@ -690,12 +691,12 @@ namespace MarkMpn.Sql4Cds.Engine
                 attr.AttributeType == AttributeTypeCode.Double)
             {
                 value = new NumericLiteral { Value = condition.value };
-                parameterValue = Decimal.Parse(condition.value);
+                parameterValue = Decimal.Parse(condition.value, CultureInfo.InvariantCulture);
             }
             else if (attr.AttributeType == AttributeTypeCode.Money)
             {
                 value = new MoneyLiteral { Value = condition.value };
-                parameterValue = Decimal.Parse(condition.value);
+                parameterValue = Decimal.Parse(condition.value, CultureInfo.InvariantCulture);
             }
             else if (attr.AttributeType == AttributeTypeCode.DateTime)
             {
@@ -940,7 +941,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                 break;
 
                             case @operator.lastxdays:
-                                startTime = DateTime.Today.AddDays(-Int32.Parse(condition.value));
+                                startTime = DateTime.Today.AddDays(-Int32.Parse(condition.value, CultureInfo.InvariantCulture));
                                 endTime = DateTime.Now;
 
                                 startExpression = DateAdd("day", new UnaryExpression { UnaryExpressionType = UnaryExpressionType.Negative, Expression = value }, new VariableReference { Name = useUtc ? "@utc_today" : "@today" });
@@ -948,7 +949,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                 break;
 
                             case @operator.lastxhours:
-                                startTime = DateTime.Today.AddHours(DateTime.Now.Hour - Int32.Parse(condition.value));
+                                startTime = DateTime.Today.AddHours(DateTime.Now.Hour - Int32.Parse(condition.value, CultureInfo.InvariantCulture));
                                 endTime = DateTime.Now;
 
                                 startExpression = DateAdd(
@@ -964,7 +965,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                 break;
 
                             case @operator.lastxmonths:
-                                startTime = DateTime.Today.AddMonths(-Int32.Parse(condition.value));
+                                startTime = DateTime.Today.AddMonths(-Int32.Parse(condition.value, CultureInfo.InvariantCulture));
                                 endTime = DateTime.Now;
 
                                 startExpression = DateAdd("month", new UnaryExpression { UnaryExpressionType = UnaryExpressionType.Negative, Expression = value }, new VariableReference { Name = useUtc ? "@utc_today" : "@today" });
@@ -972,7 +973,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                 break;
 
                             case @operator.lastxweeks:
-                                startTime = DateTime.Today.AddDays(-Int32.Parse(condition.value) * 7);
+                                startTime = DateTime.Today.AddDays(-Int32.Parse(condition.value, CultureInfo.InvariantCulture) * 7);
                                 endTime = DateTime.Now;
 
                                 startExpression = DateAdd(
@@ -988,7 +989,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                 break;
 
                             case @operator.lastxyears:
-                                startTime = DateTime.Today.AddYears(-Int32.Parse(condition.value));
+                                startTime = DateTime.Today.AddYears(-Int32.Parse(condition.value, CultureInfo.InvariantCulture));
                                 endTime = DateTime.Now;
 
                                 startExpression = DateAdd("year", new UnaryExpression { UnaryExpressionType = UnaryExpressionType.Negative, Expression = value }, new VariableReference { Name = useUtc ? "@utc_today" : "@today" });
@@ -1097,7 +1098,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                             case @operator.nextxdays:
                                 startTime = DateTime.Now;
-                                endTime = DateTime.Today.AddDays(Int32.Parse(condition.value) + 1);
+                                endTime = DateTime.Today.AddDays(Int32.Parse(condition.value, CultureInfo.InvariantCulture) + 1);
 
                                 startExpression = new VariableReference { Name = useUtc ? "@utc_now" : "@now" };
                                 endExpression = DateAdd(
@@ -1113,7 +1114,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                             case @operator.nextxhours:
                                 startTime = DateTime.Now;
-                                endTime = DateTime.Today.AddHours(DateTime.Now.Hour + Int32.Parse(condition.value) + 1);
+                                endTime = DateTime.Today.AddHours(DateTime.Now.Hour + Int32.Parse(condition.value, CultureInfo.InvariantCulture) + 1);
 
                                 startExpression = new VariableReference { Name = useUtc ? "@utc_now" : "@now" };
                                 endExpression = DateAdd(
@@ -1135,7 +1136,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                 
                             case @operator.nextxmonths:
                                 startTime = DateTime.Now;
-                                endTime = DateTime.Today.AddDays(1).AddMonths(Int32.Parse(condition.value));
+                                endTime = DateTime.Today.AddDays(1).AddMonths(Int32.Parse(condition.value, CultureInfo.InvariantCulture));
 
                                 startExpression = new VariableReference { Name = useUtc ? "@utc_now" : "@now" };
                                 endExpression = DateAdd(
@@ -1147,7 +1148,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                             case @operator.nextxweeks:
                                 startTime = DateTime.Now;
-                                endTime = DateTime.Today.AddDays(Int32.Parse(condition.value) * 7 + 1);
+                                endTime = DateTime.Today.AddDays(Int32.Parse(condition.value, CultureInfo.InvariantCulture) * 7 + 1);
 
                                 startExpression = new VariableReference { Name = useUtc ? "@utc_now" : "@now" };
                                 endExpression = DateAdd(
@@ -1169,7 +1170,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                             case @operator.nextxyears:
                                 startTime = DateTime.Now;
-                                endTime = DateTime.Today.AddDays(1).AddYears(Int32.Parse(condition.value));
+                                endTime = DateTime.Today.AddDays(1).AddYears(Int32.Parse(condition.value, CultureInfo.InvariantCulture));
 
                                 startExpression = new VariableReference { Name = useUtc ? "@utc_now" : "@now" };
                                 endExpression = DateAdd(
@@ -1217,7 +1218,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                 break;
 
                             case @operator.olderthanxdays:
-                                endTime = DateTime.Today.AddDays(-Int32.Parse(condition.value));
+                                endTime = DateTime.Today.AddDays(-Int32.Parse(condition.value, CultureInfo.InvariantCulture));
 
                                 endExpression = DateAdd(
                                     "day",
@@ -1227,7 +1228,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                 break;
 
                             case @operator.olderthanxhours:
-                                endTime = DateTime.Today.AddHours(DateTime.Now.Hour - Int32.Parse(condition.value));
+                                endTime = DateTime.Today.AddHours(DateTime.Now.Hour - Int32.Parse(condition.value, CultureInfo.InvariantCulture));
 
                                 endExpression = DateAdd(
                                     "hour",
@@ -1242,7 +1243,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                 break;
 
                             case @operator.olderthanxminutes:
-                                endTime = DateTime.Today.AddMinutes(Math.Truncate(DateTime.Now.TimeOfDay.TotalMinutes) - Int32.Parse(condition.value));
+                                endTime = DateTime.Today.AddMinutes(Math.Truncate(DateTime.Now.TimeOfDay.TotalMinutes) - Int32.Parse(condition.value, CultureInfo.InvariantCulture));
 
                                 endExpression = DateAdd(
                                     "minute",
@@ -1267,7 +1268,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                 break;
 
                             case @operator.olderthanxmonths:
-                                endTime = DateTime.Today.AddMonths(-Int32.Parse(condition.value));
+                                endTime = DateTime.Today.AddMonths(-Int32.Parse(condition.value, CultureInfo.InvariantCulture));
 
                                 endExpression = DateAdd(
                                     "month",
@@ -1277,7 +1278,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                 break;
 
                             case @operator.olderthanxweeks:
-                                endTime = DateTime.Today.AddDays(-Int32.Parse(condition.value) * 7);
+                                endTime = DateTime.Today.AddDays(-Int32.Parse(condition.value, CultureInfo.InvariantCulture) * 7);
 
                                 endExpression = DateAdd(
                                     "day",
@@ -1292,7 +1293,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                 break;
 
                             case @operator.olderthanxyears:
-                                endTime = DateTime.Today.AddYears(-Int32.Parse(condition.value));
+                                endTime = DateTime.Today.AddYears(-Int32.Parse(condition.value, CultureInfo.InvariantCulture));
 
                                 endExpression = DateAdd(
                                     "year",
@@ -1573,7 +1574,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                     GetFiscalPeriodSettings(org, out var fiscalPeriodType, out var fiscalStartDate);
                                     GetFiscalPeriodNumber(fiscalPeriodType, fiscalStartDate, DateTime.Today, out var fiscalYear, out _);
 
-                                    startTime = new DateTime(fiscalYear - Int32.Parse(condition.value), fiscalStartDate.Month, fiscalStartDate.Day);
+                                    startTime = new DateTime(fiscalYear - Int32.Parse(condition.value, CultureInfo.InvariantCulture), fiscalStartDate.Month, fiscalStartDate.Day);
                                     endTime = DateTime.Now;
                                 }
                                 break;
@@ -1584,7 +1585,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                     GetFiscalPeriodNumber(fiscalPeriodType, fiscalStartDate, DateTime.Today, out var fiscalYear, out var fiscalPeriod);
                                     GetFiscalPeriodDates(fiscalStartDate, fiscalPeriodType, fiscalYear, fiscalPeriod, out var startDate, out var endDate);
 
-                                    for (var i = 0; i < Int32.Parse(condition.value); i++)
+                                    for (var i = 0; i < Int32.Parse(condition.value, CultureInfo.InvariantCulture); i++)
                                         startDate = SubtractFiscalPeriod(startDate, fiscalPeriodType);
 
                                     startTime = startDate;
@@ -1598,7 +1599,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                     GetFiscalPeriodNumber(fiscalPeriodType, fiscalStartDate, DateTime.Today, out var fiscalYear, out _);
 
                                     startTime = DateTime.Now;
-                                    endTime = new DateTime(fiscalYear + Int32.Parse(condition.value) + 1, fiscalStartDate.Month, fiscalStartDate.Day);
+                                    endTime = new DateTime(fiscalYear + Int32.Parse(condition.value, CultureInfo.InvariantCulture) + 1, fiscalStartDate.Month, fiscalStartDate.Day);
                                 }
                                 break;
 
@@ -1608,7 +1609,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                     GetFiscalPeriodNumber(fiscalPeriodType, fiscalStartDate, DateTime.Today, out var fiscalYear, out var fiscalPeriod);
                                     GetFiscalPeriodDates(fiscalStartDate, fiscalPeriodType, fiscalYear, fiscalPeriod, out var startDate, out var endDate);
 
-                                    for (var i = 0; i < Int32.Parse(condition.value); i++)
+                                    for (var i = 0; i < Int32.Parse(condition.value, CultureInfo.InvariantCulture); i++)
                                         endDate = AddFiscalPeriod(endDate, fiscalPeriodType);
 
                                     startTime = DateTime.Now;
@@ -1620,7 +1621,7 @@ namespace MarkMpn.Sql4Cds.Engine
                                 {
                                     GetFiscalPeriodSettings(org, out var fiscalPeriodType, out var fiscalStartDate);
 
-                                    startTime = new DateTime(Int32.Parse(condition.value), fiscalStartDate.Month, fiscalStartDate.Day);
+                                    startTime = new DateTime(Int32.Parse(condition.value, CultureInfo.InvariantCulture), fiscalStartDate.Month, fiscalStartDate.Day);
                                     endTime = startTime.Value.AddYears(1);
                                 }
                                 break;
@@ -1632,7 +1633,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                             case @operator.infiscalperiodandyear:
                                 {
-                                    var values = condition.Items.OfType<conditionValue>().Select(v => Int32.Parse(v.Value)).ToArray();
+                                    var values = condition.Items.OfType<conditionValue>().Select(v => Int32.Parse(v.Value, CultureInfo.InvariantCulture)).ToArray();
                                     GetFiscalPeriodSettings(org, out var fiscalPeriodType, out var fiscalStartDate);
                                     GetFiscalPeriodDates(fiscalStartDate, fiscalPeriodType, values[1], values[0], out var startDate, out var endDate);
 
@@ -1643,7 +1644,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                             case @operator.inorbeforefiscalperiodandyear:
                                 {
-                                    var values = condition.Items.OfType<conditionValue>().Select(v => Int32.Parse(v.Value)).ToArray();
+                                    var values = condition.Items.OfType<conditionValue>().Select(v => Int32.Parse(v.Value, CultureInfo.InvariantCulture)).ToArray();
                                     GetFiscalPeriodSettings(org, out var fiscalPeriodType, out var fiscalStartDate);
                                     GetFiscalPeriodDates(fiscalStartDate, fiscalPeriodType, values[1], values[0], out _, out var endDate);
 
@@ -1653,7 +1654,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                             case @operator.inorafterfiscalperiodandyear:
                                 {
-                                    var values = condition.Items.OfType<conditionValue>().Select(v => Int32.Parse(v.Value)).ToArray();
+                                    var values = condition.Items.OfType<conditionValue>().Select(v => Int32.Parse(v.Value, CultureInfo.InvariantCulture)).ToArray();
                                     GetFiscalPeriodSettings(org, out var fiscalPeriodType, out var fiscalStartDate);
                                     GetFiscalPeriodDates(fiscalStartDate, fiscalPeriodType, values[1], values[0], out var startDate, out _);
 

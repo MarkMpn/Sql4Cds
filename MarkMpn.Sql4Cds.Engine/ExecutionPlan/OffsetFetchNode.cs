@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -98,8 +99,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 !Fetch.IsConstantValueExpression(null, options, out var fetchLiteral))
                 return sourceCount;
 
-            var offset = Int32.Parse(offsetLiteral.Value);
-            var fetch = Int32.Parse(fetchLiteral.Value);
+            var offset = Int32.Parse(offsetLiteral.Value, CultureInfo.InvariantCulture);
+            var fetch = Int32.Parse(fetchLiteral.Value, CultureInfo.InvariantCulture);
 
             return Math.Max(0, Math.Min(fetch, sourceCount - offset));
         }
