@@ -82,6 +82,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
         }
 
+        string IQueryExecutionOptions.PrimaryDataSource => "local";
+
+        Guid IQueryExecutionOptions.UserId => Guid.NewGuid();
+
         [TestMethod]
         public void SimpleSelect()
         {
@@ -124,6 +128,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 "createdon",
                 "employees",
                 "name",
+                "ownerid",
+                "owneridname",
                 "primarycontactid",
                 "primarycontactidname",
                 "turnover"
@@ -1828,7 +1834,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var filter = AssertNode<FilterNode>(top.Source);
             var constant = AssertNode<ConstantScanNode>(filter.Source);
 
-            var schema = constant.GetSchema(metadata, null);
+            var schema = constant.GetSchema(_dataSources, null);
             Assert.AreEqual(typeof(SqlInt32), schema.Schema["a.ID"]);
             Assert.AreEqual(typeof(SqlString), schema.Schema["a.name"]);
         }
@@ -2684,6 +2690,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <attribute name='createdon' />
                         <attribute name='employees' />
                         <attribute name='name' />
+                        <attribute name='ownerid' />
+                        <attribute name='owneridname' />
                         <attribute name='primarycontactid' />
                         <attribute name='primarycontactidname' />
                         <attribute name='turnover' />
@@ -2838,7 +2846,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 },
             };
 
-            var result = select.Execute(_service, metadata, this, null, null);
+            var result = select.Execute(_localDataSource, this, null, null);
             Assert.AreEqual(2, result.Rows.Count);
             Assert.AreEqual(SqlTypeConverter.UseDefaultCollation("Mark"), result.Rows[0][0]);
             Assert.AreEqual(SqlTypeConverter.UseDefaultCollation("Mark"), result.Rows[1][0]);
@@ -2963,6 +2971,158 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <attribute name='name' alias='n1' />
                         <filter>
                             <condition attribute='name' operator='eq' value='test' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void CrossInstanceJoin()
+        {
+            var metadata1 = new AttributeMetadataCache(_service);
+            var metadata2 = new AttributeMetadataCache(_service2);
+            var datasources = new []
+            {
+                new DataSource
+                {
+                    Name = "uat",
+                    Connection = _context.GetOrganizationService(),
+                    Metadata = metadata1,
+                    TableSizeCache = new StubTableSizeCache()
+                },
+                new DataSource
+                {
+                    Name = "prod",
+                    Connection = _context2.GetOrganizationService(),
+                    Metadata = metadata2,
+                    TableSizeCache = new StubTableSizeCache()
+                }
+            };
+            var planBuilder = new ExecutionPlanBuilder(datasources, this);
+
+            var query = "SELECT uat.name, prod.name FROM uat.dbo.account AS uat INNER JOIN prod.dbo.account AS prod ON uat.accountid = prod.accountid WHERE uat.name <> prod.name AND uat.name LIKE '%test%'";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+
+            var filter = AssertNode<FilterNode>(select.Source);
+            Assert.AreEqual("uat.name <> prod.name", filter.Filter.ToSql());
+
+            var join = AssertNode<MergeJoinNode>(filter.Source);
+            Assert.AreEqual("uat.accountid", join.LeftAttribute.ToSql());
+            Assert.AreEqual("prod.accountid", join.RightAttribute.ToSql());
+
+            var uatFetch = AssertNode<FetchXmlScan>(join.LeftSource);
+            Assert.AreEqual("uat", uatFetch.DataSource);
+            AssertFetchXml(uatFetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <attribute name='accountid' />
+                        <filter>
+                            <condition attribute='name' operator='like' value='%test%' />
+                        </filter>
+                        <order attribute='accountid' />
+                    </entity>
+                </fetch>");
+
+            var prodFetch = AssertNode<FetchXmlScan>(join.RightSource);
+            Assert.AreEqual("prod", prodFetch.DataSource);
+            AssertFetchXml(prodFetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <attribute name='accountid' />
+                        <order attribute='accountid' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void FilterOnGroupByExpression()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+            SELECT
+                DAY(a.createdon),
+                MONTH(a.createdon),
+                YEAR(a.createdon),
+                COUNT(*)
+            FROM
+                account a
+            WHERE
+                YEAR(a.createdon) = 2021 AND MONTH(a.createdon) = 11
+            GROUP BY
+                DAY(a.createdon),
+                MONTH(a.createdon),
+                YEAR(a.createdon)";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var grouping = AssertNode<HashMatchAggregateNode>(select.Source);
+            Assert.AreEqual("Expr1", grouping.GroupBy[0].ToSql());
+            Assert.AreEqual("Expr2", grouping.GroupBy[1].ToSql());
+            Assert.AreEqual("Expr3", grouping.GroupBy[2].ToSql());
+            var calc = AssertNode<ComputeScalarNode>(grouping.Source);
+            Assert.AreEqual("DAY(a.createdon)", calc.Columns["Expr1"].ToSql());
+            Assert.AreEqual("MONTH(a.createdon)", calc.Columns["Expr2"].ToSql());
+            Assert.AreEqual("YEAR(a.createdon)", calc.Columns["Expr3"].ToSql());
+            var filter = AssertNode<FilterNode>(calc.Source);
+            Assert.AreEqual("YEAR(a.createdon) = 2021 AND MONTH(a.createdon) = 11", filter.Filter.ToSql());
+            var fetch = AssertNode<FetchXmlScan>(filter.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='createdon' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void SystemFunctions()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT CURRENT_TIMESTAMP, CURRENT_USER, GETDATE(), USER_NAME()";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var calc = AssertNode<ComputeScalarNode>(select.Source);
+            var constant = AssertNode<ConstantScanNode>(calc.Source);
+        }
+
+        [TestMethod]
+        public void FoldEqualsCurrentUser()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT name FROM account WHERE ownerid = CURRENT_USER";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <filter>
+                            <condition attribute='ownerid' operator='eq-userid' />
                         </filter>
                     </entity>
                 </fetch>");

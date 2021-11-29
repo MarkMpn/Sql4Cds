@@ -18,6 +18,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private int _executionCount;
         private readonly Timer _timer = new Timer();
 
+        [Category("Data Source")]
+        [Description("The data source this query is executed against")]
+        public string DataSource { get; set; }
+
         [Browsable(false)]
         public string Sql { get; set; }
 
@@ -39,20 +43,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("FetchXML")]
         public string FetchXmlString { get; set; }
 
-        public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
         {
         }
 
-        public string Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        public string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             _executionCount++;
 
             try
             {
+                if (!dataSources.TryGetValue(DataSource, out var dataSource))
+                    throw new QueryExecutionException("Missing datasource " + DataSource);
+
                 using (_timer.Run())
                 {
-                    var query = ((FetchXmlToQueryExpressionResponse)org.Execute(new FetchXmlToQueryExpressionRequest { FetchXml = FetchXmlString })).Query;
-                    var meta = metadata[query.EntityName];
+                    var query = ((FetchXmlToQueryExpressionResponse)dataSource.Connection.Execute(new FetchXmlToQueryExpressionRequest { FetchXml = FetchXmlString })).Query;
+                    var meta = dataSource.Metadata[query.EntityName];
 
                     var req = new BulkDeleteRequest
                     {
@@ -65,7 +72,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         CCRecipients = Array.Empty<Guid>()
                     };
 
-                    var resp = (BulkDeleteResponse)org.Execute(req);
+                    var resp = (BulkDeleteResponse)dataSource.Connection.Execute(req);
 
                     return $"Bulk delete job started: {resp.JobId}";
                 }
@@ -83,7 +90,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public IRootExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public IRootExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             return this;
         }

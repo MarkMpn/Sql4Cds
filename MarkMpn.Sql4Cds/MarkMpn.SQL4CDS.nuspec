@@ -23,6 +23,14 @@ plugins or integrations by writing familiar SQL and converting it.
 Using the preview TDS Endpoint, SELECT queries can also be run that aren't convertible to FetchXML.</description>
     <summary>Convert SQL queries to FetchXML and execute them against Dataverse / D365</summary>
     <releaseNotes>Convert queries to M format for use in Power BI
+Allow queries across multiple instances
+Support CURRENT_TIMESTAMP and CURRENT_USER syntax
+Support primary functions (LEFT, COALESCE etc.) in GROUP BY clause
+Support ISNULL function
+Improved support for virtual table queries
+Intellisense improvements
+Show lookup values as links in grid view
+Fixed updating values to null using TDS endpoint
     </releaseNotes>
     <copyright>Copyright © 2019 Mark Carrington</copyright>
     <language>en-GB</language>

@@ -17,24 +17,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         /// <param name="org">The <see cref="IOrganizationService"/> to use to execute the plan</param>
         /// <returns>A sequence of entities matched by the query</returns>
-        IEnumerable<Entity> Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues);
+        IEnumerable<Entity> Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues);
 
         /// <summary>
         /// Attempts to fold the query operator down into its source
         /// </summary>
         /// <returns>The final execution plan node to execute</returns>
-        IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes);
+        IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes);
 
         /// <summary>
         /// Gets the schema of the dataset returned by the node
         /// </summary>
         /// <returns></returns>
-        NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes);
+        NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes);
 
         /// <summary>
         /// Estimates the number of rows that will be returned by this node
         /// </summary>
-        int EstimateRowsOut(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, ITableSizeCache tableSize);
+        int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes);
 
         /// <summary>
         /// Returns the total number of rows returned by this node

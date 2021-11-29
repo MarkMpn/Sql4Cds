@@ -43,7 +43,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="metadata">The <see cref="IAttributeMetadataCache"/> to use to get metadata</param>
         /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
         /// <param name="requiredColumns">The names of columns that are required by the parent node</param>
-        public abstract void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns);
+        public abstract void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns);
 
         /// <summary>
         /// Gets the name to show for an entity

@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine;
 using Microsoft.Xrm.Sdk.Metadata;
@@ -42,6 +43,10 @@ namespace MarkMpn.Sql4Cds.SSMS
         public List<JoinOperator> JoinOperatorsAvailable => new List<JoinOperator>();
 
         public bool BypassCustomPlugins => _options.BypassCustomPlugins;
+
+        public string PrimaryDataSource => "local";
+
+        public Guid UserId => Guid.Empty;
 
         public bool ConfirmInsert(int count, EntityMetadata meta)
         {

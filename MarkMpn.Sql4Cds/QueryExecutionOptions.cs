@@ -6,9 +6,11 @@ using System.Windows.Forms;
 using MarkMpn.Sql4Cds.Engine;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using McTools.Xrm.Connection;
+using Microsoft.Crm.Sdk.Messages;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
+using Microsoft.Xrm.Tooling.Connector;
 
 namespace MarkMpn.Sql4Cds
 {
@@ -21,6 +23,7 @@ namespace MarkMpn.Sql4Cds
         private readonly List<JoinOperator> _joinOperators;
         private int _localeId;
         private int _retrievedPages;
+        private Guid? _userId;
 
         public QueryExecutionOptions(ConnectionDetail con, IOrganizationService org, BackgroundWorker worker, Control host)
         {
@@ -169,6 +172,29 @@ namespace MarkMpn.Sql4Cds
 
             if (Settings.Instance.MaxRetrievesPerQuery != 0 && _retrievedPages > Settings.Instance.MaxRetrievesPerQuery)
                 throw new QueryExecutionException($"Hit maximum retrieval limit. This limit is in place to protect against excessive API requests. Try restricting the data to retrieve with WHERE clauses or eliminating subqueries.\r\nYour limit of {Settings.Instance.MaxRetrievesPerQuery:N0} retrievals per query can be modified in Settings.");
+        }
+
+        public string PrimaryDataSource => _con.ConnectionName;
+
+        public Guid UserId
+        {
+            get
+            {
+                if (_userId != null)
+                    return _userId.Value;
+
+                if (_org is CrmServiceClient svc && svc.CallerId != Guid.Empty)
+                    _userId = svc.CallerId;
+                else
+                    _userId = ((WhoAmIResponse)_org.Execute(new WhoAmIRequest())).UserId;
+
+                return _userId.Value;
+            }
+        }
+
+        public void SyncUserId()
+        {
+            _userId = null;
         }
     }
 }

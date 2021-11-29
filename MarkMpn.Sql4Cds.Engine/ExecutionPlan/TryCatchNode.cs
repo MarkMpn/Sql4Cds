@@ -22,14 +22,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public Func<Exception,bool> ExceptionFilter { get; set; }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             var useCatchSource = false;
             IEnumerator<Entity> enumerator;
 
             try
             {
-                enumerator = TrySource.Execute(org, metadata, options, parameterTypes, parameterValues).GetEnumerator();
+                enumerator = TrySource.Execute(dataSources, options, parameterTypes, parameterValues).GetEnumerator();
             }
             catch (Exception ex)
             {
@@ -69,14 +69,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (useCatchSource)
             {
-                foreach (var entity in CatchSource.Execute(org, metadata, options, parameterTypes, parameterValues))
+                foreach (var entity in CatchSource.Execute(dataSources, options, parameterTypes, parameterValues))
                     yield return entity;
             }
         }
 
-        public override NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
+        public override NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
         {
-            return TrySource.GetSchema(metadata, parameterTypes);
+            return TrySource.GetSchema(dataSources, parameterTypes);
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
@@ -85,24 +85,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return CatchSource;
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            TrySource = TrySource.FoldQuery(metadata, options, parameterTypes);
+            TrySource = TrySource.FoldQuery(dataSources, options, parameterTypes);
             TrySource.Parent = this;
-            CatchSource = CatchSource.FoldQuery(metadata, options, parameterTypes);
+            CatchSource = CatchSource.FoldQuery(dataSources, options, parameterTypes);
             CatchSource.Parent = this;
             return this;
         }
 
-        public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
         {
-            TrySource.AddRequiredColumns(metadata, parameterTypes, requiredColumns);
-            CatchSource.AddRequiredColumns(metadata, parameterTypes, requiredColumns);
+            TrySource.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
+            CatchSource.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        public override int EstimateRowsOut(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, ITableSizeCache tableSize)
+        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            return TrySource.EstimateRowsOut(metadata, parameterTypes, tableSize);
+            return TrySource.EstimateRowsOut(dataSources, options, parameterTypes);
         }
     }
 }

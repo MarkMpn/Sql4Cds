@@ -83,13 +83,9 @@ namespace MarkMpn.Sql4Cds
         private ExecuteParams _params;
         private int _rowCount;
         private ToolStripControlHost _progressHost;
-        private int _metadataLoadingTasks;
-        private string _preMetadataLoadingStatus;
-        private Image _preMetadataLoadingImage;
 
         private bool _addingResult;
         private IDictionary<int, TextRange> _messageLocations;
-        private ITableSizeCache _tableSize;
 
         static SqlQueryControl()
         {
@@ -99,12 +95,13 @@ namespace MarkMpn.Sql4Cds
             _sqlIcon = Icon.FromHandle(Properties.Resources.SQLFile_16x.GetHicon());
         }
 
-        public SqlQueryControl(ConnectionDetail con, SharedMetadataCache metadata, ITableSizeCache tableSize, TelemetryClient ai, Action<string> showFetchXml, Action<string> log, PropertiesWindow properties)
+        public SqlQueryControl(ConnectionDetail con, IDictionary<string, DataSource> dataSources, TelemetryClient ai, Action<string> showFetchXml, Action<string> log, PropertiesWindow properties)
         {
             InitializeComponent();
             _displayName = $"Query {++_queryCounter}";
             _modified = true;
             ShowFetchXML = showFetchXml;
+            DataSources = dataSources;
             _editor = CreateSqlEditor();
             _autocomplete = CreateAutocomplete();
             _ai = ai;
@@ -124,11 +121,10 @@ namespace MarkMpn.Sql4Cds
             splitContainer.Panel1.Controls.Add(_editor);
             Icon = _sqlIcon;
 
-            ChangeConnection(con, metadata, tableSize);
+            ChangeConnection(con);
         }
 
-        public CrmServiceClient Service { get; private set; }
-        public IAttributeMetadataCache Metadata { get; private set; }
+        public IDictionary<string, DataSource> DataSources { get; private set; }
         public Action<string> ShowFetchXML { get; }
         public string Filename
         {
@@ -144,28 +140,20 @@ namespace MarkMpn.Sql4Cds
         public ConnectionDetail Connection => _con;
         public string Sql => String.IsNullOrEmpty(_editor.SelectedText) ? _editor.Text : _editor.SelectedText;
 
-        internal void ChangeConnection(ConnectionDetail con, SharedMetadataCache metadata, ITableSizeCache tableSize)
+        internal void ChangeConnection(ConnectionDetail con)
         {
             _con = con;
-            _tableSize = tableSize;
 
             if (con != null)
             {
-                Service = con.ServiceClient;
-                Metadata = new MetaMetadataCache(metadata);
-
                 hostLabel.Text = new Uri(_con.OrganizationServiceUrl).Host;
                 orgNameLabel.Text = _con.Organization;
-
-                metadata.MetadataLoading += MetadataLoading;
 
                 toolStripStatusLabel.Text = "Connected";
                 toolStripStatusLabel.Image = Properties.Resources.ConnectFilled_grey_16x;
             }
             else
             {
-                Service = null;
-                Metadata = null;
                 hostLabel.Text = "";
                 orgNameLabel.Text = "";
 
@@ -382,16 +370,23 @@ namespace MarkMpn.Sql4Cds
                 if (!wordEnd.Success)
                     return;
 
-                EntityCache.TryGetEntities(_con.MetadataCacheLoader, Service, out var entities);
+                var autocompleteDataSources = DataSources.Values
+                    .Select(ds =>
+                    {
+                        EntityCache.TryGetEntities(ds.ConnectionDetail.MetadataCacheLoader, ds.Connection, out var entities);
 
-                var metaEntities = MetaMetadataCache.GetMetadata();
+                        var metaEntities = MetaMetadataCache.GetMetadata();
 
-                if (entities == null)
-                    entities = metaEntities.ToArray();
-                else
-                    entities = entities.Concat(metaEntities).ToArray();
+                        if (entities == null)
+                            entities = metaEntities.ToArray();
+                        else
+                            entities = entities.Concat(metaEntities).ToArray();
 
-                var suggestions = new Autocomplete(entities, Metadata).GetSuggestions(text, wordEnd.Index - 1).ToList();
+                        return new AutocompleteDataSource { Name = ds.Name, Entities = entities, Metadata = new MetaMetadataCache(ds.Metadata) };
+                    })
+                    .ToDictionary(ds => ds.Name, StringComparer.OrdinalIgnoreCase);
+
+                var suggestions = new Autocomplete(autocompleteDataSources, _con.ConnectionName).GetSuggestions(text, wordEnd.Index - 1).ToList();
                 var exactSuggestions = suggestions.Where(suggestion => suggestion.Text.Length <= wordEnd.Index && text.Substring(wordEnd.Index - suggestion.CompareText.Length, suggestion.CompareText.Length).Equals(suggestion.CompareText, StringComparison.OrdinalIgnoreCase)).ToList();
 
                 if (exactSuggestions.Count == 1)
@@ -496,16 +491,24 @@ namespace MarkMpn.Sql4Cds
                     yield break;
 
                 var text = _control._editor.Text;
-                EntityCache.TryGetEntities(_control._con.MetadataCacheLoader, _control.Service, out var entities);
 
-                var metaEntities = MetaMetadataCache.GetMetadata();
+                var autocompleteDataSources = _control.DataSources.Values
+                    .Select(ds =>
+                    {
+                        EntityCache.TryGetEntities(ds.ConnectionDetail.MetadataCacheLoader, ds.Connection, out var entities);
 
-                if (entities == null)
-                    entities = metaEntities.ToArray();
-                else
-                    entities = entities.Concat(metaEntities).ToArray();
+                        var metaEntities = MetaMetadataCache.GetMetadata();
 
-                var suggestions = new Autocomplete(entities, _control.Metadata).GetSuggestions(text, pos).ToList();
+                        if (entities == null)
+                            entities = metaEntities.ToArray();
+                        else
+                            entities = entities.Concat(metaEntities).ToArray();
+
+                        return new AutocompleteDataSource { Name = ds.Name, Entities = entities, Metadata = new MetaMetadataCache(ds.Metadata) };
+                    })
+                    .ToDictionary(ds => ds.Name, StringComparer.OrdinalIgnoreCase);
+
+                var suggestions = new Autocomplete(autocompleteDataSources, _control.Connection.ConnectionName).GetSuggestions(text, pos).ToList();
 
                 if (suggestions.Count == 0)
                     yield break;
@@ -522,7 +525,7 @@ namespace MarkMpn.Sql4Cds
 
         public void Execute(bool execute, bool includeFetchXml)
         {
-            if (Service == null)
+            if (Connection == null)
                 return;
 
             if (backgroundWorker.IsBusy)
@@ -564,35 +567,6 @@ namespace MarkMpn.Sql4Cds
         {
             backgroundWorker.ReportProgress(0, "Cancelling query...");
             backgroundWorker.CancelAsync();
-        }
-
-        private void Grid_CellMouseUp(object sender, DataGridViewCellMouseEventArgs e)
-        {
-            if (e.Button == MouseButtons.Right)
-            {
-                if (e.ColumnIndex < 0 || e.RowIndex < 0)
-                    return;
-
-                var grid = (DataGridView)sender;
-                var cell = grid[e.ColumnIndex, e.RowIndex];
-
-                if (!cell.Selected)
-                {
-                    grid.CurrentCell = cell;
-                    grid.ContextMenuStrip.Show(grid, grid.PointToClient(Cursor.Position));
-                }
-            }
-        }
-
-        private void Grid_RecordClick(object sender, CRMRecordEventArgs e)
-        {
-            // Store the details of what's been clicked
-            // Show context menu with Open & Create SELECT options enabled
-            if (e.Entity != null && e.Entity.Contains(e.Attribute) && e.Entity[e.Attribute] is EntityReference)
-            {
-                var grid = (Control)sender;
-                gridContextMenuStrip.Show(grid, grid.PointToClient(Cursor.Position));
-            }
         }
 
         private void AddResult(Control results, Control fetchXml, int rowCount)
@@ -666,33 +640,6 @@ namespace MarkMpn.Sql4Cds
             _addingResult = false;
         }
 
-        private void gridContextMenuStrip_Opening(object sender, CancelEventArgs e)
-        {
-            var grid = gridContextMenuStrip.SourceControl as CRMGridView;
-
-            if (grid == null)
-            {
-                openRecordToolStripMenuItem.Enabled = false;
-                createSELECTQueryToolStripMenuItem.Enabled = false;
-            }
-            else
-            {
-                var entity = grid.SelectedCells.Count == 1 ? grid.SelectedCellRecords.Single() : null;
-                var isEntityReference = false;
-
-                if (entity != null)
-                {
-                    var attr = grid.SelectedCells[0].OwningColumn.DataPropertyName;
-
-                    if (entity.Contains(attr) && entity[attr] is EntityReference)
-                        isEntityReference = true;
-                }
-
-                openRecordToolStripMenuItem.Enabled = isEntityReference;
-                createSELECTQueryToolStripMenuItem.Enabled = isEntityReference;
-            }
-        }
-
         private void copyToolStripMenuItem_Click(object sender, EventArgs e)
         {
             var grid = (DataGridView)gridContextMenuStrip.SourceControl;
@@ -705,33 +652,6 @@ namespace MarkMpn.Sql4Cds
             grid.ClipboardCopyMode = DataGridViewClipboardCopyMode.EnableAlwaysIncludeHeaderText;
             Clipboard.SetDataObject(grid.GetClipboardContent());
             grid.ClipboardCopyMode = DataGridViewClipboardCopyMode.EnableWithoutHeaderText;
-        }
-
-        private void openRecordToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            var grid = (CRMGridView)gridContextMenuStrip.SourceControl;
-            var entity = grid.SelectedCells.Count == 1 ? grid.SelectedCellRecords.Single() : null;
-            var attr = grid.SelectedCells[0].OwningColumn.DataPropertyName;
-            var entityReference = entity.GetAttributeValue<EntityReference>(attr);
-
-            // Open record
-            var url = new Uri(new Uri(_con.WebApplicationUrl), $"main.aspx?etn={entityReference.LogicalName}&id={entityReference.Id}&pagetype=entityrecord");
-            Process.Start(url.ToString());
-        }
-
-        private void createSELECTQueryToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            var grid = (CRMGridView)gridContextMenuStrip.SourceControl;
-            var entity = grid.SelectedCells.Count == 1 ? grid.SelectedCellRecords.Single() : null;
-            var attr = grid.SelectedCells[0].OwningColumn.DataPropertyName;
-            var entityReference = entity.GetAttributeValue<EntityReference>(attr);
-
-            // Create SELECT query
-            var metadata = Metadata[entityReference.LogicalName];
-            _editor.AppendText("\r\n\r\n");
-            var end = _editor.TextLength;
-            _editor.AppendText($"SELECT * FROM {entityReference.LogicalName} WHERE {metadata.PrimaryIdAttribute} = '{entityReference.Id}'");
-            _editor.SetSelection(_editor.TextLength, end);
         }
 
         private void backgroundWorker_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
@@ -933,12 +853,12 @@ namespace MarkMpn.Sql4Cds
 
             backgroundWorker.ReportProgress(0, "Executing query...");
 
-            var options = new QueryExecutionOptions(_con, Service, backgroundWorker, this);
-            var converter = new ExecutionPlanBuilder(Metadata, _tableSize, options);
+            var options = new QueryExecutionOptions(_con, DataSources[_con.ConnectionName].Connection, backgroundWorker, this);
+            var converter = new ExecutionPlanBuilder(DataSources.Values, options);
 
             if (Settings.Instance.UseTSQLEndpoint &&
                 args.Execute &&
-                !String.IsNullOrEmpty(((CrmServiceClient)Service).CurrentAccessToken))
+                !String.IsNullOrEmpty(((CrmServiceClient)DataSources[_con.ConnectionName].Connection).CurrentAccessToken))
                 converter.TDSEndpointAvailable = true;
 
             var queries = converter.Build(args.Sql);
@@ -953,13 +873,13 @@ namespace MarkMpn.Sql4Cds
                     {
                         if (query is IDataSetExecutionPlanNode dataQuery)
                         {
-                            var result = dataQuery.Execute(Service, Metadata, options, null, null);
+                            var result = dataQuery.Execute(DataSources.Values.Cast<Engine.DataSource>().ToDictionary(ds => ds.Name, StringComparer.OrdinalIgnoreCase), options, null, null);
 
                             Execute(() => ShowResult(query, args, result, null, null));
                         }
                         else if (query is IDmlQueryExecutionPlanNode dmlQuery)
                         {
-                            var result = dmlQuery.Execute(Service, Metadata, options, null, null);
+                            var result = dmlQuery.Execute(DataSources.Values.Cast<Engine.DataSource>().ToDictionary(ds => ds.Name, StringComparer.OrdinalIgnoreCase), options, null, null);
 
                             Execute(() => ShowResult(query, args, null, result, null));
                         }
@@ -970,7 +890,10 @@ namespace MarkMpn.Sql4Cds
                     }
 
                     if (query is IImpersonateRevertExecutionPlanNode)
+                    {
+                        options.SyncUserId();
                         Execute(() => SyncUsername());
+                    }
                 }
             }
             else
@@ -1028,6 +951,8 @@ namespace MarkMpn.Sql4Cds
                     });
                 }
 
+                var linkFont = new Font(grid.Font, grid.Font.Style | FontStyle.Underline);
+
                 grid.CellFormatting += (s, e) =>
                 {
                     if (e.Value is INullable nullable && nullable.IsNull || e.Value is DBNull)
@@ -1040,6 +965,64 @@ namespace MarkMpn.Sql4Cds
                     {
                         e.Value = b.Value ? "1" : "0";
                     }
+                    else if (e.Value is SqlDateTime dt)
+                    {
+                        e.Value = dt.Value.ToString("yyyy-MM-dd HH:mm:ss.fff");
+                    }
+                    else if (e.Value is SqlEntityReference)
+                    {
+                        e.CellStyle.ForeColor = SystemColors.HotTrack;
+                        e.CellStyle.Font = linkFont;
+                    }
+                };
+
+                grid.CellMouseEnter += (s, e) =>
+                {
+                    if (e.RowIndex < 0 || e.ColumnIndex < 0)
+                        return;
+
+                    var gv = (DataGridView)s;
+                    var cell = gv.Rows[e.RowIndex].Cells[e.ColumnIndex];
+
+                    if (cell.Value is SqlEntityReference er && !er.IsNull)
+                        gv.Cursor = Cursors.Hand;
+                    else
+                        gv.Cursor = Cursors.Default;
+                };
+
+                grid.CellMouseLeave += (s, e) =>
+                {
+                    var gv = (DataGridView)s;
+                    gv.Cursor = Cursors.Default;
+                };
+
+                grid.CellMouseDown += (s, e) =>
+                {
+                    if (e.RowIndex < 0 || e.ColumnIndex < 0)
+                        return;
+
+                    if (e.Button != MouseButtons.Right)
+                        return;
+
+                    var gv = (DataGridView)s;
+                    var cell = gv.Rows[e.RowIndex].Cells[e.ColumnIndex];
+
+                    if (cell.Selected)
+                        return;
+
+                    gv.CurrentCell = cell;
+                };
+
+                grid.CellContentDoubleClick += (s, e) =>
+                {
+                    if (e.RowIndex < 0 || e.ColumnIndex < 0)
+                        return;
+
+                    var gv = (DataGridView)s;
+                    var cell = gv.Rows[e.RowIndex].Cells[e.ColumnIndex];
+
+                    if (cell.Value is SqlEntityReference er && !er.IsNull)
+                        OpenRecord(er);
                 };
 
                 grid.HandleCreated += (s, e) =>
@@ -1091,7 +1074,8 @@ namespace MarkMpn.Sql4Cds
                     AutoEllipsis = true,
                     UseMnemonic = false
                 };
-                var planView = new ExecutionPlanView { Dock = DockStyle.Fill, Executed = args.Execute, Exception = ex, Metadata = Metadata, TableSizeCache = _tableSize };
+                var options = new QueryExecutionOptions(_con, DataSources[_con.ConnectionName].Connection, backgroundWorker, this);
+                var planView = new ExecutionPlanView { Dock = DockStyle.Fill, Executed = args.Execute, Exception = ex, DataSources = DataSources, Options = options };
                 planView.Plan = query;
                 planView.NodeSelected += (s, e) => _properties.SelectedObject = planView.Selected;
                 planView.DoubleClick += (s, e) =>
@@ -1104,6 +1088,15 @@ namespace MarkMpn.Sql4Cds
             }
 
             AddResult(result, plan, rowCount);
+        }
+
+        private void OpenRecord(SqlEntityReference entityReference)
+        {
+            if (!DataSources.TryGetValue(entityReference.DataSource, out var dataSource))
+                return;
+
+            var url = dataSource.ConnectionDetail.GetEntityReferenceUrl(entityReference);
+            Process.Start(url);
         }
 
         private void backgroundWorker_ProgressChanged(object sender, ProgressChangedEventArgs e)
@@ -1171,58 +1164,32 @@ namespace MarkMpn.Sql4Cds
             return control.Height;
         }
 
-        private void MetadataLoading(object sender, MetadataLoadingEventArgs e)
-        {
-            if (!Busy)
-            {
-                if (Interlocked.Increment(ref _metadataLoadingTasks) == 1)
-                {
-                    Execute(() =>
-                    {
-                        _preMetadataLoadingStatus = toolStripStatusLabel.Text;
-                        _preMetadataLoadingImage = toolStripStatusLabel.Image;
-                        toolStripStatusLabel.Text = "Loading metadata for " + e.LogicalName;
-                        toolStripStatusLabel.Image = null;
-                        _progressHost.Visible = true;
-                    });
-                }
-
-                e.Task.ContinueWith(t =>
-                {
-                    if (Interlocked.Decrement(ref _metadataLoadingTasks) == 0 && !Busy)
-                    {
-                        Execute(() =>
-                        {
-                            toolStripStatusLabel.Text = _preMetadataLoadingStatus;
-                            toolStripStatusLabel.Image = _preMetadataLoadingImage;
-                            _progressHost.Visible = false;
-                        });
-                    }
-                });
-            }
-        }
-
         private void SyncUsername()
         {
-            if (Service == null)
+            if (Connection == null)
             {
                 usernameDropDownButton.Text = "";
                 usernameDropDownButton.Image = null;
                 revertToolStripMenuItem.Enabled = false;
             }
-            else if (Service.CallerId == Guid.Empty)
-            {
-                usernameDropDownButton.Text = _con.UserName;
-                usernameDropDownButton.Image = null;
-                revertToolStripMenuItem.Enabled = false;
-            }
             else
             {
-                var user = Service.Retrieve("systemuser", Service.CallerId, new ColumnSet("domainname"));
+                var service = (CrmServiceClient)DataSources[Connection.ConnectionName].Connection;
+                
+                if (service.CallerId == Guid.Empty)
+                {
+                    usernameDropDownButton.Text = _con.UserName;
+                    usernameDropDownButton.Image = null;
+                    revertToolStripMenuItem.Enabled = false;
+                }
+                else
+                {
+                    var user = service.Retrieve("systemuser", service.CallerId, new ColumnSet("domainname"));
 
-                usernameDropDownButton.Text = user.GetAttributeValue<string>("domainname");
-                usernameDropDownButton.Image = Properties.Resources.StatusWarning_16x;
-                revertToolStripMenuItem.Enabled = true;
+                    usernameDropDownButton.Text = user.GetAttributeValue<string>("domainname");
+                    usernameDropDownButton.Image = Properties.Resources.StatusWarning_16x;
+                    revertToolStripMenuItem.Enabled = true;
+                }
             }
         }
 
@@ -1230,14 +1197,16 @@ namespace MarkMpn.Sql4Cds
         {
             using (var dlg = new CDSLookupDialog())
             {
-                dlg.Service = Service;
+                var service = (CrmServiceClient)DataSources[Connection.ConnectionName].Connection;
+
+                dlg.Service = service;
                 dlg.LogicalName = "systemuser";
                 dlg.Multiselect = false;
 
                 if (dlg.ShowDialog(this) == DialogResult.OK)
                 {
                     _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = "ExecuteAsNode", ["Source"] = "XrmToolBox" });
-                    Service.CallerId = dlg.Entity.Id;
+                    service.CallerId = dlg.Entity.Id;
                     SyncUsername();
                 }
             }
@@ -1245,9 +1214,54 @@ namespace MarkMpn.Sql4Cds
 
         private void revertToolStripMenuItem_Click(object sender, EventArgs e)
         {
+            var service = (CrmServiceClient)DataSources[Connection.ConnectionName].Connection;
+
             _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = "RevertNode", ["Source"] = "XrmToolBox" });
-            Service.CallerId = Guid.Empty;
+            service.CallerId = Guid.Empty;
             SyncUsername();
+        }
+
+        private void gridContextMenuStrip_Opening(object sender, CancelEventArgs e)
+        {
+            var grid = (DataGridView)gridContextMenuStrip.SourceControl;
+
+            openRecordToolStripMenuItem.Enabled = false;
+            createSELECTStatementToolStripMenuItem.Enabled = false;
+
+            if (grid.CurrentCell?.Value is SqlEntityReference er && !er.IsNull)
+            {
+                openRecordToolStripMenuItem.Enabled = true;
+                createSELECTStatementToolStripMenuItem.Enabled = true;
+            }
+        }
+
+        private void openRecordToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var grid = (DataGridView)gridContextMenuStrip.SourceControl;
+
+            if (grid.CurrentCell?.Value is SqlEntityReference er && !er.IsNull)
+                OpenRecord(er);
+        }
+
+        private void createSELECTStatementToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var grid = (DataGridView)gridContextMenuStrip.SourceControl;
+
+            if (grid.CurrentCell?.Value is SqlEntityReference er && !er.IsNull && DataSources.TryGetValue(er.DataSource, out var dataSource))
+            {
+                var select = "\r\n\r\nSELECT * FROM ";
+
+                if (er.DataSource != _con.ConnectionName)
+                    select += $"{Autocomplete.SqlAutocompleteItem.EscapeIdentifier(er.DataSource)}.dbo.";
+
+                select += Autocomplete.SqlAutocompleteItem.EscapeIdentifier(er.LogicalName);
+
+                var metadata = dataSource.Metadata[er.LogicalName];
+
+                select += $" WHERE {Autocomplete.SqlAutocompleteItem.EscapeIdentifier(metadata.PrimaryIdAttribute)} = '{er.Id}'";
+
+                _editor.AppendText(select);
+            }
         }
     }
 }

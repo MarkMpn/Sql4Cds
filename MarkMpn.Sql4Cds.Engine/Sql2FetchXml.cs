@@ -59,6 +59,10 @@ namespace MarkMpn.Sql4Cds.Engine
 
             public bool UseLocalTimeZone => false;
 
+            public string PrimaryDataSource => "local";
+
+            public Guid UserId { get; set; }
+
             public List<JoinOperator> JoinOperatorsAvailable => new List<JoinOperator> { JoinOperator.Inner, JoinOperator.LeftOuter };
 
             public bool BypassCustomPlugins => false;

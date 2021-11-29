@@ -41,21 +41,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("Additional Join Criteria")]
         public BooleanExpression AdditionalJoinCriteria { get; set; }
 
-        public override IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            LeftSource = LeftSource.FoldQuery(metadata, options, parameterTypes);
+            LeftSource = LeftSource.FoldQuery(dataSources, options, parameterTypes);
             LeftSource.Parent = this;
-            RightSource = RightSource.FoldQuery(metadata, options, parameterTypes);
+            RightSource = RightSource.FoldQuery(dataSources, options, parameterTypes);
             RightSource.Parent = this;
 
             if (SemiJoin)
                 return this;
 
-            var leftSchema = LeftSource.GetSchema(metadata, parameterTypes);
-            var rightSchema = RightSource.GetSchema(metadata, parameterTypes);
+            var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
+            var rightSchema = RightSource.GetSchema(dataSources, parameterTypes);
 
             if (LeftSource is FetchXmlScan leftFetch && RightSource is FetchXmlScan rightFetch)
             {
+                // Can't join data from different sources
+                if (!leftFetch.DataSource.Equals(rightFetch.DataSource, StringComparison.OrdinalIgnoreCase))
+                    return this;
+
                 // If one source is distinct and the other isn't, joining the two won't produce the expected results
                 if (leftFetch.FetchXml.distinct ^ rightFetch.FetchXml.distinct)
                     return this;
@@ -82,7 +86,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return this;
 
                 // If the entities are from different virtual entity data providers it's probably not going to work
-                if (metadata[leftFetch.Entity.name].DataProviderId != metadata[rightFetch.Entity.name].DataProviderId)
+                if (!dataSources.TryGetValue(leftFetch.DataSource, out var dataSource))
+                    throw new NotSupportedQueryFragmentException("Missing datasource " + leftFetch.DataSource);
+
+                if (dataSource.Metadata[leftFetch.Entity.name].DataProviderId != dataSource.Metadata[rightFetch.Entity.name].DataProviderId)
                     return this;
 
                 // If we're doing a right outer join, switch everything round to do a left outer join
@@ -107,7 +114,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var additionalCriteria = AdditionalJoinCriteria;
                 var additionalLinkEntities = new Dictionary<object, List<FetchLinkEntityType>>();
 
-                if (TranslateFetchXMLCriteria(metadata, options, additionalCriteria, rightSchema, rightFetch.Alias, rightEntity.name, rightFetch.Alias, rightEntity.Items, out var filter, additionalLinkEntities))
+                if (TranslateFetchXMLCriteria(dataSource.Metadata, options, additionalCriteria, rightSchema, rightFetch.Alias, rightEntity.name, rightFetch.Alias, rightEntity.Items, out var filter, additionalLinkEntities))
                 {
                     rightEntity.AddItem(filter);
 
@@ -163,13 +170,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 if (additionalCriteria != null)
-                    return new FilterNode { Filter = additionalCriteria, Source = leftFetch }.FoldQuery(metadata, options, parameterTypes);
+                    return new FilterNode { Filter = additionalCriteria, Source = leftFetch }.FoldQuery(dataSources, options, parameterTypes);
 
                 return leftFetch;
             }
 
             if (LeftSource is MetadataQueryNode leftMeta && RightSource is MetadataQueryNode rightMeta && JoinType == QualifiedJoinType.Inner)
             {
+                // Can't join data from different sources
+                if (!leftMeta.DataSource.Equals(rightMeta.DataSource, StringComparison.OrdinalIgnoreCase))
+                    return this;
+
                 // Check if this is a simple join that the MetadataQueryNode can handle - joining from entity metadata to one of it's children
                 if ((leftMeta.MetadataSource & rightMeta.MetadataSource) == 0 && (leftMeta.MetadataSource | rightMeta.MetadataSource).HasFlag(MetadataSource.Entity))
                 {
@@ -253,7 +264,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             right = temp;
         }
 
-        public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
         {
             if (AdditionalJoinCriteria != null)
             {
@@ -265,8 +276,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             // Work out which columns need to be pushed down to which source
-            var leftSchema = LeftSource.GetSchema(metadata, parameterTypes);
-            var rightSchema = RightSource.GetSchema(metadata, parameterTypes);
+            var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
+            var rightSchema = RightSource.GetSchema(dataSources, parameterTypes);
 
             var leftColumns = requiredColumns
                 .Where(col => leftSchema.ContainsColumn(col, out _))
@@ -278,14 +289,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             leftColumns.Add(LeftAttribute.GetColumnName());
             rightColumns.Add(RightAttribute.GetColumnName());
 
-            LeftSource.AddRequiredColumns(metadata, parameterTypes, leftColumns);
-            RightSource.AddRequiredColumns(metadata, parameterTypes, rightColumns);
+            LeftSource.AddRequiredColumns(dataSources, parameterTypes, leftColumns);
+            RightSource.AddRequiredColumns(dataSources, parameterTypes, rightColumns);
         }
 
-        public override int EstimateRowsOut(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, ITableSizeCache tableSize)
+        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            var leftEstimate = LeftSource.EstimateRowsOut(metadata, parameterTypes, tableSize);
-            var rightEstimate = RightSource.EstimateRowsOut(metadata, parameterTypes, tableSize);
+            var leftEstimate = LeftSource.EstimateRowsOut(dataSources, options, parameterTypes);
+            var rightEstimate = RightSource.EstimateRowsOut(dataSources, options, parameterTypes);
 
             if (JoinType == QualifiedJoinType.Inner)
                 return Math.Min(leftEstimate, rightEstimate);
@@ -293,14 +304,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return Math.Max(leftEstimate, rightEstimate);
         }
 
-        protected override NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, bool includeSemiJoin)
+        protected override NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, bool includeSemiJoin)
         {
-            var schema = base.GetSchema(metadata, parameterTypes, includeSemiJoin);
+            var schema = base.GetSchema(dataSources, parameterTypes, includeSemiJoin);
 
             if (schema.PrimaryKey == null && JoinType == QualifiedJoinType.Inner)
             {
-                var leftSchema = LeftSource.GetSchema(metadata, parameterTypes);
-                var rightSchema = GetRightSchema(metadata, parameterTypes);
+                var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
+                var rightSchema = GetRightSchema(dataSources, parameterTypes);
 
                 if (LeftAttribute.GetColumnName() == leftSchema.PrimaryKey)
                     schema.PrimaryKey = rightSchema.PrimaryKey;

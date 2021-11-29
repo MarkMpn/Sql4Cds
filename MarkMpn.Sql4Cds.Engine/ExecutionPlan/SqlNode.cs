@@ -23,6 +23,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override TimeSpan Duration => _duration;
 
+        [Category("Data Source")]
+        [Description("The data source this query is executed against")]
+        public string DataSource { get; set; }
+
         [Category("TDS Endpoint")]
         [Description("The SQL query to execute")]
         public string Sql { get; set; }
@@ -33,22 +37,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public int Length { get; set; }
 
-        public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
         {
         }
 
-        public DataTable Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        public DataTable Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             _executionCount++;
             var startTime = DateTime.Now;
 
             try
             {
+                if (!dataSources.TryGetValue(DataSource, out var dataSource))
+                    throw new QueryExecutionException("Missing datasource " + DataSource);
+
                 if (options.UseLocalTimeZone)
                     throw new QueryExecutionException("Cannot use automatic local time zone conversion with the TDS Endpoint");
 
-                if (!(org is CrmServiceClient svc))
-                    throw new QueryExecutionException($"IOrganizationService implementation needs to be CrmServiceClient for use with the TDS Endpoint, got {org.GetType()}");
+                if (!(dataSource.Connection is CrmServiceClient svc))
+                    throw new QueryExecutionException($"IOrganizationService implementation needs to be CrmServiceClient for use with the TDS Endpoint, got {dataSource.Connection.GetType()}");
 
                 if (svc.CallerId != Guid.Empty)
                     throw new QueryExecutionException("Cannot use impersonation with the TDS Endpoint");
@@ -69,8 +76,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             adapter.Fill(result);
                         }
 
-                        var columnSqlTypes = result.Columns.Cast<DataColumn>().Select(col => SqlTypeConverter.NetToSqlType(col.DataType)).ToArray();
-                        var columnNullValues = columnSqlTypes.Select(type => SqlTypeConverter.GetNullValue(type)).ToArray();
+                        // SQL doesn't know the data type of NULL, so SELECT NULL will be returned with a schema type
+                        // of SqlInt32. This causes problems trying to convert it to other types for updates/inserts,
+                        // so change all-null columns to object
+                        // https://github.com/MarkMpn/Sql4Cds/issues/122
+                        var nullColumns = result.Columns
+                            .Cast<DataColumn>()
+                            .Select((col, colIndex) => result.Rows
+                                .Cast<DataRow>()
+                                .Select(row => DBNull.Value.Equals(row[colIndex]))
+                                .All(isNull => isNull)
+                                )
+                            .ToArray();
+
+                        var columnSqlTypes = result.Columns
+                            .Cast<DataColumn>()
+                            .Select((col, colIndex) => nullColumns[colIndex] ? typeof(object) : SqlTypeConverter.NetToSqlType(col.DataType))
+                            .ToArray();
+                        var columnNullValues = columnSqlTypes
+                            .Select(type => SqlTypeConverter.GetNullValue(type))
+                            .ToArray();
 
                         // Values will be stored as BCL types, convert them to SqlXxx types for consistency with IDataExecutionPlanNodes
                         var sqlTable = new DataTable();
@@ -84,7 +109,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                             for (var i = 0; i < result.Columns.Count; i++)
                             {
-                                var sqlValue = DBNull.Value.Equals(row[i]) ? columnNullValues[i] : SqlTypeConverter.NetToSqlType(row[i]);
+                                var sqlValue = DBNull.Value.Equals(row[i]) ? columnNullValues[i] : SqlTypeConverter.NetToSqlType(DataSource, row[i]);
                                 sqlRow[i] = sqlValue;
                             }
                         }
@@ -114,7 +139,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public IRootExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public IRootExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
             return this;
         }

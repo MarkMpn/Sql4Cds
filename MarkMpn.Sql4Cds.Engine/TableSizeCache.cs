@@ -36,7 +36,11 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (_tableSize.TryGetValue(logicalName, out var count))
                     return count;
 
-                if (UseRetrieveTotalRecordCountRequest)
+                if (_metadata[logicalName].DataProviderId != null)
+                {
+                    count = 1000;
+                }
+                else if (UseRetrieveTotalRecordCountRequest)
                 {
                     count = (int) ((RetrieveTotalRecordCountResponse)_org.Execute(new RetrieveTotalRecordCountRequest { EntityNames = new[] { logicalName } })).EntityRecordCountCollection[logicalName];
                 }

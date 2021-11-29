@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
 
@@ -116,5 +117,15 @@ namespace MarkMpn.Sql4Cds.Engine
         /// A notification that the query is about to retrieve another page of data
         /// </summary>
         void RetrievingNextPage();
+
+        /// <summary>
+        /// Returns the name of the primary data source the query is being executed in
+        /// </summary>
+        string PrimaryDataSource { get; }
+
+        /// <summary>
+        /// Returns the unique identifier of the current user
+        /// </summary>
+        Guid UserId { get; }
     }
 }

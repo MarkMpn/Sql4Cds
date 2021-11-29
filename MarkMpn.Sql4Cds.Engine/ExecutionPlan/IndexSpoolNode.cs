@@ -34,27 +34,27 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("Seek Value")]
         public string SeekValue { get; set; }
 
-        public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
         {
             requiredColumns.Add(KeyColumn);
 
-            Source.AddRequiredColumns(metadata, parameterTypes, requiredColumns);
+            Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        public override int EstimateRowsOut(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, ITableSizeCache tableSize)
+        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            return Source.EstimateRowsOut(metadata, parameterTypes, tableSize) / 100;
+            return Source.EstimateRowsOut(dataSources, options, parameterTypes) / 100;
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            Source = Source.FoldQuery(metadata, options, parameterTypes);
+            Source = Source.FoldQuery(dataSources, options, parameterTypes);
             return this;
         }
 
-        public override NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
+        public override NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
         {
-            return Source.GetSchema(metadata, parameterTypes);
+            return Source.GetSchema(dataSources, parameterTypes);
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
@@ -62,12 +62,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             // Build an internal hash table of the source indexed by the key column
             if (_hashTable == null)
             {
-                _hashTable = Source.Execute(org, metadata, options, parameterTypes, parameterValues)
+                _hashTable = Source.Execute(dataSources, options, parameterTypes, parameterValues)
                     .GroupBy(e => e[KeyColumn], CaseInsensitiveObjectComparer.Instance)
                     .ToDictionary(g => g.Key, g => g.ToList(), CaseInsensitiveObjectComparer.Instance);
             }

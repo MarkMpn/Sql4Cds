@@ -41,19 +41,20 @@
             this.gridContextMenuStrip = new System.Windows.Forms.ContextMenuStrip(this.components);
             this.copyToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.copyWithHeadersToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.toolStripMenuItem1 = new System.Windows.Forms.ToolStripSeparator();
             this.openRecordToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.createSELECTQueryToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.createSELECTStatementToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.statusStrip = new System.Windows.Forms.StatusStrip();
             this.toolStripStatusLabel = new System.Windows.Forms.ToolStripStatusLabel();
             this.hostLabel = new System.Windows.Forms.ToolStripStatusLabel();
+            this.usernameDropDownButton = new System.Windows.Forms.ToolStripDropDownButton();
+            this.impersonateMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.revertToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.orgNameLabel = new System.Windows.Forms.ToolStripStatusLabel();
             this.timerLabel = new System.Windows.Forms.ToolStripStatusLabel();
             this.rowsLabel = new System.Windows.Forms.ToolStripStatusLabel();
             this.backgroundWorker = new System.ComponentModel.BackgroundWorker();
             this.timer = new System.Windows.Forms.Timer(this.components);
-            this.usernameDropDownButton = new System.Windows.Forms.ToolStripDropDownButton();
-            this.impersonateMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.revertToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             ((System.ComponentModel.ISupportInitialize)(this.splitContainer)).BeginInit();
             this.splitContainer.Panel2.SuspendLayout();
             this.splitContainer.SuspendLayout();
@@ -167,39 +168,47 @@
             this.gridContextMenuStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.copyToolStripMenuItem,
             this.copyWithHeadersToolStripMenuItem,
+            this.toolStripMenuItem1,
             this.openRecordToolStripMenuItem,
-            this.createSELECTQueryToolStripMenuItem});
+            this.createSELECTStatementToolStripMenuItem});
             this.gridContextMenuStrip.Name = "gridContextMenuStrip";
-            this.gridContextMenuStrip.Size = new System.Drawing.Size(183, 92);
+            this.gridContextMenuStrip.Size = new System.Drawing.Size(207, 98);
             this.gridContextMenuStrip.Opening += new System.ComponentModel.CancelEventHandler(this.gridContextMenuStrip_Opening);
             // 
             // copyToolStripMenuItem
             // 
             this.copyToolStripMenuItem.Name = "copyToolStripMenuItem";
-            this.copyToolStripMenuItem.Size = new System.Drawing.Size(182, 22);
+            this.copyToolStripMenuItem.Size = new System.Drawing.Size(206, 22);
             this.copyToolStripMenuItem.Text = "Copy";
             this.copyToolStripMenuItem.Click += new System.EventHandler(this.copyToolStripMenuItem_Click);
             // 
             // copyWithHeadersToolStripMenuItem
             // 
             this.copyWithHeadersToolStripMenuItem.Name = "copyWithHeadersToolStripMenuItem";
-            this.copyWithHeadersToolStripMenuItem.Size = new System.Drawing.Size(182, 22);
+            this.copyWithHeadersToolStripMenuItem.Size = new System.Drawing.Size(206, 22);
             this.copyWithHeadersToolStripMenuItem.Text = "Copy with Headers";
             this.copyWithHeadersToolStripMenuItem.Click += new System.EventHandler(this.copyWithHeadersToolStripMenuItem_Click);
             // 
+            // toolStripMenuItem1
+            // 
+            this.toolStripMenuItem1.Name = "toolStripMenuItem1";
+            this.toolStripMenuItem1.Size = new System.Drawing.Size(203, 6);
+            // 
             // openRecordToolStripMenuItem
             // 
+            this.openRecordToolStripMenuItem.Enabled = false;
             this.openRecordToolStripMenuItem.Name = "openRecordToolStripMenuItem";
-            this.openRecordToolStripMenuItem.Size = new System.Drawing.Size(182, 22);
+            this.openRecordToolStripMenuItem.Size = new System.Drawing.Size(206, 22);
             this.openRecordToolStripMenuItem.Text = "Open Record";
             this.openRecordToolStripMenuItem.Click += new System.EventHandler(this.openRecordToolStripMenuItem_Click);
             // 
-            // createSELECTQueryToolStripMenuItem
+            // createSELECTStatementToolStripMenuItem
             // 
-            this.createSELECTQueryToolStripMenuItem.Name = "createSELECTQueryToolStripMenuItem";
-            this.createSELECTQueryToolStripMenuItem.Size = new System.Drawing.Size(182, 22);
-            this.createSELECTQueryToolStripMenuItem.Text = "Create SELECT query";
-            this.createSELECTQueryToolStripMenuItem.Click += new System.EventHandler(this.createSELECTQueryToolStripMenuItem_Click);
+            this.createSELECTStatementToolStripMenuItem.Enabled = false;
+            this.createSELECTStatementToolStripMenuItem.Name = "createSELECTStatementToolStripMenuItem";
+            this.createSELECTStatementToolStripMenuItem.Size = new System.Drawing.Size(206, 22);
+            this.createSELECTStatementToolStripMenuItem.Text = "Create SELECT Statement";
+            this.createSELECTStatementToolStripMenuItem.Click += new System.EventHandler(this.createSELECTStatementToolStripMenuItem_Click);
             // 
             // statusStrip
             // 
@@ -224,7 +233,7 @@
             this.toolStripStatusLabel.Image = global::MarkMpn.Sql4Cds.Properties.Resources.ConnectFilled_grey_16x;
             this.toolStripStatusLabel.ImageAlign = System.Drawing.ContentAlignment.MiddleLeft;
             this.toolStripStatusLabel.Name = "toolStripStatusLabel";
-            this.toolStripStatusLabel.Size = new System.Drawing.Size(99, 17);
+            this.toolStripStatusLabel.Size = new System.Drawing.Size(130, 17);
             this.toolStripStatusLabel.Spring = true;
             this.toolStripStatusLabel.Text = "Connected";
             this.toolStripStatusLabel.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
@@ -237,6 +246,32 @@
             this.hostLabel.Size = new System.Drawing.Size(164, 17);
             this.hostLabel.Text = "orgxxx.crm.dynamics.com";
             this.hostLabel.ToolTipText = "Server URL";
+            // 
+            // usernameDropDownButton
+            // 
+            this.usernameDropDownButton.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.impersonateMenuItem,
+            this.revertToolStripMenuItem});
+            this.usernameDropDownButton.ImageTransparentColor = System.Drawing.Color.Magenta;
+            this.usernameDropDownButton.Name = "usernameDropDownButton";
+            this.usernameDropDownButton.Size = new System.Drawing.Size(153, 20);
+            this.usernameDropDownButton.Text = "username@contoso.com";
+            this.usernameDropDownButton.ToolTipText = "Impersonate other user";
+            // 
+            // impersonateMenuItem
+            // 
+            this.impersonateMenuItem.Name = "impersonateMenuItem";
+            this.impersonateMenuItem.Size = new System.Drawing.Size(140, 22);
+            this.impersonateMenuItem.Text = "Impersonate";
+            this.impersonateMenuItem.Click += new System.EventHandler(this.impersonateMenuItem_Click);
+            // 
+            // revertToolStripMenuItem
+            // 
+            this.revertToolStripMenuItem.Enabled = false;
+            this.revertToolStripMenuItem.Name = "revertToolStripMenuItem";
+            this.revertToolStripMenuItem.Size = new System.Drawing.Size(140, 22);
+            this.revertToolStripMenuItem.Text = "Revert";
+            this.revertToolStripMenuItem.Click += new System.EventHandler(this.revertToolStripMenuItem_Click);
             // 
             // orgNameLabel
             // 
@@ -272,32 +307,6 @@
             this.timer.Interval = 1000;
             this.timer.Tick += new System.EventHandler(this.timer_Tick);
             // 
-            // usernameDropDownButton
-            // 
-            this.usernameDropDownButton.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.impersonateMenuItem,
-            this.revertToolStripMenuItem});
-            this.usernameDropDownButton.ImageTransparentColor = System.Drawing.Color.Magenta;
-            this.usernameDropDownButton.Name = "usernameDropDownButton";
-            this.usernameDropDownButton.Size = new System.Drawing.Size(153, 20);
-            this.usernameDropDownButton.Text = "username@contoso.com";
-            this.usernameDropDownButton.ToolTipText = "Impersonate other user";
-            // 
-            // impersonateMenuItem
-            // 
-            this.impersonateMenuItem.Name = "impersonateMenuItem";
-            this.impersonateMenuItem.Size = new System.Drawing.Size(180, 22);
-            this.impersonateMenuItem.Text = "Impersonate";
-            this.impersonateMenuItem.Click += new System.EventHandler(this.impersonateMenuItem_Click);
-            // 
-            // revertToolStripMenuItem
-            // 
-            this.revertToolStripMenuItem.Enabled = false;
-            this.revertToolStripMenuItem.Name = "revertToolStripMenuItem";
-            this.revertToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
-            this.revertToolStripMenuItem.Text = "Revert";
-            this.revertToolStripMenuItem.Click += new System.EventHandler(this.revertToolStripMenuItem_Click);
-            // 
             // SqlQueryControl
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -327,8 +336,6 @@
         private System.Windows.Forms.ContextMenuStrip gridContextMenuStrip;
         private System.Windows.Forms.ToolStripMenuItem copyToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem copyWithHeadersToolStripMenuItem;
-        private System.Windows.Forms.ToolStripMenuItem openRecordToolStripMenuItem;
-        private System.Windows.Forms.ToolStripMenuItem createSELECTQueryToolStripMenuItem;
         private System.Windows.Forms.StatusStrip statusStrip;
         private System.Windows.Forms.ToolStripStatusLabel toolStripStatusLabel;
         private System.Windows.Forms.ToolStripStatusLabel hostLabel;
@@ -347,5 +354,8 @@
         private System.Windows.Forms.ToolStripDropDownButton usernameDropDownButton;
         private System.Windows.Forms.ToolStripMenuItem impersonateMenuItem;
         private System.Windows.Forms.ToolStripMenuItem revertToolStripMenuItem;
+        private System.Windows.Forms.ToolStripSeparator toolStripMenuItem1;
+        private System.Windows.Forms.ToolStripMenuItem openRecordToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem createSELECTStatementToolStripMenuItem;
     }
 }

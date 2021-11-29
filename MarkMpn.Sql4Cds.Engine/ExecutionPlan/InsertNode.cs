@@ -39,7 +39,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("Column Mappings")]
         public IDictionary<string, string> ColumnMappings { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
         {
             foreach (var col in ColumnMappings.Values)
             {
@@ -47,15 +47,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     requiredColumns.Add(col);
             }
 
-            Source.AddRequiredColumns(metadata, parameterTypes, requiredColumns);
+            Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        public override string Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        public override string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             _executionCount++;
 
             try
             {
+                if (!dataSources.TryGetValue(DataSource, out var dataSource))
+                    throw new QueryExecutionException("Missing datasource " + DataSource);
+
                 List<Entity> entities;
                 EntityMetadata meta;
                 Dictionary<string, AttributeMetadata> attributes;
@@ -64,10 +67,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 using (_timer.Run())
                 {
-                    entities = GetDmlSourceEntities(org, metadata, options, parameterTypes, parameterValues, out var schema);
+                    entities = GetDmlSourceEntities(dataSources, options, parameterTypes, parameterValues, out var schema);
 
                     // Precompile mappings with type conversions
-                    meta = metadata[LogicalName];
+                    meta = dataSource.Metadata[LogicalName];
                     attributes = meta.Attributes.ToDictionary(a => a.LogicalName);
                     var dateTimeKind = options.UseLocalTimeZone ? DateTimeKind.Local : DateTimeKind.Utc;
                     attributeAccessors = CompileColumnMappings(meta, ColumnMappings, schema, attributes, dateTimeKind);
@@ -81,7 +84,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 using (_timer.Run())
                 {
                     return ExecuteDmlOperation(
-                        org,
+                        dataSource.Connection,
                         options,
                         entities,
                         meta,

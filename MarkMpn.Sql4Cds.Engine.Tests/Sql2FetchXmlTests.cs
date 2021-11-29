@@ -52,6 +52,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
         }
 
+        string IQueryExecutionOptions.PrimaryDataSource => "local";
+
+        Guid IQueryExecutionOptions.UserId => Guid.NewGuid();
+
         [TestMethod]
         public void SimpleSelect()
         {
@@ -135,6 +139,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 "createdon",
                 "employees",
                 "name",
+                "ownerid",
+                "owneridname",
                 "primarycontactid",
                 "primarycontactidname",
                 "turnover"
@@ -169,6 +175,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 "createdon",
                 "employees",
                 "name",
+                "ownerid",
+                "owneridname",
                 "primarycontactid",
                 "primarycontactidname",
                 "turnover",
@@ -872,7 +880,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            queries[0].Execute(GetDataSources(context), this);
 
             Assert.AreEqual(1, ((EntityCollection)queries[0].Result).Entities.Count);
             Assert.AreEqual(3, ((EntityCollection)queries[0].Result).Entities[0]["a"]);
@@ -924,7 +932,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            queries[0].Execute(GetDataSources(context), this);
 
             Assert.AreEqual(1, ((EntityCollection)queries[0].Result).Entities.Count);
             Assert.AreEqual(guid2, ((EntityCollection)queries[0].Result).Entities[0]["contactid"]);
@@ -972,7 +980,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            queries[0].Execute(GetDataSources(context), this);
 
             Assert.AreEqual(1, ((EntityCollection)queries[0].Result).Entities.Count);
             Assert.AreEqual(guid1, ((EntityCollection)queries[0].Result).Entities[0]["contactid"]);
@@ -1017,7 +1025,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            queries[0].Execute(GetDataSources(context), this);
 
             Assert.AreEqual(1, ((EntityCollection)queries[0].Result).Entities.Count);
             Assert.AreEqual(guid2, ((EntityCollection)queries[0].Result).Entities[0]["contactid"]);
@@ -1056,7 +1064,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            queries[0].Execute(GetDataSources(context), this);
 
             Assert.AreEqual("Carrington", context.Data["contact"][guid]["firstname"]);
         }
@@ -1094,7 +1102,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            queries[0].Execute(GetDataSources(context), this);
 
             Assert.AreEqual("Hello Carrington", context.Data["contact"][guid]["firstname"]);
         }
@@ -1136,7 +1144,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            queries[0].Execute(GetDataSources(context), this);
 
             Assert.AreEqual("--CDS--", context.Data["contact"][guid]["firstname"]);
         }
@@ -1173,7 +1181,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            queries[0].Execute(GetDataSources(context), this);
 
             Assert.AreEqual(1, ((EntityCollection)queries[0].Result).Entities.Count);
 
@@ -1217,11 +1225,24 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            queries[0].Execute(GetDataSources(context), this);
 
             Assert.AreEqual(1, ((EntityCollection)queries[0].Result).Entities.Count);
             Assert.AreEqual("Mark", ((EntityCollection)queries[0].Result).Entities[0].GetAttributeValue<string>("firstname"));
             Assert.AreEqual("Hello Mark", ((EntityCollection)queries[0].Result).Entities[0].GetAttributeValue<string>("greeting"));
+        }
+
+        private IDictionary<string, DataSource> GetDataSources(XrmFakedContext context)
+        {
+            var dataSource = new DataSource
+            {
+                Name = "local",
+                Connection = context.GetOrganizationService(),
+                Metadata = new AttributeMetadataCache(context.GetOrganizationService()),
+                TableSizeCache = new StubTableSizeCache()
+            };
+
+            return new Dictionary<string, DataSource> { ["local"] = dataSource };
         }
 
         [TestMethod]
@@ -1256,7 +1277,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            queries[0].Execute(GetDataSources(context), this);
 
             Assert.AreEqual(1, ((EntityCollection)queries[0].Result).Entities.Count);
             Assert.IsNull(((EntityCollection)queries[0].Result).Entities[0].GetAttributeValue<string>("firstname"));
@@ -1305,7 +1326,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            queries[0].Execute(GetDataSources(context), this);
 
             Assert.AreEqual(2, ((EntityCollection)queries[0].Result).Entities.Count);
             Assert.AreEqual("Data", ((EntityCollection)queries[0].Result).Entities[0]["firstname"]);
@@ -1354,7 +1375,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            queries[0].Execute(GetDataSources(context), this);
 
             Assert.AreEqual(2, ((EntityCollection)queries[0].Result).Entities.Count);
             Assert.AreEqual("8", ((EntityCollection)queries[0].Result).Entities[0]["surname"]);
@@ -1402,7 +1423,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            queries[0].Execute(GetDataSources(context), this);
 
             Assert.AreEqual(2, ((EntityCollection)queries[0].Result).Entities.Count);
             Assert.AreEqual("8, Data", ((EntityCollection)queries[0].Result).Entities[0]["fullname"]);
@@ -1450,7 +1471,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            queries[0].Execute(GetDataSources(context), this);
 
             Assert.AreEqual(2, ((EntityCollection)queries[0].Result).Entities.Count);
             Assert.AreEqual("8, Data", ((EntityCollection)queries[0].Result).Entities[0]["fullname"]);
@@ -1496,7 +1517,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            queries[0].Execute(GetDataSources(context), this);
 
             Assert.AreEqual(1, ((EntityCollection)queries[0].Result).Entities.Count);
             Assert.AreEqual(guid2, ((EntityCollection)queries[0].Result).Entities[0]["contactid"]);
@@ -1591,7 +1612,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            queries[0].Execute(GetDataSources(context), this);
             var results = (EntityCollection)queries[0].Result;
             Assert.AreEqual(2, results.Entities.Count);
 
@@ -1658,7 +1679,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            queries[0].Execute(GetDataSources(context), this);
             var results = (EntityCollection)queries[0].Result;
             Assert.AreEqual(2, results.Entities.Count);
 
@@ -1718,7 +1739,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            queries[0].Execute(GetDataSources(context), this);
             var results = (EntityCollection)queries[0].Result;
             Assert.AreEqual(2, results.Entities.Count);
 
@@ -1775,7 +1796,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            queries[0].Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            queries[0].Execute(GetDataSources(context), this);
             var results = (EntityCollection)queries[0].Result;
             Assert.AreEqual(1, results.Entities.Count);
 
@@ -1832,7 +1853,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            alterativeQuery.Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            alterativeQuery.Execute(GetDataSources(context), this);
             var results = (EntityCollection)alterativeQuery.Result;
             Assert.AreEqual(2, results.Entities.Count);
 
@@ -1890,7 +1911,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            select.Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            select.Execute(GetDataSources(context), this);
             var results = (EntityCollection)select.Result;
             Assert.AreEqual(1, results.Entities.Count);
 
@@ -1947,7 +1968,17 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            update.Execute(org, metadata, this);
+            var dataSources = new Dictionary<string, DataSource>
+            {
+                ["local"] = new DataSource
+                {
+                    Connection = org,
+                    Metadata = metadata,
+                    TableSizeCache = new StubTableSizeCache(),
+                    Name = "local"
+                }
+            };
+            update.Execute(dataSources, this);
 
             Assert.AreEqual(new EntityReference("contact", contact1), context.Data["account"][account1].GetAttributeValue<EntityReference>("primarycontactid"));
             Assert.AreEqual(new EntityReference("contact", contact2), context.Data["account"][account2].GetAttributeValue<EntityReference>("primarycontactid"));
@@ -2297,7 +2328,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             };
 
             var select = queries[0];
-            select.Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            select.Execute(GetDataSources(context), this);
             var result = (EntityCollection)select.Result;
             Assert.AreEqual(null, result.Entities[0]["half"]);
             Assert.AreEqual(1M, result.Entities[1]["half"]);
@@ -2335,7 +2366,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             };
 
             var select = queries[0];
-            select.Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            select.Execute(GetDataSources(context), this);
             var result = (EntityCollection)select.Result;
             Assert.AreEqual(account2, result.Entities[0]["accountid"]);
         }
@@ -2365,7 +2396,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual("name = 'test'", filterNode.Filter.ToSql());
             var optionsetNode = (GlobalOptionSetQueryNode)filterNode.Source;
 
-            queries[0].Execute(org, metadata, this);
+            queries[0].Execute(GetDataSources(context), this);
 
             var result = (EntityCollection)queries[0].Result;
 
@@ -2394,7 +2425,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var sortNode = (SortNode)selectNode.Source;
             var metadataNode = (MetadataQueryNode)sortNode.Source;
 
-            queries[0].Execute(org, metadata, this);
+            queries[0].Execute(GetDataSources(context), this);
 
             var result = (EntityCollection)queries[0].Result;
 
@@ -2419,7 +2450,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var queries = sql2FetchXml.Convert(query);
 
-            queries[0].Execute(org, metadata, this);
+            queries[0].Execute(GetDataSources(context), this);
 
             var result = (EntityCollection)queries[0].Result;
 
@@ -2485,9 +2516,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             CollectionAssert.AreEqual(new[] { "new_optionsetvalue", "new_optionsetvaluename" }, select.ColumnSet);
 
-            queries[0].Execute(org, metadata, this);
+            queries[0].Execute(GetDataSources(context), this);
 
-            select.Execute(org, metadata, this);
+            select.Execute(GetDataSources(context), this);
             var result = (EntityCollection)select.Result;
             Assert.IsNull(result.Entities[0].GetAttributeValue<OptionSetValue>("new_optionsetvalue"));
             Assert.IsNull(result.Entities[0].GetAttributeValue<string>("new_optionsetvaluename"));
@@ -2912,7 +2943,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             };
 
             var select = queries[0];
-            select.Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            select.Execute(GetDataSources(context), this);
             var result = (EntityCollection)select.Result;
             Assert.AreEqual(2, result.Entities[0].GetAttributeValue<int>("ci0"));
             Assert.AreEqual(2, result.Entities[0].GetAttributeValue<int>("ci1"));
@@ -2947,9 +2978,55 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             };
 
             var select = queries[0];
-            select.Execute(context.GetOrganizationService(), new AttributeMetadataCache(context.GetOrganizationService()), this);
+            select.Execute(GetDataSources(context), this);
             var result = (EntityCollection)select.Result;
             Assert.AreEqual(new DateTime(2000, 1, 1), result.Entities[0].GetAttributeValue<DateTime>("converted"));
+        }
+
+        [TestMethod]
+        public void GroupByPrimaryFunction()
+        {
+            var context = new XrmFakedContext();
+            context.InitializeMetadata(Assembly.GetExecutingAssembly());
+
+            var org = context.GetOrganizationService();
+            var metadata = new AttributeMetadataCache(org);
+            var sql2FetchXml = new Sql2FetchXml(metadata, true);
+
+            var query = "SELECT left(firstname, 1) AS initial, count(*) AS count FROM contact GROUP BY left(firstname, 1) ORDER BY 2 DESC";
+
+            var queries = sql2FetchXml.Convert(query);
+
+            var contact1 = Guid.NewGuid();
+            var contact2 = Guid.NewGuid();
+            var contact3 = Guid.NewGuid();
+
+            context.Data["contact"] = new Dictionary<Guid, Entity>
+            {
+                [contact1] = new Entity("contact", contact1)
+                {
+                    ["firstname"] = "Mark",
+                    ["contactid"] = contact1
+                },
+                [contact2] = new Entity("contact", contact2)
+                {
+                    ["firstname"] = "Matt",
+                    ["contactid"] = contact2
+                },
+                [contact3] = new Entity("contact", contact3)
+                {
+                    ["firstname"] = "Rich",
+                    ["contactid"] = contact3
+                }
+            };
+
+            var select = queries[0];
+            select.Execute(GetDataSources(context), this);
+            var result = (EntityCollection)select.Result;
+            Assert.AreEqual("M", result.Entities[0].GetAttributeValue<string>("initial"));
+            Assert.AreEqual(2, result.Entities[0].GetAttributeValue<int>("count"));
+            Assert.AreEqual("R", result.Entities[1].GetAttributeValue<string>("initial"));
+            Assert.AreEqual(1, result.Entities[1].GetAttributeValue<int>("count"));
         }
 
         private void AssertFetchXml(Query[] queries, string fetchXml)

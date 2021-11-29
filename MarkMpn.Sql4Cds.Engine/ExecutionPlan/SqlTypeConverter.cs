@@ -27,6 +27,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             typeof(SqlByte),
             typeof(SqlBoolean),
             typeof(SqlGuid),
+            typeof(SqlEntityReference),
             typeof(SqlString),
         };
 
@@ -44,12 +45,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 [typeof(SqlDecimal)] = SqlDecimal.Null,
                 [typeof(SqlDouble)] = SqlDouble.Null,
                 [typeof(SqlGuid)] = SqlGuid.Null,
+                [typeof(SqlEntityReference)] = SqlEntityReference.Null,
                 [typeof(SqlInt16)] = SqlInt16.Null,
                 [typeof(SqlInt32)] = SqlInt32.Null,
                 [typeof(SqlInt64)] = SqlInt64.Null,
                 [typeof(SqlMoney)] = SqlMoney.Null,
                 [typeof(SqlSingle)] = SqlSingle.Null,
-                [typeof(SqlString)] = SqlString.Null
+                [typeof(SqlString)] = SqlString.Null,
+                [typeof(object)] = null
             };
 
             _hijriCulture = (CultureInfo)CultureInfo.GetCultureInfo("ar-JO").Clone();
@@ -124,8 +127,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Array.IndexOf(_precendenceOrder, to) == -1)
                 return false;
 
-            // Anything can be converted to/from strings
-            if (from == typeof(SqlString) || to == typeof(SqlString))
+            // Anything can be converted to/from strings (except converting string -> entity reference)
+            if ((from == typeof(SqlString) && to != typeof(SqlEntityReference)) || to == typeof(SqlString))
                 return true;
 
             // Any numeric type can be implicitly converted to any other. SQL requires a cast between decimal/numeric when precision/scale changes
@@ -141,6 +144,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // datetime can only be converted implicitly to string
             if (from == typeof(DateTime) && to == typeof(SqlString))
+                return true;
+
+            // Entity reference can be converted to guid
+            if (from == typeof(SqlEntityReference) && to == typeof(SqlGuid))
                 return true;
 
             return false;
@@ -590,9 +597,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// Converts a value from a CLR type to the equivalent SQL type. 
         /// </summary>
+        /// <param name="dataSource">The name of the data source the <paramref name="value"/> was obtained from</param>
         /// <param name="value">The value in a standard CLR type</param>
         /// <returns>The value converted to a SQL type</returns>
-        public static object NetToSqlType(object value)
+        public static object NetToSqlType(string dataSource, object value)
         {
             if (value != null)
             {
@@ -648,6 +656,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (value is EntityCollection coll)
                 return new SqlString(String.Join(",", coll.Entities.Select(e => FormatEntityCollectionEntry(e))), CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace);
+
+            if (value is EntityReference er)
+                return new SqlEntityReference(dataSource, er);
 
             // Convert any other complex types (e.g. from metadata queries) to strings
             return new SqlString(value.ToString(), CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace);

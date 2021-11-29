@@ -26,15 +26,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("UserId Source")]
         public string UserIdSource { get; set; }
 
-        public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
         {
             if (!requiredColumns.Contains(UserIdSource))
                 requiredColumns.Add(UserIdSource);
 
-            Source.AddRequiredColumns(metadata, parameterTypes, requiredColumns);
+            Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        public override string Execute(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        public override string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             _executionCount++;
 
@@ -42,7 +42,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 using (_timer.Run())
                 {
-                    var entities = GetDmlSourceEntities(org, metadata, options, parameterTypes, parameterValues, out var schema);
+                    if (!dataSources.TryGetValue(DataSource, out var dataSource))
+                        throw new QueryExecutionException("Missing datasource " + DataSource);
+
+                    var entities = GetDmlSourceEntities(dataSources, options, parameterTypes, parameterValues, out var schema);
 
                     if (entities.Count == 0)
                         throw new QueryExecutionException("Cannot find user to impersonate");
@@ -51,18 +54,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         throw new QueryExecutionException("Ambiguous user");
 
                     // Precompile mappings with type conversions
-                    var meta = metadata["systemuser"];
+                    var meta = dataSource.Metadata["systemuser"];
                     var attributes = meta.Attributes.ToDictionary(a => a.LogicalName);
                     var attributeAccessors = CompileColumnMappings(meta, new Dictionary<string, string> { ["systemuserid"] = UserIdSource }, schema, attributes, DateTimeKind.Unspecified);
                     var userIdAccessor = attributeAccessors["systemuserid"];
 
                     var userId = (Guid)userIdAccessor(entities[0]);
 
-                    if (org is Microsoft.Xrm.Sdk.Client.OrganizationServiceProxy svcProxy)
+                    if (dataSource.Connection is Microsoft.Xrm.Sdk.Client.OrganizationServiceProxy svcProxy)
                         svcProxy.CallerId = userId;
-                    else if (org is Microsoft.Xrm.Sdk.WebServiceClient.OrganizationWebProxyClient webProxy)
+                    else if (dataSource.Connection is Microsoft.Xrm.Sdk.WebServiceClient.OrganizationWebProxyClient webProxy)
                         webProxy.CallerId = userId;
-                    else if (org is CrmServiceClient svc)
+                    else if (dataSource.Connection is CrmServiceClient svc)
                         svc.CallerId = userId;
                     else
                         throw new QueryExecutionException("Unexpected organization service type");

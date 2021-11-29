@@ -38,5 +38,15 @@ namespace MarkMpn.Sql4Cds.Engine.Tests.Metadata
 
         [AttributeLogicalName("primarycontactidname")]
         public string PrimaryContactIdName { get; }
+
+        [AttributeLogicalName("ownerid")]
+        public EntityReference OwnerId { get; set; }
+
+        [AttributeLogicalName("ownerid")]
+        [RelationshipSchemaName("account_owner")]
+        public SystemUser Owner { get; set; }
+
+        [AttributeLogicalName("owneridname")]
+        public string OwnerIdName { get; }
     }
 }

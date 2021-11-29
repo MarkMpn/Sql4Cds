@@ -49,7 +49,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// A compiled version of the <see cref="SqlExpression"/> that takes the row values and parameter values and returns the value to add to the aggregate
         /// </summary>
         [Browsable(false)]
-        public Func<Entity, IDictionary<string, object>, object> Expression { get; set; }
+        public Func<Entity, IDictionary<string, object>, IQueryExecutionOptions, object> Expression { get; set; }
 
         /// <summary>
         /// The type of value produced by the aggregate function

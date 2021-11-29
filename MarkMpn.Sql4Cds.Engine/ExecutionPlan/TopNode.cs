@@ -39,31 +39,31 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public IDataExecutionPlanNode Source { get; set; }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             if (WithTies)
                 throw new NotImplementedException();
 
-            var topCount = Top.Compile(null, parameterTypes)(null, parameterValues);
+            var topCount = Top.Compile(null, parameterTypes)(null, parameterValues, options);
 
             if (!Percent)
             {
-                return Source.Execute(org, metadata, options, parameterTypes, parameterValues)
+                return Source.Execute(dataSources, options, parameterTypes, parameterValues)
                     .Take(SqlTypeConverter.ChangeType<int>(topCount));
             }
             else
             {
-                var count = Source.Execute(org, metadata, options, parameterTypes, parameterValues).Count();
+                var count = Source.Execute(dataSources, options, parameterTypes, parameterValues).Count();
                 var top = count * SqlTypeConverter.ChangeType<float>(topCount) / 100;
 
-                return Source.Execute(org, metadata, options, parameterTypes, parameterValues)
+                return Source.Execute(dataSources, options, parameterTypes, parameterValues)
                     .Take((int)top);
             }
         }
 
-        public override NodeSchema GetSchema(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes)
+        public override NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
         {
-            return Source.GetSchema(metadata, parameterTypes);
+            return Source.GetSchema(dataSources, parameterTypes);
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
@@ -71,12 +71,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            Source = Source.FoldQuery(metadata, options, parameterTypes);
+            Source = Source.FoldQuery(dataSources, options, parameterTypes);
             Source.Parent = this;
 
-            if (!Top.IsConstantValueExpression(null, out var literal))
+            if (!Top.IsConstantValueExpression(null, options, out var literal))
                 return this;
 
             // FetchXML can support TOP directly provided it's for no more than 5,000 records
@@ -103,16 +103,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return this;
         }
 
-        public override void AddRequiredColumns(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
         {
-            Source.AddRequiredColumns(metadata, parameterTypes, requiredColumns);
+            Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        public override int EstimateRowsOut(IAttributeMetadataCache metadata, IDictionary<string, Type> parameterTypes, ITableSizeCache tableSize)
+        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            var sourceCount = Source.EstimateRowsOut(metadata, parameterTypes, tableSize);
+            var sourceCount = Source.EstimateRowsOut(dataSources, options, parameterTypes);
 
-            if (!Top.IsConstantValueExpression(null, out var topLiteral))
+            if (!Top.IsConstantValueExpression(null, options, out var topLiteral))
                 return sourceCount;
 
             var top = Int32.Parse(topLiteral.Value);

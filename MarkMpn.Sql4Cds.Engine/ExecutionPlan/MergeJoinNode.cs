@@ -16,7 +16,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// </summary>
     class MergeJoinNode : FoldableJoinNode
     {
-        protected override IEnumerable<Entity> ExecuteInternal(IOrganizationService org, IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             // https://sqlserverfast.com/epr/merge-join/
             // Implemented inner, left outer, right outer and full outer variants
@@ -24,11 +24,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // TODO: Handle many-to-many joins
 
             // Left & Right: GetNext, mark as unmatched
-            var leftSchema = LeftSource.GetSchema(metadata, parameterTypes);
-            var rightSchema = RightSource.GetSchema(metadata, parameterTypes);
-            var left = LeftSource.Execute(org, metadata, options, parameterTypes, parameterValues).GetEnumerator();
-            var right = RightSource.Execute(org, metadata, options, parameterTypes, parameterValues).GetEnumerator();
-            var mergedSchema = GetSchema(metadata, parameterTypes, true);
+            var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
+            var rightSchema = RightSource.GetSchema(dataSources, parameterTypes);
+            var left = LeftSource.Execute(dataSources, options, parameterTypes, parameterValues).GetEnumerator();
+            var right = RightSource.Execute(dataSources, options, parameterTypes, parameterValues).GetEnumerator();
+            var mergedSchema = GetSchema(dataSources, parameterTypes, true);
             var additionalJoinCriteria = AdditionalJoinCriteria?.Compile(mergedSchema, parameterTypes);
 
             var hasLeft = left.MoveNext();
@@ -62,9 +62,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // Compare key values
                 var merged = Merge(hasLeft ? left.Current : null, leftSchema, hasRight ? right.Current : null, rightSchema);
 
-                var isLt = lt(merged, parameterValues);
-                var isEq = eq(merged, parameterValues);
-                var isGt = gt(merged, parameterValues);
+                var isLt = lt(merged, parameterValues, options);
+                var isEq = eq(merged, parameterValues, options);
+                var isGt = gt(merged, parameterValues, options);
 
                 if (isLt || (hasLeft && !hasRight))
                 {
@@ -76,7 +76,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
                 else if (isEq)
                 {
-                    if ((!leftMatched || !SemiJoin) && (additionalJoinCriteria == null || additionalJoinCriteria(merged, parameterValues) == true))
+                    if ((!leftMatched || !SemiJoin) && (additionalJoinCriteria == null || additionalJoinCriteria(merged, parameterValues, options) == true))
                         yield return merged;
 
                     leftMatched = true;
@@ -109,9 +109,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return !hasLeft && !hasRight;
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IAttributeMetadataCache metadata, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            var folded = base.FoldQuery(metadata, options, parameterTypes);
+            var folded = base.FoldQuery(dataSources, options, parameterTypes);
 
             if (folded != this)
                 return folded;
@@ -128,7 +128,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         SortOrder = SortOrder.Ascending
                     }
                 }
-            }.FoldQuery(metadata, options, parameterTypes);
+            }.FoldQuery(dataSources, options, parameterTypes);
             LeftSource.Parent = this;
 
             RightSource = new SortNode
@@ -142,7 +142,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         SortOrder = SortOrder.Ascending
                     }
                 }
-            }.FoldQuery(metadata, options, parameterTypes);
+            }.FoldQuery(dataSources, options, parameterTypes);
             RightSource.Parent = this;
 
             return this;

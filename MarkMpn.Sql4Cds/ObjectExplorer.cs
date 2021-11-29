@@ -17,7 +17,7 @@ namespace MarkMpn.Sql4Cds
 {
     partial class ObjectExplorer : WeifenLuo.WinFormsUI.Docking.DockContent
     {
-        private readonly IDictionary<ConnectionDetail, SharedMetadataCache> _metadata;
+        private readonly IDictionary<string, DataSource> _dataSources;
         private readonly Action<ConnectionDetail> _newQuery;
         private readonly Action _connect;
 
@@ -27,11 +27,11 @@ namespace MarkMpn.Sql4Cds
             public TreeNode Parent;
         }
 
-        public ObjectExplorer(IDictionary<ConnectionDetail, SharedMetadataCache> metadata, Action<WorkAsyncInfo> workAsync, Action<ConnectionDetail> newQuery, Action connect)
+        public ObjectExplorer(IDictionary<string, DataSource> dataSources, Action<WorkAsyncInfo> workAsync, Action<ConnectionDetail> newQuery, Action connect)
         {
             InitializeComponent();
 
-            _metadata = metadata;
+            _dataSources = dataSources;
             WorkAsync = workAsync;
             _newQuery = newQuery;
             _connect = connect;
@@ -180,7 +180,7 @@ namespace MarkMpn.Sql4Cds
             var metadata = (EntityMetadata)parent.Parent.Tag;
             
             if (metadata.Attributes == null)
-                metadata = _metadata[GetService(parent)][logicalName];
+                metadata = _dataSources[GetService(parent).ConnectionName].Metadata[logicalName];
 
             return metadata.Attributes
                 .Where(a => a.AttributeOf == null)
