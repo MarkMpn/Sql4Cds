@@ -122,6 +122,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public bool AllPages { get; set; }
 
         /// <summary>
+        /// Shows the number of pages that were retrieved in the last execution of this node
+        /// </summary>
+        [Category("FetchXML Scan")]
+        [Description("Shows the number of pages that were retrieved in the last execution of this node")]
+        [DisplayName("Pages Retrieved")]
+        public int PagesRetrieved { get; set; }
+
+        /// <summary>
         /// Indicates if all available attributes should be returned as part of the schema, used while the execution plan is being built
         /// </summary>
         [Browsable(false)]
@@ -129,6 +137,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
+            PagesRetrieved = 0;
+
             if (!dataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
 
@@ -160,6 +170,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Get the first page of results
             options.RetrievingNextPage();
             var res = dataSource.Connection.RetrieveMultiple(new FetchExpression(Serialize(FetchXml)));
+            PagesRetrieved++;
 
             var count = res.Entities.Count;
 
@@ -189,6 +200,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 options.RetrievingNextPage();
                 var nextPage = dataSource.Connection.RetrieveMultiple(new FetchExpression(Serialize(FetchXml)));
+                PagesRetrieved++;
 
                 foreach (var entity in nextPage.Entities)
                 {
@@ -772,6 +784,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                 }
             }
+
+            // If there is no attribute requested the server will return everything instead of nothing, so
+            // add the primary key in to limit it
+            if ((!FetchXml.aggregate || !FetchXml.aggregateSpecified) && !HasAttribute(Entity.Items) && !Entity.GetLinkEntities().Any(link => HasAttribute(link.Items)))
+            {
+                var metadata = dataSource.Metadata[Entity.name];
+                Entity.AddItem(new FetchAttributeType { name = metadata.PrimaryIdAttribute });
+            }
+        }
+
+        private bool HasAttribute(object[] items)
+        {
+            if (items == null)
+                return false;
+
+            return items.OfType<FetchAttributeType>().Any() || items.OfType<allattributes>().Any();
         }
 
         public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
