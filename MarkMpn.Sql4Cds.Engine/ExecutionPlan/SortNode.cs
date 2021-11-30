@@ -183,7 +183,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private IDataExecutionPlanNode FoldSorts(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
-            if (Source is TryCatchNode tryCatch && tryCatch.TrySource is FetchXmlScan tryFetch && tryFetch.FetchXml.aggregate)
+            var tryCatch = Source as TryCatchNode;
+            
+            while (tryCatch?.TrySource is TryCatchNode subTry)
+                tryCatch = subTry;
+
+            if (tryCatch != null && tryCatch.TrySource is FetchXmlScan tryFetch && tryFetch.FetchXml.aggregate)
             {
                 // We're sorting on the results of an aggregate that will try to go as a single FetchXML request first, then to a separate plan
                 // if that fails. Try to fold the sorts in to the aggregate FetchXML first
@@ -198,13 +203,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     tryCatch.TrySource = sortedFetchResult;
                     sortedFetchResult.Parent = tryCatch;
 
-                    var nonFetchAggregateSort = new SortNode { Source = tryCatch.CatchSource };
-                    nonFetchAggregateSort.Sorts.AddRange(Sorts);
+                    while (tryCatch != null)
+                    {
+                        var nonFetchAggregateSort = new SortNode { Source = tryCatch.CatchSource };
+                        nonFetchAggregateSort.Sorts.AddRange(Sorts);
 
-                    var sortedNonFetchResult = nonFetchAggregateSort.FoldSorts(dataSources, options, parameterTypes);
-                    tryCatch.CatchSource = sortedNonFetchResult;
-                    sortedNonFetchResult.Parent = tryCatch;
-                    return tryCatch;
+                        var sortedNonFetchResult = nonFetchAggregateSort.FoldSorts(dataSources, options, parameterTypes);
+                        tryCatch.CatchSource = sortedNonFetchResult;
+                        sortedNonFetchResult.Parent = tryCatch;
+
+                        tryCatch = tryCatch.Parent as TryCatchNode;
+                    }
+
+                    return Source;
                 }
             }
 
