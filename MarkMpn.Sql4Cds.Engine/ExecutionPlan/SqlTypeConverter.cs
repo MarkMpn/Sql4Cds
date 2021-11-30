@@ -98,6 +98,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var targetType = _precendenceOrder[Math.Min(lhsPrecedence, rhsPrecedence)];
 
+            if (targetType == typeof(SqlEntityReference) && (lhs == typeof(SqlString) || rhs == typeof(SqlString)))
+                targetType = typeof(SqlGuid);
+
             if (CanChangeTypeImplicit(lhs, targetType) && CanChangeTypeImplicit(rhs, targetType))
             {
                 consistent = targetType;
