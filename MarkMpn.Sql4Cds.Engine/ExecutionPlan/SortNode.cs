@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data.SqlTypes;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -337,7 +338,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 if (!top.Top.IsConstantValueExpression(null, options, out var topLiteral))
                                     return this;
 
-                                if (Int32.Parse(topLiteral.Value) > 50000)
+                                if (Int32.Parse(topLiteral.Value, CultureInfo.InvariantCulture) > 50000)
                                     return this;
                             }
                             else if (offset != null)
@@ -346,7 +347,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                     !offset.Fetch.IsConstantValueExpression(null, options, out var fetchLiteral))
                                     return this;
 
-                                if (Int32.Parse(offsetLiteral.Value) + Int32.Parse(fetchLiteral.Value) > 50000)
+                                if (Int32.Parse(offsetLiteral.Value, CultureInfo.InvariantCulture) + Int32.Parse(fetchLiteral.Value, CultureInfo.InvariantCulture) > 50000)
                                     return this;
                             }
                         }

@@ -1728,7 +1728,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 // If the order by element is a numeric literal, use the corresponding expression from the select list at that index
                 if (orderBy.Expression is IntegerLiteral literal)
                 {
-                    var index = Int32.Parse(literal.Value) - 1;
+                    var index = int.Parse(literal.Value, CultureInfo.InvariantCulture) - 1;
 
                     if (index < 0 || index >= selectList.Length)
                     {
