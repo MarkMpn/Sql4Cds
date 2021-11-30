@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 using FakeXrmEasy;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Metadata;
 
 namespace MarkMpn.Sql4Cds.Engine.Tests
 {
@@ -39,6 +40,20 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 ["local"] = _dataSource
             };
+
+            SetPrimaryIdAttributes(_context);
+            SetPrimaryIdAttributes(_context2);
+        }
+
+        private void SetPrimaryIdAttributes(XrmFakedContext context)
+        {
+            foreach (var entity in context.CreateMetadataQuery())
+            {
+                typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.PrimaryIdAttribute)).SetValue(entity, entity.LogicalName + "id");
+                var attr = entity.Attributes.Single(a => a.LogicalName == entity.LogicalName + "id");
+                typeof(AttributeMetadata).GetProperty(nameof(AttributeMetadata.IsPrimaryId)).SetValue(attr, true);
+                context.SetEntityMetadata(entity);
+            }
         }
     }
 }
