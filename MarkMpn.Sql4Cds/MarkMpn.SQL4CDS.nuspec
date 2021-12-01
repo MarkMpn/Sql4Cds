@@ -24,6 +24,7 @@ Using the preview TDS Endpoint, SELECT queries can also be run that aren't conve
     <summary>Convert SQL queries to FetchXML and execute them against Dataverse / D365</summary>
     <releaseNotes>Fixed decimal number handling with non-English regional settings
 Added missing comma in generated M query
+Fixed "No explicit conversion exists" error when using guid string literals
     </releaseNotes>
     <copyright>Copyright © 2019 Mark Carrington</copyright>
     <language>en-GB</language>
