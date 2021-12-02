@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data.SqlTypes;
+using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.ServiceModel;
@@ -648,7 +649,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         if (lit is StringLiteral)
                             dt = SqlDateTime.Parse(lit.Value).Value;
                         else if (lit is IntegerLiteral || lit is NumericLiteral || lit is RealLiteral)
-                            dt = new DateTime(1900, 1, 1).AddDays(Double.Parse(lit.Value));
+                            dt = new DateTime(1900, 1, 1).AddDays(Double.Parse(lit.Value, CultureInfo.InvariantCulture));
                         else
                             throw new NotSupportedQueryFragmentException("Invalid datetime value", lit);
 

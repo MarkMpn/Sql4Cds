@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Globalization;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 
 namespace MarkMpn.Sql4Cds.Engine.Visitors
@@ -104,7 +105,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             {
                 if (unary.UnaryExpressionType == UnaryExpressionType.Negative)
                 {
-                    var value = Int32.Parse(integer.Value);
+                    var value = Int32.Parse(integer.Value, CultureInfo.InvariantCulture);
                     integer.Value = (-value).ToString();
                     return integer;
                 }

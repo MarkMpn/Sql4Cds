@@ -194,7 +194,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (FetchXml.page == null)
                     FetchXml.page = "2";
                 else
-                    FetchXml.page = (Int32.Parse(FetchXml.page) + 1).ToString();
+                    FetchXml.page = (Int32.Parse(FetchXml.page, CultureInfo.InvariantCulture) + 1).ToString();
 
                 FetchXml.pagingcookie = res.PagingCookie;
 
@@ -831,7 +831,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private int EstimateRowsOut(string name, object[] items, IDictionary<string, DataSource> dataSources)
         {
             if (!String.IsNullOrEmpty(FetchXml.top))
-                return Int32.Parse(FetchXml.top);
+                return Int32.Parse(FetchXml.top, CultureInfo.InvariantCulture);
 
             if (!dataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);

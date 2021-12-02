@@ -422,6 +422,12 @@ namespace MarkMpn.Sql4Cds.Engine
                         var attr = attributes[colName];
                         targetName = attr.LogicalName;
                         targetType = attr.GetAttributeSqlType();
+
+                        // If we're inserting into a lookup field, the field type will be a SqlEntityReference. Change this to
+                        // a SqlGuid so we can accept any guid values, including from TDS endpoint where SqlEntityReference
+                        // values will not be available
+                        if (targetType == typeof(SqlEntityReference))
+                            targetType = typeof(SqlGuid);
                     }
 
                     if (!schema.ContainsColumn(sourceColumns[i], out var sourceColumn))
@@ -1728,7 +1734,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 // If the order by element is a numeric literal, use the corresponding expression from the select list at that index
                 if (orderBy.Expression is IntegerLiteral literal)
                 {
-                    var index = Int32.Parse(literal.Value) - 1;
+                    var index = int.Parse(literal.Value, CultureInfo.InvariantCulture) - 1;
 
                     if (index < 0 || index >= selectList.Length)
                     {
