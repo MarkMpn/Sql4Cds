@@ -214,7 +214,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Remove the aggregate settings and all attributes from the query
             minMaxNode.FetchXml.aggregate = false;
-            RemoveAttributes(minMaxNode.Entity);
+            RemoveAttributesAndOrders(minMaxNode.Entity);
 
             // Add the primary key attribute of the root entity
             minMaxNode.Entity.AddItem(new FetchAttributeType { name = "createdon" });
@@ -225,33 +225,41 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Only need to retrieve the first item
             minMaxNode.FetchXml.top = "1";
 
-            var result = minMaxNode.Execute(dataSources, options, parameterTypes, parameterValues).FirstOrDefault();
-
-            if (result == null)
-                return SqlDateTime.Null;
-
-            return (SqlDateTime)result["minmax.createdon"];
-        }
-
-        private void RemoveAttributes(FetchEntityType entity)
-        {
-            if (entity.Items != null)
+            try
             {
-                entity.Items = entity.Items.Where(o => !(o is FetchAttributeType) && !(o is allattributes)).ToArray();
+                var result = minMaxNode.Execute(dataSources, options, parameterTypes, parameterValues).FirstOrDefault();
 
-                foreach (var linkEntity in entity.Items.OfType<FetchLinkEntityType>())
-                    RemoveAttributes(linkEntity);
+                if (result == null)
+                    return SqlDateTime.Null;
+
+                return (SqlDateTime)result["minmax.createdon"];
+            }
+            catch (QueryExecutionException ex)
+            {
+                ex.Node = this;
+                throw;
             }
         }
 
-        private void RemoveAttributes(FetchLinkEntityType entity)
+        private void RemoveAttributesAndOrders(FetchEntityType entity)
         {
             if (entity.Items != null)
             {
-                entity.Items = entity.Items.Where(o => !(o is FetchAttributeType) && !(o is allattributes)).ToArray();
+                entity.Items = entity.Items.Where(o => !(o is FetchAttributeType) && !(o is allattributes) && !(o is FetchOrderType)).ToArray();
 
                 foreach (var linkEntity in entity.Items.OfType<FetchLinkEntityType>())
-                    RemoveAttributes(linkEntity);
+                    RemoveAttributesAndOrders(linkEntity);
+            }
+        }
+
+        private void RemoveAttributesAndOrders(FetchLinkEntityType entity)
+        {
+            if (entity.Items != null)
+            {
+                entity.Items = entity.Items.Where(o => !(o is FetchAttributeType) && !(o is allattributes) && !(o is FetchOrderType)).ToArray();
+
+                foreach (var linkEntity in entity.Items.OfType<FetchLinkEntityType>())
+                    RemoveAttributesAndOrders(linkEntity);
             }
         }
 
