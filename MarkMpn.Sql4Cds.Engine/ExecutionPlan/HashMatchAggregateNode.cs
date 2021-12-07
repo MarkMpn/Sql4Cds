@@ -191,9 +191,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     else
                         entityName = fetchXml.Entity.FindLinkEntity(parts[0]).name;
 
-                    var attr = metadata[entityName].Attributes.Single(a => a.LogicalName == parts[1]);
+                    var attr = metadata[entityName].Attributes.SingleOrDefault(a => a.LogicalName == parts[1]);
 
-                    if (attr.AttributeOf != null)
+                    if (attr == null || attr.AttributeOf != null)
                         return this;
                 }
 
@@ -320,7 +320,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     else
                         entityName = fetchXml.Entity.FindLinkEntity(parts[0]).name;
 
-                    var attr = metadata[entityName].Attributes.Single(a => a.LogicalName == parts[1]);
+                    var attr = metadata[entityName].Attributes.SingleOrDefault(a => a.LogicalName == parts[1]);
+
+                    if (attr == null)
+                        return this;
 
                     if (attr is EnumAttributeMetadata && (aggregateType == FetchXml.AggregateType.avg || aggregateType == FetchXml.AggregateType.max || aggregateType == FetchXml.AggregateType.min || aggregateType == FetchXml.AggregateType.sum))
                         return this;
