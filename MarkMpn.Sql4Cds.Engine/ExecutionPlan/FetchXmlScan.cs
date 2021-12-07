@@ -268,7 +268,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // Convert it back now for consistency
                 if (_entityNameGroupings.Contains(attribute.Key))
                 {
-                    var otc = ((OptionSetValue)aliasedValue.Value).Value;
+                    int otc;
+                    if (aliasedValue.Value is OptionSetValue osv)
+                        otc = osv.Value;
+                    else if (aliasedValue.Value is int i)
+                        otc = i;
+                    else
+                        throw new QueryExecutionException($"Expected ObjectTypeCode value, got {aliasedValue.Value} ({aliasedValue.Value?.GetType()})");
+
                     var meta = metadata[otc];
                     entity[attribute.Key] = meta.LogicalName;
                 }
