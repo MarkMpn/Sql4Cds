@@ -73,12 +73,13 @@
             this.pictureBox1 = new System.Windows.Forms.PictureBox();
             this.bulkDeleteHelp = new System.Windows.Forms.PictureBox();
             this.tabPage2 = new System.Windows.Forms.TabPage();
-            this.pictureBox3 = new System.Windows.Forms.PictureBox();
-            this.tabPage3 = new System.Windows.Forms.TabPage();
-            this.rememberSessionCheckbox = new System.Windows.Forms.CheckBox();
             this.label15 = new System.Windows.Forms.Label();
             this.insertWarnThresholdUpDown = new System.Windows.Forms.NumericUpDown();
             this.label16 = new System.Windows.Forms.Label();
+            this.pictureBox3 = new System.Windows.Forms.PictureBox();
+            this.tabPage3 = new System.Windows.Forms.TabPage();
+            this.rememberSessionCheckbox = new System.Windows.Forms.CheckBox();
+            this.localDateFormatCheckbox = new System.Windows.Forms.CheckBox();
             this.topPanel.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox)).BeginInit();
             this.panel2.SuspendLayout();
@@ -97,9 +98,9 @@
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.bulkDeleteHelp)).BeginInit();
             this.tabPage2.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.insertWarnThresholdUpDown)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox3)).BeginInit();
             this.tabPage3.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.insertWarnThresholdUpDown)).BeginInit();
             this.SuspendLayout();
             // 
             // topPanel
@@ -623,41 +624,6 @@
             this.tabPage2.Text = "Safety Limits";
             this.tabPage2.UseVisualStyleBackColor = true;
             // 
-            // pictureBox3
-            // 
-            this.pictureBox3.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.pictureBox3.Image = global::MarkMpn.Sql4Cds.Properties.Resources.StatusHelp_16x;
-            this.pictureBox3.Location = new System.Drawing.Point(378, 34);
-            this.pictureBox3.Name = "pictureBox3";
-            this.pictureBox3.Size = new System.Drawing.Size(16, 16);
-            this.pictureBox3.TabIndex = 27;
-            this.pictureBox3.TabStop = false;
-            this.pictureBox3.Tag = "https://docs.microsoft.com/powerapps/developer/data-platform/api-limits";
-            this.pictureBox3.Click += new System.EventHandler(this.helpIcon_Click);
-            // 
-            // tabPage3
-            // 
-            this.tabPage3.Controls.Add(this.rememberSessionCheckbox);
-            this.tabPage3.Controls.Add(this.autoSizeColumnsCheckBox);
-            this.tabPage3.Controls.Add(this.showTooltipsCheckbox);
-            this.tabPage3.Location = new System.Drawing.Point(4, 22);
-            this.tabPage3.Name = "tabPage3";
-            this.tabPage3.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPage3.Size = new System.Drawing.Size(409, 269);
-            this.tabPage3.TabIndex = 2;
-            this.tabPage3.Text = "Editor";
-            this.tabPage3.UseVisualStyleBackColor = true;
-            // 
-            // rememberSessionCheckbox
-            // 
-            this.rememberSessionCheckbox.AutoSize = true;
-            this.rememberSessionCheckbox.Location = new System.Drawing.Point(6, 52);
-            this.rememberSessionCheckbox.Name = "rememberSessionCheckbox";
-            this.rememberSessionCheckbox.Size = new System.Drawing.Size(148, 17);
-            this.rememberSessionCheckbox.TabIndex = 1;
-            this.rememberSessionCheckbox.Text = "Remember session details";
-            this.rememberSessionCheckbox.UseVisualStyleBackColor = true;
-            // 
             // label15
             // 
             this.label15.AutoSize = true;
@@ -687,6 +653,52 @@
             this.label16.Size = new System.Drawing.Size(154, 13);
             this.label16.TabIndex = 6;
             this.label16.Text = "Warn when inserting more than";
+            // 
+            // pictureBox3
+            // 
+            this.pictureBox3.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.pictureBox3.Image = global::MarkMpn.Sql4Cds.Properties.Resources.StatusHelp_16x;
+            this.pictureBox3.Location = new System.Drawing.Point(378, 34);
+            this.pictureBox3.Name = "pictureBox3";
+            this.pictureBox3.Size = new System.Drawing.Size(16, 16);
+            this.pictureBox3.TabIndex = 27;
+            this.pictureBox3.TabStop = false;
+            this.pictureBox3.Tag = "https://docs.microsoft.com/powerapps/developer/data-platform/api-limits";
+            this.pictureBox3.Click += new System.EventHandler(this.helpIcon_Click);
+            // 
+            // tabPage3
+            // 
+            this.tabPage3.Controls.Add(this.localDateFormatCheckbox);
+            this.tabPage3.Controls.Add(this.rememberSessionCheckbox);
+            this.tabPage3.Controls.Add(this.autoSizeColumnsCheckBox);
+            this.tabPage3.Controls.Add(this.showTooltipsCheckbox);
+            this.tabPage3.Location = new System.Drawing.Point(4, 22);
+            this.tabPage3.Name = "tabPage3";
+            this.tabPage3.Padding = new System.Windows.Forms.Padding(3);
+            this.tabPage3.Size = new System.Drawing.Size(409, 269);
+            this.tabPage3.TabIndex = 2;
+            this.tabPage3.Text = "Editor";
+            this.tabPage3.UseVisualStyleBackColor = true;
+            // 
+            // rememberSessionCheckbox
+            // 
+            this.rememberSessionCheckbox.AutoSize = true;
+            this.rememberSessionCheckbox.Location = new System.Drawing.Point(6, 52);
+            this.rememberSessionCheckbox.Name = "rememberSessionCheckbox";
+            this.rememberSessionCheckbox.Size = new System.Drawing.Size(148, 17);
+            this.rememberSessionCheckbox.TabIndex = 1;
+            this.rememberSessionCheckbox.Text = "Remember session details";
+            this.rememberSessionCheckbox.UseVisualStyleBackColor = true;
+            // 
+            // localDateFormatCheckbox
+            // 
+            this.localDateFormatCheckbox.AutoSize = true;
+            this.localDateFormatCheckbox.Location = new System.Drawing.Point(6, 75);
+            this.localDateFormatCheckbox.Name = "localDateFormatCheckbox";
+            this.localDateFormatCheckbox.Size = new System.Drawing.Size(203, 17);
+            this.localDateFormatCheckbox.TabIndex = 2;
+            this.localDateFormatCheckbox.Text = "Show date/time values in local format";
+            this.localDateFormatCheckbox.UseVisualStyleBackColor = true;
             // 
             // SettingsForm
             // 
@@ -728,10 +740,10 @@
             ((System.ComponentModel.ISupportInitialize)(this.bulkDeleteHelp)).EndInit();
             this.tabPage2.ResumeLayout(false);
             this.tabPage2.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.insertWarnThresholdUpDown)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox3)).EndInit();
             this.tabPage3.ResumeLayout(false);
             this.tabPage3.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.insertWarnThresholdUpDown)).EndInit();
             this.ResumeLayout(false);
 
         }
@@ -788,5 +800,6 @@
         private System.Windows.Forms.Label label15;
         private System.Windows.Forms.NumericUpDown insertWarnThresholdUpDown;
         private System.Windows.Forms.Label label16;
+        private System.Windows.Forms.CheckBox localDateFormatCheckbox;
     }
 }

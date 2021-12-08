@@ -965,7 +965,7 @@ namespace MarkMpn.Sql4Cds
                     {
                         e.Value = b.Value ? "1" : "0";
                     }
-                    else if (e.Value is SqlDateTime dt)
+                    else if (!Settings.Instance.LocalFormatDates && e.Value is SqlDateTime dt)
                     {
                         e.Value = dt.Value.ToString("yyyy-MM-dd HH:mm:ss.fff");
                     }

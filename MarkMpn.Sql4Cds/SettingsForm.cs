@@ -36,6 +36,7 @@ namespace MarkMpn.Sql4Cds
             maxDopUpDown.Value = settings.MaxDegreeOfPaallelism;
             autoSizeColumnsCheckBox.Checked = settings.AutoSizeColumns;
             rememberSessionCheckbox.Checked = settings.RememberSession;
+            localDateFormatCheckbox.Checked = settings.LocalFormatDates;
 
             _settings = settings;
         }
@@ -64,6 +65,7 @@ namespace MarkMpn.Sql4Cds
                 _settings.MaxDegreeOfPaallelism = (int) maxDopUpDown.Value;
                 _settings.AutoSizeColumns = autoSizeColumnsCheckBox.Checked;
                 _settings.RememberSession = rememberSessionCheckbox.Checked;
+                _settings.LocalFormatDates = localDateFormatCheckbox.Checked;
             }
         }
 
