@@ -855,6 +855,7 @@ namespace MarkMpn.Sql4Cds
 
             var options = new QueryExecutionOptions(_con, DataSources[_con.ConnectionName].Connection, backgroundWorker, this);
             var converter = new ExecutionPlanBuilder(DataSources.Values, options);
+            converter.QuotedIdentifiers = Settings.Instance.QuotedIdentifiers;
 
             if (Settings.Instance.UseTSQLEndpoint &&
                 args.Execute &&
