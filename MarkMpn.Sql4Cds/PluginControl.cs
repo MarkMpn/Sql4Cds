@@ -291,7 +291,29 @@ namespace MarkMpn.Sql4Cds
 
                 _ai.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = "FetchXML", ["Source"] = "XrmToolBox" });
 
-                var sql = FetchXml2Sql.Convert(con.ServiceClient, metadata, fetch, options, out _);
+                string sql;
+
+                if (Settings.Instance.UseNativeSqlConversion)
+                {
+                    try
+                    {
+                        var convertReq = new OrganizationRequest("FetchXMLToSQL")
+                        {
+                            ["FetchXml"] = xmlStr,
+                            ["SubqueryCompatible"] = true
+                        };
+                        var convertResp = con.ServiceClient.Execute(convertReq);
+                        sql = (string) convertResp["Response"];
+                    }
+                    catch
+                    {
+                        sql = FetchXml2Sql.Convert(con.ServiceClient, metadata, fetch, options, out _);
+                    }
+                }
+                else
+                {
+                    sql = FetchXml2Sql.Convert(con.ServiceClient, metadata, fetch, options, out _);
+                }
 
                 if ((bool)param["ConvertOnly"])
                 {

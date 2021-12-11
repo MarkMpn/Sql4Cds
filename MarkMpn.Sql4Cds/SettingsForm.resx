@@ -224,4 +224,15 @@
         /w/8fxutOvwPHAnkbuvmv/8AAAAASUVORK5CYII=
 </value>
   </data>
+  <data name="nativeSqlScintilla.Text" xml:space="preserve">
+    <value>select
+"account0".Name as "name"
+, "account0".Telephone1 as "telephone1"
+, "account0".OwnerIdName as "owneridname"
+, "account0".OwnerId as "ownerid"
+, "account0".OwnerIdType as "owneridtype"
+, "account0".OwnerIdYomiName as "owneridyominame"
+from
+ Account as "account0"</value>
+  </data>
 </root>

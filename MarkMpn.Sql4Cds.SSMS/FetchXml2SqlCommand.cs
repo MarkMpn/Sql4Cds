@@ -8,6 +8,7 @@ using Microsoft.SqlServer.Management.UI.VSIntegration;
 using Microsoft.SqlServer.Management.UI.VSIntegration.Editors;
 using Microsoft.SqlServer.Management.UI.VSIntegration.ObjectExplorer;
 using Microsoft.VisualStudio.Shell;
+using Microsoft.Xrm.Sdk;
 using Task = System.Threading.Tasks.Task;
 
 namespace MarkMpn.Sql4Cds.SSMS
@@ -132,12 +133,29 @@ namespace MarkMpn.Sql4Cds.SSMS
 
             _ai.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = "FetchXML", ["Source"] = "SSMS" });
 
-            var sql = FetchXml2Sql.Convert(ConnectCDS(conStr), GetMetadataCache(conStr), fetch, new FetchXml2SqlOptions
+            string sql;
+            IDictionary<string, object> paramValues;
+
+            if (Package.Settings.UseNativeSqlConversion)
             {
-                ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.SqlCalculations,
-                UseParametersForLiterals = true,
-                ConvertDateTimeToUtc = true
-            }, out var paramValues);
+                var convertReq = new OrganizationRequest("FetchXMLToSQL")
+                {
+                    ["FetchXml"] = fetch,
+                    ["SubqueryCompatible"] = true
+                };
+                var convertResp = ConnectCDS(conStr).Execute(convertReq);
+                sql = (string)convertResp["Response"];
+                paramValues = new Dictionary<string, object>();
+            }
+            else
+            {
+                sql = FetchXml2Sql.Convert(ConnectCDS(conStr), GetMetadataCache(conStr), fetch, new FetchXml2SqlOptions
+                {
+                    ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.SqlCalculations,
+                    UseParametersForLiterals = true,
+                    ConvertDateTimeToUtc = true
+                }, out paramValues);
+            }
 
             ServiceCache.ScriptFactory.CreateNewBlankScript(ScriptType.Sql, ServiceCache.ScriptFactory.CurrentlyActiveWndConnectionInfo.UIConnectionInfo, null);
 

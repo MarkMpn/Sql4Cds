@@ -57,6 +57,8 @@ namespace MarkMpn.Sql4Cds
         public TabContent[] Session { get; set; }
 
         public bool LocalFormatDates { get; set; }
+
+        public bool UseNativeSqlConversion { get; set; }
     }
 
     public class TabContent
