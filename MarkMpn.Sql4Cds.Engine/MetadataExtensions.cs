@@ -139,6 +139,9 @@ namespace MarkMpn.Sql4Cds.Engine
             if (attrMetadata is UniqueIdentifierAttributeMetadata || typeCode == AttributeTypeCode.Uniqueidentifier)
                 return typeof(SqlGuid);
 
+            if (attrMetadata.AttributeTypeName == AttributeTypeDisplayName.FileType)
+                return typeof(SqlGuid);
+
             if (attrMetadata.AttributeType == AttributeTypeCode.Virtual)
                 return typeof(SqlString);
 

@@ -41,6 +41,12 @@ namespace MarkMpn.Sql4Cds.SSMS
         [DefaultValue(false)]
         public bool BypassCustomPlugins { get; set; }
 
+        [Category("Behavior")]
+        [DisplayName("Use native FetchXML to SQL Conversion")]
+        [Description("Converts FetchXML to SQL using the same conversion logic as the Dynamics server. Generates more complex queries.")]
+        [DefaultValue(false)]
+        public bool UseNativeSqlConversion { get; set; }
+
         [Category("Version")]
         [DisplayName("Installed")]
         [Description("Installed version of SQL 4 CDS - SSMS Edition")]

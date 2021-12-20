@@ -37,7 +37,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 };
             }
 
-            public void SetValue(object value)
+            public void SetValue(object value, IQueryExecutionOptions options)
             {
                 if (value == null)
                 {
@@ -51,7 +51,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (!_filter.Items.Contains(_condition))
                         _filter.Items = _filter.Items.Except(new[] { _contradiction }).Concat(new[] { _condition }).ToArray();
 
-                    _condition.value = value.ToString();
+                    var formatted = value.ToString();
+
+                    if (value is SqlDateTime dt)
+                    {
+                        DateTimeOffset dto;
+
+                        if (options.UseLocalTimeZone)
+                            dto = new DateTimeOffset(dt.Value, TimeZone.CurrentTimeZone.GetUtcOffset(dt.Value));
+                        else
+                            dto = new DateTimeOffset(dt.Value, TimeSpan.Zero);
+
+                        formatted = dto.ToString("yyyy-MM-ddTHH':'mm':'ss.FFFzzz");
+                    }
+
+                    _condition.value = formatted;
                 }
             }
         }
@@ -108,6 +122,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public bool AllPages { get; set; }
 
         /// <summary>
+        /// Shows the number of pages that were retrieved in the last execution of this node
+        /// </summary>
+        [Category("FetchXML Scan")]
+        [Description("Shows the number of pages that were retrieved in the last execution of this node")]
+        [DisplayName("Pages Retrieved")]
+        public int PagesRetrieved { get; set; }
+
+        /// <summary>
         /// Indicates if all available attributes should be returned as part of the schema, used while the execution plan is being built
         /// </summary>
         [Browsable(false)]
@@ -115,6 +137,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
+            PagesRetrieved = 0;
+
             if (!dataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
 
@@ -130,7 +154,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 foreach (var param in parameterValues)
                 {
                     if (_parameterizedConditions.TryGetValue(param.Key, out var condition))
-                        condition.SetValue(param.Value);
+                        condition.SetValue(param.Value, options);
                 }
             }
 
@@ -139,11 +163,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var mainEntity = FetchXml.Items.OfType<FetchEntityType>().Single();
             var name = mainEntity.name;
             var meta = dataSource.Metadata[name];
-            options.Progress(0, $"Retrieving {GetDisplayName(0, meta)}...");
+
+            if (!(Parent is PartitionedAggregateNode))
+                options.Progress(0, $"Retrieving {GetDisplayName(0, meta)}...");
 
             // Get the first page of results
             options.RetrievingNextPage();
             var res = dataSource.Connection.RetrieveMultiple(new FetchExpression(Serialize(FetchXml)));
+            PagesRetrieved++;
 
             var count = res.Entities.Count;
 
@@ -161,7 +188,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Move on to subsequent pages
             while (AllPages && res.MoreRecords && options.ContinueRetrieve(count))
             {
-                options.Progress(0, $"Retrieved {count:N0} {GetDisplayName(count, meta)}...");
+                if (!(Parent is PartitionedAggregateNode))
+                    options.Progress(0, $"Retrieved {count:N0} {GetDisplayName(count, meta)}...");
 
                 if (FetchXml.page == null)
                     FetchXml.page = "2";
@@ -172,6 +200,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 options.RetrievingNextPage();
                 var nextPage = dataSource.Connection.RetrieveMultiple(new FetchExpression(Serialize(FetchXml)));
+                PagesRetrieved++;
 
                 foreach (var entity in nextPage.Entities)
                 {
@@ -239,7 +268,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // Convert it back now for consistency
                 if (_entityNameGroupings.Contains(attribute.Key))
                 {
-                    var otc = ((OptionSetValue)aliasedValue.Value).Value;
+                    int otc;
+                    if (aliasedValue.Value is OptionSetValue osv)
+                        otc = osv.Value;
+                    else if (aliasedValue.Value is int i)
+                        otc = i;
+                    else
+                        throw new QueryExecutionException($"Expected ObjectTypeCode value, got {aliasedValue.Value} ({aliasedValue.Value?.GetType()})");
+
                     var meta = metadata[otc];
                     entity[attribute.Key] = meta.LogicalName;
                 }
@@ -755,11 +791,48 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                 }
             }
+
+            // If there is no attribute requested the server will return everything instead of nothing, so
+            // add the primary key in to limit it
+            if ((!FetchXml.aggregate || !FetchXml.aggregateSpecified) && !HasAttribute(Entity.Items) && !Entity.GetLinkEntities().Any(link => HasAttribute(link.Items)))
+            {
+                var metadata = dataSource.Metadata[Entity.name];
+                Entity.AddItem(new FetchAttributeType { name = metadata.PrimaryIdAttribute });
+            }
+        }
+
+        private bool HasAttribute(object[] items)
+        {
+            if (items == null)
+                return false;
+
+            return items.OfType<FetchAttributeType>().Any() || items.OfType<allattributes>().Any();
         }
 
         public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
         {
+            if (FetchXml.aggregateSpecified && FetchXml.aggregate)
+            {
+                var hasGroups = HasGroups(Entity.Items);
+
+                if (!hasGroups)
+                    return 1;
+
+                return EstimateRowsOut(Entity.name, Entity.Items, dataSources) * 4 / 10;
+            }
+
             return EstimateRowsOut(Entity.name, Entity.Items, dataSources);
+        }
+
+        private bool HasGroups(object[] items)
+        {
+            if (items == null)
+                return false;
+
+            if (items.OfType<FetchAttributeType>().Any(a => a.groupbySpecified && a.groupby == FetchBoolType.@true))
+                return true;
+
+            return items.OfType<FetchLinkEntityType>().Any(link => HasGroups(link.Items));
         }
 
         private int EstimateRowsOut(string name, object[] items, IDictionary<string, DataSource> dataSources)

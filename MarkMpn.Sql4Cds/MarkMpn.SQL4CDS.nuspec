@@ -22,9 +22,13 @@ plugins or integrations by writing familiar SQL and converting it.
 
 Using the preview TDS Endpoint, SELECT queries can also be run that aren't convertible to FetchXML.</description>
     <summary>Convert SQL queries to FetchXML and execute them against Dataverse / D365</summary>
-    <releaseNotes>Fixed decimal number handling with non-English regional settings
-Added missing comma in generated M query
-Fixed "No explicit conversion exists" error when using guid string literals
+    <releaseNotes>Improved aggregate performance with automatic partitioning
+Added option to convert FetchXML to SQL using native D365 conversion
+Added option to control displayed date format
+Reduced attributes retrieved to process COUNT(*) queries
+Fixed GROUP BY and aggregates on virtual attributes
+Fixed retrieving file attributes
+Fixed using quoted identifiers
     </releaseNotes>
     <copyright>Copyright © 2019 Mark Carrington</copyright>
     <language>en-GB</language>

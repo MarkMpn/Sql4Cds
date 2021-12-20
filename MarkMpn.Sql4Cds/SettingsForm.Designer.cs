@@ -73,12 +73,19 @@
             this.pictureBox1 = new System.Windows.Forms.PictureBox();
             this.bulkDeleteHelp = new System.Windows.Forms.PictureBox();
             this.tabPage2 = new System.Windows.Forms.TabPage();
-            this.pictureBox3 = new System.Windows.Forms.PictureBox();
-            this.tabPage3 = new System.Windows.Forms.TabPage();
-            this.rememberSessionCheckbox = new System.Windows.Forms.CheckBox();
             this.label15 = new System.Windows.Forms.Label();
             this.insertWarnThresholdUpDown = new System.Windows.Forms.NumericUpDown();
             this.label16 = new System.Windows.Forms.Label();
+            this.pictureBox3 = new System.Windows.Forms.PictureBox();
+            this.tabPage3 = new System.Windows.Forms.TabPage();
+            this.localDateFormatCheckbox = new System.Windows.Forms.CheckBox();
+            this.rememberSessionCheckbox = new System.Windows.Forms.CheckBox();
+            this.tabPage4 = new System.Windows.Forms.TabPage();
+            this.label17 = new System.Windows.Forms.Label();
+            this.simpleSqlRadioButton = new System.Windows.Forms.RadioButton();
+            this.nativeSqlRadioButton = new System.Windows.Forms.RadioButton();
+            this.simpleSqlScintilla = new ScintillaNET.Scintilla();
+            this.nativeSqlScintilla = new ScintillaNET.Scintilla();
             this.topPanel.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox)).BeginInit();
             this.panel2.SuspendLayout();
@@ -97,9 +104,10 @@
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.bulkDeleteHelp)).BeginInit();
             this.tabPage2.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.insertWarnThresholdUpDown)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox3)).BeginInit();
             this.tabPage3.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.insertWarnThresholdUpDown)).BeginInit();
+            this.tabPage4.SuspendLayout();
             this.SuspendLayout();
             // 
             // topPanel
@@ -151,8 +159,9 @@
             // 
             // cancelButton
             // 
+            this.cancelButton.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
             this.cancelButton.DialogResult = System.Windows.Forms.DialogResult.Cancel;
-            this.cancelButton.Location = new System.Drawing.Point(313, 10);
+            this.cancelButton.Location = new System.Drawing.Point(350, 10);
             this.cancelButton.Name = "cancelButton";
             this.cancelButton.Size = new System.Drawing.Size(75, 23);
             this.cancelButton.TabIndex = 1;
@@ -161,8 +170,9 @@
             // 
             // okButton
             // 
+            this.okButton.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
             this.okButton.DialogResult = System.Windows.Forms.DialogResult.OK;
-            this.okButton.Location = new System.Drawing.Point(232, 10);
+            this.okButton.Location = new System.Drawing.Point(269, 10);
             this.okButton.Name = "okButton";
             this.okButton.Size = new System.Drawing.Size(75, 23);
             this.okButton.TabIndex = 0;
@@ -484,6 +494,7 @@
             this.tabControl1.Controls.Add(this.tabPage1);
             this.tabControl1.Controls.Add(this.tabPage2);
             this.tabControl1.Controls.Add(this.tabPage3);
+            this.tabControl1.Controls.Add(this.tabPage4);
             this.tabControl1.Location = new System.Drawing.Point(12, 57);
             this.tabControl1.Name = "tabControl1";
             this.tabControl1.SelectedIndex = 0;
@@ -623,41 +634,6 @@
             this.tabPage2.Text = "Safety Limits";
             this.tabPage2.UseVisualStyleBackColor = true;
             // 
-            // pictureBox3
-            // 
-            this.pictureBox3.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.pictureBox3.Image = global::MarkMpn.Sql4Cds.Properties.Resources.StatusHelp_16x;
-            this.pictureBox3.Location = new System.Drawing.Point(378, 34);
-            this.pictureBox3.Name = "pictureBox3";
-            this.pictureBox3.Size = new System.Drawing.Size(16, 16);
-            this.pictureBox3.TabIndex = 27;
-            this.pictureBox3.TabStop = false;
-            this.pictureBox3.Tag = "https://docs.microsoft.com/powerapps/developer/data-platform/api-limits";
-            this.pictureBox3.Click += new System.EventHandler(this.helpIcon_Click);
-            // 
-            // tabPage3
-            // 
-            this.tabPage3.Controls.Add(this.rememberSessionCheckbox);
-            this.tabPage3.Controls.Add(this.autoSizeColumnsCheckBox);
-            this.tabPage3.Controls.Add(this.showTooltipsCheckbox);
-            this.tabPage3.Location = new System.Drawing.Point(4, 22);
-            this.tabPage3.Name = "tabPage3";
-            this.tabPage3.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPage3.Size = new System.Drawing.Size(409, 269);
-            this.tabPage3.TabIndex = 2;
-            this.tabPage3.Text = "Editor";
-            this.tabPage3.UseVisualStyleBackColor = true;
-            // 
-            // rememberSessionCheckbox
-            // 
-            this.rememberSessionCheckbox.AutoSize = true;
-            this.rememberSessionCheckbox.Location = new System.Drawing.Point(6, 52);
-            this.rememberSessionCheckbox.Name = "rememberSessionCheckbox";
-            this.rememberSessionCheckbox.Size = new System.Drawing.Size(148, 17);
-            this.rememberSessionCheckbox.TabIndex = 1;
-            this.rememberSessionCheckbox.Text = "Remember session details";
-            this.rememberSessionCheckbox.UseVisualStyleBackColor = true;
-            // 
             // label15
             // 
             this.label15.AutoSize = true;
@@ -687,6 +663,119 @@
             this.label16.Size = new System.Drawing.Size(154, 13);
             this.label16.TabIndex = 6;
             this.label16.Text = "Warn when inserting more than";
+            // 
+            // pictureBox3
+            // 
+            this.pictureBox3.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.pictureBox3.Image = global::MarkMpn.Sql4Cds.Properties.Resources.StatusHelp_16x;
+            this.pictureBox3.Location = new System.Drawing.Point(378, 34);
+            this.pictureBox3.Name = "pictureBox3";
+            this.pictureBox3.Size = new System.Drawing.Size(16, 16);
+            this.pictureBox3.TabIndex = 27;
+            this.pictureBox3.TabStop = false;
+            this.pictureBox3.Tag = "https://docs.microsoft.com/powerapps/developer/data-platform/api-limits";
+            this.pictureBox3.Click += new System.EventHandler(this.helpIcon_Click);
+            // 
+            // tabPage3
+            // 
+            this.tabPage3.Controls.Add(this.localDateFormatCheckbox);
+            this.tabPage3.Controls.Add(this.rememberSessionCheckbox);
+            this.tabPage3.Controls.Add(this.autoSizeColumnsCheckBox);
+            this.tabPage3.Controls.Add(this.showTooltipsCheckbox);
+            this.tabPage3.Location = new System.Drawing.Point(4, 22);
+            this.tabPage3.Name = "tabPage3";
+            this.tabPage3.Padding = new System.Windows.Forms.Padding(3);
+            this.tabPage3.Size = new System.Drawing.Size(409, 269);
+            this.tabPage3.TabIndex = 2;
+            this.tabPage3.Text = "Editor";
+            this.tabPage3.UseVisualStyleBackColor = true;
+            // 
+            // localDateFormatCheckbox
+            // 
+            this.localDateFormatCheckbox.AutoSize = true;
+            this.localDateFormatCheckbox.Location = new System.Drawing.Point(6, 75);
+            this.localDateFormatCheckbox.Name = "localDateFormatCheckbox";
+            this.localDateFormatCheckbox.Size = new System.Drawing.Size(203, 17);
+            this.localDateFormatCheckbox.TabIndex = 2;
+            this.localDateFormatCheckbox.Text = "Show date/time values in local format";
+            this.localDateFormatCheckbox.UseVisualStyleBackColor = true;
+            // 
+            // rememberSessionCheckbox
+            // 
+            this.rememberSessionCheckbox.AutoSize = true;
+            this.rememberSessionCheckbox.Location = new System.Drawing.Point(6, 52);
+            this.rememberSessionCheckbox.Name = "rememberSessionCheckbox";
+            this.rememberSessionCheckbox.Size = new System.Drawing.Size(148, 17);
+            this.rememberSessionCheckbox.TabIndex = 1;
+            this.rememberSessionCheckbox.Text = "Remember session details";
+            this.rememberSessionCheckbox.UseVisualStyleBackColor = true;
+            // 
+            // tabPage4
+            // 
+            this.tabPage4.Controls.Add(this.nativeSqlScintilla);
+            this.tabPage4.Controls.Add(this.simpleSqlScintilla);
+            this.tabPage4.Controls.Add(this.nativeSqlRadioButton);
+            this.tabPage4.Controls.Add(this.simpleSqlRadioButton);
+            this.tabPage4.Controls.Add(this.label17);
+            this.tabPage4.Location = new System.Drawing.Point(4, 22);
+            this.tabPage4.Name = "tabPage4";
+            this.tabPage4.Padding = new System.Windows.Forms.Padding(3);
+            this.tabPage4.Size = new System.Drawing.Size(409, 269);
+            this.tabPage4.TabIndex = 3;
+            this.tabPage4.Text = "Conversion";
+            this.tabPage4.UseVisualStyleBackColor = true;
+            // 
+            // label17
+            // 
+            this.label17.AutoSize = true;
+            this.label17.Location = new System.Drawing.Point(6, 3);
+            this.label17.Name = "label17";
+            this.label17.Size = new System.Drawing.Size(317, 13);
+            this.label17.TabIndex = 0;
+            this.label17.Text = "When converting FetchXML to SQL (e.g. from FetchXML Builder):";
+            // 
+            // simpleSqlRadioButton
+            // 
+            this.simpleSqlRadioButton.AutoSize = true;
+            this.simpleSqlRadioButton.Location = new System.Drawing.Point(9, 19);
+            this.simpleSqlRadioButton.Name = "simpleSqlRadioButton";
+            this.simpleSqlRadioButton.Size = new System.Drawing.Size(136, 17);
+            this.simpleSqlRadioButton.TabIndex = 1;
+            this.simpleSqlRadioButton.TabStop = true;
+            this.simpleSqlRadioButton.Text = "generate simplified SQL";
+            this.simpleSqlRadioButton.UseVisualStyleBackColor = true;
+            // 
+            // nativeSqlRadioButton
+            // 
+            this.nativeSqlRadioButton.AutoSize = true;
+            this.nativeSqlRadioButton.Location = new System.Drawing.Point(9, 133);
+            this.nativeSqlRadioButton.Name = "nativeSqlRadioButton";
+            this.nativeSqlRadioButton.Size = new System.Drawing.Size(197, 17);
+            this.nativeSqlRadioButton.TabIndex = 2;
+            this.nativeSqlRadioButton.TabStop = true;
+            this.nativeSqlRadioButton.Text = "generate full SQL used by the server";
+            this.nativeSqlRadioButton.UseVisualStyleBackColor = true;
+            // 
+            // simpleSqlScintilla
+            // 
+            this.simpleSqlScintilla.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.simpleSqlScintilla.Location = new System.Drawing.Point(27, 42);
+            this.simpleSqlScintilla.Name = "simpleSqlScintilla";
+            this.simpleSqlScintilla.Size = new System.Drawing.Size(376, 85);
+            this.simpleSqlScintilla.TabIndex = 3;
+            this.simpleSqlScintilla.Text = "SELECT name,\r\n       telephone1,\r\n       ownerid\r\nFROM   account;";
+            // 
+            // nativeSqlScintilla
+            // 
+            this.nativeSqlScintilla.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.nativeSqlScintilla.Lexer = ScintillaNET.Lexer.Sql;
+            this.nativeSqlScintilla.Location = new System.Drawing.Point(27, 156);
+            this.nativeSqlScintilla.Name = "nativeSqlScintilla";
+            this.nativeSqlScintilla.Size = new System.Drawing.Size(376, 85);
+            this.nativeSqlScintilla.TabIndex = 4;
+            this.nativeSqlScintilla.Text = resources.GetString("nativeSqlScintilla.Text");
             // 
             // SettingsForm
             // 
@@ -728,10 +817,12 @@
             ((System.ComponentModel.ISupportInitialize)(this.bulkDeleteHelp)).EndInit();
             this.tabPage2.ResumeLayout(false);
             this.tabPage2.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.insertWarnThresholdUpDown)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox3)).EndInit();
             this.tabPage3.ResumeLayout(false);
             this.tabPage3.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.insertWarnThresholdUpDown)).EndInit();
+            this.tabPage4.ResumeLayout(false);
+            this.tabPage4.PerformLayout();
             this.ResumeLayout(false);
 
         }
@@ -788,5 +879,12 @@
         private System.Windows.Forms.Label label15;
         private System.Windows.Forms.NumericUpDown insertWarnThresholdUpDown;
         private System.Windows.Forms.Label label16;
+        private System.Windows.Forms.CheckBox localDateFormatCheckbox;
+        private System.Windows.Forms.TabPage tabPage4;
+        private ScintillaNET.Scintilla simpleSqlScintilla;
+        private System.Windows.Forms.RadioButton nativeSqlRadioButton;
+        private System.Windows.Forms.RadioButton simpleSqlRadioButton;
+        private System.Windows.Forms.Label label17;
+        private ScintillaNET.Scintilla nativeSqlScintilla;
     }
 }

@@ -460,8 +460,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, plans.Length);
 
             var select = AssertNode<SelectNode>(plans[0]);
-            var tryCatch = AssertNode<TryCatchNode>(select.Source);
-            var aggregateFetch = AssertNode<FetchXmlScan>(tryCatch.TrySource);
+            var tryCatch1 = AssertNode<TryCatchNode>(select.Source);
+            var tryCatch2 = AssertNode<TryCatchNode>(tryCatch1.TrySource);
+            var aggregateFetch = AssertNode<FetchXmlScan>(tryCatch2.TrySource);
             AssertFetchXml(aggregateFetch, @"
                 <fetch aggregate='true'>
                     <entity name='account'>
@@ -470,7 +471,17 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <order alias='name' />
                     </entity>
                 </fetch>");
-            var aggregate = AssertNode<HashMatchAggregateNode>(tryCatch.CatchSource);
+            var partitionAggregate = AssertNode<PartitionedAggregateNode>(tryCatch2.CatchSource);
+            var partitionFetch = AssertNode<FetchXmlScan>(partitionAggregate.Source);
+            AssertFetchXml(partitionFetch, @"
+                <fetch aggregate='true'>
+                    <entity name='account'>
+                        <attribute name='name' groupby='true' alias='name' />
+                        <attribute name='accountid' aggregate='count' alias='count' />
+                        <order alias='name' />
+                    </entity>
+                </fetch>");
+            var aggregate = AssertNode<HashMatchAggregateNode>(tryCatch1.CatchSource);
             var scalarFetch = AssertNode<FetchXmlScan>(aggregate.Source);
             AssertFetchXml(scalarFetch, @"
                 <fetch>
@@ -499,8 +510,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, plans.Length);
 
             var select = AssertNode<SelectNode>(plans[0]);
-            var tryCatch = AssertNode<TryCatchNode>(select.Source);
-            var aggregateFetch = AssertNode<FetchXmlScan>(tryCatch.TrySource);
+            var tryCatch1 = AssertNode<TryCatchNode>(select.Source);
+            var tryCatch2 = AssertNode<TryCatchNode>(tryCatch1.TrySource);
+            var aggregateFetch = AssertNode<FetchXmlScan>(tryCatch2.TrySource);
             AssertFetchXml(aggregateFetch, @"
                 <fetch aggregate='true'>
                     <entity name='account'>
@@ -509,7 +521,17 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <order alias='name' />
                     </entity>
                 </fetch>");
-            var aggregate = AssertNode<HashMatchAggregateNode>(tryCatch.CatchSource);
+            var partitionAggregate = AssertNode<PartitionedAggregateNode>(tryCatch2.CatchSource);
+            var partitionFetch = AssertNode<FetchXmlScan>(partitionAggregate.Source);
+            AssertFetchXml(partitionFetch, @"
+                <fetch aggregate='true'>
+                    <entity name='account'>
+                        <attribute name='name' groupby='true' alias='name' />
+                        <attribute name='accountid' aggregate='count' alias='test' />
+                        <order alias='name' />
+                    </entity>
+                </fetch>");
+            var aggregate = AssertNode<HashMatchAggregateNode>(tryCatch1.CatchSource);
             var scalarFetch = AssertNode<FetchXmlScan>(aggregate.Source);
             AssertFetchXml(scalarFetch, @"
                 <fetch>
@@ -538,8 +560,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, plans.Length);
 
             var select = AssertNode<SelectNode>(plans[0]);
-            var tryCatch = AssertNode<TryCatchNode>(select.Source);
-            var aggregateFetch = AssertNode<FetchXmlScan>(tryCatch.TrySource);
+            var tryCatch1 = AssertNode<TryCatchNode>(select.Source);
+            var tryCatch2 = AssertNode<TryCatchNode>(tryCatch1.TrySource);
+            var aggregateFetch = AssertNode<FetchXmlScan>(tryCatch2.TrySource);
             AssertFetchXml(aggregateFetch, @"
                 <fetch aggregate='true'>
                     <entity name='account'>
@@ -548,7 +571,17 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <order alias='name' />
                     </entity>
                 </fetch>");
-            var aggregate = AssertNode<HashMatchAggregateNode>(tryCatch.CatchSource);
+            var partitionAggregate = AssertNode<PartitionedAggregateNode>(tryCatch2.CatchSource);
+            var partitionFetch = AssertNode<FetchXmlScan>(partitionAggregate.Source);
+            AssertFetchXml(partitionFetch, @"
+                <fetch aggregate='true'>
+                    <entity name='account'>
+                        <attribute name='name' groupby='true' alias='name' />
+                        <attribute name='accountid' aggregate='count' alias='count' />
+                        <order alias='name' />
+                    </entity>
+                </fetch>");
+            var aggregate = AssertNode<HashMatchAggregateNode>(tryCatch1.CatchSource);
             var scalarFetch = AssertNode<FetchXmlScan>(aggregate.Source);
             AssertFetchXml(scalarFetch, @"
                 <fetch>
@@ -614,8 +647,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.IsInstanceOfType(gt.SecondExpression, typeof(IntegerLiteral));
             var val = (IntegerLiteral)gt.SecondExpression;
             Assert.AreEqual("1", val.Value);
-            var tryCatch = AssertNode<TryCatchNode>(filter.Source);
-            var aggregateFetch = AssertNode<FetchXmlScan>(tryCatch.TrySource);
+            var tryCatch1 = AssertNode<TryCatchNode>(filter.Source);
+            var tryCatch2 = AssertNode<TryCatchNode>(tryCatch1.TrySource);
+            var aggregateFetch = AssertNode<FetchXmlScan>(tryCatch2.TrySource);
             AssertFetchXml(aggregateFetch, @"
                 <fetch aggregate='true'>
                     <entity name='account'>
@@ -624,7 +658,17 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <order alias='name' />
                     </entity>
                 </fetch>");
-            var aggregate = AssertNode<HashMatchAggregateNode>(tryCatch.CatchSource);
+            var partitionAggregate = AssertNode<PartitionedAggregateNode>(tryCatch2.CatchSource);
+            var partitionFetch = AssertNode<FetchXmlScan>(partitionAggregate.Source);
+            AssertFetchXml(partitionFetch, @"
+                <fetch aggregate='true'>
+                    <entity name='account'>
+                        <attribute name='name' groupby='true' alias='name' />
+                        <attribute name='accountid' aggregate='count' alias='count' />
+                        <order alias='name' />
+                    </entity>
+                </fetch>");
+            var aggregate = AssertNode<HashMatchAggregateNode>(tryCatch1.CatchSource);
             Assert.AreEqual("account.name", aggregate.GroupBy[0].ToSql());
             Assert.AreEqual("count", aggregate.Aggregates.Single().Key);
             var scalarFetch = AssertNode<FetchXmlScan>(aggregate.Source);
@@ -657,8 +701,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var select = AssertNode<SelectNode>(plans[0]);
             Assert.AreEqual("createdon_month", select.ColumnSet[0].SourceColumn);
             Assert.AreEqual("count", select.ColumnSet[1].SourceColumn);
-            var tryCatch = AssertNode<TryCatchNode>(select.Source);
-            var aggregateFetch = AssertNode<FetchXmlScan>(tryCatch.TrySource);
+            var tryCatch1 = AssertNode<TryCatchNode>(select.Source);
+            var tryCatch2 = AssertNode<TryCatchNode>(tryCatch1.TrySource);
+            var aggregateFetch = AssertNode<FetchXmlScan>(tryCatch2.TrySource);
             AssertFetchXml(aggregateFetch, @"
                 <fetch aggregate='true'>
                     <entity name='account'>
@@ -667,7 +712,19 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <order alias='createdon_month' />
                     </entity>
                 </fetch>");
-            var aggregate = AssertNode<HashMatchAggregateNode>(tryCatch.CatchSource);
+            var partitionAggregate = AssertNode<PartitionedAggregateNode>(tryCatch2.CatchSource);
+            Assert.AreEqual("createdon_month", partitionAggregate.GroupBy[0].ToSql());
+            Assert.AreEqual("count", partitionAggregate.Aggregates.Single().Key);
+            var partitionFetch = AssertNode<FetchXmlScan>(partitionAggregate.Source);
+            AssertFetchXml(partitionFetch, @"
+                <fetch aggregate='true'>
+                    <entity name='account'>
+                        <attribute name='createdon' groupby='true' alias='createdon_month' dategrouping='month' />
+                        <attribute name='accountid' aggregate='count' alias='count' />
+                        <order alias='createdon_month' />
+                    </entity>
+                </fetch>");
+            var aggregate = AssertNode<HashMatchAggregateNode>(tryCatch1.CatchSource);
             Assert.AreEqual("createdon_month", aggregate.GroupBy[0].ToSql());
             Assert.AreEqual("count", aggregate.Aggregates.Single().Key);
             var computeScalar = AssertNode<ComputeScalarNode>(aggregate.Source);
@@ -2228,8 +2285,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var select = AssertNode<SelectNode>(plans[0]);
             Assert.AreEqual("account.name", select.ColumnSet[0].SourceColumn);
             Assert.AreEqual("count", select.ColumnSet[1].SourceColumn);
-            var tryCatch = AssertNode<TryCatchNode>(select.Source);
-            var aggregateFetch = AssertNode<FetchXmlScan>(tryCatch.TrySource);
+            var tryCatch1 = AssertNode<TryCatchNode>(select.Source);
+            var tryCatch2 = AssertNode<TryCatchNode>(tryCatch1.TrySource);
+            var aggregateFetch = AssertNode<FetchXmlScan>(tryCatch2.TrySource);
             AssertFetchXml(aggregateFetch, @"
                 <fetch aggregate='true'>
                     <entity name='account'>
@@ -2238,7 +2296,20 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <order alias='count' descending='true' />
                     </entity>
                 </fetch>");
-            var sort = AssertNode<SortNode>(tryCatch.CatchSource);
+            var partitionSort = AssertNode<SortNode>(tryCatch2.CatchSource);
+            Assert.AreEqual("count", partitionSort.Sorts.Single().Expression.ToSql());
+            Assert.AreEqual(SortOrder.Descending, partitionSort.Sorts.Single().SortOrder);
+            var partitionAggregate = AssertNode<PartitionedAggregateNode>(partitionSort.Source);
+            var partitionFetch = AssertNode<FetchXmlScan>(partitionAggregate.Source);
+            AssertFetchXml(partitionFetch, @"
+                <fetch aggregate='true'>
+                    <entity name='account'>
+                        <attribute name='name' groupby='true' alias='name' />
+                        <attribute name='accountid' aggregate='count' alias='count' />
+                        <order alias='name' />
+                    </entity>
+                </fetch>");
+            var sort = AssertNode<SortNode>(tryCatch1.CatchSource);
             Assert.AreEqual("count", sort.Sorts.Single().Expression.ToSql());
             Assert.AreEqual(SortOrder.Descending, sort.Sorts.Single().SortOrder);
             var aggregate = AssertNode<HashMatchAggregateNode>(sort.Source);
@@ -2805,8 +2876,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual("Expr1", innerAlias.Alias);
             var innerFilter = AssertNode<FilterNode>(innerAlias.Source);
             Assert.AreEqual("count > 1", innerFilter.Filter.ToSql());
-            var innerTry = AssertNode<TryCatchNode>(innerFilter.Source);
-            var innerAggregateFetch = AssertNode<FetchXmlScan>(innerTry.TrySource);
+            var innerTry1 = AssertNode<TryCatchNode>(innerFilter.Source);
+            var innerTry2 = AssertNode<TryCatchNode>(innerTry1.TrySource);
+            var innerAggregateFetch = AssertNode<FetchXmlScan>(innerTry2.TrySource);
 
             AssertFetchXml(innerAggregateFetch, @"
                 <fetch aggregate='true'>
@@ -2817,7 +2889,22 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     </entity>
                 </fetch>");
 
-            var innerAggregate = AssertNode<HashMatchAggregateNode>(innerTry.CatchSource);
+            var innerPartitionAggregate = AssertNode<PartitionedAggregateNode>(innerTry2.CatchSource);
+            Assert.AreEqual("contact.firstname", innerPartitionAggregate.GroupBy[0].GetColumnName());
+            Assert.AreEqual("count", innerPartitionAggregate.Aggregates.First().Key);
+            Assert.AreEqual(AggregateType.CountStar, innerPartitionAggregate.Aggregates.First().Value.AggregateType);
+            var innerPartitionFetch = AssertNode<FetchXmlScan>(innerPartitionAggregate.Source);
+
+            AssertFetchXml(innerPartitionFetch, @"
+                <fetch aggregate='true'>
+                    <entity name='contact'>
+                        <attribute name='firstname' groupby='true' alias='firstname' />
+                        <attribute name='contactid' aggregate='count' alias='count' />
+                        <order alias='firstname' />
+                    </entity>
+                </fetch>");
+
+            var innerAggregate = AssertNode<HashMatchAggregateNode>(innerTry1.CatchSource);
             Assert.AreEqual("contact.firstname", innerAggregate.GroupBy[0].GetColumnName());
             Assert.AreEqual("count", innerAggregate.Aggregates.First().Key);
             Assert.AreEqual(AggregateType.CountStar, innerAggregate.Aggregates.First().Value.AggregateType);
