@@ -125,6 +125,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 return new OrganizationRequest
                 {
+                    RequestName = "AddMemberList",
                     Parameters = new ParameterCollection
                     {
                         ["ListId"] = listId.Value,

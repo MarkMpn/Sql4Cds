@@ -179,6 +179,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     return new OrganizationRequest
                     {
+                        RequestName = "RemoveMemberList",
                         Parameters = new ParameterCollection
                         {
                             ["ListId"] = id,
