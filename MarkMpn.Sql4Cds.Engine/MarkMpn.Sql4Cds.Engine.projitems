@@ -82,9 +82,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)MetaMetadataCache.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)NotSupportedQueryFragmentException.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)PartialSuccessException.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)Query.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)QueryParseException.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)Sql2FetchXml.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)SqlEntityReference.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)TableSizeCache.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)TSqlEndpoint.cs" />
