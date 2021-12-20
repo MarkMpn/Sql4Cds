@@ -8,7 +8,6 @@ using Microsoft.Crm.Sdk.Messages;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
-using Microsoft.Xrm.Tooling.Connector;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -124,10 +123,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (entityId == null)
                     throw new QueryExecutionException("Cannot insert value NULL into listmember.entityid");
 
-                return new AddMemberListRequest
+                return new OrganizationRequest
                 {
-                    ListId = listId.Value,
-                    EntityId = entityId.Value
+                    Parameters = new ParameterCollection
+                    {
+                        ["ListId"] = listId.Value,
+                        ["EntityId"] = entityId.Value
+                    }
                 };
             }
             

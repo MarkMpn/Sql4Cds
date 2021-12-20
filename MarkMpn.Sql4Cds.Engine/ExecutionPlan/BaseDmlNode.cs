@@ -12,7 +12,11 @@ using System.Threading.Tasks;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
+#if NETCOREAPP
+using Microsoft.PowerPlatform.Dataverse.Client;
+#else
 using Microsoft.Xrm.Tooling.Connector;
+#endif
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -344,6 +348,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var count = 0;
 
             var maxDop = options.MaxDegreeOfParallelism;
+
+#if NETCOREAPP
+            var svc = org as ServiceClient;
+
+            if (maxDop <= 1 || svc == null || svc.ActiveAuthenticationType != Microsoft.PowerPlatform.Dataverse.Client.AuthenticationType.OAuth)
+            {
+                maxDop = 1;
+                svc = null;
+            }
+#else
             var svc = org as CrmServiceClient;
 
             if (maxDop <= 1 || svc == null || svc.ActiveAuthenticationType != Microsoft.Xrm.Tooling.Connector.AuthenticationType.OAuth)
@@ -351,6 +365,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 maxDop = 1;
                 svc = null;
             }
+#endif
 
             var useAffinityCookie = maxDop == 1 || entities.Count < 100;
 
@@ -364,8 +379,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         {
                             var service = svc?.Clone() ?? org;
 
+#if NETCOREAPP
+                            if (!useAffinityCookie && service is ServiceClient crmService)
+                                crmService.EnableAffinityCookie = false;
+#else
                             if (!useAffinityCookie && service is CrmServiceClient crmService)
                                 crmService.EnableAffinityCookie = false;
+#endif
 
                             return new { Service = service, EMR = default(ExecuteMultipleRequest) };
                         },
@@ -456,8 +476,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 }
                             }
 
-                            if (threadLocalState.Service != org)
-                                ((CrmServiceClient)threadLocalState.Service)?.Dispose();
+                            if (threadLocalState.Service != org && threadLocalState.Service is IDisposable disposableClient)
+                                disposableClient.Dispose();
                         });
                 }
             }

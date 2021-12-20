@@ -8,7 +8,6 @@ using Microsoft.Crm.Sdk.Messages;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
-using Microsoft.Xrm.Tooling.Connector;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -177,7 +176,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var secondaryId = (Guid)secondaryIdAccessor(entity);
 
                 if (meta.LogicalName == "listmember")
-                    return new RemoveMemberListRequest { ListId = id, EntityId = secondaryId };
+                {
+                    return new OrganizationRequest
+                    {
+                        Parameters = new ParameterCollection
+                        {
+                            ["ListId"] = id,
+                            ["EntityId"] = secondaryId
+                        }
+                    };
+                }
 
                 var relationship = meta.ManyToManyRelationships.Single();
 

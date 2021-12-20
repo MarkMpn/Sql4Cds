@@ -656,7 +656,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         DateTimeOffset dto;
 
                         if (options.UseLocalTimeZone)
-                            dto = new DateTimeOffset(dt, TimeZone.CurrentTimeZone.GetUtcOffset(dt));
+                            dto = new DateTimeOffset(dt, TimeZoneInfo.Local.GetUtcOffset(dt));
                         else
                             dto = new DateTimeOffset(dt, TimeSpan.Zero);
 

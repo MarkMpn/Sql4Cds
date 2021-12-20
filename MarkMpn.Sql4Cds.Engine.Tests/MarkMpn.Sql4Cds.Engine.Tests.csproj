@@ -174,9 +174,9 @@
       <Project>{43cbc9aa-6a8e-463f-83a9-aff3124afdb6}</Project>
       <Name>AutocompleteMenu-ScintillaNET</Name>
     </ProjectReference>
-    <ProjectReference Include="..\MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.csproj">
-      <Project>{583628f7-a027-451b-b3a1-e85ffb241dfb}</Project>
-      <Name>MarkMpn.Sql4Cds.Engine</Name>
+    <ProjectReference Include="..\MarkMpn.Sql4Cds.Engine.NetFx\MarkMpn.Sql4Cds.Engine.NetFx.csproj">
+      <Project>{23288bb2-0d6f-4329-9a5c-4c659567a652}</Project>
+      <Name>MarkMpn.Sql4Cds.Engine.NetFx</Name>
     </ProjectReference>
     <ProjectReference Include="..\MarkMpn.Sql4Cds\MarkMpn.Sql4Cds.csproj">
       <Project>{a7af5d13-a44e-426d-b3fc-ae390832c7df}</Project>

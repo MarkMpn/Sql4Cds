@@ -3,7 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Xml;
 using Microsoft.Xrm.Sdk.Query;
+#if NETCOREAPP
+using Microsoft.PowerPlatform.Dataverse.Client;
+#else
 using Microsoft.Xrm.Tooling.Connector;
+#endif
 
 namespace MarkMpn.Sql4Cds.Engine
 {
@@ -11,12 +15,19 @@ namespace MarkMpn.Sql4Cds.Engine
     {
         private static IDictionary<string, bool> _cache = new Dictionary<string, bool>();
 
+#if NETCOREAPP
+        public static bool IsEnabled(ServiceClient svc)
+        {
+            var host = svc.ConnectedOrgUriActual.Host;
+#else
         public static bool IsEnabled(CrmServiceClient svc)
         {
-            if (!svc.CrmConnectOrgUriActual.Host.EndsWith(".dynamics.com"))
+            var host = svc.CrmConnectOrgUriActual.Host;
+#endif
+            if (!host.EndsWith(".dynamics.com"))
                 return false;
 
-            if (_cache.TryGetValue(svc.CrmConnectOrgUriActual.Host, out var enabled))
+            if (_cache.TryGetValue(host, out var enabled))
                 return enabled;
 
             var qry = new QueryExpression("organization");
@@ -37,12 +48,16 @@ namespace MarkMpn.Sql4Cds.Engine
                 enabled = enabledNode?.Value == "true";
             }
 
-            _cache[svc.CrmConnectOrgUriActual.Host] = enabled;
+            _cache[host] = enabled;
 
             return enabled;
         }
 
+#if NETCOREAPP
+        public static void Enable(ServiceClient svc)
+#else
         public static void Enable(CrmServiceClient svc)
+#endif
         {
             var qry = new QueryExpression("organization");
             qry.ColumnSet = new ColumnSet("orgdborgsettings");
@@ -73,10 +88,18 @@ namespace MarkMpn.Sql4Cds.Engine
                 svc.Update(org);
             }
 
+#if NETCOREAPP
+            _cache[svc.ConnectedOrgUriActual.Host] = true;
+#else
             _cache[svc.CrmConnectOrgUriActual.Host] = true;
+#endif
         }
 
+#if NETCOREAPP
+        public static void Disable(ServiceClient svc)
+#else
         public static void Disable(CrmServiceClient svc)
+#endif
         {
             var qry = new QueryExpression("organization");
             qry.ColumnSet = new ColumnSet("orgdborgsettings");
@@ -100,7 +123,11 @@ namespace MarkMpn.Sql4Cds.Engine
                 svc.Update(org);
             }
 
+#if NETCOREAPP
+            _cache[svc.ConnectedOrgUriActual.Host] = true;
+#else
             _cache[svc.CrmConnectOrgUriActual.Host] = true;
+#endif
         }
     }
 }
