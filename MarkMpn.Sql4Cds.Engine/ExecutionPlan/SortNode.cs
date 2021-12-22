@@ -289,6 +289,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             if (attribute is LookupAttributeMetadata || attribute is EnumAttributeMetadata || attribute is BooleanAttributeMetadata)
                                 return this;
 
+                            // Sorting on multi-select picklist fields isn't supported in FetchXML
+                            if (attribute is MultiSelectPicklistAttributeMetadata)
+                                return this;
+
                             // Sorts on the virtual ___name attribute should be applied to the underlying field
                             if (attribute == null && fetchSort.attribute.EndsWith("name") == true)
                             {
@@ -318,6 +322,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                             // Sorting on a lookup Guid column actually sorts by the associated name field, which isn't what we want
                             if (attribute is LookupAttributeMetadata || attribute is EnumAttributeMetadata || attribute is BooleanAttributeMetadata)
+                                return this;
+
+                            // Sorting on multi-select picklist fields isn't supported in FetchXML
+                            if (attribute is MultiSelectPicklistAttributeMetadata)
                                 return this;
 
                             // Sorts on the virtual ___name attribute should be applied to the underlying field
