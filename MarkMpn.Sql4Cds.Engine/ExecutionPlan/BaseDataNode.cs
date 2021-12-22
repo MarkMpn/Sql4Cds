@@ -631,6 +631,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (attribute != null && attributeSuffix == null && (op == @operator.like || op == @operator.notlike) && !(attribute.AttributeType == AttributeTypeCode.String || attribute.AttributeType == AttributeTypeCode.Memo))
                 return false;
 
+            // Can't fold queries on PartyList attributes
+            if (attribute != null && attribute.AttributeType == AttributeTypeCode.PartyList)
+                return false;
+
             var value = literals == null ? null : literals.Length == 1 ? literals[0] is Literal l ? l.Value : literals[0] is VariableReference v ? v.Name : null : null;
             var values = literals == null ? null : literals.Select(lit => new conditionValue { Value = lit is Literal lit1 ? lit1.Value : lit is VariableReference var1 ? var1.Name : null }).ToArray();
             var entityAliases = new[] { entityAlias };
