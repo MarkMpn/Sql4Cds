@@ -128,10 +128,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // Ensure there is a sort order applied to avoid paging issues
                 if (fetch.Entity.Items == null || !fetch.Entity.Items.OfType<FetchOrderType>().Any())
                 {
-                    // Sort by each distinct attribute
+                    // Sort by each attribute. Make sure we only add one sort per attribute, taking virtual attributes
+                    // into account (i.e. don't attempt to sort on statecode and statecodename)
+                    var sortedAttributes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
                     foreach (var column in Columns)
                     {
                         if (!schema.ContainsColumn(column, out var normalized))
+                            continue;
+
+                        if (!sortedAttributes.Add(normalized))
                             continue;
 
                         var parts = normalized.Split('.');
@@ -139,9 +145,30 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             continue;
 
                         if (parts[0].Equals(fetch.Alias, StringComparison.OrdinalIgnoreCase))
+                        {
+                            var attr = dataSources[fetch.DataSource].Metadata[fetch.Entity.name].Attributes.SingleOrDefault(a => a.LogicalName.Equals(parts[1], StringComparison.OrdinalIgnoreCase));
+
+                            if (attr == null)
+                                continue;
+
+                            if (attr.AttributeOf != null && !sortedAttributes.Add(parts[0] + "." + attr.AttributeOf))
+                                continue;
+
                             fetch.Entity.AddItem(new FetchOrderType { attribute = parts[1] });
+                        }
                         else
-                            fetch.Entity.FindLinkEntity(parts[0]).AddItem(new FetchOrderType { attribute = parts[1] });
+                        {
+                            var linkEntity = fetch.Entity.FindLinkEntity(parts[0]);
+                            var attr = dataSources[fetch.DataSource].Metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName.Equals(parts[1], StringComparison.OrdinalIgnoreCase));
+
+                            if (attr == null)
+                                continue;
+
+                            if (attr.AttributeOf != null && !sortedAttributes.Add(parts[0] + "." + attr.AttributeOf))
+                                continue;
+
+                            linkEntity.AddItem(new FetchOrderType { attribute = parts[1] });
+                        }
                     }
                 }
 

@@ -33,6 +33,7 @@ Fixed GROUP BY and ORDER BY on multi-select picklist fields
 Fixed errors when using LIKE queries on non-string fields
 Fixed errors when using filters on party list fields
 Fixed running queries with more than 10 joins
+Fixed DISTINCT with repeated attributes
     </releaseNotes>
     <copyright>Copyright © 2019 Mark Carrington</copyright>
     <language>en-GB</language>
