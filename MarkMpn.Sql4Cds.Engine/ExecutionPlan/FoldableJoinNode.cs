@@ -92,6 +92,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (dataSource.Metadata[leftFetch.Entity.name].DataProviderId != dataSource.Metadata[rightFetch.Entity.name].DataProviderId)
                     return this;
 
+                // Check we're not going to have too many link entities
+                var leftLinkCount = leftFetch.Entity.GetLinkEntities().Count();
+                var rightLinkCount = rightFetch.Entity.GetLinkEntities().Count() + 1;
+
+                if (leftLinkCount + rightLinkCount > 10)
+                    return this;
+
                 // If we're doing a right outer join, switch everything round to do a left outer join
                 // Also switch join order for inner joins to use N:1 relationships instead of 1:N to avoid problems with paging
                 if (JoinType == QualifiedJoinType.RightOuter ||
