@@ -14,7 +14,12 @@
     <releaseNotes>Improved aggregate performance with automatic partitioning
 Reduced attributes retrieved to process COUNT(*) queries
 Fixed GROUP BY and aggregates on virtual attributes
-Fixed retrieving file attributes</releaseNotes>
+Fixed retrieving file attributes
+Fixed GROUP BY and ORDER BY on multi-select picklist fields
+Fixed errors when using LIKE queries on non-string fields
+Fixed errors when using filters on party list fields
+Fixed running queries with more than 10 joins
+    </releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>
     <tags>SQL CDS</tags>

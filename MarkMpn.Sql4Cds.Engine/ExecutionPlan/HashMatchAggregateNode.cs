@@ -175,7 +175,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (metadata[fetchXml.Entity.name].DataProviderId != null)
                     return this;
 
-                // Check none of the grouped columns are virtual attributes - FetchXML doesn't support grouping by them
+                // Check FetchXML supports grouping by each of the requested attributes
                 var fetchSchema = fetchXml.GetSchema(dataSources, parameterTypes);
                 foreach (var group in GroupBy)
                 {
@@ -192,7 +192,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     var attr = metadata[entityName].Attributes.SingleOrDefault(a => a.LogicalName == parts[1]);
 
+                    // Can't group by virtual attributes
                     if (attr == null || attr.AttributeOf != null)
+                        return this;
+
+                    // Can't group by multi-select picklist attributes
+                    if (attr is MultiSelectPicklistAttributeMetadata)
                         return this;
                 }
 
