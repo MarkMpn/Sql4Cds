@@ -626,6 +626,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
+            // Can't fold LIKE queries for non-string fields - the server will try to convert the value to the type of
+            // the attribute (e.g. integer) and throw an exception. 
+            if (attribute != null && attributeSuffix == null && (op == @operator.like || op == @operator.notlike) && !(attribute.AttributeType == AttributeTypeCode.String || attribute.AttributeType == AttributeTypeCode.Memo))
+                return false;
+
             var value = literals == null ? null : literals.Length == 1 ? literals[0] is Literal l ? l.Value : literals[0] is VariableReference v ? v.Name : null : null;
             var values = literals == null ? null : literals.Select(lit => new conditionValue { Value = lit is Literal lit1 ? lit1.Value : lit is VariableReference var1 ? var1.Name : null }).ToArray();
             var entityAliases = new[] { entityAlias };
@@ -635,7 +640,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var usesItems = values != null && values.Length > 1 || op == @operator.@in || op == @operator.notin || op == @operator.containvalues || op == @operator.notcontainvalues;
 
             if (attribute is DateTimeAttributeMetadata && literals != null &&
-                (op == @operator.eq || op == @operator.ne || op == @operator.neq || op == @operator.gt || op == @operator.ge || op == @operator.lt || op == @operator.le))
+                (op == @operator.eq || op == @operator.ne || op == @operator.neq || op == @operator.gt || op == @operator.ge || op == @operator.lt || op == @operator.le || op == @operator.@in || op == @operator.notin))
             {
                 for (var i = 0; i < literals.Length; i++)
                 {
