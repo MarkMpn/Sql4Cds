@@ -50,136 +50,143 @@ namespace MarkMpn.Sql4Cds.SSMS
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
-            if (ActiveDocument == null)
-                return;
-
-            if (!IsDataverse())
-                return;
-
-            // We are running a query against the Dataverse TDS endpoint, so check if there are any DML statements in the query
-
-            // Get the SQL editor object
-            var scriptFactory = new ScriptFactoryWrapper(ServiceCache.ScriptFactory);
-            var sqlScriptEditorControl = scriptFactory.GetCurrentlyActiveFrameDocView(ServiceCache.VSMonitorSelection, false, out _);
-            var textSpan = sqlScriptEditorControl.GetSelectedTextSpan();
-            var sql = textSpan.Text;
-
-            // Quick check first so we don't spend a long time connecting to CDS just to find there's a simple SELECT query
-            if (sql.IndexOf("INSERT", StringComparison.OrdinalIgnoreCase) == -1 &&
-                sql.IndexOf("UPDATE", StringComparison.OrdinalIgnoreCase) == -1 &&
-                sql.IndexOf("DELETE", StringComparison.OrdinalIgnoreCase) == -1)
-                return;
-
-            // Allow user to bypass SQL 4 CDS logic in case of problematic queries
-            if (sql.IndexOf("Bypass SQL 4 CDS", StringComparison.OrdinalIgnoreCase) != -1 ||
-                sql.IndexOf("Bypass SQL4CDS", StringComparison.OrdinalIgnoreCase) != -1)
-                return;
-
-            // Store the options being used for these queries so we can cancel them later
-            var options = new QueryExecutionOptions(sqlScriptEditorControl, Package.Settings);
-            var metadata = GetMetadataCache();
-            var org = ConnectCDS();
-            var dataSource = new DataSource { Name = "local", Metadata = metadata, TableSizeCache = new TableSizeCache(org, metadata), Connection = org };
-
-            // We've possibly got a DML statement, so parse the query properly to get the details
-            var converter = new ExecutionPlanBuilder(new[] { dataSource }, options)
-            {
-                TDSEndpointAvailable = true,
-                QuotedIdentifiers = sqlScriptEditorControl.QuotedIdentifiers
-            };
-            IRootExecutionPlanNode[] queries;
-
             try
             {
-                queries = converter.Build(sql);
+                if (ActiveDocument == null)
+                    return;
+
+                if (!IsDataverse())
+                    return;
+
+                // We are running a query against the Dataverse TDS endpoint, so check if there are any DML statements in the query
+
+                // Get the SQL editor object
+                var scriptFactory = new ScriptFactoryWrapper(ServiceCache.ScriptFactory);
+                var sqlScriptEditorControl = scriptFactory.GetCurrentlyActiveFrameDocView(ServiceCache.VSMonitorSelection, false, out _);
+                var textSpan = sqlScriptEditorControl.GetSelectedTextSpan();
+                var sql = textSpan.Text;
+
+                // Quick check first so we don't spend a long time connecting to CDS just to find there's a simple SELECT query
+                if (sql.IndexOf("INSERT", StringComparison.OrdinalIgnoreCase) == -1 &&
+                    sql.IndexOf("UPDATE", StringComparison.OrdinalIgnoreCase) == -1 &&
+                    sql.IndexOf("DELETE", StringComparison.OrdinalIgnoreCase) == -1)
+                    return;
+
+                // Allow user to bypass SQL 4 CDS logic in case of problematic queries
+                if (sql.IndexOf("Bypass SQL 4 CDS", StringComparison.OrdinalIgnoreCase) != -1 ||
+                    sql.IndexOf("Bypass SQL4CDS", StringComparison.OrdinalIgnoreCase) != -1)
+                    return;
+
+                // Store the options being used for these queries so we can cancel them later
+                var options = new QueryExecutionOptions(sqlScriptEditorControl, Package.Settings);
+                var metadata = GetMetadataCache();
+                var org = ConnectCDS();
+                var dataSource = new DataSource { Name = "local", Metadata = metadata, TableSizeCache = new TableSizeCache(org, metadata), Connection = org };
+
+                // We've possibly got a DML statement, so parse the query properly to get the details
+                var converter = new ExecutionPlanBuilder(new[] { dataSource }, options)
+                {
+                    TDSEndpointAvailable = true,
+                    QuotedIdentifiers = sqlScriptEditorControl.QuotedIdentifiers
+                };
+                IRootExecutionPlanNode[] queries;
+
+                try
+                {
+                    queries = converter.Build(sql);
+                }
+                catch (Exception ex)
+                {
+                    CancelDefault = true;
+                    ShowError(sqlScriptEditorControl, textSpan, ex);
+                    return;
+                }
+
+                var dmlQueries = queries.OfType<IDmlQueryExecutionPlanNode>().ToArray();
+                var hasSelect = queries.Length > dmlQueries.Length;
+                var hasDml = dmlQueries.Length > 0;
+
+                if (hasSelect && hasDml)
+                {
+                    // Can't mix SELECT and DML queries as we can't show results in the grid and SSMS can't execute the DML queries
+                    CancelDefault = true;
+                    ShowError(sqlScriptEditorControl, textSpan, new ApplicationException("Cannot mix SELECT queries with DML queries. Execute SELECT statements in a separate batch to INSERT/UPDATE/DELETE"));
+                    return;
+                }
+
+                if (hasSelect)
+                    return;
+
+                // We need to execute the DML statements directly
+                CancelDefault = true;
+
+                // Show the queries starting to run
+                sqlScriptEditorControl.StandardPrepareBeforeExecute();
+                sqlScriptEditorControl.OnExecutionStarted(sqlScriptEditorControl, EventArgs.Empty);
+                sqlScriptEditorControl.ToggleResultsControl(true);
+                sqlScriptEditorControl.Results.StartExecution();
+
+                _options[ActiveDocument] = options;
+                var doc = ActiveDocument;
+
+                // Run the queries in a background thread
+                var task = new System.Threading.Tasks.Task(async () =>
+                {
+                    var resultFlag = 0;
+
+                    foreach (var query in dmlQueries)
+                    {
+                        if (options.Cancelled)
+                            break;
+
+                        try
+                        {
+                            _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name, ["Source"] = "SSMS" });
+                            var msg = query.Execute(new Dictionary<string, DataSource>(StringComparer.OrdinalIgnoreCase) { [dataSource.Name] = dataSource }, options, null, null);
+
+                            sqlScriptEditorControl.Results.AddStringToMessages(msg + "\r\n\r\n");
+
+                            resultFlag |= 1; // Success
+                        }
+                        catch (Exception ex)
+                        {
+                            var error = ex;
+
+                            if (ex is PartialSuccessException partial)
+                            {
+                                error = partial.InnerException;
+
+                                if (partial.Result is string msg)
+                                {
+                                    sqlScriptEditorControl.Results.AddStringToMessages(msg + "\r\n\r\n");
+                                    resultFlag |= 1; // Success
+                                }
+                            }
+
+                            _ai.TrackException(error, new Dictionary<string, string> { ["Sql"] = sql, ["Source"] = "SSMS" });
+
+                            AddException(sqlScriptEditorControl, textSpan, error);
+                            resultFlag |= 2; // Failure
+                        }
+                    }
+
+                    if (options.Cancelled)
+                        resultFlag = 4; // Cancel
+
+                    await Package.JoinableTaskFactory.SwitchToMainThreadAsync();
+
+                    sqlScriptEditorControl.Results.OnSqlExecutionCompletedInt(resultFlag);
+
+                    _options.Remove(doc);
+                });
+
+                options.Task = task;
+                task.Start();
             }
             catch (Exception ex)
             {
-                CancelDefault = true;
-                ShowError(sqlScriptEditorControl, textSpan, ex);
-                return;
+                VsShellUtilities.LogError("SQL 4 CDS", ex.ToString());
             }
-
-            var dmlQueries = queries.OfType<IDmlQueryExecutionPlanNode>().ToArray();
-            var hasSelect = queries.Length > dmlQueries.Length;
-            var hasDml = dmlQueries.Length > 0;
-
-            if (hasSelect && hasDml)
-            {
-                // Can't mix SELECT and DML queries as we can't show results in the grid and SSMS can't execute the DML queries
-                CancelDefault = true;
-                ShowError(sqlScriptEditorControl, textSpan, new ApplicationException("Cannot mix SELECT queries with DML queries. Execute SELECT statements in a separate batch to INSERT/UPDATE/DELETE"));
-                return;
-            }
-
-            if (hasSelect)
-                return;
-
-            // We need to execute the DML statements directly
-            CancelDefault = true;
-
-            // Show the queries starting to run
-            sqlScriptEditorControl.StandardPrepareBeforeExecute();
-            sqlScriptEditorControl.OnExecutionStarted(sqlScriptEditorControl, EventArgs.Empty);
-            sqlScriptEditorControl.ToggleResultsControl(true);
-            sqlScriptEditorControl.Results.StartExecution();
-
-            _options[ActiveDocument] = options;
-            var doc = ActiveDocument;
-
-            // Run the queries in a background thread
-            var task = new System.Threading.Tasks.Task(async () =>
-            {
-                var resultFlag = 0;
-
-                foreach (var query in dmlQueries)
-                {
-                    if (options.Cancelled)
-                        break;
-
-                    try
-                    {
-                        _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name, ["Source"] = "SSMS" });
-                        var msg = query.Execute(new Dictionary<string, DataSource>(StringComparer.OrdinalIgnoreCase) { [dataSource.Name] = dataSource }, options, null, null);
-
-                        sqlScriptEditorControl.Results.AddStringToMessages(msg + "\r\n\r\n");
-
-                        resultFlag |= 1; // Success
-                    }
-                    catch (Exception ex)
-                    {
-                        var error = ex;
-
-                        if (ex is PartialSuccessException partial)
-                        {
-                            error = partial.InnerException;
-
-                            if (partial.Result is string msg)
-                            {
-                                sqlScriptEditorControl.Results.AddStringToMessages(msg + "\r\n\r\n");
-                                resultFlag |= 1; // Success
-                            }
-                        }
-
-                        _ai.TrackException(error, new Dictionary<string, string> { ["Sql"] = sql, ["Source"] = "SSMS" });
-
-                        AddException(sqlScriptEditorControl, textSpan, error);
-                        resultFlag |= 2; // Failure
-                    }
-                }
-
-                if (options.Cancelled)
-                    resultFlag = 4; // Cancel
-
-                await Package.JoinableTaskFactory.SwitchToMainThreadAsync();
-
-                sqlScriptEditorControl.Results.OnSqlExecutionCompletedInt(resultFlag);
-                
-                _options.Remove(doc);
-            });
-
-            options.Task = task;
-            task.Start();
         }
 
         private void OnCancelQuery(string Guid, int ID, object CustomIn, object CustomOut, ref bool CancelDefault)

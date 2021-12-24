@@ -6,11 +6,19 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.SqlServer.Management.QueryExecution;
 using Microsoft.SqlServer.Management.Smo.RegSvrEnum;
+using Microsoft.VisualStudio.Shell;
 
 namespace MarkMpn.Sql4Cds.SSMS
 {
     class SqlScriptEditorControlWrapper : ReflectionObjectBase
     {
+        private static readonly Type QEStatusBarKnownStates;
+
+        static SqlScriptEditorControlWrapper()
+        {
+            QEStatusBarKnownStates = GetType("Microsoft.SqlServer.Management.UI.VSIntegration.Editors.QEStatusBarKnownStates, SQLEditors");
+        }
+
         public SqlScriptEditorControlWrapper(object obj) : base(obj)
         {
             Results = new DisplaySQLResultsControlWrapper(GetField(obj, "m_sqlResultsControl"));
@@ -35,7 +43,7 @@ namespace MarkMpn.Sql4Cds.SSMS
 
         public void StandardPrepareBeforeExecute()
         {
-            var executing = Enum.ToObject(Type.GetType("Microsoft.SqlServer.Management.UI.VSIntegration.Editors.QEStatusBarKnownStates, SQLEditors"), 4);
+            var executing = Enum.ToObject(QEStatusBarKnownStates, 4);
             InvokeMethod(Target, "StandardPrepareBeforeExecute", executing);
         }
 
@@ -51,7 +59,7 @@ namespace MarkMpn.Sql4Cds.SSMS
 
         public void Cancelling()
         {
-            var cancelingExecution = Enum.ToObject(Type.GetType("Microsoft.SqlServer.Management.UI.VSIntegration.Editors.QEStatusBarKnownStates, SQLEditors"), 11);
+            var cancelingExecution = Enum.ToObject(QEStatusBarKnownStates, 11);
             InvokeMethod(Target, "OnWindowStatusTextChanged", cancelingExecution);
         }
 

@@ -90,60 +90,69 @@ namespace MarkMpn.Sql4Cds.SSMS
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
-            var sql = GetQuery();
-
-            var scriptFactory = new ScriptFactoryWrapper(ServiceCache.ScriptFactory);
-            var sqlScriptEditorControl = scriptFactory.GetCurrentlyActiveFrameDocView(ServiceCache.VSMonitorSelection, false, out _);
-
-            var options = new QueryExecutionOptions(sqlScriptEditorControl, Package.Settings);
-            var metadata = GetMetadataCache();
-            var org = ConnectCDS();
-
-            var converter = new ExecutionPlanBuilder(metadata, new TableSizeCache(org, metadata), options)
-            {
-                TDSEndpointAvailable = false,
-                QuotedIdentifiers = sqlScriptEditorControl.QuotedIdentifiers
-            };
-
             try
             {
-                var queries = converter.Build(sql);
+                var sql = GetQuery();
 
-                foreach (var query in queries)
+                var scriptFactory = new ScriptFactoryWrapper(ServiceCache.ScriptFactory);
+                var sqlScriptEditorControl = scriptFactory.GetCurrentlyActiveFrameDocView(ServiceCache.VSMonitorSelection, false, out _);
+
+                var options = new QueryExecutionOptions(sqlScriptEditorControl, Package.Settings);
+                var metadata = GetMetadataCache();
+                var org = ConnectCDS();
+
+                var converter = new ExecutionPlanBuilder(metadata, new TableSizeCache(org, metadata), options)
                 {
-                    _ai.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name, ["Source"] = "SSMS" });
+                    TDSEndpointAvailable = false,
+                    QuotedIdentifiers = sqlScriptEditorControl.QuotedIdentifiers
+                };
 
-                    var window = Dte.ItemOperations.NewFile("General\\XML File");
+                try
+                {
+                    var queries = converter.Build(sql);
 
-                    var editPoint = ActiveDocument.EndPoint.CreateEditPoint();
-                    editPoint.Insert("<!--\r\nCreated from query:\r\n\r\n");
-                    editPoint.Insert(query.Sql);
-
-                    var nodes = GetAllNodes(query).ToList();
-
-                    if (nodes.Any(node => !(node is IFetchXmlExecutionPlanNode)))
+                    foreach (var query in queries)
                     {
-                        editPoint.Insert("\r\n‼ WARNING ‼\r\n");
-                        editPoint.Insert("This query requires additional processing. This FetchXML gives the required data, but needs additional processing to format it in the same way as returned by the TDS Endpoint or SQL 4 CDS.\r\n\r\n");
-                        editPoint.Insert("Learn more at https://markcarrington.dev/sql-4-cds/additional-processing/\r\n\r\n");
-                    }
+                        _ai.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name, ["Source"] = "SSMS" });
 
-                    editPoint.Insert("\r\n\r\n-->");
+                        var window = Dte.ItemOperations.NewFile("General\\XML File");
 
-                    foreach (var fetchXml in nodes.OfType<IFetchXmlExecutionPlanNode>())
-                    {
-                        editPoint.Insert("\r\n\r\n");
-                        editPoint.Insert(fetchXml.FetchXmlString);
+                        var editPoint = ActiveDocument.EndPoint.CreateEditPoint();
+                        editPoint.Insert("<!--\r\nCreated from query:\r\n\r\n");
+                        editPoint.Insert(query.Sql);
+
+                        var nodes = GetAllNodes(query).ToList();
+
+                        if (nodes.Any(node => !(node is IFetchXmlExecutionPlanNode)))
+                        {
+                            editPoint.Insert("\r\n‼ WARNING ‼\r\n");
+                            editPoint.Insert("This query requires additional processing. This FetchXML gives the required data, but needs additional processing to format it in the same way as returned by the TDS Endpoint or SQL 4 CDS.\r\n\r\n");
+                            editPoint.Insert("Learn more at https://markcarrington.dev/sql-4-cds/additional-processing/\r\n\r\n");
+                        }
+
+                        editPoint.Insert("\r\n\r\n-->");
+
+                        foreach (var fetchXml in nodes.OfType<IFetchXmlExecutionPlanNode>())
+                        {
+                            editPoint.Insert("\r\n\r\n");
+                            editPoint.Insert(fetchXml.FetchXmlString);
+                        }
                     }
                 }
+                catch (NotSupportedQueryFragmentException ex)
+                {
+                    VsShellUtilities.LogError("SQL 4 CDS", ex.ToString());
+                    VsShellUtilities.ShowMessageBox(Package, "The query could not be converted to FetchXML: " + ex.Message, "Query Not Supported", OLEMSGICON.OLEMSGICON_CRITICAL, OLEMSGBUTTON.OLEMSGBUTTON_OK, OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
+                }
+                catch (QueryParseException ex)
+                {
+                    VsShellUtilities.LogError("SQL 4 CDS", ex.ToString());
+                    VsShellUtilities.ShowMessageBox(Package, "The query could not be parsed: " + ex.Message, "Query Parsing Error", OLEMSGICON.OLEMSGICON_CRITICAL, OLEMSGBUTTON.OLEMSGBUTTON_OK, OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
+                }
             }
-            catch (NotSupportedQueryFragmentException ex)
+            catch (Exception ex)
             {
-                VsShellUtilities.ShowMessageBox(Package, "The query could not be converted to FetchXML: " + ex.Message, "Query Not Supported", OLEMSGICON.OLEMSGICON_CRITICAL, OLEMSGBUTTON.OLEMSGBUTTON_OK, OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
-            }
-            catch (QueryParseException ex)
-            {
-                VsShellUtilities.ShowMessageBox(Package, "The query could not be parsed: " + ex.Message, "Query Parsing Error", OLEMSGICON.OLEMSGICON_CRITICAL, OLEMSGBUTTON.OLEMSGBUTTON_OK, OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
+                VsShellUtilities.LogError("SQL 4 CDS", ex.ToString());
             }
         }
 
