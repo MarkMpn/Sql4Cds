@@ -11,7 +11,8 @@
     <iconUrl>https://markcarrington.dev/sql4cds-icon/</iconUrl>
     <description>Convert SQL queries to FetchXml and execute them against Dataverse / D365</description>
     <summary>Convert SQL queries to FetchXml and execute them against Dataverse / D365</summary>
-    <releaseNotes>Improved aggregate performance with automatic partitioning
+    <releaseNotes>Added .NET Core version
+Improved aggregate performance with automatic partitioning
 Reduced attributes retrieved to process COUNT(*) queries
 Fixed GROUP BY and aggregates on virtual attributes
 Fixed retrieving file attributes
