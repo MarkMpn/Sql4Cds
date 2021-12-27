@@ -73,6 +73,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private Dictionary<string, ParameterizedCondition> _parameterizedConditions;
         private HashSet<string> _entityNameGroupings;
         private Dictionary<string, string> _primaryKeyColumns;
+        private string _lastSchemaFetchXml;
+        private NodeSchema _lastSchema;
 
         public FetchXmlScan()
         {
@@ -446,6 +448,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!dataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
 
+            var fetchXmlString = FetchXmlString;
+            if (_lastSchema != null && fetchXmlString == _lastSchemaFetchXml)
+                return _lastSchema;
+
             _primaryKeyColumns = new Dictionary<string, string>();
             var schema = new NodeSchema();
 
@@ -457,7 +463,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 schema.PrimaryKey = $"{Alias}.{meta.PrimaryIdAttribute}";
 
             AddSchemaAttributes(schema, dataSource.Metadata, entity.name, Alias, entity.Items);
-            
+
+            _lastSchema = schema;
+            _lastSchemaFetchXml = fetchXmlString;
             return schema;
         }
 
