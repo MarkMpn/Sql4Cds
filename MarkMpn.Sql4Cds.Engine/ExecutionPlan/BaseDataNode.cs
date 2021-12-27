@@ -377,7 +377,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (func.IsConstantValueExpression(schema, options, out literal))
                         values = new[] { literal };
                     else
-                        throw new NotSupportedQueryFragmentException("Unsupported FetchXML function", func);
+                        return false;
                 }
                 else if (parameterless != null)
                 {
