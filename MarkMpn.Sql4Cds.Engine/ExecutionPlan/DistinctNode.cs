@@ -85,13 +85,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public override NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
         {
             var schema = Source.GetSchema(dataSources, parameterTypes);
 
             // If this is a distinct list of one column we know the values in that column will be unique
             if (Columns.Count == 1)
-                schema.PrimaryKey = Columns[0];
+                schema = new NodeSchema(schema) { PrimaryKey = Columns[0] };
 
             return schema;
         }

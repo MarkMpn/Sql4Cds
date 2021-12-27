@@ -138,7 +138,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="parameterValues">A mapping of parameter names to their current values</param>
         /// <param name="schema">The schema of the data source</param>
         /// <returns>The entities to perform the DML operation on</returns>
-        protected List<Entity> GetDmlSourceEntities(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues, out NodeSchema schema)
+        protected List<Entity> GetDmlSourceEntities(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues, out INodeSchema schema)
         {
             List<Entity> entities;
 
@@ -157,8 +157,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 for (var i = 0; i < dataTable.Columns.Count; i++)
                 {
                     var col = dataTable.Columns[i];
-                    schema.Schema[col.ColumnName] = col.DataType;
-                    schema.Schema[i.ToString()] = col.DataType;
+                    ((NodeSchema)schema).Schema[col.ColumnName] = col.DataType;
+                    ((NodeSchema)schema).Schema[i.ToString()] = col.DataType;
                 }
 
                 entities = dataTable.Rows
@@ -193,7 +193,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="attributes">The attributes in the target metadata</param>
         /// <param name="dateTimeKind">The time zone that datetime values are supplied in</param>
         /// <returns></returns>
-        protected Dictionary<string, Func<Entity, object>> CompileColumnMappings(EntityMetadata metadata, IDictionary<string,string> mappings, NodeSchema schema, IDictionary<string, AttributeMetadata> attributes, DateTimeKind dateTimeKind)
+        protected Dictionary<string, Func<Entity, object>> CompileColumnMappings(EntityMetadata metadata, IDictionary<string,string> mappings, INodeSchema schema, IDictionary<string, AttributeMetadata> attributes, DateTimeKind dateTimeKind)
         {
             var attributeAccessors = new Dictionary<string, Func<Entity, object>>();
             var entityParam = Expression.Parameter(typeof(Entity));

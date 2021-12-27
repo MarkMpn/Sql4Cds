@@ -81,7 +81,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public IDataExecutionPlanNode Source { get; set; }
 
-        protected void InitializeAggregates(NodeSchema schema, IDictionary<string, Type> parameterTypes)
+        protected void InitializeAggregates(INodeSchema schema, IDictionary<string, Type> parameterTypes)
         {
             foreach (var aggregate in Aggregates.Where(agg => agg.Value.SqlExpression != null))
             {
@@ -103,7 +103,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        protected void InitializePartitionedAggregates(NodeSchema schema, IDictionary<string, Type> parameterTypes)
+        protected void InitializePartitionedAggregates(INodeSchema schema, IDictionary<string, Type> parameterTypes)
         {
             foreach (var aggregate in Aggregates)
             {
@@ -113,7 +113,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        protected List<string> GetGroupingColumns(NodeSchema schema)
+        protected List<string> GetGroupingColumns(INodeSchema schema)
         {
             var groupByCols = GroupBy
                 .Select(col =>
@@ -181,7 +181,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return values;
         }
 
-        public override NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
         {
             var sourceSchema = Source.GetSchema(dataSources, parameterTypes);
             var schema = new NodeSchema();

@@ -311,7 +311,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return Math.Max(leftEstimate, rightEstimate);
         }
 
-        protected override NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, bool includeSemiJoin)
+        protected override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, bool includeSemiJoin)
         {
             var schema = base.GetSchema(dataSources, parameterTypes, includeSemiJoin);
 
@@ -321,9 +321,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var rightSchema = GetRightSchema(dataSources, parameterTypes);
 
                 if (LeftAttribute.GetColumnName() == leftSchema.PrimaryKey)
-                    schema.PrimaryKey = rightSchema.PrimaryKey;
+                    schema = new NodeSchema(schema) { PrimaryKey = rightSchema.PrimaryKey };
                 else if (RightAttribute.GetColumnName() == rightSchema.PrimaryKey)
-                    schema.PrimaryKey = leftSchema.PrimaryKey;
+                    schema = new NodeSchema(schema) { PrimaryKey = leftSchema.PrimaryKey };
             }
 
             return schema;

@@ -87,7 +87,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private IDictionary<string, Type> GetInnerParameterTypes(NodeSchema leftSchema, IDictionary<string, Type> parameterTypes)
+        private IDictionary<string, Type> GetInnerParameterTypes(INodeSchema leftSchema, IDictionary<string, Type> parameterTypes)
         {
             var innerParameterTypes = parameterTypes;
 
@@ -146,7 +146,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             RightSource.AddRequiredColumns(dataSources, parameterTypes, rightColumns);
         }
 
-        protected override NodeSchema GetRightSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        protected override INodeSchema GetRightSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
         {
             var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
             var innerParameterTypes = GetInnerParameterTypes(leftSchema, parameterTypes);

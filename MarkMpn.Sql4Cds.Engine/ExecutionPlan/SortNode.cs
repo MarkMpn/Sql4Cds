@@ -126,7 +126,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private void SortSubset(List<Entity> subset, NodeSchema schema, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues, List<Func<Entity, IDictionary<string, object>, IQueryExecutionOptions, object>> expressions, IQueryExecutionOptions options)
+        private void SortSubset(List<Entity> subset, INodeSchema schema, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues, List<Func<Entity, IDictionary<string, object>, IQueryExecutionOptions, object>> expressions, IQueryExecutionOptions options)
         {
             // Simple case if there's no need to do any further sorting
             if (subset.Count <= 1)
@@ -164,7 +164,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        public override NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
         {
             return Source.GetSchema(dataSources, parameterTypes);
         }

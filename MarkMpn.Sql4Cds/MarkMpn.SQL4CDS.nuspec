@@ -34,6 +34,8 @@ Fixed errors when using LIKE queries on non-string fields
 Fixed errors when using filters on party list fields
 Fixed running queries with more than 10 joins
 Fixed DISTINCT with repeated attributes
+Fixed use of non-FetchXML functions in WHERE clause
+Fixed use of query derived tables with aggregates
     </releaseNotes>
     <copyright>Copyright © 2019 Mark Carrington</copyright>
     <language>en-GB</language>

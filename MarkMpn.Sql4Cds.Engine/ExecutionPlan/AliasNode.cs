@@ -105,7 +105,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return this;
         }
 
-        public override NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
         {
             // Map the base names to the alias names
             var sourceSchema = Source.GetSchema(dataSources, parameterTypes);
@@ -135,7 +135,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return schema;
         }
 
-        private void AddSchemaColumn(string outputColumn, string sourceColumn, NodeSchema schema, NodeSchema sourceSchema)
+        private void AddSchemaColumn(string outputColumn, string sourceColumn, NodeSchema schema, INodeSchema sourceSchema)
         {
             if (!sourceSchema.ContainsColumn(sourceColumn, out var normalized))
                 return;

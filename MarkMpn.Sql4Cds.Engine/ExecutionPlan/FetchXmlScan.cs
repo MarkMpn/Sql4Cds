@@ -74,6 +74,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private HashSet<string> _entityNameGroupings;
         private Dictionary<string, string> _primaryKeyColumns;
         private string _lastSchemaFetchXml;
+        private string _lastSchemaAlias;
         private NodeSchema _lastSchema;
 
         public FetchXmlScan()
@@ -215,7 +216,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private void OnRetrievedEntity(Entity entity, NodeSchema schema, IQueryExecutionOptions options, IAttributeMetadataCache metadata)
+        private void OnRetrievedEntity(Entity entity, INodeSchema schema, IQueryExecutionOptions options, IAttributeMetadataCache metadata)
         {
             // Expose any formatted values for OptionSetValue and EntityReference values
             foreach (var formatted in entity.FormattedValues)
@@ -443,13 +444,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Array.Empty<IDataExecutionPlanNode>();
         }
 
-        public override NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
         {
             if (!dataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
 
             var fetchXmlString = FetchXmlString;
-            if (_lastSchema != null && fetchXmlString == _lastSchemaFetchXml)
+            if (_lastSchema != null && Alias == _lastSchemaAlias && fetchXmlString == _lastSchemaFetchXml)
                 return _lastSchema;
 
             _primaryKeyColumns = new Dictionary<string, string>();
@@ -466,6 +467,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             _lastSchema = schema;
             _lastSchemaFetchXml = fetchXmlString;
+            _lastSchemaAlias = Alias;
             return schema;
         }
 

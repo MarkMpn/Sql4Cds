@@ -7,10 +7,10 @@ namespace MarkMpn.Sql4Cds.Engine
 {
     internal class JoinConditionVisitor : TSqlConcreteFragmentVisitor
     {
-        private readonly NodeSchema _lhs;
-        private readonly NodeSchema _rhs;
+        private readonly INodeSchema _lhs;
+        private readonly INodeSchema _rhs;
 
-        public JoinConditionVisitor(NodeSchema lhs, NodeSchema rhs)
+        public JoinConditionVisitor(INodeSchema lhs, INodeSchema rhs)
         {
             _lhs = lhs;
             _rhs = rhs;

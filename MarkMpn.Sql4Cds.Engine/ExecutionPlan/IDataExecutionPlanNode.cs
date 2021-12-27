@@ -29,7 +29,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// Gets the schema of the dataset returned by the node
         /// </summary>
         /// <returns></returns>
-        NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes);
+        INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes);
 
         /// <summary>
         /// Estimates the number of rows that will be returned by this node
