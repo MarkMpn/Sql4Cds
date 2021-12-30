@@ -1345,6 +1345,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <attribute name='lastname' />
                         <attribute name='firstname' />
                         <attribute name='createdon' />
+                        <order attribute='lastname' />
                     </entity>
                 </fetch>
             ");
@@ -1465,6 +1466,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     <entity name='contact'>
                         <attribute name='lastname' />
                         <attribute name='createdon' />
+                        <order attribute='lastname' />
                     </entity>
                 </fetch>
             ");
@@ -1574,6 +1576,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 <fetch>
                     <entity name='account'>
                         <attribute name='name' />
+                        <order attribute='name' />
                     </entity>
                 </fetch>
             ");
