@@ -153,6 +153,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             aliases.Add(mapped);
+
+            var sorted = sourceSchema.SortOrder.Contains(sourceColumn, StringComparer.OrdinalIgnoreCase);
+
+            if (sorted)
+                schema.SortOrder.Add(outputColumn);
         }
 
         protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)

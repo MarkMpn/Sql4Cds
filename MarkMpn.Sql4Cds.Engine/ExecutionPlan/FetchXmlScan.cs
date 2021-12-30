@@ -660,6 +660,37 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                 }
 
+                foreach (var sort in items.OfType<FetchOrderType>())
+                {
+                    string fullName;
+                    string attributeName;
+
+                    if (!String.IsNullOrEmpty(sort.alias))
+                    {
+                        var attribute = items.OfType<FetchAttributeType>().SingleOrDefault(a => a.alias.Equals(sort.alias, StringComparison.OrdinalIgnoreCase));
+
+                        if (!FetchXml.aggregate || attribute != null && attribute.groupbySpecified && attribute.groupby == FetchBoolType.@true)
+                            fullName = $"{alias}.{attribute.alias}";
+                        else
+                            fullName = attribute.alias;
+
+                        attributeName = attribute.name;
+                    }
+                    else
+                    {
+                        fullName = $"{alias}.{sort.attribute}";
+                        attributeName = sort.attribute;
+                    }
+
+                    // Sorts applied to lookup or enum fields are actually performed on the associated ___name virtual attribute
+                    var attrMeta = meta.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attributeName, StringComparison.OrdinalIgnoreCase));
+
+                    if (attrMeta is LookupAttributeMetadata || attrMeta is EnumAttributeMetadata || attrMeta is BooleanAttributeMetadata)
+                        fullName += "name";
+
+                    schema.SortOrder.Add(fullName);
+                }
+
                 foreach (var linkEntity in items.OfType<FetchLinkEntityType>())
                 {
                     if (linkEntity.SemiJoin)

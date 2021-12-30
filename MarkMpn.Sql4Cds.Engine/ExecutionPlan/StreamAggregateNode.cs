@@ -18,6 +18,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return this;
         }
 
+        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        {
+            var schema = base.GetSchema(dataSources, parameterTypes);
+            var groupByCols = GetGroupingColumns(schema);
+            ((NodeSchema)schema).SortOrder.AddRange(groupByCols);
+            
+            return schema;
+        }
+
         protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
             var schema = Source.GetSchema(dataSources, parameterTypes);

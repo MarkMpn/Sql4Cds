@@ -250,7 +250,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         linkEntity.Items = linkEntity.Items.Where(i => !(i is FetchOrderType)).ToArray();
                 }
 
-                var schema = Source.GetSchema(dataSources, parameterTypes);
+                var fetchSchema = fetchXml.GetSchema(dataSources, parameterTypes);
                 var entity = fetchXml.Entity;
                 var items = entity.Items;
 
@@ -259,7 +259,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (!(sortOrder.Expression is ColumnReferenceExpression sortColRef))
                         return this;
 
-                    if (!schema.ContainsColumn(sortColRef.GetColumnName(), out var sortCol))
+                    if (!fetchSchema.ContainsColumn(sortColRef.GetColumnName(), out var sortCol))
                         return this;
 
                     var parts = sortCol.Split('.');
@@ -390,6 +390,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 return Source;
             }
+
+            // Check if the data is already sorted by any prefix of our sorts
+            var schema = Source.GetSchema(dataSources, parameterTypes);
+
+            for (var i = 0; i < Sorts.Count && i < schema.SortOrder.Count; i++)
+            {
+                if (!(Sorts[i].Expression is ColumnReferenceExpression col))
+                    return this;
+
+                if (!schema.ContainsColumn(col.GetColumnName(), out var colName))
+                    return this;
+
+                if (!schema.SortOrder[i].Equals(colName, StringComparison.OrdinalIgnoreCase))
+                    return this;
+
+                PresortedCount++;
+            }
+
+            if (PresortedCount == Sorts.Count)
+                return Source;
 
             return this;
         }

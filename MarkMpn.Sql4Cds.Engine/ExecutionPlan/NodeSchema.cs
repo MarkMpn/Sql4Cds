@@ -31,6 +31,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var kvp in copy.Aliases)
                 Aliases[kvp.Key] = new List<string>(kvp.Value);
+
+            SortOrder.AddRange(copy.SortOrder);
         }
 
         /// <summary>
@@ -51,6 +53,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public Dictionary<string, List<string>> Aliases { get; set; } = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
 
         IReadOnlyDictionary<string, IReadOnlyList<string>> INodeSchema.Aliases => Aliases.ToDictionary(kvp => kvp.Key, kvp => (IReadOnlyList<string>) kvp.Value);
+
+        public List<string> SortOrder { get; set; } = new List<string>();
+
+        IReadOnlyList<string> INodeSchema.SortOrder => SortOrder;
 
         /// <summary>
         /// Checks if a column exists in the schema
@@ -96,6 +102,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// A mapping of names that can be used as column aliases to the list of columns the name could refer to
         /// </summary>
         IReadOnlyDictionary<string, IReadOnlyList<string>> Aliases { get; }
+
+        /// <summary>
+        /// A list of the columns by which the data is sorted
+        /// </summary>
+        IReadOnlyList<string> SortOrder { get; }
 
         /// <summary>
         /// Checks if a column exists in the schema

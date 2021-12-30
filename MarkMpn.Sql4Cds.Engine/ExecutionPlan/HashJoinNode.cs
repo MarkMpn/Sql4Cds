@@ -82,5 +82,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     yield return Merge(unmatched.Entity, leftSchema, null, rightSchema);
             }
         }
+
+        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        {
+            var schema = base.GetSchema(dataSources, parameterTypes);
+
+            if ((JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.RightOuter) && schema.ContainsColumn(RightAttribute.GetColumnName(), out var sortColumn))
+                ((NodeSchema)schema).SortOrder.Add(sortColumn);
+
+            return schema;
+        }
     }
 }

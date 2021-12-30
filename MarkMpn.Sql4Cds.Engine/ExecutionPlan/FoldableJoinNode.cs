@@ -321,9 +321,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var rightSchema = GetRightSchema(dataSources, parameterTypes);
 
                 if (LeftAttribute.GetColumnName() == leftSchema.PrimaryKey)
-                    schema = new NodeSchema(schema) { PrimaryKey = rightSchema.PrimaryKey };
+                    ((NodeSchema)schema).PrimaryKey = rightSchema.PrimaryKey;
                 else if (RightAttribute.GetColumnName() == rightSchema.PrimaryKey)
-                    schema = new NodeSchema(schema) { PrimaryKey = leftSchema.PrimaryKey };
+                    ((NodeSchema)schema).PrimaryKey = leftSchema.PrimaryKey;
             }
 
             return schema;
