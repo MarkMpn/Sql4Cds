@@ -78,6 +78,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Description("The list of aggregate values to produce")]
         public Dictionary<string, Aggregate> Aggregates { get; } = new Dictionary<string, Aggregate>();
 
+        /// <summary>
+        /// Indicates if this is a scalar aggregate operation, i.e. there are no grouping columns
+        /// </summary>
+        [Category("Aggregate")]
+        [Description("Indicates if this is a scalar aggregate operation, i.e. there are no grouping columns")]
+        public bool IsScalarAggregate => GroupBy.Count == 0;
+
         [Browsable(false)]
         public IDataExecutionPlanNode Source { get; set; }
 
@@ -282,6 +289,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return 1;
 
             return Source.EstimateRowsOut(dataSources, options, parameterTypes) * 4 / 10;
+        }
+
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        {
+            // Columns required by previous nodes must be derived from this node, so no need to pass them through.
+            // Just calculate the columns that are required to calculate the groups & aggregates
+            var scalarRequiredColumns = new List<string>();
+            if (GroupBy != null)
+                scalarRequiredColumns.AddRange(GroupBy.Select(g => g.GetColumnName()));
+
+            scalarRequiredColumns.AddRange(Aggregates.Where(agg => agg.Value.SqlExpression != null).SelectMany(agg => agg.Value.SqlExpression.GetColumns()).Distinct());
+
+            Source.AddRequiredColumns(dataSources, parameterTypes, scalarRequiredColumns);
         }
     }
 }

@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
@@ -61,11 +62,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Sources;
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
         {
             for (var i = 0; i < Sources.Count; i++)
             {
-                Sources[i] = Sources[i].FoldQuery(dataSources, options, parameterTypes);
+                Sources[i] = Sources[i].FoldQuery(dataSources, options, parameterTypes, hints);
                 Sources[i].Parent = this;
             }
 

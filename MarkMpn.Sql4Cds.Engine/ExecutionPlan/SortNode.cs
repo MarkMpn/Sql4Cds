@@ -169,9 +169,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Source.GetSchema(dataSources, parameterTypes);
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
         {
-            Source = Source.FoldQuery(dataSources, options, parameterTypes);
+            Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
 
             // These sorts will override any previous sort
             if (Source is SortNode prevSort)
@@ -220,11 +220,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
-            // Allow folding sorts around filters
+            // Allow folding sorts around filters and Compute Scalar (so long as sort is not on a calculated field)
+            var source = Source;
             var fetchXml = Source as FetchXmlScan;
 
-            if (fetchXml == null && Source is FilterNode filter)
-                fetchXml = filter.Source as FetchXmlScan;
+            while (source != null && fetchXml == null)
+            {
+                if (source is FilterNode filter)
+                    source = filter.Source;
+                else if (source is ComputeScalarNode computeScalar)
+                    source = computeScalar.Source;
+                else
+                    break;
+
+                fetchXml = source as FetchXmlScan;
+            }
 
             if (fetchXml != null)
             {

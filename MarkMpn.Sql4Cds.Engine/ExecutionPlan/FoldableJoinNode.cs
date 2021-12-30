@@ -41,11 +41,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("Additional Join Criteria")]
         public BooleanExpression AdditionalJoinCriteria { get; set; }
 
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
         {
-            LeftSource = LeftSource.FoldQuery(dataSources, options, parameterTypes);
+            LeftSource = LeftSource.FoldQuery(dataSources, options, parameterTypes, hints);
             LeftSource.Parent = this;
-            RightSource = RightSource.FoldQuery(dataSources, options, parameterTypes);
+            RightSource = RightSource.FoldQuery(dataSources, options, parameterTypes, hints);
             RightSource.Parent = this;
 
             if (SemiJoin)
@@ -177,7 +177,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 if (additionalCriteria != null)
-                    return new FilterNode { Filter = additionalCriteria, Source = leftFetch }.FoldQuery(dataSources, options, parameterTypes);
+                    return new FilterNode { Filter = additionalCriteria, Source = leftFetch }.FoldQuery(dataSources, options, parameterTypes, hints);
 
                 return leftFetch;
             }

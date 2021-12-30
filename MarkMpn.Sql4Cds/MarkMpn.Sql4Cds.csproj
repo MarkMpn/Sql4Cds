@@ -314,6 +314,7 @@
     <None Include="app.config" />
     <None Include="ILMergeConfig.json" />
     <EmbeddedResource Include="Images\PartitionedAggregateNode.ico" />
+    <EmbeddedResource Include="Images\StreamAggregateNode.ico" />
     <None Include="packages.config">
       <SubType>Designer</SubType>
     </None>

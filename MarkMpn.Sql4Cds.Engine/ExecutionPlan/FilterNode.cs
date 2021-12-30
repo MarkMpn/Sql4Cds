@@ -54,9 +54,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Source.GetSchema(dataSources, parameterTypes);
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
         {
-            Source = Source.FoldQuery(dataSources, options, parameterTypes);
+            Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
             Source.Parent = this;
 
             // Foldable correlated IN queries "lefttable.column IN (SELECT righttable.column FROM righttable WHERE ...) are created as:
@@ -326,7 +326,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 Expression = indexColumn.ToColumnReference(),
                                 IsNot = true
                             }
-                        }.FoldQuery(dataSources, options, parameterTypes);
+                        }.FoldQuery(dataSources, options, parameterTypes, hints);
                     }
 
                     Source = new IndexSpoolNode

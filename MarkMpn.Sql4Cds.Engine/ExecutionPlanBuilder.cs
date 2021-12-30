@@ -77,6 +77,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     var originalSql = statement.ToSql();
 
                     IRootExecutionPlanNode plan;
+                    var hints = statement is StatementWithCtesAndXmlNamespaces stmt ? stmt.OptimizerHints : null;
 
                     if (statement is SelectStatement select)
                         plan = ConvertSelectStatement(select);
@@ -94,7 +95,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         throw new NotSupportedQueryFragmentException("Unsupported statement", statement);
 
                     SetParent(plan);
-                    plan = optimizer.Optimize(plan);
+                    plan = optimizer.Optimize(plan, hints);
 
                     plan.Sql = originalSql;
                     plan.Index = index;

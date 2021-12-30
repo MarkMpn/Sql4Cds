@@ -9,6 +9,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
@@ -113,12 +114,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="options"><see cref="IQueryExecutionOptions"/> to indicate how the query can be executed</param>
         /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
         /// <returns>The node that should be used in place of this node</returns>
-        public virtual IRootExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public virtual IRootExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
         {
             if (Source is IDataExecutionPlanNode dataNode)
-                Source = dataNode.FoldQuery(dataSources, options, parameterTypes);
+                Source = dataNode.FoldQuery(dataSources, options, parameterTypes, hints);
             else if (Source is IDataSetExecutionPlanNode dataSetNode)
-                Source = dataSetNode.FoldQuery(dataSources, options, parameterTypes);
+                Source = dataSetNode.FoldQuery(dataSources, options, parameterTypes, hints);
 
             return this;
         }

@@ -109,9 +109,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return !hasLeft && !hasRight;
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
         {
-            var folded = base.FoldQuery(dataSources, options, parameterTypes);
+            var folded = base.FoldQuery(dataSources, options, parameterTypes, hints);
 
             if (folded != this)
                 return folded;
@@ -128,7 +128,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         SortOrder = SortOrder.Ascending
                     }
                 }
-            }.FoldQuery(dataSources, options, parameterTypes);
+            }.FoldQuery(dataSources, options, parameterTypes, hints);
             LeftSource.Parent = this;
 
             RightSource = new SortNode
@@ -142,7 +142,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         SortOrder = SortOrder.Ascending
                     }
                 }
-            }.FoldQuery(dataSources, options, parameterTypes);
+            }.FoldQuery(dataSources, options, parameterTypes, hints);
             RightSource.Parent = this;
 
             return this;

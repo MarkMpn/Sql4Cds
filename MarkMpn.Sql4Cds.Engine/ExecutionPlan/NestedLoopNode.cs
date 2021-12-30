@@ -105,14 +105,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return innerParameterTypes;
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
         {
             var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
-            LeftSource = LeftSource.FoldQuery(dataSources, options, parameterTypes);
+            LeftSource = LeftSource.FoldQuery(dataSources, options, parameterTypes, hints);
             LeftSource.Parent = this;
 
             var innerParameterTypes = GetInnerParameterTypes(leftSchema, parameterTypes);
-            RightSource = RightSource.FoldQuery(dataSources, options, innerParameterTypes);
+            RightSource = RightSource.FoldQuery(dataSources, options, innerParameterTypes, hints);
             RightSource.Parent = this;
             return this;
         }

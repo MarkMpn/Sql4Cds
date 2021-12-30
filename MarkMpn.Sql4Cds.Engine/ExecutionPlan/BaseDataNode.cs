@@ -142,11 +142,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// Attempts to fold this node into its source to simplify the query
         /// </summary>
-        /// <param name="metadata">The <see cref="IAttributeMetadataCache"/> to use to get metadata</param>
+        /// <param name="dataSources">The data sources the query can use</param>
         /// <param name="options"><see cref="IQueryExpressionVisitor"/> to indicate how the query can be executed</param>
         /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
+        /// <param name="hints">Any optimizer hints to apply</param>
         /// <returns>The node that should be used in place of this node</returns>
-        public abstract IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes);
+        public abstract IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints);
 
         /// <summary>
         /// Translates filter criteria from ScriptDom to FetchXML

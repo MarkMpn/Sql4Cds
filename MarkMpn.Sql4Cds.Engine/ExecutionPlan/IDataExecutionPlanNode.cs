@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
@@ -23,7 +24,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// Attempts to fold the query operator down into its source
         /// </summary>
         /// <returns>The final execution plan node to execute</returns>
-        IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes);
+        IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints);
 
         /// <summary>
         /// Gets the schema of the dataset returned by the node
