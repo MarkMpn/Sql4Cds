@@ -23,25 +23,31 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     {
         protected class GroupingKey
         {
-            private readonly int _hashCode;
+            private readonly Lazy<int> _hashCode;
 
             public GroupingKey(Entity entity, List<string> columns)
             {
                 Values = columns.Select(col => entity[col]).ToList();
-                _hashCode = 0;
 
-                foreach (var value in Values)
+                _hashCode = new Lazy<int>(() =>
                 {
-                    if (value == null)
-                        continue;
+                    var hashCode = 0;
 
-                    _hashCode ^= StringComparer.OrdinalIgnoreCase.GetHashCode(value);
-                }
+                    foreach (var value in Values)
+                    {
+                        if (value == null)
+                            continue;
+
+                        hashCode ^= value.GetHashCode();
+                    }
+
+                    return hashCode;
+                });
             }
 
             public List<object> Values { get; }
 
-            public override int GetHashCode() => _hashCode;
+            public override int GetHashCode() => _hashCode.Value;
 
             public override bool Equals(object obj)
             {
@@ -61,6 +67,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 return true;
             }
+        }
+
+        protected class AggregateFunctionState
+        {
+            public AggregateFunction AggregateFunction { get; set; }
+
+            public object State { get; set; }
         }
 
         /// <summary>
@@ -134,7 +147,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return groupByCols;
         }
 
-        protected Dictionary<string, AggregateFunction> CreateGroupValues(IDictionary<string, object> parameterValues, IQueryExecutionOptions options, bool partitioned)
+        protected Dictionary<string, AggregateFunction> CreateAggregateFunctions(IDictionary<string, object> parameterValues, IQueryExecutionOptions options, bool partitioned)
         {
             var values = new Dictionary<string, AggregateFunction>();
 
@@ -186,6 +199,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return values;
+        }
+
+        protected Dictionary<string, AggregateFunctionState> ResetAggregates(Dictionary<string, AggregateFunction> aggregates)
+        {
+            return aggregates.ToDictionary(kvp => kvp.Key, kvp => new AggregateFunctionState { AggregateFunction = kvp.Value, State = kvp.Value.Reset() });
+        }
+
+        protected IEnumerable<KeyValuePair<string, object>> GetValues(Dictionary<string, AggregateFunctionState> aggregateStates)
+        {
+            return aggregateStates.Select(kvp => new KeyValuePair<string, object>(kvp.Key, kvp.Value.AggregateFunction.GetValue(kvp.Value.State)));
         }
 
         public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)

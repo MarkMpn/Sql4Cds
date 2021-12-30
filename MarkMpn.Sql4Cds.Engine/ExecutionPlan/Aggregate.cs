@@ -78,38 +78,46 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// Updates the aggregate function state based on the next <see cref="Entity"/> in the sequence
         /// </summary>
         /// <param name="entity">The <see cref="Entity"/> to take the value from and apply to this aggregation</param>
-        public virtual void NextRecord(Entity entity)
+        /// <param name="state">The current state of the aggregation</param>
+        /// <returns>The new state of the aggregation</returns>
+        public virtual void NextRecord(Entity entity, object state)
         {
             var value = _selector == null ? entity : _selector(entity);
-            Update(value);
+            Update(value, state);
         }
 
         /// <summary>
         /// Updates the aggregate function state based on the aggregate values for a partition
         /// </summary>
         /// <param name="entity">The <see cref="Entity"/> that contains aggregated values from a partition of the available records</param>
-        public virtual void NextPartition(Entity entity)
+        /// <param name="state">The current state of the aggregation</param>
+        /// <returns>The new state of the aggregation</returns>
+        public virtual void NextPartition(Entity entity, object state)
         {
             var value = _selector(entity);
-            UpdatePartition(value);
+            UpdatePartition(value, state);
         }
 
         /// <summary>
         /// Updates the aggregation state based on a value extracted from the source <see cref="Entity"/>
         /// </summary>
         /// <param name="value"></param>
-        protected abstract void Update(object value);
-        
+        /// <param name="state">The current state of the aggregation</param>
+        protected abstract void Update(object value, object state);
+
         /// <summary>
         /// Updates the aggregation state based on a value extracted from the partition <see cref="Entity"/>
         /// </summary>
         /// <param name="value"></param>
-        protected abstract void UpdatePartition(object value);
+        /// <param name="state">The current state of the aggregation</param>
+        protected abstract void UpdatePartition(object value, object state);
 
         /// <summary>
         /// Returns the current value of this aggregation
         /// </summary>
-        public object Value { get; protected set; }
+        /// <param name="state">The current state of the aggregation</param>
+        /// <returns>The value of the aggregation</returns>
+        public abstract object GetValue(object state);
 
         /// <summary>
         /// Returns the name of the column that will store the result of this aggregation in the aggregated dataset
@@ -134,10 +142,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// Resets this aggregation ready for the next group
         /// </summary>
-        public virtual void Reset()
-        {
-            Value = null;
-        }
+        /// <returns>The initial state of the aggregation</returns>
+        public abstract object Reset();
     }
 
     /// <summary>
@@ -145,9 +151,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// </summary>
     class Average : AggregateFunction
     {
-        private SqlDecimal _sum;
-        private int _count;
-        private Func<SqlDecimal, object> _valueSelector;
+        class State
+        {
+            public SqlDecimal Sum { get; set; }
+            public int Count { get; set; }
+        }
+
+        private readonly Func<SqlDecimal, object> _valueSelector;
 
         /// <summary>
         /// Creates a new <see cref="Average"/>
@@ -163,31 +173,38 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _valueSelector = (Func<SqlDecimal, object>)Expression.Lambda(conversion, valueParam).Compile();
         }
 
-        protected override void Update(object value)
+        protected override void Update(object value, object state)
         {
             var d = (SqlDecimal)value;
 
             if (d.IsNull)
                 return;
 
-            _sum += d;
-            _count++;
-
-            Value = _valueSelector(_sum / _count);
+            var s = (State)state;
+            s.Sum += d;
+            s.Count++;
         }
 
-        protected override void UpdatePartition(object value)
+        protected override void UpdatePartition(object value, object state)
         {
             throw new InvalidOperationException();
         }
 
+        public override object GetValue(object state)
+        {
+            var s = (State)state;
+
+            if (s.Count == 0)
+                return _valueSelector(SqlDecimal.Null);
+
+            return _valueSelector(s.Sum / s.Count);
+        }
+
         public override Type Type { get; }
 
-        public override void Reset()
+        public override object Reset()
         {
-            _sum = 0;
-            _count = 0;
-            base.Reset();
+            return new State();
         }
     }
 
@@ -196,6 +213,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// </summary>
     class Count : AggregateFunction
     {
+        class State
+        {
+            public SqlInt32 Value { get; set; }
+        }
+
         /// <summary>
         /// Creates a new <see cref="Count"/>
         /// </summary>
@@ -204,21 +226,29 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
         }
 
-        protected override void Update(object value)
+        protected override void Update(object value, object state)
         {
-            Value = (SqlInt32)Value + 1;
+            var s = (State)state;
+            s.Value = s.Value + 1;
         }
 
-        protected override void UpdatePartition(object value)
+        protected override void UpdatePartition(object value, object state)
         {
-            Value = (SqlInt32)Value + (SqlInt32)value;
+            var s = (State)state;
+            s.Value = s.Value + (SqlInt32)value;
+        }
+
+        public override object GetValue(object state)
+        {
+            var s = (State)state;
+            return s.Value;
         }
 
         public override Type Type => typeof(SqlInt32);
 
-        public override void Reset()
+        public override object Reset()
         {
-            Value = new SqlInt32(0);
+            return new State { Value = 0 };
         }
     }
 
@@ -227,6 +257,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// </summary>
     class CountColumn : AggregateFunction
     {
+        class State
+        {
+            public SqlInt32 Value { get; set; }
+        }
+
         /// <summary>
         /// Creates a new <see cref="CountColumn"/>
         /// </summary>
@@ -235,24 +270,32 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
         }
 
-        protected override void Update(object value)
+        protected override void Update(object value, object state)
         {
             if (value == null || (value is INullable nullable && nullable.IsNull))
                 return;
 
-            Value = (SqlInt32)Value + 1;
+            var s = (State)state;
+            s.Value = s.Value + 1;
         }
 
-        protected override void UpdatePartition(object value)
+        protected override void UpdatePartition(object value, object state)
         {
-            Value = (SqlInt32)Value + (SqlInt32)value;
+            var s = (State)state;
+            s.Value = s.Value + (SqlInt32)value;
         }
 
-        public override Type Type => typeof(int);
-
-        public override void Reset()
+        public override object GetValue(object state)
         {
-            Value = new SqlInt32(0);
+            var s = (State)state;
+            return s.Value;
+        }
+
+        public override Type Type => typeof(SqlInt32);
+
+        public override object Reset()
+        {
+            return new State { Value = 0 };
         }
     }
 
@@ -261,6 +304,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// </summary>
     class Max : AggregateFunction
     {
+        class State
+        {
+            public IComparable Value { get; set; }
+        }
+
         /// <summary>
         /// Creates a new <see cref="Max"/>
         /// </summary>
@@ -270,24 +318,36 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Type = type;
         }
 
-        protected override void Update(object value)
+        protected override void Update(object value, object state)
         {
             if (value == null || (value is INullable nullable && nullable.IsNull))
                 return;
 
-            if (!(value is IComparable))
+            if (!(value is IComparable cmp))
                 throw new InvalidOperationException("MAX is not valid for values of type " + value.GetType().Name);
 
-            if (Value == null || ((IComparable)Value).CompareTo(value) < 0)
-                Value = value;
+            var s = (State)state;
+            if (s.Value == null || s.Value.CompareTo(cmp) < 0)
+                s.Value = cmp;
         }
 
-        protected override void UpdatePartition(object value)
+        protected override void UpdatePartition(object value, object state)
         {
-            Update(value);
+            Update(value, state);
+        }
+
+        public override object GetValue(object state)
+        {
+            var s = (State)state;
+            return s.Value;
         }
 
         public override Type Type { get; }
+
+        public override object Reset()
+        {
+            return new State();
+        }
     }
 
     /// <summary>
@@ -295,6 +355,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// </summary>
     class Min : AggregateFunction
     {
+        class State
+        {
+            public IComparable Value { get; set; }
+        }
+
         /// <summary>
         /// Creates a new <see cref="Min"/>
         /// </summary>
@@ -304,24 +369,37 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Type = type;
         }
 
-        protected override void Update(object value)
+        protected override void Update(object value, object state)
         {
             if (value == null || (value is INullable nullable && nullable.IsNull))
                 return;
 
-            if (!(value is IComparable))
+            if (!(value is IComparable cmp))
                 throw new InvalidOperationException("MAX is not valid for values of type " + value.GetType().Name);
 
-            if (Value == null || ((IComparable)Value).CompareTo(value) > 0)
-                Value = value;
+            var s = (State)state;
+
+            if (s.Value == null || s.Value.CompareTo(cmp) > 0)
+                s.Value = cmp;
         }
 
-        protected override void UpdatePartition(object value)
+        protected override void UpdatePartition(object value, object state)
         {
-            Update(value);
+            Update(value, state);
+        }
+
+        public override object GetValue(object state)
+        {
+            var s = (State)state;
+            return s.Value;
         }
 
         public override Type Type { get; }
+
+        public override object Reset()
+        {
+            return new State();
+        }
     }
 
     /// <summary>
@@ -329,7 +407,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// </summary>
     class Sum : AggregateFunction
     {
-        private SqlDecimal _sumDecimal;
+        class State
+        {
+            public SqlDecimal Value { get; set; }
+        }
+
         private Func<SqlDecimal, object> _valueSelector;
 
         /// <summary>
@@ -346,36 +428,43 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _valueSelector = (Func<SqlDecimal, object>) Expression.Lambda(conversion, valueParam).Compile();
         }
 
-        protected override void Update(object value)
+        protected override void Update(object value, object state)
         {
             var d = (SqlDecimal)value;
 
             if (d.IsNull)
                 return;
 
-            _sumDecimal += d;
-
-            Value = _valueSelector(_sumDecimal);
+            var s = (State)state;
+            s.Value += d;
         }
 
-        protected override void UpdatePartition(object value)
+        protected override void UpdatePartition(object value, object state)
         {
-            Update(value);
+            Update(value, state);
+        }
+
+        public override object GetValue(object state)
+        {
+            return _valueSelector(((State)state).Value);
         }
 
         public override Type Type { get; }
 
-        public override void Reset()
+        public override object Reset()
         {
-            base.Reset();
-            _sumDecimal = 0;
-            Value = _valueSelector(_sumDecimal);
+            return new State { Value = 0 };
         }
     }
 
     class First : AggregateFunction
     {
-        private bool _done;
+        class State
+        {
+            public bool Done { get; set; }
+
+            public object Value { get; set; }
+        }
 
         /// <summary>
         /// Creates a new <see cref="Sum"/>
@@ -386,38 +475,49 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Type = type;
         }
 
-        protected override void Update(object value)
+        protected override void Update(object value, object state)
         {
-            if (_done)
+            var s = (State)state;
+            if (s.Done)
                 return;
 
-            Value = value;
+            s.Value = value;
         }
 
-        protected override void UpdatePartition(object value)
+        protected override void UpdatePartition(object value, object state)
         {
             throw new InvalidOperationException();
         }
 
+        public override object GetValue(object state)
+        {
+            var s = (State)state;
+
+            return s.Value;
+        }
+
         public override Type Type { get; }
 
-        public override void Reset()
+        public override object Reset()
         {
-            base.Reset();
-            _done = false;
+            return new State();
         }
     }
 
     class DistinctAggregate : AggregateFunction
     {
-        private readonly HashSet<object> _distinct;
+        class State
+        {
+            public HashSet<object> Distinct { get; set; }
+            public object InnerState { get; set; }
+        }
+
         private readonly AggregateFunction _func;
         private readonly Func<Entity, object> _selector;
 
         public DistinctAggregate(AggregateFunction func, Func<Entity, object> selector) : base(selector)
         {
             _func = func;
-            _distinct = new HashSet<object>(CaseInsensitiveObjectComparer.Instance);
             _selector = selector;
 
             Expression = func.Expression;
@@ -427,32 +527,38 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override Type Type => _func.Type;
 
-        public override void NextRecord(Entity entity)
+        public override void NextRecord(Entity entity, object state)
         {
             var value = _selector(entity);
+            var s = (State)state;
 
-            if (_distinct.Add(value))
-            {
-                _func.NextRecord(entity);
-                Value = _func.Value;
-            }
+            if (s.Distinct.Add(value))
+                _func.NextRecord(entity, s.InnerState);
         }
 
-        protected override void UpdatePartition(object value)
+        protected override void UpdatePartition(object value, object state)
         {
             throw new InvalidOperationException();
         }
 
-        protected override void Update(object value)
+        protected override void Update(object value, object state)
         {
             throw new NotImplementedException();
         }
 
-        public override void Reset()
+        public override object GetValue(object state)
         {
-            _distinct.Clear();
-            _func.Reset();
-            Value = _func.Value;
+            var s = (State)state;
+            return _func.GetValue(s.InnerState);
+        }
+
+        public override object Reset()
+        {
+            return new State
+            {
+                Distinct = new HashSet<object>(),
+                InnerState = _func.Reset()
+            };
         }
     }
 }

@@ -69,8 +69,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (_hashTable == null)
             {
                 _hashTable = Source.Execute(dataSources, options, parameterTypes, parameterValues)
-                    .GroupBy(e => e[KeyColumn], CaseInsensitiveObjectComparer.Instance)
-                    .ToDictionary(g => g.Key, g => g.ToList(), CaseInsensitiveObjectComparer.Instance);
+                    .GroupBy(e => e[KeyColumn])
+                    .ToDictionary(g => g.Key, g => g.ToList());
             }
 
             var keyValue = parameterValues[SeekValue];

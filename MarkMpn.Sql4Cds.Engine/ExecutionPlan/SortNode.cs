@@ -52,18 +52,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 IOrderedEnumerable<Entity> sortedSource;
 
                 if (Sorts[0].SortOrder == SortOrder.Descending)
-                    sortedSource = source.OrderByDescending(e => expressions[0](e, parameterValues, options), CaseInsensitiveObjectComparer.Instance);
+                    sortedSource = source.OrderByDescending(e => expressions[0](e, parameterValues, options));
                 else
-                    sortedSource = source.OrderBy(e => expressions[0](e, parameterValues, options), CaseInsensitiveObjectComparer.Instance);
+                    sortedSource = source.OrderBy(e => expressions[0](e, parameterValues, options));
 
                 for (var i = 1; i < Sorts.Count; i++)
                 {
                     var expr = expressions[i];
 
                     if (Sorts[i].SortOrder == SortOrder.Descending)
-                        sortedSource = sortedSource.ThenByDescending(e => expr(e, parameterValues, options), CaseInsensitiveObjectComparer.Instance);
+                        sortedSource = sortedSource.ThenByDescending(e => expr(e, parameterValues, options));
                     else
-                        sortedSource = sortedSource.ThenBy(e => expr(e, parameterValues, options), CaseInsensitiveObjectComparer.Instance);
+                        sortedSource = sortedSource.ThenBy(e => expr(e, parameterValues, options));
                 }
 
                 foreach (var entity in sortedSource)
@@ -76,7 +76,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // subsets individually on the remaining sorts
                 var subset = new List<Entity>();
                 var presortedValues = new List<object>(PresortedCount);
-                IEqualityComparer<object> comparer = CaseInsensitiveObjectComparer.Instance;
 
                 foreach (var next in source)
                 {
@@ -95,7 +94,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             var nextValue = nextSortedValues[i];
 
                             if (prevValue == null ^ nextValue == null ||
-                                !comparer.Equals(prevValue, nextValue))
+                                !prevValue.Equals(nextValue))
                             {
                                 // A value is different, so this record doesn't fit in the same subset. Sort the subset
                                 // by the remaining sorts and return the values from it
@@ -144,7 +143,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 for (var i = 0; i < Sorts.Count - PresortedCount; i++)
                 {
-                    var comparison = CaseInsensitiveObjectComparer.Instance.Compare(xValues[i], yValues[i]);
+                    var comparison = ((IComparable)xValues[i]).CompareTo(yValues[i]);
 
                     if (comparison == 0)
                         continue;

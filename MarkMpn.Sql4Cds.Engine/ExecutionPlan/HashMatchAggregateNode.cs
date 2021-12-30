@@ -25,11 +25,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            var groups = new Dictionary<GroupingKey, Dictionary<string, AggregateFunction>>();
+            var groups = new Dictionary<GroupingKey, Dictionary<string, AggregateFunctionState>>();
             var schema = Source.GetSchema(dataSources, parameterTypes);
             var groupByCols = GetGroupingColumns(schema);
 
             InitializeAggregates(schema, parameterTypes);
+            var aggregates = CreateAggregateFunctions(parameterValues, options, false);
 
             foreach (var entity in Source.Execute(dataSources, options, parameterTypes, parameterValues))
             {
@@ -37,12 +38,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (!groups.TryGetValue(key, out var values))
                 {
-                    values = CreateGroupValues(parameterValues, options, false);
+                    values = ResetAggregates(aggregates);
                     groups[key] = values;
                 }
 
                 foreach (var func in values.Values)
-                    func.NextRecord(entity);
+                    func.AggregateFunction.NextRecord(entity, func.State);
             }
 
             foreach (var group in groups)
@@ -52,8 +53,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 for (var i = 0; i < GroupBy.Count; i++)
                     result[groupByCols[i]] = group.Key.Values[i];
 
-                foreach (var aggregate in group.Value)
-                    result[aggregate.Key] = aggregate.Value.Value;
+                foreach (var aggregate in GetValues(group.Value))
+                    result[aggregate.Key] = aggregate.Value;
 
                 yield return result;
             }

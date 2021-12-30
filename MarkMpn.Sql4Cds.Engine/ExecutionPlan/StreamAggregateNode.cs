@@ -36,7 +36,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             InitializeAggregates(schema, parameterTypes);
             GroupingKey currentGroup = null;
-            var currentValues = isScalarAggregate ? CreateGroupValues(parameterValues, options, false) : null;
+            var aggregates = CreateAggregateFunctions(parameterValues, options, false);
+            var states = isScalarAggregate ? ResetAggregates(aggregates) : null;
 
             foreach (var entity in Source.Execute(dataSources, options, parameterTypes, parameterValues))
             {
@@ -53,8 +54,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         for (var i = 0; i < GroupBy.Count; i++)
                             result[groupByCols[i]] = currentGroup.Values[i];
 
-                        foreach (var aggregate in currentValues)
-                            result[aggregate.Key] = aggregate.Value.Value;
+                        foreach (var aggregate in GetValues(states))
+                            result[aggregate.Key] = aggregate.Value;
 
                         yield return result;
 
@@ -64,15 +65,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (startNewGroup)
                     {
                         currentGroup = key;
-                        currentValues = CreateGroupValues(parameterValues, options, false);
+                        states = ResetAggregates(aggregates);
                     }
                 }
 
-                foreach (var func in currentValues.Values)
-                    func.NextRecord(entity);
+                foreach (var func in states.Values)
+                    func.AggregateFunction.NextRecord(entity, func.State);
             }
 
-            if (currentValues != null)
+            if (states != null)
             {
                 // For scalar aggregates, or for non-scalar aggregates where we've found at least one group, we need to
                 // return the values for the final group
@@ -81,8 +82,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 for (var i = 0; i < GroupBy.Count; i++)
                     result[groupByCols[i]] = currentGroup.Values[i];
 
-                foreach (var aggregate in currentValues)
-                    result[aggregate.Key] = aggregate.Value.Value;
+                foreach (var aggregate in GetValues(states))
+                    result[aggregate.Key] = aggregate.Value;
 
                 yield return result;
             }
