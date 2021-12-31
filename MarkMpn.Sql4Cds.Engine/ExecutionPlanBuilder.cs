@@ -1731,6 +1731,8 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             // Check if any of the order expressions need pre-calculation
+            var calculationRewrites = new Dictionary<ScalarExpression, ScalarExpression>();
+
             foreach (var orderBy in orderByClause.OrderByElements)
             {
                 // If the order by element is a numeric literal, use the corresponding expression from the select list at that index
@@ -1757,6 +1759,8 @@ namespace MarkMpn.Sql4Cds.Engine
                     var calculated = ComputeScalarExpression(orderBy.Expression, hints, query, computeScalar, nonAggregateSchema, parameterTypes, ref source);
                     sort.Source = source;
                     schema = source.GetSchema(DataSources, parameterTypes);
+
+                    calculationRewrites[orderBy.Expression] = calculated.ToColumnReference();
                 }
 
                 // Validate the expression
@@ -1764,6 +1768,10 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 sort.Sorts.Add(orderBy);
             }
+
+            // Use the calculated expressions in the sort and anywhere else that uses the same expression
+            if (calculationRewrites.Any())
+                query.Accept(new RewriteVisitor(calculationRewrites));
 
             if (computeScalar.Columns.Any())
                 sort.Source = computeScalar;

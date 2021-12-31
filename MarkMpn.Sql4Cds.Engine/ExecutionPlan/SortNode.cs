@@ -74,8 +74,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // We have managed to fold some but not all of the sorts down to the source. Take records
                 // from the source that have equal values of the sorts that have been folded, then sort those
                 // subsets individually on the remaining sorts
+                var preSortedColumns = Sorts
+                    .Take(PresortedCount)
+                    .Select(s => { schema.ContainsColumn(((ColumnReferenceExpression)s.Expression).GetColumnName(), out var colName); return colName; })
+                    .ToList();
+
                 var subset = new List<Entity>();
-                var presortedValues = new List<object>(PresortedCount);
+                CompoundKey presortedValues = null;
 
                 foreach (var next in source)
                 {
@@ -86,33 +91,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         .ToList();
 
                     // If we've already got a subset to work on, check if this fits in the same subset
-                    if (subset.Count > 0)
+                    var key = new CompoundKey(next, preSortedColumns);
+
+                    if (subset.Count > 0 && !presortedValues.Equals(key))
                     {
-                        for (var i = 0; i < PresortedCount; i++)
-                        {
-                            var prevValue = presortedValues[i];
-                            var nextValue = nextSortedValues[i];
+                        // A value is different, so this record doesn't fit in the same subset. Sort the subset
+                        // by the remaining sorts and return the values from it
+                        SortSubset(subset, schema, parameterTypes, parameterValues, expressions, options);
 
-                            if (prevValue == null ^ nextValue == null ||
-                                !prevValue.Equals(nextValue))
-                            {
-                                // A value is different, so this record doesn't fit in the same subset. Sort the subset
-                                // by the remaining sorts and return the values from it
-                                SortSubset(subset, schema, parameterTypes, parameterValues, expressions, options);
+                        foreach (var entity in subset)
+                            yield return entity;
 
-                                foreach (var entity in subset)
-                                    yield return entity;
-
-                                // Now clear out the previous subset so we can move on to the next
-                                subset.Clear();
-                                presortedValues.Clear();
-                                break;
-                            }
-                        }
+                        // Now clear out the previous subset so we can move on to the next
+                        subset.Clear();
                     }
 
                     if (subset.Count == 0)
-                        presortedValues.AddRange(nextSortedValues);
+                        presortedValues = key;
 
                     subset.Add(next);
                 }
@@ -165,7 +160,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
         {
-            return Source.GetSchema(dataSources, parameterTypes);
+            var schema = new NodeSchema(Source.GetSchema(dataSources, parameterTypes));
+            schema.SortOrder.Clear();
+
+            foreach (var sort in Sorts)
+            {
+                if (!(sort.Expression is ColumnReferenceExpression col))
+                    return schema;
+
+                if (!schema.ContainsColumn(col.GetColumnName(), out var colName))
+                    return schema;
+
+                schema.SortOrder.Add(colName);
+            }
+
+            return schema;
         }
 
         public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)

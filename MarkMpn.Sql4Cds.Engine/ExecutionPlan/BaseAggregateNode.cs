@@ -21,54 +21,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// </summary>
     abstract class BaseAggregateNode : BaseDataNode, ISingleSourceExecutionPlanNode
     {
-        protected class GroupingKey
-        {
-            private readonly Lazy<int> _hashCode;
-
-            public GroupingKey(Entity entity, List<string> columns)
-            {
-                Values = columns.Select(col => entity[col]).ToList();
-
-                _hashCode = new Lazy<int>(() =>
-                {
-                    var hashCode = 0;
-
-                    foreach (var value in Values)
-                    {
-                        if (value == null)
-                            continue;
-
-                        hashCode ^= value.GetHashCode();
-                    }
-
-                    return hashCode;
-                });
-            }
-
-            public List<object> Values { get; }
-
-            public override int GetHashCode() => _hashCode.Value;
-
-            public override bool Equals(object obj)
-            {
-                var other = (GroupingKey)obj;
-
-                for (var i = 0; i < Values.Count; i++)
-                {
-                    if (Values[i] == null && other.Values[i] == null)
-                        continue;
-
-                    if (Values[i] == null || other.Values[i] == null)
-                        return false;
-
-                    if (!StringComparer.OrdinalIgnoreCase.Equals(Values[i], other.Values[i]))
-                        return false;
-                }
-
-                return true;
-            }
-        }
-
         protected class AggregateFunctionState
         {
             public AggregateFunction AggregateFunction { get; set; }

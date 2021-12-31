@@ -23,6 +23,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\BaseJoinNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\BaseNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\BulkDeleteJobNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\CompoundKey.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ComputeScalarNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ConcatenateNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ConstantScanNode.cs" />

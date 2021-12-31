@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Data.SqlTypes;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -15,51 +16,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// </summary>
     class DistinctNode : BaseDataNode, ISingleSourceExecutionPlanNode
     {
-        class DistinctKey
-        {
-            private List<object> _values;
-            private readonly int _hashCode;
-
-            public DistinctKey(Entity entity, List<string> columns)
-            {
-                _values = columns.Select(col => entity[col]).ToList();
-
-                _hashCode = 0;
-
-                foreach (var val in _values)
-                {
-                    if (val == null)
-                        continue;
-
-                    _hashCode ^= StringComparer.CurrentCultureIgnoreCase.GetHashCode(val);
-                }
-            }
-
-            public override int GetHashCode()
-            {
-                return _hashCode;
-            }
-
-            public override bool Equals(object obj)
-            {
-                var other = (DistinctKey)obj;
-
-                for (var i = 0; i < _values.Count; i++)
-                {
-                    if (_values[i] == null && other._values[i] == null)
-                        continue;
-
-                    if (_values[i] == null || other._values[i] == null)
-                        return false;
-
-                    if (StringComparer.CurrentCultureIgnoreCase.Compare(_values[i], other._values[i]) != 0)
-                        return false;
-                }
-
-                return true;
-            }
-        }
-
         /// <summary>
         /// The columns to consider
         /// </summary>
@@ -75,11 +31,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            var distinct = new HashSet<DistinctKey>();
+            var distinct = new HashSet<CompoundKey>();
 
             foreach (var entity in Source.Execute(dataSources, options, parameterTypes, parameterValues))
             {
-                var key = new DistinctKey(entity, Columns);
+                var key = new CompoundKey(entity, Columns);
 
                 if (distinct.Add(key))
                     yield return entity;
@@ -176,7 +132,35 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return fetch;
             }
 
-            return this;
+            // If the data is already sorted by all the distinct columns we can use a stream aggregate instead.
+            // We don't mind what order the columns are sorted in though, so long as the distinct columns form a
+            // prefix of the sort order.
+            var requiredSorts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var col in Columns)
+            {
+                if (!schema.ContainsColumn(col, out var column))
+                    return this;
+
+                requiredSorts.Add(column);
+            }
+
+            if (requiredSorts.Count > schema.SortOrder.Count)
+                return this;
+
+            for (var i = 0; i < requiredSorts.Count; i++)
+            {
+                if (!requiredSorts.Contains(schema.SortOrder[i]))
+                    return this;
+            }
+
+            var aggregate = new StreamAggregateNode { Source = Source };
+            Source.Parent = aggregate;
+
+            for (var i = 0; i < requiredSorts.Count; i++)
+                aggregate.GroupBy.Add(schema.SortOrder[i].ToColumnReference());
+
+            return aggregate;
         }
 
         public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)

@@ -50,7 +50,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            var groups = new Dictionary<GroupingKey, Dictionary<string, AggregateFunctionState>>();
+            var groups = new Dictionary<CompoundKey, Dictionary<string, AggregateFunctionState>>();
             var schema = Source.GetSchema(dataSources, parameterTypes);
             var groupByCols = GetGroupingColumns(schema);
 
@@ -181,7 +181,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             });
         }
 
-        private void ExecuteAggregate(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues, Dictionary<string, AggregateFunction> aggregates, Dictionary<GroupingKey, Dictionary<string, AggregateFunctionState>> groups, List<string> groupByCols, FetchXmlScan fetchXmlNode, SqlDateTime minValue, SqlDateTime maxValue)
+        private void ExecuteAggregate(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues, Dictionary<string, AggregateFunction> aggregates, Dictionary<CompoundKey, Dictionary<string, AggregateFunctionState>> groups, List<string> groupByCols, FetchXmlScan fetchXmlNode, SqlDateTime minValue, SqlDateTime maxValue)
         {
             parameterValues["@PartitionStart"] = minValue;
             parameterValues["@PartitionEnd"] = maxValue;
@@ -191,7 +191,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             foreach (var entity in results)
             {
                 // Update aggregates
-                var key = new GroupingKey(entity, groupByCols);
+                var key = new CompoundKey(entity, groupByCols);
 
                 if (!groups.TryGetValue(key, out var values))
                 {

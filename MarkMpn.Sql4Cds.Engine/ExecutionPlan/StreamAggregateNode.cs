@@ -35,7 +35,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var isScalarAggregate = IsScalarAggregate;
 
             InitializeAggregates(schema, parameterTypes);
-            GroupingKey currentGroup = null;
+            CompoundKey currentGroup = null;
             var aggregates = CreateAggregateFunctions(parameterValues, options, false);
             var states = isScalarAggregate ? ResetAggregates(aggregates) : null;
 
@@ -43,7 +43,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 if (!isScalarAggregate || currentGroup != null)
                 {
-                    var key = new GroupingKey(entity, groupByCols);
+                    var key = new CompoundKey(entity, groupByCols);
                     var startNewGroup = currentGroup == null;
 
                     if (currentGroup != null && !key.Equals(currentGroup))
