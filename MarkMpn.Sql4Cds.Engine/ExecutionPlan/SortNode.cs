@@ -80,7 +80,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     .ToList();
 
                 var subset = new List<Entity>();
-                CompoundKey presortedValues = null;
+                var comparer = new DistinctEqualityComparer(preSortedColumns);
 
                 foreach (var next in source)
                 {
@@ -91,9 +91,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         .ToList();
 
                     // If we've already got a subset to work on, check if this fits in the same subset
-                    var key = new CompoundKey(next, preSortedColumns);
-
-                    if (subset.Count > 0 && !presortedValues.Equals(key))
+                    if (subset.Count > 0 && !comparer.Equals(subset[0], next))
                     {
                         // A value is different, so this record doesn't fit in the same subset. Sort the subset
                         // by the remaining sorts and return the values from it
@@ -105,9 +103,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         // Now clear out the previous subset so we can move on to the next
                         subset.Clear();
                     }
-
-                    if (subset.Count == 0)
-                        presortedValues = key;
 
                     subset.Add(next);
                 }

@@ -35,7 +35,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var isScalarAggregate = IsScalarAggregate;
 
             InitializeAggregates(schema, parameterTypes);
-            CompoundKey currentGroup = null;
+            Entity currentGroup = null;
+            var comparer = new DistinctEqualityComparer(groupByCols);
             var aggregates = CreateAggregateFunctions(parameterValues, options, false);
             var states = isScalarAggregate ? ResetAggregates(aggregates) : null;
 
@@ -43,16 +44,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 if (!isScalarAggregate || currentGroup != null)
                 {
-                    var key = new CompoundKey(entity, groupByCols);
                     var startNewGroup = currentGroup == null;
 
-                    if (currentGroup != null && !key.Equals(currentGroup))
+                    if (currentGroup != null && !comparer.Equals(currentGroup, entity))
                     {
                         // We've reached the end of the previous group - return that row now
                         var result = new Entity();
 
-                        for (var i = 0; i < GroupBy.Count; i++)
-                            result[groupByCols[i]] = currentGroup.Values[i];
+                        for (var i = 0; i < groupByCols.Count; i++)
+                            result[groupByCols[i]] = currentGroup[groupByCols[i]];
 
                         foreach (var aggregate in GetValues(states))
                             result[aggregate.Key] = aggregate.Value;
@@ -64,7 +64,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     if (startNewGroup)
                     {
-                        currentGroup = key;
+                        currentGroup = entity;
                         states = ResetAggregates(aggregates);
                     }
                 }
@@ -79,8 +79,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // return the values for the final group
                 var result = new Entity();
 
-                for (var i = 0; i < GroupBy.Count; i++)
-                    result[groupByCols[i]] = currentGroup.Values[i];
+                for (var i = 0; i < groupByCols.Count; i++)
+                    result[groupByCols[i]] = currentGroup[groupByCols[i]];
 
                 foreach (var aggregate in GetValues(states))
                     result[aggregate.Key] = aggregate.Value;

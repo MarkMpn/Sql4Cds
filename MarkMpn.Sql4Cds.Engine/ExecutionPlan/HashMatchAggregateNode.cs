@@ -25,21 +25,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            var groups = new Dictionary<CompoundKey, Dictionary<string, AggregateFunctionState>>();
             var schema = Source.GetSchema(dataSources, parameterTypes);
             var groupByCols = GetGroupingColumns(schema);
+            var groups = new Dictionary<Entity, Dictionary<string, AggregateFunctionState>>(new DistinctEqualityComparer(groupByCols));
 
             InitializeAggregates(schema, parameterTypes);
             var aggregates = CreateAggregateFunctions(parameterValues, options, false);
 
             foreach (var entity in Source.Execute(dataSources, options, parameterTypes, parameterValues))
             {
-                var key = new CompoundKey(entity, groupByCols);
-
-                if (!groups.TryGetValue(key, out var values))
+                if (!groups.TryGetValue(entity, out var values))
                 {
                     values = ResetAggregates(aggregates);
-                    groups[key] = values;
+                    groups[entity] = values;
                 }
 
                 foreach (var func in values.Values)
@@ -50,8 +48,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 var result = new Entity();
 
-                for (var i = 0; i < GroupBy.Count; i++)
-                    result[groupByCols[i]] = group.Key.Values[i];
+                for (var i = 0; i < groupByCols.Count; i++)
+                    result[groupByCols[i]] = group.Key[groupByCols[i]];
 
                 foreach (var aggregate in GetValues(group.Value))
                     result[aggregate.Key] = aggregate.Value;

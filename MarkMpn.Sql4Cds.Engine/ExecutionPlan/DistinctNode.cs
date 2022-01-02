@@ -31,13 +31,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            var distinct = new HashSet<CompoundKey>();
+            var distinct = new HashSet<Entity>(new DistinctEqualityComparer(Columns));
 
             foreach (var entity in Source.Execute(dataSources, options, parameterTypes, parameterValues))
             {
-                var key = new CompoundKey(entity, Columns);
-
-                if (distinct.Add(key))
+                if (distinct.Add(entity))
                     yield return entity;
             }
         }

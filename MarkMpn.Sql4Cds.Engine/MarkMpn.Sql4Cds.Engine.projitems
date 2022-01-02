@@ -23,11 +23,11 @@
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\BaseJoinNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\BaseNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\BulkDeleteJobNode.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\CompoundKey.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ComputeScalarNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ConcatenateNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ConstantScanNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\DeleteNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\DistinctEqualityComparer.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\DistinctNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ExecuteAsNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ExpressionExtensions.cs" />

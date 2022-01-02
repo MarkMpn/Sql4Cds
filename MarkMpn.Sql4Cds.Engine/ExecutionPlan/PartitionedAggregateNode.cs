@@ -50,9 +50,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            var groups = new Dictionary<CompoundKey, Dictionary<string, AggregateFunctionState>>();
             var schema = Source.GetSchema(dataSources, parameterTypes);
             var groupByCols = GetGroupingColumns(schema);
+            var groups = new Dictionary<Entity, Dictionary<string, AggregateFunctionState>>(new DistinctEqualityComparer(groupByCols));
 
             InitializePartitionedAggregates(schema, parameterTypes);
             var aggregates = CreateAggregateFunctions(parameterValues, options, true);
@@ -126,7 +126,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 try
                 {
                     // Execute the query with the partition minValue -> split
-                    ExecuteAggregate(dataSources, options, partitionParameterTypes, partitionParameterValues, aggregates, groups, groupByCols, fetchXmlNode, partition.MinValue, partition.MaxValue);
+                    ExecuteAggregate(dataSources, options, partitionParameterTypes, partitionParameterValues, aggregates, groups, fetchXmlNode, partition.MinValue, partition.MaxValue);
 
                     _progress += partition.Percentage;
                     options.Progress(0, $"Partitioning {GetDisplayName(0, meta)} ({_progress:P0})...");
@@ -147,8 +147,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 var result = new Entity();
 
-                for (var i = 0; i < GroupBy.Count; i++)
-                    result[groupByCols[i]] = group.Key.Values[i];
+                for (var i = 0; i < groupByCols.Count; i++)
+                    result[groupByCols[i]] = group.Key[groupByCols[i]];
 
                 foreach (var aggregate in GetValues(group.Value))
                     result[aggregate.Key] = aggregate.Value;
@@ -181,7 +181,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             });
         }
 
-        private void ExecuteAggregate(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues, Dictionary<string, AggregateFunction> aggregates, Dictionary<CompoundKey, Dictionary<string, AggregateFunctionState>> groups, List<string> groupByCols, FetchXmlScan fetchXmlNode, SqlDateTime minValue, SqlDateTime maxValue)
+        private void ExecuteAggregate(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues, Dictionary<string, AggregateFunction> aggregates, Dictionary<Entity, Dictionary<string, AggregateFunctionState>> groups, FetchXmlScan fetchXmlNode, SqlDateTime minValue, SqlDateTime maxValue)
         {
             parameterValues["@PartitionStart"] = minValue;
             parameterValues["@PartitionEnd"] = maxValue;
@@ -191,12 +191,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             foreach (var entity in results)
             {
                 // Update aggregates
-                var key = new CompoundKey(entity, groupByCols);
-
-                if (!groups.TryGetValue(key, out var values))
+                if (!groups.TryGetValue(entity, out var values))
                 {
                     values = ResetAggregates(aggregates);
-                    groups[key] = values;
+                    groups[entity] = values;
                 }
 
                 foreach (var func in values.Values)

@@ -71,18 +71,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     .Take(top);
             }
 
-            CompoundKey tieValues = null;
+            Entity lastRow = null;
+            var tieComparer = new DistinctEqualityComparer(TieColumns);
 
             return Source.Execute(dataSources, options, parameterTypes, parameterValues)
                 .TakeWhile((entity, index) =>
                 {
                     if (index == top - 1)
-                        tieValues = new CompoundKey(entity, TieColumns);
+                        lastRow = entity;
 
                     if (index < top)
                         return true;
 
-                    return tieValues.Equals(new CompoundKey(entity, TieColumns));
+                    return tieComparer.Equals(lastRow, entity);
                 });
         }
 
