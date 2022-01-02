@@ -1150,7 +1150,7 @@ namespace MarkMpn.Sql4Cds
                 else if (rowCount == 0 && grid.DataSource == null)
                     grid.DataBindingComplete += (sender, args) => grid.Height = Math.Min(Math.Max(grid.Height, GetMinHeight(grid, max)), max);
 
-                return Math.Max(2, rowCount + 1) * grid.ColumnHeadersHeight + SystemInformation.HorizontalScrollBarHeight;
+                return Math.Min(Math.Max(2, rowCount + 1) * grid.ColumnHeadersHeight + SystemInformation.HorizontalScrollBarHeight, max);
             }
 
             if (control is Scintilla scintilla)
