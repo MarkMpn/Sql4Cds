@@ -1104,7 +1104,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (querySpec.TopRowFilter != null && querySpec.OffsetClause != null)
                 throw new NotSupportedQueryFragmentException("A TOP can not be used in the same query or sub-query as a OFFSET.", querySpec.TopRowFilter);
 
-            node = ConvertTopClause(node, querySpec.TopRowFilter, parameterTypes);
+            node = ConvertTopClause(node, querySpec.TopRowFilter, querySpec.OrderByClause, parameterTypes);
             node = ConvertOffsetClause(node, querySpec.OffsetClause, parameterTypes);
 
             // Add SELECT
@@ -1307,7 +1307,8 @@ namespace MarkMpn.Sql4Cds.Engine
                     // We can spool the results for reuse each time
                     innerQuery.Source = new TableSpoolNode
                     {
-                        Source = innerQuery.Source
+                        Source = innerQuery.Source,
+                        SpoolType = SpoolType.Lazy
                     };
 
                     testColumn = $"Expr{++_colNameCounter}";
@@ -1675,15 +1676,10 @@ namespace MarkMpn.Sql4Cds.Engine
             };
         }
 
-        private IDataExecutionPlanNode ConvertTopClause(IDataExecutionPlanNode source, TopRowFilter topRowFilter, IDictionary<string, Type> parameterTypes)
+        private IDataExecutionPlanNode ConvertTopClause(IDataExecutionPlanNode source, TopRowFilter topRowFilter, OrderByClause orderByClause, IDictionary<string, Type> parameterTypes)
         {
             if (topRowFilter == null)
                 return source;
-
-            // TOP x PERCENT requires evaluating the source twice - once to get the total count and again to get the top
-            // records. Cache the results in a table spool node.
-            if (topRowFilter.Percent)
-                source = new TableSpoolNode { Source = source };
 
             var topType = topRowFilter.Expression.GetType(null, null, parameterTypes);
             var targetType = topRowFilter.Percent ? typeof(SqlSingle) : typeof(SqlInt32);
@@ -1691,12 +1687,47 @@ namespace MarkMpn.Sql4Cds.Engine
             if (!SqlTypeConverter.CanChangeTypeImplicit(topType, targetType))
                 throw new NotSupportedQueryFragmentException("Unexpected TOP type", topRowFilter.Expression);
 
+            var tieColumns = new HashSet<string>();
+
+            if (topRowFilter.WithTies)
+            {
+                if (orderByClause == null)
+                    throw new NotSupportedQueryFragmentException("The TOP N WITH TIES clause is not allowed without a corresponding ORDER BY clause", topRowFilter);
+
+                var schema = source.GetSchema(DataSources, parameterTypes);
+
+                foreach (var sort in orderByClause.OrderByElements)
+                {
+                    if (!(sort.Expression is ColumnReferenceExpression sortCol))
+                        throw new NotSupportedQueryFragmentException("ORDER BY must reference a column for use with TOP N WITH TIES", sort.Expression);
+
+                    if (!schema.ContainsColumn(sortCol.GetColumnName(), out var colName))
+                        throw new NotSupportedQueryFragmentException("Unknown column name", sortCol);
+
+                    tieColumns.Add(colName);
+                }
+
+                // Ensure data is sorted by the tie columns
+                if (!schema.IsSortedBy(tieColumns))
+                {
+                    var sort = new SortNode { Source = source };
+                    sort.Sorts.AddRange(orderByClause.OrderByElements);
+                    source = sort;
+                }
+            }
+
+            // TOP x PERCENT requires evaluating the source twice - once to get the total count and again to get the top
+            // records. Cache the results in a table spool node.
+            if (topRowFilter.Percent)
+                source = new TableSpoolNode { Source = source, SpoolType = SpoolType.Eager };
+
             return new TopNode
             {
                 Source = source,
                 Top = topRowFilter.Expression,
                 Percent = topRowFilter.Percent,
-                WithTies = topRowFilter.WithTies
+                WithTies = topRowFilter.WithTies,
+                TieColumns = topRowFilter.WithTies ? tieColumns.ToList() : null
             };
         }
 
@@ -2039,7 +2070,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     // If it is correlated, add a spool where possible closer to the data source
                     if (outerReferences.Count == 0)
                     {
-                        var spool = new TableSpoolNode { Source = loopRightSource };
+                        var spool = new TableSpoolNode { Source = loopRightSource, SpoolType = SpoolType.Lazy };
                         loopRightSource = spool;
                     }
                     else if (loopRightSource is ISingleSourceExecutionPlanNode loopRightSourceSimple)
@@ -2325,7 +2356,8 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 var spool = new TableSpoolNode
                 {
-                    Source = lastCorrelatedStep.Source
+                    Source = lastCorrelatedStep.Source,
+                    SpoolType = SpoolType.Lazy
                 };
 
                 lastCorrelatedStep.Source = spool;
@@ -2395,7 +2427,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 var nextTable = ConvertTableReference(tables[i], hints, query, outerSchema, outerReferences, parameterTypes);
 
                 // TODO: See if we can lift a join predicate from the WHERE clause
-                nextTable = new TableSpoolNode { Source = nextTable };
+                nextTable = new TableSpoolNode { Source = nextTable, SpoolType = SpoolType.Lazy };
 
                 node = new NestedLoopNode { LeftSource = node, RightSource = nextTable };
             }
@@ -2684,7 +2716,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     // If it is correlated, add a spool where possible closer to the data source
                     if (lhsReferences.Count == 0)
                     {
-                        var spool = new TableSpoolNode { Source = rhs };
+                        var spool = new TableSpoolNode { Source = rhs, SpoolType = SpoolType.Lazy };
                         rhs = spool;
                     }
                     else if (UseMergeJoin(lhs, subqueryPlan, lhsReferences, null, null, false, out _, out var merge))
@@ -2702,7 +2734,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 // For cross joins there is no outer reference so the entire result can be spooled for reuse
                 if (unqualifiedJoin.UnqualifiedJoinType == UnqualifiedJoinType.CrossJoin)
-                    rhs = new TableSpoolNode { Source = rhs };
+                    rhs = new TableSpoolNode { Source = rhs, SpoolType = SpoolType.Lazy };
                 
                 return new NestedLoopNode
                 {

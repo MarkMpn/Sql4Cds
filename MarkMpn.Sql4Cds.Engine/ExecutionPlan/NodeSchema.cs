@@ -81,6 +81,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             normalized = null;
             return false;
         }
+
+        /// <summary>
+        /// Checks if the data is sorted by the required fields
+        /// </summary>
+        /// <param name="requiredSorts">The fields the data must be sorted by</param>
+        /// <returns><c>true</c> if the data is sorted by the required columns, irrespective of the column ordering, or <c>false</c> otherwise</returns>
+        public bool IsSortedBy(ISet<string> requiredSorts)
+        {
+            if (requiredSorts.Count > SortOrder.Count)
+                return false;
+
+            for (var i = 0; i < requiredSorts.Count; i++)
+            {
+                if (!requiredSorts.Contains(SortOrder[i]))
+                    return false;
+            }
+
+            return true;
+        }
     }
 
     /// <summary>
@@ -115,5 +134,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="normalized">The normalized name of the requested column</param>
         /// <returns><c>true</c> if the column name exists, or <c>false</c> otherwise</returns>
         bool ContainsColumn(string column, out string normalized);
+
+        /// <summary>
+        /// Checks if the data is sorted by the required fields
+        /// </summary>
+        /// <param name="requiredSorts">The fields the data must be sorted by</param>
+        /// <returns><c>true</c> if the data is sorted by the required columns, irrespective of the column ordering, or <c>false</c> otherwise</returns>
+        bool IsSortedBy(ISet<string> requiredSorts);
     }
 }

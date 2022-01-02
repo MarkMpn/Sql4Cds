@@ -83,7 +83,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private CachedList<Entity> _cache;
+        private Entity[] _eagerSpool;
+        private CachedList<Entity> _lazyCache;
 
         /// <summary>
         /// The data source to cache
@@ -91,12 +92,34 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public IDataExecutionPlanNode Source { get; set; }
 
+        [Category("Table Spool")]
+        [DisplayName("Spool Type")]
+        public SpoolType SpoolType { get; set; }
+
+        internal int GetCount(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        {
+            if (_eagerSpool == null)
+                _eagerSpool = Source.Execute(dataSources, options, parameterTypes, parameterValues).ToArray();
+
+            return _eagerSpool.Length;
+        }
+
         protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            if (_cache == null)
-                _cache = new CachedList<Entity>(Source.Execute(dataSources, options, parameterTypes, parameterValues));
+            if (SpoolType == SpoolType.Eager)
+            {
+                if (_eagerSpool == null)
+                    _eagerSpool = Source.Execute(dataSources, options, parameterTypes, parameterValues).ToArray();
 
-            return _cache;
+                return _eagerSpool;
+            }
+            else
+            {
+                if (_lazyCache == null)
+                    _lazyCache = new CachedList<Entity>(Source.Execute(dataSources, options, parameterTypes, parameterValues));
+
+                return _lazyCache;
+            }
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
@@ -128,7 +151,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override string ToString()
         {
-            return "Table Spool\r\n(Lazy Spool)";
+            return $"Table Spool\r\n({SpoolType} Spool)";
         }
+    }
+
+    enum SpoolType
+    {
+        Eager,
+        Lazy
     }
 }

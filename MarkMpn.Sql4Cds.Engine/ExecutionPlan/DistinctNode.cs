@@ -145,14 +145,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 requiredSorts.Add(column);
             }
 
-            if (requiredSorts.Count > schema.SortOrder.Count)
+            if (!schema.IsSortedBy(requiredSorts))
                 return this;
-
-            for (var i = 0; i < requiredSorts.Count; i++)
-            {
-                if (!requiredSorts.Contains(schema.SortOrder[i]))
-                    return this;
-            }
 
             var aggregate = new StreamAggregateNode { Source = Source };
             Source.Parent = aggregate;
