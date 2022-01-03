@@ -52,6 +52,11 @@ steps:
     platform: '$(buildPlatform)'
     configuration: '$(buildConfiguration)'
 
+- task: NuGetToolInstaller@1
+  inputs:
+    versionSpec: '*'
+    checkLatest: true
+
 - task: NuGetCommand@2
   displayName: Pack
   inputs:
