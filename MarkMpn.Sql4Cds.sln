@@ -18,19 +18,21 @@ Project("{930C7802-8A8C-48F9-8165-68863BCCD9DD}") = "MarkMpn.Sql4Cds.SSMS.Setup"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarkMpn.Sql4Cds.Tests", "MarkMpn.Sql4Cds.Tests\MarkMpn.Sql4Cds.Tests.csproj", "{081AA0FB-A019-430A-B05A-F55CAC7C50FD}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarkMpn.Sql4Cds.Engine.FetchXml", "MarkMpn.Sql4Cds.Engine.FetchXml\MarkMpn.Sql4Cds.Engine.FetchXml.csproj", "{CA534229-43FF-4BD4-9C60-182F56936AC3}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarkMpn.Sql4Cds.Engine.FetchXml.Tests", "MarkMpn.Sql4Cds.Engine.FetchXml.Tests\MarkMpn.Sql4Cds.Engine.FetchXml.Tests.csproj", "{69F7D111-3542-4E31-A0F8-E544F9FFA587}"
 EndProject
 Project("{D954291E-2A0B-460D-934E-DC6B0785DB48}") = "MarkMpn.Sql4Cds.Engine", "MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.shproj", "{BCF89341-E1A6-4106-9C12-1E15C9E7C58B}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarkMpn.Sql4Cds.Engine.NetFx", "MarkMpn.Sql4Cds.Engine.NetFx\MarkMpn.Sql4Cds.Engine.NetFx.csproj", "{23288BB2-0D6F-4329-9A5C-4C659567A652}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarkMpn.Sql4Cds.Engine.NetCore", "MarkMpn.Sql4Cds.Engine.NetCore\MarkMpn.Sql4Cds.Engine.NetCore.csproj", "{A570CBCA-D09C-40D5-A318-A95C8FBBD593}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MarkMpn.Sql4Cds.Engine.NetCore", "MarkMpn.Sql4Cds.Engine.NetCore\MarkMpn.Sql4Cds.Engine.NetCore.csproj", "{A570CBCA-D09C-40D5-A318-A95C8FBBD593}"
+EndProject
+Project("{D954291E-2A0B-460D-934E-DC6B0785DB48}") = "MarkMpn.Sql4Cds.Engine.FetchXml", "MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.FetchXml.shproj", "{460A4174-B9EA-413A-AF83-C27C0686E98F}"
 EndProject
 Global
 	GlobalSection(SharedMSBuildProjectFiles) = preSolution
 		MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.projitems*{23288bb2-0d6f-4329-9a5c-4c659567a652}*SharedItemsImports = 4
+		MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.FetchXml.projitems*{460a4174-b9ea-413a-af83-c27c0686e98f}*SharedItemsImports = 13
+		MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.FetchXml.projitems*{69f7d111-3542-4e31-a0f8-e544f9ffa587}*SharedItemsImports = 4
 		MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.projitems*{a570cbca-d09c-40d5-a318-a95c8fbbd593}*SharedItemsImports = 5
 		MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.projitems*{bcf89341-e1a6-4106-9c12-1e15c9e7c58b}*SharedItemsImports = 13
 	EndGlobalSection
@@ -86,14 +88,6 @@ Global
 		{081AA0FB-A019-430A-B05A-F55CAC7C50FD}.Release|Any CPU.Build.0 = Release|Any CPU
 		{081AA0FB-A019-430A-B05A-F55CAC7C50FD}.Release|x86.ActiveCfg = Release|Any CPU
 		{081AA0FB-A019-430A-B05A-F55CAC7C50FD}.Release|x86.Build.0 = Release|Any CPU
-		{CA534229-43FF-4BD4-9C60-182F56936AC3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{CA534229-43FF-4BD4-9C60-182F56936AC3}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{CA534229-43FF-4BD4-9C60-182F56936AC3}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{CA534229-43FF-4BD4-9C60-182F56936AC3}.Debug|x86.Build.0 = Debug|Any CPU
-		{CA534229-43FF-4BD4-9C60-182F56936AC3}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{CA534229-43FF-4BD4-9C60-182F56936AC3}.Release|Any CPU.Build.0 = Release|Any CPU
-		{CA534229-43FF-4BD4-9C60-182F56936AC3}.Release|x86.ActiveCfg = Release|Any CPU
-		{CA534229-43FF-4BD4-9C60-182F56936AC3}.Release|x86.Build.0 = Release|Any CPU
 		{69F7D111-3542-4E31-A0F8-E544F9FFA587}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{69F7D111-3542-4E31-A0F8-E544F9FFA587}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{69F7D111-3542-4E31-A0F8-E544F9FFA587}.Debug|x86.ActiveCfg = Debug|Any CPU

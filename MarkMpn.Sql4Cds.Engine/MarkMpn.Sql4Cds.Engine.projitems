@@ -106,6 +106,5 @@
     <None Include="$(MSBuildThisFileDirectory)FetchXml.xsd">
       <SubType>Designer</SubType>
     </None>
-    <None Include="$(MSBuildThisFileDirectory)MarkMpn.Sql4Cds.Engine.nuspec" />
   </ItemGroup>
 </Project>
