@@ -1,0 +1,19 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <MSBuildAllProjects Condition="'$(MSBuildVersion)' == '' Or '$(MSBuildVersion)' &lt; '16.0'">$(MSBuildAllProjects);$(MSBuildThisFileFullPath)</MSBuildAllProjects>
+    <HasSharedItems>true</HasSharedItems>
+    <SharedGUID>460a4174-b9ea-413a-af83-c27c0686e98f</SharedGUID>
+  </PropertyGroup>
+  <PropertyGroup Label="Configuration">
+    <Import_RootNamespace>MarkMpn.Sql4Cds.Engine.FetchXml</Import_RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)ScriptDom.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)AttributeMetadataCache.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)DisconnectedException.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)FetchXml.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)FetchXml2Sql.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)IAttributeMetadataCache.cs" />
+  </ItemGroup>
+</Project>
