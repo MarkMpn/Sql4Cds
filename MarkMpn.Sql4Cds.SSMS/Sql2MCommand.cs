@@ -90,16 +90,18 @@ namespace MarkMpn.Sql4Cds.SSMS
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
-            var scriptFactory = new ScriptFactoryWrapper(ServiceCache.ScriptFactory);
-            var sqlScriptEditorControl = scriptFactory.GetCurrentlyActiveFrameDocView(ServiceCache.VSMonitorSelection, false, out _);
+            try
+            {
+                var scriptFactory = new ScriptFactoryWrapper(ServiceCache.ScriptFactory);
+                var sqlScriptEditorControl = scriptFactory.GetCurrentlyActiveFrameDocView(ServiceCache.VSMonitorSelection, false, out _);
 
-            var constr = GetConnectionInfo();
-            var server = constr.DataSource.Split(',')[0];
+                var constr = GetConnectionInfo(true);
+                var server = constr.DataSource.Split(',')[0];
 
-            _ai.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = "M", ["Source"] = "SSMS" });
+                _ai.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = "M", ["Source"] = "SSMS" });
 
-            var sql = GetQuery();
-            var m = $@"/*
+                var sql = GetQuery();
+                var m = $@"/*
 Query converted to M format by SQL 4 CDS
 To use in Power BI:
 1. Click New Source
@@ -109,15 +111,20 @@ To use in Power BI:
 */
 
 let
-  Source = CommonDataService.Database(""{server}""),
-  DataverseSQL = Value.NativeQuery(Source, ""{sql.Replace("\"", "\"\"").Replace("\r\n", " ").Trim()}"", null, [EnableFolding=true])
+    Source = CommonDataService.Database(""{server}""),
+    DataverseSQL = Value.NativeQuery(Source, ""{sql.Replace("\"", "\"\"").Replace("\r\n", " ").Trim()}"", null, [EnableFolding=true])
 in
-  DataverseSQL";
+    DataverseSQL";
 
-            var window = Dte.ItemOperations.NewFile("General\\Text File");
+                var window = Dte.ItemOperations.NewFile("General\\Text File");
 
-            var editPoint = ActiveDocument.EndPoint.CreateEditPoint();
-            editPoint.Insert(m);
+                var editPoint = ActiveDocument.EndPoint.CreateEditPoint();
+                editPoint.Insert(m);
+            }
+            catch (Exception ex)
+            {
+                VsShellUtilities.LogError("SQL 4 CDS", ex.ToString());
+            }
         }
 
         private IEnumerable<IExecutionPlanNode> GetAllNodes(IExecutionPlanNode node)

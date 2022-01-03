@@ -84,9 +84,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
         {
-            Source = Source.FoldQuery(dataSources, options, parameterTypes);
+            Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
             Source.Parent = this;
 
             SelectNode.FoldFetchXmlColumns(Source, ColumnSet, dataSources, parameterTypes);
@@ -105,7 +105,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return this;
         }
 
-        public override NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
         {
             // Map the base names to the alias names
             var sourceSchema = Source.GetSchema(dataSources, parameterTypes);
@@ -135,7 +135,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return schema;
         }
 
-        private void AddSchemaColumn(string outputColumn, string sourceColumn, NodeSchema schema, NodeSchema sourceSchema)
+        private void AddSchemaColumn(string outputColumn, string sourceColumn, NodeSchema schema, INodeSchema sourceSchema)
         {
             if (!sourceSchema.ContainsColumn(sourceColumn, out var normalized))
                 return;
@@ -153,6 +153,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             aliases.Add(mapped);
+
+            var sorted = sourceSchema.SortOrder.Contains(sourceColumn, StringComparer.OrdinalIgnoreCase);
+
+            if (sorted)
+                schema.SortOrder.Add(outputColumn);
         }
 
         protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)

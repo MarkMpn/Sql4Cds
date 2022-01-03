@@ -7,6 +7,7 @@ using EnvDTE80;
 using MarkMpn.Sql4Cds.Engine;
 using Microsoft.ApplicationInsights;
 using Microsoft.SqlServer.Management.UI.VSIntegration;
+using Microsoft.VisualStudio.Shell;
 using Microsoft.Xrm.Tooling.Connector;
 
 namespace MarkMpn.Sql4Cds.SSMS
@@ -57,13 +58,18 @@ namespace MarkMpn.Sql4Cds.SSMS
         /// Gets the details of the currently active connection
         /// </summary>
         /// <returns></returns>
-        protected SqlConnectionStringBuilder GetConnectionInfo()
+        protected SqlConnectionStringBuilder GetConnectionInfo(bool log)
         {
             var scriptFactory = new ScriptFactoryWrapper(ServiceCache.ScriptFactory);
             var sqlScriptEditorControl = scriptFactory.GetCurrentlyActiveFrameDocView(ServiceCache.VSMonitorSelection, false, out _);
 
             if (sqlScriptEditorControl?.ConnectionString == null)
+            {
+                if (log)
+                    VsShellUtilities.LogMessage("SQL 4 CDS", "No currently active window or connection", Microsoft.VisualStudio.Shell.Interop.__ACTIVITYLOG_ENTRYTYPE.ALE_INFORMATION);
+
                 return null;
+            }
             
             return new SqlConnectionStringBuilder(sqlScriptEditorControl.ConnectionString);
         }
@@ -74,7 +80,7 @@ namespace MarkMpn.Sql4Cds.SSMS
         /// <returns></returns>
         protected bool IsDataverse()
         {
-            var conStr = GetConnectionInfo();
+            var conStr = GetConnectionInfo(false);
 
             return IsDataverse(conStr);
         }
@@ -110,7 +116,7 @@ namespace MarkMpn.Sql4Cds.SSMS
         protected CrmServiceClient ConnectCDS()
         {
             // Get the server name based on the current SQL connection
-            var conStr = GetConnectionInfo();
+            var conStr = GetConnectionInfo(true);
             return ConnectCDS(conStr);
         }
 
@@ -151,10 +157,9 @@ namespace MarkMpn.Sql4Cds.SSMS
         protected AttributeMetadataCache GetMetadataCache()
         {
             // Get the server name based on the current SQL connection
-            var conStr = GetConnectionInfo();
+            var conStr = GetConnectionInfo(true);
             return GetMetadataCache(conStr);
         }
-
 
         /// <summary>
         /// Gets metadata details for the given connection

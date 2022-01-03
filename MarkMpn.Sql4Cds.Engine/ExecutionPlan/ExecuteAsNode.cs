@@ -5,7 +5,11 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Xrm.Sdk;
+#if NETCOREAPP
+using Microsoft.PowerPlatform.Dataverse.Client;
+#else
 using Microsoft.Xrm.Tooling.Connector;
+#endif
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -61,12 +65,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     var userId = (Guid)userIdAccessor(entities[0]);
 
+#if NETCOREAPP
+                    if (dataSource.Connection is ServiceClient svc)
+                        svc.CallerId = userId;
+#else
                     if (dataSource.Connection is Microsoft.Xrm.Sdk.Client.OrganizationServiceProxy svcProxy)
                         svcProxy.CallerId = userId;
                     else if (dataSource.Connection is Microsoft.Xrm.Sdk.WebServiceClient.OrganizationWebProxyClient webProxy)
                         webProxy.CallerId = userId;
                     else if (dataSource.Connection is CrmServiceClient svc)
                         svc.CallerId = userId;
+#endif
                     else
                         throw new QueryExecutionException("Unexpected organization service type");
 

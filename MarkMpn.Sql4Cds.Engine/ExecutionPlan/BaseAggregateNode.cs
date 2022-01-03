@@ -9,7 +9,6 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Xml.Serialization;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
-using MarkMpn.Sql4Cds.Engine.QueryExtensions;
 using MarkMpn.Sql4Cds.Engine.Visitors;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
@@ -22,46 +21,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// </summary>
     abstract class BaseAggregateNode : BaseDataNode, ISingleSourceExecutionPlanNode
     {
-        protected class GroupingKey
+        protected class AggregateFunctionState
         {
-            private readonly int _hashCode;
+            public AggregateFunction AggregateFunction { get; set; }
 
-            public GroupingKey(Entity entity, List<string> columns)
-            {
-                Values = columns.Select(col => entity[col]).ToList();
-                _hashCode = 0;
-
-                foreach (var value in Values)
-                {
-                    if (value == null)
-                        continue;
-
-                    _hashCode ^= StringComparer.OrdinalIgnoreCase.GetHashCode(value);
-                }
-            }
-
-            public List<object> Values { get; }
-
-            public override int GetHashCode() => _hashCode;
-
-            public override bool Equals(object obj)
-            {
-                var other = (GroupingKey)obj;
-
-                for (var i = 0; i < Values.Count; i++)
-                {
-                    if (Values[i] == null && other.Values[i] == null)
-                        continue;
-
-                    if (Values[i] == null || other.Values[i] == null)
-                        return false;
-
-                    if (!StringComparer.OrdinalIgnoreCase.Equals(Values[i], other.Values[i]))
-                        return false;
-                }
-
-                return true;
-            }
+            public object State { get; set; }
         }
 
         /// <summary>
@@ -79,10 +43,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Description("The list of aggregate values to produce")]
         public Dictionary<string, Aggregate> Aggregates { get; } = new Dictionary<string, Aggregate>();
 
+        /// <summary>
+        /// Indicates if this is a scalar aggregate operation, i.e. there are no grouping columns
+        /// </summary>
+        [Category("Aggregate")]
+        [Description("Indicates if this is a scalar aggregate operation, i.e. there are no grouping columns")]
+        public bool IsScalarAggregate => GroupBy.Count == 0;
+
         [Browsable(false)]
         public IDataExecutionPlanNode Source { get; set; }
 
-        protected void InitializeAggregates(NodeSchema schema, IDictionary<string, Type> parameterTypes)
+        protected void InitializeAggregates(INodeSchema schema, IDictionary<string, Type> parameterTypes)
         {
             foreach (var aggregate in Aggregates.Where(agg => agg.Value.SqlExpression != null))
             {
@@ -104,7 +75,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        protected void InitializePartitionedAggregates(NodeSchema schema, IDictionary<string, Type> parameterTypes)
+        protected void InitializePartitionedAggregates(INodeSchema schema, IDictionary<string, Type> parameterTypes)
         {
             foreach (var aggregate in Aggregates)
             {
@@ -114,7 +85,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        protected List<string> GetGroupingColumns(NodeSchema schema)
+        protected List<string> GetGroupingColumns(INodeSchema schema)
         {
             var groupByCols = GroupBy
                 .Select(col =>
@@ -128,7 +99,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return groupByCols;
         }
 
-        protected Dictionary<string, AggregateFunction> CreateGroupValues(IDictionary<string, object> parameterValues, IQueryExecutionOptions options, bool partitioned)
+        protected Dictionary<string, AggregateFunction> CreateAggregateFunctions(IDictionary<string, object> parameterValues, IQueryExecutionOptions options, bool partitioned)
         {
             var values = new Dictionary<string, AggregateFunction>();
 
@@ -182,7 +153,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return values;
         }
 
-        public override NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        protected Dictionary<string, AggregateFunctionState> ResetAggregates(Dictionary<string, AggregateFunction> aggregates)
+        {
+            return aggregates.ToDictionary(kvp => kvp.Key, kvp => new AggregateFunctionState { AggregateFunction = kvp.Value, State = kvp.Value.Reset() });
+        }
+
+        protected IEnumerable<KeyValuePair<string, object>> GetValues(Dictionary<string, AggregateFunctionState> aggregateStates)
+        {
+            return aggregateStates.Select(kvp => new KeyValuePair<string, object>(kvp.Key, kvp.Value.AggregateFunction.GetValue(kvp.Value.State)));
+        }
+
+        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
         {
             var sourceSchema = Source.GetSchema(dataSources, parameterTypes);
             var schema = new NodeSchema();
@@ -283,6 +264,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return 1;
 
             return Source.EstimateRowsOut(dataSources, options, parameterTypes) * 4 / 10;
+        }
+
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        {
+            // Columns required by previous nodes must be derived from this node, so no need to pass them through.
+            // Just calculate the columns that are required to calculate the groups & aggregates
+            var scalarRequiredColumns = new List<string>();
+            if (GroupBy != null)
+                scalarRequiredColumns.AddRange(GroupBy.Select(g => g.GetColumnName()));
+
+            scalarRequiredColumns.AddRange(Aggregates.Where(agg => agg.Value.SqlExpression != null).SelectMany(agg => agg.Value.SqlExpression.GetColumns()).Distinct());
+
+            Source.AddRequiredColumns(dataSources, parameterTypes, scalarRequiredColumns);
         }
     }
 }

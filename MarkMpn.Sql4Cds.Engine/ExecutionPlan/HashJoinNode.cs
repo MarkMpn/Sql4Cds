@@ -24,7 +24,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            _hashTable = new Dictionary<object, List<OuterRecord>>(CaseInsensitiveObjectComparer.Instance);
+            _hashTable = new Dictionary<object, List<OuterRecord>>();
             var mergedSchema = GetSchema(dataSources, parameterTypes, true);
             var additionalJoinCriteria = AdditionalJoinCriteria?.Compile(mergedSchema, parameterTypes);
 
@@ -81,6 +81,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 foreach (var unmatched in _hashTable.SelectMany(kvp => kvp.Value).Where(e => !e.Used))
                     yield return Merge(unmatched.Entity, leftSchema, null, rightSchema);
             }
+        }
+
+        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        {
+            var schema = base.GetSchema(dataSources, parameterTypes);
+
+            if ((JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.RightOuter) && schema.ContainsColumn(RightAttribute.GetColumnName(), out var sortColumn))
+                ((NodeSchema)schema).SortOrder.Add(sortColumn);
+
+            return schema;
         }
     }
 }

@@ -58,7 +58,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         DateTimeOffset dto;
 
                         if (options.UseLocalTimeZone)
-                            dto = new DateTimeOffset(dt.Value, TimeZone.CurrentTimeZone.GetUtcOffset(dt.Value));
+                            dto = new DateTimeOffset(dt.Value, TimeZoneInfo.Local.GetUtcOffset(dt.Value));
                         else
                             dto = new DateTimeOffset(dt.Value, TimeSpan.Zero);
 
@@ -73,6 +73,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private Dictionary<string, ParameterizedCondition> _parameterizedConditions;
         private HashSet<string> _entityNameGroupings;
         private Dictionary<string, string> _primaryKeyColumns;
+        private string _lastSchemaFetchXml;
+        private string _lastSchemaAlias;
+        private NodeSchema _lastSchema;
 
         public FetchXmlScan()
         {
@@ -213,7 +216,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private void OnRetrievedEntity(Entity entity, NodeSchema schema, IQueryExecutionOptions options, IAttributeMetadataCache metadata)
+        private void OnRetrievedEntity(Entity entity, INodeSchema schema, IQueryExecutionOptions options, IAttributeMetadataCache metadata)
         {
             // Expose any formatted values for OptionSetValue and EntityReference values
             foreach (var formatted in entity.FormattedValues)
@@ -441,10 +444,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Array.Empty<IDataExecutionPlanNode>();
         }
 
-        public override NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
         {
             if (!dataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
+
+            var fetchXmlString = FetchXmlString;
+            if (_lastSchema != null && Alias == _lastSchemaAlias && fetchXmlString == _lastSchemaFetchXml)
+                return _lastSchema;
 
             _primaryKeyColumns = new Dictionary<string, string>();
             var schema = new NodeSchema();
@@ -457,7 +464,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 schema.PrimaryKey = $"{Alias}.{meta.PrimaryIdAttribute}";
 
             AddSchemaAttributes(schema, dataSource.Metadata, entity.name, Alias, entity.Items);
-            
+
+            _lastSchema = schema;
+            _lastSchemaFetchXml = fetchXmlString;
+            _lastSchemaAlias = Alias;
             return schema;
         }
 
@@ -650,6 +660,37 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                 }
 
+                foreach (var sort in items.OfType<FetchOrderType>())
+                {
+                    string fullName;
+                    string attributeName;
+
+                    if (!String.IsNullOrEmpty(sort.alias))
+                    {
+                        var attribute = items.OfType<FetchAttributeType>().SingleOrDefault(a => a.alias.Equals(sort.alias, StringComparison.OrdinalIgnoreCase));
+
+                        if (!FetchXml.aggregate || attribute != null && attribute.groupbySpecified && attribute.groupby == FetchBoolType.@true)
+                            fullName = $"{alias}.{attribute.alias}";
+                        else
+                            fullName = attribute.alias;
+
+                        attributeName = attribute.name;
+                    }
+                    else
+                    {
+                        fullName = $"{alias}.{sort.attribute}";
+                        attributeName = sort.attribute;
+                    }
+
+                    // Sorts applied to lookup or enum fields are actually performed on the associated ___name virtual attribute
+                    var attrMeta = meta.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attributeName, StringComparison.OrdinalIgnoreCase));
+
+                    if (attrMeta is LookupAttributeMetadata || attrMeta is EnumAttributeMetadata || attrMeta is BooleanAttributeMetadata)
+                        fullName += "name";
+
+                    schema.SortOrder.Add(fullName);
+                }
+
                 foreach (var linkEntity in items.OfType<FetchLinkEntityType>())
                 {
                     if (linkEntity.SemiJoin)
@@ -714,7 +755,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 simpleColumnNameAliases.Add(fullName);
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<Microsoft.SqlServer.TransactSql.ScriptDom.OptimizerHint> hints)
         {
             return this;
         }

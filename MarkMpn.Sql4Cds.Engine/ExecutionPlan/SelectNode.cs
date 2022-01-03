@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata.Query;
 
@@ -95,9 +96,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        public IRootExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public IRootExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
         {
-            Source = Source.FoldQuery(dataSources, options, parameterTypes);
+            Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
             Source.Parent = this;
 
             FoldFetchXmlColumns(Source, ColumnSet, dataSources, parameterTypes);
@@ -285,9 +286,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        IRootExecutionPlanNode IRootExecutionPlanNode.FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        IRootExecutionPlanNode IRootExecutionPlanNode.FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
         {
-            return this.FoldQuery(dataSources, options, parameterTypes);
+            return this.FoldQuery(dataSources, options, parameterTypes, hints);
         }
 
         public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)

@@ -58,7 +58,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="rightEntity">The data from the right source</param>
         /// <param name="rightSchema">The schema of the right source</param>
         /// <returns>The merged data</returns>
-        protected Entity Merge(Entity leftEntity, NodeSchema leftSchema, Entity rightEntity, NodeSchema rightSchema)
+        protected Entity Merge(Entity leftEntity, INodeSchema leftSchema, Entity rightEntity, INodeSchema rightSchema)
         {
             var merged = new Entity();
 
@@ -101,12 +101,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return RightSource;
         }
 
-        public override NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
         {
             return GetSchema(dataSources, parameterTypes, false);
         }
 
-        protected virtual NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, bool includeSemiJoin)
+        protected virtual INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, bool includeSemiJoin)
         {
             var outerSchema = LeftSource.GetSchema(dataSources, parameterTypes);
             var innerSchema = GetRightSchema(dataSources, parameterTypes);
@@ -143,7 +143,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return schema;
         }
 
-        protected virtual NodeSchema GetRightSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        protected virtual INodeSchema GetRightSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
         {
             return RightSource.GetSchema(dataSources, parameterTypes);
         }

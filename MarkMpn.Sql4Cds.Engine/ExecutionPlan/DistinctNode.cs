@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Data.SqlTypes;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
@@ -14,51 +16,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// </summary>
     class DistinctNode : BaseDataNode, ISingleSourceExecutionPlanNode
     {
-        class DistinctKey
-        {
-            private List<object> _values;
-            private readonly int _hashCode;
-
-            public DistinctKey(Entity entity, List<string> columns)
-            {
-                _values = columns.Select(col => entity[col]).ToList();
-
-                _hashCode = 0;
-
-                foreach (var val in _values)
-                {
-                    if (val == null)
-                        continue;
-
-                    _hashCode ^= StringComparer.CurrentCultureIgnoreCase.GetHashCode(val);
-                }
-            }
-
-            public override int GetHashCode()
-            {
-                return _hashCode;
-            }
-
-            public override bool Equals(object obj)
-            {
-                var other = (DistinctKey)obj;
-
-                for (var i = 0; i < _values.Count; i++)
-                {
-                    if (_values[i] == null && other._values[i] == null)
-                        continue;
-
-                    if (_values[i] == null || other._values[i] == null)
-                        return false;
-
-                    if (StringComparer.CurrentCultureIgnoreCase.Compare(_values[i], other._values[i]) != 0)
-                        return false;
-                }
-
-                return true;
-            }
-        }
-
         /// <summary>
         /// The columns to consider
         /// </summary>
@@ -74,24 +31,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            var distinct = new HashSet<DistinctKey>();
+            var distinct = new HashSet<Entity>(new DistinctEqualityComparer(Columns));
 
             foreach (var entity in Source.Execute(dataSources, options, parameterTypes, parameterValues))
             {
-                var key = new DistinctKey(entity, Columns);
-
-                if (distinct.Add(key))
+                if (distinct.Add(entity))
                     yield return entity;
             }
         }
 
-        public override NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
         {
             var schema = Source.GetSchema(dataSources, parameterTypes);
 
             // If this is a distinct list of one column we know the values in that column will be unique
             if (Columns.Count == 1)
-                schema.PrimaryKey = Columns[0];
+                schema = new NodeSchema(schema) { PrimaryKey = Columns[0] };
 
             return schema;
         }
@@ -101,9 +56,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
         {
-            Source = Source.FoldQuery(dataSources, options, parameterTypes);
+            Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
             Source.Parent = this;
 
             // Remove any duplicated column names
@@ -128,10 +83,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // Ensure there is a sort order applied to avoid paging issues
                 if (fetch.Entity.Items == null || !fetch.Entity.Items.OfType<FetchOrderType>().Any())
                 {
-                    // Sort by each distinct attribute
+                    // Sort by each attribute. Make sure we only add one sort per attribute, taking virtual attributes
+                    // into account (i.e. don't attempt to sort on statecode and statecodename)
+                    var sortedAttributes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
                     foreach (var column in Columns)
                     {
                         if (!schema.ContainsColumn(column, out var normalized))
+                            continue;
+
+                        if (!sortedAttributes.Add(normalized))
                             continue;
 
                         var parts = normalized.Split('.');
@@ -139,16 +100,59 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             continue;
 
                         if (parts[0].Equals(fetch.Alias, StringComparison.OrdinalIgnoreCase))
+                        {
+                            var attr = dataSources[fetch.DataSource].Metadata[fetch.Entity.name].Attributes.SingleOrDefault(a => a.LogicalName.Equals(parts[1], StringComparison.OrdinalIgnoreCase));
+
+                            if (attr == null)
+                                continue;
+
+                            if (attr.AttributeOf != null && !sortedAttributes.Add(parts[0] + "." + attr.AttributeOf))
+                                continue;
+
                             fetch.Entity.AddItem(new FetchOrderType { attribute = parts[1] });
+                        }
                         else
-                            fetch.Entity.FindLinkEntity(parts[0]).AddItem(new FetchOrderType { attribute = parts[1] });
+                        {
+                            var linkEntity = fetch.Entity.FindLinkEntity(parts[0]);
+                            var attr = dataSources[fetch.DataSource].Metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName.Equals(parts[1], StringComparison.OrdinalIgnoreCase));
+
+                            if (attr == null)
+                                continue;
+
+                            if (attr.AttributeOf != null && !sortedAttributes.Add(parts[0] + "." + attr.AttributeOf))
+                                continue;
+
+                            linkEntity.AddItem(new FetchOrderType { attribute = parts[1] });
+                        }
                     }
                 }
 
                 return fetch;
             }
 
-            return this;
+            // If the data is already sorted by all the distinct columns we can use a stream aggregate instead.
+            // We don't mind what order the columns are sorted in though, so long as the distinct columns form a
+            // prefix of the sort order.
+            var requiredSorts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var col in Columns)
+            {
+                if (!schema.ContainsColumn(col, out var column))
+                    return this;
+
+                requiredSorts.Add(column);
+            }
+
+            if (!schema.IsSortedBy(requiredSorts))
+                return this;
+
+            var aggregate = new StreamAggregateNode { Source = Source };
+            Source.Parent = aggregate;
+
+            for (var i = 0; i < requiredSorts.Count; i++)
+                aggregate.GroupBy.Add(schema.SortOrder[i].ToColumnReference());
+
+            return aggregate;
         }
 
         public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)

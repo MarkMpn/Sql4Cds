@@ -325,12 +325,11 @@
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.csproj">
-      <Project>{583628f7-a027-451b-b3a1-e85ffb241dfb}</Project>
-      <Name>MarkMpn.Sql4Cds.Engine</Name>
+    <ProjectReference Include="..\MarkMpn.Sql4Cds.Engine.NetFx\MarkMpn.Sql4Cds.Engine.NetFx.csproj">
+      <Project>{23288bb2-0d6f-4329-9a5c-4c659567a652}</Project>
+      <Name>MarkMpn.Sql4Cds.Engine.NetFx</Name>
     </ProjectReference>
   </ItemGroup>
-  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Import Project="$(VSToolsPath)\VSSDK\Microsoft.VsSDK.targets" Condition="'$(VSToolsPath)' != ''" />
   <Import Project="..\packages\Microsoft.VisualStudio.SDK.EmbedInteropTypes.15.0.10\build\Microsoft.VisualStudio.SDK.EmbedInteropTypes.targets" Condition="Exists('..\packages\Microsoft.VisualStudio.SDK.EmbedInteropTypes.15.0.10\build\Microsoft.VisualStudio.SDK.EmbedInteropTypes.targets')" />

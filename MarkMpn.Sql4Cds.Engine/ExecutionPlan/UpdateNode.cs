@@ -7,7 +7,6 @@ using System.Threading.Tasks;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
-using Microsoft.Xrm.Tooling.Connector;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {

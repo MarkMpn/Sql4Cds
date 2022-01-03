@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<package xmlns="http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd">
+<package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
   <metadata>
     <id>MarkMpn.Sql4Cds.Engine</id>
     <version>3.0.0</version>
@@ -11,20 +11,39 @@
     <iconUrl>https://markcarrington.dev/sql4cds-icon/</iconUrl>
     <description>Convert SQL queries to FetchXml and execute them against Dataverse / D365</description>
     <summary>Convert SQL queries to FetchXml and execute them against Dataverse / D365</summary>
-    <releaseNotes>Improved aggregate performance with automatic partitioning
+    <releaseNotes>Added .NET Core version
+Improved aggregate performance with automatic partitioning
 Reduced attributes retrieved to process COUNT(*) queries
 Fixed GROUP BY and aggregates on virtual attributes
 Fixed retrieving file attributes
+Fixed GROUP BY and ORDER BY on multi-select picklist fields
+Fixed errors when using LIKE queries on non-string fields
+Fixed errors when using filters on party list fields
+Fixed running queries with more than 10 joins
+Fixed DISTINCT with repeated attributes
+Fixed use of non-FetchXML functions in WHERE clause
+Fixed use of query derived tables with aggregates
     </releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>
     <tags>SQL CDS</tags>
     <dependencies>
-      <dependency id="Microsoft.CrmSdk.CoreAssemblies" version="9.0.2.17" />
-      <dependency id="Microsoft.SqlServer.TransactSql.ScriptDom" version="15.0.4200.1" />
+      <group targetFramework=".NETFramework4.6.2">
+        <dependency id="Microsoft.CrmSdk.CoreAssemblies" version="9.0.2.33" />
+        <dependency id="Microsoft.CrmSdk.XrmTooling.CoreAssembly" version="9.1.0.79" />
+        <dependency id="Microsoft.SqlServer.TransactSql.ScriptDom" version="150.4897.1" />
+      </group>
+      <group targetFramework=".NETCoreApp3.1">
+        <dependency id="Microsoft.PowerPlatform.Dataverse.Client" version="0.5.10" />
+        <dependency id="Microsoft.SqlServer.TransactSql.ScriptDom" version="150.4897.1" />
+        <dependency id="System.Data.SqlClient" version="4.8.3" />
+      </group>
     </dependencies>
+	<readme>docs\README.md</readme>
   </metadata>
   <files>
-    <file src="bin\Release\MarkMpn.Sql4Cds.Engine.dll" target="lib\net462\MarkMpn.Sql4Cds.Engine.dll" />
+    <file src="..\MarkMpn.Sql4Cds.Engine.NetFx\bin\Release\MarkMpn.Sql4Cds.Engine.dll" target="lib\net462\MarkMpn.Sql4Cds.Engine.dll" />
+    <file src="..\MarkMpn.Sql4Cds.Engine.NetCore\bin\Release\netcoreapp3.1\MarkMpn.Sql4Cds.Engine.dll" target="lib\netcoreapp3.1\MarkMpn.Sql4Cds.Engine.dll" />
+	<file src="..\README.md" target="docs\" />
   </files>
 </package>

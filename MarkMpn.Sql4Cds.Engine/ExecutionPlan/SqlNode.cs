@@ -6,8 +6,13 @@ using System.Data.SqlClient;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
+#if NETCOREAPP
+using Microsoft.PowerPlatform.Dataverse.Client;
+#else
 using Microsoft.Xrm.Tooling.Connector;
+#endif
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -54,13 +59,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (options.UseLocalTimeZone)
                     throw new QueryExecutionException("Cannot use automatic local time zone conversion with the TDS Endpoint");
 
+#if NETCOREAPP
+                if (!(dataSource.Connection is ServiceClient svc))
+                    throw new QueryExecutionException($"IOrganizationService implementation needs to be ServiceClient for use with the TDS Endpoint, got {dataSource.Connection.GetType()}");
+#else
                 if (!(dataSource.Connection is CrmServiceClient svc))
                     throw new QueryExecutionException($"IOrganizationService implementation needs to be CrmServiceClient for use with the TDS Endpoint, got {dataSource.Connection.GetType()}");
+#endif
 
                 if (svc.CallerId != Guid.Empty)
                     throw new QueryExecutionException("Cannot use impersonation with the TDS Endpoint");
 
+#if NETCOREAPP
+                using (var con = new SqlConnection("server=" + svc.ConnectedOrgUriActual.Host))
+#else
                 using (var con = new SqlConnection("server=" + svc.CrmConnectOrgUriActual.Host))
+#endif
                 {
                     con.AccessToken = svc.CurrentAccessToken;
                     con.Open();
@@ -139,7 +153,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public IRootExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public IRootExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
         {
             return this;
         }

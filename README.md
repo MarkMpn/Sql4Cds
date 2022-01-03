@@ -63,3 +63,89 @@ WHERE  attribute.description IS NULL
 As well as writing and executing queries as SQL, the generated FetchXML can be sent to [FetchXML Builder](https://fetchxmlbuilder.com/)
 for further editing or converting to another syntax such as OData. You can also start building a query in FetchXML Builder and then edit
 it in SQL 4 CDS.
+
+## Library Usage
+
+The NuGet package includes assemblies for .NET Framework 4.6.2 and later, and .NET Core 3.1 and later.
+
+The main entry point to the library is the `ExecutionPlanBuilder` class. This exposes a `Build()` method
+that accepts a SQL string and produces a set of execution plan nodes that the calling application can execute.
+
+The `ExecutionPlanBuilder` class requires details of the data sources (D365 instances) the query will be executed
+against, and a set of options that control how the SQL query will be converted and executed.
+
+The `DataSource` class has the following properties:
+
+* `Name` - the name this data source can be referred to by in the SQL query
+* `Connection` - the `IOrganizationService` instance that provides access to this data source
+* `Metadata` - an `IAttributeMetadataCache` instance that provides cached access to the metadata for this data source.
+A standard implementation is provided by `AttributeMetadataCache`
+* `TableSizeCache` - an `ITableSizeCache` instance that provides a quick estimate of the number of records in each table
+in the data source. A standard implementation is provided by `TableSizeCache`
+
+The calling application must also provide an implementation of the `IQueryExecutionOptions` interface. This provides
+various properties and methods that can control how the query is converted and executed:
+
+* `BatchSize` - when executing DML operations, how many requests should be sent to the server at once?
+* `BypassCustomPlugins` - when executing DML operations, should custom plugins be bypassed?
+* `JoinOperatorsAvailable` - depending on the version of D365, different join operators are available. This property
+lists the operators that are available for SQL 4 CDS to use. This should contain `inner` and `outer` at a minimum.
+* `UseLocalTimeZone` - when working with date values, this property indicates whether the local or UTC time zone should
+be used.
+* `ColumnComparisonAvailable` - indicates whether the version of D365 that will be executing the query supports the
+FetchXML `valueof` attribute in filter conditions
+* `MaxDegreeOfParallelism` - when executing DML operations, how many requests can be made in parallel?
+* `UseTDSEndpoint` - indicates if the preview TDS Endpoint should be used where possible to execute SELECT queries
+* `PrimaryEndPoint` - the name of the `DataSource` that queries will run against unless the FROM clause explicitly references
+a different data source
+* `UserId` - the unique identifier of the current user
+* `BlockDeleteWithoutWhere` - indicates if an error should be produced if running a DELETE query without a corresponding WHERE clause
+* `BlockUpdateWithoutWhere` - indicates if an error should be produced if running a UPDATE query without a corresponding WHERE clause
+* `Cancelled` - set to `true` to stop further execution of the query
+* `UseBulkDelete` - set to `true` to use a bulk delete job instead of deleting individual records for a DELETE query
+
+* `ConfirmDelete()` - callback method to allow the application to confirm a DELETE query should go ahead
+* `ConfirmInsert()` - callback method to allow the application to confirm an INSERT query should go ahead
+* `ConfirmUpdate()` - callback method to allow the application to confirm an UPDATE query should go ahead
+* `ConfinueRetrieval()` - callback method to allow the application to stop queries that involve too many data retrieval requests
+* `Progress()` - callback method to allow the application to log progress from the query
+* `RetrievingNextPagE()` - callback method to notify the application that the query is retrieving another page of data from the server
+
+Once these pieces are in place, the application can execute a query using code such as:
+
+```csharp
+var svc = new CrmServiceClient("connectionstring");
+var metadata = new AttributeMetadataCache(svc);
+
+var dataSource = new DataSource
+{
+  Name = "prod",
+  Connection = svc,
+  Metadata = metadata
+  TableSizeCache = new TableSizeCache(svc, metadata)
+};
+
+var dataSources = new Dictionary<string, DataSource>
+{
+	[dataSource.Name] = dataSource
+};
+
+var executionPlanBuilder = new ExecutionPlanBuilder(dataSources.Values, options);
+var queries = executionPlanBuilder.Build(sql);
+
+foreach (var query in queries)
+{
+	if (query is IDataSetExecutionPlanNode selectQuery)
+	{
+		var results = selectQuery.Execute(dataSources, options, null, null);
+		// results is a DataTable
+		// Display/save/process the results as required
+	}
+	else if (query is IDmlQueryExecutionPlanNode dmlQuery)
+	{
+		var message = dmlQuery.Execute(dataSources, options, null, null);
+		// message is a description of the affect of executing the INSERT/UPDATE/DELETE query
+		// Display/log it as required
+	}
+}
+```

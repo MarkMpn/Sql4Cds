@@ -22,6 +22,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Implemented inner, left outer, right outer and full outer variants
             // Not implemented semi joins
             // TODO: Handle many-to-many joins
+            // TODO: Handle union & concatenate
 
             // Left & Right: GetNext, mark as unmatched
             var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
@@ -109,9 +110,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return !hasLeft && !hasRight;
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
         {
-            var folded = base.FoldQuery(dataSources, options, parameterTypes);
+            var folded = base.FoldQuery(dataSources, options, parameterTypes, hints);
 
             if (folded != this)
                 return folded;
@@ -128,7 +129,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         SortOrder = SortOrder.Ascending
                     }
                 }
-            }.FoldQuery(dataSources, options, parameterTypes);
+            }.FoldQuery(dataSources, options, parameterTypes, hints);
             LeftSource.Parent = this;
 
             RightSource = new SortNode
@@ -142,10 +143,30 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         SortOrder = SortOrder.Ascending
                     }
                 }
-            }.FoldQuery(dataSources, options, parameterTypes);
+            }.FoldQuery(dataSources, options, parameterTypes, hints);
             RightSource.Parent = this;
 
             return this;
+        }
+
+        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        {
+            var schema = base.GetSchema(dataSources, parameterTypes);
+            schema.ContainsColumn(LeftAttribute.GetColumnName(), out var left);
+            schema.ContainsColumn(RightAttribute.GetColumnName(), out var right);
+
+            if (JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.LeftOuter)
+            {
+                ((NodeSchema)schema).SortOrder.Add(left);
+                ((NodeSchema)schema).SortOrder.Add(right);
+            }
+            else if (JoinType == QualifiedJoinType.RightOuter)
+            {
+                ((NodeSchema)schema).SortOrder.Add(right);
+                ((NodeSchema)schema).SortOrder.Add(left);
+            }
+
+            return schema;
         }
     }
 }

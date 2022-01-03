@@ -5,10 +5,10 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Crm.Sdk.Messages;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
-using Microsoft.Xrm.Tooling.Connector;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -58,9 +58,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        public override IRootExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IRootExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
         {
-            var result = base.FoldQuery(dataSources, options, parameterTypes);
+            var result = base.FoldQuery(dataSources, options, parameterTypes, hints);
 
             if (result != this)
                 return result;
@@ -177,7 +177,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var secondaryId = (Guid)secondaryIdAccessor(entity);
 
                 if (meta.LogicalName == "listmember")
-                    return new RemoveMemberListRequest { ListId = id, EntityId = secondaryId };
+                {
+                    return new OrganizationRequest
+                    {
+                        RequestName = "RemoveMemberList",
+                        Parameters = new ParameterCollection
+                        {
+                            ["ListId"] = id,
+                            ["EntityId"] = secondaryId
+                        }
+                    };
+                }
 
                 var relationship = meta.ManyToManyRelationships.Single();
 

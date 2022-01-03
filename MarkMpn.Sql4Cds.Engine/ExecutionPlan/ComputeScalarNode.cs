@@ -44,17 +44,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public override NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
         {
             // Copy the source schema and add in the additional computed columns
             var sourceSchema = Source.GetSchema(dataSources, parameterTypes);
-            var schema = new NodeSchema { PrimaryKey = sourceSchema.PrimaryKey };
-
-            foreach (var col in sourceSchema.Schema)
-                schema.Schema.Add(col);
-
-            foreach (var alias in sourceSchema.Aliases)
-                schema.Aliases.Add(alias);
+            var schema = new NodeSchema(sourceSchema);
 
             foreach (var calc in Columns)
                 schema.Schema[calc.Key] = calc.Value.GetType(sourceSchema, null, parameterTypes);
@@ -67,9 +61,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
         {
-            Source = Source.FoldQuery(dataSources, options, parameterTypes);
+            Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
 
             // Combine multiple ComputeScalar nodes. Calculations in this node might be dependent on those in the previous node, so rewrite any references
             // to the earlier computed columns

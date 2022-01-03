@@ -41,11 +41,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("Additional Join Criteria")]
         public BooleanExpression AdditionalJoinCriteria { get; set; }
 
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
         {
-            LeftSource = LeftSource.FoldQuery(dataSources, options, parameterTypes);
+            LeftSource = LeftSource.FoldQuery(dataSources, options, parameterTypes, hints);
             LeftSource.Parent = this;
-            RightSource = RightSource.FoldQuery(dataSources, options, parameterTypes);
+            RightSource = RightSource.FoldQuery(dataSources, options, parameterTypes, hints);
             RightSource.Parent = this;
 
             if (SemiJoin)
@@ -90,6 +90,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     throw new NotSupportedQueryFragmentException("Missing datasource " + leftFetch.DataSource);
 
                 if (dataSource.Metadata[leftFetch.Entity.name].DataProviderId != dataSource.Metadata[rightFetch.Entity.name].DataProviderId)
+                    return this;
+
+                // Check we're not going to have too many link entities
+                var leftLinkCount = leftFetch.Entity.GetLinkEntities().Count();
+                var rightLinkCount = rightFetch.Entity.GetLinkEntities().Count() + 1;
+
+                if (leftLinkCount + rightLinkCount > 10)
                     return this;
 
                 // If we're doing a right outer join, switch everything round to do a left outer join
@@ -170,7 +177,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 if (additionalCriteria != null)
-                    return new FilterNode { Filter = additionalCriteria, Source = leftFetch }.FoldQuery(dataSources, options, parameterTypes);
+                    return new FilterNode { Filter = additionalCriteria, Source = leftFetch }.FoldQuery(dataSources, options, parameterTypes, hints);
 
                 return leftFetch;
             }
@@ -304,7 +311,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return Math.Max(leftEstimate, rightEstimate);
         }
 
-        protected override NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, bool includeSemiJoin)
+        protected override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, bool includeSemiJoin)
         {
             var schema = base.GetSchema(dataSources, parameterTypes, includeSemiJoin);
 
@@ -314,9 +321,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var rightSchema = GetRightSchema(dataSources, parameterTypes);
 
                 if (LeftAttribute.GetColumnName() == leftSchema.PrimaryKey)
-                    schema.PrimaryKey = rightSchema.PrimaryKey;
+                    ((NodeSchema)schema).PrimaryKey = rightSchema.PrimaryKey;
                 else if (RightAttribute.GetColumnName() == rightSchema.PrimaryKey)
-                    schema.PrimaryKey = leftSchema.PrimaryKey;
+                    ((NodeSchema)schema).PrimaryKey = leftSchema.PrimaryKey;
             }
 
             return schema;
