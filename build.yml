@@ -51,13 +51,13 @@ steps:
   inputs:
     platform: '$(buildPlatform)'
     configuration: '$(buildConfiguration)'
-    
-- task: DotNetCoreCLI@2
+
+- task: NuGetCommand@2
   displayName: Pack
   inputs:
     command: pack
     packagesToPack: '**/*.nuspec'
-    nobuild: true
+    packDestination: '$(Build.ArtifactStagingDirectory)'
     versioningScheme: byEnvVar
     versionEnvVar: GITVERSION_NUGETVERSION
 
