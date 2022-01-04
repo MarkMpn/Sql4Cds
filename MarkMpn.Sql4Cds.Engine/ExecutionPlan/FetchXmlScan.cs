@@ -76,6 +76,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private string _lastSchemaFetchXml;
         private string _lastSchemaAlias;
         private NodeSchema _lastSchema;
+        private bool _resetPage;
+        private string _startingPage;
 
         public FetchXmlScan()
         {
@@ -172,6 +174,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Get the first page of results
             options.RetrievingNextPage();
+
+            // Ensure we reset the page number & cookie for subsequent executions
+            if (_resetPage)
+            {
+                FetchXml.page = _startingPage;
+                FetchXml.pagingcookie = null;
+            }
+            else
+            {
+                _startingPage = FetchXml.page;
+                _resetPage = true;
+            }
+
             var res = dataSource.Connection.RetrieveMultiple(new FetchExpression(Serialize(FetchXml)));
             PagesRetrieved++;
 
