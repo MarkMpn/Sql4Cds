@@ -48,6 +48,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("Aggregate")]
         [Description("Indicates if this is a scalar aggregate operation, i.e. there are no grouping columns")]
+        [DisplayName("Is Scalar Aggregate")]
         public bool IsScalarAggregate => GroupBy.Count == 0;
 
         [Browsable(false)]
