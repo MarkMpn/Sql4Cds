@@ -87,7 +87,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
         {
-            return TrySource.GetSchema(dataSources, parameterTypes);
+            var trySchema = TrySource.GetSchema(dataSources, parameterTypes);
+            var catchSchema = CatchSource.GetSchema(dataSources, parameterTypes);
+
+            // Columns should be the same but sort order may be different
+            if (trySchema.SortOrder.SequenceEqual(catchSchema.SortOrder, StringComparer.OrdinalIgnoreCase))
+                return trySchema;
+
+            var consistentSorts = trySchema.SortOrder
+                .TakeWhile((sort, index) => index < catchSchema.SortOrder.Count && sort.Equals(catchSchema.SortOrder[index], StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            return new NodeSchema(trySchema) { SortOrder = consistentSorts };
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
