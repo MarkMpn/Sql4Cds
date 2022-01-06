@@ -24,7 +24,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     abstract class BaseDataNode : BaseNode, IDataExecutionPlanNode
     {
         private int _executionCount;
-        private Timer _timer = new Timer();
+        private readonly Timer _timer = new Timer();
+        private TimeSpan _additionalDuration;
         private int _rowsOut;
 
         /// <summary>
@@ -111,7 +112,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// Returns the time that the node has taken to execute
         /// </summary>
-        public override TimeSpan Duration => _timer.Duration;
+        public override TimeSpan Duration => _timer.Duration + _additionalDuration;
 
         /// <summary>
         /// Returns the number of rows that the node has generated
@@ -119,6 +120,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Category("Statistics")]
         [Description("Returns the number of rows that the node has generated")]
         public int RowsOut => _rowsOut;
+
+        /// <summary>
+        /// Adds the execution statistics from another node into the summary for this node
+        /// </summary>
+        /// <param name="other">The other node to add the statistics from</param>
+        public void MergeStatsFrom(BaseDataNode other)
+        {
+            _rowsOut += other.RowsOut;
+            _additionalDuration += other.Duration;
+            _executionCount += other.ExecutionCount;
+        }
 
         /// <summary>
         /// Produces the data for the node without keeping track of any execution time statistics

@@ -94,7 +94,7 @@ lists the operators that are available for SQL 4 CDS to use. This should contain
 be used.
 * `ColumnComparisonAvailable` - indicates whether the version of D365 that will be executing the query supports the
 FetchXML `valueof` attribute in filter conditions
-* `MaxDegreeOfParallelism` - when executing DML operations, how many requests can be made in parallel?
+* `MaxDegreeOfParallelism` - how many requests can be made in parallel? Currently used for DML and partitioned aggregate queries
 * `UseTDSEndpoint` - indicates if the preview TDS Endpoint should be used where possible to execute SELECT queries
 * `PrimaryEndPoint` - the name of the `DataSource` that queries will run against unless the FROM clause explicitly references
 a different data source
