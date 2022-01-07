@@ -468,6 +468,12 @@
   <ItemGroup>
     <None Include="Resources\StatusHelp_16x.png" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Images\AssignVariablesNode.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Images\DeclareVariablesNode.ico" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>

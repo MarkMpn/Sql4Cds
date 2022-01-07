@@ -956,15 +956,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             [SqlDataTypeOption.VarChar] = typeof(SqlString)
         };
 
+        public static Type ToNetType(this DataTypeReference type, out SqlDataTypeReference sqlDataType)
+        {
+            if (!(type is SqlDataTypeReference dataType))
+                throw new NotSupportedQueryFragmentException("Unsupported data type reference", type);
+
+            sqlDataType = dataType;
+
+            if (!_typeMapping.TryGetValue(dataType.SqlDataTypeOption, out var targetType))
+                throw new NotSupportedQueryFragmentException("Unknown type name", type);
+
+            return targetType;
+        }
+
         private static Expression ToExpression(this ConvertCall convert, NodeSchema schema, NodeSchema nonAggregateSchema, IDictionary<string, Type> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
         {
             var value = convert.Parameter.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
 
-            if (!(convert.DataType is SqlDataTypeReference dataType))
-                throw new NotSupportedQueryFragmentException("Unsupported data type reference", convert.DataType);
-
-            if (!_typeMapping.TryGetValue(dataType.SqlDataTypeOption, out var targetType))
-                throw new NotSupportedQueryFragmentException("Unknown type name", convert.DataType);
+            var targetType = convert.DataType.ToNetType(out var dataType);
 
             var sourceType = value.Type;
 

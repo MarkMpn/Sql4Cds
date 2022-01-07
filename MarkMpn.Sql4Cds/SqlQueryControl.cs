@@ -863,6 +863,8 @@ namespace MarkMpn.Sql4Cds
                 converter.TDSEndpointAvailable = true;
 
             var queries = converter.Build(args.Sql);
+            var parameterTypes = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase);
+            var parameterValues = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
 
             if (args.Execute)
             {
@@ -874,13 +876,13 @@ namespace MarkMpn.Sql4Cds
                     {
                         if (query is IDataSetExecutionPlanNode dataQuery)
                         {
-                            var result = dataQuery.Execute(DataSources.Values.Cast<Engine.DataSource>().ToDictionary(ds => ds.Name, StringComparer.OrdinalIgnoreCase), options, null, null);
+                            var result = dataQuery.Execute(DataSources.Values.Cast<Engine.DataSource>().ToDictionary(ds => ds.Name, StringComparer.OrdinalIgnoreCase), options, parameterTypes, parameterValues);
 
                             Execute(() => ShowResult(query, args, result, null, null));
                         }
                         else if (query is IDmlQueryExecutionPlanNode dmlQuery)
                         {
-                            var result = dmlQuery.Execute(DataSources.Values.Cast<Engine.DataSource>().ToDictionary(ds => ds.Name, StringComparer.OrdinalIgnoreCase), options, null, null);
+                            var result = dmlQuery.Execute(DataSources.Values.Cast<Engine.DataSource>().ToDictionary(ds => ds.Name, StringComparer.OrdinalIgnoreCase), options, parameterTypes, parameterValues);
 
                             Execute(() => ShowResult(query, args, null, result, null));
                         }
