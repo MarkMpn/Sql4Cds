@@ -1,9 +1,11 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data.SqlTypes;
 using System.Globalization;
 using System.Linq;
 using System.Linq.Expressions;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
@@ -33,6 +35,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private static readonly IDictionary<Type, object> _nullValues;
         private static readonly CultureInfo _hijriCulture;
+        private static ConcurrentDictionary<string, Func<object, object>> _conversions;
 
         static SqlTypeConverter()
         {
@@ -57,6 +60,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             _hijriCulture = (CultureInfo)CultureInfo.GetCultureInfo("ar-JO").Clone();
             _hijriCulture.DateTimeFormat.Calendar = new HijriCalendar();
+
+            _conversions = new ConcurrentDictionary<string, Func<object, object>>();
         }
 
         /// <summary>
@@ -242,6 +247,143 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return expr;
+        }
+
+        /// <summary>
+        /// Produces the required expression to convert values to a specific type
+        /// </summary>
+        /// <param name="expr">The expression that generates the values to convert</param>
+        /// <param name="to">The type to convert to</param>
+        /// <param name="style">An optional parameter defining the style of the conversion</param>
+        /// <param name="convert">An optional parameter containing the SQL CONVERT() function call to report any errors against</param>
+        /// <returns>An expression to generate values of the required type</returns>
+        public static Expression Convert(Expression expr, DataTypeReference to, Expression style = null, ConvertCall convert = null)
+        {
+            var targetType = to.ToNetType(out var dataType);
+
+            var sourceType = expr.Type;
+
+            if (!CanChangeTypeExplicit(sourceType, targetType))
+                throw new NotSupportedQueryFragmentException($"No type conversion available from {sourceType} to {targetType}", convert);
+
+            // Special cases for styles
+            if (style != null)
+            {
+                if (!CanChangeTypeImplicit(style.Type, typeof(SqlInt32)))
+                    throw new NotSupportedQueryFragmentException($"No type conversion available from {style.Type} to {typeof(SqlInt32)}", convert.Style);
+
+                if (expr.Type == typeof(SqlDateTime) && targetType == typeof(SqlString))
+                    expr = Expr.Call(() => Convert(Expr.Arg<SqlDateTime>(), Expr.Arg<SqlInt32>()), expr, style);
+                else if ((expr.Type == typeof(SqlDouble) || expr.Type == typeof(SqlSingle)) && targetType == typeof(SqlString))
+                    expr = Expr.Call(() => Convert(Expr.Arg<SqlDouble>(), Expr.Arg<SqlInt32>()), expr, style);
+                else if (expr.Type == typeof(SqlMoney) && targetType == typeof(SqlString))
+                    expr = Expr.Call(() => Convert(Expr.Arg<SqlMoney>(), Expr.Arg<SqlInt32>()), expr, style);
+            }
+
+            if (expr.Type != targetType)
+                expr = Convert(expr, targetType);
+
+            if (dataType.SqlDataTypeOption == SqlDataTypeOption.Date)
+            {
+                // Remove the time part of the DateTime value
+                expr = Expression.Condition(NullCheck(expr), Expression.Constant(SqlDateTime.Null), Expression.Convert(Expression.Property(Expression.Convert(expr, typeof(DateTime)), nameof(DateTime.Date)), typeof(SqlDateTime)));
+            }
+
+            // Truncate results for [n][var]char
+            // https://docs.microsoft.com/en-us/sql/t-sql/functions/cast-and-convert-transact-sql?view=sql-server-ver15#truncating-and-rounding-results
+            if (dataType.SqlDataTypeOption == SqlDataTypeOption.Char ||
+                dataType.SqlDataTypeOption == SqlDataTypeOption.NChar ||
+                dataType.SqlDataTypeOption == SqlDataTypeOption.VarChar ||
+                dataType.SqlDataTypeOption == SqlDataTypeOption.NVarChar)
+            {
+                if (dataType.Parameters.Count == 1)
+                {
+                    if (Int32.TryParse(dataType.Parameters[0].Value, out var maxLength))
+                    {
+                        if (maxLength < 1)
+                            throw new NotSupportedQueryFragmentException("Length or precision specification 0 is invalid.", dataType);
+
+                        // Truncate the value to the specified length, but some special cases
+                        string valueOnTruncate = null;
+                        Exception exceptionOnTruncate = null;
+
+                        if (sourceType == typeof(SqlInt32) || sourceType == typeof(SqlInt16) || sourceType == typeof(SqlByte))
+                        {
+                            if (dataType.SqlDataTypeOption == SqlDataTypeOption.Char || dataType.SqlDataTypeOption == SqlDataTypeOption.VarChar)
+                                valueOnTruncate = "*";
+                            else if (dataType.SqlDataTypeOption == SqlDataTypeOption.NChar || dataType.SqlDataTypeOption == SqlDataTypeOption.NVarChar)
+                                exceptionOnTruncate = new QueryExecutionException("Arithmetic overflow error converting expression to data type " + dataType.SqlDataTypeOption);
+                        }
+                        else if ((sourceType == typeof(SqlMoney) || sourceType == typeof(SqlDecimal) || sourceType == typeof(SqlSingle)) &&
+                            (dataType.SqlDataTypeOption == SqlDataTypeOption.Char || dataType.SqlDataTypeOption == SqlDataTypeOption.VarChar || dataType.SqlDataTypeOption == SqlDataTypeOption.NChar || dataType.SqlDataTypeOption == SqlDataTypeOption.NVarChar))
+                        {
+                            exceptionOnTruncate = new QueryExecutionException("Arithmetic overflow error converting expression to data type " + dataType.SqlDataTypeOption);
+                        }
+
+                        expr = Expr.Call(() => Truncate(Expr.Arg<SqlString>(), Expr.Arg<int>(), Expr.Arg<string>(), Expr.Arg<Exception>()),
+                            expr,
+                            Expression.Constant(maxLength),
+                            Expression.Constant(valueOnTruncate, typeof(string)),
+                            Expression.Constant(exceptionOnTruncate, typeof(Exception)));
+                    }
+                    else if (!dataType.Parameters[0].Value.Equals("max", StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new NotSupportedQueryFragmentException("Invalid attributes specified for type " + dataType.SqlDataTypeOption, dataType);
+                    }
+                }
+                else if (dataType.Parameters.Count > 1)
+                {
+                    throw new NotSupportedQueryFragmentException("Invalid attributes specified for type " + dataType.SqlDataTypeOption, dataType);
+                }
+            }
+
+            // Apply changes to precision & scale
+            if (expr.Type == typeof(SqlDecimal))
+            {
+                if (dataType.Parameters.Count > 0)
+                {
+                    if (!Int32.TryParse(dataType.Parameters[0].Value, out var precision))
+                        throw new NotSupportedQueryFragmentException("Invalid attributes specified for type " + dataType.SqlDataTypeOption, dataType);
+
+                    if (precision < 1)
+                        throw new NotSupportedQueryFragmentException("Length or precision specification 0 is invalid.", dataType);
+
+                    var scale = 0;
+
+                    if (dataType.Parameters.Count > 1)
+                    {
+                        if (!Int32.TryParse(dataType.Parameters[1].Value, out scale))
+                            throw new NotSupportedQueryFragmentException("Invalid attributes specified for type " + dataType.SqlDataTypeOption, dataType);
+                    }
+
+                    if (dataType.Parameters.Count > 2)
+                        throw new NotSupportedQueryFragmentException("Invalid attributes specified for type " + dataType.SqlDataTypeOption, dataType);
+
+                    expr = Expr.Call(() => SqlDecimal.ConvertToPrecScale(Expr.Arg<SqlDecimal>(), Expr.Arg<int>(), Expr.Arg<int>()),
+                        expr,
+                        Expression.Constant(precision),
+                        Expression.Constant(scale));
+                }
+            }
+
+            return expr;
+        }
+
+        private static SqlString Truncate(SqlString value, int maxLength, string valueOnTruncate, Exception exceptionOnTruncate)
+        {
+            if (value.IsNull)
+                return value;
+
+            if (value.Value.Length <= maxLength)
+                return value;
+
+            if (valueOnTruncate != null)
+                return SqlTypeConverter.UseDefaultCollation(new SqlString(valueOnTruncate));
+
+            if (exceptionOnTruncate != null)
+                throw exceptionOnTruncate;
+
+            return SqlTypeConverter.UseDefaultCollation(new SqlString(value.Value.Substring(0, maxLength)));
         }
 
         private static EntityCollection ParseEntityCollection(SqlString value)
@@ -715,32 +857,40 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (value != null && value.GetType() == type)
                 return value;
 
-            var expression = (Expression)Expression.Constant(value);
+            var key = value.GetType().FullName + " -> " + type.FullName;
+            var conversion = _conversions.GetOrAdd(key, _ => CompileConversion(value.GetType(), type));
+            return conversion(value);
+        }
+
+        private static Func<object, object> CompileConversion(Type sourceType, Type destType)
+        {
+            var param = Expression.Parameter(typeof(object));
+            var expression = (Expression) Expression.Convert(param, sourceType);
 
             // Special case for converting from string to enum for metadata filters
-            if (expression.Type == typeof(SqlString) && type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>) && type.GetGenericArguments()[0].IsEnum)
+            if (expression.Type == typeof(SqlString) && destType.IsGenericType && destType.GetGenericTypeDefinition() == typeof(Nullable<>) && destType.GetGenericArguments()[0].IsEnum)
             {
                 var nullCheck = NullCheck(expression);
                 var nullValue = (Expression)Expression.Constant(null);
-                nullValue = Expression.Convert(nullValue, type);
+                nullValue = Expression.Convert(nullValue, destType);
                 var parsedValue = (Expression)Expression.Convert(expression, typeof(string));
-                parsedValue = Expr.Call(() => Enum.Parse(Expr.Arg<Type>(), Expr.Arg<string>(), Expr.Arg<bool>()), Expression.Constant(type.GetGenericArguments()[0]), parsedValue, Expression.Constant(true));
-                parsedValue = Expression.Convert(parsedValue, type);
+                parsedValue = Expr.Call(() => Enum.Parse(Expr.Arg<Type>(), Expr.Arg<string>(), Expr.Arg<bool>()), Expression.Constant(destType.GetGenericArguments()[0]), parsedValue, Expression.Constant(true));
+                parsedValue = Expression.Convert(parsedValue, destType);
                 expression = Expression.Condition(nullCheck, nullValue, parsedValue);
             }
-            else if (expression.Type == typeof(SqlString) && type.IsEnum)
+            else if (expression.Type == typeof(SqlString) && destType.IsEnum)
             {
                 expression = (Expression)Expression.Convert(expression, typeof(string));
-                expression = Expr.Call(() => Enum.Parse(Expr.Arg<Type>(), Expr.Arg<string>(), Expr.Arg<bool>()), Expression.Constant(type), expression, Expression.Constant(true));
-                expression = Expression.Convert(expression, type);
+                expression = Expr.Call(() => Enum.Parse(Expr.Arg<Type>(), Expr.Arg<string>(), Expr.Arg<bool>()), Expression.Constant(destType), expression, Expression.Constant(true));
+                expression = Expression.Convert(expression, destType);
             }
             else
             {
-                expression = Expression.Convert(expression, type);
+                expression = Expression.Convert(expression, destType);
             }
 
             expression = Expression.Convert(expression, typeof(object));
-            return Expression.Lambda<Func<object>>(expression).Compile()();
+            return Expression.Lambda<Func<object,object>>(expression, param).Compile();
         }
 
         /// <summary>

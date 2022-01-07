@@ -9,6 +9,7 @@ using System.ServiceModel;
 using System.Text.RegularExpressions;
 using System.Xml.Serialization;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
@@ -90,7 +91,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// The FetchXML query
         /// </summary>
         [Browsable(false)]
-        public FetchType FetchXml { get; set; }
+        public FetchXml.FetchType FetchXml { get; set; }
 
         /// <summary>
         /// The main &lt;entity&gt; node in the <see cref="FetchXml"/>
@@ -135,7 +136,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public bool ReturnFullSchema { get; set; }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
             PagesRetrieved = 0;
 
@@ -324,7 +325,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (entity.Attributes.TryGetValue(col.Key, out var value) && value != null)
                     sqlValue = SqlTypeConverter.NetToSqlType(DataSource, value);
                 else
-                    sqlValue = SqlTypeConverter.GetNullValue(col.Value);
+                    sqlValue = SqlTypeConverter.GetNullValue(col.Value.ToNetType(out _));
 
                 if (_primaryKeyColumns.TryGetValue(col.Key, out var logicalName) && sqlValue is SqlGuid guid)
                     sqlValue = new SqlEntityReference(DataSource, logicalName, guid);
@@ -416,9 +417,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         /// <param name="fetch">The FetchXML query object to convert</param>
         /// <returns>The string representation of the query</returns>
-        internal static string Serialize(FetchType fetch)
+        internal static string Serialize(FetchXml.FetchType fetch)
         {
-            var serializer = new XmlSerializer(typeof(FetchType));
+            var serializer = new XmlSerializer(typeof(FetchXml.FetchType));
 
             using (var writer = new StringWriter())
             using (var xmlWriter = System.Xml.XmlWriter.Create(writer, new System.Xml.XmlWriterSettings
@@ -441,7 +442,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Array.Empty<IDataExecutionPlanNode>();
         }
 
-        public override NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
             if (!dataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
@@ -699,7 +700,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private void AddSchemaAttribute(NodeSchema schema, string fullName, string simpleName, Type type)
         {
-            schema.Schema[fullName] = type;
+            schema.Schema[fullName] = type.ToSqlType();
 
             if (simpleName == null)
                 return;
@@ -714,12 +715,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 simpleColumnNameAliases.Add(fullName);
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
             return this;
         }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
         {
             if (!dataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
@@ -809,7 +810,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return items.OfType<FetchAttributeType>().Any() || items.OfType<allattributes>().Any();
         }
 
-        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
             if (FetchXml.aggregateSpecified && FetchXml.aggregate)
             {

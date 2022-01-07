@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -36,13 +37,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         [Category("Declare Variables")]
         [Description("The name and type of each variable to be declared")]
-        public IDictionary<string, Type> Variables { get; } = new Dictionary<string, Type>();
+        public IDictionary<string, DataTypeReference> Variables { get; } = new Dictionary<string, DataTypeReference>();
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
         {
         }
 
-        public string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        public string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
             _executionCount++;
 
@@ -51,14 +52,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 foreach (var variable in Variables)
                 {
                     parameterTypes[variable.Key] = variable.Value;
-                    parameterValues[variable.Key] = Activator.CreateInstance(variable.Value);
+                    parameterValues[variable.Key] = SqlTypeConverter.GetNullValue(variable.Value.ToNetType(out _));
                 }
             }
 
             return null;
         }
 
-        public IRootExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public IRootExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
             return this;
         }

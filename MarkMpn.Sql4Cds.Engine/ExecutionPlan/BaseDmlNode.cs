@@ -9,6 +9,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
@@ -100,7 +101,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
         /// <param name="parameterValues">A mapping of parameter names to their current values</param>
         /// <returns>A log message to display</returns>
-        public abstract string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues);
+        public abstract string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues);
 
         /// <summary>
         /// Attempts to fold this node into its source to simplify the query
@@ -109,7 +110,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="options"><see cref="IQueryExecutionOptions"/> to indicate how the query can be executed</param>
         /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
         /// <returns>The node that should be used in place of this node</returns>
-        public virtual IRootExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public virtual IRootExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
             if (Source is IDataExecutionPlanNode dataNode)
                 Source = dataNode.FoldQuery(dataSources, options, parameterTypes);
@@ -134,7 +135,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="parameterValues">A mapping of parameter names to their current values</param>
         /// <param name="schema">The schema of the data source</param>
         /// <returns>The entities to perform the DML operation on</returns>
-        protected List<Entity> GetDmlSourceEntities(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues, out NodeSchema schema)
+        protected List<Entity> GetDmlSourceEntities(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out NodeSchema schema)
         {
             List<Entity> entities;
 
@@ -153,8 +154,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 for (var i = 0; i < dataTable.Columns.Count; i++)
                 {
                     var col = dataTable.Columns[i];
-                    schema.Schema[col.ColumnName] = col.DataType;
-                    schema.Schema[i.ToString()] = col.DataType;
+                    schema.Schema[col.ColumnName] = col.DataType.ToSqlType();
+                    schema.Schema[i.ToString()] = col.DataType.ToSqlType();
                 }
 
                 entities = dataTable.Rows
@@ -214,7 +215,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var expr = (Expression)Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(sourceColumnName));
                 var originalExpr = expr;
 
-                if (sourceType == typeof(object))
+                if (sourceType.ToNetType(out _) == typeof(object))
                 {
                     // null literal
                     expr = Expression.Constant(null, destType);
@@ -231,7 +232,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         // Special case: intersect attributes can be simple guids
                         if (metadata.IsIntersect != true)
                         {
-                            if (sourceType == typeof(SqlEntityReference))
+                            if (sourceType.Name?.BaseIdentifier.Value == typeof(SqlEntityReference).FullName)
                             {
                                 expr = SqlTypeConverter.Convert(originalExpr, sourceType);
                                 convertedExpr = SqlTypeConverter.Convert(expr, typeof(EntityReference));

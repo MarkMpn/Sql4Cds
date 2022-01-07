@@ -1892,8 +1892,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var constant = AssertNode<ConstantScanNode>(filter.Source);
 
             var schema = constant.GetSchema(_dataSources, null);
-            Assert.AreEqual(typeof(SqlInt32), schema.Schema["a.ID"]);
-            Assert.AreEqual(typeof(SqlString), schema.Schema["a.name"]);
+            Assert.AreEqual(typeof(SqlInt32), schema.Schema["a.ID"].ToNetType(out _));
+            Assert.AreEqual(typeof(SqlString), schema.Schema["a.name"].ToNetType(out _));
         }
 
         [TestMethod]
@@ -3260,7 +3260,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var declare = AssertNode<DeclareVariablesNode>(plans[0]);
             Assert.AreEqual(1, declare.Variables.Count);
-            Assert.AreEqual(typeof(SqlInt32), declare.Variables["@test"]);
+            Assert.AreEqual(typeof(SqlInt32), declare.Variables["@test"].ToNetType(out _));
 
             var setVariable = AssertNode<AssignVariablesNode>(plans[1]);
             Assert.AreEqual(1, setVariable.Variables.Count);
@@ -3278,7 +3278,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var selectConstantScan = AssertNode<ConstantScanNode>(selectCompute.Source);
             Assert.AreEqual(1, selectConstantScan.Values.Count);
 
-            var parameterTypes = new Dictionary<string, Type>();
+            var parameterTypes = new Dictionary<string, DataTypeReference>();
             var parameterValues = new Dictionary<string, object>();
 
             foreach (var plan in plans)

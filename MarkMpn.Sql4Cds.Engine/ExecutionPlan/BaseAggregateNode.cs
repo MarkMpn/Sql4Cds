@@ -82,7 +82,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public IDataExecutionPlanNode Source { get; set; }
 
-        protected void InitializeAggregates(NodeSchema schema, IDictionary<string, Type> parameterTypes)
+        protected void InitializeAggregates(NodeSchema schema, IDictionary<string, DataTypeReference> parameterTypes)
         {
             foreach (var aggregate in Aggregates.Where(agg => agg.Value.SqlExpression != null))
             {
@@ -104,7 +104,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        protected void InitializePartitionedAggregates(NodeSchema schema, IDictionary<string, Type> parameterTypes)
+        protected void InitializePartitionedAggregates(NodeSchema schema, IDictionary<string, DataTypeReference> parameterTypes)
         {
             foreach (var aggregate in Aggregates)
             {
@@ -182,7 +182,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return values;
         }
 
-        public override NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
             var sourceSchema = Source.GetSchema(dataSources, parameterTypes);
             var schema = new NodeSchema();
@@ -224,7 +224,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         break;
                 }
 
-                schema.Schema[aggregate.Key] = aggregateType;
+                schema.Schema[aggregate.Key] = aggregateType.ToSqlType();
             }
 
             return schema;
@@ -277,7 +277,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return false;
         }
 
-        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
             if (GroupBy.Count == 0)
                 return 1;

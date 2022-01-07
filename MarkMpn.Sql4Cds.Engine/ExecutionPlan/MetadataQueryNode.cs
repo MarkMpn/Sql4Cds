@@ -7,6 +7,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
@@ -205,7 +206,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Description("The metadata query to be executed")]
         public EntityQueryExpression Query { get; } = new EntityQueryExpression();
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
         {
             _entityCols = new Dictionary<string, MetadataProperty>();
             _attributeCols = new Dictionary<string, AttributeProperty>();
@@ -295,17 +296,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
             return 100;
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
             return this;
         }
 
-        public override NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
             var schema = new NodeSchema();
             var childCount = 0;
@@ -319,7 +320,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 foreach (var prop in entityProps)
                 {
-                    schema.Schema[$"{EntityAlias}.{prop.SqlName}"] = prop.Type;
+                    schema.Schema[$"{EntityAlias}.{prop.SqlName}"] = prop.Type.ToSqlType();
 
                     if (!schema.Aliases.TryGetValue(prop.SqlName, out var aliases))
                     {
@@ -342,7 +343,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 foreach (var prop in attributeProps)
                 {
-                    schema.Schema[$"{AttributeAlias}.{prop.SqlName}"] = prop.Type;
+                    schema.Schema[$"{AttributeAlias}.{prop.SqlName}"] = prop.Type.ToSqlType();
 
                     if (!schema.Aliases.TryGetValue(prop.SqlName, out var aliases))
                     {
@@ -366,7 +367,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 foreach (var prop in relationshipProps)
                 {
-                    schema.Schema[$"{OneToManyRelationshipAlias}.{prop.SqlName}"] = prop.Type;
+                    schema.Schema[$"{OneToManyRelationshipAlias}.{prop.SqlName}"] = prop.Type.ToSqlType();
 
                     if (!schema.Aliases.TryGetValue(prop.SqlName, out var aliases))
                     {
@@ -390,7 +391,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 foreach (var prop in relationshipProps)
                 {
-                    schema.Schema[$"{ManyToOneRelationshipAlias}.{prop.SqlName}"] = prop.Type;
+                    schema.Schema[$"{ManyToOneRelationshipAlias}.{prop.SqlName}"] = prop.Type.ToSqlType();
 
                     if (!schema.Aliases.TryGetValue(prop.SqlName, out var aliases))
                     {
@@ -414,7 +415,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 foreach (var prop in relationshipProps)
                 {
-                    schema.Schema[$"{ManyToManyRelationshipAlias}.{prop.SqlName}"] = prop.Type;
+                    schema.Schema[$"{ManyToManyRelationshipAlias}.{prop.SqlName}"] = prop.Type.ToSqlType();
 
                     if (!schema.Aliases.TryGetValue(prop.SqlName, out var aliases))
                     {
@@ -518,7 +519,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Array.Empty<IDataExecutionPlanNode>();
         }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
             if (MetadataSource.HasFlag(MetadataSource.Attribute))
             {

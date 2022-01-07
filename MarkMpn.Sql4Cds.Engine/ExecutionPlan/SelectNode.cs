@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata.Query;
 
@@ -46,7 +47,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override int ExecutionCount => _executionCount;
 
-        public DataTable Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        public DataTable Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
             _executionCount++;
             var startTime = DateTime.Now;
@@ -62,7 +63,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (!schema.ContainsColumn(sourceName, out sourceName))
                         throw new QueryExecutionException($"Missing column {col.SourceColumn}") { Node = this };
 
-                    var dataCol = dataTable.Columns.Add(col.PhysicalOutputColumn, schema.Schema[sourceName]);
+                    var dataCol = dataTable.Columns.Add(col.PhysicalOutputColumn, schema.Schema[sourceName].ToNetType(out _));
                     dataCol.Caption = col.OutputColumn;
                 }
 
@@ -95,7 +96,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        public IRootExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public IRootExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
             Source = Source.FoldQuery(dataSources, options, parameterTypes);
             Source.Parent = this;
@@ -126,7 +127,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return this;
         }
 
-        internal static void FoldFetchXmlColumns(IDataExecutionPlanNode source, List<SelectColumn> columnSet, IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        internal static void FoldFetchXmlColumns(IDataExecutionPlanNode source, List<SelectColumn> columnSet, IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
             if (source is FetchXmlScan fetchXml)
             {
@@ -249,12 +250,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public void ExpandWildcardColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public void ExpandWildcardColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
             ExpandWildcardColumns(Source, ColumnSet, dataSources, parameterTypes);
         }
 
-        internal static void ExpandWildcardColumns(IDataExecutionPlanNode source, List<SelectColumn> columnSet, IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        internal static void ExpandWildcardColumns(IDataExecutionPlanNode source, List<SelectColumn> columnSet, IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
             // Expand any AllColumns
             if (columnSet.Any(col => col.AllColumns))
@@ -285,12 +286,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        IRootExecutionPlanNode IRootExecutionPlanNode.FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        IRootExecutionPlanNode IRootExecutionPlanNode.FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
             return this.FoldQuery(dataSources, options, parameterTypes);
         }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
         {
             foreach (var col in ColumnSet.Select(c => c.SourceColumn + (c.AllColumns ? ".*" : "")))
             {

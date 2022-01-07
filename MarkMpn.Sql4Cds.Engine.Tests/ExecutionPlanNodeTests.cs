@@ -31,7 +31,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 },
                 Schema =
                 {
-                    ["firstname"] = typeof(SqlString)
+                    ["firstname"] = typeof(SqlString).ToSqlType()
                 }
             };
 
@@ -55,7 +55,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["firstname"] = typeof(SqlString)
+                        ["firstname"] = typeof(SqlString).ToSqlType()
                     }
                 },
                 Filter = new BooleanComparisonExpression
@@ -95,8 +95,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["f.key"] = typeof(SqlInt32),
-                        ["f.firstname"] = typeof(SqlString)
+                        ["f.key"] = typeof(SqlInt32).ToSqlType(),
+                        ["f.firstname"] = typeof(SqlString).ToSqlType()
                     }
                 },
                 LeftAttribute = new ColumnReferenceExpression
@@ -116,8 +116,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["l.key"] = typeof(SqlInt32),
-                        ["l.lastname"] = typeof(SqlString)
+                        ["l.key"] = typeof(SqlInt32).ToSqlType(),
+                        ["l.lastname"] = typeof(SqlString).ToSqlType()
                     }
                 },
                 RightAttribute = new ColumnReferenceExpression
@@ -153,8 +153,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["key"] = typeof(SqlInt32),
-                        ["firstname"] = typeof(SqlString)
+                        ["key"] = typeof(SqlInt32).ToSqlType(),
+                        ["firstname"] = typeof(SqlString).ToSqlType()
                     },
                     Alias = "f"
                 },
@@ -175,8 +175,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["key"] = typeof(SqlInt32),
-                        ["lastname"] = typeof(SqlString)
+                        ["key"] = typeof(SqlInt32).ToSqlType(),
+                        ["lastname"] = typeof(SqlString).ToSqlType()
                     },
                     Alias = "l"
                 },
@@ -215,8 +215,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["key"] = typeof(SqlInt32),
-                        ["firstname"] = typeof(SqlString)
+                        ["key"] = typeof(SqlInt32).ToSqlType(),
+                        ["firstname"] = typeof(SqlString).ToSqlType()
                     },
                     Alias = "f"
                 },
@@ -237,8 +237,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["key"] = typeof(SqlInt32),
-                        ["lastname"] = typeof(SqlString)
+                        ["key"] = typeof(SqlInt32).ToSqlType(),
+                        ["lastname"] = typeof(SqlString).ToSqlType()
                     },
                     Alias = "l"
                 },
@@ -303,8 +303,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["value1"] = typeof(SqlInt32),
-                        ["value2"] = typeof(SqlInt32)
+                        ["value1"] = typeof(SqlInt32).ToSqlType(),
+                        ["value2"] = typeof(SqlInt32).ToSqlType()
                     }
                 },
                 Columns =
@@ -353,8 +353,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["value1"] = typeof(SqlInt32),
-                        ["value2"] = typeof(SqlInt32)
+                        ["value1"] = typeof(SqlInt32).ToSqlType(),
+                        ["value2"] = typeof(SqlInt32).ToSqlType()
                     }
                 }
             };
@@ -382,8 +382,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["value1"] = typeof(SqlString),
-                        ["value2"] = typeof(SqlInt32)
+                        ["value1"] = typeof(SqlString).ToSqlType(),
+                        ["value2"] = typeof(SqlInt32).ToSqlType()
                     }
                 }
             };
@@ -423,9 +423,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["value1"] = typeof(SqlString),
-                        ["value2"] = typeof(SqlInt32),
-                        ["expectedorder"] = typeof(SqlInt32)
+                        ["value1"] = typeof(SqlString).ToSqlType(),
+                        ["value2"] = typeof(SqlInt32).ToSqlType(),
+                        ["expectedorder"] = typeof(SqlInt32).ToSqlType()
                     }
                 }
             };
@@ -467,9 +467,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["value1"] = typeof(SqlString),
-                        ["value2"] = typeof(SqlInt32),
-                        ["expectedorder"] = typeof(SqlInt32)
+                        ["value1"] = typeof(SqlString).ToSqlType(),
+                        ["value2"] = typeof(SqlInt32).ToSqlType(),
+                        ["expectedorder"] = typeof(SqlInt32).ToSqlType()
                     }
                 }
             };
@@ -493,7 +493,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 },
                 Schema =
                 {
-                    ["value1"] = typeof(SqlInt32)
+                    ["value1"] = typeof(SqlInt32).ToSqlType()
                 }
             };
 

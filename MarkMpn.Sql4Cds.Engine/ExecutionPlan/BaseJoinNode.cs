@@ -70,7 +70,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             else
             {
                 foreach (var attr in leftSchema.Schema)
-                    merged[attr.Key] = SqlTypeConverter.GetNullValue(attr.Value);
+                    merged[attr.Key] = SqlTypeConverter.GetNullValue(attr.Value.ToNetType(out _));
             }
 
             if (rightEntity != null)
@@ -81,13 +81,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             else
             {
                 foreach (var attr in rightSchema.Schema)
-                    merged[attr.Key] = SqlTypeConverter.GetNullValue(attr.Value);
+                    merged[attr.Key] = SqlTypeConverter.GetNullValue(attr.Value.ToNetType(out _));
             }
 
             foreach (var definedValue in DefinedValues)
             {
                 if (rightEntity == null)
-                    merged[definedValue.Key] = SqlTypeConverter.GetNullValue(rightSchema.Schema[definedValue.Value]);
+                    merged[definedValue.Key] = SqlTypeConverter.GetNullValue(rightSchema.Schema[definedValue.Value].ToNetType(out _));
                 else
                     merged[definedValue.Key] = rightEntity[definedValue.Value];
             }
@@ -101,12 +101,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return RightSource;
         }
 
-        public override NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
             return GetSchema(dataSources, parameterTypes, false);
         }
 
-        protected virtual NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, bool includeSemiJoin)
+        protected virtual NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, bool includeSemiJoin)
         {
             var outerSchema = LeftSource.GetSchema(dataSources, parameterTypes);
             var innerSchema = GetRightSchema(dataSources, parameterTypes);
@@ -143,7 +143,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return schema;
         }
 
-        protected virtual NodeSchema GetRightSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        protected virtual NodeSchema GetRightSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
             return RightSource.GetSchema(dataSources, parameterTypes);
         }

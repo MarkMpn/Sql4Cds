@@ -863,7 +863,7 @@ namespace MarkMpn.Sql4Cds
                 converter.TDSEndpointAvailable = true;
 
             var queries = converter.Build(args.Sql);
-            var parameterTypes = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase);
+            var parameterTypes = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
             var parameterValues = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
 
             if (args.Execute)

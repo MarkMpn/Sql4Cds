@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -19,7 +20,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// A mapping of column names to the types of data stored in them
         /// </summary>
-        public IDictionary<string, Type> Schema { get; set; } = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase);
+        public IDictionary<string, DataTypeReference> Schema { get; set; } = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
         /// A mapping of names that can be used as column aliases to the list of columns the name could refer to

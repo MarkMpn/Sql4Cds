@@ -10,6 +10,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Xml.Serialization;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
 
@@ -35,19 +36,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private double _progress;
         private Queue<Partition> _queue;
 
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
             Source = Source.FoldQuery(dataSources, options, parameterTypes);
             Source.Parent = this;
             return this;
         }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
         {
             // All required columns must already have been added during the original folding of the HashMatchAggregateNode
         }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
             var groups = new Dictionary<GroupingKey, Dictionary<string, AggregateFunction>>();
             var schema = Source.GetSchema(dataSources, parameterTypes);
@@ -78,10 +79,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             });
 
-            var partitionParameterTypes = new Dictionary<string, Type>
+            var partitionParameterTypes = new Dictionary<string, DataTypeReference>
             {
-                ["@PartitionStart"] = typeof(SqlDateTime),
-                ["@PartitionEnd"] = typeof(SqlDateTime)
+                ["@PartitionStart"] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.DateTime },
+                ["@PartitionEnd"] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.DateTime }
             };
 
             var partitionParameterValues = new Dictionary<string, object>
@@ -179,7 +180,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             });
         }
 
-        private void ExecuteAggregate(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues, Dictionary<GroupingKey, Dictionary<string, AggregateFunction>> groups, List<string> groupByCols, FetchXmlScan fetchXmlNode, SqlDateTime minValue, SqlDateTime maxValue)
+        private void ExecuteAggregate(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, Dictionary<GroupingKey, Dictionary<string, AggregateFunction>> groups, List<string> groupByCols, FetchXmlScan fetchXmlNode, SqlDateTime minValue, SqlDateTime maxValue)
         {
             parameterValues["@PartitionStart"] = minValue;
             parameterValues["@PartitionEnd"] = maxValue;
@@ -202,7 +203,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private SqlDateTime GetMinMaxKey(FetchXmlScan fetchXmlNode, IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues, bool max)
+        private SqlDateTime GetMinMaxKey(FetchXmlScan fetchXmlNode, IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, bool max)
         {
             // Create a new FetchXmlScan node with a copy of the original query
             var minMaxNode = new FetchXmlScan
