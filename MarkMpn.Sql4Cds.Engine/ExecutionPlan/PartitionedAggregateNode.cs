@@ -142,13 +142,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 #endif
 
-            Parallel.For(1, maxDop, index =>
+            Parallel.For(0, maxDop, index =>
             {
                 var ds = new Dictionary<string, DataSource>
                 {
                     [fetchXmlNode.DataSource] = new DataSource
                     {
-                        Connection = svc.Clone(),
+                        Connection = svc?.Clone() ?? org,
                         Metadata = dataSources[fetchXmlNode.DataSource].Metadata,
                         Name = fetchXmlNode.DataSource,
                         TableSizeCache = dataSources[fetchXmlNode.DataSource].TableSizeCache
