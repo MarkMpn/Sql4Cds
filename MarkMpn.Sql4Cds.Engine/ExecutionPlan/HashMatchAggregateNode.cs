@@ -185,6 +185,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             canUseFetchXmlAggregate = false;
                             break;
                         }
+
+                        // FetchXML dategrouping always uses local timezone. If we're using UTC we can't use it
+                        if (!options.UseLocalTimeZone)
+                        {
+                            canUseFetchXmlAggregate = false;
+                            break;
+                        }
                     }
                 }
 
