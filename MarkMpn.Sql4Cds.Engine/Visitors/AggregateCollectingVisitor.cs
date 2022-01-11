@@ -73,6 +73,9 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
         private bool IsAggregate(FunctionCall func)
         {
+            if (func.OverClause != null)
+                return false;
+
             if (func.FunctionName.Value.Equals("SUM", StringComparison.OrdinalIgnoreCase) ||
                 func.FunctionName.Value.Equals("MIN", StringComparison.OrdinalIgnoreCase) ||
                 func.FunctionName.Value.Equals("MAX", StringComparison.OrdinalIgnoreCase) ||

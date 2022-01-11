@@ -531,6 +531,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private static Expression ToExpression(this FunctionCall func, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, Type> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
         {
+            if (func.OverClause != null)
+                throw new NotSupportedQueryFragmentException("Window functions are not supported", func);
+
             // Find the method to call and get the expressions for the parameter values
             var method = GetMethod(func, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out var paramValues);
 
