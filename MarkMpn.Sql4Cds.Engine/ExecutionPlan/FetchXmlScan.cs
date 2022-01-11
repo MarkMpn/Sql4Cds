@@ -70,6 +70,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
+        public class InvalidPagingException : Exception
+        {
+            public InvalidPagingException(string message) : base(message)
+            {
+            }
+        }
+
         private Dictionary<string, ParameterizedCondition> _parameterizedConditions;
         private HashSet<string> _entityNameGroupings;
         private Dictionary<string, string> _primaryKeyColumns;
@@ -197,6 +204,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (AllPages && FetchXml.aggregateSpecified && FetchXml.aggregate && count == 5000 && FetchXml.top != "5000" && !res.MoreRecords)
                 throw new FaultException<OrganizationServiceFault>(new OrganizationServiceFault { ErrorCode = -2147164125, Message = "AggregateQueryRecordLimitExceeded" });
 
+            // Aggregate queries with grouping on lookup columns don't provide reliable paging as the sorting is done by the name of the related
+            // record, not the guid. Non-aggregate queries can also be sorted on the primary key as a tie-breaker.
+            if (res.MoreRecords && FetchXml.aggregateSpecified && FetchXml.aggregate && ContainsSortOnLookupAttribute(dataSource.Metadata, Entity.name, Entity.Items, out var lookupAttr))
+                throw new InvalidPagingException($"{lookupAttr.name} is a lookup attribute - paging with a sort order on this attribute is not reliable.");
+
             foreach (var entity in res.Entities)
             {
                 OnRetrievedEntity(entity, schema, options, dataSource.Metadata);
@@ -229,6 +241,42 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 count += nextPage.Entities.Count;
                 res = nextPage;
             }
+        }
+
+        private bool ContainsSortOnLookupAttribute(IAttributeMetadataCache metadata, string logicalName, object[] items, out FetchAttributeType lookupAttr)
+        {
+            if (items == null)
+            {
+                lookupAttr = null;
+                return false;
+            }
+
+            foreach (var order in items.OfType<FetchOrderType>())
+            {
+                if (!String.IsNullOrEmpty(order.alias))
+                    lookupAttr = items.OfType<FetchAttributeType>().FirstOrDefault(attr => attr.alias.Equals(order.alias, StringComparison.OrdinalIgnoreCase));
+                else
+                    lookupAttr = items.OfType<FetchAttributeType>().FirstOrDefault(attr => attr.name.Equals(order.attribute, StringComparison.OrdinalIgnoreCase));
+
+                if (lookupAttr == null)
+                    continue;
+
+                var meta = metadata[logicalName];
+                var attrName = lookupAttr.name;
+                var attrMetadata = meta.Attributes.SingleOrDefault(a => a.LogicalName.Equals(attrName, StringComparison.OrdinalIgnoreCase));
+
+                if (attrMetadata is LookupAttributeMetadata)
+                    return true;
+            }
+
+            foreach (var linkEntity in items.OfType<FetchLinkEntityType>())
+            {
+                if (ContainsSortOnLookupAttribute(metadata, linkEntity.name, linkEntity.Items, out lookupAttr))
+                    return true;
+            }
+
+            lookupAttr = null;
+            return false;
         }
 
         private void OnRetrievedEntity(Entity entity, INodeSchema schema, IQueryExecutionOptions options, IAttributeMetadataCache metadata)
