@@ -185,6 +185,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             canUseFetchXmlAggregate = false;
                             break;
                         }
+
+                        // FetchXML dategrouping always uses local timezone. If we're using UTC we can't use it
+                        if (!options.UseLocalTimeZone)
+                        {
+                            canUseFetchXmlAggregate = false;
+                            break;
+                        }
                     }
                 }
 
@@ -506,7 +513,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     TrySource = firstTry,
                     CatchSource = nonFetchXmlAggregate,
-                    ExceptionFilter = ex => (ex is QueryExecutionException qee && qee.InnerException is PartitionedAggregateNode.PartitionOverflowException) || (GetOrganizationServiceFault(ex, out var fault) && IsAggregateQueryRetryable(fault))
+                    ExceptionFilter = ex => (ex is QueryExecutionException qee && (qee.InnerException is PartitionedAggregateNode.PartitionOverflowException || qee.InnerException is FetchXmlScan.InvalidPagingException)) || (GetOrganizationServiceFault(ex, out var fault) && IsAggregateQueryRetryable(fault))
                 };
 
                 firstTry.Parent = tryCatch;

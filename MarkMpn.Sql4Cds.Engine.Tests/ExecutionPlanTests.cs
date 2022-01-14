@@ -48,7 +48,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         bool IQueryExecutionOptions.ColumnComparisonAvailable => true;
 
-        bool IQueryExecutionOptions.UseLocalTimeZone => false;
+        bool IQueryExecutionOptions.UseLocalTimeZone => true;
 
         List<JoinOperator> IQueryExecutionOptions.JoinOperatorsAvailable => _supportedJoins;
 
@@ -3305,6 +3305,18 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <attribute name='name' />
                     </entity>
                 </fetch>");
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void WindowFunctionsNotSupported()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT COUNT(accountid) OVER(PARTITION BY accountid) AS test FROM account";
+
+            planBuilder.Build(query);
         }
     }
 }

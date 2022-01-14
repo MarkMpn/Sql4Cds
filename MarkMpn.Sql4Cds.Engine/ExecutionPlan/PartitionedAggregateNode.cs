@@ -142,80 +142,90 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 #endif
 
-            Parallel.For(1, maxDop, index =>
+            try
             {
-                var ds = new Dictionary<string, DataSource>
+                Parallel.For(0, maxDop, index =>
                 {
-                    [fetchXmlNode.DataSource] = new DataSource
+                    var ds = new Dictionary<string, DataSource>
                     {
-                        Connection = svc.Clone(),
-                        Metadata = dataSources[fetchXmlNode.DataSource].Metadata,
-                        Name = fetchXmlNode.DataSource,
-                        TableSizeCache = dataSources[fetchXmlNode.DataSource].TableSizeCache
-                    }
-                };
+                        [fetchXmlNode.DataSource] = new DataSource
+                        {
+                            Connection = svc?.Clone() ?? org,
+                            Metadata = dataSources[fetchXmlNode.DataSource].Metadata,
+                            Name = fetchXmlNode.DataSource,
+                            TableSizeCache = dataSources[fetchXmlNode.DataSource].TableSizeCache
+                        }
+                    };
 
-                var fetch = new FetchXmlScan
-                {
-                    Alias = fetchXmlNode.Alias,
-                    DataSource = fetchXmlNode.DataSource,
-                    FetchXml = CloneFetchXml(fetchXmlNode.FetchXml),
-                    Parent = this
-                };
-
-                var partitionParameterValues = new Dictionary<string, object>
-                {
-                    ["@PartitionStart"] = minKey,
-                    ["@PartitionEnd"] = maxKey
-                };
-
-                if (parameterValues != null)
-                {
-                    foreach (var kvp in parameterValues)
-                        partitionParameterValues[kvp.Key] = kvp.Value;
-                }
-
-                foreach (var partition in _queue.GetConsumingEnumerable())
-                {
-                    try
+                    var fetch = new FetchXmlScan
                     {
-                        // Execute the query for this partition
-                        ExecuteAggregate(ds, options, partitionParameterTypes, partitionParameterValues, aggregates, groups, fetch, partition.MinValue, partition.MaxValue);
+                        Alias = fetchXmlNode.Alias,
+                        DataSource = fetchXmlNode.DataSource,
+                        FetchXml = CloneFetchXml(fetchXmlNode.FetchXml),
+                        Parent = this
+                    };
 
-                        lock (_lock)
-                        {
-                            _progress += partition.Percentage;
-                            options.Progress(0, $"Partitioning {GetDisplayName(0, meta)} ({_progress:P0})...");
-                        }
-
-                        if (Interlocked.Decrement(ref _pendingPartitions) == 0)
-                            _queue.CompleteAdding();
-                    }
-                    catch (Exception ex)
+                    var partitionParameterValues = new Dictionary<string, object>
                     {
-                        if (!GetOrganizationServiceFault(ex, out var fault))
-                        {
-                            _queue.CompleteAdding();
-                            throw;
-                        }
+                        ["@PartitionStart"] = minKey,
+                        ["@PartitionEnd"] = maxKey
+                    };
 
-                        if (!IsAggregateQueryLimitExceeded(fault))
-                        {
-                            _queue.CompleteAdding();
-                            throw;
-                        }
-
-                        SplitPartition(partition);
+                    if (parameterValues != null)
+                    {
+                        foreach (var kvp in parameterValues)
+                            partitionParameterValues[kvp.Key] = kvp.Value;
                     }
-                }
 
-                // Merge the stats from this clone of the FetchXML node so we can still see total number of executions etc.
-                // in the main query plan.
-                lock (fetchXmlNode)
-                {
-                    fetchXmlNode.MergeStatsFrom(fetch);
-                }
-            });
+                    foreach (var partition in _queue.GetConsumingEnumerable())
+                    {
+                        try
+                        {
+                            // Execute the query for this partition
+                            ExecuteAggregate(ds, options, partitionParameterTypes, partitionParameterValues, aggregates, groups, fetch, partition.MinValue, partition.MaxValue);
+
+                            lock (_lock)
+                            {
+                                _progress += partition.Percentage;
+                                options.Progress(0, $"Partitioning {GetDisplayName(0, meta)} ({_progress:P0})...");
+                            }
+
+                            if (Interlocked.Decrement(ref _pendingPartitions) == 0)
+                                _queue.CompleteAdding();
+                        }
+                        catch (Exception ex)
+                        {
+                            lock (_queue)
+                            {
+                                if (!GetOrganizationServiceFault(ex, out var fault))
+                                {
+                                    _queue.CompleteAdding();
+                                    throw;
+                                }
+
+                                if (!IsAggregateQueryLimitExceeded(fault))
+                                {
+                                    _queue.CompleteAdding();
+                                    throw;
+                                }
+
+                                SplitPartition(partition);
+                            }
+                        }
+                    }
+
+                    // Merge the stats from this clone of the FetchXML node so we can still see total number of executions etc.
+                    // in the main query plan.
+                    lock (fetchXmlNode)
+                    {
+                        fetchXmlNode.MergeStatsFrom(fetch);
+                    }
+                });
+            }
+            catch (AggregateException aggEx)
+            {
+                throw aggEx.InnerExceptions[0];
+            }
 
             foreach (var group in groups)
             {
@@ -233,6 +243,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private void SplitPartition(Partition partition)
         {
+            if (_queue.IsAddingCompleted)
+                return;
+
             // Fail if we get stuck on a particularly dense partition. If there's > 50K records in a 10 second window we probably
             // won't be able to split it successfully
             if (partition.MaxValue.Value < partition.MinValue.Value.AddSeconds(10))
