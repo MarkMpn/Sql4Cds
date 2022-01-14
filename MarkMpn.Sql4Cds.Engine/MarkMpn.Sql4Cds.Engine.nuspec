@@ -11,18 +11,9 @@
     <iconUrl>https://markcarrington.dev/sql4cds-icon/</iconUrl>
     <description>Convert SQL queries to FetchXml and execute them against Dataverse / D365</description>
     <summary>Convert SQL queries to FetchXml and execute them against Dataverse / D365</summary>
-    <releaseNotes>Added .NET Core version
-Improved aggregate performance with automatic partitioning
-Reduced attributes retrieved to process COUNT(*) queries
-Fixed GROUP BY and aggregates on virtual attributes
-Fixed retrieving file attributes
-Fixed GROUP BY and ORDER BY on multi-select picklist fields
-Fixed errors when using LIKE queries on non-string fields
-Fixed errors when using filters on party list fields
-Fixed running queries with more than 10 joins
-Fixed DISTINCT with repeated attributes
-Fixed use of non-FetchXML functions in WHERE clause
-Fixed use of query derived tables with aggregates
+    <releaseNotes>Improved aggregate results when grouping by lookup columns
+Detect use of window functions
+Fixed use of DATEPART groupings when using UTC timezone
     </releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>
