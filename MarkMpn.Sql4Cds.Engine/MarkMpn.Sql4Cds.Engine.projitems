@@ -1,0 +1,112 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <MSBuildAllProjects Condition="'$(MSBuildVersion)' == '' Or '$(MSBuildVersion)' &lt; '16.0'">$(MSBuildAllProjects);$(MSBuildThisFileFullPath)</MSBuildAllProjects>
+    <HasSharedItems>true</HasSharedItems>
+    <SharedGUID>bcf89341-e1a6-4106-9c12-1e15c9e7c58b</SharedGUID>
+  </PropertyGroup>
+  <PropertyGroup Label="Configuration">
+    <Import_RootNamespace>MarkMpn.Sql4Cds.Engine</Import_RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)AttributeMetadataCache.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)DataSource.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)DisconnectedException.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlanBuilder.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlanOptimizer.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\Aggregate.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\AliasNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\AssertNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\AssignVariablesNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\BaseAggregateNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\BaseDataNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\BaseDmlNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\BaseJoinNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\BaseNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\BulkDeleteJobNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ComputeScalarNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ConcatenateNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ConstantScanNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\DeclareVariablesNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\DeleteNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\DistinctEqualityComparer.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\DistinctNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ExecuteAsNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ExpressionExtensions.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\FetchXmlScan.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\FilterNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\FoldableJoinNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\GlobalOptionSetQueryNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\HashJoinNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\HashMatchAggregateNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\IDataExecutionPlanNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\IDataSetExecutionPlanNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\IDmlQueryExecutionPlanNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\IExecutionPlanNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\IFetchXmlExecutionPlanNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\IImpersonateRevertExecutionPlanNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\IndexSpoolNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\InsertNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\IRootExecutionPlanNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ISingleSourceExecutionPlanNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ITableSizeCache.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\MergeJoinNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\MetadataQueryNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\NestedLoopNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\NodeSchema.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\OffsetFetchNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\PartitionedAggregateNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\QueryExecutionException.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\RetrieveTotalRecordCountNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\RevertNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\SelectNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\SortNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\SqlNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\SqlTypeConverter.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\StreamAggregateNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\TableSpoolNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\Timer.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\TopNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\TryCatchNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\UpdateNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExpressionFunctions.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)FetchXml.cs">
+      <DependentUpon>FetchXml.xsd</DependentUpon>
+    </Compile>
+    <Compile Include="$(MSBuildThisFileDirectory)FetchXml2Sql.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)FetchXmlConditionMethods.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)FetchXmlElementComparer.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)FetchXmlExtensions.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)IAttributeMetadataCache.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)IQueryExecutionOptions.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)JoinConditionVisitor.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)MetadataExtensions.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)MetadataQueryExtensions.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)MetaMetadataCache.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)NotSupportedQueryFragmentException.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)PartialSuccessException.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)QueryParseException.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)SqlEntityReference.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)TableSizeCache.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)TSqlEndpoint.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)TSqlFragmentExtensions.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Visitors\AggregateCollectingVisitor.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Visitors\BooleanRewriteVisitor.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Visitors\ColumnCollectingVisitor.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Visitors\ExistsSubqueryVisitor.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Visitors\GroupValidationVisitor.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Visitors\InSubqueryVisitor.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Visitors\ParameterlessCollectingVisitor.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Visitors\ReplacePrimaryFunctionsVisitor.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Visitors\RewriteVisitor.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Visitors\RewriteVisitorBase.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Visitors\ScalarSubqueryVisitor.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Visitors\UpdateTargetVisitor.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Visitors\VariableCollectingVisitor.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)FetchXml.xsd">
+      <SubType>Designer</SubType>
+    </None>
+  </ItemGroup>
+</Project>

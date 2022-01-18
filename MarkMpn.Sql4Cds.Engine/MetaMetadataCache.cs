@@ -48,7 +48,7 @@ namespace MarkMpn.Sql4Cds.Engine
             _customMetadata["metadata." + optionsetNode.Alias] = SchemaToMetadata(optionsetSchema, optionsetNode.Alias);
         }
 
-        private static EntityMetadata SchemaToMetadata(NodeSchema schema, string alias)
+        private static EntityMetadata SchemaToMetadata(INodeSchema schema, string alias)
         {
             var metadata = new EntityMetadata
             {

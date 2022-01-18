@@ -23,6 +23,19 @@ namespace MarkMpn.Sql4Cds.SSMS
 
 ";
 
+        private static readonly Type QESQLExecutionOptions;
+        private static readonly Type QESQLBatch;
+        private static readonly Type ScriptExecutionResult;
+        private static readonly Type ScriptExecutionCompletedEventArgs;
+
+        static DisplaySQLResultsControlWrapper()
+        {
+            QESQLExecutionOptions = GetType("Microsoft.SqlServer.Management.QueryExecution.QESQLExecutionOptions, SQLEditors");
+            QESQLBatch = GetType("Microsoft.SqlServer.Management.QueryExecution.QESQLBatch, SQLEditors");
+            ScriptExecutionResult = GetType("Microsoft.SqlServer.Management.QueryExecution.ScriptExecutionResult, SQLEditors");
+            ScriptExecutionCompletedEventArgs = GetType("Microsoft.SqlServer.Management.QueryExecution.ScriptExecutionCompletedEventArgs, SQLEditors");
+        }
+
         public DisplaySQLResultsControlWrapper(object obj) : base(obj)
         {
         }
@@ -34,9 +47,9 @@ namespace MarkMpn.Sql4Cds.SSMS
 
             // Cancel method expects execution options to have been set at the start - create some default ones now
             var m_sqlExec = GetField(Target, "m_sqlExec");
-            var execOptions = Activator.CreateInstance(Type.GetType("Microsoft.SqlServer.Management.QueryExecution.QESQLExecutionOptions, SQLEditors"));
+            var execOptions = Activator.CreateInstance(QESQLExecutionOptions);
             SetField(m_sqlExec, "m_execOptions", execOptions);
-            var batch = Activator.CreateInstance(Type.GetType("Microsoft.SqlServer.Management.QueryExecution.QESQLBatch, SQLEditors"));
+            var batch = Activator.CreateInstance(QESQLBatch);
             SetField(m_sqlExec, "m_curBatch", batch);
             SetField(m_sqlExec, "m_batchConsumer", GetField(Target, "m_batchConsumer"));
 
@@ -84,8 +97,8 @@ namespace MarkMpn.Sql4Cds.SSMS
 
         public void OnSqlExecutionCompletedInt(int resultFlag)
         {
-            var result = Enum.ToObject(Type.GetType("Microsoft.SqlServer.Management.QueryExecution.ScriptExecutionResult, SQLEditors"), resultFlag);
-            var resultsArg = Activator.CreateInstance(Type.GetType("Microsoft.SqlServer.Management.QueryExecution.ScriptExecutionCompletedEventArgs, SQLEditors"), BindingFlags.CreateInstance | BindingFlags.NonPublic | BindingFlags.Instance, null, new[] { result }, null);
+            var result = Enum.ToObject(ScriptExecutionResult, resultFlag);
+            var resultsArg = Activator.CreateInstance(ScriptExecutionCompletedEventArgs, BindingFlags.CreateInstance | BindingFlags.NonPublic | BindingFlags.Instance, null, new[] { result }, null);
             InvokeMethod(Target, "OnSqlExecutionCompletedInt", Target, resultsArg);
         }
     }

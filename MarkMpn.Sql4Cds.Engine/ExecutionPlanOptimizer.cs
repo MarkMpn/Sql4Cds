@@ -31,11 +31,12 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Optimizes an execution plan
         /// </summary>
         /// <param name="node">The root node of the execution plan</param>
+        /// <param name="hints">Any optimizer hints to apply</param>
         /// <returns>A new execution plan node</returns>
-        public IRootExecutionPlanNode Optimize(IRootExecutionPlanNode node)
+        public IRootExecutionPlanNode Optimize(IRootExecutionPlanNode node, IList<OptimizerHint> hints)
         {
             // Move any additional operators down to the FetchXml
-            node = node.FoldQuery(DataSources, Options, null);
+            node = node.FoldQuery(DataSources, Options, null, hints);
 
             // Ensure all required columns are added to the FetchXML
             node.AddRequiredColumns(DataSources, null, new List<string>());

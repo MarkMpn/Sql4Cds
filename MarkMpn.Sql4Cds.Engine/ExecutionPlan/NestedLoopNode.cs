@@ -87,7 +87,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private IDictionary<string, DataTypeReference> GetInnerParameterTypes(NodeSchema leftSchema, IDictionary<string, DataTypeReference> parameterTypes)
+        private IDictionary<string, DataTypeReference> GetInnerParameterTypes(INodeSchema leftSchema, IDictionary<string, DataTypeReference> parameterTypes)
         {
             var innerParameterTypes = parameterTypes;
 
@@ -105,14 +105,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return innerParameterTypes;
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
             var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
-            LeftSource = LeftSource.FoldQuery(dataSources, options, parameterTypes);
+            LeftSource = LeftSource.FoldQuery(dataSources, options, parameterTypes, hints);
             LeftSource.Parent = this;
 
             var innerParameterTypes = GetInnerParameterTypes(leftSchema, parameterTypes);
-            RightSource = RightSource.FoldQuery(dataSources, options, innerParameterTypes);
+            RightSource = RightSource.FoldQuery(dataSources, options, innerParameterTypes, hints);
             RightSource.Parent = this;
             return this;
         }
@@ -146,7 +146,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             RightSource.AddRequiredColumns(dataSources, parameterTypes, rightColumns);
         }
 
-        protected override NodeSchema GetRightSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override INodeSchema GetRightSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
             var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
             var innerParameterTypes = GetInnerParameterTypes(leftSchema, parameterTypes);

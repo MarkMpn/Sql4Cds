@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.VisualStudio.Shell;
 
 namespace MarkMpn.Sql4Cds.SSMS
 {
@@ -14,7 +16,7 @@ namespace MarkMpn.Sql4Cds.SSMS
 
         public static void Check()
         {
-            Result = Task.Run(() =>
+            Result = System.Threading.Tasks.Task.Run(() =>
             {
                 var req = WebRequest.CreateHttp("https://markcarrington.dev/sql4cds-version.txt");
 
@@ -24,6 +26,10 @@ namespace MarkMpn.Sql4Cds.SSMS
                 {
                     var s = reader.ReadToEnd();
                     var version = new Version(s);
+
+                    var currentVersion = Assembly.GetExecutingAssembly().GetName().Version;
+                    if (version > currentVersion)
+                        VsShellUtilities.LogWarning("SQL 4 CDS", $"Updated version available. Current version {currentVersion}, latest version {version}");
 
                     return version;
                 }

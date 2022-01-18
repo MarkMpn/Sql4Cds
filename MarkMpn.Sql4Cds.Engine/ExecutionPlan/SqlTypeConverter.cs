@@ -283,6 +283,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (expr.Type != targetType)
                 expr = Convert(expr, targetType);
 
+            if (dataType == null)
+                return expr;
+
             if (dataType.SqlDataTypeOption == SqlDataTypeOption.Date)
             {
                 // Remove the time part of the DateTime value

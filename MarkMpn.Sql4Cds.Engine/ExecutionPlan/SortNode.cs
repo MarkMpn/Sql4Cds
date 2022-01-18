@@ -52,18 +52,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 IOrderedEnumerable<Entity> sortedSource;
 
                 if (Sorts[0].SortOrder == SortOrder.Descending)
-                    sortedSource = source.OrderByDescending(e => expressions[0](e, parameterValues, options), CaseInsensitiveObjectComparer.Instance);
+                    sortedSource = source.OrderByDescending(e => expressions[0](e, parameterValues, options));
                 else
-                    sortedSource = source.OrderBy(e => expressions[0](e, parameterValues, options), CaseInsensitiveObjectComparer.Instance);
+                    sortedSource = source.OrderBy(e => expressions[0](e, parameterValues, options));
 
                 for (var i = 1; i < Sorts.Count; i++)
                 {
                     var expr = expressions[i];
 
                     if (Sorts[i].SortOrder == SortOrder.Descending)
-                        sortedSource = sortedSource.ThenByDescending(e => expr(e, parameterValues, options), CaseInsensitiveObjectComparer.Instance);
+                        sortedSource = sortedSource.ThenByDescending(e => expr(e, parameterValues, options));
                     else
-                        sortedSource = sortedSource.ThenBy(e => expr(e, parameterValues, options), CaseInsensitiveObjectComparer.Instance);
+                        sortedSource = sortedSource.ThenBy(e => expr(e, parameterValues, options));
                 }
 
                 foreach (var entity in sortedSource)
@@ -74,9 +74,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // We have managed to fold some but not all of the sorts down to the source. Take records
                 // from the source that have equal values of the sorts that have been folded, then sort those
                 // subsets individually on the remaining sorts
+                var preSortedColumns = Sorts
+                    .Take(PresortedCount)
+                    .Select(s => { schema.ContainsColumn(((ColumnReferenceExpression)s.Expression).GetColumnName(), out var colName); return colName; })
+                    .ToList();
+
                 var subset = new List<Entity>();
-                var presortedValues = new List<object>(PresortedCount);
-                IEqualityComparer<object> comparer = CaseInsensitiveObjectComparer.Instance;
+                var comparer = new DistinctEqualityComparer(preSortedColumns);
 
                 foreach (var next in source)
                 {
@@ -87,33 +91,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         .ToList();
 
                     // If we've already got a subset to work on, check if this fits in the same subset
-                    if (subset.Count > 0)
+                    if (subset.Count > 0 && !comparer.Equals(subset[0], next))
                     {
-                        for (var i = 0; i < PresortedCount; i++)
-                        {
-                            var prevValue = presortedValues[i];
-                            var nextValue = nextSortedValues[i];
+                        // A value is different, so this record doesn't fit in the same subset. Sort the subset
+                        // by the remaining sorts and return the values from it
+                        SortSubset(subset, schema, parameterTypes, parameterValues, expressions, options);
 
-                            if (prevValue == null ^ nextValue == null ||
-                                !comparer.Equals(prevValue, nextValue))
-                            {
-                                // A value is different, so this record doesn't fit in the same subset. Sort the subset
-                                // by the remaining sorts and return the values from it
-                                SortSubset(subset, schema, parameterTypes, parameterValues, expressions, options);
+                        foreach (var entity in subset)
+                            yield return entity;
 
-                                foreach (var entity in subset)
-                                    yield return entity;
-
-                                // Now clear out the previous subset so we can move on to the next
-                                subset.Clear();
-                                presortedValues.Clear();
-                                break;
-                            }
-                        }
+                        // Now clear out the previous subset so we can move on to the next
+                        subset.Clear();
                     }
-
-                    if (subset.Count == 0)
-                        presortedValues.AddRange(nextSortedValues);
 
                     subset.Add(next);
                 }
@@ -126,7 +115,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private void SortSubset(List<Entity> subset, NodeSchema schema, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, List<Func<Entity, IDictionary<string, object>, IQueryExecutionOptions, object>> expressions, IQueryExecutionOptions options)
+        private void SortSubset(List<Entity> subset, INodeSchema schema, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, List<Func<Entity, IDictionary<string, object>, IQueryExecutionOptions, object>> expressions, IQueryExecutionOptions options)
         {
             // Simple case if there's no need to do any further sorting
             if (subset.Count <= 1)
@@ -144,7 +133,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 for (var i = 0; i < Sorts.Count - PresortedCount; i++)
                 {
-                    var comparison = CaseInsensitiveObjectComparer.Instance.Compare(xValues[i], yValues[i]);
+                    var comparison = ((IComparable)xValues[i]).CompareTo(yValues[i]);
 
                     if (comparison == 0)
                         continue;
@@ -164,14 +153,28 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        public override NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
+        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
-            return Source.GetSchema(dataSources, parameterTypes);
+            var schema = new NodeSchema(Source.GetSchema(dataSources, parameterTypes));
+            schema.SortOrder.Clear();
+
+            foreach (var sort in Sorts)
+            {
+                if (!(sort.Expression is ColumnReferenceExpression col))
+                    return schema;
+
+                if (!schema.ContainsColumn(col.GetColumnName(), out var colName))
+                    return schema;
+
+                schema.SortOrder.Add(colName);
+            }
+
+            return schema;
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
-            Source = Source.FoldQuery(dataSources, options, parameterTypes);
+            Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
 
             // These sorts will override any previous sort
             if (Source is SortNode prevSort)
@@ -220,11 +223,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
-            // Allow folding sorts around filters
+            // Allow folding sorts around filters and Compute Scalar (so long as sort is not on a calculated field)
+            var source = Source;
             var fetchXml = Source as FetchXmlScan;
 
-            if (fetchXml == null && Source is FilterNode filter)
-                fetchXml = filter.Source as FetchXmlScan;
+            while (source != null && fetchXml == null)
+            {
+                if (source is FilterNode filter)
+                    source = filter.Source;
+                else if (source is ComputeScalarNode computeScalar)
+                    source = computeScalar.Source;
+                else
+                    break;
+
+                fetchXml = source as FetchXmlScan;
+            }
 
             if (fetchXml != null)
             {
@@ -240,7 +253,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         linkEntity.Items = linkEntity.Items.Where(i => !(i is FetchOrderType)).ToArray();
                 }
 
-                var schema = Source.GetSchema(dataSources, parameterTypes);
+                var fetchSchema = fetchXml.GetSchema(dataSources, parameterTypes);
                 var entity = fetchXml.Entity;
                 var items = entity.Items;
 
@@ -249,7 +262,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (!(sortOrder.Expression is ColumnReferenceExpression sortColRef))
                         return this;
 
-                    if (!schema.ContainsColumn(sortColRef.GetColumnName(), out var sortCol))
+                    if (!fetchSchema.ContainsColumn(sortColRef.GetColumnName(), out var sortCol))
                         return this;
 
                     var parts = sortCol.Split('.');
@@ -289,6 +302,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             if (attribute is LookupAttributeMetadata || attribute is EnumAttributeMetadata || attribute is BooleanAttributeMetadata)
                                 return this;
 
+                            // Sorting on multi-select picklist fields isn't supported in FetchXML
+                            if (attribute is MultiSelectPicklistAttributeMetadata)
+                                return this;
+
                             // Sorts on the virtual ___name attribute should be applied to the underlying field
                             if (attribute == null && fetchSort.attribute.EndsWith("name") == true)
                             {
@@ -318,6 +335,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                             // Sorting on a lookup Guid column actually sorts by the associated name field, which isn't what we want
                             if (attribute is LookupAttributeMetadata || attribute is EnumAttributeMetadata || attribute is BooleanAttributeMetadata)
+                                return this;
+
+                            // Sorting on multi-select picklist fields isn't supported in FetchXML
+                            if (attribute is MultiSelectPicklistAttributeMetadata)
                                 return this;
 
                             // Sorts on the virtual ___name attribute should be applied to the underlying field
@@ -372,6 +393,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 return Source;
             }
+
+            // Check if the data is already sorted by any prefix of our sorts
+            var schema = Source.GetSchema(dataSources, parameterTypes);
+
+            for (var i = 0; i < Sorts.Count && i < schema.SortOrder.Count; i++)
+            {
+                if (!(Sorts[i].Expression is ColumnReferenceExpression col))
+                    return this;
+
+                if (!schema.ContainsColumn(col.GetColumnName(), out var colName))
+                    return this;
+
+                if (!schema.SortOrder[i].Equals(colName, StringComparison.OrdinalIgnoreCase))
+                    return this;
+
+                PresortedCount++;
+            }
+
+            if (PresortedCount == Sorts.Count)
+                return Source;
 
             return this;
         }

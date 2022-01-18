@@ -46,7 +46,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public override NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
+        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
             var schema = new NodeSchema();
             var sourceSchema = Sources[0].GetSchema(dataSources, parameterTypes);
@@ -62,11 +62,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Sources;
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
             for (var i = 0; i < Sources.Count; i++)
             {
-                Sources[i] = Sources[i].FoldQuery(dataSources, options, parameterTypes);
+                Sources[i] = Sources[i].FoldQuery(dataSources, options, parameterTypes, hints);
                 Sources[i].Parent = this;
             }
 

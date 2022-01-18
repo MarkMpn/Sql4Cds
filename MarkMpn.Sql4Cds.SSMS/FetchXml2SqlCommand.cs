@@ -125,88 +125,95 @@ namespace MarkMpn.Sql4Cds.SSMS
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
-            _objectExplorer.GetSelectedNodes(out var size, out var nodes);
-            var conStr = new SqlConnectionStringBuilder(nodes[0].Connection.ConnectionString);
-
-            var start = ActiveDocument.StartPoint.CreateEditPoint();
-            var fetch = start.GetText(ActiveDocument.EndPoint);
-
-            _ai.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = "FetchXML", ["Source"] = "SSMS" });
-
-            string sql;
-            IDictionary<string, object> paramValues;
-
-            if (Package.Settings.UseNativeSqlConversion)
+            try
             {
-                var convertReq = new OrganizationRequest("FetchXMLToSQL")
+                _objectExplorer.GetSelectedNodes(out var size, out var nodes);
+                var conStr = new SqlConnectionStringBuilder(nodes[0].Connection.ConnectionString);
+
+                var start = ActiveDocument.StartPoint.CreateEditPoint();
+                var fetch = start.GetText(ActiveDocument.EndPoint);
+
+                _ai.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = "FetchXML", ["Source"] = "SSMS" });
+
+                string sql;
+                IDictionary<string, object> paramValues;
+
+                if (Package.Settings.UseNativeSqlConversion)
                 {
-                    ["FetchXml"] = fetch,
-                    ["SubqueryCompatible"] = true
-                };
-                var convertResp = ConnectCDS(conStr).Execute(convertReq);
-                sql = (string)convertResp["Response"];
-                paramValues = new Dictionary<string, object>();
-            }
-            else
-            {
-                sql = FetchXml2Sql.Convert(ConnectCDS(conStr), GetMetadataCache(conStr), fetch, new FetchXml2SqlOptions
+                    var convertReq = new OrganizationRequest("FetchXMLToSQL")
+                    {
+                        ["FetchXml"] = fetch,
+                        ["SubqueryCompatible"] = true
+                    };
+                    var convertResp = ConnectCDS(conStr).Execute(convertReq);
+                    sql = (string)convertResp["Response"];
+                    paramValues = new Dictionary<string, object>();
+                }
+                else
                 {
-                    ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.SqlCalculations,
-                    UseParametersForLiterals = true,
-                    ConvertDateTimeToUtc = true
-                }, out paramValues);
-            }
-
-            ServiceCache.ScriptFactory.CreateNewBlankScript(ScriptType.Sql, ServiceCache.ScriptFactory.CurrentlyActiveWndConnectionInfo.UIConnectionInfo, null);
-
-            var editPoint = ActiveDocument.EndPoint.CreateEditPoint();
-            editPoint.Insert("/*\r\nCreated from query:\r\n\r\n");
-            editPoint.Insert(fetch);
-            editPoint.Insert("\r\n\r\n*/\r\n\r\n");
-
-            foreach (var param in paramValues)
-            {
-                string paramType;
-                var quoteValues = false;
-
-                switch (param.Value.GetType().Name)
-                {
-                    case "Int32":
-                        paramType = "int";
-                        break;
-
-                    case "Decimal":
-                        paramType = "numeric";
-                        break;
-
-                    case "DateTime":
-                        paramType = "datetime";
-                        quoteValues = true;
-                        break;
-
-                    default:
-                        paramType = "nvarchar(max)";
-                        quoteValues = true;
-                        break;
+                    sql = FetchXml2Sql.Convert(ConnectCDS(conStr), GetMetadataCache(conStr), fetch, new FetchXml2SqlOptions
+                    {
+                        ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.SqlCalculations,
+                        UseParametersForLiterals = true,
+                        ConvertDateTimeToUtc = true
+                    }, out paramValues);
                 }
 
-                editPoint.Insert($"DECLARE {param.Key} {paramType} = ");
+                ServiceCache.ScriptFactory.CreateNewBlankScript(ScriptType.Sql, ServiceCache.ScriptFactory.CurrentlyActiveWndConnectionInfo.UIConnectionInfo, null);
 
-                var value = param.Value.ToString();
+                var editPoint = ActiveDocument.EndPoint.CreateEditPoint();
+                editPoint.Insert("/*\r\nCreated from query:\r\n\r\n");
+                editPoint.Insert(fetch);
+                editPoint.Insert("\r\n\r\n*/\r\n\r\n");
 
-                if (param.Value is DateTime dt)
-                    value = dt.ToString("s");
+                foreach (var param in paramValues)
+                {
+                    string paramType;
+                    var quoteValues = false;
 
-                if (quoteValues)
-                    value = "'" + value.Replace("'", "''") + "'";
+                    switch (param.Value.GetType().Name)
+                    {
+                        case "Int32":
+                            paramType = "int";
+                            break;
 
-                editPoint.Insert(value + "\r\n");
+                        case "Decimal":
+                            paramType = "numeric";
+                            break;
+
+                        case "DateTime":
+                            paramType = "datetime";
+                            quoteValues = true;
+                            break;
+
+                        default:
+                            paramType = "nvarchar(max)";
+                            quoteValues = true;
+                            break;
+                    }
+
+                    editPoint.Insert($"DECLARE {param.Key} {paramType} = ");
+
+                    var value = param.Value.ToString();
+
+                    if (param.Value is DateTime dt)
+                        value = dt.ToString("s");
+
+                    if (quoteValues)
+                        value = "'" + value.Replace("'", "''") + "'";
+
+                    editPoint.Insert(value + "\r\n");
+                }
+
+                if (paramValues.Count > 0)
+                    editPoint.Insert("\r\n");
+
+                editPoint.Insert(sql);
             }
-
-            if (paramValues.Count > 0)
-                editPoint.Insert("\r\n");
-
-            editPoint.Insert(sql);
+            catch (Exception ex)
+            {
+                VsShellUtilities.LogError("SQL 4 CDS", ex.ToString());
+            }
         }
     }
 }

@@ -13,6 +13,13 @@ using MarkMpn.Sql4Cds.Engine.FetchXml;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
+using System.Collections.Concurrent;
+using System.Threading;
+#if NETCOREAPP
+using Microsoft.PowerPlatform.Dataverse.Client;
+#else
+using Microsoft.Xrm.Tooling.Connector;
+#endif
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -31,14 +38,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             public SqlDateTime MinValue { get; set; }
             public SqlDateTime MaxValue { get; set; }
             public double Percentage { get; set; }
+            public int Depth { get; set; }
         }
 
         private double _progress;
-        private Queue<Partition> _queue;
+        private BlockingCollection<Partition> _queue;
+        private int _pendingPartitions;
+        private object _lock;
 
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
-            Source = Source.FoldQuery(dataSources, options, parameterTypes);
+            Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
             Source.Parent = this;
             return this;
         }
@@ -50,11 +60,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            var groups = new Dictionary<GroupingKey, Dictionary<string, AggregateFunction>>();
             var schema = Source.GetSchema(dataSources, parameterTypes);
             var groupByCols = GetGroupingColumns(schema);
+            var groups = new ConcurrentDictionary<Entity, Dictionary<string, AggregateFunctionState>>(new DistinctEqualityComparer(groupByCols));
 
             InitializePartitionedAggregates(schema, parameterTypes);
+            var aggregates = CreateAggregateFunctions(parameterValues, options, true);
 
             var fetchXmlNode = (FetchXmlScan)Source;
 
@@ -85,22 +96,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 ["@PartitionEnd"] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.DateTime }
             };
 
-            var partitionParameterValues = new Dictionary<string, object>
-            {
-                ["@PartitionStart"] = minKey,
-                ["@PartitionEnd"] = maxKey
-            };
-
             if (parameterTypes != null)
             {
                 foreach (var kvp in parameterTypes)
                     partitionParameterTypes[kvp.Key] = kvp.Value;
-            }
-
-            if (parameterValues != null)
-            {
-                foreach (var kvp in parameterValues)
-                    partitionParameterValues[kvp.Key] = kvp.Value;
             }
 
             if (minKey > maxKey)
@@ -115,42 +114,128 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Percentage = 1
             };
 
-            _queue = new Queue<Partition>();
+            _queue = new BlockingCollection<Partition>();
+            _pendingPartitions = 1;
+
             SplitPartition(fullRange);
 
-            while (_queue.Count > 0)
+            // Multi-thread where possible
+            var org = dataSources[fetchXmlNode.DataSource].Connection;
+            var maxDop = options.MaxDegreeOfParallelism;
+            _lock = new object();
+
+#if NETCOREAPP
+            var svc = org as ServiceClient;
+
+            if (maxDop <= 1 || svc == null || svc.ActiveAuthenticationType != Microsoft.PowerPlatform.Dataverse.Client.AuthenticationType.OAuth)
             {
-                var partition = _queue.Dequeue();
+                maxDop = 1;
+                svc = null;
+            }
+#else
+            var svc = org as CrmServiceClient;
 
-                try
+            if (maxDop <= 1 || svc == null || svc.ActiveAuthenticationType != Microsoft.Xrm.Tooling.Connector.AuthenticationType.OAuth)
+            {
+                maxDop = 1;
+                svc = null;
+            }
+#endif
+
+            try
+            {
+                Parallel.For(0, maxDop, index =>
                 {
-                    // Execute the query with the partition minValue -> split
-                    ExecuteAggregate(dataSources, options, partitionParameterTypes, partitionParameterValues, groups, groupByCols, fetchXmlNode, partition.MinValue, partition.MaxValue);
+                    var ds = new Dictionary<string, DataSource>
+                    {
+                        [fetchXmlNode.DataSource] = new DataSource
+                        {
+                            Connection = svc?.Clone() ?? org,
+                            Metadata = dataSources[fetchXmlNode.DataSource].Metadata,
+                            Name = fetchXmlNode.DataSource,
+                            TableSizeCache = dataSources[fetchXmlNode.DataSource].TableSizeCache
+                        }
+                    };
 
-                    _progress += partition.Percentage;
-                    options.Progress(0, $"Partitioning {GetDisplayName(0, meta)} ({_progress:P0})...");
-                }
-                catch (Exception ex)
-                {
-                    if (!GetOrganizationServiceFault(ex, out var fault))
-                        throw;
+                    var fetch = new FetchXmlScan
+                    {
+                        Alias = fetchXmlNode.Alias,
+                        DataSource = fetchXmlNode.DataSource,
+                        FetchXml = CloneFetchXml(fetchXmlNode.FetchXml),
+                        Parent = this
+                    };
 
-                    if (!IsAggregateQueryLimitExceeded(fault))
-                        throw;
+                    var partitionParameterValues = new Dictionary<string, object>
+                    {
+                        ["@PartitionStart"] = minKey,
+                        ["@PartitionEnd"] = maxKey
+                    };
 
-                    SplitPartition(partition);
-                }
+                    if (parameterValues != null)
+                    {
+                        foreach (var kvp in parameterValues)
+                            partitionParameterValues[kvp.Key] = kvp.Value;
+                    }
+
+                    foreach (var partition in _queue.GetConsumingEnumerable())
+                    {
+                        try
+                        {
+                            // Execute the query for this partition
+                            ExecuteAggregate(ds, options, partitionParameterTypes, partitionParameterValues, aggregates, groups, fetch, partition.MinValue, partition.MaxValue);
+
+                            lock (_lock)
+                            {
+                                _progress += partition.Percentage;
+                                options.Progress(0, $"Partitioning {GetDisplayName(0, meta)} ({_progress:P0})...");
+                            }
+
+                            if (Interlocked.Decrement(ref _pendingPartitions) == 0)
+                                _queue.CompleteAdding();
+                        }
+                        catch (Exception ex)
+                        {
+                            lock (_queue)
+                            {
+                                if (!GetOrganizationServiceFault(ex, out var fault))
+                                {
+                                    _queue.CompleteAdding();
+                                    throw;
+                                }
+
+                                if (!IsAggregateQueryLimitExceeded(fault))
+                                {
+                                    _queue.CompleteAdding();
+                                    throw;
+                                }
+
+                                SplitPartition(partition);
+                            }
+                        }
+                    }
+
+                    // Merge the stats from this clone of the FetchXML node so we can still see total number of executions etc.
+                    // in the main query plan.
+                    lock (fetchXmlNode)
+                    {
+                        fetchXmlNode.MergeStatsFrom(fetch);
+                    }
+                });
+            }
+            catch (AggregateException aggEx)
+            {
+                throw aggEx.InnerExceptions[0];
             }
 
             foreach (var group in groups)
             {
                 var result = new Entity();
 
-                for (var i = 0; i < GroupBy.Count; i++)
-                    result[groupByCols[i]] = group.Key.Values[i];
+                for (var i = 0; i < groupByCols.Count; i++)
+                    result[groupByCols[i]] = group.Key[groupByCols[i]];
 
-                foreach (var aggregate in group.Value)
-                    result[aggregate.Key] = aggregate.Value.Value;
+                foreach (var aggregate in GetValues(group.Value))
+                    result[aggregate.Key] = aggregate.Value;
 
                 yield return result;
             }
@@ -158,29 +243,47 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private void SplitPartition(Partition partition)
         {
+            if (_queue.IsAddingCompleted)
+                return;
+
             // Fail if we get stuck on a particularly dense partition. If there's > 50K records in a 10 second window we probably
             // won't be able to split it successfully
             if (partition.MaxValue.Value < partition.MinValue.Value.AddSeconds(10))
                 throw new PartitionOverflowException();
 
-            var split = partition.MinValue.Value + TimeSpan.FromSeconds((partition.MaxValue.Value - partition.MinValue.Value).TotalSeconds / 2);
+            // Start splitting partitions in half. Once we've done that a few times and are still hitting the 50K limit, start
+            // pre-emptively splitting into smaller chunks
+            var splitCount = 2;
 
-            _queue.Enqueue(new Partition
-            {
-                MinValue = partition.MinValue,
-                MaxValue = split,
-                Percentage = partition.Percentage / 2
-            });
+            if (partition.Depth > 5)
+                splitCount = 4;
 
-            _queue.Enqueue(new Partition
+            Interlocked.Add(ref _pendingPartitions, splitCount - 1);
+
+            var partitionSize = TimeSpan.FromSeconds((partition.MaxValue.Value - partition.MinValue.Value).TotalSeconds / splitCount);
+
+            var partitionStart = partition.MinValue;
+
+            for (var i = 0; i < splitCount; i++)
             {
-                MinValue = split,
-                MaxValue = partition.MaxValue,
-                Percentage = partition.Percentage / 2
-            });
+                var partitionEnd = partitionStart + partitionSize;
+
+                if (i == splitCount - 1)
+                    partitionEnd = partition.MaxValue;
+
+                _queue.Add(new Partition
+                {
+                    MinValue = partitionStart,
+                    MaxValue = partitionEnd,
+                    Percentage = partition.Percentage / splitCount,
+                    Depth = partition.Depth + 1
+                });
+
+                partitionStart = partitionEnd;
+            }
         }
 
-        private void ExecuteAggregate(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, Dictionary<GroupingKey, Dictionary<string, AggregateFunction>> groups, List<string> groupByCols, FetchXmlScan fetchXmlNode, SqlDateTime minValue, SqlDateTime maxValue)
+        private void ExecuteAggregate(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, Dictionary<string, AggregateFunction> aggregates, ConcurrentDictionary<Entity, Dictionary<string, AggregateFunctionState>> groups, FetchXmlScan fetchXmlNode, SqlDateTime minValue, SqlDateTime maxValue)
         {
             parameterValues["@PartitionStart"] = minValue;
             parameterValues["@PartitionEnd"] = maxValue;
@@ -190,16 +293,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             foreach (var entity in results)
             {
                 // Update aggregates
-                var key = new GroupingKey(entity, groupByCols);
+                var values = groups.GetOrAdd(entity, _ => ResetAggregates(aggregates));
 
-                if (!groups.TryGetValue(key, out var values))
+                lock (values)
                 {
-                    values = base.CreateGroupValues(parameterValues, options, true);
-                    groups[key] = values;
+                    foreach (var func in values.Values)
+                        func.AggregateFunction.NextPartition(entity, func.State);
                 }
-
-                foreach (var func in values.Values)
-                    func.NextPartition(entity);
             }
         }
 
@@ -210,7 +310,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 Alias = "minmax",
                 DataSource = fetchXmlNode.DataSource,
-                FetchXml = CloneFetchXml(fetchXmlNode.FetchXml)
+                FetchXml = CloneFetchXml(fetchXmlNode.FetchXml),
+                Parent = this
             };
 
             // Remove the aggregate settings and all attributes from the query

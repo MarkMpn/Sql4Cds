@@ -36,6 +36,7 @@ namespace MarkMpn.Sql4Cds
             _properties.Show(dockPanel, DockState.DockRightAutoHide);
             _properties.SelectedObjectChanged += OnSelectedObjectChanged;
             _ai = new TelemetryClient(new Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration("79761278-a908-4575-afbf-2f4d82560da6"));
+            tscbConnection.Items.Add("Add Connection...");
 
             TabIcon = Properties.Resources.SQL4CDS_Icon_16;
             PluginIcon = System.Drawing.Icon.FromHandle(Properties.Resources.SQL4CDS_Icon_16.GetHicon());
@@ -55,15 +56,41 @@ namespace MarkMpn.Sql4Cds
             if (actionName == "ChangeConnection")
             {
                 if (dockPanel.ActiveDocument is SqlQueryControl query)
+                {
                     query.ChangeConnection(detail);
+                    tscbConnection.Text = detail.ConnectionName;
+                }
+
+                if (!tscbConnection.Items.Contains(detail))
+                    tscbConnection.Items.Insert(tscbConnection.Items.Count - 1, detail);
             }
             else if (actionName == "ConnectObjectExplorer")
             {
                 _objectExplorer.AddConnection(detail);
+
+                if (!tscbConnection.Items.Contains(detail))
+                    tscbConnection.Items.Insert(tscbConnection.Items.Count - 1, detail);
+            }
+            else if (actionName == "ConnectObjectExplorerAndChangeConnection")
+            {
+                _objectExplorer.AddConnection(detail);
+
+                if (!tscbConnection.Items.Contains(detail))
+                    tscbConnection.Items.Insert(tscbConnection.Items.Count - 1, detail);
+
+                if (dockPanel.ActiveDocument is SqlQueryControl query)
+                {
+                    query.ChangeConnection(detail);
+                    tscbConnection.Text = detail.ConnectionName;
+                }
             }
             else if (String.IsNullOrEmpty(actionName))
             {
                 _objectExplorer.AddConnection(detail);
+
+                if (!tscbConnection.Items.Contains(detail))
+                    tscbConnection.Items.Insert(tscbConnection.Items.Count - 1, detail);
+
                 CreateQuery(detail, "");
             }
             else
@@ -407,6 +434,8 @@ namespace MarkMpn.Sql4Cds
                 tsbPreviewFetchXml.PerformClick();
             else if (keyData == (Keys.Control | Keys.M))
                 tsbIncludeFetchXml.PerformClick();
+            else if (keyData == (Keys.Control | Keys.U))
+                tscbConnection.Focus();
             else if (keyData == Keys.F5 || keyData == (Keys.Control | Keys.E))
                 tsbExecute.PerformClick();
             else if (keyData == Keys.F4)
@@ -432,12 +461,15 @@ namespace MarkMpn.Sql4Cds
         {
             if (!(dockPanel.ActiveDocument is SqlQueryControl query))
             {
+                tscbConnection.Enabled = false;
                 tsbExecute.Enabled = false;
                 tsbPreviewFetchXml.Enabled = false;
                 tsbPowerBi.Enabled = false;
                 return;
             }
 
+            tscbConnection.Enabled = !query.Busy;
+            tscbConnection.Text = query.Connection.ConnectionName;
             tsbExecute.Enabled = query.Connection != null && !query.Busy;
             tsbPreviewFetchXml.Enabled = query.Connection != null && !query.Busy;
             tsbPowerBi.Enabled = query.Connection != null && !query.Busy;
@@ -536,6 +568,23 @@ let
 in
   DataverseSQL";
             CreateM(m);
+        }
+
+        private void tscbConnection_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (dockPanel.ActiveDocument is SqlQueryControl query && tscbConnection.SelectedItem != null)
+            {
+                if (tscbConnection.SelectedItem is ConnectionDetail conn)
+                {
+                    query.ChangeConnection(conn);
+                    query.SetFocus();
+                }
+                else
+                {
+                    var args = new RequestConnectionEventArgs { ActionName = "ConnectObjectExplorerAndChangeConnection", Control = this };
+                    OnConnectionRequested(this, args);
+                }
+            }
         }
     }
 }

@@ -48,7 +48,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         bool IQueryExecutionOptions.ColumnComparisonAvailable => true;
 
-        bool IQueryExecutionOptions.UseLocalTimeZone => false;
+        bool IQueryExecutionOptions.UseLocalTimeZone => true;
 
         List<JoinOperator> IQueryExecutionOptions.JoinOperatorsAvailable => _supportedJoins;
 
@@ -481,12 +481,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <order alias='name' />
                     </entity>
                 </fetch>");
-            var aggregate = AssertNode<HashMatchAggregateNode>(tryCatch1.CatchSource);
+            var aggregate = AssertNode<StreamAggregateNode>(tryCatch1.CatchSource);
             var scalarFetch = AssertNode<FetchXmlScan>(aggregate.Source);
             AssertFetchXml(scalarFetch, @"
                 <fetch>
                     <entity name='account'>
                         <attribute name='name' />
+                        <order attribute='name' />
                     </entity>
                 </fetch>");
         }
@@ -531,12 +532,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <order alias='name' />
                     </entity>
                 </fetch>");
-            var aggregate = AssertNode<HashMatchAggregateNode>(tryCatch1.CatchSource);
+            var aggregate = AssertNode<StreamAggregateNode>(tryCatch1.CatchSource);
             var scalarFetch = AssertNode<FetchXmlScan>(aggregate.Source);
             AssertFetchXml(scalarFetch, @"
                 <fetch>
                     <entity name='account'>
                         <attribute name='name' />
+                        <order attribute='name' />
                     </entity>
                 </fetch>");
         }
@@ -581,12 +583,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <order alias='name' />
                     </entity>
                 </fetch>");
-            var aggregate = AssertNode<HashMatchAggregateNode>(tryCatch1.CatchSource);
+            var aggregate = AssertNode<StreamAggregateNode>(tryCatch1.CatchSource);
             var scalarFetch = AssertNode<FetchXmlScan>(aggregate.Source);
             AssertFetchXml(scalarFetch, @"
                 <fetch>
                     <entity name='account'>
                         <attribute name='name' />
+                        <order attribute='name' />
                     </entity>
                 </fetch>");
         }
@@ -668,7 +671,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <order alias='name' />
                     </entity>
                 </fetch>");
-            var aggregate = AssertNode<HashMatchAggregateNode>(tryCatch1.CatchSource);
+            var aggregate = AssertNode<StreamAggregateNode>(tryCatch1.CatchSource);
             Assert.AreEqual("account.name", aggregate.GroupBy[0].ToSql());
             Assert.AreEqual("count", aggregate.Aggregates.Single().Key);
             var scalarFetch = AssertNode<FetchXmlScan>(aggregate.Source);
@@ -676,6 +679,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 <fetch>
                     <entity name='account'>
                         <attribute name='name' />
+                        <order attribute='name' />
                     </entity>
                 </fetch>");
         }
@@ -999,7 +1003,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     </entity>
                 </fetch>");
             var subAssert = AssertNode<AssertNode>(nestedLoop.RightSource);
-            var subAggregate = AssertNode<HashMatchAggregateNode>(subAssert.Source);
+            var subAggregate = AssertNode<StreamAggregateNode>(subAssert.Source);
             var subIndexSpool = AssertNode<IndexSpoolNode>(subAggregate.Source);
             Assert.AreEqual("account.createdon", subIndexSpool.KeyColumn);
             Assert.AreEqual("@Expr2", subIndexSpool.SeekValue);
@@ -1049,7 +1053,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     </entity>
                 </fetch>");
             var subAssert = AssertNode<AssertNode>(nestedLoop.RightSource);
-            var subAggregate = AssertNode<HashMatchAggregateNode>(subAssert.Source);
+            var subAggregate = AssertNode<StreamAggregateNode>(subAssert.Source);
             var subAggregateFetch = AssertNode<FetchXmlScan>(subAggregate.Source);
             AssertFetchXml(subAggregateFetch, @"
                 <fetch>
@@ -1139,7 +1143,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     </entity>
                 </fetch>");
             var subAssert = AssertNode<AssertNode>(nestedLoop.RightSource);
-            var subAggregate = AssertNode<HashMatchAggregateNode>(subAssert.Source);
+            var subAggregate = AssertNode<StreamAggregateNode>(subAssert.Source);
             var subIndexSpool = AssertNode<IndexSpoolNode>(subAggregate.Source);
             Assert.AreEqual("account.createdon", subIndexSpool.KeyColumn);
             Assert.AreEqual("@Expr2", subIndexSpool.SeekValue);
@@ -1190,7 +1194,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     </entity>
                 </fetch>");
             var subAssert = AssertNode<AssertNode>(nestedLoop.RightSource);
-            var subAggregate = AssertNode<HashMatchAggregateNode>(subAssert.Source);
+            var subAggregate = AssertNode<StreamAggregateNode>(subAssert.Source);
             var subIndexSpool = AssertNode<IndexSpoolNode>(subAggregate.Source);
             Assert.AreEqual("account.createdon", subIndexSpool.KeyColumn);
             Assert.AreEqual("@Expr2", subIndexSpool.SeekValue);
@@ -1245,7 +1249,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     </entity>
                 </fetch>");
             var subAssert = AssertNode<AssertNode>(nestedLoop.RightSource);
-            var subAggregate = AssertNode<HashMatchAggregateNode>(subAssert.Source);
+            var subAggregate = AssertNode<StreamAggregateNode>(subAssert.Source);
             var subCompute = AssertNode<ComputeScalarNode>(subAggregate.Source);
             var subIndexSpool = AssertNode<IndexSpoolNode>(subCompute.Source);
             Assert.AreEqual("account.accountid", subIndexSpool.KeyColumn);
@@ -2312,12 +2316,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var sort = AssertNode<SortNode>(tryCatch1.CatchSource);
             Assert.AreEqual("count", sort.Sorts.Single().Expression.ToSql());
             Assert.AreEqual(SortOrder.Descending, sort.Sorts.Single().SortOrder);
-            var aggregate = AssertNode<HashMatchAggregateNode>(sort.Source);
+            var aggregate = AssertNode<StreamAggregateNode>(sort.Source);
             var fetch = AssertNode<FetchXmlScan>(aggregate.Source);
             AssertFetchXml(fetch, @"
                 <fetch>
                     <entity name='account'>
                         <attribute name='name' />
+                        <order attribute='name' />
                     </entity>
                 </fetch>");
         }
@@ -2806,7 +2811,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, plans.Length);
 
             var select = AssertNode<SelectNode>(plans[0]);
-            var aggregate = AssertNode<HashMatchAggregateNode>(select.Source);
+            var aggregate = AssertNode<StreamAggregateNode>(select.Source);
             var fetchXml = AssertNode<FetchXmlScan>(aggregate.Source);
 
             AssertFetchXml(fetchXml, @"
@@ -2814,6 +2819,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     <entity name='new_customentity'>
                         <attribute name='new_name' />
                         <attribute name='new_optionsetvalue' />
+                        <order attribute='new_name' />
                     </entity>
                 </fetch>");
         }
@@ -2904,7 +2910,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     </entity>
                 </fetch>");
 
-            var innerAggregate = AssertNode<HashMatchAggregateNode>(innerTry1.CatchSource);
+            var innerAggregate = AssertNode<StreamAggregateNode>(innerTry1.CatchSource);
             Assert.AreEqual("contact.firstname", innerAggregate.GroupBy[0].GetColumnName());
             Assert.AreEqual("count", innerAggregate.Aggregates.First().Key);
             Assert.AreEqual(AggregateType.CountStar, innerAggregate.Aggregates.First().Value.AggregateType);
@@ -2914,6 +2920,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 <fetch>
                     <entity name='contact'>
                         <attribute name='firstname' />
+                        <order attribute='firstname' />
                     </entity>
                 </fetch>");
 
@@ -2999,12 +3006,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, plans.Length);
 
             var select = AssertNode<SelectNode>(plans[0]);
-            var aggregate = AssertNode<HashMatchAggregateNode>(select.Source);
+            var aggregate = AssertNode<StreamAggregateNode>(select.Source);
             var fetch = AssertNode<FetchXmlScan>(aggregate.Source);
             AssertFetchXml(fetch, @"
                 <fetch>
                     <entity name='account'>
                         <attribute name='createdon' />
+                        <order attribute='createdon' />
                     </entity>
                 </fetch>");
         }
@@ -3241,6 +3249,74 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         </filter>
                     </entity>
                 </fetch>");
+        }
+
+        [TestMethod]
+        public void OrderBySelectExpression()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT name + 'foo' FROM account ORDER BY 1";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual("Expr1", select.ColumnSet.Single().SourceColumn);
+            var sort = AssertNode<SortNode>(select.Source);
+            Assert.AreEqual("Expr1", sort.Sorts.Single().ToSql());
+            var compute = AssertNode<ComputeScalarNode>(sort.Source);
+            Assert.AreEqual("name + 'foo'", compute.Columns["Expr1"].ToSql());
+            var fetch = AssertNode<FetchXmlScan>(compute.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void DistinctOrderByUsesScalarAggregate()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT DISTINCT name + 'foo' FROM account ORDER BY 1";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual("Expr1", select.ColumnSet.Single().SourceColumn);
+            var aggregate = AssertNode<StreamAggregateNode>(select.Source);
+            Assert.AreEqual("Expr1", aggregate.GroupBy.Single().ToSql());
+            var sort = AssertNode<SortNode>(aggregate.Source);
+            Assert.AreEqual("Expr1", sort.Sorts.Single().ToSql());
+            var compute = AssertNode<ComputeScalarNode>(sort.Source);
+            Assert.AreEqual("name + 'foo'", compute.Columns["Expr1"].ToSql());
+            var fetch = AssertNode<FetchXmlScan>(compute.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void WindowFunctionsNotSupported()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT COUNT(accountid) OVER(PARTITION BY accountid) AS test FROM account";
+
+            planBuilder.Build(query);
         }
 
         [TestMethod]

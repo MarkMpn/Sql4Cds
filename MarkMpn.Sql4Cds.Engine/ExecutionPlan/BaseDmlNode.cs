@@ -13,7 +13,11 @@ using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
+#if NETCOREAPP
+using Microsoft.PowerPlatform.Dataverse.Client;
+#else
 using Microsoft.Xrm.Tooling.Connector;
+#endif
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -110,12 +114,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="options"><see cref="IQueryExecutionOptions"/> to indicate how the query can be executed</param>
         /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
         /// <returns>The node that should be used in place of this node</returns>
-        public virtual IRootExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        public virtual IRootExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
             if (Source is IDataExecutionPlanNode dataNode)
-                Source = dataNode.FoldQuery(dataSources, options, parameterTypes);
+                Source = dataNode.FoldQuery(dataSources, options, parameterTypes, hints);
             else if (Source is IDataSetExecutionPlanNode dataSetNode)
-                Source = dataSetNode.FoldQuery(dataSources, options, parameterTypes);
+                Source = dataSetNode.FoldQuery(dataSources, options, parameterTypes, hints);
 
             return this;
         }
@@ -135,7 +139,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="parameterValues">A mapping of parameter names to their current values</param>
         /// <param name="schema">The schema of the data source</param>
         /// <returns>The entities to perform the DML operation on</returns>
-        protected List<Entity> GetDmlSourceEntities(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out NodeSchema schema)
+        protected List<Entity> GetDmlSourceEntities(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out INodeSchema schema)
         {
             List<Entity> entities;
 
@@ -154,8 +158,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 for (var i = 0; i < dataTable.Columns.Count; i++)
                 {
                     var col = dataTable.Columns[i];
-                    schema.Schema[col.ColumnName] = col.DataType.ToSqlType();
-                    schema.Schema[i.ToString()] = col.DataType.ToSqlType();
+                    ((NodeSchema)schema).Schema[col.ColumnName] = col.DataType.ToSqlType();
+                    ((NodeSchema)schema).Schema[i.ToString()] = col.DataType.ToSqlType();
                 }
 
                 entities = dataTable.Rows
@@ -190,7 +194,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="attributes">The attributes in the target metadata</param>
         /// <param name="dateTimeKind">The time zone that datetime values are supplied in</param>
         /// <returns></returns>
-        protected Dictionary<string, Func<Entity, object>> CompileColumnMappings(EntityMetadata metadata, IDictionary<string,string> mappings, NodeSchema schema, IDictionary<string, AttributeMetadata> attributes, DateTimeKind dateTimeKind)
+        protected Dictionary<string, Func<Entity, object>> CompileColumnMappings(EntityMetadata metadata, IDictionary<string,string> mappings, INodeSchema schema, IDictionary<string, AttributeMetadata> attributes, DateTimeKind dateTimeKind)
         {
             var attributeAccessors = new Dictionary<string, Func<Entity, object>>();
             var entityParam = Expression.Parameter(typeof(Entity));
@@ -345,6 +349,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var count = 0;
 
             var maxDop = options.MaxDegreeOfParallelism;
+
+#if NETCOREAPP
+            var svc = org as ServiceClient;
+
+            if (maxDop <= 1 || svc == null || svc.ActiveAuthenticationType != Microsoft.PowerPlatform.Dataverse.Client.AuthenticationType.OAuth)
+            {
+                maxDop = 1;
+                svc = null;
+            }
+#else
             var svc = org as CrmServiceClient;
 
             if (maxDop <= 1 || svc == null || svc.ActiveAuthenticationType != Microsoft.Xrm.Tooling.Connector.AuthenticationType.OAuth)
@@ -352,6 +366,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 maxDop = 1;
                 svc = null;
             }
+#endif
 
             var useAffinityCookie = maxDop == 1 || entities.Count < 100;
 
@@ -365,8 +380,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         {
                             var service = svc?.Clone() ?? org;
 
+#if NETCOREAPP
+                            if (!useAffinityCookie && service is ServiceClient crmService)
+                                crmService.EnableAffinityCookie = false;
+#else
                             if (!useAffinityCookie && service is CrmServiceClient crmService)
                                 crmService.EnableAffinityCookie = false;
+#endif
 
                             return new { Service = service, EMR = default(ExecuteMultipleRequest) };
                         },
@@ -457,8 +477,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 }
                             }
 
-                            if (threadLocalState.Service != org)
-                                ((CrmServiceClient)threadLocalState.Service)?.Dispose();
+                            if (threadLocalState.Service != org && threadLocalState.Service is IDisposable disposableClient)
+                                disposableClient.Dispose();
                         });
                 }
             }

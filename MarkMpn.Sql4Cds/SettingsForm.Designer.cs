@@ -81,11 +81,11 @@
             this.localDateFormatCheckbox = new System.Windows.Forms.CheckBox();
             this.rememberSessionCheckbox = new System.Windows.Forms.CheckBox();
             this.tabPage4 = new System.Windows.Forms.TabPage();
-            this.label17 = new System.Windows.Forms.Label();
-            this.simpleSqlRadioButton = new System.Windows.Forms.RadioButton();
-            this.nativeSqlRadioButton = new System.Windows.Forms.RadioButton();
-            this.simpleSqlScintilla = new ScintillaNET.Scintilla();
             this.nativeSqlScintilla = new ScintillaNET.Scintilla();
+            this.simpleSqlScintilla = new ScintillaNET.Scintilla();
+            this.nativeSqlRadioButton = new System.Windows.Forms.RadioButton();
+            this.simpleSqlRadioButton = new System.Windows.Forms.RadioButton();
+            this.label17 = new System.Windows.Forms.Label();
             this.topPanel.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox)).BeginInit();
             this.panel2.SuspendLayout();
@@ -384,9 +384,9 @@
             this.label12.AutoSize = true;
             this.label12.Location = new System.Drawing.Point(173, 52);
             this.label12.Name = "label12";
-            this.label12.Size = new System.Drawing.Size(155, 13);
+            this.label12.Size = new System.Drawing.Size(77, 13);
             this.label12.TabIndex = 19;
-            this.label12.Text = "worker threads for DML queries";
+            this.label12.Text = "worker threads";
             // 
             // localTimesComboBox
             // 
@@ -534,7 +534,7 @@
             // 
             this.pictureBox6.Cursor = System.Windows.Forms.Cursors.Hand;
             this.pictureBox6.Image = global::MarkMpn.Sql4Cds.Properties.Resources.StatusHelp_16x;
-            this.pictureBox6.Location = new System.Drawing.Point(334, 52);
+            this.pictureBox6.Location = new System.Drawing.Point(256, 52);
             this.pictureBox6.Name = "pictureBox6";
             this.pictureBox6.Size = new System.Drawing.Size(16, 16);
             this.pictureBox6.TabIndex = 31;
@@ -725,25 +725,26 @@
             this.tabPage4.Text = "Conversion";
             this.tabPage4.UseVisualStyleBackColor = true;
             // 
-            // label17
+            // nativeSqlScintilla
             // 
-            this.label17.AutoSize = true;
-            this.label17.Location = new System.Drawing.Point(6, 3);
-            this.label17.Name = "label17";
-            this.label17.Size = new System.Drawing.Size(317, 13);
-            this.label17.TabIndex = 0;
-            this.label17.Text = "When converting FetchXML to SQL (e.g. from FetchXML Builder):";
+            this.nativeSqlScintilla.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.nativeSqlScintilla.Lexer = ScintillaNET.Lexer.Sql;
+            this.nativeSqlScintilla.Location = new System.Drawing.Point(27, 156);
+            this.nativeSqlScintilla.Name = "nativeSqlScintilla";
+            this.nativeSqlScintilla.Size = new System.Drawing.Size(376, 85);
+            this.nativeSqlScintilla.TabIndex = 4;
+            this.nativeSqlScintilla.Text = resources.GetString("nativeSqlScintilla.Text");
             // 
-            // simpleSqlRadioButton
+            // simpleSqlScintilla
             // 
-            this.simpleSqlRadioButton.AutoSize = true;
-            this.simpleSqlRadioButton.Location = new System.Drawing.Point(9, 19);
-            this.simpleSqlRadioButton.Name = "simpleSqlRadioButton";
-            this.simpleSqlRadioButton.Size = new System.Drawing.Size(136, 17);
-            this.simpleSqlRadioButton.TabIndex = 1;
-            this.simpleSqlRadioButton.TabStop = true;
-            this.simpleSqlRadioButton.Text = "generate simplified SQL";
-            this.simpleSqlRadioButton.UseVisualStyleBackColor = true;
+            this.simpleSqlScintilla.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.simpleSqlScintilla.Location = new System.Drawing.Point(27, 42);
+            this.simpleSqlScintilla.Name = "simpleSqlScintilla";
+            this.simpleSqlScintilla.Size = new System.Drawing.Size(376, 85);
+            this.simpleSqlScintilla.TabIndex = 3;
+            this.simpleSqlScintilla.Text = "SELECT name,\r\n       telephone1,\r\n       ownerid\r\nFROM   account;";
             // 
             // nativeSqlRadioButton
             // 
@@ -756,26 +757,25 @@
             this.nativeSqlRadioButton.Text = "generate full SQL used by the server";
             this.nativeSqlRadioButton.UseVisualStyleBackColor = true;
             // 
-            // simpleSqlScintilla
+            // simpleSqlRadioButton
             // 
-            this.simpleSqlScintilla.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
-            | System.Windows.Forms.AnchorStyles.Right)));
-            this.simpleSqlScintilla.Location = new System.Drawing.Point(27, 42);
-            this.simpleSqlScintilla.Name = "simpleSqlScintilla";
-            this.simpleSqlScintilla.Size = new System.Drawing.Size(376, 85);
-            this.simpleSqlScintilla.TabIndex = 3;
-            this.simpleSqlScintilla.Text = "SELECT name,\r\n       telephone1,\r\n       ownerid\r\nFROM   account;";
+            this.simpleSqlRadioButton.AutoSize = true;
+            this.simpleSqlRadioButton.Location = new System.Drawing.Point(9, 19);
+            this.simpleSqlRadioButton.Name = "simpleSqlRadioButton";
+            this.simpleSqlRadioButton.Size = new System.Drawing.Size(136, 17);
+            this.simpleSqlRadioButton.TabIndex = 1;
+            this.simpleSqlRadioButton.TabStop = true;
+            this.simpleSqlRadioButton.Text = "generate simplified SQL";
+            this.simpleSqlRadioButton.UseVisualStyleBackColor = true;
             // 
-            // nativeSqlScintilla
+            // label17
             // 
-            this.nativeSqlScintilla.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
-            | System.Windows.Forms.AnchorStyles.Right)));
-            this.nativeSqlScintilla.Lexer = ScintillaNET.Lexer.Sql;
-            this.nativeSqlScintilla.Location = new System.Drawing.Point(27, 156);
-            this.nativeSqlScintilla.Name = "nativeSqlScintilla";
-            this.nativeSqlScintilla.Size = new System.Drawing.Size(376, 85);
-            this.nativeSqlScintilla.TabIndex = 4;
-            this.nativeSqlScintilla.Text = resources.GetString("nativeSqlScintilla.Text");
+            this.label17.AutoSize = true;
+            this.label17.Location = new System.Drawing.Point(6, 3);
+            this.label17.Name = "label17";
+            this.label17.Size = new System.Drawing.Size(317, 13);
+            this.label17.TabIndex = 0;
+            this.label17.Text = "When converting FetchXML to SQL (e.g. from FetchXML Builder):";
             // 
             // SettingsForm
             // 

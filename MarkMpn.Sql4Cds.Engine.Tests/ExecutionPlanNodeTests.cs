@@ -511,5 +511,42 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             CollectionAssert.AreEqual(new[] { 1, 2 }, results2);
             Assert.AreEqual(1, source.ExecutionCount);
         }
+
+        [TestMethod]
+        public void CaseInsenstiveHashMatchAggregateNodeTest()
+        {
+            var source = new ConstantScanNode
+            {
+                Values =
+                {
+                    new Entity{["value1"] = new SqlString("hello", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace)},
+                    new Entity{["value1"] = new SqlString("Hello", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace)}
+                },
+                Schema =
+                {
+                    ["value1"] = typeof(SqlString).ToSqlType()
+                },
+                Alias = "src"
+            };
+
+            var spool = new HashMatchAggregateNode
+            {
+                Source = source,
+                GroupBy =
+                {
+                    "src.value1".ToColumnReference()
+                },
+                Aggregates =
+                {
+                    ["count"] = new Aggregate { AggregateType = AggregateType.CountStar }
+                }
+            };
+
+            var results = spool.Execute(_dataSources, new StubOptions(), null, null)
+                .Select(e => new { Name = e.GetAttributeValue<SqlString>("src.value1").Value, Count = e.GetAttributeValue<SqlInt32>("count").Value })
+                .ToArray();
+
+            CollectionAssert.AreEqual(new[] { new { Name = "hello", Count = 2 } }, results);
+        }
     }
 }

@@ -51,6 +51,8 @@
             this.tslAboutLink = new System.Windows.Forms.ToolStripLabel();
             this.dockPanel = new WeifenLuo.WinFormsUI.Docking.DockPanel();
             this.saveSessionTimer = new System.Windows.Forms.Timer(this.components);
+            this.tscbConnection = new System.Windows.Forms.ToolStripComboBox();
+            this.toolStripSeparator1 = new System.Windows.Forms.ToolStripSeparator();
             this.toolStripMenu.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -60,6 +62,8 @@
             this.tsbConnect,
             this.tsbChangeConnection,
             this.toolStripSeparator,
+            this.tscbConnection,
+            this.toolStripSeparator1,
             this.tsbNewQuery,
             this.tsbOpen,
             this.tsbSave,
@@ -272,6 +276,21 @@
             this.saveSessionTimer.Interval = 60000;
             this.saveSessionTimer.Tick += new System.EventHandler(this.saveSessionTimer_Tick);
             // 
+            // tscbConnection
+            // 
+            this.tscbConnection.AutoCompleteMode = System.Windows.Forms.AutoCompleteMode.SuggestAppend;
+            this.tscbConnection.AutoCompleteSource = System.Windows.Forms.AutoCompleteSource.ListItems;
+            this.tscbConnection.Enabled = false;
+            this.tscbConnection.Name = "tscbConnection";
+            this.tscbConnection.Size = new System.Drawing.Size(121, 25);
+            this.tscbConnection.ToolTipText = "Available Databases (Ctrl+U)";
+            this.tscbConnection.SelectedIndexChanged += new System.EventHandler(this.tscbConnection_SelectedIndexChanged);
+            // 
+            // toolStripSeparator1
+            // 
+            this.toolStripSeparator1.Name = "toolStripSeparator1";
+            this.toolStripSeparator1.Size = new System.Drawing.Size(6, 25);
+            // 
             // PluginControl
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -311,5 +330,7 @@
         private System.Windows.Forms.Timer saveSessionTimer;
         private System.Windows.Forms.ToolStripButton tsbFetchXMLBuilder;
         private System.Windows.Forms.ToolStripButton tsbPowerBi;
+        private System.Windows.Forms.ToolStripComboBox tscbConnection;
+        private System.Windows.Forms.ToolStripSeparator toolStripSeparator1;
     }
 }

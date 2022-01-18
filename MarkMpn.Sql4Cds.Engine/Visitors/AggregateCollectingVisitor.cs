@@ -66,8 +66,16 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             // Do not recurse into subqueries - they'll be handled separately
         }
 
+        public override void ExplicitVisit(QueryDerivedTable node)
+        {
+            // Do not recurse into subqueries - they'll be handled separately
+        }
+
         private bool IsAggregate(FunctionCall func)
         {
+            if (func.OverClause != null)
+                return false;
+
             if (func.FunctionName.Value.Equals("SUM", StringComparison.OrdinalIgnoreCase) ||
                 func.FunctionName.Value.Equals("MIN", StringComparison.OrdinalIgnoreCase) ||
                 func.FunctionName.Value.Equals("MAX", StringComparison.OrdinalIgnoreCase) ||

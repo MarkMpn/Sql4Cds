@@ -37,32 +37,57 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Description("Indicates if two records with the same sort order should be included even if the total number of records has been met")]
         public bool WithTies { get; set; }
 
+        /// <summary>
+        /// The columns to check for ties on
+        /// </summary>
+        [Category("Top")]
+        [Description("When using the WITH TIES option, indicates the columns to check for ties on")]
+        public List<string> TieColumns { get; set; }
+
         [Browsable(false)]
         public IDataExecutionPlanNode Source { get; set; }
 
         protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            if (WithTies)
-                throw new NotImplementedException();
-
             var topCount = Top.Compile(null, parameterTypes)(null, parameterValues, options);
 
-            if (!Percent)
+            if (Percent)
             {
-                return Source.Execute(dataSources, options, parameterTypes, parameterValues)
-                    .Take(SqlTypeConverter.ChangeType<int>(topCount));
-            }
-            else
-            {
-                var count = Source.Execute(dataSources, options, parameterTypes, parameterValues).Count();
-                var top = count * SqlTypeConverter.ChangeType<float>(topCount) / 100;
+                int count;
 
-                return Source.Execute(dataSources, options, parameterTypes, parameterValues)
-                    .Take((int)top);
+                if (Source is TableSpoolNode spool && spool.SpoolType == SpoolType.Eager)
+                    count = spool.GetCount(dataSources, options, parameterTypes, parameterValues);
+                else
+                    count = Source.Execute(dataSources, options, parameterTypes, parameterValues).Count();
+
+                topCount = (int)(count * SqlTypeConverter.ChangeType<float>(topCount) / 100);
             }
+
+            var top = SqlTypeConverter.ChangeType<int>(topCount);
+
+            if (!WithTies)
+            {
+                return Source.Execute(dataSources, options, parameterTypes, parameterValues)
+                    .Take(top);
+            }
+
+            Entity lastRow = null;
+            var tieComparer = new DistinctEqualityComparer(TieColumns);
+
+            return Source.Execute(dataSources, options, parameterTypes, parameterValues)
+                .TakeWhile((entity, index) =>
+                {
+                    if (index == top - 1)
+                        lastRow = entity;
+
+                    if (index < top)
+                        return true;
+
+                    return tieComparer.Equals(lastRow, entity);
+                });
         }
 
-        public override NodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
+        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
             return Source.GetSchema(dataSources, parameterTypes);
         }
@@ -72,9 +97,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
-            Source = Source.FoldQuery(dataSources, options, parameterTypes);
+            Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
             Source.Parent = this;
 
             if (!Top.IsConstantValueExpression(null, options, out var literal))
