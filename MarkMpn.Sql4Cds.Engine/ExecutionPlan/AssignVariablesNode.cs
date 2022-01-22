@@ -13,6 +13,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private int _executionCount;
         private readonly Timer _timer = new Timer();
 
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public override string DataSource { get => base.DataSource; set => base.DataSource = value; }
+
         [Category("Assign Variables")]
         public List<VariableAssignment> Variables { get; } = new List<VariableAssignment>();
 

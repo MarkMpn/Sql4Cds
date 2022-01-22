@@ -92,36 +92,39 @@ namespace MarkMpn.Sql4Cds.Engine
                     var length = statement.ScriptTokenStream[statement.LastTokenIndex].Offset + statement.ScriptTokenStream[statement.LastTokenIndex].Text.Length - index;
                     var originalSql = statement.ToSql();
 
-                    IRootExecutionPlanNode plan;
+                    IRootExecutionPlanNode[] plans;
                     var hints = statement is StatementWithCtesAndXmlNamespaces stmt ? stmt.OptimizerHints : null;
 
                     if (statement is SelectStatement select)
-                        plan = ConvertSelectStatement(select);
+                        plans = new[] { ConvertSelectStatement(select) };
                     else if (statement is UpdateStatement update)
-                        plan = ConvertUpdateStatement(update);
+                        plans = new[] { ConvertUpdateStatement(update) };
                     else if (statement is DeleteStatement delete)
-                        plan = ConvertDeleteStatement(delete);
+                        plans = new[] { ConvertDeleteStatement(delete) };
                     else if (statement is InsertStatement insert)
-                        plan = ConvertInsertStatement(insert);
+                        plans = new[] { ConvertInsertStatement(insert) };
                     else if (statement is ExecuteAsStatement impersonate)
-                        plan = ConvertExecuteAsStatement(impersonate);
+                        plans = new[] { ConvertExecuteAsStatement(impersonate) };
                     else if (statement is RevertStatement revert)
-                        plan = ConvertRevertStatement(revert);
+                        plans = new[] { ConvertRevertStatement(revert) };
                     else if (statement is DeclareVariableStatement declare)
-                        plan = ConvertDeclareVariableStatement(declare);
+                        plans = ConvertDeclareVariableStatement(declare);
                     else if (statement is SetVariableStatement set)
-                        plan = ConvertSetVariableStatement(set);
+                        plans = new[] { ConvertSetVariableStatement(set) };
                     else
                         throw new NotSupportedQueryFragmentException("Unsupported statement", statement);
 
-                    SetParent(plan);
-                    plan = optimizer.Optimize(plan, hints);
+                    foreach (var plan in plans)
+                    {
+                        SetParent(plan);
+                        var optimized = optimizer.Optimize(plan, hints);
 
-                    plan.Sql = originalSql;
-                    plan.Index = index;
-                    plan.Length = length;
+                        optimized.Sql = originalSql;
+                        optimized.Index = index;
+                        optimized.Length = length;
 
-                    queries.Add(plan);
+                        queries.Add(optimized);
+                    }
                 }
             }
 
@@ -141,6 +144,9 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (set.Parameters != null && set.Parameters.Count > 0)
                 throw new NotSupportedQueryFragmentException("Parameters are not supported", set.Parameters[0]);
+
+            if (!_parameterTypes.TryGetValue(set.Variable.Name, out var paramType))
+                throw new NotSupportedQueryFragmentException("Must declare the scalar variable", set.Variable);
 
             // Create the SELECT statement that generates the required information
             var expr = set.Expression;
@@ -180,6 +186,9 @@ namespace MarkMpn.Sql4Cds.Engine
                     break;
             }
 
+            expr = new ConvertCall { DataType = paramType, Parameter = expr };
+            expr.ScriptTokenStream = null;
+
             var queryExpression = new QuerySpecification();
             queryExpression.SelectElements.Add(new SelectScalarExpression { Expression = expr, ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = "Value" } } });
             var selectStatement = new SelectStatement { QueryExpression = queryExpression };
@@ -202,26 +211,56 @@ namespace MarkMpn.Sql4Cds.Engine
             return node;
         }
 
-        private IRootExecutionPlanNode ConvertDeclareVariableStatement(DeclareVariableStatement declare)
+        private IRootExecutionPlanNode[] ConvertDeclareVariableStatement(DeclareVariableStatement declare)
         {
-            var node = new DeclareVariablesNode();
+            var nodes = new List<IRootExecutionPlanNode>();
+            var declareNode = new DeclareVariablesNode();
+            nodes.Add(declareNode);
 
             foreach (var declaration in declare.Declarations)
             {
+                if (_parameterTypes.ContainsKey(declaration.VariableName.Value))
+                    throw new NotSupportedQueryFragmentException("The variable name has already been declared. Variable names must be unique within a query batch", declaration.VariableName);
+
+                // Apply default maximum length for [n][var]char types
+                if (declaration.DataType is SqlDataTypeReference dataType)
+                {
+                    if (dataType.SqlDataTypeOption == SqlDataTypeOption.Cursor)
+                        throw new NotSupportedQueryFragmentException("Cursors are not supported", dataType);
+
+                    if (dataType.SqlDataTypeOption == SqlDataTypeOption.Table)
+                        throw new NotSupportedQueryFragmentException("Table variables are not supported", dataType);
+
+                    if (dataType.SqlDataTypeOption == SqlDataTypeOption.Char ||
+                    dataType.SqlDataTypeOption == SqlDataTypeOption.NChar ||
+                    dataType.SqlDataTypeOption == SqlDataTypeOption.VarChar ||
+                    dataType.SqlDataTypeOption == SqlDataTypeOption.NVarChar)
+                    {
+                        if (dataType.Parameters.Count == 0)
+                            dataType.Parameters.Add(new IntegerLiteral { Value = "1" });
+                    }
+                }
+
+                declareNode.Variables[declaration.VariableName.Value] = declaration.DataType;
+
+                // Make the variables available in our local copy of parameters so later statements
+                // in the same batch can use them
+                _parameterTypes[declaration.VariableName.Value] = declaration.DataType;
+
                 if (declaration.Value != null)
-                    throw new NotSupportedQueryFragmentException("Assigning variables during declaration is not supported", declaration.Value);
+                {
+                    var setStatement = new SetVariableStatement
+                    {
+                        Variable = new VariableReference { Name = declaration.VariableName.Value },
+                        AssignmentKind = AssignmentKind.Equals,
+                        Expression = declaration.Value
+                    };
 
-                // TODO: What should happen if the variable is already declared?
-
-                node.Variables[declaration.VariableName.Value] = declaration.DataType;
+                    nodes.Add(ConvertSetVariableStatement(setStatement));
+                }
             }
 
-            // Make the variables available in our local copy of parameters so later statements
-            // in the same batch can use them
-            foreach (var variable in node.Variables)
-                _parameterTypes[variable.Key] = variable.Value;
-
-            return node;
+            return nodes.ToArray();
         }
 
         private void SetParent(IExecutionPlanNode plan)
@@ -1072,7 +1111,94 @@ namespace MarkMpn.Sql4Cds.Engine
             if (select.WithCtesAndXmlNamespaces != null)
                 throw new NotSupportedQueryFragmentException("Unsupported CTE clause", select.WithCtesAndXmlNamespaces);
 
-            return ConvertSelectStatement(select.QueryExpression, select.OptimizerHints, null, null, _parameterTypes);
+            var variableAssignments = new List<string>();
+            SelectElement firstNonSetSelectElement = null;
+
+            if (select.QueryExpression is QuerySpecification querySpec)
+            {
+                for (var i = 0; i < querySpec.SelectElements.Count; i++)
+                {
+                    var selectElement = querySpec.SelectElements[i];
+
+                    if (selectElement is SelectSetVariable set)
+                    {
+                        if (firstNonSetSelectElement != null)
+                            throw new NotSupportedQueryFragmentException("A SELECT statement that assigns a value to a variable must not be combined with data-retrieval operations", selectElement);
+
+                        variableAssignments.Add(set.Variable.Name);
+
+                        if (!_parameterTypes.TryGetValue(set.Variable.Name, out var paramType))
+                            throw new NotSupportedQueryFragmentException("Must declare the scalar variable", set.Variable);
+
+                        // Create the SELECT statement that generates the required information
+                        var expr = set.Expression;
+
+                        switch (set.AssignmentKind)
+                        {
+                            case AssignmentKind.AddEquals:
+                                expr = new BinaryExpression { FirstExpression = set.Variable, BinaryExpressionType = BinaryExpressionType.Add, SecondExpression = expr };
+                                break;
+
+                            case AssignmentKind.BitwiseAndEquals:
+                                expr = new BinaryExpression { FirstExpression = set.Variable, BinaryExpressionType = BinaryExpressionType.BitwiseAnd, SecondExpression = expr };
+                                break;
+
+                            case AssignmentKind.BitwiseOrEquals:
+                                expr = new BinaryExpression { FirstExpression = set.Variable, BinaryExpressionType = BinaryExpressionType.BitwiseOr, SecondExpression = expr };
+                                break;
+
+                            case AssignmentKind.BitwiseXorEquals:
+                                expr = new BinaryExpression { FirstExpression = set.Variable, BinaryExpressionType = BinaryExpressionType.BitwiseXor, SecondExpression = expr };
+                                break;
+
+                            case AssignmentKind.DivideEquals:
+                                expr = new BinaryExpression { FirstExpression = set.Variable, BinaryExpressionType = BinaryExpressionType.Divide, SecondExpression = expr };
+                                break;
+
+                            case AssignmentKind.ModEquals:
+                                expr = new BinaryExpression { FirstExpression = set.Variable, BinaryExpressionType = BinaryExpressionType.Modulo, SecondExpression = expr };
+                                break;
+
+                            case AssignmentKind.MultiplyEquals:
+                                expr = new BinaryExpression { FirstExpression = set.Variable, BinaryExpressionType = BinaryExpressionType.Multiply, SecondExpression = expr };
+                                break;
+
+                            case AssignmentKind.SubtractEquals:
+                                expr = new BinaryExpression { FirstExpression = set.Variable, BinaryExpressionType = BinaryExpressionType.Subtract, SecondExpression = expr };
+                                break;
+                        }
+
+                        expr = new ConvertCall { DataType = paramType, Parameter = expr };
+                        expr.ScriptTokenStream = null;
+
+                        querySpec.SelectElements[i] = new SelectScalarExpression { Expression = expr };
+                    }
+                    else if (firstNonSetSelectElement == null)
+                    {
+                        if (variableAssignments.Count > 0)
+                            throw new NotSupportedQueryFragmentException("A SELECT statement that assigns a value to a variable must not be combined with data-retrieval operations", selectElement);
+
+                        firstNonSetSelectElement = selectElement;
+                    }
+                }
+            }
+
+            var converted = ConvertSelectStatement(select.QueryExpression, select.OptimizerHints, null, null, _parameterTypes);
+
+            if (variableAssignments.Count > 0)
+            {
+                var assign = new AssignVariablesNode
+                {
+                    Source = converted.Source
+                };
+
+                for (var i = 0; i < variableAssignments.Count; i++)
+                    assign.Variables.Add(new VariableAssignment { SourceColumn = converted.ColumnSet[i].SourceColumn, VariableName = variableAssignments[i] });
+
+                return assign;
+            }
+
+            return converted;
         }
 
         private SelectNode ConvertSelectStatement(QueryExpression query, IList<OptimizerHint> hints, INodeSchema outerSchema, Dictionary<string,string> outerReferences, IDictionary<string, DataTypeReference> parameterTypes)
@@ -2060,6 +2186,10 @@ namespace MarkMpn.Sql4Cds.Engine
                         SourceColumn = colName,
                         AllColumns = true
                     });
+                }
+                else
+                {
+                    throw new NotSupportedQueryFragmentException("Unhandled SELECT element", element);
                 }
             }
 

@@ -3343,7 +3343,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual("@test", setVariable.Variables[0].VariableName);
             Assert.AreEqual("Expr1", setVariable.Variables[0].SourceColumn);
             var setCompute = AssertNode<ComputeScalarNode>(setVariable.Source);
-            Assert.AreEqual("1", setCompute.Columns["Expr1"].ToSql());
+            Assert.AreEqual("CONVERT (INT, 1)", setCompute.Columns["Expr1"].ToSql());
             var setConstantScan = AssertNode<ConstantScanNode>(setCompute.Source);
             Assert.AreEqual(1, setConstantScan.Values.Count);
 
@@ -3372,6 +3372,303 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     dmlQuery.Execute(_dataSources, this, parameterTypes, parameterValues);
                 }
             }
+        }
+
+        [TestMethod]
+        public void SetVariableInDeclaration()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                DECLARE @test int = 1
+                SELECT @test";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(3, plans.Length);
+
+            var declare = AssertNode<DeclareVariablesNode>(plans[0]);
+            Assert.AreEqual(1, declare.Variables.Count);
+            Assert.AreEqual(typeof(SqlInt32), declare.Variables["@test"].ToNetType(out _));
+
+            var setVariable = AssertNode<AssignVariablesNode>(plans[1]);
+            Assert.AreEqual(1, setVariable.Variables.Count);
+            Assert.AreEqual("@test", setVariable.Variables[0].VariableName);
+            Assert.AreEqual("Expr1", setVariable.Variables[0].SourceColumn);
+            var setCompute = AssertNode<ComputeScalarNode>(setVariable.Source);
+            Assert.AreEqual("CONVERT (INT, 1)", setCompute.Columns["Expr1"].ToSql());
+            var setConstantScan = AssertNode<ConstantScanNode>(setCompute.Source);
+            Assert.AreEqual(1, setConstantScan.Values.Count);
+
+            var select = AssertNode<SelectNode>(plans[2]);
+            Assert.AreEqual("Expr2", select.ColumnSet[0].SourceColumn);
+            var selectCompute = AssertNode<ComputeScalarNode>(select.Source);
+            Assert.AreEqual("@test", selectCompute.Columns["Expr2"].ToSql());
+            var selectConstantScan = AssertNode<ConstantScanNode>(selectCompute.Source);
+            Assert.AreEqual(1, selectConstantScan.Values.Count);
+
+            var parameterTypes = new Dictionary<string, DataTypeReference>();
+            var parameterValues = new Dictionary<string, object>();
+
+            foreach (var plan in plans)
+            {
+                if (plan is IDataSetExecutionPlanNode selectQuery)
+                {
+                    var results = selectQuery.Execute(_dataSources, this, parameterTypes, parameterValues);
+
+                    Assert.AreEqual(1, results.Rows.Count);
+                    Assert.AreEqual(1, results.Columns.Count);
+                    Assert.AreEqual((SqlInt32)1, results.Rows[0][0]);
+                }
+                else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
+                {
+                    dmlQuery.Execute(_dataSources, this, parameterTypes, parameterValues);
+                }
+            }
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void UnknownVariable()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SET @test = 1";
+
+            planBuilder.Build(query);
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void DuplicateVariable()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                DECLARE @test INT
+                DECLARE @test INT";
+
+            planBuilder.Build(query);
+        }
+
+        [TestMethod]
+        public void VariableTypeConversionIntToString()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                DECLARE @test varchar(3)
+                SET @test = 100
+                SELECT @test";
+
+            var plans = planBuilder.Build(query);
+
+            var parameterTypes = new Dictionary<string, DataTypeReference>();
+            var parameterValues = new Dictionary<string, object>();
+
+            foreach (var plan in plans)
+            {
+                if (plan is IDataSetExecutionPlanNode selectQuery)
+                {
+                    var results = selectQuery.Execute(_dataSources, this, parameterTypes, parameterValues);
+
+                    Assert.AreEqual(1, results.Rows.Count);
+                    Assert.AreEqual(1, results.Columns.Count);
+                    Assert.AreEqual(ToSqlString("100"), results.Rows[0][0]);
+                }
+                else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
+                {
+                    dmlQuery.Execute(_dataSources, this, parameterTypes, parameterValues);
+                }
+            }
+        }
+
+        [TestMethod]
+        public void VariableTypeConversionStringTruncation()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                DECLARE @test varchar(3)
+                SET @test = 'test'
+                SELECT @test";
+
+            var plans = planBuilder.Build(query);
+
+            var parameterTypes = new Dictionary<string, DataTypeReference>();
+            var parameterValues = new Dictionary<string, object>();
+
+            foreach (var plan in plans)
+            {
+                if (plan is IDataSetExecutionPlanNode selectQuery)
+                {
+                    var results = selectQuery.Execute(_dataSources, this, parameterTypes, parameterValues);
+
+                    Assert.AreEqual(1, results.Rows.Count);
+                    Assert.AreEqual(1, results.Columns.Count);
+                    Assert.AreEqual(ToSqlString("tes"), results.Rows[0][0]);
+                }
+                else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
+                {
+                    dmlQuery.Execute(_dataSources, this, parameterTypes, parameterValues);
+                }
+            }
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void CannotCombineSetVariableAndDataRetrievalInSelect()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            // A SELECT statement that assigns a value to a variable must not be combined with data-retrieval operations
+            var query = @"
+                DECLARE @test varchar(3)
+                SELECT @test = name, accountid FROM account";
+
+            planBuilder.Build(query);
+        }
+
+        [TestMethod]
+        public void SetVariableWithSelectUsesFinalValue()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                DECLARE @test varchar(3)
+                SELECT @test = name FROM account ORDER BY name
+                SELECT @test";
+
+            var plans = planBuilder.Build(query);
+
+            Assert.AreEqual(3, plans.Length);
+
+            var declare = AssertNode<DeclareVariablesNode>(plans[0]);
+            Assert.AreEqual(1, declare.Variables.Count);
+            Assert.AreEqual(typeof(SqlString), declare.Variables["@test"].ToNetType(out _));
+
+            var setVariable = AssertNode<AssignVariablesNode>(plans[1]);
+            Assert.AreEqual(1, setVariable.Variables.Count);
+            Assert.AreEqual("@test", setVariable.Variables[0].VariableName);
+            Assert.AreEqual("Expr1", setVariable.Variables[0].SourceColumn);
+            var setCompute = AssertNode<ComputeScalarNode>(setVariable.Source);
+            Assert.AreEqual("CONVERT (VARCHAR (3), name)", setCompute.Columns["Expr1"].ToSql());
+            var setFetchXml = AssertNode<FetchXmlScan>(setCompute.Source);
+            AssertFetchXml(setFetchXml, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <order attribute='name' />
+                    </entity>
+                </fetch>");
+
+            var select = AssertNode<SelectNode>(plans[2]);
+            Assert.AreEqual("Expr2", select.ColumnSet[0].SourceColumn);
+            var selectCompute = AssertNode<ComputeScalarNode>(select.Source);
+            Assert.AreEqual("@test", selectCompute.Columns["Expr2"].ToSql());
+            var selectConstantScan = AssertNode<ConstantScanNode>(selectCompute.Source);
+            Assert.AreEqual(1, selectConstantScan.Values.Count);
+
+            _context.Data["account"] = new Dictionary<Guid, Entity>
+            {
+                [Guid.NewGuid()] = new Entity("account")
+                {
+                    ["name"] = "X"
+                },
+                [Guid.NewGuid()] = new Entity("account")
+                {
+                    ["name"] = "Z"
+                },
+                [Guid.NewGuid()] = new Entity("account")
+                {
+                    ["name"] = "Y"
+                },
+            };
+
+            var parameterTypes = new Dictionary<string, DataTypeReference>();
+            var parameterValues = new Dictionary<string, object>();
+
+            foreach (var plan in plans)
+            {
+                if (plan is IDataSetExecutionPlanNode selectQuery)
+                {
+                    var results = selectQuery.Execute(_localDataSource, this, parameterTypes, parameterValues);
+
+                    Assert.AreEqual(1, results.Rows.Count);
+                    Assert.AreEqual(1, results.Columns.Count);
+                    Assert.AreEqual(ToSqlString("Z"), results.Rows[0][0]);
+                }
+                else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
+                {
+                    dmlQuery.Execute(_localDataSource, this, parameterTypes, parameterValues);
+                }
+            }
+        }
+
+        [TestMethod]
+        public void VarCharLengthDefaultsTo1()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                DECLARE @test varchar
+                SET @test = 'test'
+                SELECT @test";
+
+            var plans = planBuilder.Build(query);
+
+            var parameterTypes = new Dictionary<string, DataTypeReference>();
+            var parameterValues = new Dictionary<string, object>();
+
+            foreach (var plan in plans)
+            {
+                if (plan is IDataSetExecutionPlanNode selectQuery)
+                {
+                    var results = selectQuery.Execute(_dataSources, this, parameterTypes, parameterValues);
+
+                    Assert.AreEqual(1, results.Rows.Count);
+                    Assert.AreEqual(1, results.Columns.Count);
+                    Assert.AreEqual(ToSqlString("t"), results.Rows[0][0]);
+                }
+                else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
+                {
+                    dmlQuery.Execute(_dataSources, this, parameterTypes, parameterValues);
+                }
+            }
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void CursorVariableNotSupported()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                DECLARE @test CURSOR";
+
+            planBuilder.Build(query);
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void TableVariableNotSupported()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                DECLARE @test TABLE (ID INT)";
+
+            planBuilder.Build(query);
         }
     }
 }

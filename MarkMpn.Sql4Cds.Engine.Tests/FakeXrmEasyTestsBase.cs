@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data.SqlTypes;
+using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -54,6 +56,11 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 typeof(AttributeMetadata).GetProperty(nameof(AttributeMetadata.IsPrimaryId)).SetValue(attr, true);
                 context.SetEntityMetadata(entity);
             }
+        }
+
+        protected SqlString ToSqlString(string str)
+        {
+            return new SqlString(str, CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace);
         }
     }
 }

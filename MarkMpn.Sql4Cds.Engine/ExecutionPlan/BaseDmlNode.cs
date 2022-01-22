@@ -88,7 +88,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("Data Source")]
         [Description("The data source this query is executed against")]
-        public string DataSource { get; set; }
+        public virtual string DataSource { get; set; }
 
         /// <summary>
         /// Changes system settings to optimise for parallel connections

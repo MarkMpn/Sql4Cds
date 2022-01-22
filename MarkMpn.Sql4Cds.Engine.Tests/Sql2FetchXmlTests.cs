@@ -1611,11 +1611,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual((SqlInt32)2, dataTable.Rows[0][select.ColumnSet[1].SourceColumn]);
         }
 
-        private SqlString ToSqlString(string str)
-        {
-            return new SqlString(str, CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace);
-        }
-
         [TestMethod]
         public void GuidEntityReferenceInequality()
         {
