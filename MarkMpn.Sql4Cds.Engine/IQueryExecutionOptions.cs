@@ -84,11 +84,6 @@ namespace MarkMpn.Sql4Cds.Engine
         bool UseRetrieveTotalRecordCount { get; }
 
         /// <summary>
-        /// The language code to retrieve results in
-        /// </summary>
-        int LocaleId { get; }
-
-        /// <summary>
         /// The maximum number of worker threads to use to execute DML queries
         /// </summary>
         int MaxDegreeOfParallelism { get; }

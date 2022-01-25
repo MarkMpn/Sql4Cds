@@ -47,7 +47,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
         }
 
-        public string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        public string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected)
         {
             _executionCount++;
 
@@ -72,6 +72,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     else
                         throw new QueryExecutionException("Unexpected organization service type") { Node = this };
 
+                    recordsAffected = -1;
                     return "Reverted impersonation";
                 }
             }

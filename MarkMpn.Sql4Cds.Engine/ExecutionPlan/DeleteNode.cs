@@ -81,7 +81,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return this;
         }
 
-        public override string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        public override string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected)
         {
             _executionCount++;
 
@@ -151,7 +151,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             InProgressUppercase = "Deleting",
                             InProgressLowercase = "deleting",
                             CompletedLowercase = "deleted"
-                        });
+                        },
+                        out recordsAffected);
                 }
             }
             catch (QueryExecutionException ex)

@@ -124,5 +124,15 @@ namespace MarkMpn.Sql4Cds.Engine
 
             return new EntityReference(er.LogicalName, er._guid.Value);
         }
+
+        public static implicit operator Guid(SqlEntityReference er)
+        {
+            return er._guid.Value;
+        }
+
+        public static implicit operator SqlEntityReference(EntityReference er)
+        {
+            return new SqlEntityReference(null, er);
+        }
     }
 }

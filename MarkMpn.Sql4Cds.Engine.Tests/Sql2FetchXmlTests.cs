@@ -38,8 +38,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         bool IQueryExecutionOptions.UseRetrieveTotalRecordCount => true;
 
-        int IQueryExecutionOptions.LocaleId => 1033;
-
         int IQueryExecutionOptions.MaxDegreeOfParallelism => 10;
 
         bool IQueryExecutionOptions.ColumnComparisonAvailable => true;
@@ -896,7 +894,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            ((UpdateNode)queries[0]).Execute(GetDataSources(_context), this, null, null);
+            ((UpdateNode)queries[0]).Execute(GetDataSources(_context), this, null, null, out _);
 
             Assert.AreEqual("Carrington", _context.Data["contact"][guid]["firstname"]);
         }
@@ -929,7 +927,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            ((UpdateNode)queries[0]).Execute(GetDataSources(_context), this, null, null);
+            ((UpdateNode)queries[0]).Execute(GetDataSources(_context), this, null, null, out _);
 
             Assert.AreEqual("Hello Carrington", _context.Data["contact"][guid]["firstname"]);
         }
@@ -966,7 +964,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            ((UpdateNode)queries[0]).Execute(GetDataSources(_context), this, null, null);
+            ((UpdateNode)queries[0]).Execute(GetDataSources(_context), this, null, null, out _);
 
             Assert.AreEqual("--CDS--", _context.Data["contact"][guid]["firstname"]);
         }
@@ -1707,7 +1705,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            update.Execute(GetDataSources(_context), this, null, null);
+            update.Execute(GetDataSources(_context), this, null, null, out _);
 
             Assert.AreEqual(new EntityReference("contact", contact1), _context.Data["account"][account1].GetAttributeValue<EntityReference>("primarycontactid"));
             Assert.AreEqual(new EntityReference("contact", contact2), _context.Data["account"][account2].GetAttributeValue<EntityReference>("primarycontactid"));

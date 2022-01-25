@@ -105,7 +105,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
         /// <param name="parameterValues">A mapping of parameter names to their current values</param>
         /// <returns>A log message to display</returns>
-        public abstract string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues);
+        public abstract string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected);
 
         /// <summary>
         /// Attempts to fold this node into its source to simplify the query
@@ -343,7 +343,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="requestGenerator">A function to generate a DML request from a data source entity</param>
         /// <param name="operationNames">The constant strings to use in log messages</param>
         /// <returns>The final log message</returns>
-        protected string ExecuteDmlOperation(IOrganizationService org, IQueryExecutionOptions options, List<Entity> entities, EntityMetadata meta, Func<Entity,OrganizationRequest> requestGenerator, OperationNames operationNames)
+        protected string ExecuteDmlOperation(IOrganizationService org, IQueryExecutionOptions options, List<Entity> entities, EntityMetadata meta, Func<Entity,OrganizationRequest> requestGenerator, OperationNames operationNames, out int recordsAffected)
         {
             var inProgressCount = 0;
             var count = 0;
@@ -490,6 +490,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 throw new PartialSuccessException($"{count:N0} {GetDisplayName(count, meta)} {operationNames.CompletedLowercase}", ex);
             }
 
+            recordsAffected = count;
             return $"{count:N0} {GetDisplayName(count, meta)} {operationNames.CompletedLowercase}";
         }
     }

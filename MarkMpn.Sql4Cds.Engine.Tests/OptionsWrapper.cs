@@ -23,7 +23,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             BatchSize = options.BatchSize;
             UseTDSEndpoint = options.UseTDSEndpoint;
             UseRetrieveTotalRecordCount = options.UseRetrieveTotalRecordCount;
-            LocaleId = options.LocaleId;
             MaxDegreeOfParallelism = options.MaxDegreeOfParallelism;
             ColumnComparisonAvailable = options.ColumnComparisonAvailable;
             UseLocalTimeZone = options.UseLocalTimeZone;
@@ -46,8 +45,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public bool UseTDSEndpoint { get; set; }
 
         public bool UseRetrieveTotalRecordCount { get; set; }
-
-        public int LocaleId { get; set; }
 
         public int MaxDegreeOfParallelism { get; set; }
 

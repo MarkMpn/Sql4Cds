@@ -30,6 +30,9 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             DataSources = dataSources.ToDictionary(ds => ds.Name, StringComparer.OrdinalIgnoreCase);
             Options = options;
+
+            if (!DataSources.ContainsKey(Options.PrimaryDataSource))
+                throw new ArgumentOutOfRangeException(nameof(options), "Primary data source " + options.PrimaryDataSource + " not found");
         }
 
         /// <summary>

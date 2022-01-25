@@ -24,8 +24,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         bool IQueryExecutionOptions.UseRetrieveTotalRecordCount => true;
 
-        int IQueryExecutionOptions.LocaleId => 1033;
-
         int IQueryExecutionOptions.MaxDegreeOfParallelism => 10;
 
         bool IQueryExecutionOptions.ColumnComparisonAvailable => true;

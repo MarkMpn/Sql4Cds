@@ -32,8 +32,6 @@ namespace MarkMpn.Sql4Cds.SSMS
 
         public bool UseRetrieveTotalRecordCount => false;
 
-        public int LocaleId => 1033;
-
         public int MaxDegreeOfParallelism => _options.MaxDegreeOfParallelism;
 
         public bool ColumnComparisonAvailable => true;

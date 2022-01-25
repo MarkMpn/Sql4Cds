@@ -130,32 +130,6 @@ namespace MarkMpn.Sql4Cds
 
         public bool UseRetrieveTotalRecordCount => Settings.Instance.UseRetrieveTotalRecordCount;
 
-        public int LocaleId
-        {
-            get
-            {
-                if (_localeId != 0)
-                    return _localeId;
-
-                var qry = new QueryExpression("usersettings");
-                qry.TopCount = 1;
-                qry.ColumnSet = new ColumnSet("localeid");
-                qry.Criteria.AddCondition("systemuserid", ConditionOperator.EqualUserId);
-                var userLink = qry.AddLink("systemuser", "systemuserid", "systemuserid");
-                var orgLink = userLink.AddLink("organization", "organizationid", "organizationid");
-                orgLink.EntityAlias = "org";
-                orgLink.Columns = new ColumnSet("localeid");
-                var locale = _org.RetrieveMultiple(qry).Entities.Single();
-
-                if (locale.Contains("localeid"))
-                    _localeId = locale.GetAttributeValue<int>("localeid");
-                else
-                    _localeId = (int) locale.GetAttributeValue<AliasedValue>("org.localeid").Value;
-
-                return _localeId;
-            }
-        }
-
         public int MaxDegreeOfParallelism => Settings.Instance.MaxDegreeOfPaallelism;
 
         public bool ColumnComparisonAvailable => new Version(_con.OrganizationVersion) >= new Version("9.1.0.19251");
