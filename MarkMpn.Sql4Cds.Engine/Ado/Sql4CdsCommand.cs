@@ -122,7 +122,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (_plan != null)
                 return;
 
-            _plan = _connection.PlanBuilder.Build(CommandText);
+            _plan = _connection.PlanBuilder.Build(CommandText, ((Sql4CdsParameterCollection)Parameters).GetParameterTypes());
         }
 
         protected override DbParameter CreateDbParameter()

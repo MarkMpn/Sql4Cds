@@ -113,5 +113,26 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             }
         }
+
+        [TestMethod]
+        public void SelectParameters()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList(), this))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "SELECT @param1, @param2";
+
+                cmd.Parameters.Add(new Sql4CdsParameter("@param1", 1));
+                cmd.Parameters.Add(new Sql4CdsParameter("@param2", "text"));
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(1, reader.GetInt32(0));
+                    Assert.AreEqual("text", reader.GetString(1));
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
     }
 }

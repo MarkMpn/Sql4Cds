@@ -55,20 +55,15 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         public bool TDSEndpointAvailable { get; set; }
 
-        /// <summary>
-        /// The names and types of any parameters that are available to the queries
-        /// </summary>
-        public IDictionary<string, DataTypeReference> Parameters { get; set; }
-
-        public IRootExecutionPlanNode[] Build(string sql)
+        public IRootExecutionPlanNode[] Build(string sql, IDictionary<string, DataTypeReference> parameters = null)
         {
             // Take a copy of the defined parameters so we can add more while we're building the query without
             // affecting the original collection until the query is actually run
             _parameterTypes = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
 
-            if (Parameters != null)
+            if (parameters != null)
             {
-                foreach (var param in Parameters)
+                foreach (var param in parameters)
                     _parameterTypes[param.Key] = param.Value;
             }
 

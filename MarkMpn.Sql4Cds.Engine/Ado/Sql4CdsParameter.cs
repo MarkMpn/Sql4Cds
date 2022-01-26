@@ -17,6 +17,16 @@ namespace MarkMpn.Sql4Cds.Engine
         private DataTypeReference _dataType;
         private object _value;
 
+        public Sql4CdsParameter()
+        {
+        }
+
+        public Sql4CdsParameter(string name, object value)
+        {
+            ParameterName = name;
+            Value = value;
+        }
+
         public override DbType DbType
         {
             get
