@@ -8,6 +8,7 @@ using System.Data.SqlTypes;
 using System.Linq.Expressions;
 using System.Text;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
+using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
@@ -36,12 +37,17 @@ namespace MarkMpn.Sql4Cds.Engine
             var parameterTypes = ((Sql4CdsParameterCollection)command.Parameters).GetParameterTypes();
             var parameterValues = ((Sql4CdsParameterCollection)command.Parameters).GetParameterValues();
 
+            parameterTypes["@@IDENTITY"] = typeof(SqlEntityReference).ToSqlType();
+            parameterTypes["@@ROWCOUNT"] = typeof(SqlInt32).ToSqlType();
+            parameterValues["@@IDENTITY"] = SqlEntityReference.Null;
+            parameterValues["@@ROWCOUNT"] = (SqlInt32)0;
+
             foreach (var plan in command.Plan)
             {
                 if (plan is IDataSetExecutionPlanNode dataSetNode)
                 {
                     var table = dataSetNode.Execute(_connection.DataSources, options, parameterTypes, parameterValues);
-                    _results.Add(ConvertToNetTypes(table));
+                    _results.Add(table);
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlNode)
                 {
@@ -66,87 +72,6 @@ namespace MarkMpn.Sql4Cds.Engine
             NextResult();
         }
 
-        private static readonly Dictionary<Type, Type> _sqlToNetType = new Dictionary<Type, Type>
-        {
-            [typeof(SqlBinary)] = typeof(byte[]),
-            [typeof(SqlBoolean)] = typeof(bool),
-            [typeof(SqlByte)] = typeof(byte),
-            [typeof(SqlDateTime)] = typeof(DateTime),
-            [typeof(SqlDecimal)] = typeof(decimal),
-            [typeof(SqlDouble)] = typeof(double),
-            [typeof(SqlGuid)] = typeof(Guid),
-            [typeof(SqlInt16)] = typeof(short),
-            [typeof(SqlInt32)] = typeof(int),
-            [typeof(SqlInt64)] = typeof(long),
-            [typeof(SqlSingle)] = typeof(float),
-            [typeof(SqlString)] = typeof(string),
-            [typeof(SqlMoney)] = typeof(decimal),
-            [typeof(SqlEntityReference)] = typeof(Guid)
-        };
-
-        private static Type SqlToNetType(Type sqlType)
-        {
-            if (_sqlToNetType.TryGetValue(sqlType, out var netType))
-                return netType;
-
-            return typeof(string);
-        }
-
-        private static ConcurrentDictionary<Type, Func<object, object>> _conversions = new ConcurrentDictionary<Type, Func<object, object>>();
-
-        private static Func<object, object> GetConversion(Type sqlType)
-        {
-            return _conversions.GetOrAdd(sqlType, t => CompileConversion(t));
-        }
-
-        private static Func<object, object> CompileConversion(Type sqlType)
-        {
-            var netType = SqlToNetType(sqlType);
-
-            var param = Expression.Parameter(typeof(object));
-            var expr = (Expression) param;
-            expr = Expression.Convert(expr, sqlType);
-            expr = Expression.Condition(
-                    SqlTypeConverter.NullCheck(expr),
-                    Expression.Convert(
-                        Expression.Constant(DBNull.Value),
-                        typeof(object)
-                        ),
-                    Expression.Convert(
-                        SqlTypeConverter.Convert(expr, netType),
-                        typeof(object)
-                        )
-                    );
-
-            return Expression.Lambda<Func<object, object>>(expr, param).Compile();
-        }
-
-        private static DataTable ConvertToNetTypes(DataTable sqlTable)
-        {
-            var netTable = new DataTable();
-            var conversions = new List<Func<object, object>>();
-
-            for (var i = 0; i < sqlTable.Columns.Count; i++)
-            {
-                var netType = SqlToNetType(sqlTable.Columns[i].DataType);
-                conversions.Add(GetConversion(sqlTable.Columns[i].DataType));
-                netTable.Columns.Add(sqlTable.Columns[i].ColumnName, netType);
-            }
-
-            foreach (DataRow row in sqlTable.Rows)
-            {
-                var netRow = netTable.Rows.Add();
-
-                for (var i = 0; i < sqlTable.Columns.Count; i++)
-                {
-                    var netValue = conversions[i](row[i]);
-                    netRow[i] = netValue;
-                }
-            }
-
-            return netTable;
-        }
-
         public override object this[int ordinal] => _results[_resultIndex].Rows[_rowIndex][ordinal];
 
         public override object this[string name] => _results[_resultIndex].Rows[_rowIndex][name];
@@ -163,17 +88,17 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public override bool GetBoolean(int ordinal)
         {
-            return (bool)this[ordinal];
+            return (bool)(SqlBoolean)this[ordinal];
         }
 
         public override byte GetByte(int ordinal)
         {
-            return (byte)this[ordinal];
+            return (byte)(SqlByte)this[ordinal];
         }
 
         public override long GetBytes(int ordinal, long dataOffset, byte[] buffer, int bufferOffset, int length)
         {
-            var bytes = (byte[])this[ordinal];
+            var bytes = (byte[])(SqlBinary)this[ordinal];
             length = (int) Math.Min(length, bytes.Length - dataOffset);
 
             Array.Copy(bytes, dataOffset, buffer, bufferOffset, length);
@@ -182,12 +107,12 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public override char GetChar(int ordinal)
         {
-            return (char)this[ordinal];
+            throw new NotImplementedException();
         }
 
         public override long GetChars(int ordinal, long dataOffset, char[] buffer, int bufferOffset, int length)
         {
-            var chars = (char[])this[ordinal];
+            var chars = ((SqlChars)this[ordinal]).Value;
             length = (int)Math.Min(length, chars.Length - dataOffset);
 
             Array.Copy(chars, dataOffset, buffer, bufferOffset, length);
@@ -201,17 +126,24 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public override DateTime GetDateTime(int ordinal)
         {
-            return (DateTime)this[ordinal];
+            return (DateTime)(SqlDateTime)this[ordinal];
         }
 
         public override decimal GetDecimal(int ordinal)
         {
-            return (decimal)this[ordinal];
+            var value = this[ordinal];
+
+            if (value is SqlDecimal d)
+                return (decimal)d;
+            else if (value is SqlMoney m)
+                return (decimal)m;
+            else
+                throw new InvalidCastException();
         }
 
         public override double GetDouble(int ordinal)
         {
-            return (double)this[ordinal];
+            return (double)(SqlDouble)this[ordinal];
         }
 
         public override IEnumerator GetEnumerator()
@@ -227,27 +159,34 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public override float GetFloat(int ordinal)
         {
-            return (float)this[ordinal];
+            return (float)(SqlSingle)this[ordinal];
         }
 
         public override Guid GetGuid(int ordinal)
         {
-            return (Guid)this[ordinal];
+            var value = this[ordinal];
+
+            if (value is SqlGuid g)
+                return (Guid)g;
+            else if (value is SqlEntityReference er)
+                return (Guid)er;
+            else
+                throw new InvalidCastException();
         }
 
         public override short GetInt16(int ordinal)
         {
-            return (short)this[ordinal];
+            return (short)(SqlInt16)this[ordinal];
         }
 
         public override int GetInt32(int ordinal)
         {
-            return (int)this[ordinal];
+            return (int)(SqlInt32)this[ordinal];
         }
 
         public override long GetInt64(int ordinal)
         {
-            return (long)this[ordinal];
+            return (long)(SqlInt64)this[ordinal];
         }
 
         public override string GetName(int ordinal)
@@ -262,7 +201,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public override string GetString(int ordinal)
         {
-            return (string)this[ordinal];
+            return (string)(SqlString)this[ordinal];
         }
 
         public override object GetValue(int ordinal)
@@ -280,7 +219,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public override bool IsDBNull(int ordinal)
         {
-            return this[ordinal].Equals(DBNull.Value);
+            return ((INullable)this[ordinal]).IsNull;
         }
 
         public override bool NextResult()
