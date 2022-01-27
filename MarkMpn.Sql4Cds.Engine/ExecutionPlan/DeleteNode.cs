@@ -152,7 +152,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             InProgressLowercase = "deleting",
                             CompletedLowercase = "deleted"
                         },
-                        out recordsAffected);
+                        out recordsAffected,
+                        parameterValues);
                 }
             }
             catch (QueryExecutionException ex)

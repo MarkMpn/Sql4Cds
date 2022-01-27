@@ -202,7 +202,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     Assert.AreEqual(1, reader.RecordsAffected);
                     Assert.IsTrue(reader.Read());
-                    var id = reader.GetGuid(0);
+                    var id = (SqlEntityReference) reader.GetValue(0);
+                    Assert.AreEqual("account", id.LogicalName);
                     Assert.IsFalse(reader.Read());
 
                     Assert.IsTrue(reader.NextResult());
@@ -212,8 +213,48 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     Assert.IsFalse(reader.NextResult());
 
                     Assert.AreEqual(1, _context.Data["account"].Count);
-                    Assert.AreEqual("'Data8'", _context.Data["account"][id].GetAttributeValue<string>("name"));
+                    Assert.AreEqual("'Data8'", _context.Data["account"][id.Id].GetAttributeValue<string>("name"));
                     Assert.AreEqual("'Data8'", name);
+                }
+            }
+        }
+
+        [TestMethod]
+        public void GetLastInsertId()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList(), this))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "INSERT INTO account (name) VALUES (@name); SELECT @@IDENTITY";
+                cmd.Parameters.Add(new Sql4CdsParameter("@name", "'Data8'"));
+
+                var id = (SqlEntityReference)cmd.ExecuteScalar();
+
+                Assert.AreEqual("account", id.LogicalName);
+                Assert.AreEqual(1, _context.Data["account"].Count);
+                Assert.AreEqual("'Data8'", _context.Data["account"][id.Id].GetAttributeValue<string>("name"));
+            }
+        }
+
+        [TestMethod]
+        public void RowCount()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList(), this))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "INSERT INTO account (name) VALUES ('1'), ('2'), ('3'); SELECT @@ROWCOUNT; SELECT @@ROWCOUNT";
+                
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(3, reader.GetInt32(0));
+                    Assert.IsFalse(reader.Read());
+
+                    Assert.IsTrue(reader.NextResult());
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual(1, reader.GetInt32(0));
+                    Assert.IsFalse(reader.Read());
+                    Assert.IsFalse(reader.NextResult());
                 }
             }
         }

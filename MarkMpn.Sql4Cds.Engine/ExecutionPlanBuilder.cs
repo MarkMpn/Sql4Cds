@@ -67,6 +67,10 @@ namespace MarkMpn.Sql4Cds.Engine
                     _parameterTypes[param.Key] = param.Value;
             }
 
+            // Add in standard global variables
+            _parameterTypes["@@IDENTITY"] = typeof(SqlEntityReference).ToSqlType();
+            _parameterTypes["@@ROWCOUNT"] = typeof(SqlInt32).ToSqlType();
+
             var queries = new List<IRootExecutionPlanNode>();
 
             // Parse the SQL DOM

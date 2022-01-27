@@ -131,6 +131,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return ToExpression(cast, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
             else if (expr is ParameterlessCall parameterless)
                 return ToExpression(parameterless, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+            else if (expr is GlobalVariableExpression global)
+                return ToExpression(global, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
             else
                 throw new NotSupportedQueryFragmentException("Unhandled expression type", expr);
         }
@@ -614,7 +616,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (parameterTypes == null || !parameterTypes.TryGetValue(var.Name, out var type))
                 throw new NotSupportedQueryFragmentException("Undefined variable", var);
 
-            var expr = Expression.Property(parameterParam, typeof(IDictionary<string,object>).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(var.Name));
+            var expr = Expression.Property(parameterParam, typeof(IDictionary<string, object>).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(var.Name));
+            return Expression.Convert(expr, type.ToNetType(out _));
+        }
+
+        private static Expression ToExpression(this GlobalVariableExpression var, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
+        {
+            if (parameterTypes == null || !parameterTypes.TryGetValue(var.Name, out var type))
+                throw new NotSupportedQueryFragmentException("Undefined variable", var);
+
+            var expr = Expression.Property(parameterParam, typeof(IDictionary<string, object>).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(var.Name));
             return Expression.Convert(expr, type.ToNetType(out _));
         }
 

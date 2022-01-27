@@ -95,7 +95,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             InProgressLowercase = "inserting",
                             CompletedLowercase = "inserted"
                         },
-                        out recordsAffected);
+                        out recordsAffected,
+                        parameterValues,
+                        LogicalName == "listmember" || meta.IsIntersect == true ? null : (Action<OrganizationResponse>) ((r) => SetIdentity(r, parameterValues))
+                        );
                 }
             }
             catch (QueryExecutionException ex)
@@ -180,6 +183,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return new CreateRequest { Target = insert };
+        }
+
+        private void SetIdentity(OrganizationResponse response, IDictionary<string, object> parameterValues)
+        {
+            var create = (CreateResponse)response;
+            parameterValues["@@IDENTITY"] = new SqlEntityReference(DataSource, LogicalName, create.id);
         }
 
         public override string ToString()

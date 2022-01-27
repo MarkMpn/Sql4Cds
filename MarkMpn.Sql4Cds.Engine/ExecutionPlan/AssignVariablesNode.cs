@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Data.SqlTypes;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -30,11 +31,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             using (_timer.Run())
             {
+                var count = 0;
+
                 foreach (var entity in GetDmlSourceEntities(dataSources, options, parameterTypes, parameterValues, out _))
                 {
                     foreach (var variable in Variables)
                         parameterValues[variable.VariableName] = entity[variable.SourceColumn];
+
+                    count++;
                 }
+
+                parameterValues["@@ROWCOUNT"] = (SqlInt32)count;
             }
 
             recordsAffected = -1;

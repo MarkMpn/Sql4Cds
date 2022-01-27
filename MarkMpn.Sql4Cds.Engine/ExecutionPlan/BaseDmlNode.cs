@@ -343,7 +343,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="requestGenerator">A function to generate a DML request from a data source entity</param>
         /// <param name="operationNames">The constant strings to use in log messages</param>
         /// <returns>The final log message</returns>
-        protected string ExecuteDmlOperation(IOrganizationService org, IQueryExecutionOptions options, List<Entity> entities, EntityMetadata meta, Func<Entity,OrganizationRequest> requestGenerator, OperationNames operationNames, out int recordsAffected)
+        protected string ExecuteDmlOperation(IOrganizationService org, IQueryExecutionOptions options, List<Entity> entities, EntityMetadata meta, Func<Entity,OrganizationRequest> requestGenerator, OperationNames operationNames, out int recordsAffected, IDictionary<string, object> parameterValues, Action<OrganizationResponse> responseHandler = null)
         {
             var inProgressCount = 0;
             var count = 0;
@@ -408,8 +408,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 var newCount = Interlocked.Increment(ref inProgressCount);
                                 var progress = (double)newCount / entities.Count;
                                 options.Progress(progress, $"{operationNames.InProgressUppercase} {newCount:N0} of {entities.Count:N0} {GetDisplayName(0, meta)} ({progress:P0})...");
-                                threadLocalState.Service.Execute(request);
+                                var response = threadLocalState.Service.Execute(request);
                                 Interlocked.Increment(ref count);
+
+                                responseHandler?.Invoke(response);
                             }
                             else
                             {
@@ -424,7 +426,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                             Settings = new ExecuteMultipleSettings
                                             {
                                                 ContinueOnError = false,
-                                                ReturnResponses = false
+                                                ReturnResponses = responseHandler != null
                                             }
                                         }
                                     };
@@ -439,9 +441,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                     options.Progress(progress, $"{operationNames.InProgressUppercase} {GetDisplayName(0, meta)} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
                                     var resp = (ExecuteMultipleResponse)threadLocalState.Service.Execute(threadLocalState.EMR);
 
+                                    if (responseHandler != null)
+                                    {
+                                        foreach (var item in resp.Responses)
+                                        {
+                                            if (item.Response != null)
+                                                responseHandler(item.Response);
+                                        }
+                                    }
+
                                     if (resp.IsFaulted)
                                     {
-                                        var error = resp.Responses[0];
+                                        var error = resp.Responses.First(r => r.Fault != null);
                                         Interlocked.Add(ref count, error.RequestIndex);
                                         throw new ApplicationException($"Error {operationNames.InProgressLowercase} {GetDisplayName(0, meta)} - " + error.Fault.Message);
                                     }
@@ -465,9 +476,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 options.Progress(progress, $"{operationNames.InProgressUppercase} {GetDisplayName(0, meta)} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
                                 var resp = (ExecuteMultipleResponse)threadLocalState.Service.Execute(threadLocalState.EMR);
 
+                                if (responseHandler != null)
+                                {
+                                    foreach (var item in resp.Responses)
+                                    {
+                                        if (item.Response != null)
+                                            responseHandler(item.Response);
+                                    }
+                                }
+
                                 if (resp.IsFaulted)
                                 {
-                                    var error = resp.Responses[0];
+                                    var error = resp.Responses.First(r => r.Fault != null);
                                     Interlocked.Add(ref count, error.RequestIndex);
                                     throw new ApplicationException($"Error {operationNames.InProgressLowercase} {GetDisplayName(0, meta)} - " + error.Fault.Message);
                                 }
@@ -491,6 +511,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             recordsAffected = count;
+            parameterValues["@@ROWCOUNT"] = (SqlInt32)count;
             return $"{count:N0} {GetDisplayName(count, meta)} {operationNames.CompletedLowercase}";
         }
     }

@@ -127,7 +127,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             InProgressLowercase = "updating",
                             CompletedLowercase = "updated"
                         },
-                        out recordsAffected);
+                        out recordsAffected,
+                        parameterValues);
                 }
             }
             catch (QueryExecutionException ex)

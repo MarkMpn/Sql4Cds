@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
 using System.Data.SqlClient;
+using System.Data.SqlTypes;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -128,6 +129,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 sqlRow[i] = sqlValue;
                             }
                         }
+
+                        if (Parent == null)
+                            parameterValues["@@ROWCOUNT"] = (SqlInt32)sqlTable.Rows.Count;
 
                         return sqlTable;
                     }
