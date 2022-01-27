@@ -348,9 +348,9 @@ namespace MarkMpn.Sql4Cds.Engine
                     },
                     Values =
                     {
-                        new Entity
+                        new Dictionary<string, ScalarExpression>
                         {
-                            ["systemuserid"] = SqlTypeConverter.UseDefaultCollation(new SqlString(user.Value))
+                            ["systemuserid"] = user
                         }
                     }
                 };
@@ -1293,7 +1293,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             // Each table in the FROM clause starts as a separate FetchXmlScan node. Add appropriate join nodes
-            var node = querySpec.FromClause == null ? new ConstantScanNode { Values = { new Entity() } } : ConvertFromClause(querySpec.FromClause.TableReferences, hints, querySpec, outerSchema, outerReferences, parameterTypes);
+            var node = querySpec.FromClause == null ? new ConstantScanNode { Values = { new Dictionary<string, ScalarExpression>() } } : ConvertFromClause(querySpec.FromClause.TableReferences, hints, querySpec, outerSchema, outerReferences, parameterTypes);
 
             node = ConvertInSubqueries(node, hints, querySpec, parameterTypes, outerSchema, outerReferences);
             node = ConvertExistsSubqueries(node, hints, querySpec, parameterTypes, outerSchema, outerReferences);
@@ -3008,13 +3008,13 @@ namespace MarkMpn.Sql4Cds.Engine
                 throw new NotSupportedQueryFragmentException($"Expected {columnNames.Count} columns, got {firstMismatchRow.ColumnValues.Count}", firstMismatchRow);
 
             // Work out the column types
-            var types = inlineDerivedTable.RowValues[0].ColumnValues.Select(val => val.GetType(null, null, null)).ToList();
+            var types = inlineDerivedTable.RowValues[0].ColumnValues.Select(val => val.GetType(null, null, _parameterTypes)).ToList();
 
             foreach (var row in inlineDerivedTable.RowValues.Skip(1))
             {
                 for (var colIndex = 0; colIndex < types.Count; colIndex++)
                 {
-                    if (!SqlTypeConverter.CanMakeConsistentTypes(types[colIndex], row.ColumnValues[colIndex].GetType(null, null, null), out var colType))
+                    if (!SqlTypeConverter.CanMakeConsistentTypes(types[colIndex], row.ColumnValues[colIndex].GetType(null, null, _parameterTypes), out var colType))
                         throw new NotSupportedQueryFragmentException("No available implicit type conversion", row.ColumnValues[colIndex]);
 
                     types[colIndex] = colType;
@@ -3026,17 +3026,12 @@ namespace MarkMpn.Sql4Cds.Engine
 
             foreach (var row in inlineDerivedTable.RowValues)
             {
-                var entity = new Entity();
+                var values = new Dictionary<string, ScalarExpression>();
 
                 for (var colIndex = 0; colIndex < types.Count; colIndex++)
-                {
-                    if (!row.ColumnValues[colIndex].IsConstantValueExpression(null, Options, out var literal))
-                        throw new NotSupportedQueryFragmentException("Literal value expected", row.ColumnValues[colIndex]);
+                    values[columnNames[colIndex]] = row.ColumnValues[colIndex];
 
-                    entity[columnNames[colIndex]] = SqlTypeConverter.ChangeType(new SqlString(literal.Value, CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace), types[colIndex]);
-                }
-
-                constantScan.Values.Add(entity);
+                constantScan.Values.Add(values);
             }
 
             // Build the schema

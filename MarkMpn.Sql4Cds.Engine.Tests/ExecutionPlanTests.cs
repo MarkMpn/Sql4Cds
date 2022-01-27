@@ -3089,6 +3089,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     Connection = _context2.GetOrganizationService(),
                     Metadata = metadata2,
                     TableSizeCache = new StubTableSizeCache()
+                },
+                new DataSource
+                {
+                    Name = "local" // Hack so that ((IQueryExecutionOptions)this).PrimaryDataSource = "local" doesn't cause test to fail
                 }
             };
             var planBuilder = new ExecutionPlanBuilder(datasources, this);

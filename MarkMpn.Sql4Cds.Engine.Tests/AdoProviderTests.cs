@@ -134,5 +134,88 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             }
         }
+
+        [TestMethod]
+        public void InsertRecordsAffected()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList(), this))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "INSERT INTO account (name) VALUES (@name)";
+                cmd.Parameters.Add(new Sql4CdsParameter("@name", "'Data8'"));
+                var affected = cmd.ExecuteNonQuery();
+
+                Assert.AreEqual(1, affected);
+                Assert.AreEqual(1, _context.Data["account"].Count);
+                Assert.AreEqual("'Data8'", _context.Data["account"].Values.Single().GetAttributeValue<string>("name"));
+            }
+        }
+
+        [TestMethod]
+        public void InsertRecordsAffectedMultipleCommands()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList(), this))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "INSERT INTO account (name) VALUES (@name); INSERT INTO account (name) VALUES (@name)";
+                cmd.Parameters.Add(new Sql4CdsParameter("@name", "'Data8'"));
+                var affected = cmd.ExecuteNonQuery();
+
+                Assert.AreEqual(2, affected);
+                Assert.AreEqual(2, _context.Data["account"].Count);
+                CollectionAssert.AreEqual(new[] { "'Data8'", "'Data8'" }, _context.Data["account"].Values.Select(a => a.GetAttributeValue<string>("name")).ToArray());
+            }
+        }
+
+        [TestMethod]
+        public void CombinedInsertSelect()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList(), this))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "INSERT INTO account (name) VALUES (@name); SELECT accountid FROM account WHERE name = @name";
+                cmd.Parameters.Add(new Sql4CdsParameter("@name", "'Data8'"));
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.AreEqual(1, reader.RecordsAffected);
+                    Assert.IsTrue(reader.Read());
+                    var id = reader.GetGuid(0);
+                    Assert.IsFalse(reader.Read());
+
+                    Assert.AreEqual(1, _context.Data["account"].Count);
+                    Assert.AreEqual("'Data8'", _context.Data["account"][id].GetAttributeValue<string>("name"));
+                }
+            }
+        }
+
+        [TestMethod]
+        public void MultipleResultSets()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList(), this))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "INSERT INTO account (name) VALUES (@name); SELECT accountid FROM account WHERE name = @name; SELECT name FROM account";
+                cmd.Parameters.Add(new Sql4CdsParameter("@name", "'Data8'"));
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.AreEqual(1, reader.RecordsAffected);
+                    Assert.IsTrue(reader.Read());
+                    var id = reader.GetGuid(0);
+                    Assert.IsFalse(reader.Read());
+
+                    Assert.IsTrue(reader.NextResult());
+                    Assert.IsTrue(reader.Read());
+                    var name = reader.GetString(0);
+                    Assert.IsFalse(reader.Read());
+                    Assert.IsFalse(reader.NextResult());
+
+                    Assert.AreEqual(1, _context.Data["account"].Count);
+                    Assert.AreEqual("'Data8'", _context.Data["account"][id].GetAttributeValue<string>("name"));
+                    Assert.AreEqual("'Data8'", name);
+                }
+            }
+        }
     }
 }

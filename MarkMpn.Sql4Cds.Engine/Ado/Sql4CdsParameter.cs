@@ -279,7 +279,7 @@ namespace MarkMpn.Sql4Cds.Engine
             else if (value is float f)
                 value = (SqlSingle)f;
             else if (value is string str)
-                value = new SqlString(str, CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace);
+                value = SqlTypeConverter.UseDefaultCollation(str);
             else if (value is DateTimeOffset dto)
                 value = (SqlDateTime)dto.DateTime;
             else if (value is EntityReference er)

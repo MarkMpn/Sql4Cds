@@ -65,8 +65,6 @@ namespace MarkMpn.Sql4Cds.Engine
 
             _dataSources = dataSources.ToDictionary(ds => ds.Name, StringComparer.OrdinalIgnoreCase);
             _options = new ChangeDatabaseOptionsWrapper(options);
-
-            PlanBuilder = new ExecutionPlanBuilder(_dataSources.Values, _options);
         }
 
         private static IOrganizationService Connect(string connectionString)
@@ -124,8 +122,6 @@ namespace MarkMpn.Sql4Cds.Engine
         internal Dictionary<string, DataSource> DataSources => _dataSources;
 
         internal IQueryExecutionOptions Options => _options;
-
-        internal ExecutionPlanBuilder PlanBuilder { get; }
 
         public override string ConnectionString { get; set; }
 

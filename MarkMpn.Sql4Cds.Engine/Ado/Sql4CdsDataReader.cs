@@ -159,7 +159,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public override bool IsClosed => _closed;
 
-        public override int RecordsAffected => throw new NotImplementedException();
+        public override int RecordsAffected => _recordsAffected;
 
         public override bool GetBoolean(int ordinal)
         {

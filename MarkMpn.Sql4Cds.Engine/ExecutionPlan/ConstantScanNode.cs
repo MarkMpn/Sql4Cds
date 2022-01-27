@@ -18,7 +18,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// The list of values to be returned
         /// </summary>
         [Browsable(false)]
-        public List<Entity> Values { get; } = new List<Entity>();
+        public List<IDictionary<string, ScalarExpression>> Values { get; } = new List<IDictionary<string, ScalarExpression>>();
 
         /// <summary>
         /// The alias for the data source
@@ -35,11 +35,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            foreach (var value in Values)
+            foreach (var expressions in Values)
             {
-                foreach (var col in Schema.Keys)
-                    value[$"{Alias}.{col}"] = value[col];
-                
+                var value = new Entity();
+
+                foreach (var col in Schema)
+                    value[$"{Alias}.{col.Key}"] = new ConvertCall { Parameter = expressions[col.Key], DataType = col.Value }.Compile(null, parameterTypes)(null, parameterValues, options);
+
                 yield return value;
             }
         }

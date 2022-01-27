@@ -11,6 +11,7 @@ namespace MarkMpn.Sql4Cds.Engine
     public class Sql4CdsCommand : DbCommand
     {
         private Sql4CdsConnection _connection;
+        private ExecutionPlanBuilder _planBuilder;
         private string _commandText;
         private IRootExecutionPlanNode[] _plan;
         private CancellationTokenSource _cts;
@@ -25,6 +26,8 @@ namespace MarkMpn.Sql4Cds.Engine
             CommandText = commandText;
             CommandTimeout = 30;
             DbParameterCollection = new Sql4CdsParameterCollection();
+
+            _planBuilder = new ExecutionPlanBuilder(_connection.DataSources.Values, _connection.Options);
         }
 
         internal IRootExecutionPlanNode[] Plan => _plan;
@@ -77,6 +80,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     throw new ArgumentOutOfRangeException(nameof(value), "Connection must be a Sql4CdsConnection");
 
                 _connection = con;
+                _planBuilder = new ExecutionPlanBuilder(_connection.DataSources.Values, _connection.Options);
                 _plan = null;
             }
         }
@@ -122,7 +126,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (_plan != null)
                 return;
 
-            _plan = _connection.PlanBuilder.Build(CommandText, ((Sql4CdsParameterCollection)Parameters).GetParameterTypes());
+            _plan = _planBuilder.Build(CommandText, ((Sql4CdsParameterCollection)Parameters).GetParameterTypes());
         }
 
         protected override DbParameter CreateDbParameter()

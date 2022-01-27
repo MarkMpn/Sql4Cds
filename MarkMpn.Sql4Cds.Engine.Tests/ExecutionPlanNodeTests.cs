@@ -24,21 +24,22 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 Values =
                 {
-                    new Entity
+                    new Dictionary<string, ScalarExpression>
                     {
-                        ["firstname"] = new SqlString("Mark", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace)
+                        ["firstname"] = new StringLiteral { Value = "Mark" }
                     }
                 },
                 Schema =
                 {
                     ["firstname"] = typeof(SqlString).ToSqlType()
-                }
+                },
+                Alias = "test"
             };
 
             var results = node.Execute(_dataSources, new StubOptions(), null, null).ToArray();
 
             Assert.AreEqual(1, results.Length);
-            Assert.AreEqual("Mark", ((SqlString)results[0]["firstname"]).Value);
+            Assert.AreEqual("Mark", ((SqlString)results[0]["test.firstname"]).Value);
         }
 
         [TestMethod]
@@ -50,13 +51,20 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     Values =
                     {
-                        new Entity { ["firstname"] = new SqlString("Mark", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) },
-                        new Entity { ["firstname"] = new SqlString("Joe", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) }
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["firstname"] = new StringLiteral { Value = "Mark" }
+                        },
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["firstname"] = new StringLiteral { Value = "Joe" }
+                        }
                     },
                     Schema =
                     {
                         ["firstname"] = typeof(SqlString).ToSqlType()
-                    }
+                    },
+                    Alias = "test"
                 },
                 Filter = new BooleanComparisonExpression
                 {
@@ -78,7 +86,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var results = node.Execute(_dataSources, new StubOptions(), null, null).ToArray();
 
             Assert.AreEqual(1, results.Length);
-            Assert.AreEqual("Mark", ((SqlString)results[0]["firstname"]).Value);
+            Assert.AreEqual("Mark", ((SqlString)results[0]["test.firstname"]).Value);
         }
 
         [TestMethod]
@@ -90,14 +98,23 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     Values =
                     {
-                        new Entity { ["f.key"] = new SqlInt32(1), ["f.firstname"] = new SqlString("Mark", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) },
-                        new Entity { ["f.key"] = new SqlInt32(2), ["f.firstname"] = new SqlString("Joe", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) }
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["key"] = new IntegerLiteral { Value = "1" },
+                            ["firstname"] = new StringLiteral { Value = "Mark" }
+                        },
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["key"] = new IntegerLiteral { Value = "2" },
+                            ["firstname"] = new StringLiteral { Value = "Joe" }
+                        }
                     },
                     Schema =
                     {
-                        ["f.key"] = typeof(SqlInt32).ToSqlType(),
-                        ["f.firstname"] = typeof(SqlString).ToSqlType()
-                    }
+                        ["key"] = typeof(SqlInt32).ToSqlType(),
+                        ["firstname"] = typeof(SqlString).ToSqlType()
+                    },
+                    Alias = "f"
                 },
                 LeftAttribute = new ColumnReferenceExpression
                 {
@@ -110,15 +127,28 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     Values =
                     {
-                        new Entity { ["l.key"] = new SqlInt32(1), ["l.lastname"] = new SqlString("Carrington", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) },
-                        new Entity { ["l.key"] = new SqlInt32(1), ["l.lastname"] = new SqlString("Twain", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) },
-                        new Entity { ["l.key"] = new SqlInt32(3), ["l.lastname"] = new SqlString("Webber", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) }
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["key"] = new IntegerLiteral { Value = "1" },
+                            ["lastname"] = new StringLiteral { Value = "Carrington" }
+                        },
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["key"] = new IntegerLiteral { Value = "1" },
+                            ["lastname"] = new StringLiteral { Value = "Twain" }
+                        },
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["key"] = new IntegerLiteral { Value = "3" },
+                            ["lastname"] = new StringLiteral { Value = "Webber" }
+                        }
                     },
                     Schema =
                     {
-                        ["l.key"] = typeof(SqlInt32).ToSqlType(),
-                        ["l.lastname"] = typeof(SqlString).ToSqlType()
-                    }
+                        ["key"] = typeof(SqlInt32).ToSqlType(),
+                        ["lastname"] = typeof(SqlString).ToSqlType()
+                    },
+                    Alias = "l"
                 },
                 RightAttribute = new ColumnReferenceExpression
                 {
@@ -148,8 +178,16 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     Values =
                     {
-                        new Entity { ["key"] = new SqlInt32(1), ["firstname"] = new SqlString("Mark", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) },
-                        new Entity { ["key"] = new SqlInt32(2), ["firstname"] = new SqlString("Joe", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) }
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["key"] = new IntegerLiteral { Value = "1" },
+                            ["firstname"] = new StringLiteral { Value = "Mark" }
+                        },
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["key"] = new IntegerLiteral { Value = "2" },
+                            ["firstname"] = new StringLiteral { Value = "Joe" }
+                        }
                     },
                     Schema =
                     {
@@ -169,9 +207,21 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     Values =
                     {
-                        new Entity { ["key"] = new SqlInt32(1), ["lastname"] = new SqlString("Carrington", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) },
-                        new Entity { ["key"] = new SqlInt32(1), ["lastname"] = new SqlString("Twain", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) },
-                        new Entity { ["key"] = new SqlInt32(3), ["lastname"] = new SqlString("Hamill", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) }
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["key"] = new IntegerLiteral { Value = "1" },
+                            ["lastname"] = new StringLiteral { Value = "Carrington" }
+                        },
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["key"] = new IntegerLiteral { Value = "1" },
+                            ["lastname"] = new StringLiteral { Value = "Twain" }
+                        },
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["key"] = new IntegerLiteral { Value = "3" },
+                            ["lastname"] = new StringLiteral { Value = "Hamill" }
+                        }
                     },
                     Schema =
                     {
@@ -210,8 +260,16 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     Values =
                     {
-                        new Entity { ["key"] = new SqlInt32(1), ["firstname"] = new SqlString("Mark", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) },
-                        new Entity { ["key"] = new SqlInt32(2), ["firstname"] = new SqlString("Joe", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) }
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["key"] = new IntegerLiteral { Value = "1" },
+                            ["firstname"] = new StringLiteral { Value = "Mark" }
+                        },
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["key"] = new IntegerLiteral { Value = "2" },
+                            ["firstname"] = new StringLiteral { Value = "Joe" }
+                        }
                     },
                     Schema =
                     {
@@ -231,9 +289,21 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     Values =
                     {
-                        new Entity { ["key"] = new SqlInt32(1), ["lastname"] = new SqlString("Carrington", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) },
-                        new Entity { ["key"] = new SqlInt32(1), ["lastname"] = new SqlString("Twain", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) },
-                        new Entity { ["key"] = new SqlInt32(3), ["lastname"] = new SqlString("Hamill", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) }
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["key"] = new IntegerLiteral { Value = "1" },
+                            ["lastname"] = new StringLiteral { Value = "Carrington" }
+                        },
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["key"] = new IntegerLiteral { Value = "1" },
+                            ["lastname"] = new StringLiteral { Value = "Twain" }
+                        },
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["key"] = new IntegerLiteral { Value = "3" },
+                            ["lastname"] = new StringLiteral { Value = "Hamill" }
+                        }
                     },
                     Schema =
                     {
@@ -272,18 +342,29 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     Values =
                     {
-                        new Entity { ["name"] = new SqlString("Mark", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) },
-                        new Entity { ["name"] = new SqlString("Carrington", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace) }
-                    }
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["name"] = new StringLiteral { Value = "Mark" }
+                        },
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["name"] = new StringLiteral { Value = "Carrington" }
+                        }
+                    },
+                    Schema =
+                    {
+                        ["name"] = typeof(SqlString).ToSqlType()
+                    },
+                    Alias = "test"
                 },
-                Assertion = e => e.GetAttributeValue<SqlString>("name").Value == "Mark",
+                Assertion = e => e.GetAttributeValue<SqlString>("test.name").Value == "Mark",
                 ErrorMessage = "Only Mark is allowed"
             };
 
             var results = node.Execute(_dataSources, new StubOptions(), null, null).GetEnumerator();
 
             Assert.IsTrue(results.MoveNext());
-            Assert.AreEqual("Mark", results.Current.GetAttributeValue<SqlString>("name").Value);
+            Assert.AreEqual("Mark", results.Current.GetAttributeValue<SqlString>("test.name").Value);
 
             var ex = Assert.ThrowsException<QueryExecutionException>(() => results.MoveNext());
             Assert.AreEqual(node.ErrorMessage, ex.Message);
@@ -298,8 +379,16 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     Values =
                     {
-                        new Entity { ["value1"] = new SqlInt32(1), ["value2"] = new SqlInt32(2) },
-                        new Entity { ["value1"] = new SqlInt32(3), ["value2"] = new SqlInt32(4) }
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["value1"] = new IntegerLiteral { Value = "1" },
+                            ["value2"] = new IntegerLiteral { Value = "2" }
+                        },
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["value1"] = new IntegerLiteral { Value = "3" },
+                            ["value2"] = new IntegerLiteral { Value = "4" }
+                        }
                     },
                     Schema =
                     {
@@ -342,25 +431,38 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var node = new DistinctNode
             {
-                Columns = { "value1" },
+                Columns = { "test.value1" },
                 Source = new ConstantScanNode
                 {
                     Values =
                     {
-                        new Entity { ["value1"] = new SqlInt32(1), ["value2"] = new SqlInt32(1) },
-                        new Entity { ["value1"] = new SqlInt32(3), ["value2"] = new SqlInt32(2) },
-                        new Entity { ["value1"] = new SqlInt32(1), ["value2"] = new SqlInt32(3) }
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["value1"] = new IntegerLiteral { Value = "1" },
+                            ["value2"] = new IntegerLiteral { Value = "1" }
+                        },
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["value1"] = new IntegerLiteral { Value = "3" },
+                            ["value2"] = new IntegerLiteral { Value = "2" }
+                        },
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["value1"] = new IntegerLiteral { Value = "1" },
+                            ["value2"] = new IntegerLiteral { Value = "3" }
+                        }
                     },
                     Schema =
                     {
                         ["value1"] = typeof(SqlInt32).ToSqlType(),
                         ["value2"] = typeof(SqlInt32).ToSqlType()
-                    }
+                    },
+                    Alias = "test"
                 }
             };
 
             var results = node.Execute(_dataSources, new StubOptions(), null, null)
-                .Select(e => e.GetAttributeValue<SqlInt32>("value1").Value)
+                .Select(e => e.GetAttributeValue<SqlInt32>("test.value1").Value)
                 .ToArray();
 
             CollectionAssert.AreEqual(new[] { 1, 3 }, results);
@@ -371,25 +473,38 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var node = new DistinctNode
             {
-                Columns = { "value1" },
+                Columns = { "test.value1" },
                 Source = new ConstantScanNode
                 {
                     Values =
                     {
-                        new Entity { ["value1"] = new SqlString("hello", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace), ["value2"] = new SqlInt32(1) },
-                        new Entity { ["value1"] = new SqlString("world", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace), ["value2"] = new SqlInt32(2) },
-                        new Entity { ["value1"] = new SqlString("Hello", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace), ["value2"] = new SqlInt32(3) }
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["value1"] = new StringLiteral { Value = "hello" },
+                            ["value2"] = new IntegerLiteral { Value = "1" }
+                        },
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["value1"] = new StringLiteral { Value = "world" },
+                            ["value2"] = new IntegerLiteral { Value = "2" }
+                        },
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["value1"] = new StringLiteral { Value = "Hello" },
+                            ["value2"] = new IntegerLiteral { Value = "3" }
+                        }
                     },
                     Schema =
                     {
                         ["value1"] = typeof(SqlString).ToSqlType(),
                         ["value2"] = typeof(SqlInt32).ToSqlType()
-                    }
+                    },
+                    Alias = "test"
                 }
             };
 
             var results = node.Execute(_dataSources, new StubOptions(), null, null)
-                .Select(e => e.GetAttributeValue<SqlString>("value1").Value)
+                .Select(e => e.GetAttributeValue<SqlString>("test.value1").Value)
                 .ToArray();
 
             CollectionAssert.AreEqual(new[] { "hello", "world" }, results);
@@ -404,12 +519,12 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     new ExpressionWithSortOrder
                     {
-                        Expression = new ColumnReferenceExpression{MultiPartIdentifier = new MultiPartIdentifier{Identifiers = {new Identifier{Value = "value1" } } } },
+                        Expression = new ColumnReferenceExpression{MultiPartIdentifier = new MultiPartIdentifier{Identifiers = { new Identifier { Value = "test" }, new Identifier { Value = "value1" } } } },
                         SortOrder = SortOrder.Ascending
                     },
                     new ExpressionWithSortOrder
                     {
-                        Expression = new ColumnReferenceExpression{MultiPartIdentifier = new MultiPartIdentifier{Identifiers = {new Identifier{Value = "value2" } } } },
+                        Expression = new ColumnReferenceExpression{MultiPartIdentifier = new MultiPartIdentifier{Identifiers = { new Identifier{Value = "test" }, new Identifier { Value = "value2" } } } },
                         SortOrder = SortOrder.Descending
                     }
                 },
@@ -417,21 +532,37 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     Values =
                     {
-                        new Entity { ["value1"] = new SqlString("hello", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace), ["value2"] = new SqlInt32(1), ["expectedorder"] = new SqlInt32(2) },
-                        new Entity { ["value1"] = new SqlString("world", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace), ["value2"] = new SqlInt32(2), ["expectedorder"] = new SqlInt32(3) },
-                        new Entity { ["value1"] = new SqlString("Hello", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace), ["value2"] = new SqlInt32(3), ["expectedorder"] = new SqlInt32(1) }
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["value1"] = new StringLiteral { Value = "hello" },
+                            ["value2"] = new IntegerLiteral { Value = "1" },
+                            ["expectedorder"] = new IntegerLiteral { Value = "2" }
+                        },
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["value1"] = new StringLiteral { Value = "world" },
+                            ["value2"] = new IntegerLiteral { Value = "2" },
+                            ["expectedorder"] = new IntegerLiteral { Value = "3" }
+                        },
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["value1"] = new StringLiteral { Value = "Hello" },
+                            ["value2"] = new IntegerLiteral { Value = "3" },
+                            ["expectedorder"] = new IntegerLiteral { Value = "1" }
+                        }
                     },
                     Schema =
                     {
                         ["value1"] = typeof(SqlString).ToSqlType(),
                         ["value2"] = typeof(SqlInt32).ToSqlType(),
                         ["expectedorder"] = typeof(SqlInt32).ToSqlType()
-                    }
+                    },
+                    Alias = "test"
                 }
             };
 
             var results = node.Execute(_dataSources, new StubOptions(), null, null)
-                .Select(e => e.GetAttributeValue<SqlInt32>("expectedorder").Value)
+                .Select(e => e.GetAttributeValue<SqlInt32>("test.expectedorder").Value)
                 .ToArray();
 
             CollectionAssert.AreEqual(new[] { 1, 2, 3 }, results);
@@ -446,12 +577,12 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     new ExpressionWithSortOrder
                     {
-                        Expression = new ColumnReferenceExpression{MultiPartIdentifier = new MultiPartIdentifier{Identifiers = {new Identifier{Value = "value1" } } } },
+                        Expression = new ColumnReferenceExpression{MultiPartIdentifier = new MultiPartIdentifier{Identifiers = {new Identifier{Value = "test" }, new Identifier { Value = "value1" } } } },
                         SortOrder = SortOrder.Ascending
                     },
                     new ExpressionWithSortOrder
                     {
-                        Expression = new ColumnReferenceExpression{MultiPartIdentifier = new MultiPartIdentifier{Identifiers = {new Identifier{Value = "value2" } } } },
+                        Expression = new ColumnReferenceExpression{MultiPartIdentifier = new MultiPartIdentifier{Identifiers = { new Identifier { Value = "test" }, new Identifier { Value = "value2" } } } },
                         SortOrder = SortOrder.Descending
                     }
                 },
@@ -460,22 +591,43 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     Values =
                     {
-                        new Entity { ["value1"] = new SqlString("hello", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace), ["value2"] = new SqlInt32(1), ["expectedorder"] = new SqlInt32(1) },
-                        new Entity { ["value1"] = new SqlString("world", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace), ["value2"] = new SqlInt32(2), ["expectedorder"] = new SqlInt32(2) },
-                        new Entity { ["value1"] = new SqlString("Hello", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace), ["value2"] = new SqlInt32(3), ["expectedorder"] = new SqlInt32(4) },
-                        new Entity { ["value1"] = new SqlString("Hello", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace), ["value2"] = new SqlInt32(4), ["expectedorder"] = new SqlInt32(3) }
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["value1"] = new StringLiteral { Value = "hello" },
+                            ["value2"] = new IntegerLiteral { Value = "1" },
+                            ["expectedorder"] = new IntegerLiteral { Value = "1" }
+                        },
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["value1"] = new StringLiteral { Value = "world" },
+                            ["value2"] = new IntegerLiteral { Value = "2" },
+                            ["expectedorder"] = new IntegerLiteral { Value = "2" }
+                        },
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["value1"] = new StringLiteral { Value = "Hello" },
+                            ["value2"] = new IntegerLiteral { Value = "3" },
+                            ["expectedorder"] = new IntegerLiteral { Value = "4" }
+                        },
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["value1"] = new StringLiteral { Value = "Hello" },
+                            ["value2"] = new IntegerLiteral { Value = "4" },
+                            ["expectedorder"] = new IntegerLiteral { Value = "3" }
+                        }
                     },
                     Schema =
                     {
                         ["value1"] = typeof(SqlString).ToSqlType(),
                         ["value2"] = typeof(SqlInt32).ToSqlType(),
                         ["expectedorder"] = typeof(SqlInt32).ToSqlType()
-                    }
+                    },
+                    Alias = "test"
                 }
             };
 
             var results = node.Execute(_dataSources, new StubOptions(), null, null)
-                .Select(e => e.GetAttributeValue<SqlInt32>("expectedorder").Value)
+                .Select(e => e.GetAttributeValue<SqlInt32>("test.expectedorder").Value)
                 .ToArray();
 
             CollectionAssert.AreEqual(new[] { 1, 2, 3, 4 }, results);
@@ -488,23 +640,30 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 Values =
                 {
-                    new Entity{["value1"] = new SqlInt32(1)},
-                    new Entity{["value1"] = new SqlInt32(2)}
+                    new Dictionary<string, ScalarExpression>
+                    {
+                        ["value1"] = new IntegerLiteral { Value = "1" }
+                    },
+                    new Dictionary<string, ScalarExpression>
+                    {
+                        ["value1"] = new IntegerLiteral { Value = "2" }
+                    }
                 },
                 Schema =
                 {
                     ["value1"] = typeof(SqlInt32).ToSqlType()
-                }
+                },
+                Alias = "test"
             };
 
             var spool = new TableSpoolNode { Source = source };
 
             var results1 = spool.Execute(_dataSources, new StubOptions(), null, null)
-                .Select(e => e.GetAttributeValue<SqlInt32>("value1").Value)
+                .Select(e => e.GetAttributeValue<SqlInt32>("test.value1").Value)
                 .ToArray();
 
             var results2 = spool.Execute(_dataSources, new StubOptions(), null, null)
-                .Select(e => e.GetAttributeValue<SqlInt32>("value1").Value)
+                .Select(e => e.GetAttributeValue<SqlInt32>("test.value1").Value)
                 .ToArray();
 
             CollectionAssert.AreEqual(new[] { 1, 2 }, results1);
@@ -519,8 +678,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 Values =
                 {
-                    new Entity{["value1"] = new SqlString("hello", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace)},
-                    new Entity{["value1"] = new SqlString("Hello", CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace)}
+                    new Dictionary<string, ScalarExpression>
+                    {
+                        ["value1"] = new StringLiteral { Value = "hello" }
+                    },
+                    new Dictionary<string, ScalarExpression>
+                    {
+                        ["value1"] = new StringLiteral { Value = "Hello" }
+                    }
                 },
                 Schema =
                 {
