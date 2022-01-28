@@ -126,6 +126,9 @@ namespace MarkMpn.Sql4Cds.Engine
             if (_plan != null)
                 return;
 
+            if (_connection.Options.UseTDSEndpoint)
+                _planBuilder.TDSEndpointAvailable = _connection.TDSEndpointEnabled;
+
             _plan = _planBuilder.Build(CommandText, ((Sql4CdsParameterCollection)Parameters).GetParameterTypes());
         }
 

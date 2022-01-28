@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Xml;
 using Microsoft.Xrm.Sdk.Query;
+using System.Net.Sockets;
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
 #else
@@ -13,7 +14,7 @@ namespace MarkMpn.Sql4Cds.Engine
 {
     public static class TSqlEndpoint
     {
-        private static IDictionary<string, bool> _cache = new Dictionary<string, bool>();
+        private static readonly IDictionary<string, bool> _cache = new Dictionary<string, bool>();
 
 #if NETCOREAPP
         public static bool IsEnabled(ServiceClient svc)
@@ -36,7 +37,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (String.IsNullOrEmpty(orgSettings))
             {
-                enabled = false;
+                enabled = TestConnection(svc);
             }
             else
             {
@@ -45,12 +46,42 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 var enabledNode = xml.SelectSingleNode("//EnableTDSEndpoint/text()");
 
-                enabled = enabledNode?.Value == "true";
+                if (enabledNode != null)
+                    enabled = enabledNode.Value == "true";
+                else
+                    enabled = TestConnection(svc);
             }
 
             _cache[host] = enabled;
 
             return enabled;
+        }
+
+#if NETCOREAPP
+        private static bool TestConnection(ServiceClient svc)
+#else
+        private static bool TestConnection(CrmServiceClient svc)
+#endif
+        {
+            var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+
+#if NETCOREAPP
+            var result = socket.BeginConnect(svc.ConnectedOrgUriActual.Host, 1433, null, null);
+#else
+            var result = socket.BeginConnect(svc.CrmConnectOrgUriActual.Host, 1433, null, null);
+#endif
+            var success = result.AsyncWaitHandle.WaitOne(1000, true);
+
+            if (socket.Connected)
+            {
+                socket.EndConnect(result);
+                return true;
+            }
+            else
+            {
+                socket.Close();
+                return false;
+            }
         }
 
 #if NETCOREAPP

@@ -191,5 +191,21 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             return new Sql4CdsCommand(this);
         }
+
+        public bool TDSEndpointEnabled
+        {
+            get
+            {
+#if NETCOREAPP
+                if (!(DataSources[Database].Connection is ServiceClient svc))
+                    return false;
+#else
+                if (!(DataSources[Database].Connection is CrmServiceClient svc))
+                    return false;
+#endif
+
+                return TSqlEndpoint.IsEnabled(svc);
+            }
+        }
     }
 }

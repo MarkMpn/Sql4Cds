@@ -142,7 +142,7 @@ namespace MarkMpn.Sql4Cds.SSMS
                         try
                         {
                             _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name, ["Source"] = "SSMS" });
-                            var msg = query.Execute(new Dictionary<string, DataSource>(StringComparer.OrdinalIgnoreCase) { [dataSource.Name] = dataSource }, options, null, null);
+                            var msg = query.Execute(new Dictionary<string, DataSource>(StringComparer.OrdinalIgnoreCase) { [dataSource.Name] = dataSource }, options, null, null, out _);
 
                             sqlScriptEditorControl.Results.AddStringToMessages(msg + "\r\n\r\n");
 

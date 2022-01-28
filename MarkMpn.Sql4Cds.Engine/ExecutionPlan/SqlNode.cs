@@ -84,6 +84,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         cmd.CommandTimeout = (int)TimeSpan.FromMinutes(2).TotalSeconds;
                         cmd.CommandText = Sql;
+
+                        foreach (var paramValue in parameterValues)
+                        {
+                            if (paramValue.Key.StartsWith("@@"))
+                                continue;
+
+                            var param = cmd.CreateParameter();
+                            param.ParameterName = paramValue.Key;
+
+                            if (paramValue.Value is SqlEntityReference er)
+                                param.Value = (SqlGuid)er;
+                            else
+                                param.Value = paramValue.Value;
+
+                            cmd.Parameters.Add(param);
+                        }
+
                         var result = new DataTable();
 
                         using (var adapter = new SqlDataAdapter(cmd))
