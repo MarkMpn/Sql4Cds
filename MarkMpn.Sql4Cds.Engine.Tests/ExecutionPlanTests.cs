@@ -2938,7 +2938,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 },
             };
 
-            var result = select.Execute(_localDataSource, this, null, null);
+            var result = select.Execute(_localDataSource, this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
             Assert.AreEqual(2, result.Rows.Count);
             Assert.AreEqual(SqlTypeConverter.UseDefaultCollation("Mark"), result.Rows[0][0]);
             Assert.AreEqual(SqlTypeConverter.UseDefaultCollation("Mark"), result.Rows[1][0]);
