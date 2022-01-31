@@ -146,7 +146,7 @@ namespace MarkMpn.Sql4Cds
             {
                 var tsqlNode = conNode.Nodes.Add("TDS Endpoint");
 
-                if (TSqlEndpoint.IsEnabled(svc))
+                if (TDSEndpoint.IsEnabled(svc))
                 {
                     if (!String.IsNullOrEmpty(svc.CurrentAccessToken))
                     {
@@ -465,7 +465,7 @@ INNER JOIN {manyToMany.Entity2LogicalName}
                 Message = "Enabling...",
                 Work = (worker, args) =>
                 {
-                    TSqlEndpoint.Enable(con.ServiceClient);
+                    TDSEndpoint.Enable(con.ServiceClient);
                 },
                 PostWorkCallBack = (args) =>
                 {
@@ -502,7 +502,7 @@ INNER JOIN {manyToMany.Entity2LogicalName}
                 Message = "Disabling...",
                 Work = (worker, args) =>
                 {
-                    TSqlEndpoint.Disable(con.ServiceClient);
+                    TDSEndpoint.Disable(con.ServiceClient);
                 },
                 PostWorkCallBack = (args) =>
                 {

@@ -71,6 +71,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (svc.CallerId != Guid.Empty)
                     throw new QueryExecutionException("Cannot use impersonation with the TDS Endpoint");
 
+                if (String.IsNullOrEmpty(svc.CurrentAccessToken))
+                    throw new QueryExecutionException("OAuth must be used to authenticate with the TDS Endpoint");
+
 #if NETCOREAPP
                 using (var con = new SqlConnection("server=" + svc.ConnectedOrgUriActual.Host))
 #else

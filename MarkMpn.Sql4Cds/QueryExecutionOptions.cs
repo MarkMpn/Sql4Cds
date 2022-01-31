@@ -43,6 +43,8 @@ namespace MarkMpn.Sql4Cds
                 _joinOperators.Add(JoinOperator.Any);
                 _joinOperators.Add(JoinOperator.Exists);
             }
+
+            UseTDSEndpoint = Settings.Instance.UseTSQLEndpoint;
         }
 
         public bool Cancelled => _worker.CancellationPending;
@@ -126,7 +128,7 @@ namespace MarkMpn.Sql4Cds
 
         public int BatchSize => Settings.Instance.BatchSize;
 
-        public bool UseTDSEndpoint => Settings.Instance.UseTSQLEndpoint;
+        public bool UseTDSEndpoint { get; set; }
 
         public bool UseRetrieveTotalRecordCount => Settings.Instance.UseRetrieveTotalRecordCount;
 

@@ -854,15 +854,13 @@ namespace MarkMpn.Sql4Cds
             backgroundWorker.ReportProgress(0, "Executing query...");
 
             var options = new QueryExecutionOptions(_con, DataSources[_con.ConnectionName].Connection, backgroundWorker, this);
+            if (!args.Execute)
+                options.UseTDSEndpoint = false;
+
             var converter = new ExecutionPlanBuilder(DataSources.Values, options);
             converter.QuotedIdentifiers = Settings.Instance.QuotedIdentifiers;
 
-            if (Settings.Instance.UseTSQLEndpoint &&
-                args.Execute &&
-                !String.IsNullOrEmpty(((CrmServiceClient)DataSources[_con.ConnectionName].Connection).CurrentAccessToken))
-                converter.TDSEndpointAvailable = true;
-
-            var queries = converter.Build(args.Sql);
+            var queries = converter.Build(args.Sql, null, out _);
             var parameterTypes = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
             var parameterValues = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
 

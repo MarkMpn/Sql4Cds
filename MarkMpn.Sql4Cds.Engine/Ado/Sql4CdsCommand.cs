@@ -2,9 +2,17 @@
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
+using System.Data.SqlClient;
+using System.Data.SqlTypes;
+using System.IO;
 using System.Text;
 using System.Threading;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
+#if NETCOREAPP
+using Microsoft.PowerPlatform.Dataverse.Client;
+#else
+using Microsoft.Xrm.Tooling.Connector;
+#endif
 
 namespace MarkMpn.Sql4Cds.Engine
 {
@@ -13,6 +21,7 @@ namespace MarkMpn.Sql4Cds.Engine
         private Sql4CdsConnection _connection;
         private ExecutionPlanBuilder _planBuilder;
         private string _commandText;
+        private bool _useTDSEndpointDirectly;
         private IRootExecutionPlanNode[] _plan;
         private CancellationTokenSource _cts;
 
@@ -39,6 +48,7 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 _commandText = value;
                 _plan = null;
+                _useTDSEndpointDirectly = false;
             }
         }
 
@@ -82,6 +92,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 _connection = con;
                 _planBuilder = new ExecutionPlanBuilder(_connection.DataSources.Values, _connection.Options);
                 _plan = null;
+                _useTDSEndpointDirectly = false;
             }
         }
 
@@ -123,13 +134,10 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public override void Prepare()
         {
-            if (_plan != null)
+            if (_useTDSEndpointDirectly || _plan != null)
                 return;
 
-            if (_connection.Options.UseTDSEndpoint)
-                _planBuilder.TDSEndpointAvailable = _connection.TDSEndpointEnabled;
-
-            _plan = _planBuilder.Build(CommandText, ((Sql4CdsParameterCollection)Parameters).GetParameterTypes());
+            _plan = _planBuilder.Build(CommandText, ((Sql4CdsParameterCollection)Parameters).GetParameterTypes(), out _useTDSEndpointDirectly);
         }
 
         protected override DbParameter CreateDbParameter()
@@ -140,6 +148,38 @@ namespace MarkMpn.Sql4Cds.Engine
         protected override DbDataReader ExecuteDbDataReader(CommandBehavior behavior)
         {
             Prepare();
+
+            if (_useTDSEndpointDirectly)
+            {
+#if NETCOREAPP
+                var svc = (ServiceClient)_connection.DataSources[_connection.Database].Connection;
+                var con = new SqlConnection("server=" + svc.ConnectedOrgUriActual.Host);
+#else
+                var svc = (CrmServiceClient)_connection.DataSources[_connection.Database].Connection;
+                var con = new SqlConnection("server=" + svc.CrmConnectOrgUriActual.Host);
+#endif
+                con.AccessToken = svc.CurrentAccessToken;
+                con.Open();
+
+                var cmd = con.CreateCommand();
+                cmd.CommandTimeout = (int)TimeSpan.FromMinutes(2).TotalSeconds;
+                cmd.CommandText = CommandText;
+
+                foreach (Sql4CdsParameter sql4cdsParam in Parameters)
+                {
+                    var param = cmd.CreateParameter();
+                    param.ParameterName = sql4cdsParam.ParameterName;
+
+                    if (sql4cdsParam.Value is SqlEntityReference er)
+                        param.Value = (SqlGuid)er;
+                    else
+                        param.Value = sql4cdsParam.Value;
+
+                    cmd.Parameters.Add(param);
+                }
+
+                return new SqlDataReaderWrapper(con, cmd);
+            }
 
             _cts = CommandTimeout == 0 ? new CancellationTokenSource() : new CancellationTokenSource(TimeSpan.FromSeconds(CommandTimeout));
             var options = new CancellationTokenOptionsWrapper(_connection.Options, _cts);

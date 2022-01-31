@@ -51,11 +51,13 @@ namespace MarkMpn.Sql4Cds.Engine
         public IQueryExecutionOptions Options { get; set; }
 
         /// <summary>
-        /// Indicates if the TDS Endpoint is available to use if necessary
+        /// Builds the execution plans for a SQL command
         /// </summary>
-        public bool TDSEndpointAvailable { get; set; }
-
-        public IRootExecutionPlanNode[] Build(string sql, IDictionary<string, DataTypeReference> parameters = null)
+        /// <param name="sql">The SQL command to generate the execution plans for</param>
+        /// <param name="parameters">The types of parameters that are available to the SQL command</param>
+        /// <param name="useTDSEndpointDirectly">Indicates if the SQL command should be executed directly against the TDS endpoint</param>
+        /// <returns></returns>
+        public IRootExecutionPlanNode[] Build(string sql, IDictionary<string, DataTypeReference> parameters, out bool useTDSEndpointDirectly)
         {
             // Take a copy of the defined parameters so we can add more while we're building the query without
             // affecting the original collection until the query is actually run
@@ -80,6 +82,20 @@ namespace MarkMpn.Sql4Cds.Engine
             // Check if there were any parse errors
             if (errors.Count > 0)
                 throw new QueryParseException(errors[0]);
+
+            if (TDSEndpoint.CanUseTDSEndpoint(Options, DataSources[Options.PrimaryDataSource].Connection))
+            {
+                var tdsEndpointCompatibilityVisitor = new TDSEndpointCompatibilityVisitor(DataSources[Options.PrimaryDataSource].Metadata);
+                fragment.Accept(tdsEndpointCompatibilityVisitor);
+
+                if (tdsEndpointCompatibilityVisitor.IsCompatible)
+                {
+                    useTDSEndpointDirectly = true;
+                    return null;
+                }
+            }
+
+            useTDSEndpointDirectly = false;
 
             var script = (TSqlScript)fragment;
             script.Accept(new ReplacePrimaryFunctionsVisitor());
@@ -1095,10 +1111,16 @@ namespace MarkMpn.Sql4Cds.Engine
 
         private IRootExecutionPlanNode ConvertSelectStatement(SelectStatement select)
         {
-            if (Options.UseTDSEndpoint && TDSEndpointAvailable)
+            if (TDSEndpoint.CanUseTDSEndpoint(Options, DataSources[Options.PrimaryDataSource].Connection))
             {
-                select.ScriptTokenStream = null;
-                return new SqlNode { DataSource = Options.PrimaryDataSource, Sql = select.ToSql() };
+                var tdsEndpointCompatibilityVisitor = new TDSEndpointCompatibilityVisitor(DataSources[Options.PrimaryDataSource].Metadata);
+                select.Accept(tdsEndpointCompatibilityVisitor);
+
+                if (tdsEndpointCompatibilityVisitor.IsCompatible)
+                {
+                    select.ScriptTokenStream = null;
+                    return new SqlNode { DataSource = Options.PrimaryDataSource, Sql = select.ToSql() };
+                }
             }
 
             if (select.ComputeClauses != null && select.ComputeClauses.Count > 0)

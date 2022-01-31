@@ -64,7 +64,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -83,7 +83,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -109,7 +109,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -140,7 +140,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -172,7 +172,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -194,7 +194,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -223,7 +223,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -245,7 +245,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -271,7 +271,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -292,7 +292,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -313,7 +313,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -333,7 +333,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch top='10'>
@@ -352,7 +352,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch top='10'>
@@ -371,7 +371,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -393,7 +393,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch no-lock='true'>
@@ -412,7 +412,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch distinct='true'>
@@ -431,7 +431,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch count='50' page='3'>
@@ -451,7 +451,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -472,7 +472,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -494,7 +494,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -519,7 +519,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             Assert.IsNotInstanceOfType(((SelectNode)queries[0]).Source, typeof(FetchXmlScan));
         }
@@ -531,7 +531,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch top='100'>
@@ -554,7 +554,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -580,7 +580,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch aggregate='true'>
@@ -603,7 +603,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch aggregate='true'>
@@ -623,7 +623,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch aggregate='true'>
@@ -644,7 +644,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch aggregate='true'>
@@ -668,7 +668,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch aggregate='true'>
@@ -691,7 +691,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -709,7 +709,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -748,7 +748,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new OptionsWrapper(this) { ColumnComparisonAvailable = false });
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -791,7 +791,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -834,7 +834,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -874,7 +874,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -907,7 +907,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -940,7 +940,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -977,7 +977,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -1016,7 +1016,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -1063,7 +1063,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -1098,7 +1098,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -1141,7 +1141,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -1185,7 +1185,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -1228,7 +1228,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -1271,7 +1271,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -1313,7 +1313,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new OptionsWrapper(this) { ColumnComparisonAvailable = false });
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -1336,7 +1336,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -1402,7 +1402,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -1458,7 +1458,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -1513,7 +1513,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -1563,7 +1563,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             var select = (SelectNode)queries[0];
             var source = ((TryCatchNode)select.Source).CatchSource;
@@ -1617,7 +1617,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             var select = (SelectNode)queries[0];
 
@@ -1670,7 +1670,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var lookup = (LookupAttributeMetadata)metadata["account"].Attributes.Single(a => a.LogicalName == "primarycontactid");
             lookup.Targets = new[] { "contact" };
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             var update = (UpdateNode)queries[0];
 
@@ -1719,7 +1719,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -1743,7 +1743,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -1768,7 +1768,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 var metadata = new AttributeMetadataCache(_service);
                 var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
                 planBuilder.QuotedIdentifiers = true;
-                var queries = planBuilder.Build(query);
+                var queries = planBuilder.Build(query, null, out _);
 
                 Assert.Fail("Expected exception");
             }
@@ -1785,7 +1785,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, $@"
                 <fetch>
@@ -1807,7 +1807,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             var selectNode = (SelectNode)queries[0];
             var computeScalarNode = (ComputeScalarNode)selectNode.Source;
@@ -1821,7 +1821,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, $@"
                 <fetch>
@@ -1839,7 +1839,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, $@"
                 <fetch>
@@ -1862,7 +1862,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, $@"
                 <fetch>
@@ -1885,7 +1885,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, $@"
                 <fetch>
@@ -1909,7 +1909,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, $@"
                 <fetch>
@@ -1933,7 +1933,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, $@"
                 <fetch>
@@ -1957,10 +1957,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new OptionsWrapper(this) { UseTDSEndpoint = true });
-            planBuilder.TDSEndpointAvailable = true;
-            var queries = planBuilder.Build(query);
-            var tsql = (SqlNode)queries[0];
-            Assert.AreEqual("SELECT COUNT(*) AS count FROM account WHERE name IS NULL", Regex.Replace(tsql.Sql, "\\s+", " "));
+            var queries = planBuilder.Build(query, null, out var useTDSEndpointDirectly);
+            Assert.IsTrue(useTDSEndpointDirectly);
+            Assert.IsNull(queries);
         }
 
         [TestMethod]
@@ -1970,7 +1969,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             var account1 = Guid.NewGuid();
             var account2 = Guid.NewGuid();
@@ -2001,7 +2000,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             var account1 = Guid.NewGuid();
             var account2 = Guid.NewGuid();
@@ -2032,7 +2031,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var metadata = new AttributeMetadataCache(_service);
             _context.AddFakeMessageExecutor<RetrieveAllOptionSetsRequest>(new RetrieveAllOptionSetsHandler());
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             Assert.IsInstanceOfType(queries.Single(), typeof(SelectNode));
 
@@ -2056,7 +2055,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var metadata = new AttributeMetadataCache(_service);
             _context.AddFakeMessageExecutor<RetrieveMetadataChangesRequest>(new RetrieveMetadataChangesHandler(metadata));
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             Assert.IsInstanceOfType(queries.Single(), typeof(SelectNode));
 
@@ -2080,7 +2079,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var metadata = new AttributeMetadataCache(_service);
             _context.AddFakeMessageExecutor<RetrieveMetadataChangesRequest>(new RetrieveMetadataChangesHandler(metadata));
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             var dataTable = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
 
@@ -2105,7 +2104,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var attr = metadata["new_customentity"].Attributes.Single(a => a.LogicalName == "new_optionsetvaluename");
             attr.GetType().GetProperty(nameof(AttributeMetadata.AttributeOf)).SetValue(attr, "new_optionsetvalue");
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             var record1 = Guid.NewGuid();
             var record2 = Guid.NewGuid();
@@ -2169,7 +2168,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -2193,7 +2192,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var attr = metadata["account"].Attributes.Single(a => a.LogicalName == "primarycontactidname");
             attr.GetType().GetProperty(nameof(AttributeMetadata.AttributeOf)).SetValue(attr, "primarycontactid");
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -2227,7 +2226,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.PrimaryNameAttribute)).SetValue(metadata["contact"], "fullname");
 
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch>
@@ -2251,7 +2250,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var lookup = (LookupAttributeMetadata)metadata["account"].Attributes.Single(a => a.LogicalName == "primarycontactid");
             lookup.Targets = new[] { "contact" };
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
         }
 
         [TestMethod]
@@ -2263,7 +2262,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 var metadata = new AttributeMetadataCache(_service);
                 var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-                var queries = planBuilder.Build(query);
+                var queries = planBuilder.Build(query, null, out _);
                 Assert.Fail("Expected exception");
             }
             catch (NotSupportedQueryFragmentException ex)
@@ -2279,7 +2278,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
         }
 
         [TestMethod]
@@ -2291,7 +2290,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             Assert.IsInstanceOfType(queries[0], typeof(ExecuteAsNode));
             Assert.IsInstanceOfType(queries[1], typeof(RevertNode));
@@ -2317,7 +2316,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(new[] { queries[0] }, @"
                 <fetch>
@@ -2350,8 +2349,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var parentcustomeridtype = new StringAttributeMetadata { LogicalName = "parentcustomeridtype" };
             typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.Attributes)).SetValue(metadata["contact"], metadata["contact"].Attributes.Concat(new[] { parentcustomeridtype }).ToArray());
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new OptionsWrapper(this) { UseTDSEndpoint = true });
-            planBuilder.TDSEndpointAvailable = true;
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             var tds = (SqlNode)((UpdateNode)queries[0]).Source;
 
@@ -2380,8 +2378,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new OptionsWrapper(this) { UseTDSEndpoint = true });
-            planBuilder.TDSEndpointAvailable = true;
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             var tds = (SqlNode)((DeleteNode)queries[0]).Source;
 
@@ -2405,7 +2402,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch aggregate='true'>
@@ -2425,7 +2422,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             AssertFetchXml(queries, @"
                 <fetch aggregate='true'>
@@ -2447,7 +2444,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             var select = (SelectNode)queries[0];
             var source = select.Source;
@@ -2478,7 +2475,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             var contact1 = Guid.NewGuid();
 
@@ -2506,7 +2503,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             var contact1 = Guid.NewGuid();
 
@@ -2530,7 +2527,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-            var queries = planBuilder.Build(query);
+            var queries = planBuilder.Build(query, null, out _);
 
             var contact1 = Guid.NewGuid();
             var contact2 = Guid.NewGuid();

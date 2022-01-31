@@ -92,7 +92,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT accountid, name FROM account";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -115,7 +115,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT * FROM account";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -149,7 +149,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT accountid, name FROM account INNER JOIN contact ON account.accountid = contact.parentcustomerid";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -180,7 +180,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     account
                     INNER JOIN contact ON account.accountid = contact.parentcustomerid AND contact.firstname = 'Mark'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -208,7 +208,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT accountid, name FROM account INNER JOIN contact ON account.name = contact.fullname";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -233,7 +233,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT accountid, name FROM account INNER JOIN contact ON account.name = (contact.firstname + ' ' + contact.lastname)";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -273,7 +273,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 WHERE
                     name = 'Data8'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -306,7 +306,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 ORDER BY
                     name ASC";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -337,7 +337,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 ORDER BY
                     2 ASC";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -365,7 +365,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 FROM
                     account";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -393,7 +393,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 FROM
                     account";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -423,7 +423,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 ORDER BY name
                 OFFSET 100 ROWS FETCH NEXT 50 ROWS ONLY";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -453,7 +453,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     account
                 GROUP BY name";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -504,7 +504,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     account
                 GROUP BY name";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -555,7 +555,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     account
                 GROUP BY name";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -600,7 +600,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT accountid, name AS test FROM account";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -631,7 +631,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 HAVING
                     count(*) > 1";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -696,7 +696,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     account
                 GROUP BY DATEPART(month, createdon)";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -759,7 +759,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     name,
                     accountid";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -797,7 +797,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     name,
                     accountid";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -835,7 +835,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     name = 'Data8'
                     and (turnover + employees) = 100";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -865,7 +865,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var query = @"
                 SELECT count(*) FROM account";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -886,7 +886,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname FROM contact WHERE firstname = 'Mark'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -916,7 +916,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var query = @"
                 SELECT contactid FROM contact WHERE firstname + ' ' + lastname = 'Mark Carrington'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -943,7 +943,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT name FROM account WHERE accountid = parentcustomerid) AS accountname FROM contact WHERE firstname = 'Mark'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -977,7 +977,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT name FROM account WHERE createdon = contact.createdon) AS accountname FROM contact WHERE firstname = 'Mark'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1027,7 +1027,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var query = @"
                 SELECT TOP 10 firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT name FROM account WHERE createdon = contact.createdon) AS accountname FROM contact WHERE firstname = 'Mark'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1073,7 +1073,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT TOP 1 name FROM account) AS accountname FROM contact WHERE firstname = 'Mark'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1116,7 +1116,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT name FROM account WHERE createdon = contact.createdon) AS accountname FROM contact WHERE firstname = 'Mark'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1167,7 +1167,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT name FROM account WHERE createdon = contact.createdon AND employees > 10) AS accountname FROM contact WHERE firstname = 'Mark'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1222,7 +1222,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT firstname + ' ' + name FROM account WHERE accountid = parentcustomerid) AS accountname FROM contact WHERE firstname = 'Mark'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1271,7 +1271,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var query = @"
                 SELECT firstname FROM contact ORDER BY (SELECT TOP 1 name FROM account WHERE accountid = parentcustomerid ORDER BY firstname)";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1312,7 +1312,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname FROM contact WHERE (SELECT name FROM account WHERE accountid = parentcustomerid) = 'Data8'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1348,7 +1348,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 FROM
                     account";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1378,7 +1378,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 UNION ALL
                 SELECT fullname FROM contact";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1422,7 +1422,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 WHERE
                     name in ('Data8', 'Mark Carrington')";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1458,7 +1458,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 WHERE
                     name in (SELECT firstname FROM contact)";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1499,7 +1499,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 WHERE
                     name in (SELECT firstname, lastname FROM contact)";
 
-            planBuilder.Build(query);
+            planBuilder.Build(query, null, out _);
         }
 
         [TestMethod]
@@ -1517,7 +1517,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 WHERE
                     primarycontactid in (SELECT contactid FROM contact WHERE firstname = 'Mark')";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1556,7 +1556,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 WHERE
                     name in (SELECT firstname FROM contact WHERE parentcustomerid = accountid)";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1605,7 +1605,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 WHERE
                     name not in (SELECT firstname FROM contact WHERE parentcustomerid = accountid)";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1654,7 +1654,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 WHERE
                     EXISTS (SELECT * FROM contact)";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1694,7 +1694,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 WHERE
                     EXISTS (SELECT * FROM contact WHERE contactid = primarycontactid)";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1730,7 +1730,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 WHERE
                     EXISTS (SELECT * FROM contact WHERE parentcustomerid = accountid)";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1775,7 +1775,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 WHERE
                     NOT EXISTS (SELECT * FROM contact WHERE parentcustomerid = accountid)";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1820,7 +1820,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 WHERE
                     name = 'Data8'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1852,7 +1852,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 WHERE
                     a.accountname = 'Data8'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1884,7 +1884,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 WHERE
                     name = 'Data8'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1912,7 +1912,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 WHERE
                     name = 'Data8'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1944,7 +1944,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     CROSS JOIN
                     contact";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1989,7 +1989,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         WHERE  primarycontactid = contactid
                     ) a";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2027,7 +2027,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         WHERE  primarycontactid = contactid
                     ) a";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2066,7 +2066,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         ORDER BY firstname
                     ) a";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2119,7 +2119,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 WHERE
                     createdon = lastxdays(1)";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2147,7 +2147,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 SELECT logicalname
                 FROM   metadata.entity";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2170,7 +2170,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 FROM   metadata.entity
                 WHERE  objecttypecode = 1";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2194,7 +2194,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "UPDATE account SET name = 'foo' WHERE name = 'bar'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2224,7 +2224,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "UPDATE a SET name = 'foo' FROM account a INNER JOIN contact c ON a.accountid = c.parentcustomerid WHERE name = 'bar'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2257,7 +2257,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT accountid, name FROM account OPTION (OPTIMIZE FOR UNKNOWN, FORCE ORDER, RECOMPILE, USE HINT('DISABLE_OPTIMIZER_ROWGOAL'), USE HINT('ENABLE_QUERY_OPTIMIZER_HOTFIXES'), LOOP JOIN, MERGE JOIN, HASH JOIN, NO_PERFORMANCE_SPOOL, MAXRECURSION 2)";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2280,7 +2280,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT name, count(*) from account group by name order by 2 desc";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2333,7 +2333,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT name from account INNER JOIN contact ON left(name, 4) = left(firstname, 4) where name like 'Data8%' and firstname like 'Mark%'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2371,7 +2371,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT name from account where name like 'Data8%' and primarycontactid in (select contactid from contact where firstname = 'Mark')";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2406,7 +2406,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
                 var query = "SELECT name from account where name like 'Data8%' and createdon in (select createdon from contact where firstname = 'Mark')";
 
-                var plans = planBuilder.Build(query);
+                var plans = planBuilder.Build(query, null, out _);
 
                 Assert.AreEqual(1, plans.Length);
 
@@ -2445,7 +2445,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
                 var query = "SELECT name from account inner join contact on account.accountid = contact.parentcustomerid where name like 'Data8%' and contact.createdon in (select createdon from contact where firstname = 'Mark')";
 
-                var plans = planBuilder.Build(query);
+                var plans = planBuilder.Build(query, null, out _);
 
                 Assert.AreEqual(1, plans.Length);
 
@@ -2486,7 +2486,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
                 var query = "SELECT name from account where name like 'Data8%' and exists (select * from contact where firstname = 'Mark' and createdon = account.createdon)";
 
-                var plans = planBuilder.Build(query);
+                var plans = planBuilder.Build(query, null, out _);
 
                 Assert.AreEqual(1, plans.Length);
 
@@ -2524,7 +2524,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT DISTINCT accountid, name from account";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2547,7 +2547,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT DISTINCT accountid, name from account INNER JOIN contact ON account.accountid = contact.parentcustomerid";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2574,7 +2574,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "DELETE FROM account WHERE name = 'bar'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2601,7 +2601,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "INSERT INTO account (name) SELECT fullname FROM contact WHERE firstname = 'Mark'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2628,7 +2628,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT fullname, lastname + ', ' + firstname as fullname FROM contact WHERE firstname = 'Mark'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2664,7 +2664,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT * FROM (SELECT fullname, lastname + ', ' + firstname as fullname FROM contact WHERE firstname = 'Mark') a";
 
-            planBuilder.Build(query);
+            planBuilder.Build(query, null, out _);
         }
 
         [TestMethod]
@@ -2677,7 +2677,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                           UNION
                           SELECT fullname, lastname + ', ' + firstname as fullname FROM contact WHERE firstname = 'Mark'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2710,7 +2710,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                             SELECT fullname, lastname + ', ' + firstname as fullname FROM contact WHERE firstname = 'Mark'
                           ) a";
 
-            planBuilder.Build(query);
+            planBuilder.Build(query, null, out _);
         }
 
         private T AssertNode<T>(IExecutionPlanNode node) where T : IExecutionPlanNode
@@ -2744,7 +2744,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = @"SELECT * FROM account WHERE accountid IN (SELECT parentcustomerid FROM contact)";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2793,7 +2793,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = @"SELECT contact.* FROM account WHERE accountid IN (SELECT parentcustomerid FROM contact)";
 
-            planBuilder.Build(query);
+            planBuilder.Build(query, null, out _);
         }
 
         [TestMethod]
@@ -2804,7 +2804,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = @"SELECT new_name, min(new_optionsetvalue) FROM new_customentity GROUP BY new_name";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2832,7 +2832,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             try
             {
-                planBuilder.Build(query);
+                planBuilder.Build(query, null, out _);
                 Assert.Fail();
             }
             catch (NotSupportedQueryFragmentException ex)
@@ -2854,7 +2854,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                                                GROUP BY firstname
                                                HAVING   count(*) > 1);";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2952,7 +2952,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT parentcustomeridname FROM account INNER JOIN contact ON account.accountid = contact.parentcustomerid";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2976,7 +2976,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT DISTINCT name AS n1, name AS n2 FROM account";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2999,7 +2999,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT createdon, COUNT(*) FROM account GROUP BY createdon";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -3023,7 +3023,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT collectionschemaname + '.' + entitysetname FROM metadata.entity WHERE description LIKE '%test%'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -3049,7 +3049,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT name AS n1, name AS n2 FROM account WHERE name = 'test'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -3099,7 +3099,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT uat.name, prod.name FROM uat.dbo.account AS uat INNER JOIN prod.dbo.account AS prod ON uat.accountid = prod.accountid WHERE uat.name <> prod.name AND uat.name LIKE '%test%'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -3159,7 +3159,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 MONTH(a.createdon),
                 YEAR(a.createdon)";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -3191,7 +3191,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT CURRENT_TIMESTAMP, CURRENT_USER, GETDATE(), USER_NAME()";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -3208,7 +3208,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT name FROM account WHERE ownerid = CURRENT_USER";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -3233,7 +3233,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT name FROM account WHERE accountid IN ('0000000000000000-0000-0000-000000000000', '0000000000000000-0000-0000-000000000001')";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -3261,7 +3261,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT name + 'foo' FROM account ORDER BY 1";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -3288,7 +3288,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT DISTINCT name + 'foo' FROM account ORDER BY 1";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -3318,7 +3318,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT COUNT(accountid) OVER(PARTITION BY accountid) AS test FROM account";
 
-            planBuilder.Build(query);
+            planBuilder.Build(query, null, out _);
         }
 
         [TestMethod]
@@ -3332,7 +3332,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 SET @test = 1
                 SELECT @test";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(3, plans.Length);
 
@@ -3386,7 +3386,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 DECLARE @test int = 1
                 SELECT @test";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(3, plans.Length);
 
@@ -3439,7 +3439,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SET @test = 1";
 
-            planBuilder.Build(query);
+            planBuilder.Build(query, null, out _);
         }
 
         [TestMethod]
@@ -3453,7 +3453,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 DECLARE @test INT
                 DECLARE @test INT";
 
-            planBuilder.Build(query);
+            planBuilder.Build(query, null, out _);
         }
 
         [TestMethod]
@@ -3467,7 +3467,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 SET @test = 100
                 SELECT @test";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             var parameterTypes = new Dictionary<string, DataTypeReference>();
             var parameterValues = new Dictionary<string, object>();
@@ -3500,7 +3500,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 SET @test = 'test'
                 SELECT @test";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             var parameterTypes = new Dictionary<string, DataTypeReference>();
             var parameterValues = new Dictionary<string, object>();
@@ -3534,7 +3534,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 DECLARE @test varchar(3)
                 SELECT @test = name, accountid FROM account";
 
-            planBuilder.Build(query);
+            planBuilder.Build(query, null, out _);
         }
 
         [TestMethod]
@@ -3548,7 +3548,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 SELECT @test = name FROM account ORDER BY name
                 SELECT @test";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(3, plans.Length);
 
@@ -3625,7 +3625,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 SET @test = 'test'
                 SELECT @test";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             var parameterTypes = new Dictionary<string, DataTypeReference>();
             var parameterValues = new Dictionary<string, object>();
@@ -3657,7 +3657,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var query = @"
                 DECLARE @test CURSOR";
 
-            planBuilder.Build(query);
+            planBuilder.Build(query, null, out _);
         }
 
         [TestMethod]
@@ -3670,7 +3670,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var query = @"
                 DECLARE @test TABLE (ID INT)";
 
-            planBuilder.Build(query);
+            planBuilder.Build(query, null, out _);
         }
     }
 }

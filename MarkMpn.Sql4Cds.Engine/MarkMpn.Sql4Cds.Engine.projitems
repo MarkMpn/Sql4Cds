@@ -19,6 +19,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)Ado\Sql4CdsException.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Ado\Sql4CdsParameter.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Ado\Sql4CdsParameterCollection.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Ado\SqlDataReaderWrapper.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)AttributeMetadataCache.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DataSource.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DisconnectedException.cs" />
@@ -98,7 +99,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)QueryParseException.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)SqlEntityReference.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)TableSizeCache.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)TSqlEndpoint.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)TDSEndpoint.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)TSqlFragmentExtensions.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\AggregateCollectingVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\BooleanRewriteVisitor.cs" />
@@ -111,6 +112,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\RewriteVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\RewriteVisitorBase.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\ScalarSubqueryVisitor.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Visitors\TDSEndpointCompatibilityVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\UpdateTargetVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\VariableCollectingVisitor.cs" />
   </ItemGroup>

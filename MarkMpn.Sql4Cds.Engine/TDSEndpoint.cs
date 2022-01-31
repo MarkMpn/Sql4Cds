@@ -4,6 +4,7 @@ using System.Linq;
 using System.Xml;
 using Microsoft.Xrm.Sdk.Query;
 using System.Net.Sockets;
+using Microsoft.Xrm.Sdk;
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
 #else
@@ -12,7 +13,7 @@ using Microsoft.Xrm.Tooling.Connector;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
-    public static class TSqlEndpoint
+    public static class TDSEndpoint
     {
         private static readonly IDictionary<string, bool> _cache = new Dictionary<string, bool>();
 
@@ -159,6 +160,45 @@ namespace MarkMpn.Sql4Cds.Engine
 #else
             _cache[svc.CrmConnectOrgUriActual.Host] = true;
 #endif
+        }
+
+        /// <summary>
+        /// Checks if the TDS endpoint is valid to be used with a specific connection and set of options
+        /// </summary>
+        /// <param name="options">The <see cref="IQueryExecutionOptions"/> that describe how a query should be executed</param>
+        /// <param name="org">The <see cref="IOrganizationService"/> that is connected to the instance to use</param>
+        /// <returns><c>true</c> if the TDS endpoint can be used for this connection and options, or <c>false</c> otherwise</returns>
+        public static bool CanUseTDSEndpoint(IQueryExecutionOptions options, IOrganizationService org)
+        {
+            if (!options.UseTDSEndpoint)
+                return false;
+
+            if (options.UseLocalTimeZone)
+                return false;
+
+            // Allow generating TDS-based plans in tests
+            if (org == null)
+                return true;
+
+#if NETCOREAPP
+            var svc = org as ServiceClient;
+#else
+            var svc = org as CrmServiceClient;
+#endif
+
+            if (svc == null)
+                return false;
+
+            if (svc.CallerId != Guid.Empty)
+                return false;
+
+            if (String.IsNullOrEmpty(svc.CurrentAccessToken))
+                return false;
+
+            if (!IsEnabled(svc))
+                return false;
+
+            return true;
         }
     }
 }
