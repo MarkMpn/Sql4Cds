@@ -122,5 +122,10 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Returns the unique identifier of the current user
         /// </summary>
         Guid UserId { get; }
+
+        /// <summary>
+        /// Returns or sets a value indicating if SQL will be parsed using quoted identifiers
+        /// </summary>
+        bool QuotedIdentifiers { get; }
     }
 }

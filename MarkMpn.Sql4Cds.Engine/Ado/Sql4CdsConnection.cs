@@ -5,6 +5,7 @@ using System.Data.Common;
 using System.Linq;
 using System.Text;
 using Microsoft.Crm.Sdk.Messages;
+using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
 #else
@@ -111,12 +112,12 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public event EventHandler<InfoMessageEventArgs> InfoMessage;
 
-        internal void OnInfoMessage(string message)
+        internal void OnInfoMessage(IRootExecutionPlanNode node, string message)
         {
             var handler = InfoMessage;
 
             if (handler != null)
-                handler(this, new InfoMessageEventArgs(message));
+                handler(this, new InfoMessageEventArgs(node, message));
         }
 
         internal Dictionary<string, DataSource> DataSources => _dataSources;

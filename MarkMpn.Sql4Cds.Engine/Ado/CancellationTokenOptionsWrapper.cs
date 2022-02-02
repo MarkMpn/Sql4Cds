@@ -47,6 +47,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public Guid UserId => _options.UserId;
 
+        public bool QuotedIdentifiers => _options.QuotedIdentifiers;
+
         public bool ConfirmDelete(int count, EntityMetadata meta)
         {
             return _options.ConfirmDelete(count, meta);

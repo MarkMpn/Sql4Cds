@@ -13,6 +13,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)Ado\ChangeDatabaseOptionsWrapper.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Ado\DefaultQueryExecutionOptions.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Ado\InfoMessageEventArgs.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Ado\ISql4CdsDataReader.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Ado\Sql4CdsCommand.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Ado\Sql4CdsConnection.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Ado\Sql4CdsDataReader.cs" />
@@ -20,6 +21,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)Ado\Sql4CdsParameter.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Ado\Sql4CdsParameterCollection.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Ado\SqlDataReaderWrapper.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Ado\StatementCompletedEventArgs.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)AttributeMetadataCache.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DataSource.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DisconnectedException.cs" />

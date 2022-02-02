@@ -32,7 +32,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         IEnumerable<IExecutionPlanNode> GetSources();
 
         /// <summary>
-        /// Adds 
+        /// Adds columns into the query which are required by preceding nodes
         /// </summary>
         /// <param name="metadata"></param>
         /// <param name="parameterTypes"></param>

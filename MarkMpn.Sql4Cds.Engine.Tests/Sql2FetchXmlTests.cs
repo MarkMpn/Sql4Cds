@@ -57,6 +57,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         Guid IQueryExecutionOptions.UserId => Guid.NewGuid();
 
+        bool IQueryExecutionOptions.QuotedIdentifiers => false;
+
         [TestMethod]
         public void SimpleSelect()
         {
@@ -1766,8 +1768,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             try
             {
                 var metadata = new AttributeMetadataCache(_service);
-                var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-                planBuilder.QuotedIdentifiers = true;
+                var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new OptionsWrapper(this) { QuotedIdentifiers = true });
                 var queries = planBuilder.Build(query, null, out _);
 
                 Assert.Fail("Expected exception");

@@ -16,7 +16,7 @@ using SelectColumn = MarkMpn.Sql4Cds.Engine.ExecutionPlan.SelectColumn;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
-    public class ExecutionPlanBuilder
+    class ExecutionPlanBuilder
     {
         private int _colNameCounter;
         private IDictionary<string, DataTypeReference> _parameterTypes;
@@ -39,11 +39,6 @@ namespace MarkMpn.Sql4Cds.Engine
         /// The connections that will be used by this conversion
         /// </summary>
         public IDictionary<string, DataSource> DataSources { get; }
-
-        /// <summary>
-        /// Returns or sets a value indicating if SQL will be parsed using quoted identifiers
-        /// </summary>
-        public bool QuotedIdentifiers { get; set; }
 
         /// <summary>
         /// Indicates how the query will be executed
@@ -76,7 +71,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var queries = new List<IRootExecutionPlanNode>();
 
             // Parse the SQL DOM
-            var dom = new TSql150Parser(QuotedIdentifiers);
+            var dom = new TSql150Parser(Options.QuotedIdentifiers);
             var fragment = dom.Parse(new StringReader(sql), out var errors);
 
             // Check if there were any parse errors

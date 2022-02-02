@@ -80,6 +80,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         Guid IQueryExecutionOptions.UserId => Guid.NewGuid();
 
+        bool IQueryExecutionOptions.QuotedIdentifiers => true;
+
         [TestMethod]
         public void SelectArithmetic()
         {
@@ -259,24 +261,23 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             }
         }
 
-        //[TestMethod]
-        public void TDS()
+        [TestMethod]
+        public void LoadToDataTable()
         {
-            using (var con = new Sql4CdsConnection("AuthType=OAuth;Username=markc@data-8.co.uk;Password=TonarinoTotoro;Url=https://orgc9d0c16b.crm11.dynamics.com;AppId=51f81489-12ee-4a9e-aaae-a2591f45987d;RedirectUri=app://58145B91-0C36-4500-8554-080854F2AC97;LoginPrompt=Auto"))
+            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList(), this))
             using (var cmd = con.CreateCommand())
             {
-                cmd.CommandText = "SELECT TOP (@top) name FROM account";
-                cmd.Parameters.Add(new Sql4CdsParameter("@top", 10));
+                cmd.CommandText = "SELECT 1, 'hello world'";
 
                 using (var reader = cmd.ExecuteReader())
                 {
-                    for (var i = 0; i < 10; i++)
-                    {
-                        Assert.IsTrue(reader.Read());
-                        var name = reader.GetString(0);
-                    }
+                    var table = new DataTable();
+                    table.Load(reader);
 
-                    Assert.IsFalse(reader.Read());
+                    Assert.AreEqual(1, table.Rows.Count);
+                    Assert.AreEqual(2, table.Columns.Count);
+                    Assert.AreEqual(1, table.Rows[0][0]);
+                    Assert.AreEqual("hello world", table.Rows[0][1]);
                 }
             }
         }

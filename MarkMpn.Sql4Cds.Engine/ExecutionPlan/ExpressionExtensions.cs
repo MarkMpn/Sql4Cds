@@ -1012,7 +1012,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             [typeof(SqlInt16)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.SmallInt },
             [typeof(SqlByte)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.TinyInt },
             [typeof(SqlGuid)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.UniqueIdentifier },
-            [typeof(SqlEntityReference)] = new UserDataTypeReference { Name = new SchemaObjectName { Identifiers = { new Identifier { Value = typeof(SqlEntityReference).FullName } } } }
+            [typeof(SqlEntityReference)] = new UserDataTypeReference { Name = new SchemaObjectName { Identifiers = { new Identifier { Value = typeof(SqlEntityReference).FullName } } } },
+            [typeof(object)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Sql_Variant }
         };
 
         /// <summary>

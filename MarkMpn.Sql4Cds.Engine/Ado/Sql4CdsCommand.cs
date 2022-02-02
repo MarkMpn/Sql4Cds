@@ -39,7 +39,7 @@ namespace MarkMpn.Sql4Cds.Engine
             _planBuilder = new ExecutionPlanBuilder(_connection.DataSources.Values, _connection.Options);
         }
 
-        internal IRootExecutionPlanNode[] Plan => _plan;
+        public IRootExecutionPlanNode[] Plan => _plan;
 
         public override string CommandText
         {
@@ -70,12 +70,12 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public event EventHandler<StatementCompletedEventArgs> StatementCompleted;
 
-        internal void OnStatementCompleted(int recordsAffected)
+        internal void OnStatementCompleted(IRootExecutionPlanNode node, int recordsAffected)
         {
             var handler = StatementCompleted;
 
             if (handler != null)
-                handler(this, new StatementCompletedEventArgs(recordsAffected));
+                handler(this, new StatementCompletedEventArgs(node, recordsAffected));
         }
         
         protected override DbConnection DbConnection
@@ -178,7 +178,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     cmd.Parameters.Add(param);
                 }
 
-                return new SqlDataReaderWrapper(con, cmd);
+                return new SqlDataReaderWrapper(_connection, this, con, cmd, _connection.Database);
             }
 
             _cts = CommandTimeout == 0 ? new CancellationTokenSource() : new CancellationTokenSource(TimeSpan.FromSeconds(CommandTimeout));

@@ -172,5 +172,7 @@ namespace MarkMpn.Sql4Cds
         {
             _userId = null;
         }
+
+        public bool QuotedIdentifiers => Settings.Instance.QuotedIdentifiers;
     }
 }

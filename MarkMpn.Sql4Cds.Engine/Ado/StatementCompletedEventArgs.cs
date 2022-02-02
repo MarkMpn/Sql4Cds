@@ -5,16 +5,16 @@ using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
-    public class InfoMessageEventArgs : EventArgs
+    public class StatementCompletedEventArgs
     {
-        public InfoMessageEventArgs(IRootExecutionPlanNode node, string message)
+        public StatementCompletedEventArgs(IRootExecutionPlanNode node, int recordsAffected)
         {
             Statement = node;
-            Message = message;
+            RecordsAffected = recordsAffected;
         }
 
         public IRootExecutionPlanNode Statement { get; }
 
-        public string Message { get; }
+        public int RecordsAffected { get; }
     }
 }

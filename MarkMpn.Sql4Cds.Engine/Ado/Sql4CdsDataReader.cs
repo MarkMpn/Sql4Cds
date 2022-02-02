@@ -12,13 +12,14 @@ using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
-    public class Sql4CdsDataReader : DbDataReader
+    class Sql4CdsDataReader : DbDataReader, ISql4CdsDataReader
     {
         private readonly Sql4CdsConnection _connection;
         private readonly Sql4CdsCommand _command;
         private readonly IQueryExecutionOptions _options;
         private readonly CommandBehavior _behavior;
         private readonly List<DataTable> _results;
+        private readonly List<IDataSetExecutionPlanNode> _resultQueries;
         private readonly int _recordsAffected;
         private int _resultIndex;
         private int _rowIndex;
@@ -63,6 +64,7 @@ namespace MarkMpn.Sql4Cds.Engine
             _behavior = behavior;
 
             _results = new List<DataTable>();
+            _resultQueries = new List<IDataSetExecutionPlanNode>();
             _recordsAffected = -1;
 
             var parameterTypes = ((Sql4CdsParameterCollection)command.Parameters).GetParameterTypes();
@@ -79,18 +81,22 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     var table = dataSetNode.Execute(_connection.DataSources, options, parameterTypes, parameterValues);
                     _results.Add(table);
+                    _resultQueries.Add(dataSetNode);
+
+                    _connection.OnInfoMessage(plan, $"({table.Rows.Count} row{(table.Rows.Count == 1 ? "" : "s")} affected)");
+                    command.OnStatementCompleted(plan, -1);
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlNode)
                 {
                     var msg = dmlNode.Execute(_connection.DataSources, options, parameterTypes, parameterValues, out var recordsAffected);
 
                     if (!String.IsNullOrEmpty(msg))
-                        _connection.OnInfoMessage(msg);
+                        _connection.OnInfoMessage(plan, msg);
+
+                    command.OnStatementCompleted(plan, recordsAffected);
 
                     if (recordsAffected != -1)
                     {
-                        command.OnStatementCompleted(recordsAffected);
-
                         if (_recordsAffected == -1)
                             _recordsAffected = 0;
 
@@ -100,8 +106,12 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             _resultIndex = -1;
-            NextResult();
+
+            if (!NextResult())
+                Close();
         }
+
+        public IDataSetExecutionPlanNode CurrentResultQuery => _resultQueries[_resultIndex];
 
         public override object this[int ordinal] => ToClrType(GetRawValue(ordinal));
 
@@ -294,6 +304,21 @@ namespace MarkMpn.Sql4Cds.Engine
                 return false;
 
             return true;
+        }
+
+        public override DataTable GetSchemaTable()
+        {
+            return null;
+        }
+
+        public DataTable GetCurrentDataTable()
+        {
+            var table = _results[_resultIndex];
+
+            if (!NextResult())
+                Close();
+
+            return table;
         }
 
         public override void Close()

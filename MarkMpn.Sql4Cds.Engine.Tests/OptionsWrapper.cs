@@ -30,6 +30,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             BypassCustomPlugins = options.BypassCustomPlugins;
             PrimaryDataSource = options.PrimaryDataSource;
             UserId = options.UserId;
+            QuotedIdentifiers = options.QuotedIdentifiers;
         }
 
         public bool Cancelled { get; set; }
@@ -59,6 +60,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public string PrimaryDataSource { get; set; }
 
         public Guid UserId { get; set; }
+
+        public bool QuotedIdentifiers { get; set; }
 
         public bool ConfirmDelete(int count, EntityMetadata meta)
         {

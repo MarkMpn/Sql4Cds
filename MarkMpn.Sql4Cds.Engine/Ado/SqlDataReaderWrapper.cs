@@ -1,24 +1,33 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Data;
 using System.Data.Common;
 using System.Data.SqlClient;
 using System.Text;
+using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
-    class SqlDataReaderWrapper : DbDataReader
+    class SqlDataReaderWrapper : DbDataReader, ISql4CdsDataReader
     {
+        private Sql4CdsConnection _connection;
         private SqlConnection _sqlConnection;
         private SqlCommand _sqlCommand;
         private SqlDataReader _sqlDataReader;
+        private readonly SqlNode _node;
 
-        public SqlDataReaderWrapper(SqlConnection sqlConnection, SqlCommand sqlCommand)
+        public SqlDataReaderWrapper(Sql4CdsConnection connection, Sql4CdsCommand command, SqlConnection sqlConnection, SqlCommand sqlCommand, string dataSource)
         {
+            _connection = connection;
             _sqlConnection = sqlConnection;
             _sqlCommand = sqlCommand;
             _sqlDataReader = sqlCommand.ExecuteReader();
+            _node = new SqlNode { Sql = sqlCommand.CommandText, DataSource = dataSource };
+            command.OnStatementCompleted(_node, -1);
         }
+
+        public IDataSetExecutionPlanNode CurrentResultQuery => _node;
 
         public override object this[int ordinal] => _sqlDataReader[ordinal];
 
@@ -152,6 +161,24 @@ namespace MarkMpn.Sql4Cds.Engine
         public override bool Read()
         {
             return _sqlDataReader.Read();
+        }
+
+        public override DataTable GetSchemaTable()
+        {
+            return _sqlDataReader.GetSchemaTable();
+        }
+
+        public override void Close()
+        {
+            _sqlDataReader.Close();
+        }
+
+        public DataTable GetCurrentDataTable()
+        {
+            var table = new DataTable();
+            table.Load(this);
+            _connection.OnInfoMessage(_node, $"({table.Rows.Count} row{(table.Rows.Count == 1 ? "" : "s")} affected)");
+            return table;
         }
 
         protected override void Dispose(bool disposing)

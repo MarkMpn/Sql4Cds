@@ -569,26 +569,15 @@ namespace MarkMpn.Sql4Cds
             backgroundWorker.CancelAsync();
         }
 
-        private void AddResult(Control results, Control fetchXml, int rowCount)
+        private void AddResult(Control results, int rowCount)
         {
-            if (results != null)
+            if (!tabControl.TabPages.Contains(resultsTabPage))
             {
-                if (!tabControl.TabPages.Contains(resultsTabPage))
-                {
-                    tabControl.TabPages.Insert(0, resultsTabPage);
-                    tabControl.SelectedTab = resultsTabPage;
-                }
-
-                AddControl(results, resultsTabPage);
+                tabControl.TabPages.Insert(0, resultsTabPage);
+                tabControl.SelectedTab = resultsTabPage;
             }
 
-            if (fetchXml != null)
-            {
-                if (!tabControl.TabPages.Contains(fetchXmlTabPage))
-                    tabControl.TabPages.Insert(tabControl.TabPages.Count - 1, fetchXmlTabPage);
-
-                AddControl(fetchXml, fetchXmlTabPage);
-            }
+            AddControl(results, resultsTabPage);
 
             _rowCount += rowCount;
 
@@ -596,6 +585,14 @@ namespace MarkMpn.Sql4Cds
                 rowsLabel.Text = "1 row";
             else
                 rowsLabel.Text = $"{_rowCount:N0} rows";
+        }
+
+        private void AddExecutionPlan(Control executionPlan)
+        {
+            if (!tabControl.TabPages.Contains(fetchXmlTabPage))
+                tabControl.TabPages.Insert(tabControl.TabPages.Count - 1, fetchXmlTabPage);
+
+            AddControl(executionPlan, fetchXmlTabPage);
         }
 
         private void AddControl(Control control, TabPage tabPage)
@@ -857,52 +854,50 @@ namespace MarkMpn.Sql4Cds
             if (!args.Execute)
                 options.UseTDSEndpoint = false;
 
-            var converter = new ExecutionPlanBuilder(DataSources.Values, options);
-            converter.QuotedIdentifiers = Settings.Instance.QuotedIdentifiers;
-
-            var queries = converter.Build(args.Sql, null, out _);
-            var parameterTypes = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
-            var parameterValues = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
-
-            if (args.Execute)
+            using (var con = new Sql4CdsConnection(DataSources.Values.ToList(), options))
+            using (var cmd = new Sql4CdsCommand(con))
             {
-                foreach (var query in queries)
+                cmd.CommandText = args.Sql;
+                cmd.Prepare();
+
+                if (args.Execute)
                 {
-                    _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name, ["Source"] = "XrmToolBox" });
-
-                    try
+                    con.InfoMessage += (s, msg) =>
                     {
-                        if (query is IDataSetExecutionPlanNode dataQuery)
+                        Execute(() => ShowResult(msg.Statement, args, null, msg.Message, null));
+                    };
+
+                    cmd.StatementCompleted += (s, stmt) =>
+                    {
+                        _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = stmt.Statement.GetType().Name, ["Source"] = "XrmToolBox" });
+
+                        Execute(() => ShowResult(stmt.Statement, args, null, null, null));
+
+                        if (stmt.Statement is IImpersonateRevertExecutionPlanNode)
                         {
-                            var result = dataQuery.Execute(DataSources.Values.Cast<Engine.DataSource>().ToDictionary(ds => ds.Name, StringComparer.OrdinalIgnoreCase), options, parameterTypes, parameterValues);
-
-                            Execute(() => ShowResult(query, args, result, null, null));
+                            options.SyncUserId();
+                            Execute(() => SyncUsername());
                         }
-                        else if (query is IDmlQueryExecutionPlanNode dmlQuery)
+                    };
+
+                    using (var reader = (ISql4CdsDataReader) cmd.ExecuteReader())
+                    {
+                        while (!reader.IsClosed)
                         {
-                            var result = dmlQuery.Execute(DataSources.Values.Cast<Engine.DataSource>().ToDictionary(ds => ds.Name, StringComparer.OrdinalIgnoreCase), options, parameterTypes, parameterValues, out _);
+                            var node = reader.CurrentResultQuery;
+                            var dataTable = reader.GetCurrentDataTable();
 
-                            Execute(() => ShowResult(query, args, null, result, null));
+                            Execute(() => ShowResult(node, args, dataTable, null, null));
                         }
-                    }
-                    catch (Exception ex)
-                    {
-                        throw new QueryException(query, ex);
-                    }
-
-                    if (query is IImpersonateRevertExecutionPlanNode)
-                    {
-                        options.SyncUserId();
-                        Execute(() => SyncUsername());
                     }
                 }
-            }
-            else
-            {
-                foreach (var query in queries)
+                else
                 {
-                    _ai.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name, ["Source"] = "XrmToolBox" });
-                    Execute(() => ShowResult(query, args, null, null, null));
+                    foreach (var query in cmd.Plan)
+                    {
+                        _ai.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name, ["Source"] = "XrmToolBox" });
+                        Execute(() => ShowResult(query, args, null, null, null));
+                    }
                 }
             }
 
@@ -915,10 +910,6 @@ namespace MarkMpn.Sql4Cds
 
         private void ShowResult(IRootExecutionPlanNode query, ExecuteParams args, DataTable results, string msg, QueryExecutionException ex)
         {
-            Control result = null;
-            Control plan = null;
-            var rowCount = 0;
-
             if (results != null)
             {
                 var grid = new DataGridView();
@@ -1048,20 +1039,17 @@ namespace MarkMpn.Sql4Cds
                     e.Graphics.DrawString(rowIdx, this.Font, SystemBrushes.ControlText, headerBounds, centerFormat);
                 };
 
-                result = grid;
+                var rowCount = results.Rows.Count;
 
-                rowCount = results.Rows.Count;
-
-                AddMessage(query.Index, query.Length, $"({rowCount} row{(rowCount == 1 ? "" : "s")} affected)", false);
+                AddResult(grid, rowCount);
             }
             else if (msg != null)
             {
                 AddMessage(query.Index, query.Length, msg, false);
             }
-
-            if (args.IncludeFetchXml)
+            else if (args.IncludeFetchXml)
             {
-                plan = new Panel();
+                var plan = new Panel();
                 var fetchLabel = new System.Windows.Forms.Label
                 {
                     Text = query.Sql,
@@ -1086,9 +1074,9 @@ namespace MarkMpn.Sql4Cds
                 };
                 plan.Controls.Add(planView);
                 plan.Controls.Add(fetchLabel);
-            }
 
-            AddResult(result, plan, rowCount);
+                AddExecutionPlan(plan);
+            }
         }
 
         private void OpenRecord(SqlEntityReference entityReference)
