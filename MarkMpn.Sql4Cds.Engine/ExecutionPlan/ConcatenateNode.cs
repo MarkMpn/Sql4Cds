@@ -18,7 +18,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// The data sources to concatenate
         /// </summary>
         [Browsable(false)]
-        public List<IDataExecutionPlanNode> Sources { get; } = new List<IDataExecutionPlanNode>();
+        public List<IDataExecutionPlanNodeInternal> Sources { get; } = new List<IDataExecutionPlanNodeInternal>();
 
         /// <summary>
         /// The columns to produce in the result and the source columns from each data source
@@ -62,7 +62,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Sources;
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
             for (var i = 0; i < Sources.Count; i++)
             {

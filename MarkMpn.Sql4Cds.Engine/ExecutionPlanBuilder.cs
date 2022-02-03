@@ -105,7 +105,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     var length = statement.ScriptTokenStream[statement.LastTokenIndex].Offset + statement.ScriptTokenStream[statement.LastTokenIndex].Text.Length - index;
                     var originalSql = statement.ToSql();
 
-                    IRootExecutionPlanNode[] plans;
+                    IRootExecutionPlanNodeInternal[] plans;
                     var hints = statement is StatementWithCtesAndXmlNamespaces stmt ? stmt.OptimizerHints : null;
 
                     if (statement is SelectStatement select)
@@ -144,7 +144,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return queries.ToArray();
         }
 
-        private IRootExecutionPlanNode ConvertSetVariableStatement(SetVariableStatement set)
+        private IRootExecutionPlanNodeInternal ConvertSetVariableStatement(SetVariableStatement set)
         {
             if (set.CursorDefinition != null)
                 throw new NotSupportedQueryFragmentException("Cursors are not supported", set.CursorDefinition);
@@ -224,9 +224,9 @@ namespace MarkMpn.Sql4Cds.Engine
             return node;
         }
 
-        private IRootExecutionPlanNode[] ConvertDeclareVariableStatement(DeclareVariableStatement declare)
+        private IRootExecutionPlanNodeInternal[] ConvertDeclareVariableStatement(DeclareVariableStatement declare)
         {
-            var nodes = new List<IRootExecutionPlanNode>();
+            var nodes = new List<IRootExecutionPlanNodeInternal>();
             var declareNode = new DeclareVariablesNode();
             nodes.Add(declareNode);
 
@@ -276,9 +276,9 @@ namespace MarkMpn.Sql4Cds.Engine
             return nodes.ToArray();
         }
 
-        private void SetParent(IExecutionPlanNode plan)
+        private void SetParent(IExecutionPlanNodeInternal plan)
         {
-            foreach (var child in plan.GetSources())
+            foreach (IExecutionPlanNodeInternal child in plan.GetSources())
             {
                 child.Parent = plan;
                 SetParent(child);
@@ -301,7 +301,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (!(impersonate.ExecuteContext.Principal is StringLiteral user))
                 throw new NotSupportedQueryFragmentException("Unhandled username variable", impersonate.ExecuteContext.Principal);
 
-            IExecutionPlanNode source;
+            IExecutionPlanNodeInternal source;
 
             if (impersonate.ExecuteContext.Kind == ExecuteAsOption.Login)
             {
@@ -411,7 +411,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 throw new NotSupportedQueryFragmentException("Unhandled INSERT target", insert.InsertSpecification.Target);
 
             // Check if we are inserting constant values or the results of a SELECT statement and perform the appropriate conversion
-            IExecutionPlanNode source;
+            IExecutionPlanNodeInternal source;
             string[] columns;
 
             if (insert.InsertSpecification.InsertSource is ValuesInsertSource values)
@@ -442,7 +442,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return ConvertInlineDerivedTable(table);
         }
 
-        private IExecutionPlanNode ConvertInsertSelectSource(SelectInsertSource selectSource, IList<OptimizerHint> hints, out string[] columns)
+        private IExecutionPlanNodeInternal ConvertInsertSelectSource(SelectInsertSource selectSource, IList<OptimizerHint> hints, out string[] columns)
         {
             var selectStatement = new SelectStatement { QueryExpression = selectSource.Select };
             var select = ConvertSelectStatement(selectStatement);
@@ -472,7 +472,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return dataSource;
         }
 
-        private InsertNode ConvertInsertSpecification(NamedTableReference target, IList<ColumnReferenceExpression> targetColumns, IExecutionPlanNode source, string[] sourceColumns)
+        private InsertNode ConvertInsertSpecification(NamedTableReference target, IList<ColumnReferenceExpression> targetColumns, IExecutionPlanNodeInternal source, string[] sourceColumns)
         {
             var dataSource = SelectDataSource(target.SchemaObject);
 
@@ -502,7 +502,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var attributes = metadata.Attributes.ToDictionary(attr => attr.LogicalName, StringComparer.OrdinalIgnoreCase);
             var attributeNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var virtualTypeAttributes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var schema = sourceColumns == null ? null : ((IDataExecutionPlanNode)source).GetSchema(DataSources, null);
+            var schema = sourceColumns == null ? null : ((IDataExecutionPlanNodeInternal)source).GetSchema(DataSources, null);
 
             // Check all target columns are valid for create
             foreach (var col in targetColumns)
@@ -992,7 +992,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return updateNode;
         }
 
-        private UpdateNode ConvertSetClause(IList<SetClause> setClauses, DataSource dataSource, IExecutionPlanNode node, string targetLogicalName, string targetAlias, HashSet<string> attributeNames, HashSet<string> virtualTypeAttributes)
+        private UpdateNode ConvertSetClause(IList<SetClause> setClauses, DataSource dataSource, IExecutionPlanNodeInternal node, string targetLogicalName, string targetAlias, HashSet<string> attributeNames, HashSet<string> virtualTypeAttributes)
         {
             var targetMetadata = dataSource.Metadata[targetLogicalName];
             var attributes = targetMetadata.Attributes.ToDictionary(attr => attr.LogicalName, StringComparer.OrdinalIgnoreCase);
@@ -1104,7 +1104,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return update;
         }
 
-        private IRootExecutionPlanNode ConvertSelectStatement(SelectStatement select)
+        private IRootExecutionPlanNodeInternal ConvertSelectStatement(SelectStatement select)
         {
             if (TDSEndpoint.CanUseTDSEndpoint(Options, DataSources[Options.PrimaryDataSource].Connection))
             {
@@ -1276,7 +1276,7 @@ namespace MarkMpn.Sql4Cds.Engine
             for (var i = 0; i < concat.ColumnSet.Count; i++)
                 concat.ColumnSet[i].SourceColumns.Add(right.ColumnSet[i].SourceColumn);
 
-            var node = (IDataExecutionPlanNode)concat;
+            var node = (IDataExecutionPlanNodeInternal)concat;
 
             if (!binary.All)
             {
@@ -1374,7 +1374,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return selectNode;
         }
 
-        private IDataExecutionPlanNode ConvertInSubqueries(IDataExecutionPlanNode source, IList<OptimizerHint> hints, TSqlFragment query, IDictionary<string, DataTypeReference> parameterTypes, INodeSchema outerSchema, IDictionary<string,string> outerReferences)
+        private IDataExecutionPlanNodeInternal ConvertInSubqueries(IDataExecutionPlanNodeInternal source, IList<OptimizerHint> hints, TSqlFragment query, IDictionary<string, DataTypeReference> parameterTypes, INodeSchema outerSchema, IDictionary<string,string> outerReferences)
         {
             var visitor = new InSubqueryVisitor();
             query.Accept(visitor);
@@ -1516,7 +1516,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return source;
         }
 
-        private IDataExecutionPlanNode ConvertExistsSubqueries(IDataExecutionPlanNode source, IList<OptimizerHint> hints, TSqlFragment query, IDictionary<string, DataTypeReference> parameterTypes, INodeSchema outerSchema, IDictionary<string, string> outerReferences)
+        private IDataExecutionPlanNodeInternal ConvertExistsSubqueries(IDataExecutionPlanNodeInternal source, IList<OptimizerHint> hints, TSqlFragment query, IDictionary<string, DataTypeReference> parameterTypes, INodeSchema outerSchema, IDictionary<string, string> outerReferences)
         {
             var visitor = new ExistsSubqueryVisitor();
             query.Accept(visitor);
@@ -1655,7 +1655,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return source;
         }
 
-        private IDataExecutionPlanNode ConvertHavingClause(IDataExecutionPlanNode source, IList<OptimizerHint> hints, HavingClause havingClause, IDictionary<string, DataTypeReference> parameterTypes, INodeSchema outerSchema, IDictionary<string, string> outerReferences, TSqlFragment query, INodeSchema nonAggregateSchema)
+        private IDataExecutionPlanNodeInternal ConvertHavingClause(IDataExecutionPlanNodeInternal source, IList<OptimizerHint> hints, HavingClause havingClause, IDictionary<string, DataTypeReference> parameterTypes, INodeSchema outerSchema, IDictionary<string, string> outerReferences, TSqlFragment query, INodeSchema nonAggregateSchema)
         {
             if (havingClause == null)
                 return source;
@@ -1675,7 +1675,7 @@ namespace MarkMpn.Sql4Cds.Engine
             };
         }
 
-        private IDataExecutionPlanNode ConvertGroupByAggregates(IDataExecutionPlanNode source, QuerySpecification querySpec, IDictionary<string, DataTypeReference> parameterTypes, INodeSchema outerSchema, IDictionary<string, string> outerReferences)
+        private IDataExecutionPlanNodeInternal ConvertGroupByAggregates(IDataExecutionPlanNodeInternal source, QuerySpecification querySpec, IDictionary<string, DataTypeReference> parameterTypes, INodeSchema outerSchema, IDictionary<string, string> outerReferences)
         {
             // Check if there is a GROUP BY clause or aggregate functions to convert
             if (querySpec.GroupByClause == null)
@@ -1915,7 +1915,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return hashMatch;
         }
 
-        private IDataExecutionPlanNode ConvertOffsetClause(IDataExecutionPlanNode source, OffsetClause offsetClause, IDictionary<string, DataTypeReference> parameterTypes)
+        private IDataExecutionPlanNodeInternal ConvertOffsetClause(IDataExecutionPlanNodeInternal source, OffsetClause offsetClause, IDictionary<string, DataTypeReference> parameterTypes)
         {
             if (offsetClause == null)
                 return source;
@@ -1937,7 +1937,7 @@ namespace MarkMpn.Sql4Cds.Engine
             };
         }
 
-        private IDataExecutionPlanNode ConvertTopClause(IDataExecutionPlanNode source, TopRowFilter topRowFilter, OrderByClause orderByClause, IDictionary<string, DataTypeReference> parameterTypes)
+        private IDataExecutionPlanNodeInternal ConvertTopClause(IDataExecutionPlanNodeInternal source, TopRowFilter topRowFilter, OrderByClause orderByClause, IDictionary<string, DataTypeReference> parameterTypes)
         {
             if (topRowFilter == null)
                 return source;
@@ -1992,7 +1992,7 @@ namespace MarkMpn.Sql4Cds.Engine
             };
         }
 
-        private IDataExecutionPlanNode ConvertOrderByClause(IDataExecutionPlanNode source, IList<OptimizerHint> hints, OrderByClause orderByClause, ScalarExpression[] selectList, TSqlFragment query, IDictionary<string, DataTypeReference> parameterTypes, INodeSchema outerSchema, Dictionary<string, string> outerReferences, INodeSchema nonAggregateSchema)
+        private IDataExecutionPlanNodeInternal ConvertOrderByClause(IDataExecutionPlanNodeInternal source, IList<OptimizerHint> hints, OrderByClause orderByClause, ScalarExpression[] selectList, TSqlFragment query, IDictionary<string, DataTypeReference> parameterTypes, INodeSchema outerSchema, Dictionary<string, string> outerReferences, INodeSchema nonAggregateSchema)
         {
             if (orderByClause == null)
                 return source;
@@ -2071,7 +2071,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return sort;
         }
 
-        private IDataExecutionPlanNode ConvertWhereClause(IDataExecutionPlanNode source, IList<OptimizerHint> hints, WhereClause whereClause, INodeSchema outerSchema, Dictionary<string,string> outerReferences, IDictionary<string, DataTypeReference> parameterTypes, TSqlFragment query)
+        private IDataExecutionPlanNodeInternal ConvertWhereClause(IDataExecutionPlanNodeInternal source, IList<OptimizerHint> hints, WhereClause whereClause, INodeSchema outerSchema, Dictionary<string,string> outerReferences, IDictionary<string, DataTypeReference> parameterTypes, TSqlFragment query)
         {
             if (whereClause == null)
                 return source;
@@ -2094,7 +2094,7 @@ namespace MarkMpn.Sql4Cds.Engine
             };
         }
 
-        private TSqlFragment CaptureOuterReferences(INodeSchema outerSchema, IDataExecutionPlanNode source, TSqlFragment query, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string,string> outerReferences)
+        private TSqlFragment CaptureOuterReferences(INodeSchema outerSchema, IDataExecutionPlanNodeInternal source, TSqlFragment query, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string,string> outerReferences)
         {
             if (outerSchema == null)
                 return query;
@@ -2138,7 +2138,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return query;
         }
 
-        private SelectNode ConvertSelectClause(IList<SelectElement> selectElements, IList<OptimizerHint> hints, IDataExecutionPlanNode node, DistinctNode distinct, TSqlFragment query, IDictionary<string, DataTypeReference> parameterTypes, INodeSchema outerSchema, IDictionary<string,string> outerReferences, INodeSchema nonAggregateSchema)
+        private SelectNode ConvertSelectClause(IList<SelectElement> selectElements, IList<OptimizerHint> hints, IDataExecutionPlanNodeInternal node, DistinctNode distinct, TSqlFragment query, IDictionary<string, DataTypeReference> parameterTypes, INodeSchema outerSchema, IDictionary<string,string> outerReferences, INodeSchema nonAggregateSchema)
         {
             var schema = node.GetSchema(DataSources, parameterTypes);
 
@@ -2239,7 +2239,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return select;
         }
 
-        private string ComputeScalarExpression(ScalarExpression expression, IList<OptimizerHint> hints, TSqlFragment query, ComputeScalarNode computeScalar, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ref IDataExecutionPlanNode node)
+        private string ComputeScalarExpression(ScalarExpression expression, IList<OptimizerHint> hints, TSqlFragment query, ComputeScalarNode computeScalar, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ref IDataExecutionPlanNodeInternal node)
         {
             var computedColumn = ConvertScalarSubqueries(expression, hints, ref node, computeScalar, parameterTypes, query);
 
@@ -2255,7 +2255,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return alias;
         }
 
-        private ColumnReferenceExpression ConvertScalarSubqueries(TSqlFragment expression, IList<OptimizerHint> hints, ref IDataExecutionPlanNode node, ComputeScalarNode computeScalar, IDictionary<string, DataTypeReference> parameterTypes, TSqlFragment query)
+        private ColumnReferenceExpression ConvertScalarSubqueries(TSqlFragment expression, IList<OptimizerHint> hints, ref IDataExecutionPlanNodeInternal node, ComputeScalarNode computeScalar, IDictionary<string, DataTypeReference> parameterTypes, TSqlFragment query)
         {
             /*
              * Possible subquery execution plans:
@@ -2373,7 +2373,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return null;
         }
 
-        private bool UseMergeJoin(IDataExecutionPlanNode node, IDataExecutionPlanNode subqueryPlan, Dictionary<string, string> outerReferences, string subqueryCol, string inPredicateCol, bool semiJoin, out string outputCol, out MergeJoinNode merge)
+        private bool UseMergeJoin(IDataExecutionPlanNodeInternal node, IDataExecutionPlanNode subqueryPlan, Dictionary<string, string> outerReferences, string subqueryCol, string inPredicateCol, bool semiJoin, out string outputCol, out MergeJoinNode merge)
         {
             outputCol = null;
             merge = null;
@@ -2474,7 +2474,7 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 LeftSource = node,
                 LeftAttribute = outerKey.ToColumnReference(),
-                RightSource = inPredicateCol != null ? (IDataExecutionPlanNode) filter ?? fetch : fetch,
+                RightSource = inPredicateCol != null ? (IDataExecutionPlanNodeInternal) filter ?? fetch : fetch,
                 RightAttribute = rightAttribute,
                 JoinType = QualifiedJoinType.LeftOuter
             };
@@ -2683,7 +2683,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return false;
         }
 
-        private IDataExecutionPlanNode ConvertFromClause(IList<TableReference> tables, IList<OptimizerHint> hints, TSqlFragment query, INodeSchema outerSchema, Dictionary<string, string> outerReferences, IDictionary<string, DataTypeReference> parameterTypes)
+        private IDataExecutionPlanNodeInternal ConvertFromClause(IList<TableReference> tables, IList<OptimizerHint> hints, TSqlFragment query, INodeSchema outerSchema, Dictionary<string, string> outerReferences, IDictionary<string, DataTypeReference> parameterTypes)
         {
             var node = ConvertTableReference(tables[0], hints, query, outerSchema, outerReferences, parameterTypes);
 
@@ -2700,7 +2700,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return node;
         }
 
-        private IDataExecutionPlanNode ConvertTableReference(TableReference reference, IList<OptimizerHint> hints, TSqlFragment query, INodeSchema outerSchema, Dictionary<string, string> outerReferences, IDictionary<string, DataTypeReference> parameterTypes)
+        private IDataExecutionPlanNodeInternal ConvertTableReference(TableReference reference, IList<OptimizerHint> hints, TSqlFragment query, INodeSchema outerSchema, Dictionary<string, string> outerReferences, IDictionary<string, DataTypeReference> parameterTypes)
         {
             if (reference is NamedTableReference table)
             {
@@ -2960,7 +2960,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (reference is UnqualifiedJoin unqualifiedJoin)
             {
                 var lhs = ConvertTableReference(unqualifiedJoin.FirstTableReference, hints, query, outerSchema, outerReferences, parameterTypes);
-                IDataExecutionPlanNode rhs;
+                IDataExecutionPlanNodeInternal rhs;
                 Dictionary<string, string> lhsReferences;
 
                 if (unqualifiedJoin.UnqualifiedJoinType == UnqualifiedJoinType.CrossJoin)

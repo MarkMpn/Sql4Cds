@@ -33,7 +33,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// The data source to select from
         /// </summary>
         [Browsable(false)]
-        public IDataExecutionPlanNode Source { get; set; }
+        public IDataExecutionPlanNodeInternal Source { get; set; }
 
         [Browsable(false)]
         public string Sql { get; set; }
@@ -98,7 +98,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        public IRootExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public IRootExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
             Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
             Source.Parent = this;
@@ -257,7 +257,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             ExpandWildcardColumns(Source, ColumnSet, dataSources, parameterTypes);
         }
 
-        internal static void ExpandWildcardColumns(IDataExecutionPlanNode source, List<SelectColumn> columnSet, IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
+        internal static void ExpandWildcardColumns(IDataExecutionPlanNodeInternal source, List<SelectColumn> columnSet, IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
             // Expand any AllColumns
             if (columnSet.Any(col => col.AllColumns))
@@ -286,11 +286,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 columnSet.Clear();
                 columnSet.AddRange(expanded);
             }
-        }
-
-        IRootExecutionPlanNode IRootExecutionPlanNode.FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
-        {
-            return this.FoldQuery(dataSources, options, parameterTypes, hints);
         }
 
         public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)

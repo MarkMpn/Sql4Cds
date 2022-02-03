@@ -21,7 +21,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// A base class for execution plan nodes that generate a stream of data
     /// </summary>
-    abstract class BaseDataNode : BaseNode, IDataExecutionPlanNode
+    abstract class BaseDataNode : BaseNode, IDataExecutionPlanNodeInternal
     {
         private int _executionCount;
         private readonly Timer _timer = new Timer();
@@ -159,7 +159,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
         /// <param name="hints">Any optimizer hints to apply</param>
         /// <returns>The node that should be used in place of this node</returns>
-        public abstract IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints);
+        public abstract IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints);
 
         /// <summary>
         /// Translates filter criteria from ScriptDom to FetchXML

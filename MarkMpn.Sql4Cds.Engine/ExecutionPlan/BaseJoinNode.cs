@@ -18,13 +18,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// The first data source to merge
         /// </summary>
         [Browsable(false)]
-        public IDataExecutionPlanNode LeftSource { get; set; }
+        public IDataExecutionPlanNodeInternal LeftSource { get; set; }
 
         /// <summary>
         /// The second data source to merge
         /// </summary>
         [Browsable(false)]
-        public IDataExecutionPlanNode RightSource { get; set; }
+        public IDataExecutionPlanNodeInternal RightSource { get; set; }
 
         /// <summary>
         /// The type of join to apply

@@ -21,23 +21,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     public interface IExecutionPlanNode
     {
         /// <summary>
-        /// Returns or sets the parent of this node
+        /// Returns the parent of this node
         /// </summary>
-        IExecutionPlanNode Parent { get; set; }
+        IExecutionPlanNode Parent { get; }
 
         /// <summary>
         /// Gets the children of this node
         /// </summary>
         /// <returns></returns>
         IEnumerable<IExecutionPlanNode> GetSources();
-
-        /// <summary>
-        /// Adds columns into the query which are required by preceding nodes
-        /// </summary>
-        /// <param name="metadata"></param>
-        /// <param name="parameterTypes"></param>
-        /// <param name="requiredColumns"></param>
-        void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns);
 
         /// <summary>
         /// Returns the number of times this node has been executed
@@ -48,5 +40,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// Returns the total amount of time spent executing this node, including the time spent calling source nodes
         /// </summary>
         TimeSpan Duration { get; }
+    }
+
+    internal interface IExecutionPlanNodeInternal : IExecutionPlanNode
+    {
+        /// <summary>
+        /// Returns or sets the parent of this node
+        /// </summary>
+        new IExecutionPlanNode Parent { get; set; }
+
+        /// <summary>
+        /// Adds columns into the query which are required by preceding nodes
+        /// </summary>
+        /// <param name="metadata"></param>
+        /// <param name="parameterTypes"></param>
+        /// <param name="requiredColumns"></param>
+        void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns);
     }
 }

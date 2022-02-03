@@ -14,7 +14,7 @@ using Microsoft.Xrm.Tooling.Connector;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    class RevertNode : BaseNode, IImpersonateRevertExecutionPlanNode
+    class RevertNode : BaseNode, IRootExecutionPlanNodeInternal, IImpersonateRevertExecutionPlanNode
     {
         private int _executionCount;
         private readonly Timer _timer = new Timer();
@@ -89,7 +89,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public IRootExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public IRootExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
             return this;
         }

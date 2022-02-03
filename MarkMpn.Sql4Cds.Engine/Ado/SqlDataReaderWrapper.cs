@@ -27,7 +27,7 @@ namespace MarkMpn.Sql4Cds.Engine
             command.OnStatementCompleted(_node, -1);
         }
 
-        public IDataSetExecutionPlanNode CurrentResultQuery => _node;
+        public IRootExecutionPlanNode CurrentResultQuery => _node;
 
         public override object this[int ordinal] => _sqlDataReader[ordinal];
 

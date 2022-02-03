@@ -15,10 +15,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     class TryCatchNode : BaseDataNode
     {
         [Browsable(false)]
-        public IDataExecutionPlanNode TrySource { get; set; }
+        public IDataExecutionPlanNodeInternal TrySource { get; set; }
 
         [Browsable(false)]
-        public IDataExecutionPlanNode CatchSource { get; set; }
+        public IDataExecutionPlanNodeInternal CatchSource { get; set; }
 
         [Browsable(false)]
         public Func<Exception,bool> ExceptionFilter { get; set; }
@@ -107,7 +107,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return CatchSource;
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
             TrySource = TrySource.FoldQuery(dataSources, options, parameterTypes, hints);
             TrySource.Parent = this;

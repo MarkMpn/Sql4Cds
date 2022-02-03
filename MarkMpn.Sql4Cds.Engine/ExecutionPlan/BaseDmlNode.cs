@@ -81,7 +81,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public int Length { get; set; }
 
         [Browsable(false)]
-        public IExecutionPlanNode Source { get; set; }
+        public IExecutionPlanNodeInternal Source { get; set; }
 
         /// <summary>
         /// The instance that this node will be executed against
@@ -114,9 +114,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="options"><see cref="IQueryExecutionOptions"/> to indicate how the query can be executed</param>
         /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
         /// <returns>The node that should be used in place of this node</returns>
-        public virtual IRootExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public virtual IRootExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
-            if (Source is IDataExecutionPlanNode dataNode)
+            if (Source is IDataExecutionPlanNodeInternal dataNode)
                 Source = dataNode.FoldQuery(dataSources, options, parameterTypes, hints);
             else if (Source is IDataSetExecutionPlanNode dataSetNode)
                 Source = dataSetNode.FoldQuery(dataSources, options, parameterTypes, hints);
@@ -143,7 +143,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             List<Entity> entities;
 
-            if (Source is IDataExecutionPlanNode dataSource)
+            if (Source is IDataExecutionPlanNodeInternal dataSource)
             {
                 schema = dataSource.GetSchema(dataSources, parameterTypes);
                 entities = dataSource.Execute(dataSources, options, parameterTypes, parameterValues).ToList();

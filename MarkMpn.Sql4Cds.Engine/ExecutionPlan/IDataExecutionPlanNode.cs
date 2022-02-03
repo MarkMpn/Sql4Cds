@@ -14,6 +14,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     public interface IDataExecutionPlanNode : IExecutionPlanNode
     {
         /// <summary>
+        /// Estimates the number of rows that will be returned by this node
+        /// </summary>
+        int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes);
+
+        /// <summary>
+        /// Returns the total number of rows returned by this node
+        /// </summary>
+        int RowsOut { get; }
+    }
+
+    internal interface IDataExecutionPlanNodeInternal : IDataExecutionPlanNode, IExecutionPlanNodeInternal
+    {
+        /// <summary>
         /// Executes the execution plan
         /// </summary>
         /// <param name="org">The <see cref="IOrganizationService"/> to use to execute the plan</param>
@@ -24,22 +37,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// Attempts to fold the query operator down into its source
         /// </summary>
         /// <returns>The final execution plan node to execute</returns>
-        IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints);
+        IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints);
 
         /// <summary>
         /// Gets the schema of the dataset returned by the node
         /// </summary>
         /// <returns></returns>
         INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes);
-
-        /// <summary>
-        /// Estimates the number of rows that will be returned by this node
-        /// </summary>
-        int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes);
-
-        /// <summary>
-        /// Returns the total number of rows returned by this node
-        /// </summary>
-        int RowsOut { get; }
     }
 }

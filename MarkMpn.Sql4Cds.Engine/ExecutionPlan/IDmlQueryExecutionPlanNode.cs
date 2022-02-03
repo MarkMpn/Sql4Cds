@@ -11,7 +11,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// A <see cref="IRootExecutionPlanNode"/> that modifies data
     /// </summary>
-    public interface IDmlQueryExecutionPlanNode : IRootExecutionPlanNode
+    internal interface IDmlQueryExecutionPlanNode : IRootExecutionPlanNodeInternal
     {
         /// <summary>
         /// Executes the execution plan

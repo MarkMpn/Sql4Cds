@@ -8,7 +8,7 @@ namespace MarkMpn.Sql4Cds.Engine
 {
     public interface ISql4CdsDataReader : IDataReader
     {
-        IDataSetExecutionPlanNode CurrentResultQuery { get; }
+        IRootExecutionPlanNode CurrentResultQuery { get; }
 
         DataTable GetCurrentDataTable();
     }

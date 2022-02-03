@@ -30,7 +30,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// The data source to select from
         /// </summary>
         [Browsable(false)]
-        public IDataExecutionPlanNode Source { get; set; }
+        public IDataExecutionPlanNodeInternal Source { get; set; }
 
         protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
@@ -54,7 +54,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Source.GetSchema(dataSources, parameterTypes);
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
             Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
             Source.Parent = this;
@@ -420,7 +420,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return null;
         }
 
-        private IEnumerable<IDataExecutionPlanNode> GetFoldableSources(IDataExecutionPlanNode source)
+        private IEnumerable<IDataExecutionPlanNodeInternal> GetFoldableSources(IDataExecutionPlanNodeInternal source)
         {
             if (source is FetchXmlScan)
             {
@@ -457,7 +457,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (source is TableSpoolNode)
                 yield break;
 
-            foreach (var subSource in source.GetSources().OfType<IDataExecutionPlanNode>())
+            foreach (var subSource in source.GetSources().OfType<IDataExecutionPlanNodeInternal>())
             {
                 foreach (var foldableSubSource in GetFoldableSources(subSource))
                     yield return foldableSubSource;

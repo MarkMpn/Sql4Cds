@@ -52,7 +52,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public bool IsScalarAggregate => GroupBy.Count == 0;
 
         [Browsable(false)]
-        public IDataExecutionPlanNode Source { get; set; }
+        public IDataExecutionPlanNodeInternal Source { get; set; }
 
         protected void InitializeAggregates(INodeSchema schema, IDictionary<string, DataTypeReference> parameterTypes)
         {

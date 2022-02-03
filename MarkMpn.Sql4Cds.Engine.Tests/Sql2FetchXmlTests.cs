@@ -2455,7 +2455,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 if (source is TryCatchNode tryCatch)
                     source = tryCatch.CatchSource;
                 else
-                    source = (IDataExecutionPlanNode) source.GetSources().First();
+                    source = (IDataExecutionPlanNodeInternal) source.GetSources().First();
             }
 
             AssertFetchXml(new[] { new SelectNode { Source = source } }, @"

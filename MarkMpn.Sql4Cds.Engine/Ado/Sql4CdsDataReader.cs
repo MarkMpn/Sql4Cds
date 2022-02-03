@@ -19,7 +19,7 @@ namespace MarkMpn.Sql4Cds.Engine
         private readonly IQueryExecutionOptions _options;
         private readonly CommandBehavior _behavior;
         private readonly List<DataTable> _results;
-        private readonly List<IDataSetExecutionPlanNode> _resultQueries;
+        private readonly List<IRootExecutionPlanNode> _resultQueries;
         private readonly int _recordsAffected;
         private int _resultIndex;
         private int _rowIndex;
@@ -64,7 +64,7 @@ namespace MarkMpn.Sql4Cds.Engine
             _behavior = behavior;
 
             _results = new List<DataTable>();
-            _resultQueries = new List<IDataSetExecutionPlanNode>();
+            _resultQueries = new List<IRootExecutionPlanNode>();
             _recordsAffected = -1;
 
             var parameterTypes = ((Sql4CdsParameterCollection)command.Parameters).GetParameterTypes();
@@ -111,7 +111,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 Close();
         }
 
-        public IDataSetExecutionPlanNode CurrentResultQuery => _resultQueries[_resultIndex];
+        public IRootExecutionPlanNode CurrentResultQuery => _resultQueries[_resultIndex];
 
         public override object this[int ordinal] => ToClrType(GetRawValue(ordinal));
 
