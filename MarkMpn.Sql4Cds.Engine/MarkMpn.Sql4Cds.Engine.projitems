@@ -39,6 +39,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\BulkDeleteJobNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ComputeScalarNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ConcatenateNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ConditionalNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ConstantScanNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\DeclareVariablesNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\DeleteNode.cs" />
@@ -58,8 +59,6 @@
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\IDmlQueryExecutionPlanNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\IExecutionPlanNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\IFetchXmlExecutionPlanNode.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\WhileNode.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\IfNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\IImpersonateRevertExecutionPlanNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\IndexSpoolNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\InsertNode.cs" />

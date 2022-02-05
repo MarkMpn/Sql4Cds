@@ -159,45 +159,80 @@ namespace MarkMpn.Sql4Cds.Engine
             }
         }
 
+        private IRootExecutionPlanNodeInternal ConvertIfWhileStatement(ConditionalNodeType type, BooleanExpression predicate, TSqlStatement trueStatement, TSqlStatement falseStatement, ExecutionPlanOptimizer optimizer)
+        {
+            // Check if the predicate is a simple expression or requires a query
+            var subqueryVisitor = new ScalarSubqueryVisitor();
+            predicate.Accept(subqueryVisitor);
+            IDataExecutionPlanNodeInternal predicateSource = null;
+            string sourceCol = null;
+
+            if (subqueryVisitor.Subqueries.Count == 0)
+            {
+                // Check the predicate for errors
+                predicate.GetType(null, null, _parameterTypes);
+            }
+            else
+            {
+                // Convert predicate to query - IF EXISTS(qry) => SELECT CASE WHEN EXISTS(qry) THEN 1 ELSE 0 END
+                var select = new QuerySpecification
+                {
+                    SelectElements =
+                    {
+                        new SelectScalarExpression
+                        {
+                            Expression = new SearchedCaseExpression
+                            {
+                                WhenClauses =
+                                {
+                                    new SearchedWhenClause
+                                    {
+                                        WhenExpression = predicate,
+                                        ThenExpression = new IntegerLiteral { Value = "1" }
+                                    }
+                                },
+                                ElseExpression = new IntegerLiteral { Value = "0" }
+                            }
+                        }
+                    }
+                };
+
+                var selectQry = ConvertSelectQuerySpec(select, Array.Empty<OptimizerHint>(), null, null, _parameterTypes);
+                predicateSource = selectQry.Source;
+                sourceCol = selectQry.ColumnSet[0].SourceColumn;
+            }
+
+            // Convert the true & false branches
+            var trueQueries = new List<IRootExecutionPlanNodeInternal>();
+            ConvertStatement(trueStatement, optimizer, trueQueries);
+
+            List<IRootExecutionPlanNodeInternal> falseQueries = null;
+
+            if (falseStatement != null)
+            {
+                falseQueries = new List<IRootExecutionPlanNodeInternal>();
+                ConvertStatement(falseStatement, optimizer, falseQueries);
+            }
+
+            return new ConditionalNode
+            {
+                Condition = subqueryVisitor.Subqueries.Count == 0 ? predicate : null,
+                Source = predicateSource,
+                SourceColumn = sourceCol,
+                TrueStatements = trueQueries.ToArray(),
+                FalseStatements = falseQueries?.ToArray(),
+                Type = type
+            };
+        }
+
         private IRootExecutionPlanNodeInternal ConvertWhileStatement(WhileStatement whileStmt, ExecutionPlanOptimizer optimizer)
         {
-            // Check the predicate for errors
-            whileStmt.Predicate.GetType(null, null, _parameterTypes);
-
-            // Convert the inner statements
-            var queries = new List<IRootExecutionPlanNodeInternal>();
-            ConvertStatement(whileStmt.Statement, optimizer, queries);
-
-            return new WhileNode
-            {
-                Condition = whileStmt.Predicate,
-                Statements = queries.ToArray()
-            };
+            return ConvertIfWhileStatement(ConditionalNodeType.While, whileStmt.Predicate, whileStmt.Statement, null, optimizer);
         }
 
         private IRootExecutionPlanNodeInternal ConvertIfStatement(IfStatement ifStmt, ExecutionPlanOptimizer optimizer)
         {
-            // Check the predicate for errors
-            ifStmt.Predicate.GetType(null, null, _parameterTypes);
-
-            // Convert the true & false branches
-            var trueQueries = new List<IRootExecutionPlanNodeInternal>();
-            ConvertStatement(ifStmt.ThenStatement, optimizer, trueQueries);
-
-            List<IRootExecutionPlanNodeInternal> falseQueries = null;
-
-            if (ifStmt.ElseStatement != null)
-            {
-                falseQueries = new List<IRootExecutionPlanNodeInternal>();
-                ConvertStatement(ifStmt.ElseStatement, optimizer, falseQueries);
-            }
-
-            return new IfNode
-            {
-                Condition = ifStmt.Predicate,
-                TrueStatements = trueQueries.ToArray(),
-                FalseStatements = falseQueries?.ToArray()
-            };
+            return ConvertIfWhileStatement(ConditionalNodeType.If, ifStmt.Predicate, ifStmt.ThenStatement, ifStmt.ElseStatement, optimizer);
         }
 
         private IRootExecutionPlanNodeInternal ConvertSetVariableStatement(SetVariableStatement set)

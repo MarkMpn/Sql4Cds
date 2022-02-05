@@ -3698,8 +3698,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             Assert.AreEqual(1, plans.Length);
 
-            var cond = AssertNode<IfNode>(plans[0]);
+            var cond = AssertNode<ConditionalNode>(plans[0]);
             Assert.AreEqual("@param1 = 1", cond.Condition.ToSql());
+            Assert.AreEqual(ConditionalNodeType.If, cond.Type);
 
             Assert.AreEqual(2, cond.TrueStatements.Length);
             AssertNode<InsertNode>(cond.TrueStatements[0]);
@@ -3730,12 +3731,39 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             Assert.AreEqual(1, plans.Length);
 
-            var cond = AssertNode<WhileNode>(plans[0]);
+            var cond = AssertNode<ConditionalNode>(plans[0]);
             Assert.AreEqual("@param1 < 10", cond.Condition.ToSql());
+            Assert.AreEqual(ConditionalNodeType.While, cond.Type);
 
-            Assert.AreEqual(2, cond.Statements.Length);
-            AssertNode<InsertNode>(cond.Statements[0]);
-            AssertNode<AssignVariablesNode>(cond.Statements[1]);
+            Assert.AreEqual(2, cond.TrueStatements.Length);
+            AssertNode<InsertNode>(cond.TrueStatements[0]);
+            AssertNode<AssignVariablesNode>(cond.TrueStatements[1]);
+        }
+
+        [TestMethod]
+        public void IfNotExists()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                IF NOT EXISTS(SELECT * FROM account WHERE name = @param1)
+                BEGIN
+                    INSERT INTO account (name) VALUES (@param1)
+                END";
+
+            var parameters = new Dictionary<string, DataTypeReference>
+            {
+                ["@param1"] = typeof(SqlString).ToSqlType()
+            };
+            var plans = planBuilder.Build(query, parameters, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var cond = AssertNode<ConditionalNode>(plans[0]);
+
+            Assert.AreEqual(1, cond.TrueStatements.Length);
+            AssertNode<InsertNode>(cond.TrueStatements[0]);
         }
     }
 }
