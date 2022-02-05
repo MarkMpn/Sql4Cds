@@ -94,7 +94,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var script = (TSqlScript)fragment;
             script.Accept(new ReplacePrimaryFunctionsVisitor());
-            var optimizer = new ExecutionPlanOptimizer(DataSources, Options);
+            var optimizer = new ExecutionPlanOptimizer(DataSources, Options, _parameterTypes);
 
             // Convert each statement in turn to the appropriate query type
             foreach (var batch in script.Batches)

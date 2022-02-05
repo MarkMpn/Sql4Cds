@@ -140,6 +140,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     yield return stmt;
             }
         }
+
+        public override string ToString()
+        {
+            var name = base.ToString();
+
+            if (Source != null)
+                name += "\r\n(With Query)";
+
+            return name;
+        }
     }
 
     enum ConditionalNodeType

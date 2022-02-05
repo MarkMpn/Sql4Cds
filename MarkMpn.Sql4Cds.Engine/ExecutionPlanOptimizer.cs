@@ -17,15 +17,18 @@ namespace MarkMpn.Sql4Cds.Engine
     /// </summary>
     class ExecutionPlanOptimizer
     {
-        public ExecutionPlanOptimizer(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options)
+        public ExecutionPlanOptimizer(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
             DataSources = dataSources;
             Options = options;
+            ParameterTypes = parameterTypes;
         }
 
         public IDictionary<string, DataSource> DataSources { get; }
 
         public IQueryExecutionOptions Options { get; }
+
+        public IDictionary<string, DataTypeReference> ParameterTypes { get; }
 
         /// <summary>
         /// Optimizes an execution plan
@@ -36,10 +39,10 @@ namespace MarkMpn.Sql4Cds.Engine
         public IRootExecutionPlanNodeInternal Optimize(IRootExecutionPlanNodeInternal node, IList<OptimizerHint> hints)
         {
             // Move any additional operators down to the FetchXml
-            node = node.FoldQuery(DataSources, Options, null, hints);
+            node = node.FoldQuery(DataSources, Options, ParameterTypes, hints);
 
             // Ensure all required columns are added to the FetchXML
-            node.AddRequiredColumns(DataSources, null, new List<string>());
+            node.AddRequiredColumns(DataSources, ParameterTypes, new List<string>());
 
             //Sort the items in the FetchXml nodes to match examples in documentation
             SortFetchXmlElements(node);
