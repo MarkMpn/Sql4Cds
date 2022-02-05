@@ -68,7 +68,7 @@ namespace MarkMpn.Sql4Cds.Engine
             _parameterTypes["@@IDENTITY"] = typeof(SqlEntityReference).ToSqlType();
             _parameterTypes["@@ROWCOUNT"] = typeof(SqlInt32).ToSqlType();
 
-            var queries = new List<IRootExecutionPlanNode>();
+            var queries = new List<IRootExecutionPlanNodeInternal>();
 
             // Parse the SQL DOM
             var dom = new TSql150Parser(Options.QuotedIdentifiers);
@@ -100,48 +100,104 @@ namespace MarkMpn.Sql4Cds.Engine
             foreach (var batch in script.Batches)
             {
                 foreach (var statement in batch.Statements)
-                {
-                    var index = statement.StartOffset;
-                    var length = statement.ScriptTokenStream[statement.LastTokenIndex].Offset + statement.ScriptTokenStream[statement.LastTokenIndex].Text.Length - index;
-                    var originalSql = statement.ToSql();
-
-                    IRootExecutionPlanNodeInternal[] plans;
-                    var hints = statement is StatementWithCtesAndXmlNamespaces stmt ? stmt.OptimizerHints : null;
-
-                    if (statement is SelectStatement select)
-                        plans = new[] { ConvertSelectStatement(select) };
-                    else if (statement is UpdateStatement update)
-                        plans = new[] { ConvertUpdateStatement(update) };
-                    else if (statement is DeleteStatement delete)
-                        plans = new[] { ConvertDeleteStatement(delete) };
-                    else if (statement is InsertStatement insert)
-                        plans = new[] { ConvertInsertStatement(insert) };
-                    else if (statement is ExecuteAsStatement impersonate)
-                        plans = new[] { ConvertExecuteAsStatement(impersonate) };
-                    else if (statement is RevertStatement revert)
-                        plans = new[] { ConvertRevertStatement(revert) };
-                    else if (statement is DeclareVariableStatement declare)
-                        plans = ConvertDeclareVariableStatement(declare);
-                    else if (statement is SetVariableStatement set)
-                        plans = new[] { ConvertSetVariableStatement(set) };
-                    else
-                        throw new NotSupportedQueryFragmentException("Unsupported statement", statement);
-
-                    foreach (var plan in plans)
-                    {
-                        SetParent(plan);
-                        var optimized = optimizer.Optimize(plan, hints);
-
-                        optimized.Sql = originalSql;
-                        optimized.Index = index;
-                        optimized.Length = length;
-
-                        queries.Add(optimized);
-                    }
-                }
+                    ConvertStatement(statement, optimizer, queries);
             }
 
             return queries.ToArray();
+        }
+
+        private void ConvertStatement(TSqlStatement statement, ExecutionPlanOptimizer optimizer, List<IRootExecutionPlanNodeInternal> queries)
+        {
+            if (statement is BeginEndBlockStatement block)
+            {
+                foreach (var stmt in block.StatementList.Statements)
+                    ConvertStatement(stmt, optimizer, queries);
+
+                return;
+            }
+
+            var index = statement.StartOffset;
+            var length = statement.ScriptTokenStream[statement.LastTokenIndex].Offset + statement.ScriptTokenStream[statement.LastTokenIndex].Text.Length - index;
+            var originalSql = statement.ToSql();
+
+            IRootExecutionPlanNodeInternal[] plans;
+            var hints = statement is StatementWithCtesAndXmlNamespaces stmtWithCtes ? stmtWithCtes.OptimizerHints : null;
+
+            if (statement is SelectStatement select)
+                plans = new[] { ConvertSelectStatement(select) };
+            else if (statement is UpdateStatement update)
+                plans = new[] { ConvertUpdateStatement(update) };
+            else if (statement is DeleteStatement delete)
+                plans = new[] { ConvertDeleteStatement(delete) };
+            else if (statement is InsertStatement insert)
+                plans = new[] { ConvertInsertStatement(insert) };
+            else if (statement is ExecuteAsStatement impersonate)
+                plans = new[] { ConvertExecuteAsStatement(impersonate) };
+            else if (statement is RevertStatement revert)
+                plans = new[] { ConvertRevertStatement(revert) };
+            else if (statement is DeclareVariableStatement declare)
+                plans = ConvertDeclareVariableStatement(declare);
+            else if (statement is SetVariableStatement set)
+                plans = new[] { ConvertSetVariableStatement(set) };
+            else if (statement is IfStatement ifStmt)
+                plans = new[] { ConvertIfStatement(ifStmt, optimizer) };
+            else if (statement is WhileStatement whileStmt)
+                plans = new[] { ConvertWhileStatement(whileStmt, optimizer) };
+            else
+                throw new NotSupportedQueryFragmentException("Unsupported statement", statement);
+
+            foreach (var plan in plans)
+            {
+                SetParent(plan);
+                var optimized = optimizer.Optimize(plan, hints);
+
+                optimized.Sql = originalSql;
+                optimized.Index = index;
+                optimized.Length = length;
+
+                queries.Add(optimized);
+            }
+        }
+
+        private IRootExecutionPlanNodeInternal ConvertWhileStatement(WhileStatement whileStmt, ExecutionPlanOptimizer optimizer)
+        {
+            // Check the predicate for errors
+            whileStmt.Predicate.GetType(null, null, _parameterTypes);
+
+            // Convert the inner statements
+            var queries = new List<IRootExecutionPlanNodeInternal>();
+            ConvertStatement(whileStmt.Statement, optimizer, queries);
+
+            return new WhileNode
+            {
+                Condition = whileStmt.Predicate,
+                Statements = queries.ToArray()
+            };
+        }
+
+        private IRootExecutionPlanNodeInternal ConvertIfStatement(IfStatement ifStmt, ExecutionPlanOptimizer optimizer)
+        {
+            // Check the predicate for errors
+            ifStmt.Predicate.GetType(null, null, _parameterTypes);
+
+            // Convert the true & false branches
+            var trueQueries = new List<IRootExecutionPlanNodeInternal>();
+            ConvertStatement(ifStmt.ThenStatement, optimizer, trueQueries);
+
+            List<IRootExecutionPlanNodeInternal> falseQueries = null;
+
+            if (ifStmt.ElseStatement != null)
+            {
+                falseQueries = new List<IRootExecutionPlanNodeInternal>();
+                ConvertStatement(ifStmt.ElseStatement, optimizer, falseQueries);
+            }
+
+            return new IfNode
+            {
+                Condition = ifStmt.Predicate,
+                TrueStatements = trueQueries.ToArray(),
+                FalseStatements = falseQueries?.ToArray()
+            };
         }
 
         private IRootExecutionPlanNodeInternal ConvertSetVariableStatement(SetVariableStatement set)

@@ -692,8 +692,11 @@ namespace MarkMpn.Sql4Cds
 
                 if (error is QueryExecutionException queryExecution)
                 {
+                    if (plan == null)
+                        plan = queryExecution.Node as IRootExecutionPlanNode;
+
                     messageSuffix = "\r\nSee the Execution Plan tab for details of where this error occurred";
-                    ShowResult(plan, new ExecuteParams { Execute = true, IncludeFetchXml = true, Sql = plan.Sql }, null, null, queryExecution);
+                    ShowResult(plan, new ExecuteParams { Execute = true, IncludeFetchXml = true, Sql = plan?.Sql }, null, null, queryExecution);
 
                     if (queryExecution.InnerException != null)
                         error = queryExecution.InnerException;

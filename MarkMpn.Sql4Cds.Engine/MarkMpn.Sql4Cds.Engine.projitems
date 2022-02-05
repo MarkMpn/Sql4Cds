@@ -52,11 +52,14 @@
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\GlobalOptionSetQueryNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\HashJoinNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\HashMatchAggregateNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\IControlOfFlowNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\IDataExecutionPlanNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\IDataSetExecutionPlanNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\IDmlQueryExecutionPlanNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\IExecutionPlanNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\IFetchXmlExecutionPlanNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\WhileNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\IfNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\IImpersonateRevertExecutionPlanNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\IndexSpoolNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\InsertNode.cs" />

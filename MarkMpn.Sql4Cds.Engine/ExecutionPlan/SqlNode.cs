@@ -149,7 +149,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             }
                         }
 
-                        if (Parent == null)
+                        if (Parent == null || Parent is IControlOfFlowNode)
                             parameterValues["@@ROWCOUNT"] = (SqlInt32)sqlTable.Rows.Count;
 
                         return sqlTable;

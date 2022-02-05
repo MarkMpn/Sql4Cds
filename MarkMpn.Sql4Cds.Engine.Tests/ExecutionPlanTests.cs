@@ -3674,5 +3674,68 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             planBuilder.Build(query, null, out _);
         }
+
+        [TestMethod]
+        public void IfStatement()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                IF @param1 = 1
+                BEGIN
+                    INSERT INTO account (name) VALUES ('one')
+                    DELETE FROM account WHERE accountid = @@IDENTITY
+                END
+                ELSE
+                    SELECT name FROM account";
+
+            var parameters = new Dictionary<string, DataTypeReference>
+            {
+                ["@param1"] = typeof(SqlInt32).ToSqlType()
+            };
+            var plans = planBuilder.Build(query, parameters, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var cond = AssertNode<IfNode>(plans[0]);
+            Assert.AreEqual("@param1 = 1", cond.Condition.ToSql());
+
+            Assert.AreEqual(2, cond.TrueStatements.Length);
+            AssertNode<InsertNode>(cond.TrueStatements[0]);
+            AssertNode<DeleteNode>(cond.TrueStatements[1]);
+
+            Assert.AreEqual(1, cond.FalseStatements.Length);
+            AssertNode<SelectNode>(cond.FalseStatements[0]);
+        }
+
+        [TestMethod]
+        public void WhileStatement()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                WHILE @param1 < 10
+                BEGIN
+                    INSERT INTO account (name) VALUES (@param1)
+                    SET @param1 += 1
+                END";
+
+            var parameters = new Dictionary<string, DataTypeReference>
+            {
+                ["@param1"] = typeof(SqlInt32).ToSqlType()
+            };
+            var plans = planBuilder.Build(query, parameters, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var cond = AssertNode<WhileNode>(plans[0]);
+            Assert.AreEqual("@param1 < 10", cond.Condition.ToSql());
+
+            Assert.AreEqual(2, cond.Statements.Length);
+            AssertNode<InsertNode>(cond.Statements[0]);
+            AssertNode<AssignVariablesNode>(cond.Statements[1]);
+        }
     }
 }

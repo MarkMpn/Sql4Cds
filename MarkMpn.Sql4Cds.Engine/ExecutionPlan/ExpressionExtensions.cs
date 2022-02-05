@@ -1262,7 +1262,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var variableVisitor = new VariableCollectingVisitor();
             expr.Accept(variableVisitor);
 
-            if (variableVisitor.Variables.Count > 0)
+            if (variableVisitor.Variables.Count > 0 || variableVisitor.GlobalVariables.Count > 0)
                 return false;
 
             var parameterlessVisitor = new ParameterlessCollectingVisitor();

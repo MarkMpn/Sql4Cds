@@ -281,5 +281,48 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             }
         }
+
+        [TestMethod]
+        public void ControlOfFlow()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList(), this))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+                    IF @param1 = 1
+                        SELECT 'a'
+
+                    IF @param1 = 2
+                        SELECT 'b'
+
+                    WHILE @param1 < 10
+                    BEGIN
+                        SELECT @param1
+                        SET @param1 += 1
+                    END";
+                cmd.Parameters.Add(new Sql4CdsParameter("@param1", 1));
+
+                var log = "";
+                var results = new List<string>();
+
+                ((Sql4CdsCommand)cmd).StatementCompleted += (s, e) => log += e.Statement.Sql + "\r\n";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    while (!reader.IsClosed)
+                    {
+                        var table = new DataTable();
+                        table.Load(reader);
+
+                        Assert.AreEqual(1, table.Columns.Count);
+                        Assert.AreEqual(1, table.Rows.Count);
+                        results.Add(table.Rows[0][0].ToString());
+                    }
+                }
+
+                Assert.AreEqual("SELECT 'a'\r\nSELECT @param1\r\nSET @param1 += 1\r\nSELECT @param1\r\nSET @param1 += 1\r\nSELECT @param1\r\nSET @param1 += 1\r\nSELECT @param1\r\nSET @param1 += 1\r\nSELECT @param1\r\nSET @param1 += 1\r\nSELECT @param1\r\nSET @param1 += 1\r\nSELECT @param1\r\nSET @param1 += 1\r\nSELECT @param1\r\nSET @param1 += 1\r\nSELECT @param1\r\nSET @param1 += 1\r\n", log);
+                CollectionAssert.AreEqual(new[] { "a", "1", "2", "3", "4", "5", "6", "7", "8", "9" }, results);
+            }
+        }
     }
 }

@@ -8,6 +8,7 @@ using System.Data.SqlTypes;
 using System.Linq.Expressions;
 using System.Text;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine
@@ -20,7 +21,7 @@ namespace MarkMpn.Sql4Cds.Engine
         private readonly CommandBehavior _behavior;
         private readonly List<DataTable> _results;
         private readonly List<IRootExecutionPlanNode> _resultQueries;
-        private readonly int _recordsAffected;
+        private int _recordsAffected;
         private int _resultIndex;
         private int _rowIndex;
         private bool _closed;
@@ -77,38 +78,59 @@ namespace MarkMpn.Sql4Cds.Engine
 
             foreach (var plan in command.Plan)
             {
-                if (plan is IDataSetExecutionPlanNode dataSetNode)
-                {
-                    var table = dataSetNode.Execute(_connection.DataSources, options, parameterTypes, parameterValues);
-                    _results.Add(table);
-                    _resultQueries.Add(dataSetNode);
-
-                    _connection.OnInfoMessage(plan, $"({table.Rows.Count} row{(table.Rows.Count == 1 ? "" : "s")} affected)");
-                    command.OnStatementCompleted(plan, -1);
-                }
-                else if (plan is IDmlQueryExecutionPlanNode dmlNode)
-                {
-                    var msg = dmlNode.Execute(_connection.DataSources, options, parameterTypes, parameterValues, out var recordsAffected);
-
-                    if (!String.IsNullOrEmpty(msg))
-                        _connection.OnInfoMessage(plan, msg);
-
-                    command.OnStatementCompleted(plan, recordsAffected);
-
-                    if (recordsAffected != -1)
-                    {
-                        if (_recordsAffected == -1)
-                            _recordsAffected = 0;
-
-                        _recordsAffected += recordsAffected;
-                    }
-                }
+                Execute(plan, parameterTypes, parameterValues);
             }
 
             _resultIndex = -1;
 
             if (!NextResult())
                 Close();
+        }
+
+        private void Execute(IRootExecutionPlanNode plan, Dictionary<string, DataTypeReference> parameterTypes, Dictionary<string, object> parameterValues)
+        {
+            if (plan is IDataSetExecutionPlanNode dataSetNode)
+            {
+                var table = dataSetNode.Execute(_connection.DataSources, _options, parameterTypes, parameterValues);
+                _results.Add(table);
+                _resultQueries.Add(dataSetNode);
+
+                _connection.OnInfoMessage(plan, $"({table.Rows.Count} row{(table.Rows.Count == 1 ? "" : "s")} affected)");
+                _command.OnStatementCompleted(plan, -1);
+            }
+            else if (plan is IDmlQueryExecutionPlanNode dmlNode)
+            {
+                var msg = dmlNode.Execute(_connection.DataSources, _options, parameterTypes, parameterValues, out var recordsAffected);
+
+                if (!String.IsNullOrEmpty(msg))
+                    _connection.OnInfoMessage(plan, msg);
+
+                _command.OnStatementCompleted(plan, recordsAffected);
+
+                if (recordsAffected != -1)
+                {
+                    if (_recordsAffected == -1)
+                        _recordsAffected = 0;
+
+                    _recordsAffected += recordsAffected;
+                }
+            }
+            else if (plan is IControlOfFlowNode cond)
+            {
+                while (true)
+                {
+                    var childNodes = cond.Execute(_connection.DataSources, _options, parameterTypes, parameterValues, out var rerun);
+
+                    if (childNodes == null)
+                        break;
+
+                    foreach (var child in childNodes)
+                        Execute(child, parameterTypes, parameterValues);
+
+                    if (!rerun)
+                        break;
+                }
+            }
         }
 
         public IRootExecutionPlanNode CurrentResultQuery => _resultQueries[_resultIndex];
