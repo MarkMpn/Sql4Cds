@@ -16,16 +16,18 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
     {
         private readonly IAttributeMetadataCache _metadata;
         private readonly Dictionary<string, string> _tableNames;
+        private bool? _isEntireBatch;
         private TSqlFragment _root;
 
         /// <summary>
         /// Creates a new <see cref="TDSEndpointCompatibilityVisitor"/>
         /// </summary>
         /// <param name="metadata">The metadata cache for the primary data source</param>
-        public TDSEndpointCompatibilityVisitor(IAttributeMetadataCache metadata, Dictionary<string, string> outerTableNames = null)
+        public TDSEndpointCompatibilityVisitor(IAttributeMetadataCache metadata, bool? isEntireBatch = null, Dictionary<string, string> outerTableNames = null)
         {
             _metadata = metadata;
             _tableNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            _isEntireBatch = isEntireBatch;
 
             if (outerTableNames != null)
             {
@@ -41,7 +43,12 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
         public override void Visit(TSqlFragment node)
         {
             if (_root == null)
+            {
                 _root = node;
+
+                if (_isEntireBatch == null)
+                    _isEntireBatch = node is TSqlScript;
+            }
 
             base.Visit(node);
         }
@@ -163,6 +170,12 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                 return;
             }
 
+            if (_isEntireBatch == false && node.Name.Equals("@@ROWCOUNT", StringComparison.OrdinalIgnoreCase))
+            {
+                IsCompatible = false;
+                return;
+            }
+
             base.Visit(node);
         }
 
@@ -171,7 +184,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             // Name resolution needs to be scoped to the query, so create a new sub-visitor
             if (IsCompatible && _root != node)
             {
-                var subVisitor = new TDSEndpointCompatibilityVisitor(_metadata, _tableNames);
+                var subVisitor = new TDSEndpointCompatibilityVisitor(_metadata, _isEntireBatch, _tableNames);
                 node.Accept(subVisitor);
 
                 if (!subVisitor.IsCompatible)
@@ -188,7 +201,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             // Name resolution needs to be scoped to the query, so create a new sub-visitor
             if (IsCompatible && _root != node)
             {
-                var subVisitor = new TDSEndpointCompatibilityVisitor(_metadata);
+                var subVisitor = new TDSEndpointCompatibilityVisitor(_metadata, _isEntireBatch);
                 node.Accept(subVisitor);
 
                 if (!subVisitor.IsCompatible)
@@ -205,7 +218,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             // Name resolution needs to be scoped to the query, so create a new sub-visitor
             if (IsCompatible && _root != node)
             {
-                var subVisitor = new TDSEndpointCompatibilityVisitor(_metadata);
+                var subVisitor = new TDSEndpointCompatibilityVisitor(_metadata, _isEntireBatch);
                 node.Accept(subVisitor);
 
                 if (!subVisitor.IsCompatible)

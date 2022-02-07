@@ -1199,7 +1199,7 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             if (TDSEndpoint.CanUseTDSEndpoint(Options, DataSources[Options.PrimaryDataSource].Connection))
             {
-                var tdsEndpointCompatibilityVisitor = new TDSEndpointCompatibilityVisitor(DataSources[Options.PrimaryDataSource].Metadata);
+                var tdsEndpointCompatibilityVisitor = new TDSEndpointCompatibilityVisitor(DataSources[Options.PrimaryDataSource].Metadata, false);
                 select.Accept(tdsEndpointCompatibilityVisitor);
 
                 if (tdsEndpointCompatibilityVisitor.IsCompatible)
