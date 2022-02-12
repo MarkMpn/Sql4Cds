@@ -106,5 +106,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             return "BULK DELETE";
         }
+
+        public object Clone()
+        {
+            return new BulkDeleteJobNode
+            {
+                DataSource = DataSource,
+                Sql = Sql,
+                Index = Index,
+                Length = Length
+            };
+        }
     }
 }

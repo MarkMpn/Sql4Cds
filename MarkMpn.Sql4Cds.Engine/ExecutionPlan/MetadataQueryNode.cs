@@ -204,7 +204,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("Metadata Query")]
         [Description("The metadata query to be executed")]
-        public EntityQueryExpression Query { get; } = new EntityQueryExpression();
+        public EntityQueryExpression Query { get; private set; } = new EntityQueryExpression();
 
         public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
         {
@@ -643,6 +643,27 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 yield return converted;
             }
+        }
+
+        public override object Clone()
+        {
+            return new MetadataQueryNode
+            {
+                AttributeAlias = AttributeAlias,
+                DataSource = DataSource,
+                EntityAlias= EntityAlias,
+                ManyToManyRelationshipAlias = ManyToManyRelationshipAlias,
+                ManyToManyRelationshipJoin = ManyToManyRelationshipJoin,
+                ManyToOneRelationshipAlias = ManyToOneRelationshipAlias,
+                MetadataSource = MetadataSource,
+                OneToManyRelationshipAlias = OneToManyRelationshipAlias,
+                Query = Query,
+                _attributeCols = _attributeCols,
+                _entityCols = _entityCols,
+                _manyToManyRelationshipCols = _manyToManyRelationshipCols,
+                _manyToOneRelationshipCols = _manyToOneRelationshipCols,
+                _oneToManyRelationshipCols = _oneToManyRelationshipCols
+            };
         }
     }
 

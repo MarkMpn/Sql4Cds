@@ -168,5 +168,27 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             return schema;
         }
+
+        public override object Clone()
+        {
+            var clone = new MergeJoinNode
+            {
+                AdditionalJoinCriteria = AdditionalJoinCriteria,
+                JoinType = JoinType,
+                LeftAttribute = LeftAttribute,
+                LeftSource = (IDataExecutionPlanNodeInternal)LeftSource.Clone(),
+                RightAttribute = RightAttribute,
+                RightSource =  (IDataExecutionPlanNodeInternal)RightSource.Clone(),
+                SemiJoin = SemiJoin
+            };
+
+            foreach (var kvp in DefinedValues)
+                clone.DefinedValues.Add(kvp);
+
+            clone.LeftSource.Parent = clone;
+            clone.RightSource.Parent = clone;
+
+            return clone;
+        }
     }
 }

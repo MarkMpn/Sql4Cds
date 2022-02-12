@@ -153,6 +153,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             return $"Table Spool\r\n({SpoolType} Spool)";
         }
+
+        public override object Clone()
+        {
+            var clone = new TableSpoolNode
+            {
+                Source = (IDataExecutionPlanNodeInternal)Source.Clone(),
+                SpoolType = SpoolType
+            };
+
+            clone.Source.Parent = clone;
+            return clone;
+        }
     }
 
     enum SpoolType

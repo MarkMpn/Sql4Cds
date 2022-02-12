@@ -378,5 +378,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
         }
+
+        public override object Clone()
+        {
+            var clone = new PartitionedAggregateNode
+            {
+                Source = (IDataExecutionPlanNodeInternal)Source.Clone()
+            };
+
+            foreach (var kvp in clone.Aggregates)
+                clone.Aggregates.Add(kvp.Key, kvp.Value);
+
+            clone.GroupBy.AddRange(GroupBy);
+            clone.Source.Parent = clone;
+
+            return clone;
+        }
     }
 }

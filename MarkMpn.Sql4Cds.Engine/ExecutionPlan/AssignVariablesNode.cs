@@ -58,6 +58,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
+
+        public override object Clone()
+        {
+            var clone = new AssignVariablesNode
+            {
+                DataSource = DataSource,
+                Index = Index,
+                Length = Length,
+                Source = (IExecutionPlanNodeInternal)Source.Clone(),
+                Sql = Sql
+            };
+
+            clone.Source.Parent = clone;
+            clone.Variables.AddRange(Variables);
+
+            return clone;
+        }
     }
 
     class VariableAssignment

@@ -79,6 +79,9 @@ namespace MarkMpn.Sql4Cds.Engine
             foreach (var plan in command.Plan)
             {
                 Execute(plan, parameterTypes, parameterValues);
+
+                if (options.Cancelled)
+                    break;
             }
 
             _resultIndex = -1;
@@ -91,21 +94,23 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             if (plan is IDataSetExecutionPlanNode dataSetNode)
             {
+                dataSetNode = (IDataSetExecutionPlanNode) dataSetNode.Clone();
                 var table = dataSetNode.Execute(_connection.DataSources, _options, parameterTypes, parameterValues);
                 _results.Add(table);
                 _resultQueries.Add(dataSetNode);
 
-                _connection.OnInfoMessage(plan, $"({table.Rows.Count} row{(table.Rows.Count == 1 ? "" : "s")} affected)");
-                _command.OnStatementCompleted(plan, -1);
+                _connection.OnInfoMessage(dataSetNode, $"({table.Rows.Count} row{(table.Rows.Count == 1 ? "" : "s")} affected)");
+                _command.OnStatementCompleted(dataSetNode, -1);
             }
             else if (plan is IDmlQueryExecutionPlanNode dmlNode)
             {
+                dmlNode = (IDmlQueryExecutionPlanNode)dmlNode.Clone();
                 var msg = dmlNode.Execute(_connection.DataSources, _options, parameterTypes, parameterValues, out var recordsAffected);
 
                 if (!String.IsNullOrEmpty(msg))
-                    _connection.OnInfoMessage(plan, msg);
+                    _connection.OnInfoMessage(dmlNode, msg);
 
-                _command.OnStatementCompleted(plan, recordsAffected);
+                _command.OnStatementCompleted(dmlNode, recordsAffected);
 
                 if (recordsAffected != -1)
                 {
@@ -117,8 +122,13 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             else if (plan is IControlOfFlowNode cond)
             {
+                cond = (IControlOfFlowNode)cond.Clone();
+
                 while (true)
                 {
+                    if (_options.Cancelled)
+                        break;
+
                     var childNodes = cond.Execute(_connection.DataSources, _options, parameterTypes, parameterValues, out var rerun);
 
                     if (childNodes == null)

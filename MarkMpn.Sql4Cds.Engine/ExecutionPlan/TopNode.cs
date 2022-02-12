@@ -145,5 +145,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             return Math.Max(0, Math.Min(top, sourceCount));
         }
+
+        public override object Clone()
+        {
+            var clone = new TopNode
+            {
+                Percent = Percent,
+                Source = (IDataExecutionPlanNodeInternal)Source.Clone(),
+                TieColumns = TieColumns,
+                Top = Top,
+                WithTies = WithTies
+            };
+
+            clone.Source.Parent = clone;
+            return clone;
+        }
     }
 }

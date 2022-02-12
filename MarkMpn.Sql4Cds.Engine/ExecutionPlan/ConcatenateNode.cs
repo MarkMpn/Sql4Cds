@@ -90,6 +90,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             return Sources.Sum(s => s.EstimateRowsOut(dataSources, options, parameterTypes));
         }
+
+        public override object Clone()
+        {
+            var clone = new ConcatenateNode();
+
+            foreach (var source in Sources)
+            {
+                var sourceClone = (IDataExecutionPlanNodeInternal)source.Clone();
+                sourceClone.Parent = clone;
+                clone.Sources.Add(sourceClone);
+            }
+
+            clone.ColumnSet.AddRange(ColumnSet);
+
+            return clone;
+        }
     }
 
     class ConcatenateColumn

@@ -163,5 +163,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 yield return converted;
             }
         }
+
+        public override object Clone()
+        {
+            return new GlobalOptionSetQueryNode
+            {
+                Alias = Alias,
+                DataSource = DataSource,
+                _optionsetCols = _optionsetCols
+            };
+        }
     }
 }

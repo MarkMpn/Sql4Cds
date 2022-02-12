@@ -101,5 +101,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             return "EXECUTE AS";
         }
+
+        public override object Clone()
+        {
+            var clone = new ExecuteAsNode
+            {
+                DataSource = DataSource,
+                Index = Index,
+                Length = Length,
+                Source = (IExecutionPlanNodeInternal)Source.Clone(),
+                Sql = Sql,
+                UserIdSource = UserIdSource
+            };
+
+            clone.Source.Parent = clone;
+            return clone;
+        }
     }
 }

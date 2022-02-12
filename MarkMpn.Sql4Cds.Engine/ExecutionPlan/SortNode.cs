@@ -458,5 +458,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             return Source.EstimateRowsOut(dataSources, options, parameterTypes);
         }
+
+        public override object Clone()
+        {
+            var clone = new SortNode
+            {
+                PresortedCount = PresortedCount,
+                Source = (IDataExecutionPlanNodeInternal)Source.Clone()
+            };
+
+            clone.Sorts.AddRange(Sorts);
+            clone.Source.Parent = clone;
+
+            return clone;
+        }
     }
 }

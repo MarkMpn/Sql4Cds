@@ -71,5 +71,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             return Source.EstimateRowsOut(dataSources, options, parameterTypes);
         }
+
+        public override object Clone()
+        {
+            var clone = new AssertNode
+            {
+                Source = (IDataExecutionPlanNodeInternal)Source.Clone(),
+                Assertion = Assertion,
+                ErrorMessage = ErrorMessage
+            };
+
+            clone.Source.Parent = clone;
+            return clone;
+        }
     }
 }

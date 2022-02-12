@@ -303,6 +303,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             return "SELECT";
         }
+
+        public object Clone()
+        {
+            var clone = new SelectNode
+            {
+                Source = (IDataExecutionPlanNodeInternal)Source.Clone(),
+                Sql = Sql,
+                Index = Index,
+                Length = Length
+            };
+
+            clone.ColumnSet.AddRange(ColumnSet);
+            clone.Source.Parent = clone;
+
+            return clone;
+        }
     }
 
     /// <summary>

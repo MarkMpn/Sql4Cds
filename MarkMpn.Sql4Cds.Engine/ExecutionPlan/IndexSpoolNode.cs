@@ -85,5 +85,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             return "Index Spool\r\n(Eager Spool)";
         }
+
+        public override object Clone()
+        {
+            var clone = new IndexSpoolNode
+            {
+                Source = (IDataExecutionPlanNodeInternal)Source.Clone(),
+                KeyColumn = KeyColumn,
+                SeekValue = SeekValue
+            };
+
+            clone.Source.Parent = clone;
+            return clone;
+        }
     }
 }

@@ -211,5 +211,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             return "DELETE";
         }
+
+        public override object Clone()
+        {
+            var clone = new DeleteNode
+            {
+                DataSource = DataSource,
+                Index = Index,
+                Length = Length,
+                LogicalName = LogicalName,
+                PrimaryIdSource = PrimaryIdSource,
+                SecondaryIdSource = SecondaryIdSource,
+                Source = (IExecutionPlanNodeInternal)Source.Clone(),
+                Sql = Sql
+            };
+
+            clone.Source.Parent = clone;
+            return clone;
+        }
     }
 }

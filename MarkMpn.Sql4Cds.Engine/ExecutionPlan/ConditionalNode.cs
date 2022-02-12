@@ -79,7 +79,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                     else
                     {
-                        var record = Source.Execute(dataSources, options, parameterTypes, parameterValues).First();
+                        var source = (IDataExecutionPlanNodeInternal)Source.Clone();
+                        var record = source.Execute(dataSources, options, parameterTypes, parameterValues).First();
                         result = ((SqlInt32)record[SourceColumn]).Value == 1;
                     }
 
@@ -149,6 +150,37 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 name += "\r\n(With Query)";
 
             return name;
+        }
+
+        public object Clone()
+        {
+            var clone = new ConditionalNode
+            {
+                _condition = _condition,
+                Sql = Sql,
+                Index = Index,
+                Length = Length,
+                Type = Type,
+                Condition = Condition,
+                Source = (IDataExecutionPlanNodeInternal) Source?.Clone(),
+                SourceColumn = SourceColumn,
+                TrueStatements = TrueStatements.Select(s => s.Clone()).Cast<IRootExecutionPlanNodeInternal>().ToArray(),
+                FalseStatements = FalseStatements?.Select(s => s.Clone()).Cast<IRootExecutionPlanNodeInternal>().ToArray()
+            };
+
+            foreach (var s in clone.TrueStatements)
+                s.Parent = clone;
+
+            if (clone.FalseStatements != null)
+            {
+                foreach (var s in clone.FalseStatements)
+                    s.Parent = clone;
+            }
+
+            if (clone.Source != null)
+                clone.Source.Parent = clone;
+
+            return clone;
         }
     }
 

@@ -31,7 +31,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// The types of values to be returned
         /// </summary>
         [Browsable(false)]
-        public Dictionary<string, DataTypeReference> Schema { get; } = new Dictionary<string, DataTypeReference>();
+        public Dictionary<string, DataTypeReference> Schema { get; private set; } = new Dictionary<string, DataTypeReference>();
 
         protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
@@ -72,6 +72,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
             return Values.Count;
+        }
+
+        public override object Clone()
+        {
+            var clone = new ConstantScanNode
+            {
+                Alias = Alias,
+                Schema = Schema
+            };
+
+            clone.Values.AddRange(Values);
+
+            return clone;
         }
     }
 }

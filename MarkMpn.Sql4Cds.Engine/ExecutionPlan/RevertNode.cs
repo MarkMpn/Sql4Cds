@@ -19,6 +19,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private int _executionCount;
         private readonly Timer _timer = new Timer();
 
+        /// <summary>
+        /// The instance that this node will be executed against
+        /// </summary>
+        [Category("Data Source")]
+        [Description("The data source this query is executed against")]
         public string DataSource { get; set; }
 
         /// <summary>
@@ -102,6 +107,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override string ToString()
         {
             return "REVERT";
+        }
+
+        public object Clone()
+        {
+            return new RevertNode
+            {
+                DataSource = DataSource,
+                Sql = Sql,
+                Index = Index,
+                Length = Length
+            };
         }
     }
 }

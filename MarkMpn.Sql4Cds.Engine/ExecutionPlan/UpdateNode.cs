@@ -148,5 +148,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             return "UPDATE";
         }
+
+        public override object Clone()
+        {
+            var clone = new UpdateNode
+            {
+                DataSource = DataSource,
+                Index = Index,
+                Length = Length,
+                LogicalName = LogicalName,
+                PrimaryIdSource = PrimaryIdSource,
+                Source = (IExecutionPlanNodeInternal)Source.Clone(),
+                Sql = Sql
+            };
+
+            foreach (var kvp in ColumnMappings)
+                clone.ColumnMappings.Add(kvp);
+
+            clone.Source.Parent = clone;
+            return clone;
+        }
     }
 }

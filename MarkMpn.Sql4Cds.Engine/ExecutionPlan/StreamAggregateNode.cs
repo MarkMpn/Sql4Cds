@@ -88,5 +88,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 yield return result;
             }
         }
+
+        public override object Clone()
+        {
+            var clone = new StreamAggregateNode
+            {
+                Source = (IDataExecutionPlanNodeInternal)Source.Clone()
+            };
+
+            foreach (var kvp in Aggregates)
+                clone.Aggregates.Add(kvp.Key, kvp.Value);
+
+            clone.GroupBy.AddRange(GroupBy);
+            clone.Source.Parent = clone;
+
+            return clone;
+        }
     }
 }

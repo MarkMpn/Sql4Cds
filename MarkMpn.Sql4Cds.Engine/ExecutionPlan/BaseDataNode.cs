@@ -929,5 +929,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             return linkEntity.name;
         }
+
+        public abstract object Clone();
     }
 }

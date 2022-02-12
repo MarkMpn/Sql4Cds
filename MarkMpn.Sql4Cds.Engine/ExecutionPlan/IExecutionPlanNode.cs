@@ -42,7 +42,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         TimeSpan Duration { get; }
     }
 
-    internal interface IExecutionPlanNodeInternal : IExecutionPlanNode
+    internal interface IExecutionPlanNodeInternal : IExecutionPlanNode, ICloneable
     {
         /// <summary>
         /// Returns or sets the parent of this node

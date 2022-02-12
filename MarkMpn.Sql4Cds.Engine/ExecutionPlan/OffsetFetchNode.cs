@@ -43,7 +43,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (fetch <= 0)
                 throw new QueryExecutionException("The number of rows provided for a FETCH clause must be greater then zero.");
 
-
             return Source.Execute(dataSources, options, parameterTypes, parameterValues)
                 .Skip(offset)
                 .Take(fetch);
@@ -108,6 +107,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override string ToString()
         {
             return "Offset";
+        }
+
+        public override object Clone()
+        {
+            var clone = new OffsetFetchNode
+            {
+                Fetch = Fetch,
+                Offset = Offset,
+                Source = (IDataExecutionPlanNodeInternal)Source.Clone()
+            };
+
+            clone.Source.Parent = clone;
+            return clone;
         }
     }
 }

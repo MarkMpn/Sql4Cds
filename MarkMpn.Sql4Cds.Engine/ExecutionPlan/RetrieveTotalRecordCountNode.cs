@@ -76,5 +76,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             return 1;
         }
+
+        public override object Clone()
+        {
+            return new RetrieveTotalRecordCountNode
+            {
+                DataSource = DataSource,
+                EntityName = EntityName
+            };
+        }
     }
 }

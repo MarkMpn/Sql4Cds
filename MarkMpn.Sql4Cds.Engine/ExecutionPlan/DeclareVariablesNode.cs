@@ -69,5 +69,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             return Array.Empty<IExecutionPlanNode>();
         }
+
+        public object Clone()
+        {
+            var clone = new DeclareVariablesNode
+            {
+                Sql = Sql,
+                Index = Index,
+                Length = Length
+            };
+
+            foreach (var kvp in Variables)
+                clone.Variables.Add(kvp);
+
+            return clone;
+        }
     }
 }

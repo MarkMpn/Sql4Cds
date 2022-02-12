@@ -191,5 +191,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             return "TDS Endpoint";
         }
+
+        public object Clone()
+        {
+            return new SqlNode
+            {
+                DataSource = DataSource,
+                Sql = Sql,
+                Index = Index,
+                Length = Length
+            };
+        }
     }
 }

@@ -874,5 +874,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             return Source.EstimateRowsOut(dataSources, options, parameterTypes) * 8 / 10;
         }
+
+        public override object Clone()
+        {
+            var clone = new FilterNode
+            {
+                Filter = Filter,
+                Source = (IDataExecutionPlanNodeInternal)Source.Clone()
+            };
+
+            clone.Source.Parent = clone;
+            return clone;
+        }
     }
 }

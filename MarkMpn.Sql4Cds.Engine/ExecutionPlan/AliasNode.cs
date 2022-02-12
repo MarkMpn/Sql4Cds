@@ -35,6 +35,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 throw new NotSupportedQueryFragmentException($"The column '{duplicateColumn.Key}' was specified multiple times", identifier);
         }
 
+        private AliasNode()
+        {
+        }
+
         /// <summary>
         /// The alias to apply to the results of the subquery
         /// </summary>
@@ -187,6 +191,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override IEnumerable<IExecutionPlanNode> GetSources()
         {
             yield return Source;
+        }
+
+        public override object Clone()
+        {
+            var clone = new AliasNode
+            {
+                Alias = Alias,
+                Source = (IDataExecutionPlanNodeInternal)Source.Clone()
+            };
+
+            clone.Source.Parent = clone;
+            clone.ColumnSet.AddRange(ColumnSet);
+
+            return clone;
         }
     }
 }

@@ -168,5 +168,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             else
                 return Math.Max(leftEstimate, rightEstimate);
         }
+
+        public override object Clone()
+        {
+            var clone = new NestedLoopNode
+            {
+                JoinCondition = JoinCondition,
+                JoinType = JoinType,
+                LeftSource = (IDataExecutionPlanNodeInternal)LeftSource.Clone(),
+                OuterReferences = OuterReferences,
+                RightSource = (IDataExecutionPlanNodeInternal)RightSource.Clone(),
+                SemiJoin = SemiJoin
+            };
+
+            foreach (var kvp in DefinedValues)
+                clone.DefinedValues.Add(kvp);
+
+            clone.LeftSource.Parent = clone;
+            clone.RightSource.Parent = clone;
+
+            return clone;
+        }
     }
 }

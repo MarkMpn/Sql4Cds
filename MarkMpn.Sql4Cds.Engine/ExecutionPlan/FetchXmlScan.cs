@@ -503,6 +503,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
+        /// <summary>
+        /// Converts the FetchXML string to a query object
+        /// </summary>
+        /// <param name="fetchXml">The FetchXML string to convert</param>
+        /// <returns>The object representation of the query</returns>
+        internal static FetchXml.FetchType Deserialize(string fetchXml)
+        {
+            var serializer = new XmlSerializer(typeof(FetchXml.FetchType));
+
+            using (var reader = new StringReader(fetchXml))
+            {
+                return (FetchXml.FetchType)serializer.Deserialize(reader);
+            }
+        }
+
         public override IEnumerable<IExecutionPlanNode> GetSources()
         {
             return Array.Empty<IDataExecutionPlanNode>();
@@ -1105,6 +1120,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override string ToString()
         {
             return "FetchXML Query";
+        }
+
+        public override object Clone()
+        {
+            return new FetchXmlScan
+            {
+                Alias = Alias,
+                AllPages = AllPages,
+                DataSource = DataSource,
+                FetchXml = Deserialize(FetchXmlString),
+                ReturnFullSchema = ReturnFullSchema,
+                _entityNameGroupings = _entityNameGroupings,
+                _lastSchema = _lastSchema,
+                _lastSchemaAlias = _lastSchemaAlias,
+                _lastSchemaFetchXml = _lastSchemaFetchXml,
+                _primaryKeyColumns = _primaryKeyColumns,
+            };
         }
     }
 }

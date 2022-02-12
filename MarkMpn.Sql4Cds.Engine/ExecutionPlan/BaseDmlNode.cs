@@ -514,5 +514,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             parameterValues["@@ROWCOUNT"] = (SqlInt32)count;
             return $"{count:N0} {GetDisplayName(count, meta)} {operationNames.CompletedLowercase}";
         }
+
+        public abstract object Clone();
     }
 }

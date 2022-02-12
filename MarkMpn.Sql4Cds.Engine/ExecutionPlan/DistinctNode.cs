@@ -174,5 +174,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var totalCount = Source.EstimateRowsOut(dataSources, options, parameterTypes);
             return totalCount * 8 / 10;
         }
+
+        public override object Clone()
+        {
+            var clone = new DistinctNode
+            {
+                Source = (IDataExecutionPlanNodeInternal)Source.Clone()
+            };
+
+            clone.Source.Parent = clone;
+            clone.Columns.AddRange(Columns);
+
+            return clone;
+        }
     }
 }
