@@ -143,6 +143,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 plans = new[] { ConvertIfStatement(ifStmt, optimizer) };
             else if (statement is WhileStatement whileStmt)
                 plans = new[] { ConvertWhileStatement(whileStmt, optimizer) };
+            else if (statement is PrintStatement print)
+                plans = new[] { ConvertPrintStatement(print, optimizer) };
             else
                 throw new NotSupportedQueryFragmentException("Unsupported statement", statement);
 
@@ -157,6 +159,35 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 queries.Add(optimized);
             }
+        }
+
+        private IRootExecutionPlanNodeInternal ConvertPrintStatement(PrintStatement print, ExecutionPlanOptimizer optimizer)
+        {
+            // Check if the value is a simple expression or requires a query. Subqueries are not allowed
+            var subqueryVisitor = new ScalarSubqueryVisitor();
+            print.Expression.Accept(subqueryVisitor);
+
+            if (subqueryVisitor.Subqueries.Count > 0)
+                throw new NotSupportedQueryFragmentException("Subqueries are not allowed in this context. Only scalar expressions are allowed.", print.Expression);
+
+            // Check the expression for errors. Ensure it can be converted to a string
+            var expr = print.Expression;
+
+            if (print.Expression.GetType(null, null, _parameterTypes) != typeof(string))
+            {
+                expr = new ConvertCall
+                {
+                    DataType = typeof(SqlString).ToSqlType(),
+                    Parameter = print.Expression
+                };
+
+                expr.GetType(null, null, _parameterTypes);
+            }
+
+            return new PrintNode
+            {
+                Expression = expr
+            };
         }
 
         private IRootExecutionPlanNodeInternal ConvertIfWhileStatement(ConditionalNodeType type, BooleanExpression predicate, TSqlStatement trueStatement, TSqlStatement falseStatement, ExecutionPlanOptimizer optimizer)

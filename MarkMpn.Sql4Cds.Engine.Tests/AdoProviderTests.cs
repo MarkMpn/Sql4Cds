@@ -324,5 +324,23 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 CollectionAssert.AreEqual(new[] { "a", "1", "2", "3", "4", "5", "6", "7", "8", "9" }, results);
             }
         }
+
+        [TestMethod]
+        public void Print()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList(), this))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "PRINT @param1";
+                cmd.Parameters.Add(new Sql4CdsParameter("@param1", 1));
+
+                var log = "";
+                con.InfoMessage += (s, e) => log += e.Message;
+
+                cmd.ExecuteNonQuery();
+
+                Assert.AreEqual("1", log);
+            }
+        }
     }
 }

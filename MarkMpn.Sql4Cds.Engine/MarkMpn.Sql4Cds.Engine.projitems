@@ -71,6 +71,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\NodeSchema.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\OffsetFetchNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\PartitionedAggregateNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\PrintNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\QueryExecutionException.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\RetrieveTotalRecordCountNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\RevertNode.cs" />
