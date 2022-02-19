@@ -176,7 +176,7 @@ namespace MarkMpn.Sql4Cds
                     var label = GetLabel(kvp.Key);
                     var stringFormat = new StringFormat { Alignment = StringAlignment.Center };
 
-                    if (kvp.Key == Selected)
+                    if (Focused && kvp.Key == Selected)
                     {
                         e.Graphics.FillRectangle(SystemBrushes.Highlight, labelRect);
                         e.Graphics.DrawString(label, Font, SystemBrushes.HighlightText, labelRect, stringFormat);
@@ -280,6 +280,7 @@ namespace MarkMpn.Sql4Cds
         protected override void OnMouseClick(MouseEventArgs e)
         {
             base.OnMouseClick(e);
+            Focus();
 
             var hit = false;
 
@@ -307,6 +308,22 @@ namespace MarkMpn.Sql4Cds
                 Selected = null;
                 OnNodeSelected(EventArgs.Empty);
             }
+        }
+
+        protected override void OnGotFocus(EventArgs e)
+        {
+            base.OnGotFocus(e);
+
+            if (Selected != null)
+                Invalidate(Selected);
+        }
+
+        protected override void OnLostFocus(EventArgs e)
+        {
+            base.OnLostFocus(e);
+
+            if (Selected != null)
+                Invalidate(Selected);
         }
 
         private void Invalidate(IExecutionPlanNode node)
