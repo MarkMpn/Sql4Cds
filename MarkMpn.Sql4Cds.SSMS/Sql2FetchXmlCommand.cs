@@ -97,45 +97,44 @@ namespace MarkMpn.Sql4Cds.SSMS
                 var scriptFactory = new ScriptFactoryWrapper(ServiceCache.ScriptFactory);
                 var sqlScriptEditorControl = scriptFactory.GetCurrentlyActiveFrameDocView(ServiceCache.VSMonitorSelection, false, out _);
 
-                var options = new QueryExecutionOptions(sqlScriptEditorControl, Package.Settings);
-                var metadata = GetMetadataCache();
-                var org = ConnectCDS();
-
-                var converter = new ExecutionPlanBuilder(metadata, new TableSizeCache(org, metadata), options)
-                {
-                    TDSEndpointAvailable = false,
-                    QuotedIdentifiers = sqlScriptEditorControl.QuotedIdentifiers
-                };
+                var options = new QueryExecutionOptions(sqlScriptEditorControl, Package.Settings, false);
+                var dataSource = GetDataSource();
 
                 try
                 {
-                    var queries = converter.Build(sql);
-
-                    foreach (var query in queries)
+                    using (var con = new Sql4CdsConnection(new[] { dataSource }, options))
+                    using (var cmd = con.CreateCommand())
                     {
-                        _ai.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name, ["Source"] = "SSMS" });
+                        cmd.CommandText = sql;
 
-                        var window = Dte.ItemOperations.NewFile("General\\XML File");
+                        var queries = cmd.GeneratePlan(false);
 
-                        var editPoint = ActiveDocument.EndPoint.CreateEditPoint();
-                        editPoint.Insert("<!--\r\nCreated from query:\r\n\r\n");
-                        editPoint.Insert(query.Sql);
-
-                        var nodes = GetAllNodes(query).ToList();
-
-                        if (nodes.Any(node => !(node is IFetchXmlExecutionPlanNode)))
+                        foreach (var query in queries)
                         {
-                            editPoint.Insert("\r\n‼ WARNING ‼\r\n");
-                            editPoint.Insert("This query requires additional processing. This FetchXML gives the required data, but needs additional processing to format it in the same way as returned by the TDS Endpoint or SQL 4 CDS.\r\n\r\n");
-                            editPoint.Insert("Learn more at https://markcarrington.dev/sql-4-cds/additional-processing/\r\n\r\n");
-                        }
+                            _ai.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name, ["Source"] = "SSMS" });
 
-                        editPoint.Insert("\r\n\r\n-->");
+                            var window = Dte.ItemOperations.NewFile("General\\XML File");
 
-                        foreach (var fetchXml in nodes.OfType<IFetchXmlExecutionPlanNode>())
-                        {
-                            editPoint.Insert("\r\n\r\n");
-                            editPoint.Insert(fetchXml.FetchXmlString);
+                            var editPoint = ActiveDocument.EndPoint.CreateEditPoint();
+                            editPoint.Insert("<!--\r\nCreated from query:\r\n\r\n");
+                            editPoint.Insert(query.Sql);
+
+                            var nodes = GetAllNodes(query).ToList();
+
+                            if (nodes.Any(node => !(node is IFetchXmlExecutionPlanNode)))
+                            {
+                                editPoint.Insert("\r\n‼ WARNING ‼\r\n");
+                                editPoint.Insert("This query requires additional processing. This FetchXML gives the required data, but needs additional processing to format it in the same way as returned by the TDS Endpoint or SQL 4 CDS.\r\n\r\n");
+                                editPoint.Insert("Learn more at https://markcarrington.dev/sql-4-cds/additional-processing/\r\n\r\n");
+                            }
+
+                            editPoint.Insert("\r\n\r\n-->");
+
+                            foreach (var fetchXml in nodes.OfType<IFetchXmlExecutionPlanNode>())
+                            {
+                                editPoint.Insert("\r\n\r\n");
+                                editPoint.Insert(fetchXml.FetchXmlString);
+                            }
                         }
                     }
                 }

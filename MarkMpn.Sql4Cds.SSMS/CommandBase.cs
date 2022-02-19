@@ -110,6 +110,26 @@ namespace MarkMpn.Sql4Cds.SSMS
         }
 
         /// <summary>
+        /// Gets the Dataverse connectoin details for the active query
+        /// </summary>
+        /// <returns>The <see cref="DataSource"/> instance representing this connection</returns>
+        protected DataSource GetDataSource()
+        {
+            var conStr = GetConnectionInfo(true);
+            var name = conStr.DataSource.Split('.')[0];
+            var con = ConnectCDS(conStr);
+            var metadata = GetMetadataCache(conStr);
+
+            return new DataSource
+            {
+                Connection = con,
+                Metadata = metadata,
+                Name = name,
+                TableSizeCache = new TableSizeCache(con, metadata)
+            };
+        }
+
+        /// <summary>
         /// Connects to the Dataverse API for the active query
         /// </summary>
         /// <returns></returns>

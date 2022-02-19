@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data.SqlClient;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine;
 using Microsoft.Xrm.Sdk.Metadata;
@@ -12,11 +13,14 @@ namespace MarkMpn.Sql4Cds.SSMS
         private readonly SqlScriptEditorControlWrapper _sqlScriptEditorControl;
         private readonly OptionsPage _options;
 
-        public QueryExecutionOptions(SqlScriptEditorControlWrapper sqlScriptEditorControl, OptionsPage options)
+        public QueryExecutionOptions(SqlScriptEditorControlWrapper sqlScriptEditorControl, OptionsPage options, bool useTds)
         {
             _sqlScriptEditorControl = sqlScriptEditorControl;
             _options = options;
+            UseTDSEndpoint = useTds;
         }
+
+        public bool QuotedIdentifiers => _sqlScriptEditorControl.QuotedIdentifiers;
 
         public bool Cancelled { get; private set; }
 
@@ -28,7 +32,7 @@ namespace MarkMpn.Sql4Cds.SSMS
 
         public int BatchSize => _options.BatchSize;
 
-        public bool UseTDSEndpoint => true;
+        public bool UseTDSEndpoint { get; }
 
         public bool UseRetrieveTotalRecordCount => false;
 
@@ -42,7 +46,7 @@ namespace MarkMpn.Sql4Cds.SSMS
 
         public bool BypassCustomPlugins => _options.BypassCustomPlugins;
 
-        public string PrimaryDataSource => "local";
+        public string PrimaryDataSource => new SqlConnectionStringBuilder(_sqlScriptEditorControl.ConnectionString).DataSource.Split('.')[0];
 
         public Guid UserId => Guid.Empty;
 
