@@ -145,22 +145,21 @@ namespace MarkMpn.Sql4Cds
                 {
                     using (var stream = GetType().Assembly.GetManifestResourceStream(GetType(), "Images." + kvp.Key.GetType().Name + ".ico"))
                     {
-                        if (stream == null)
-                        {
-                            e.Graphics.DrawRectangle(Pens.Black, iconRect);
+                        Image image;
 
-                            using (var x = new Pen(Color.Red, 4))
-                            {
-                                e.Graphics.DrawLine(x, iconRect.Left, iconRect.Top, iconRect.Right, iconRect.Bottom);
-                                e.Graphics.DrawLine(x, iconRect.Left, iconRect.Bottom, iconRect.Right, iconRect.Top);
-                            }
+                        if (stream != null)
+                        {
+                            image = Bitmap.FromStream(stream);
                         }
                         else
                         {
-                            var image = Bitmap.FromStream(stream);
-
-                            e.Graphics.DrawImage(image, iconRect);
+                            using (var fallbackStream = GetType().Assembly.GetManifestResourceStream(GetType(), "Images.FallbackNode.ico"))
+                            {
+                                image = Bitmap.FromStream(fallbackStream);
+                            }
                         }
+
+                        e.Graphics.DrawImage(image, iconRect);
                     }
 
                     if (Exception?.Node == kvp.Key)

@@ -858,10 +858,9 @@ namespace MarkMpn.Sql4Cds
                 options.UseTDSEndpoint = false;
 
             using (var con = new Sql4CdsConnection(DataSources.Values.ToList(), options))
-            using (var cmd = new Sql4CdsCommand(con))
+            using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = args.Sql;
-                cmd.Prepare();
 
                 if (args.Execute)
                 {
@@ -896,7 +895,9 @@ namespace MarkMpn.Sql4Cds
                 }
                 else
                 {
-                    foreach (var query in cmd.Plan)
+                    var plan = cmd.GeneratePlan(false);
+
+                    foreach (var query in plan)
                     {
                         _ai.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name, ["Source"] = "XrmToolBox" });
                         Execute(() => ShowResult(query, args, null, null, null));

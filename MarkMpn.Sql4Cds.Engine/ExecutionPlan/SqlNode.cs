@@ -25,6 +25,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private int _executionCount;
         private TimeSpan _duration;
 
+        public SqlNode() { }
+
         public override int ExecutionCount => _executionCount;
 
         public override TimeSpan Duration => _duration;
@@ -42,6 +44,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         [Browsable(false)]
         public int Length { get; set; }
+
+        [Browsable(false)]
+        public HashSet<string> Parameters { get; private set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
         {
@@ -91,6 +96,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         foreach (var paramValue in parameterValues)
                         {
                             if (paramValue.Key.StartsWith("@@"))
+                                continue;
+
+                            if (!Parameters.Contains(paramValue.Key))
                                 continue;
 
                             var param = cmd.CreateParameter();
@@ -149,7 +157,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             }
                         }
 
-                        if (Parent == null || Parent is IControlOfFlowNode)
+                        if (Parent == null || Parent is IGoToNode)
                             parameterValues["@@ROWCOUNT"] = (SqlInt32)sqlTable.Rows.Count;
 
                         return sqlTable;
@@ -177,9 +185,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public IRootExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public IRootExecutionPlanNodeInternal[] FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
-            return this;
+            return new[] { this };
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
@@ -199,7 +207,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 DataSource = DataSource,
                 Sql = Sql,
                 Index = Index,
-                Length = Length
+                Length = Length,
+                Parameters = Parameters
             };
         }
     }

@@ -114,14 +114,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="options"><see cref="IQueryExecutionOptions"/> to indicate how the query can be executed</param>
         /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
         /// <returns>The node that should be used in place of this node</returns>
-        public virtual IRootExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public virtual IRootExecutionPlanNodeInternal[] FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
             if (Source is IDataExecutionPlanNodeInternal dataNode)
                 Source = dataNode.FoldQuery(dataSources, options, parameterTypes, hints);
             else if (Source is IDataSetExecutionPlanNode dataSetNode)
-                Source = dataSetNode.FoldQuery(dataSources, options, parameterTypes, hints);
+                Source = dataSetNode.FoldQuery(dataSources, options, parameterTypes, hints).Single();
 
-            return this;
+            return new[] { this };
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()

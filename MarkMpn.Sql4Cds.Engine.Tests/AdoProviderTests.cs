@@ -342,5 +342,93 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 Assert.AreEqual("1", log);
             }
         }
+
+        [TestMethod]
+        public void GoTo()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList(), this))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+                    declare @param1 int = 1
+                    goto label1
+
+                    while @param1 < 10
+                    begin
+                        select @param1
+                        label2:
+                        set @param1 += 1
+                    end
+
+                    goto label3
+
+                    label1:
+                    set @param1 = 2
+                    goto label2
+
+                    label3:
+                    select 'end'";
+
+                var results = new List<string>();
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    while (!reader.IsClosed)
+                    {
+                        var table = new DataTable();
+                        table.Load(reader);
+
+                        Assert.AreEqual(1, table.Columns.Count);
+                        Assert.AreEqual(1, table.Rows.Count);
+                        results.Add(table.Rows[0][0].ToString());
+                    }
+                }
+
+                CollectionAssert.AreEqual(new[] {"3", "4", "5", "6", "7", "8", "9", "end" }, results);
+            }
+        }
+
+        [TestMethod]
+        public void ContinueBreak()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList(), this))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+                    declare @param1 int = 1
+
+                    while @param1 < 10
+                    begin
+                        set @param1 += 1
+
+                        if @param1 = 2
+                            continue
+
+                        if @param1 = 5
+                            break
+
+                        select @param1
+                    end
+
+                    select 'end'";
+
+                var results = new List<string>();
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    while (!reader.IsClosed)
+                    {
+                        var table = new DataTable();
+                        table.Load(reader);
+
+                        Assert.AreEqual(1, table.Columns.Count);
+                        Assert.AreEqual(1, table.Rows.Count);
+                        results.Add(table.Rows[0][0].ToString());
+                    }
+                }
+
+                CollectionAssert.AreEqual(new[] { "3", "4", "end" }, results);
+            }
+        }
     }
 }

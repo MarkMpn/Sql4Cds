@@ -419,9 +419,6 @@
     <EmbeddedResource Include="Images\MergeJoinNode.ico" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="Images\TryCatchNode.ico" />
-  </ItemGroup>
-  <ItemGroup>
     <EmbeddedResource Include="Images\TableSpoolNode.ico" />
   </ItemGroup>
   <ItemGroup>
@@ -471,10 +468,7 @@
     <None Include="Resources\StatusHelp_16x.png" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="Images\AssignVariablesNode.ico" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Images\DeclareVariablesNode.ico" />
+    <EmbeddedResource Include="Images\FallbackNode.ico" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>

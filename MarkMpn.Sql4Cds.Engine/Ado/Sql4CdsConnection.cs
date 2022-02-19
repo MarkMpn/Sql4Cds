@@ -190,6 +190,11 @@ namespace MarkMpn.Sql4Cds.Engine
 
         protected override DbCommand CreateDbCommand()
         {
+            return CreateCommand();
+        }
+
+        public new Sql4CdsCommand CreateCommand()
+        {
             return new Sql4CdsCommand(this);
         }
     }

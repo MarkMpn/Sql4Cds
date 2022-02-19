@@ -5,9 +5,12 @@ using System.Data.Common;
 using System.Data.SqlClient;
 using System.Data.SqlTypes;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
+using MarkMpn.Sql4Cds.Engine.Visitors;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
 #else
@@ -137,10 +140,31 @@ namespace MarkMpn.Sql4Cds.Engine
             if (_useTDSEndpointDirectly || _plan != null)
                 return;
 
-            _plan = _planBuilder.Build(CommandText, ((Sql4CdsParameterCollection)Parameters).GetParameterTypes(), out _useTDSEndpointDirectly);
+            GeneratePlan(true);
+        }
+
+        /// <summary>
+        /// Creates the execution plan for the current command
+        /// </summary>
+        /// <param name="compileForExecution">Indicates if the plan should be generated ready for execution or for display only</param>
+        /// <returns>The root nodes of the plan</returns>
+        public IRootExecutionPlanNode[] GeneratePlan(bool compileForExecution)
+        {
+            _planBuilder.CompileConditions = compileForExecution;
+            var plan = _planBuilder.Build(CommandText, ((Sql4CdsParameterCollection)Parameters).GetParameterTypes(), out _useTDSEndpointDirectly);
+
+            if (compileForExecution)
+                _plan = plan;
+
+            return plan;
         }
 
         protected override DbParameter CreateDbParameter()
+        {
+            return CreateParameter();
+        }
+
+        public new Sql4CdsParameter CreateParameter()
         {
             return new Sql4CdsParameter();
         }
@@ -165,17 +189,29 @@ namespace MarkMpn.Sql4Cds.Engine
                 cmd.CommandTimeout = (int)TimeSpan.FromMinutes(2).TotalSeconds;
                 cmd.CommandText = CommandText;
 
-                foreach (Sql4CdsParameter sql4cdsParam in Parameters)
+                if (Parameters.Count > 0)
                 {
-                    var param = cmd.CreateParameter();
-                    param.ParameterName = sql4cdsParam.ParameterName;
+                    var dom = new TSql150Parser(_connection.Options.QuotedIdentifiers);
+                    var fragment = dom.Parse(new StringReader(CommandText), out _);
+                    var variables = new VariableCollectingVisitor();
+                    fragment.Accept(variables);
+                    var requiredParameters = new HashSet<string>(variables.Variables.Select(v => v.Name), StringComparer.OrdinalIgnoreCase);
 
-                    if (sql4cdsParam.Value is SqlEntityReference er)
-                        param.Value = (SqlGuid)er;
-                    else
-                        param.Value = sql4cdsParam.Value;
+                    foreach (Sql4CdsParameter sql4cdsParam in Parameters)
+                    {
+                        if (!requiredParameters.Contains(sql4cdsParam.ParameterName))
+                            continue;
 
-                    cmd.Parameters.Add(param);
+                        var param = cmd.CreateParameter();
+                        param.ParameterName = sql4cdsParam.ParameterName;
+
+                        if (sql4cdsParam.Value is SqlEntityReference er)
+                            param.Value = (SqlGuid)er;
+                        else
+                            param.Value = sql4cdsParam.Value;
+
+                        cmd.Parameters.Add(param);
+                    }
                 }
 
                 return new SqlDataReaderWrapper(_connection, this, con, cmd, _connection.Database);

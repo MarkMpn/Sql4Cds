@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
 using System.Data.SqlTypes;
+using System.Linq;
 using System.Linq.Expressions;
 using System.Text;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
@@ -76,13 +77,7 @@ namespace MarkMpn.Sql4Cds.Engine
             parameterValues["@@IDENTITY"] = SqlEntityReference.Null;
             parameterValues["@@ROWCOUNT"] = (SqlInt32)0;
 
-            foreach (var plan in command.Plan)
-            {
-                Execute(plan, parameterTypes, parameterValues);
-
-                if (options.Cancelled)
-                    break;
-            }
+            Execute(command.Plan, parameterTypes, parameterValues);
 
             _resultIndex = -1;
 
@@ -90,56 +85,64 @@ namespace MarkMpn.Sql4Cds.Engine
                 Close();
         }
 
-        private void Execute(IRootExecutionPlanNode plan, Dictionary<string, DataTypeReference> parameterTypes, Dictionary<string, object> parameterValues)
+        private void Execute(IRootExecutionPlanNode[] plan, Dictionary<string, DataTypeReference> parameterTypes, Dictionary<string, object> parameterValues)
         {
-            if (plan is IDataSetExecutionPlanNode dataSetNode)
+            var instructionPointer = 0;
+            var labelIndexes = plan
+                .Select((node, index) => new { node, index })
+                .Where(n => n.node is GotoLabelNode)
+                .ToDictionary(n => ((GotoLabelNode)n.node).Label, n => n.index);
+
+            while (instructionPointer < plan.Length && !_options.Cancelled)
             {
-                dataSetNode = (IDataSetExecutionPlanNode) dataSetNode.Clone();
-                var table = dataSetNode.Execute(_connection.DataSources, _options, parameterTypes, parameterValues);
-                _results.Add(table);
-                _resultQueries.Add(dataSetNode);
+                var node = plan[instructionPointer];
 
-                _connection.OnInfoMessage(dataSetNode, $"({table.Rows.Count} row{(table.Rows.Count == 1 ? "" : "s")} affected)");
-                _command.OnStatementCompleted(dataSetNode, -1);
-            }
-            else if (plan is IDmlQueryExecutionPlanNode dmlNode)
-            {
-                dmlNode = (IDmlQueryExecutionPlanNode)dmlNode.Clone();
-                var msg = dmlNode.Execute(_connection.DataSources, _options, parameterTypes, parameterValues, out var recordsAffected);
-
-                if (!String.IsNullOrEmpty(msg))
-                    _connection.OnInfoMessage(dmlNode, msg);
-
-                _command.OnStatementCompleted(dmlNode, recordsAffected);
-
-                if (recordsAffected != -1)
+                if (node is IDataSetExecutionPlanNode dataSetNode)
                 {
-                    if (_recordsAffected == -1)
-                        _recordsAffected = 0;
+                    dataSetNode = (IDataSetExecutionPlanNode)dataSetNode.Clone();
+                    var table = dataSetNode.Execute(_connection.DataSources, _options, parameterTypes, parameterValues);
+                    _results.Add(table);
+                    _resultQueries.Add(dataSetNode);
 
-                    _recordsAffected += recordsAffected;
+                    _connection.OnInfoMessage(dataSetNode, $"({table.Rows.Count} row{(table.Rows.Count == 1 ? "" : "s")} affected)");
+                    _command.OnStatementCompleted(dataSetNode, -1);
                 }
-            }
-            else if (plan is IControlOfFlowNode cond)
-            {
-                cond = (IControlOfFlowNode)cond.Clone();
-
-                while (true)
+                else if (node is IDmlQueryExecutionPlanNode dmlNode)
                 {
-                    if (_options.Cancelled)
-                        break;
+                    dmlNode = (IDmlQueryExecutionPlanNode)dmlNode.Clone();
+                    var msg = dmlNode.Execute(_connection.DataSources, _options, parameterTypes, parameterValues, out var recordsAffected);
 
-                    var childNodes = cond.Execute(_connection.DataSources, _options, parameterTypes, parameterValues, out var rerun);
+                    if (!String.IsNullOrEmpty(msg))
+                        _connection.OnInfoMessage(dmlNode, msg);
 
-                    if (childNodes == null)
-                        break;
+                    _command.OnStatementCompleted(dmlNode, recordsAffected);
 
-                    foreach (var child in childNodes)
-                        Execute(child, parameterTypes, parameterValues);
+                    if (recordsAffected != -1)
+                    {
+                        if (_recordsAffected == -1)
+                            _recordsAffected = 0;
 
-                    if (!rerun)
-                        break;
+                        _recordsAffected += recordsAffected;
+                    }
                 }
+                else if (node is IGoToNode cond)
+                {
+                    cond = (IGoToNode)cond.Clone();
+                    var label = cond.Execute(_connection.DataSources, _options, parameterTypes, parameterValues);
+
+                    if (label != null)
+                        instructionPointer = labelIndexes[label];
+                }
+                else if (node is GotoLabelNode)
+                {
+                    // NOOP
+                }
+                else
+                {
+                    throw new NotImplementedException("Unexpected node type " + node.GetType().Name);
+                }
+
+                instructionPointer++;
             }
         }
 

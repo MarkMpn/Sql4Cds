@@ -58,11 +58,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        public override IRootExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public override IRootExecutionPlanNodeInternal[] FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
             var result = base.FoldQuery(dataSources, options, parameterTypes, hints);
 
-            if (result != this)
+            if (result.Length != 1 || result[0] != this)
                 return result;
 
             if (!dataSources.TryGetValue(DataSource, out var dataSource))
@@ -75,10 +75,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 PrimaryIdSource.Equals($"{fetch.Alias}.{dataSource.Metadata[LogicalName].PrimaryIdAttribute}") &&
                 String.IsNullOrEmpty(SecondaryIdSource))
             {
-                return new BulkDeleteJobNode { DataSource = DataSource, FetchXmlString = fetch.FetchXmlString };
+                return new[] { new BulkDeleteJobNode { DataSource = DataSource, FetchXmlString = fetch.FetchXmlString } };
             }
 
-            return this;
+            return new[] { this };
         }
 
         public override string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected)

@@ -41,6 +41,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ConcatenateNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ConditionalNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ConstantScanNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ContinueBreakNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\DeclareVariablesNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\DeleteNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\DistinctEqualityComparer.cs" />
@@ -51,9 +52,11 @@
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\FilterNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\FoldableJoinNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\GlobalOptionSetQueryNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\GotoLabelNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\GoToNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\HashJoinNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\HashMatchAggregateNode.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\IControlOfFlowNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\IGoToNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\IDataExecutionPlanNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\IDataSetExecutionPlanNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\IDmlQueryExecutionPlanNode.cs" />

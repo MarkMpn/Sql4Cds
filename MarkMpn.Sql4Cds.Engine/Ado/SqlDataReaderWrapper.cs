@@ -24,6 +24,10 @@ namespace MarkMpn.Sql4Cds.Engine
             _sqlCommand = sqlCommand;
             _sqlDataReader = sqlCommand.ExecuteReader();
             _node = new SqlNode { Sql = sqlCommand.CommandText, DataSource = dataSource };
+
+            foreach (SqlParameter parameter in sqlCommand.Parameters)
+                _node.Parameters.Add(parameter.ParameterName);
+
             command.OnStatementCompleted(_node, -1);
         }
 

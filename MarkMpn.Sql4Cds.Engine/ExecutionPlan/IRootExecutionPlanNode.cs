@@ -38,6 +38,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
         /// <param name="hints">Any optimizer hints to apply</param>
         /// <returns>The node that should be used in place of this node</returns>
-        IRootExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints);
+        IRootExecutionPlanNodeInternal[] FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints);
     }
 }

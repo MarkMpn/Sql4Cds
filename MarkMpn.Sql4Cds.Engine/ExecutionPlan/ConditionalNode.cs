@@ -9,15 +9,11 @@ using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    class ConditionalNode : BaseNode, IControlOfFlowNode
+    class ConditionalNode : BaseNode, IGoToNode
     {
-        private int _executionCount;
-        private readonly Timer _timer = new Timer();
-        private Func<Entity, IDictionary<string, object>, IQueryExecutionOptions, bool> _condition;
+        public override int ExecutionCount => 0;
 
-        public override int ExecutionCount => _executionCount;
-
-        public override TimeSpan Duration => _timer.Duration;
+        public override TimeSpan Duration => TimeSpan.Zero;
 
         [Browsable(false)]
         public string Sql { get; set; }
@@ -47,6 +43,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public IRootExecutionPlanNodeInternal[] FalseStatements { get; set; }
 
+        internal string TrueLabel { get; private set; }
+
+        internal string FalseLabel { get; private set; }
+
         public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
         {
             if (Source != null)
@@ -62,69 +62,85 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public IRootExecutionPlanNodeInternal[] Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out bool rerun)
+        public string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            using (_timer.Run())
-            {
-                try
-                {
-                    _executionCount++;
-                    rerun = false;
-
-                    bool result;
-
-                    if (_condition != null)
-                    {
-                        result = _condition(null, parameterValues, options);
-                    }
-                    else
-                    {
-                        var source = (IDataExecutionPlanNodeInternal)Source.Clone();
-                        var record = source.Execute(dataSources, options, parameterTypes, parameterValues).First();
-                        result = ((SqlInt32)record[SourceColumn]).Value == 1;
-                    }
-
-                    if (result)
-                    {
-                        if (Type == ConditionalNodeType.While)
-                            rerun = true;
-
-                        return TrueStatements;
-                    }
-
-                    return FalseStatements;
-                }
-                catch (QueryExecutionException ex)
-                {
-                    if (ex.Node == null)
-                        ex.Node = this;
-
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    throw new QueryExecutionException(ex.Message, ex) { Node = this };
-                }
-            }
+            throw new NotSupportedException("Conditional node should have been converted to GOTO during query plan building");
         }
 
-        public IRootExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public IRootExecutionPlanNodeInternal[] FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
-            if (Source != null)
-                Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
-
-            for (var i = 0; i < TrueStatements.Length; i++)
-                TrueStatements[i] = TrueStatements[i].FoldQuery(dataSources, options, parameterTypes, hints);
-
-            if (FalseStatements != null)
+            if (hints != null && hints.OfType<DoNotCompileConditionsHint>().Any())
             {
-                for (var i = 0; i < FalseStatements.Length; i++)
-                    FalseStatements[i] = FalseStatements[i].FoldQuery(dataSources, options, parameterTypes, hints);
+                TrueStatements = TrueStatements
+                    .SelectMany(s => s.FoldQuery(dataSources, options, parameterTypes, hints))
+                    .ToArray();
+
+                FalseStatements = FalseStatements
+                    ?.SelectMany(s => s.FoldQuery(dataSources, options, parameterTypes, hints))
+                    ?.ToArray();
+
+                return new[] { this };
             }
 
-            _condition = Condition?.Compile(null, parameterTypes);
+            var statements = new List<IRootExecutionPlanNodeInternal>();
 
-            return this;
+            TrueLabel = Guid.NewGuid().ToString();
+            FalseLabel = Guid.NewGuid().ToString();
+
+            statements.AddRange(
+                new GoToNode
+                {
+                    Label = TrueLabel,
+                    Condition = Condition,
+                    Source = Source,
+                    SourceColumn = SourceColumn
+                }.FoldQuery(dataSources, options, parameterTypes, hints));
+
+            statements.AddRange(
+                new GoToNode
+                {
+                    Label = FalseLabel
+                }.FoldQuery(dataSources, options, parameterTypes, hints));
+
+            statements.Add(new GotoLabelNode { Label = TrueLabel });
+
+            foreach (var stmt in TrueStatements)
+                statements.AddRange(stmt.FoldQuery(dataSources, options, parameterTypes, hints));
+
+            if (FalseStatements == null)
+            {
+                if (Type == ConditionalNodeType.While)
+                {
+                    statements.AddRange(
+                        new GoToNode
+                        {
+                            Label = TrueLabel,
+                            Condition = Condition,
+                            Source = Source,
+                            SourceColumn = SourceColumn
+                        }.FoldQuery(dataSources, options, parameterTypes, hints));
+                }
+
+                statements.Add(new GotoLabelNode { Label = FalseLabel });
+            }
+            else
+            {
+                var endLabel = Guid.NewGuid().ToString();
+                statements.AddRange(
+                    new GoToNode
+                    {
+                        Label = endLabel
+                    }.FoldQuery(dataSources, options, parameterTypes, hints));
+
+                statements.Add(new GotoLabelNode { Label = FalseLabel });
+
+                foreach (var stmt in FalseStatements)
+                    statements.AddRange(stmt.FoldQuery(dataSources, options, parameterTypes, hints));
+
+                statements.Add(new GotoLabelNode { Label = endLabel });
+            }
+
+            return statements.ToArray();
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
@@ -156,7 +172,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var clone = new ConditionalNode
             {
-                _condition = _condition,
                 Sql = Sql,
                 Index = Index,
                 Length = Length,
@@ -181,6 +196,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 clone.Source.Parent = clone;
 
             return clone;
+        }
+
+        internal class DoNotCompileConditionsHint : OptimizerHint
+        {
         }
     }
 

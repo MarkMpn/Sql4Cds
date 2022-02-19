@@ -33,6 +33,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (!DataSources.ContainsKey(Options.PrimaryDataSource))
                 throw new ArgumentOutOfRangeException(nameof(options), "Primary data source " + options.PrimaryDataSource + " not found");
+
+            CompileConditions = true;
         }
 
         /// <summary>
@@ -44,6 +46,11 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Indicates how the query will be executed
         /// </summary>
         public IQueryExecutionOptions Options { get; set; }
+
+        /// <summary>
+        /// Indicates if conditional nodes will be compiled ready for execution
+        /// </summary>
+        public bool CompileConditions { get; set; }
 
         /// <summary>
         /// Builds the execution plans for a SQL command
@@ -94,13 +101,22 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var script = (TSqlScript)fragment;
             script.Accept(new ReplacePrimaryFunctionsVisitor());
-            var optimizer = new ExecutionPlanOptimizer(DataSources, Options, _parameterTypes);
+            var optimizer = new ExecutionPlanOptimizer(DataSources, Options, _parameterTypes, CompileConditions);
 
             // Convert each statement in turn to the appropriate query type
             foreach (var batch in script.Batches)
             {
                 foreach (var statement in batch.Statements)
                     ConvertStatement(statement, optimizer, queries);
+            }
+
+            // Ensure GOTOs only reference valid labels
+            var labels = new HashSet<string>(GetLabels(queries).Select(n => n.Label), StringComparer.OrdinalIgnoreCase);
+
+            foreach (var gotoNode in queries.OfType<GoToNode>())
+            {
+                if (!labels.Contains(gotoNode.Label))
+                    throw new NotSupportedQueryFragmentException($"A GOTO statement references the label '{gotoNode.Label}' but the label has not been declared.");
             }
 
             return queries.ToArray();
@@ -145,6 +161,14 @@ namespace MarkMpn.Sql4Cds.Engine
                 plans = new[] { ConvertWhileStatement(whileStmt, optimizer) };
             else if (statement is PrintStatement print)
                 plans = new[] { ConvertPrintStatement(print, optimizer) };
+            else if (statement is LabelStatement label)
+                plans = new[] { ConvertLabelStatement(label, queries) };
+            else if (statement is GoToStatement gotoStmt)
+                plans = new[] { ConvertGoToStatement(gotoStmt) };
+            else if (statement is BreakStatement breakStmt)
+                plans = new[] { ConvertBreakStatement(breakStmt) };
+            else if (statement is ContinueStatement continueStmt)
+                plans = new[] { ConvertContinueStatement(continueStmt) };
             else
                 throw new NotSupportedQueryFragmentException("Unsupported statement", statement);
 
@@ -153,12 +177,48 @@ namespace MarkMpn.Sql4Cds.Engine
                 SetParent(plan);
                 var optimized = optimizer.Optimize(plan, hints);
 
-                optimized.Sql = originalSql;
-                optimized.Index = index;
-                optimized.Length = length;
+                foreach (var qry in optimized)
+                {
+                    if (qry.Sql == null)
+                    {
+                        qry.Sql = originalSql;
+                        qry.Index = index;
+                        qry.Length = length;
+                    }
+                }
 
-                queries.Add(optimized);
+                queries.AddRange(optimized);
             }
+        }
+
+        private IRootExecutionPlanNodeInternal ConvertContinueStatement(ContinueStatement continueStmt)
+        {
+            return new ContinueBreakNode { Type = ContinueBreakNodeType.Continue };
+        }
+
+        private IRootExecutionPlanNodeInternal ConvertBreakStatement(BreakStatement breakStmt)
+        {
+            return new ContinueBreakNode { Type = ContinueBreakNodeType.Break };
+        }
+
+        private IRootExecutionPlanNodeInternal ConvertGoToStatement(GoToStatement gotoStmt)
+        {
+            return new GoToNode { Label = gotoStmt.LabelName.Value };
+        }
+
+        private IRootExecutionPlanNodeInternal ConvertLabelStatement(LabelStatement label, List<IRootExecutionPlanNodeInternal> queries)
+        {
+            // Check this label hasn't already been defined
+            if (GetLabels(queries).Any(l => l.Label.Equals(label.Value, StringComparison.OrdinalIgnoreCase)))
+                throw new NotSupportedQueryFragmentException("The label has already been declared. Label names must be unique within a query batch or stored procedure.", label);
+
+            return new GotoLabelNode { Label = label.Value.TrimEnd(':') };
+        }
+
+        private IEnumerable<GotoLabelNode> GetLabels(IEnumerable<IRootExecutionPlanNodeInternal> queries)
+        {
+            return queries.OfType<GotoLabelNode>()
+                .Concat(queries.SelectMany(q => GetLabels(q.GetSources().OfType<IRootExecutionPlanNodeInternal>())));
         }
 
         private IRootExecutionPlanNodeInternal ConvertPrintStatement(PrintStatement print, ExecutionPlanOptimizer optimizer)
@@ -1236,7 +1296,19 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (tdsEndpointCompatibilityVisitor.IsCompatible)
                 {
                     select.ScriptTokenStream = null;
-                    return new SqlNode { DataSource = Options.PrimaryDataSource, Sql = select.ToSql() };
+                    var sql = new SqlNode
+                    {
+                        DataSource = Options.PrimaryDataSource,
+                        Sql = select.ToSql()
+                    };
+
+                    var variables = new VariableCollectingVisitor();
+                    select.Accept(variables);
+
+                    foreach (var variable in variables.Variables)
+                        sql.Parameters.Add(variable.Name);
+
+                    return sql;
                 }
             }
 

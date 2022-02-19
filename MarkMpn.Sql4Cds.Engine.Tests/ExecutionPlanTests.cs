@@ -3679,7 +3679,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void IfStatement()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this) { CompileConditions = false };
 
             var query = @"
                 IF @param1 = 1
@@ -3714,7 +3714,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void WhileStatement()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this) { CompileConditions = false };
 
             var query = @"
                 WHILE @param1 < 10
@@ -3744,7 +3744,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void IfNotExists()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this) { CompileConditions = false };
 
             var query = @"
                 IF NOT EXISTS(SELECT * FROM account WHERE name = @param1)
