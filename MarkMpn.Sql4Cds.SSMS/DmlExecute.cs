@@ -127,11 +127,16 @@ namespace MarkMpn.Sql4Cds.SSMS
                             {
                                 while (!reader.IsClosed)
                                 {
-                                    var node = reader.CurrentResultQuery;
-                                    var dataTable = reader.GetCurrentDataTable();
+                                    var resultSet = QEResultSetWrapper.Create(reader);
+                                    resultSet.Initialize(false);
 
-                                    // TODO: Show results
-                                    //Execute(() => ShowResult(node, args, dataTable, null, null));
+                                    var gridContainer = ResultSetAndGridContainerWrapper.Create(resultSet, true, 1024);
+                                    sqlScriptEditorControl.Results.AddGridContainer(gridContainer);
+                                    gridContainer.StartRetrievingData();
+                                    gridContainer.UpdateGrid();
+
+                                    if (!reader.NextResult())
+                                        break;
                                 }
                             }
                         }
