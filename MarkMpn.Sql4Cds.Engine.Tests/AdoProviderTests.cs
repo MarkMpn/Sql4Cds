@@ -23,66 +23,8 @@ using Microsoft.Xrm.Sdk.Query;
 namespace MarkMpn.Sql4Cds.Engine.Tests
 {
     [TestClass]
-    public class AdoProviderTests : FakeXrmEasyTestsBase, IQueryExecutionOptions
+    public class AdoProviderTests : FakeXrmEasyTestsBase
     {
-        CancellationToken IQueryExecutionOptions.CancellationToken => CancellationToken.None;
-
-        bool IQueryExecutionOptions.BlockUpdateWithoutWhere => false;
-
-        bool IQueryExecutionOptions.BlockDeleteWithoutWhere => false;
-
-        bool IQueryExecutionOptions.UseBulkDelete => false;
-
-        int IQueryExecutionOptions.BatchSize => 1;
-
-        bool IQueryExecutionOptions.UseTDSEndpoint => false;
-
-        bool IQueryExecutionOptions.UseRetrieveTotalRecordCount => true;
-
-        int IQueryExecutionOptions.MaxDegreeOfParallelism => 10;
-
-        bool IQueryExecutionOptions.ColumnComparisonAvailable => true;
-
-        bool IQueryExecutionOptions.UseLocalTimeZone => false;
-
-        List<JoinOperator> IQueryExecutionOptions.JoinOperatorsAvailable => new List<JoinOperator> { JoinOperator.Inner, JoinOperator.LeftOuter };
-
-        bool IQueryExecutionOptions.BypassCustomPlugins => false;
-
-        void IQueryExecutionOptions.RetrievingNextPage()
-        {
-        }
-
-        void IQueryExecutionOptions.Progress(double? progress, string message)
-        {
-        }
-
-        bool IQueryExecutionOptions.ContinueRetrieve(int count)
-        {
-            return true;
-        }
-
-        bool IQueryExecutionOptions.ConfirmInsert(int count, EntityMetadata meta)
-        {
-            return true;
-        }
-
-        bool IQueryExecutionOptions.ConfirmUpdate(int count, EntityMetadata meta)
-        {
-            return true;
-        }
-
-        bool IQueryExecutionOptions.ConfirmDelete(int count, EntityMetadata meta)
-        {
-            return true;
-        }
-
-        string IQueryExecutionOptions.PrimaryDataSource => "uat";
-
-        Guid IQueryExecutionOptions.UserId => Guid.NewGuid();
-
-        bool IQueryExecutionOptions.QuotedIdentifiers => true;
-
         [TestMethod]
         public void SelectArithmetic()
         {
@@ -99,7 +41,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList(), this))
+            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList()))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = query;
@@ -120,7 +62,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void SelectParameters()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList(), this))
+            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList()))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "SELECT @param1, @param2";
@@ -141,7 +83,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void InsertRecordsAffected()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList(), this))
+            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList()))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "INSERT INTO account (name) VALUES (@name)";
@@ -157,7 +99,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void InsertRecordsAffectedMultipleCommands()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList(), this))
+            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList()))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "INSERT INTO account (name) VALUES (@name); INSERT INTO account (name) VALUES (@name)";
@@ -173,7 +115,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void CombinedInsertSelect()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList(), this))
+            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList()))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "INSERT INTO account (name) VALUES (@name); SELECT accountid FROM account WHERE name = @name";
@@ -195,7 +137,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void MultipleResultSets()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList(), this))
+            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList()))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "INSERT INTO account (name) VALUES (@name); SELECT accountid FROM account WHERE name = @name; SELECT name FROM account";
@@ -225,7 +167,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void GetLastInsertId()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList(), this))
+            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList()))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "INSERT INTO account (name) VALUES (@name); SELECT @@IDENTITY";
@@ -242,7 +184,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void RowCount()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList(), this))
+            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList()))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "INSERT INTO account (name) VALUES ('1'), ('2'), ('3'); SELECT @@ROWCOUNT; SELECT @@ROWCOUNT";
@@ -265,7 +207,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void LoadToDataTable()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList(), this))
+            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList()))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "SELECT 1, 'hello world'";
@@ -286,7 +228,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void ControlOfFlow()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList(), this))
+            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList()))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = @"
@@ -329,7 +271,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void Print()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList(), this))
+            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList()))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "PRINT @param1";
@@ -347,7 +289,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void GoTo()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList(), this))
+            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList()))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = @"
@@ -392,7 +334,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void ContinueBreak()
         {
-            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList(), this))
+            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToList()))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = @"

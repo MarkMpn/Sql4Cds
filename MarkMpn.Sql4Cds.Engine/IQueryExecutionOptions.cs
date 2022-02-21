@@ -9,7 +9,7 @@ namespace MarkMpn.Sql4Cds.Engine
     /// <summary>
     /// The options to apply to control the execution of a query
     /// </summary>
-    public interface IQueryExecutionOptions
+    interface IQueryExecutionOptions
     {
         /// <summary>
         /// Indicates that the query should be cancelled

@@ -153,15 +153,27 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return RightSource.GetSchema(dataSources, innerParameterTypes);
         }
 
-        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        public override void EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
-            var leftEstimate = LeftSource.EstimateRowsOut(dataSources, options, parameterTypes);
+            LeftSource.EstimateRowsOut(dataSources, options, parameterTypes);
+
+            var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
+            var innerParameterTypes = GetInnerParameterTypes(leftSchema, parameterTypes);
+
+            RightSource.EstimateRowsOut(dataSources, options, innerParameterTypes);
+
+            EstimatedRowsOut = EstimateRowsOutInternal(dataSources, options, parameterTypes);
+        }
+
+        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        {
+            var leftEstimate = LeftSource.EstimatedRowsOut;
 
             // We tend to use a nested loop with an assert node for scalar subqueries - we'll return one record for each record in the outer loop
             if (RightSource is AssertNode)
                 return leftEstimate;
 
-            var rightEstimate = RightSource.EstimateRowsOut(dataSources, options, parameterTypes);
+            var rightEstimate = RightSource.EstimatedRowsOut;
 
             if (JoinType == QualifiedJoinType.Inner)
                 return Math.Min(leftEstimate, rightEstimate);

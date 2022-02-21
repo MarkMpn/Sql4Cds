@@ -27,12 +27,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             _context = new XrmFakedContext();
             _context.InitializeMetadata(Assembly.GetExecutingAssembly());
+            _context.CallerId = new EntityReference("systemuser", Guid.NewGuid());
 
             _service = _context.GetOrganizationService();
             _dataSource = new DataSource { Name = "uat", Connection = _service, Metadata = new AttributeMetadataCache(_service), TableSizeCache = new StubTableSizeCache() };
 
             _context2 = new XrmFakedContext();
             _context2.InitializeMetadata(Assembly.GetExecutingAssembly());
+            _context2.CallerId = _context.CallerId;
 
             _service2 = _context2.GetOrganizationService();
             _dataSource2 = new DataSource { Name = "prod", Connection = _service2, Metadata = new AttributeMetadataCache(_service2), TableSizeCache = new StubTableSizeCache() };

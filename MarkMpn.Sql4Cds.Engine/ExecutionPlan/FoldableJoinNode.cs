@@ -300,10 +300,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             RightSource.AddRequiredColumns(dataSources, parameterTypes, rightColumns);
         }
 
-        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
-            var leftEstimate = LeftSource.EstimateRowsOut(dataSources, options, parameterTypes);
-            var rightEstimate = RightSource.EstimateRowsOut(dataSources, options, parameterTypes);
+            var leftEstimate = LeftSource.EstimatedRowsOut;
+            var rightEstimate = RightSource.EstimatedRowsOut;
 
             if (JoinType == QualifiedJoinType.Inner)
                 return Math.Min(leftEstimate, rightEstimate);

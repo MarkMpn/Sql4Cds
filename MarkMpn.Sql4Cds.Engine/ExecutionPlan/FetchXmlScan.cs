@@ -929,7 +929,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return items.OfType<FetchAttributeType>().Any() || items.OfType<allattributes>().Any();
         }
 
-        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
             if (FetchXml.aggregateSpecified && FetchXml.aggregate)
             {

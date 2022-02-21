@@ -15,7 +15,7 @@ using Microsoft.Xrm.Tooling.Connector;
 
 namespace MarkMpn.Sql4Cds
 {
-    class QueryExecutionOptions : IQueryExecutionOptions
+    class QueryExecutionOptions
     {
         private readonly ConnectionDetail _con;
         private readonly IOrganizationService _org;

@@ -45,16 +45,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Creates a new <see cref="Sql4CdsConnection"/> using the specified list of data sources
         /// </summary>
         /// <param name="dataSources">The list of data sources to use</param>
-        public Sql4CdsConnection(IReadOnlyList<DataSource> dataSources) : this(dataSources, null)
-        {
-        }
-
-        /// <summary>
-        /// Creates a new <see cref="Sql4CdsConnection"/> using the specified list of data sources
-        /// </summary>
-        /// <param name="dataSources">The list of data sources to use</param>
-        /// <param name="options">The options to control how queries will be executed</param>
-        public Sql4CdsConnection(IReadOnlyList<DataSource> dataSources, IQueryExecutionOptions options)
+        public Sql4CdsConnection(IReadOnlyList<DataSource> dataSources)
         {
             if (dataSources == null)
                 throw new ArgumentNullException(nameof(dataSources));
@@ -62,8 +53,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (dataSources.Count == 0)
                 throw new ArgumentOutOfRangeException("At least one data source must be supplied");
 
-            if (options == null)
-                options = new DefaultQueryExecutionOptions(dataSources[0], CancellationToken.None);
+            var options = new DefaultQueryExecutionOptions(dataSources[0], CancellationToken.None);
 
             _dataSources = dataSources.ToDictionary(ds => ds.Name, StringComparer.OrdinalIgnoreCase);
             _options = new ChangeDatabaseOptionsWrapper(options);

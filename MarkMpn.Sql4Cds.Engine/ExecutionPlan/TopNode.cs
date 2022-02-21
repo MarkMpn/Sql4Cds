@@ -134,9 +134,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
-            var sourceCount = Source.EstimateRowsOut(dataSources, options, parameterTypes);
+            var sourceCount = Source.EstimatedRowsOut;
 
             if (!Top.IsConstantValueExpression(null, options, out var topLiteral))
                 return sourceCount;

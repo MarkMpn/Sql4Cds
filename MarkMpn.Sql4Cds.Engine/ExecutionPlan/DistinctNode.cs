@@ -166,12 +166,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
             // TODO: Is there any metadata available that could help give a better estimate for this?
             // Maybe get the schema and check if any of the columns included in the DISTINCT list are the
             // primary key and if so return the entire count, if some are optionset then there's a known list
-            var totalCount = Source.EstimateRowsOut(dataSources, options, parameterTypes);
+            var totalCount = Source.EstimatedRowsOut;
             return totalCount * 8 / 10;
         }
 

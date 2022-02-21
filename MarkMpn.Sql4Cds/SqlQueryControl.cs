@@ -861,7 +861,7 @@ namespace MarkMpn.Sql4Cds
             if (!args.Execute)
                 options.UseTDSEndpoint = false;
 
-            using (var con = new Sql4CdsConnection(DataSources.Values.ToList(), options))
+            using (var con = new Sql4CdsConnection(DataSources.Values.ToList()))
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = args.Sql;
@@ -1071,8 +1071,7 @@ namespace MarkMpn.Sql4Cds
                     AutoEllipsis = true,
                     UseMnemonic = false
                 };
-                var options = new QueryExecutionOptions(_con, DataSources[_con.ConnectionName].Connection, backgroundWorker, this, CancellationToken.None);
-                var planView = new ExecutionPlanView { Dock = DockStyle.Fill, Executed = args.Execute, Exception = ex, DataSources = DataSources, Options = options };
+                var planView = new ExecutionPlanView { Dock = DockStyle.Fill, Executed = args.Execute, Exception = ex, DataSources = DataSources };
                 planView.Plan = query;
                 planView.NodeSelected += (s, e) => _properties.SelectedObject = planView.Selected;
                 planView.DoubleClick += (s, e) =>

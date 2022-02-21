@@ -34,7 +34,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (!DataSources.ContainsKey(Options.PrimaryDataSource))
                 throw new ArgumentOutOfRangeException(nameof(options), "Primary data source " + options.PrimaryDataSource + " not found");
 
-            CompileConditions = true;
+            EstimatedPlanOnly = true;
         }
 
         /// <summary>
@@ -48,9 +48,9 @@ namespace MarkMpn.Sql4Cds.Engine
         public IQueryExecutionOptions Options { get; set; }
 
         /// <summary>
-        /// Indicates if conditional nodes will be compiled ready for execution
+        /// Indicates if only a simplified plan for display purposes is required
         /// </summary>
-        public bool CompileConditions { get; set; }
+        public bool EstimatedPlanOnly { get; set; }
 
         /// <summary>
         /// Builds the execution plans for a SQL command
@@ -101,7 +101,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var script = (TSqlScript)fragment;
             script.Accept(new ReplacePrimaryFunctionsVisitor());
-            var optimizer = new ExecutionPlanOptimizer(DataSources, Options, _parameterTypes, CompileConditions);
+            var optimizer = new ExecutionPlanOptimizer(DataSources, Options, _parameterTypes, EstimatedPlanOnly);
 
             // Convert each statement in turn to the appropriate query type
             foreach (var batch in script.Batches)
@@ -117,6 +117,12 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 if (!labels.Contains(gotoNode.Label))
                     throw new NotSupportedQueryFragmentException($"A GOTO statement references the label '{gotoNode.Label}' but the label has not been declared.");
+            }
+
+            if (EstimatedPlanOnly)
+            {
+                foreach (var node in queries)
+                    EstimateRowsOut(node, _parameterTypes);
             }
 
             return queries.ToArray();
@@ -2808,8 +2814,8 @@ namespace MarkMpn.Sql4Cds.Engine
             // Check the estimated counts for the outer loop and the source at the point we'd insert the spool
             // If the outer loop is non-trivial (>= 100 rows) or the inner loop is small (<= 5000 records) then we want
             // to use the spool.
-            var outerCount = outerSource.EstimateRowsOut(DataSources, Options, parameterTypes);
-            var innerCount = outerCount >= 100 ? -1 : lastCorrelatedStep.Source.EstimateRowsOut(DataSources, Options, parameterTypes);
+            var outerCount = EstimateRowsOut((IDataExecutionPlanNodeInternal) outerSource, parameterTypes);
+            var innerCount = outerCount >= 100 ? -1 : EstimateRowsOut(lastCorrelatedStep.Source, parameterTypes);
 
             if (outerCount >= 100 || innerCount <= 5000)
             {
@@ -2821,6 +2827,17 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 lastCorrelatedStep.Source = spool;
             }
+        }
+
+        private int EstimateRowsOut(IExecutionPlanNode source, IDictionary<string, DataTypeReference> parameterTypes)
+        {
+            if (source is IDataExecutionPlanNodeInternal dataNode)
+            {
+                dataNode.EstimateRowsOut(DataSources, Options, parameterTypes);
+                return dataNode.EstimatedRowsOut;
+            }
+
+            return 0;
         }
 
         private bool SplitCorrelatedCriteria(BooleanExpression filter, out BooleanExpression correlatedFilter, out BooleanExpression nonCorrelatedFilter)

@@ -168,7 +168,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="options">The <see cref="IQueryExecutionOptions"/> that describe how a query should be executed</param>
         /// <param name="org">The <see cref="IOrganizationService"/> that is connected to the instance to use</param>
         /// <returns><c>true</c> if the TDS endpoint can be used for this connection and options, or <c>false</c> otherwise</returns>
-        public static bool CanUseTDSEndpoint(IQueryExecutionOptions options, IOrganizationService org)
+        internal static bool CanUseTDSEndpoint(IQueryExecutionOptions options, IOrganizationService org)
         {
             if (!options.UseTDSEndpoint)
                 return false;

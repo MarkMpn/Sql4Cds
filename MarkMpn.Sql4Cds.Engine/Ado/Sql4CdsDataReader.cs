@@ -414,9 +414,9 @@ namespace MarkMpn.Sql4Cds.Engine
                     DBNull.Value,         // BaseColumnName
                     DBNull.Value,         // BaseSchemaName
                     DBNull.Value,         // BaseTableName
-                    column.DataType,      // DataType
+                    ToClrType(column.DataType),      // DataType
                     false,                // AllowDBNull
-                    column.DataType,      // ProviderType
+                    ToClrType(column.DataType),      // ProviderType
                     false,                // IsAliased
                     false,                // IsExpression
                     false,                // IsIdentity
@@ -426,7 +426,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     false,                // IsLong
                     true,                 // IsReadOnly
                     column.DataType,      // ProviderSpecificDataType
-                    column.DataType.Name, // DataTypeName TODO: Convert to T-SQL data type name
+                    GetDataTypeName(column.Ordinal), // DataTypeName
                     DBNull.Value,         // XmlSchemaCollectionDatabase
                     DBNull.Value,         // XmlSchemaCollectionOwningSchema
                     DBNull.Value,         // XmlSchemaCollectionName

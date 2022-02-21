@@ -16,7 +16,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// Estimates the number of rows that will be returned by this node
         /// </summary>
-        int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes);
+        int EstimatedRowsOut { get; }
 
         /// <summary>
         /// Returns the total number of rows returned by this node
@@ -26,6 +26,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
     internal interface IDataExecutionPlanNodeInternal : IDataExecutionPlanNode, IExecutionPlanNodeInternal
     {
+        /// <summary>
+        /// Populates <see cref="IDataExecutionPlanNode.EstimatedRowsOut"/> with an estimate of the number of rows that will be returned by this node
+        /// </summary>
+        void EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes);
+
         /// <summary>
         /// Executes the execution plan
         /// </summary>
