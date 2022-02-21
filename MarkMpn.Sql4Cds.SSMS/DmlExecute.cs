@@ -123,6 +123,9 @@ namespace MarkMpn.Sql4Cds.SSMS
                     {
                         try
                         {
+                            // SSMS grid doesn't know how to show entity references, so show as simple guids
+                            con.ReturnEntityReferenceAsGuid = true;
+
                             using (var reader = (ISql4CdsDataReader)cmd.ExecuteReader())
                             {
                                 while (!reader.IsClosed)

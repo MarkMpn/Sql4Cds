@@ -197,7 +197,18 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public override string GetDataTypeName(int ordinal)
         {
-            return GetFieldType(ordinal).Name;
+            // Return T-SQL data type name
+            var type = _results[_resultIndex].Columns[ordinal].DataType;
+
+            if (type == typeof(SqlEntityReference) && _connection.ReturnEntityReferenceAsGuid)
+                type = typeof(SqlGuid);
+
+            var sqlType = type.ToSqlType();
+
+            if (sqlType is SqlDataTypeReference sql)
+                return sql.SqlDataTypeOption.ToString().ToLower();
+
+            return String.Join(".", ((UserDataTypeReference)sqlType).Name.Identifiers.Select(id => id.Value));
         }
 
         public override DateTime GetDateTime(int ordinal)
@@ -298,6 +309,9 @@ namespace MarkMpn.Sql4Cds.Engine
 
         private Type ToClrType(Type type)
         {
+            if (type == typeof(SqlEntityReference) && _connection.ReturnEntityReferenceAsGuid)
+                type = typeof(SqlGuid);
+
             if (_typeConversions.TryGetValue(type, out var clr))
                 return clr;
 
@@ -309,7 +323,12 @@ namespace MarkMpn.Sql4Cds.Engine
             if (value.IsNull)
                 return DBNull.Value;
 
-            if (_typeConversionFuncs.TryGetValue(value.GetType(), out var func))
+            var type = value.GetType();
+
+            if (type == typeof(SqlEntityReference) && _connection.ReturnEntityReferenceAsGuid)
+                return ((SqlEntityReference)value).Id;
+
+            if (_typeConversionFuncs.TryGetValue(type, out var func))
                 return func(value);
 
             return value;
@@ -343,7 +362,81 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public override DataTable GetSchemaTable()
         {
-            return null;
+            if (_resultIndex >= _results.Count)
+                return null;
+
+            var schemaTable = new DataTable();
+            schemaTable.Columns.Add("ColumnName", typeof(string));
+            schemaTable.Columns.Add("ColumnOrdinal", typeof(int));
+            schemaTable.Columns.Add("ColumnSize", typeof(int));
+            schemaTable.Columns.Add("NumericPrecision", typeof(int));
+            schemaTable.Columns.Add("NumericScale", typeof(int));
+            schemaTable.Columns.Add("IsUnique", typeof(bool));
+            schemaTable.Columns.Add("IsKey", typeof(bool));
+            schemaTable.Columns.Add("BaseServerName", typeof(string));
+            schemaTable.Columns.Add("BaseCatalogName", typeof(string));
+            schemaTable.Columns.Add("BaseColumnName", typeof(string));
+            schemaTable.Columns.Add("BaseSchemaName", typeof(string));
+            schemaTable.Columns.Add("BaseTableName", typeof(string));
+            schemaTable.Columns.Add("DataType", typeof(Type));
+            schemaTable.Columns.Add("AllowDBNull", typeof(bool));
+            schemaTable.Columns.Add("ProviderType", typeof(Type));
+            schemaTable.Columns.Add("IsAliased", typeof(bool));
+            schemaTable.Columns.Add("IsExpression", typeof(bool));
+            schemaTable.Columns.Add("IsIdentity", typeof(bool));
+            schemaTable.Columns.Add("IsAutoIncrement", typeof(bool));
+            schemaTable.Columns.Add("IsRowVersion", typeof(bool));
+            schemaTable.Columns.Add("IsHidden", typeof(bool));
+            schemaTable.Columns.Add("IsLong", typeof(bool));
+            schemaTable.Columns.Add("IsReadOnly", typeof(bool));
+            schemaTable.Columns.Add("ProviderSpecificDataType", typeof(Type));
+            schemaTable.Columns.Add("DataTypeName", typeof(string));
+            schemaTable.Columns.Add("XmlSchemaCollectionDatabase", typeof(string));
+            schemaTable.Columns.Add("XmlSchemaCollectionOwningSchema", typeof(string));
+            schemaTable.Columns.Add("XmlSchemaCollectionName", typeof(string));
+            schemaTable.Columns.Add("UdtAssemblyQualifiedName", typeof(string));
+            schemaTable.Columns.Add("NonVersionedProviderType", typeof(string));
+            schemaTable.Columns.Add("IsColumnSet", typeof(bool));
+
+            foreach (DataColumn column in _results[_resultIndex].Columns)
+            {
+                schemaTable.Rows.Add(new object[]
+                {
+                    column.ColumnName,    // ColumnName
+                    column.Ordinal,       // ColumnOrdinal
+                    4000,                 // ColumnSize
+                    255,                  // NumericPrecision
+                    255,                  // NumericScale
+                    false,                // IsUnique
+                    false,                // IsKey
+                    DBNull.Value,         // BaseServerName
+                    DBNull.Value,         // BaseCatalogName
+                    DBNull.Value,         // BaseColumnName
+                    DBNull.Value,         // BaseSchemaName
+                    DBNull.Value,         // BaseTableName
+                    column.DataType,      // DataType
+                    false,                // AllowDBNull
+                    column.DataType,      // ProviderType
+                    false,                // IsAliased
+                    false,                // IsExpression
+                    false,                // IsIdentity
+                    false,                // IsAutoIncrement
+                    false,                // IsRowVersion
+                    false,                // IsHidden
+                    false,                // IsLong
+                    true,                 // IsReadOnly
+                    column.DataType,      // ProviderSpecificDataType
+                    column.DataType.Name, // DataTypeName TODO: Convert to T-SQL data type name
+                    DBNull.Value,         // XmlSchemaCollectionDatabase
+                    DBNull.Value,         // XmlSchemaCollectionOwningSchema
+                    DBNull.Value,         // XmlSchemaCollectionName
+                    column.DataType.AssemblyQualifiedName, // UdtAssemblyQualifiedName
+                    column.DataType,      // NonVersionedProviderType TODO: Convert to SqlDbType
+                    false                 // IsColumnSet
+                });
+            }
+
+            return schemaTable;
         }
 
         public DataTable GetCurrentDataTable()

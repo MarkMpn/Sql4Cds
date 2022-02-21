@@ -124,6 +124,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
         internal IQueryExecutionOptions Options => _options;
 
+        public bool ReturnEntityReferenceAsGuid { get; set; }
+
         public override string ConnectionString { get; set; }
 
         public override string Database => _options.PrimaryDataSource;
