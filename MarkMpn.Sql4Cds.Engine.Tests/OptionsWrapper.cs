@@ -88,10 +88,5 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             _options.Progress(progress, message);
         }
-
-        public void RetrievingNextPage()
-        {
-            _options.RetrievingNextPage();
-        }
     }
 }

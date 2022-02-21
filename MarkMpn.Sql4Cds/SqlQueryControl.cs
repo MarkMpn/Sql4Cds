@@ -857,13 +857,11 @@ namespace MarkMpn.Sql4Cds
 
             backgroundWorker.ReportProgress(0, "Executing query...");
 
-            var options = new QueryExecutionOptions(_con, DataSources[_con.ConnectionName].Connection, backgroundWorker, this, Cancellable ? _cts.Token : CancellationToken.None);
-            if (!args.Execute)
-                options.UseTDSEndpoint = false;
-
             using (var con = new Sql4CdsConnection(DataSources.Values.ToList()))
             using (var cmd = con.CreateCommand())
             {
+                new QueryExecutionOptions(this, backgroundWorker).ApplySettings(con, cmd, args.Execute);
+
                 cmd.CommandText = args.Sql;
 
                 if (args.Execute)
@@ -880,10 +878,7 @@ namespace MarkMpn.Sql4Cds
                         Execute(() => ShowResult(stmt.Statement, args, null, null, null));
 
                         if (stmt.Statement is IImpersonateRevertExecutionPlanNode)
-                        {
-                            options.SyncUserId();
                             Execute(() => SyncUsername());
-                        }
                     };
 
                     using (var reader = (ISql4CdsDataReader) cmd.ExecuteReader())

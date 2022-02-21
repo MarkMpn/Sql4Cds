@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Data;
 using System.Data.Common;
 using System.Linq;
@@ -56,7 +57,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var options = new DefaultQueryExecutionOptions(dataSources[0], CancellationToken.None);
 
             _dataSources = dataSources.ToDictionary(ds => ds.Name, StringComparer.OrdinalIgnoreCase);
-            _options = new ChangeDatabaseOptionsWrapper(options);
+            _options = new ChangeDatabaseOptionsWrapper(this, options);
         }
 
         private static IOrganizationService Connect(string connectionString)
@@ -115,7 +116,168 @@ namespace MarkMpn.Sql4Cds.Engine
 
         internal IQueryExecutionOptions Options => _options;
 
+        /// <summary>
+        /// Indicates if <see cref="SqlEntityReference"/> values should be returned as <see cref="Guid"/>s from the data reader
+        /// </summary>
         public bool ReturnEntityReferenceAsGuid { get; set; }
+
+        /// <summary>
+        /// Indicates if the Dataverse TDS Endpoint should be used for query execution where possible
+        /// </summary>
+        public bool UseTDSEndpoint
+        {
+            get => _options.UseTDSEndpoint;
+            set => _options.UseTDSEndpoint = value;
+        }
+
+        /// <summary>
+        /// Indicates if an UPDATE statement cannot be executed unless it has a WHERE clause
+        /// </summary>
+        public bool BlockUpdateWithoutWhere
+        {
+            get => _options.BlockUpdateWithoutWhere;
+            set => _options.BlockUpdateWithoutWhere = value;
+        }
+
+        /// <summary>
+        /// Indicates if a DELETE statement cannot be execyted unless it has a WHERE clause
+        /// </summary>
+        public bool BlockDeleteWithoutWhere
+        {
+            get => _options.BlockDeleteWithoutWhere;
+            set => _options.BlockDeleteWithoutWhere = value;
+        }
+
+        /// <summary>
+        /// Indicates if DELETE queries should be executed with a bulk delete job
+        /// </summary>
+        public bool UseBulkDelete
+        {
+            get => _options.UseBulkDelete;
+            set => _options.UseBulkDelete = value;
+        }
+
+        /// <summary>
+        /// The number of records that should be inserted, updated or deleted in a single batch
+        /// </summary>
+        public int BatchSize
+        {
+            get => _options.BatchSize;
+            set => _options.BatchSize = value;
+        }
+
+        /// <summary>
+        /// Indicates if a <see cref="Microsoft.Crm.Sdk.Messages.RetrieveTotalRecordCountRequest"/> should be used for simple SELECT count(*) FROM table queries
+        /// </summary>
+        public bool UseRetrieveTotalRecordCount
+        {
+            get => _options.UseRetrieveTotalRecordCount;
+            set => _options.UseRetrieveTotalRecordCount = value;
+        }
+
+        /// <summary>
+        /// The maximum number of worker threads to use to execute DML queries
+        /// </summary>
+        public int MaxDegreeOfParallelism
+        {
+            get => _options.MaxDegreeOfParallelism;
+            set => _options.MaxDegreeOfParallelism = value;
+        }
+
+        /// <summary>
+        /// Indicates if date/time values should be interpreted in the local timezone or in UTC
+        /// </summary>
+        public bool UseLocalTimeZone
+        {
+            get => _options.UseLocalTimeZone;
+            set => _options.UseLocalTimeZone = value;
+        }
+
+        /// <summary>
+        /// Indicates if plugins should be bypassed when executing DML operations
+        /// </summary>
+        public bool BypassCustomPlugins
+        {
+            get => _options.BypassCustomPlugins;
+            set => _options.BypassCustomPlugins = value;
+        }
+
+        /// <summary>
+        /// Returns or sets a value indicating if SQL will be parsed using quoted identifiers
+        /// </summary>
+        public bool QuotedIdentifiers
+        {
+            get => _options.QuotedIdentifiers;
+            set => _options.QuotedIdentifiers = value;
+        }
+
+        /// <summary>
+        /// Triggered before one or more records are about to be deleted
+        /// </summary>
+        /// <remarks>
+        /// Set the <see cref="CancelEventArgs.Cancel"/> property to <c>true</c> to prevent the deletion
+        /// </remarks>
+        public event EventHandler<ConfirmDmlStatementEventArgs> PreDelete;
+
+        internal void OnPreDelete(ConfirmDmlStatementEventArgs args)
+        {
+            PreDelete?.Invoke(this, args);
+        }
+
+        /// <summary>
+        /// Triggered before one or more records are about to be inserted
+        /// </summary>
+        /// <remarks>
+        /// Set the <see cref="CancelEventArgs.Cancel"/> property to <c>true</c> to prevent the insertion
+        /// </remarks>
+        public event EventHandler<ConfirmDmlStatementEventArgs> PreInsert;
+
+        internal void OnPreInsert(ConfirmDmlStatementEventArgs args)
+        {
+            PreInsert?.Invoke(this, args);
+        }
+
+        /// <summary>
+        /// Triggered before one or more records are about to be updated
+        /// </summary>
+        /// <remarks>
+        /// Set the <see cref="CancelEventArgs.Cancel"/> property to <c>true</c> to prevent the update
+        /// </remarks>
+        public event EventHandler<ConfirmDmlStatementEventArgs> PreUpdate;
+
+        internal void OnPreUpdate(ConfirmDmlStatementEventArgs args)
+        {
+            PreUpdate?.Invoke(this, args);
+        }
+
+        /// <summary>
+        /// Triggered before a page of data is about to be retrieved
+        /// </summary>
+        /// <remarks>
+        /// Set the <see cref="CancelEventArgs.Cancel"/> property to <c>true</c> to prevent the retrieval
+        /// </remarks>
+        public event EventHandler<ConfirmRetrieveEventArgs> PreRetrieve;
+
+        internal void OnPreRetrieve(ConfirmRetrieveEventArgs args)
+        {
+            PreRetrieve?.Invoke(this, args);
+        }
+
+        /// <summary>
+        /// Triggered when there is some progress that can be reported to the user
+        /// </summary>
+        /// <remarks>
+        /// This event does not signify that an operation has completed successfully. It can be triggered multiple times
+        /// for the same operation. Use <see cref="Sql4CdsCommand.StatementCompleted"/> to receive a notification that a
+        /// statement has completed successfully, or <see cref="InfoMessage"/> to receive messages that should be shown
+        /// as part of the main output of a query.
+        /// </remarks>
+        public event EventHandler<ProgressEventArgs> Progress;
+
+        internal void OnProgress(ProgressEventArgs args)
+        {
+            Progress?.Invoke(this, args);
+        }
 
         public override string ConnectionString { get; set; }
 

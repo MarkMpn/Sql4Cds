@@ -142,6 +142,11 @@ namespace MarkMpn.Sql4Cds.Engine
                     throw new NotImplementedException("Unexpected node type " + node.GetType().Name);
                 }
 
+                if (node is IImpersonateRevertExecutionPlanNode)
+                {
+                    // TODO: Update options.UserId
+                }
+
                 instructionPointer++;
             }
         }

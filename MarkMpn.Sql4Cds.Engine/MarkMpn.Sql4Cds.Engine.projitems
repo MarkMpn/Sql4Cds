@@ -11,9 +11,12 @@
   <ItemGroup>
     <Compile Include="$(MSBuildThisFileDirectory)Ado\CancellationTokenOptionsWrapper.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Ado\ChangeDatabaseOptionsWrapper.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Ado\ConfirmDmlStatementEventArgs.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Ado\ConfirmRetrieveEventArgs.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Ado\DefaultQueryExecutionOptions.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Ado\InfoMessageEventArgs.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Ado\ISql4CdsDataReader.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Ado\ProgressEventArgs.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Ado\Sql4CdsCommand.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Ado\Sql4CdsConnection.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Ado\Sql4CdsDataReader.cs" />

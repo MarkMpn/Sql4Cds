@@ -72,12 +72,13 @@ namespace MarkMpn.Sql4Cds.SSMS
                     return;
 
                 // Store the options being used for these queries so we can cancel them later
-                var options = new QueryExecutionOptions(sqlScriptEditorControl, Package.Settings, true);
                 var dataSource = GetDataSource();
 
-                using (var con = new Sql4CdsConnection(new[] { dataSource }, options))
+                using (var con = new Sql4CdsConnection(new[] { dataSource }))
                 using (var cmd = con.CreateCommand())
                 {
+                    var options = new QueryExecutionOptions(sqlScriptEditorControl, Package.Settings, true, cmd);
+                    options.ApplySettings(con);
                     cmd.CommandText = sql;
 
                     try
@@ -164,7 +165,7 @@ namespace MarkMpn.Sql4Cds.SSMS
                             resultFlag |= 2; // Failure
                         }
 
-                        if (options.CancellationToken.IsCancellationRequested)
+                        if (options.IsCancelled)
                             resultFlag = 4; // Cancel
 
                         await Package.JoinableTaskFactory.SwitchToMainThreadAsync();

@@ -97,14 +97,14 @@ namespace MarkMpn.Sql4Cds.SSMS
                 var scriptFactory = new ScriptFactoryWrapper(ServiceCache.ScriptFactory);
                 var sqlScriptEditorControl = scriptFactory.GetCurrentlyActiveFrameDocView(ServiceCache.VSMonitorSelection, false, out _);
 
-                var options = new QueryExecutionOptions(sqlScriptEditorControl, Package.Settings, false);
                 var dataSource = GetDataSource();
 
                 try
                 {
-                    using (var con = new Sql4CdsConnection(new[] { dataSource }, options))
+                    using (var con = new Sql4CdsConnection(new[] { dataSource }))
                     using (var cmd = con.CreateCommand())
                     {
+                        new QueryExecutionOptions(sqlScriptEditorControl, Package.Settings, false, cmd).ApplySettings(con);
                         cmd.CommandText = sql;
 
                         var queries = cmd.GeneratePlan(false);

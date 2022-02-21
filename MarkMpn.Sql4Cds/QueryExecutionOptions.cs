@@ -17,51 +17,49 @@ namespace MarkMpn.Sql4Cds
 {
     class QueryExecutionOptions
     {
-        private readonly ConnectionDetail _con;
-        private readonly IOrganizationService _org;
-        private readonly BackgroundWorker _worker;
         private readonly Control _host;
-        private readonly List<JoinOperator> _joinOperators;
+        private readonly BackgroundWorker _worker;
         private int _retrievedPages;
-        private Guid? _userId;
 
-        public QueryExecutionOptions(ConnectionDetail con, IOrganizationService org, BackgroundWorker worker, Control host, CancellationToken cancellationToken)
+        public QueryExecutionOptions(Control host, BackgroundWorker worker)
         {
-            _con = con;
-            _org = org;
-            _worker = worker;
             _host = host;
-            _joinOperators = new List<JoinOperator>
-            {
-                JoinOperator.Inner,
-                JoinOperator.LeftOuter
-            };
-
-            if (new Version(con.OrganizationVersion) >= new Version("9.1.0.17461"))
-            {
-                // First documented in SDK Version 9.0.2.25: Updated for 9.1.0.17461 CDS release
-                _joinOperators.Add(JoinOperator.Any);
-                _joinOperators.Add(JoinOperator.Exists);
-            }
-
-            CancellationToken = cancellationToken;
-            UseTDSEndpoint = Settings.Instance.UseTSQLEndpoint;
+            _worker = worker;
         }
 
-        public CancellationToken CancellationToken { get; }
-
-        public bool BlockUpdateWithoutWhere => Settings.Instance.BlockUpdateWithoutWhere;
-
-        public bool BlockDeleteWithoutWhere => Settings.Instance.BlockDeleteWithoutWhere;
-
-        public bool UseBulkDelete => Settings.Instance.UseBulkDelete;
-
-        public bool ConfirmInsert(int count, EntityMetadata meta)
+        public void ApplySettings(Sql4CdsConnection con, Sql4CdsCommand cmd, bool execute)
         {
-            if (count > Settings.Instance.InsertWarnThreshold || BypassCustomPlugins)
+            con.BlockDeleteWithoutWhere = Settings.Instance.BlockDeleteWithoutWhere;
+            con.BlockUpdateWithoutWhere = Settings.Instance.BlockUpdateWithoutWhere;
+            con.UseBulkDelete = Settings.Instance.UseBulkDelete;
+            con.BatchSize = Settings.Instance.BatchSize;
+            con.UseTDSEndpoint = Settings.Instance.UseTSQLEndpoint && execute;
+            con.UseRetrieveTotalRecordCount = Settings.Instance.UseRetrieveTotalRecordCount;
+            con.MaxDegreeOfParallelism = Settings.Instance.MaxDegreeOfPaallelism;
+            con.UseLocalTimeZone = Settings.Instance.ShowLocalTimes;
+            con.BypassCustomPlugins = Settings.Instance.BypassCustomPlugins;
+            con.QuotedIdentifiers = Settings.Instance.QuotedIdentifiers;
+
+            con.PreInsert += ConfirmInsert;
+            con.PreUpdate += ConfirmUpdate;
+            con.PreDelete += ConfirmDelete;
+            con.PreRetrieve += ConfirmRetrieve;
+            con.Progress += Progress;
+
+            cmd.StatementCompleted += StatementCompleted;
+        }
+
+        private void ConfirmInsert(object sender, ConfirmDmlStatementEventArgs e)
+        {
+            e.Cancel |= ConfirmInsert((Sql4CdsConnection)sender, e.Count, e.Metadata);
+        }
+
+        private bool ConfirmInsert(Sql4CdsConnection con, int count, EntityMetadata meta)
+        {
+            if (count > Settings.Instance.InsertWarnThreshold || con.BypassCustomPlugins)
             {
                 var msg = $"Insert will affect {count:N0} {GetDisplayName(count, meta)}.";
-                if (BypassCustomPlugins)
+                if (con.BypassCustomPlugins)
                     msg += "\r\n\r\nThis operation will bypass any custom plugins.";
 
                 var result = MessageBox.Show(_host, msg + "\r\n\r\nDo you want to proceed?", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
@@ -73,12 +71,17 @@ namespace MarkMpn.Sql4Cds
             return true;
         }
 
-        public bool ConfirmUpdate(int count, EntityMetadata meta)
+        private void ConfirmUpdate(object sender, ConfirmDmlStatementEventArgs e)
         {
-            if (count > Settings.Instance.UpdateWarnThreshold || BypassCustomPlugins)
+            e.Cancel |= ConfirmUpdate((Sql4CdsConnection)sender, e.Count, e.Metadata);
+        }
+
+        private bool ConfirmUpdate(Sql4CdsConnection con, int count, EntityMetadata meta)
+        {
+            if (count > Settings.Instance.UpdateWarnThreshold || con.BypassCustomPlugins)
             {
                 var msg = $"Update will affect {count:N0} {GetDisplayName(count, meta)}.";
-                if (BypassCustomPlugins)
+                if (con.BypassCustomPlugins)
                     msg += "\r\n\r\nThis operation will bypass any custom plugins.";
 
                 var result = MessageBox.Show(_host, msg + "\r\n\r\nDo you want to proceed?", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
@@ -90,12 +93,17 @@ namespace MarkMpn.Sql4Cds
             return true;
         }
 
-        public bool ConfirmDelete(int count, EntityMetadata meta)
+        private void ConfirmDelete(object sender, ConfirmDmlStatementEventArgs e)
         {
-            if (count > Settings.Instance.DeleteWarnThreshold || BypassCustomPlugins)
+            e.Cancel |= ConfirmDelete((Sql4CdsConnection)sender, e.Count, e.Metadata);
+        }
+
+        private bool ConfirmDelete(Sql4CdsConnection con, int count, EntityMetadata meta)
+        {
+            if (count > Settings.Instance.DeleteWarnThreshold || con.BypassCustomPlugins)
             {
                 var msg = $"Delete will affect {count:N0} {GetDisplayName(count, meta)}.";
-                if (BypassCustomPlugins)
+                if (con.BypassCustomPlugins)
                     msg += "\r\n\r\nThis operation will bypass any custom plugins.";
 
                 var result = MessageBox.Show(_host, msg + "\r\n\r\nDo you want to proceed?", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
@@ -117,33 +125,20 @@ namespace MarkMpn.Sql4Cds
                 meta.LogicalName;
         }
 
-        public bool ContinueRetrieve(int count)
+        private void ConfirmRetrieve(object sender, ConfirmRetrieveEventArgs e)
+        {
+            e.Cancel |= ContinueRetrieve(e.Count);
+
+            if (!e.Cancel)
+                RetrievingNextPage();
+        }
+
+        private bool ContinueRetrieve(int count)
         {
             return Settings.Instance.SelectLimit == 0 || Settings.Instance.SelectLimit > count;
         }
 
-        public void Progress(double? progress, string message)
-        {
-            _worker.ReportProgress(progress == null ? -1 : (int) (progress * 100), message);
-        }
-
-        public int BatchSize => Settings.Instance.BatchSize;
-
-        public bool UseTDSEndpoint { get; set; }
-
-        public bool UseRetrieveTotalRecordCount => Settings.Instance.UseRetrieveTotalRecordCount;
-
-        public int MaxDegreeOfParallelism => Settings.Instance.MaxDegreeOfPaallelism;
-
-        public bool ColumnComparisonAvailable => new Version(_con.OrganizationVersion) >= new Version("9.1.0.19251");
-
-        public bool UseLocalTimeZone => Settings.Instance.ShowLocalTimes;
-
-        public List<JoinOperator> JoinOperatorsAvailable => _joinOperators;
-
-        public bool BypassCustomPlugins => Settings.Instance.BypassCustomPlugins;
-
-        public void RetrievingNextPage()
+        private void RetrievingNextPage()
         {
             _retrievedPages++;
 
@@ -151,29 +146,19 @@ namespace MarkMpn.Sql4Cds
                 throw new QueryExecutionException($"Hit maximum retrieval limit. This limit is in place to protect against excessive API requests. Try restricting the data to retrieve with WHERE clauses or eliminating subqueries.\r\nYour limit of {Settings.Instance.MaxRetrievesPerQuery:N0} retrievals per query can be modified in Settings.");
         }
 
-        public string PrimaryDataSource => _con.ConnectionName;
-
-        public Guid UserId
+        private void StatementCompleted(object sender, StatementCompletedEventArgs e)
         {
-            get
-            {
-                if (_userId != null)
-                    return _userId.Value;
-
-                if (_org is CrmServiceClient svc && svc.CallerId != Guid.Empty)
-                    _userId = svc.CallerId;
-                else
-                    _userId = ((WhoAmIResponse)_org.Execute(new WhoAmIRequest())).UserId;
-
-                return _userId.Value;
-            }
+            _retrievedPages = 0;
         }
 
-        public void SyncUserId()
+        private void Progress(object sender, ProgressEventArgs e)
         {
-            _userId = null;
+            Progress(e.Progress, e.Message);
         }
 
-        public bool QuotedIdentifiers => Settings.Instance.QuotedIdentifiers;
+        private void Progress(double? progress, string message)
+        {
+            _worker.ReportProgress(progress == null ? -1 : (int)(progress * 100), message);
+        }
     }
 }

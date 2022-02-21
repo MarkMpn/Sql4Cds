@@ -181,7 +181,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 options.Progress(0, $"Retrieving {GetDisplayName(0, meta)}...");
 
             // Get the first page of results
-            options.RetrievingNextPage();
+            if (!options.ContinueRetrieve(0))
+                yield break;
 
             // Ensure we reset the page number & cookie for subsequent executions
             if (_resetPage)
@@ -217,7 +218,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             // Move on to subsequent pages
-            while (AllPages && res.MoreRecords && options.ContinueRetrieve(count))
+            while (AllPages && res.MoreRecords && !options.ContinueRetrieve(count))
             {
                 if (!(Parent is PartitionedAggregateNode))
                     options.Progress(0, $"Retrieved {count:N0} {GetDisplayName(count, meta)}...");
@@ -229,7 +230,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 FetchXml.pagingcookie = res.PagingCookie;
 
-                options.RetrievingNextPage();
                 var nextPage = dataSource.Connection.RetrieveMultiple(new FetchExpression(Serialize(FetchXml)));
                 PagesRetrieved++;
 

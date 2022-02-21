@@ -50,10 +50,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         bool IQueryExecutionOptions.BypassCustomPlugins => false;
 
-        void IQueryExecutionOptions.RetrievingNextPage()
-        {
-        }
-
         string IQueryExecutionOptions.PrimaryDataSource => "local";
 
         Guid IQueryExecutionOptions.UserId => Guid.NewGuid();

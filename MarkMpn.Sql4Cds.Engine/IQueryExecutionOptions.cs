@@ -110,11 +110,6 @@ namespace MarkMpn.Sql4Cds.Engine
         bool BypassCustomPlugins { get; }
 
         /// <summary>
-        /// A notification that the query is about to retrieve another page of data
-        /// </summary>
-        void RetrievingNextPage();
-
-        /// <summary>
         /// Returns the name of the primary data source the query is being executed in
         /// </summary>
         string PrimaryDataSource { get; }
