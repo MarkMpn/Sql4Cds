@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Threading;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
 
@@ -13,7 +14,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// Indicates that the query should be cancelled
         /// </summary>
-        bool Cancelled { get; }
+        CancellationToken CancellationToken { get; }
 
         /// <summary>
         /// Allows the query execution to report progress

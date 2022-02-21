@@ -8,6 +8,7 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Xml.Serialization;
 using FakeXrmEasy;
 using FakeXrmEasy.FakeMessageExecutors;
@@ -24,7 +25,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
     [TestClass]
     public class AdoProviderTests : FakeXrmEasyTestsBase, IQueryExecutionOptions
     {
-        bool IQueryExecutionOptions.Cancelled => false;
+        CancellationToken IQueryExecutionOptions.CancellationToken => CancellationToken.None;
 
         bool IQueryExecutionOptions.BlockUpdateWithoutWhere => false;
 

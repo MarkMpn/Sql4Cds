@@ -135,7 +135,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 // Check again that the update is allowed. Don't count any UI interaction in the execution time
-                if (options.Cancelled || !options.ConfirmDelete(entities.Count, meta))
+                if (options.CancellationToken.IsCancellationRequested || !options.ConfirmDelete(entities.Count, meta))
                     throw new OperationCanceledException("DELETE cancelled by user");
 
                 using (_timer.Run())

@@ -113,6 +113,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         }
 
                         var result = new DataTable();
+                        options.CancellationToken.Register(() => cmd.Cancel());
 
                         using (var adapter = new SqlDataAdapter(cmd))
                         {

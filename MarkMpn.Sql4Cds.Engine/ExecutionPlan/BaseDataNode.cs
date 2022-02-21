@@ -64,7 +64,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
-            while (!options.Cancelled)
+            while (!options.CancellationToken.IsCancellationRequested)
             {
                 Entity current;
 

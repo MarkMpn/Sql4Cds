@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using Microsoft.Crm.Sdk.Messages;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
+using System.Threading;
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
 #else
@@ -62,7 +63,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 throw new ArgumentOutOfRangeException("At least one data source must be supplied");
 
             if (options == null)
-                options = new DefaultQueryExecutionOptions(dataSources[0]);
+                options = new DefaultQueryExecutionOptions(dataSources[0], CancellationToken.None);
 
             _dataSources = dataSources.ToDictionary(ds => ds.Name, StringComparer.OrdinalIgnoreCase);
             _options = new ChangeDatabaseOptionsWrapper(options);

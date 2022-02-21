@@ -392,7 +392,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         },
                         (entity, loopState, index, threadLocalState) =>
                         {
-                            if (options.Cancelled)
+                            if (options.CancellationToken.IsCancellationRequested)
                             {
                                 loopState.Stop();
                                 return threadLocalState;

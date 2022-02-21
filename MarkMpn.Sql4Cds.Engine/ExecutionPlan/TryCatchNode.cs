@@ -52,7 +52,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var doneFirst = false;
 
-            while (!useCatchSource && !options.Cancelled)
+            while (!useCatchSource && !options.CancellationToken.IsCancellationRequested)
             {
                 Entity current;
 

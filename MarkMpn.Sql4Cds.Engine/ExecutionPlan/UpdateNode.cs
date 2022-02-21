@@ -90,7 +90,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 // Check again that the update is allowed. Don't count any UI interaction in the execution time
-                if (options.Cancelled || !options.ConfirmUpdate(entities.Count, meta))
+                if (options.CancellationToken.IsCancellationRequested || !options.ConfirmUpdate(entities.Count, meta))
                     throw new OperationCanceledException("UPDATE cancelled by user");
 
                 using (_timer.Run())

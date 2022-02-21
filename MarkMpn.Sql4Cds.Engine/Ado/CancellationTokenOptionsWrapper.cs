@@ -19,7 +19,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public CancellationTokenSource CancellationTokenSource { get; }
 
-        public bool Cancelled => CancellationTokenSource.IsCancellationRequested;
+        public CancellationToken CancellationToken => CancellationTokenSource.Token;
 
         public bool BlockUpdateWithoutWhere => _options.BlockUpdateWithoutWhere;
 

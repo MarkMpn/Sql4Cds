@@ -164,7 +164,7 @@ namespace MarkMpn.Sql4Cds.SSMS
                             resultFlag |= 2; // Failure
                         }
 
-                        if (options.Cancelled)
+                        if (options.CancellationToken.IsCancellationRequested)
                             resultFlag = 4; // Cancel
 
                         await Package.JoinableTaskFactory.SwitchToMainThreadAsync();

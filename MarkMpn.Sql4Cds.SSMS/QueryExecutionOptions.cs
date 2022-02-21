@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Data.SqlClient;
+using System.Threading;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine;
 using Microsoft.Xrm.Sdk.Metadata;
@@ -12,17 +13,19 @@ namespace MarkMpn.Sql4Cds.SSMS
     {
         private readonly SqlScriptEditorControlWrapper _sqlScriptEditorControl;
         private readonly OptionsPage _options;
+        private readonly CancellationTokenSource _cts;
 
         public QueryExecutionOptions(SqlScriptEditorControlWrapper sqlScriptEditorControl, OptionsPage options, bool useTds)
         {
             _sqlScriptEditorControl = sqlScriptEditorControl;
             _options = options;
+            _cts = new CancellationTokenSource();
             UseTDSEndpoint = useTds;
         }
 
         public bool QuotedIdentifiers => _sqlScriptEditorControl.QuotedIdentifiers;
 
-        public bool Cancelled { get; private set; }
+        public CancellationToken CancellationToken => _cts.Token;
 
         public bool BlockUpdateWithoutWhere => _options.BlockUpdateWithoutWhere;
 
@@ -97,7 +100,7 @@ namespace MarkMpn.Sql4Cds.SSMS
         {
             _sqlScriptEditorControl.Cancelling();
             Task.ContinueWith(t => _sqlScriptEditorControl.DoCancelExec());
-            Cancelled = true;
+            _cts.Cancel();
         }
 
         public void RetrievingNextPage()

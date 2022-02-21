@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Serialization;
 using FakeXrmEasy;
@@ -28,7 +29,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             JoinOperator.LeftOuter
         };
 
-        bool IQueryExecutionOptions.Cancelled => false;
+        CancellationToken IQueryExecutionOptions.CancellationToken => CancellationToken.None;
 
         bool IQueryExecutionOptions.BlockUpdateWithoutWhere => false;
 

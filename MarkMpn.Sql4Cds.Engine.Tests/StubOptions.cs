@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
@@ -10,7 +11,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 {
     class StubOptions : IQueryExecutionOptions
     {
-        bool IQueryExecutionOptions.Cancelled => false;
+        CancellationToken IQueryExecutionOptions.CancellationToken => CancellationToken.None;
 
         bool IQueryExecutionOptions.BlockUpdateWithoutWhere => false;
 

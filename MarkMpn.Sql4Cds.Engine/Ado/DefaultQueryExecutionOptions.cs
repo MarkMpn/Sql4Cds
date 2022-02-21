@@ -9,14 +9,16 @@ using Microsoft.Xrm.Tooling.Connector;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
 using Microsoft.Crm.Sdk.Messages;
+using System.Threading;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
     class DefaultQueryExecutionOptions : IQueryExecutionOptions
     {
-        public DefaultQueryExecutionOptions(DataSource dataSource)
+        public DefaultQueryExecutionOptions(DataSource dataSource, CancellationToken cancellationToken)
         {
             PrimaryDataSource = dataSource.Name;
+            CancellationToken = cancellationToken;
 
             Version version;
 
@@ -58,7 +60,7 @@ namespace MarkMpn.Sql4Cds.Engine
             ColumnComparisonAvailable = version >= new Version("9.1.0.19251");
         }
 
-        public bool Cancelled => false;
+        public CancellationToken CancellationToken { get; }
 
         public bool BlockUpdateWithoutWhere => false;
 

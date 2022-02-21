@@ -93,7 +93,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 .Where(n => n.node is GotoLabelNode)
                 .ToDictionary(n => ((GotoLabelNode)n.node).Label, n => n.index);
 
-            while (instructionPointer < plan.Length && !_options.Cancelled)
+            while (instructionPointer < plan.Length && !_options.CancellationToken.IsCancellationRequested)
             {
                 var node = plan[instructionPointer];
 

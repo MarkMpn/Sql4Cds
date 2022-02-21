@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Threading;
 using System.Windows.Forms;
 using MarkMpn.Sql4Cds.Engine;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
@@ -21,11 +22,10 @@ namespace MarkMpn.Sql4Cds
         private readonly BackgroundWorker _worker;
         private readonly Control _host;
         private readonly List<JoinOperator> _joinOperators;
-        private int _localeId;
         private int _retrievedPages;
         private Guid? _userId;
 
-        public QueryExecutionOptions(ConnectionDetail con, IOrganizationService org, BackgroundWorker worker, Control host)
+        public QueryExecutionOptions(ConnectionDetail con, IOrganizationService org, BackgroundWorker worker, Control host, CancellationToken cancellationToken)
         {
             _con = con;
             _org = org;
@@ -44,10 +44,11 @@ namespace MarkMpn.Sql4Cds
                 _joinOperators.Add(JoinOperator.Exists);
             }
 
+            CancellationToken = cancellationToken;
             UseTDSEndpoint = Settings.Instance.UseTSQLEndpoint;
         }
 
-        public bool Cancelled => _worker.CancellationPending;
+        public CancellationToken CancellationToken { get; }
 
         public bool BlockUpdateWithoutWhere => Settings.Instance.BlockUpdateWithoutWhere;
 

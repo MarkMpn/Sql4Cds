@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
 
@@ -16,7 +17,7 @@ namespace MarkMpn.Sql4Cds.Engine
             PrimaryDataSource = options.PrimaryDataSource;
         }
 
-        public bool Cancelled => _options.Cancelled;
+        public CancellationToken CancellationToken => _options.CancellationToken;
 
         public bool BlockUpdateWithoutWhere => _options.BlockUpdateWithoutWhere;
 

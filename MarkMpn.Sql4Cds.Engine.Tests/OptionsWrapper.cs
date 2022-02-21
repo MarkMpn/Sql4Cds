@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
@@ -16,7 +17,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             _options = options;
 
-            Cancelled = options.Cancelled;
+            CancellationToken = options.CancellationToken;
             BlockUpdateWithoutWhere = options.BlockUpdateWithoutWhere;
             BlockDeleteWithoutWhere = options.BlockDeleteWithoutWhere;
             UseBulkDelete = options.UseBulkDelete;
@@ -33,7 +34,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             QuotedIdentifiers = options.QuotedIdentifiers;
         }
 
-        public bool Cancelled { get; set; }
+        public CancellationToken CancellationToken { get; set; }
 
         public bool BlockUpdateWithoutWhere { get; set; }
 
