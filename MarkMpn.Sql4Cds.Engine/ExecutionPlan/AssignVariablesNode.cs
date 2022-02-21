@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Data.SqlTypes;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 
@@ -25,7 +26,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override TimeSpan Duration => _timer.Duration;
 
-        public override string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected)
+        public override string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected, CancellationToken cancellationToken)
         {
             _executionCount++;
 
@@ -33,7 +34,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 var count = 0;
 
-                foreach (var entity in GetDmlSourceEntities(dataSources, options, parameterTypes, parameterValues, out _))
+                foreach (var entity in GetDmlSourceEntities(dataSources, options, parameterTypes, parameterValues, out _, cancellationToken))
                 {
                     foreach (var variable in Variables)
                         parameterValues[variable.VariableName] = entity[variable.SourceColumn];

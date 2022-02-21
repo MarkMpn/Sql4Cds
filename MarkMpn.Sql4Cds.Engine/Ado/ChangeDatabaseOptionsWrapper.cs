@@ -16,8 +16,6 @@ namespace MarkMpn.Sql4Cds.Engine
             PrimaryDataSource = options.PrimaryDataSource;
         }
 
-        public bool Cancelled => _options.Cancelled;
-
         public bool BlockUpdateWithoutWhere => _options.BlockUpdateWithoutWhere;
 
         public bool BlockDeleteWithoutWhere => _options.BlockDeleteWithoutWhere;

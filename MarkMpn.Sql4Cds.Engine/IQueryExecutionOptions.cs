@@ -11,11 +11,6 @@ namespace MarkMpn.Sql4Cds.Engine
     public interface IQueryExecutionOptions
     {
         /// <summary>
-        /// Indicates that the query should be cancelled
-        /// </summary>
-        bool Cancelled { get; }
-
-        /// <summary>
         /// Allows the query execution to report progress
         /// </summary>
         /// <param name="progress">The progress (0-1) to report back to the caller</param>

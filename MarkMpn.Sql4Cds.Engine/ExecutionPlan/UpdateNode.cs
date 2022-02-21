@@ -60,7 +60,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        public override string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected)
+        public override string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected, CancellationToken cancellationToken)
         {
             _executionCount++;
 
@@ -77,7 +77,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 using (_timer.Run())
                 {
-                    entities = GetDmlSourceEntities(dataSources, options, parameterTypes, parameterValues, out var schema);
+                    entities = GetDmlSourceEntities(dataSources, options, parameterTypes, parameterValues, out var schema, cancellationToken);
 
                     // Precompile mappings with type conversions
                     meta = dataSource.Metadata[LogicalName];
@@ -90,7 +90,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 // Check again that the update is allowed. Don't count any UI interaction in the execution time
-                if (options.Cancelled || !options.ConfirmUpdate(entities.Count, meta))
+                if (cancellationToken.IsCancellationRequested || !options.ConfirmUpdate(entities.Count, meta))
                     throw new OperationCanceledException("UPDATE cancelled by user");
 
                 using (_timer.Run())
@@ -128,7 +128,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             CompletedLowercase = "updated"
                         },
                         out recordsAffected,
-                        parameterValues);
+                        parameterValues,
+                        cancellationToken);
                 }
             }
             catch (QueryExecutionException ex)

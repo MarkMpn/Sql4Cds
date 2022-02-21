@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Serialization;
 using FakeXrmEasy;
@@ -27,8 +28,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             JoinOperator.Inner,
             JoinOperator.LeftOuter
         };
-
-        bool IQueryExecutionOptions.Cancelled => false;
 
         bool IQueryExecutionOptions.BlockUpdateWithoutWhere => false;
 
@@ -3360,6 +3359,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var parameterTypes = new Dictionary<string, DataTypeReference>();
             var parameterValues = new Dictionary<string, object>();
+            var cts = new CancellationTokenSource();
 
             foreach (var plan in plans)
             {
@@ -3373,7 +3373,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(_dataSources, this, parameterTypes, parameterValues, out _);
+                    dmlQuery.Execute(_dataSources, this, parameterTypes, parameterValues, out _, cts.Token);
                 }
             }
         }
@@ -3414,6 +3414,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var parameterTypes = new Dictionary<string, DataTypeReference>();
             var parameterValues = new Dictionary<string, object>();
+            var cts = new CancellationTokenSource();
 
             foreach (var plan in plans)
             {
@@ -3427,7 +3428,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(_dataSources, this, parameterTypes, parameterValues, out _);
+                    dmlQuery.Execute(_dataSources, this, parameterTypes, parameterValues, out _, cts.Token);
                 }
             }
         }
@@ -3473,6 +3474,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var parameterTypes = new Dictionary<string, DataTypeReference>();
             var parameterValues = new Dictionary<string, object>();
+            var cts = new CancellationTokenSource();
 
             foreach (var plan in plans)
             {
@@ -3486,7 +3488,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(_dataSources, this, parameterTypes, parameterValues, out _);
+                    dmlQuery.Execute(_dataSources, this, parameterTypes, parameterValues, out _, cts.Token);
                 }
             }
         }
@@ -3506,6 +3508,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var parameterTypes = new Dictionary<string, DataTypeReference>();
             var parameterValues = new Dictionary<string, object>();
+            var cts = new CancellationTokenSource();
 
             foreach (var plan in plans)
             {
@@ -3519,7 +3522,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(_dataSources, this, parameterTypes, parameterValues, out _);
+                    dmlQuery.Execute(_dataSources, this, parameterTypes, parameterValues, out _, cts.Token);
                 }
             }
         }
@@ -3598,6 +3601,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var parameterTypes = new Dictionary<string, DataTypeReference>();
             var parameterValues = new Dictionary<string, object>();
+            var cts = new CancellationTokenSource();
 
             foreach (var plan in plans)
             {
@@ -3611,7 +3615,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(_localDataSource, this, parameterTypes, parameterValues, out _);
+                    dmlQuery.Execute(_localDataSource, this, parameterTypes, parameterValues, out _, cts.Token);
                 }
             }
         }
@@ -3631,6 +3635,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var parameterTypes = new Dictionary<string, DataTypeReference>();
             var parameterValues = new Dictionary<string, object>();
+            var cts = new CancellationTokenSource();
 
             foreach (var plan in plans)
             {
@@ -3644,7 +3649,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(_dataSources, this, parameterTypes, parameterValues, out _);
+                    dmlQuery.Execute(_dataSources, this, parameterTypes, parameterValues, out _, cts.Token);
                 }
             }
         }

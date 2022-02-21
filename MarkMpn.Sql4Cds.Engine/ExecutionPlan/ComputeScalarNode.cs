@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine.Visitors;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
@@ -28,14 +29,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public IDataExecutionPlanNodeInternal Source { get; set; }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, CancellationToken cancellationToken)
         {
             var schema = Source.GetSchema(dataSources, parameterTypes);
             var columns = Columns
                 .Select(kvp => new { Name = kvp.Key, Expression = kvp.Value.Compile(schema, parameterTypes) })
                 .ToList();
 
-            foreach (var entity in Source.Execute(dataSources, options, parameterTypes, parameterValues))
+            foreach (var entity in Source.Execute(dataSources, options, parameterTypes, parameterValues, cancellationToken))
             {
                 foreach (var col in columns)
                     entity[col.Name] = col.Expression(entity, parameterValues, options);

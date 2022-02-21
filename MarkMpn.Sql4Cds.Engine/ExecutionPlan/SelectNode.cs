@@ -5,6 +5,7 @@ using System.Data;
 using System.Data.SqlTypes;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
@@ -48,7 +49,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override int ExecutionCount => _executionCount;
 
-        public DataTable Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        public DataTable Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, CancellationToken cancellationToken)
         {
             _executionCount++;
             var startTime = DateTime.Now;
@@ -68,7 +69,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     dataCol.Caption = col.OutputColumn;
                 }
 
-                foreach (var entity in Source.Execute(dataSources, options, parameterTypes, parameterValues))
+                foreach (var entity in Source.Execute(dataSources, options, parameterTypes, parameterValues, cancellationToken))
                 {
                     var row = dataTable.NewRow();
 

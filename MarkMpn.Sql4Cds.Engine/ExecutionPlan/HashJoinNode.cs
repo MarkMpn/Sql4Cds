@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
@@ -22,7 +23,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private IDictionary<object, List<OuterRecord>> _hashTable;
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, CancellationToken cancellationToken)
         {
             _hashTable = new Dictionary<object, List<OuterRecord>>();
             var mergedSchema = GetSchema(dataSources, parameterTypes, true);
@@ -32,7 +33,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
             leftSchema.ContainsColumn(LeftAttribute.GetColumnName(), out var leftCol);
 
-            foreach (var entity in LeftSource.Execute(dataSources, options, parameterTypes, parameterValues))
+            foreach (var entity in LeftSource.Execute(dataSources, options, parameterTypes, parameterValues, cancellationToken))
             {
                 var key = entity[leftCol];
 
@@ -49,7 +50,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var rightSchema = RightSource.GetSchema(dataSources, parameterTypes);
             rightSchema.ContainsColumn(RightAttribute.GetColumnName(), out var rightCol);
 
-            foreach (var entity in RightSource.Execute(dataSources, options, parameterTypes, parameterValues))
+            foreach (var entity in RightSource.Execute(dataSources, options, parameterTypes, parameterValues, cancellationToken))
             {
                 var key = entity[rightCol];
                 var matched = false;

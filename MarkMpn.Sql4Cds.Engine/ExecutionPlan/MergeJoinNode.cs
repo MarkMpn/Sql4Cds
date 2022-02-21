@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
 using MarkMpn.Sql4Cds.Engine.Visitors;
@@ -16,7 +17,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// </summary>
     class MergeJoinNode : FoldableJoinNode
     {
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, CancellationToken cancellationToken)
         {
             // https://sqlserverfast.com/epr/merge-join/
             // Implemented inner, left outer, right outer and full outer variants
@@ -27,8 +28,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Left & Right: GetNext, mark as unmatched
             var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
             var rightSchema = RightSource.GetSchema(dataSources, parameterTypes);
-            var left = LeftSource.Execute(dataSources, options, parameterTypes, parameterValues).GetEnumerator();
-            var right = RightSource.Execute(dataSources, options, parameterTypes, parameterValues).GetEnumerator();
+            var left = LeftSource.Execute(dataSources, options, parameterTypes, parameterValues, cancellationToken).GetEnumerator();
+            var right = RightSource.Execute(dataSources, options, parameterTypes, parameterValues, cancellationToken).GetEnumerator();
             var mergedSchema = GetSchema(dataSources, parameterTypes, true);
             var additionalJoinCriteria = AdditionalJoinCriteria?.Compile(mergedSchema, parameterTypes);
 
@@ -58,7 +59,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 SecondExpression = RightAttribute
             }.Compile(mergedSchema, parameterTypes);
 
-            while (!Done(hasLeft, hasRight))
+            while (!cancellationToken.IsCancellationRequested && !Done(hasLeft, hasRight))
             {
                 // Compare key values
                 var merged = Merge(hasLeft ? left.Current : null, leftSchema, hasRight ? right.Current : null, rightSchema);

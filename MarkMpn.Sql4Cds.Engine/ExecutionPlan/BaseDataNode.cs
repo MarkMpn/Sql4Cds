@@ -7,6 +7,7 @@ using System.Linq;
 using System.Reflection;
 using System.ServiceModel;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
 using MarkMpn.Sql4Cds.Engine.Visitors;
@@ -37,7 +38,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
         /// <param name="parameterValues">A mapping of parameter names to their current values</param>
         /// <returns>A stream of <see cref="Entity"/> records</returns>
-        public IEnumerable<Entity> Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        public IEnumerable<Entity> Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, CancellationToken cancellationToken)
         {
             // Track execution times roughly using Environment.TickCount. Stopwatch provides more accurate results
             // but gives a large performance penalty.
@@ -49,7 +50,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     _executionCount++;
 
-                    enumerator = ExecuteInternal(dataSources, options, parameterTypes, parameterValues).GetEnumerator();
+                    enumerator = ExecuteInternal(dataSources, options, parameterTypes, parameterValues, cancellationToken).GetEnumerator();
                 }
                 catch (QueryExecutionException ex)
                 {
@@ -64,7 +65,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
-            while (!options.Cancelled)
+            while (!cancellationToken.IsCancellationRequested)
             {
                 Entity current;
 
@@ -141,7 +142,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
         /// <param name="parameterValues">A mapping of parameter names to their current values</param>
         /// <returns>A stream of <see cref="Entity"/> records</returns>
-        protected abstract IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues);
+        protected abstract IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, CancellationToken cancellationToken);
 
         /// <summary>
         /// Gets the details of columns produced by the node

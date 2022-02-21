@@ -8,6 +8,7 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Xml.Serialization;
 using FakeXrmEasy;
 using FakeXrmEasy.FakeMessageExecutors;
@@ -25,8 +26,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
     [TestClass]
     public class Sql2FetchXmlTests : FakeXrmEasyTestsBase, IQueryExecutionOptions
     {
-        bool IQueryExecutionOptions.Cancelled => false;
-
         bool IQueryExecutionOptions.BlockUpdateWithoutWhere => false;
 
         bool IQueryExecutionOptions.BlockDeleteWithoutWhere => false;
@@ -897,7 +896,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            ((UpdateNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), out _);
+            ((UpdateNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), out _, CancellationToken.None);
 
             Assert.AreEqual("Carrington", _context.Data["contact"][guid]["firstname"]);
         }
@@ -930,7 +929,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            ((UpdateNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), out _);
+            ((UpdateNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), out _, CancellationToken.None);
 
             Assert.AreEqual("Hello Carrington", _context.Data["contact"][guid]["firstname"]);
         }
@@ -967,7 +966,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            ((UpdateNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), out _);
+            ((UpdateNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), out _, CancellationToken.None);
 
             Assert.AreEqual("--CDS--", _context.Data["contact"][guid]["firstname"]);
         }
@@ -1708,7 +1707,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            update.Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), out _);
+            update.Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), out _, CancellationToken.None);
 
             Assert.AreEqual(new EntityReference("contact", contact1), _context.Data["account"][account1].GetAttributeValue<EntityReference>("primarycontactid"));
             Assert.AreEqual(new EntityReference("contact", contact2), _context.Data["account"][account2].GetAttributeValue<EntityReference>("primarycontactid"));

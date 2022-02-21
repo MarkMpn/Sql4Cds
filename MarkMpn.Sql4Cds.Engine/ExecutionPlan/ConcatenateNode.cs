@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
@@ -28,13 +29,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("Column Set")]
         public List<ConcatenateColumn> ColumnSet { get; } = new List<ConcatenateColumn>();
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, CancellationToken cancellationToken)
         {
             for (var i = 0; i < Sources.Count; i++)
             {
                 var source = Sources[i];
 
-                foreach (var entity in source.Execute(dataSources, options, parameterTypes, parameterValues))
+                foreach (var entity in source.Execute(dataSources, options, parameterTypes, parameterValues, cancellationToken))
                 {
                     var result = new Entity(entity.LogicalName, entity.Id);
 

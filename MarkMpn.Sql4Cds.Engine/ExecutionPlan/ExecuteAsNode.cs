@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
@@ -39,7 +40,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        public override string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected)
+        public override string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected, CancellationToken cancellationToken)
         {
             _executionCount++;
 
@@ -50,7 +51,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (!dataSources.TryGetValue(DataSource, out var dataSource))
                         throw new QueryExecutionException("Missing datasource " + DataSource);
 
-                    var entities = GetDmlSourceEntities(dataSources, options, parameterTypes, parameterValues, out var schema);
+                    var entities = GetDmlSourceEntities(dataSources, options, parameterTypes, parameterValues, out var schema, cancellationToken);
 
                     if (entities.Count == 0)
                         throw new QueryExecutionException("Cannot find user to impersonate");

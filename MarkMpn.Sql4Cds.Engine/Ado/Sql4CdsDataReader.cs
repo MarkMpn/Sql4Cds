@@ -8,6 +8,7 @@ using System.Data.SqlTypes;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Text;
+using System.Threading;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
@@ -58,7 +59,7 @@ namespace MarkMpn.Sql4Cds.Engine
             _typeConversionFuncs[typeof(TSql)] = v => func((TSql)v);
         }
 
-        public Sql4CdsDataReader(Sql4CdsCommand command, IQueryExecutionOptions options, CommandBehavior behavior)
+        public Sql4CdsDataReader(Sql4CdsCommand command, IRootExecutionPlanNode[] plan, IQueryExecutionOptions options, CommandBehavior behavior, CancellationToken cancellationToken)
         {
             _connection = (Sql4CdsConnection)command.Connection;
             _command = command;
@@ -77,7 +78,7 @@ namespace MarkMpn.Sql4Cds.Engine
             parameterValues["@@IDENTITY"] = SqlEntityReference.Null;
             parameterValues["@@ROWCOUNT"] = (SqlInt32)0;
 
-            Execute(command.Plan, parameterTypes, parameterValues);
+            Execute(plan, parameterTypes, parameterValues, cancellationToken);
 
             _resultIndex = -1;
 
@@ -85,7 +86,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 Close();
         }
 
-        private void Execute(IRootExecutionPlanNode[] plan, Dictionary<string, DataTypeReference> parameterTypes, Dictionary<string, object> parameterValues)
+        private void Execute(IRootExecutionPlanNode[] plan, Dictionary<string, DataTypeReference> parameterTypes, Dictionary<string, object> parameterValues, CancellationToken cancellationToken)
         {
             var instructionPointer = 0;
             var labelIndexes = plan
@@ -93,14 +94,14 @@ namespace MarkMpn.Sql4Cds.Engine
                 .Where(n => n.node is GotoLabelNode)
                 .ToDictionary(n => ((GotoLabelNode)n.node).Label, n => n.index);
 
-            while (instructionPointer < plan.Length && !_options.Cancelled)
+            while (instructionPointer < plan.Length && !cancellationToken.IsCancellationRequested)
             {
                 var node = plan[instructionPointer];
 
                 if (node is IDataSetExecutionPlanNode dataSetNode)
                 {
                     dataSetNode = (IDataSetExecutionPlanNode)dataSetNode.Clone();
-                    var table = dataSetNode.Execute(_connection.DataSources, _options, parameterTypes, parameterValues);
+                    var table = dataSetNode.Execute(_connection.DataSources, _options, parameterTypes, parameterValues, cancellationToken);
                     _results.Add(table);
                     _resultQueries.Add(dataSetNode);
 
@@ -110,7 +111,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 else if (node is IDmlQueryExecutionPlanNode dmlNode)
                 {
                     dmlNode = (IDmlQueryExecutionPlanNode)dmlNode.Clone();
-                    var msg = dmlNode.Execute(_connection.DataSources, _options, parameterTypes, parameterValues, out var recordsAffected);
+                    var msg = dmlNode.Execute(_connection.DataSources, _options, parameterTypes, parameterValues, out var recordsAffected, cancellationToken);
 
                     if (!String.IsNullOrEmpty(msg))
                         _connection.OnInfoMessage(dmlNode, msg);
@@ -128,7 +129,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 else if (node is IGoToNode cond)
                 {
                     cond = (IGoToNode)cond.Clone();
-                    var label = cond.Execute(_connection.DataSources, _options, parameterTypes, parameterValues);
+                    var label = cond.Execute(_connection.DataSources, _options, parameterTypes, parameterValues, cancellationToken);
 
                     if (label != null)
                         instructionPointer = labelIndexes[label];

@@ -5,6 +5,7 @@ using System.Data.SqlTypes;
 using System.Globalization;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
@@ -39,9 +40,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public IDataExecutionPlanNodeInternal Source { get; set; }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, CancellationToken cancellationToken)
         {
-            var source = Source.Execute(dataSources, options, parameterTypes, parameterValues);
+            var source = Source.Execute(dataSources, options, parameterTypes, parameterValues, cancellationToken);
             var schema = GetSchema(dataSources, parameterTypes);
             var expressions = Sorts.Select(sort => sort.Expression.Compile(schema, parameterTypes)).ToList();
 

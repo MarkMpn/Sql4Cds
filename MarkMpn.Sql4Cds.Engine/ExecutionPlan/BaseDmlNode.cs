@@ -105,7 +105,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
         /// <param name="parameterValues">A mapping of parameter names to their current values</param>
         /// <returns>A log message to display</returns>
-        public abstract string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected);
+        public abstract string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected, CancellationToken cancellationToken);
 
         /// <summary>
         /// Attempts to fold this node into its source to simplify the query
@@ -139,18 +139,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="parameterValues">A mapping of parameter names to their current values</param>
         /// <param name="schema">The schema of the data source</param>
         /// <returns>The entities to perform the DML operation on</returns>
-        protected List<Entity> GetDmlSourceEntities(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out INodeSchema schema)
+        protected List<Entity> GetDmlSourceEntities(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out INodeSchema schema, CancellationToken cancellationToken)
         {
             List<Entity> entities;
 
             if (Source is IDataExecutionPlanNodeInternal dataSource)
             {
                 schema = dataSource.GetSchema(dataSources, parameterTypes);
-                entities = dataSource.Execute(dataSources, options, parameterTypes, parameterValues).ToList();
+                entities = dataSource.Execute(dataSources, options, parameterTypes, parameterValues, cancellationToken).ToList();
             }
             else if (Source is IDataSetExecutionPlanNode dataSetSource)
             {
-                var dataTable = dataSetSource.Execute(dataSources, options, parameterTypes, parameterValues);
+                var dataTable = dataSetSource.Execute(dataSources, options, parameterTypes, parameterValues, cancellationToken);
 
                 // Store the values under the column index as well as name for compatibility with INSERT ... SELECT ...
                 schema = new NodeSchema();
@@ -343,7 +343,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="requestGenerator">A function to generate a DML request from a data source entity</param>
         /// <param name="operationNames">The constant strings to use in log messages</param>
         /// <returns>The final log message</returns>
-        protected string ExecuteDmlOperation(IOrganizationService org, IQueryExecutionOptions options, List<Entity> entities, EntityMetadata meta, Func<Entity,OrganizationRequest> requestGenerator, OperationNames operationNames, out int recordsAffected, IDictionary<string, object> parameterValues, Action<OrganizationResponse> responseHandler = null)
+        protected string ExecuteDmlOperation(IOrganizationService org, IQueryExecutionOptions options, List<Entity> entities, EntityMetadata meta, Func<Entity,OrganizationRequest> requestGenerator, OperationNames operationNames, out int recordsAffected, IDictionary<string, object> parameterValues, CancellationToken cancellationToken, Action<OrganizationResponse> responseHandler = null)
         {
             var inProgressCount = 0;
             var count = 0;
@@ -392,7 +392,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         },
                         (entity, loopState, index, threadLocalState) =>
                         {
-                            if (options.Cancelled)
+                            if (cancellationToken.IsCancellationRequested)
                             {
                                 loopState.Stop();
                                 return threadLocalState;

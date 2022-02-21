@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.ServiceModel;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Serialization;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
@@ -23,7 +24,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     {
         private bool _folded;
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, CancellationToken cancellationToken)
         {
             var schema = Source.GetSchema(dataSources, parameterTypes);
             var groupByCols = GetGroupingColumns(schema);
@@ -32,7 +33,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             InitializeAggregates(schema, parameterTypes);
             var aggregates = CreateAggregateFunctions(parameterValues, options, false);
 
-            foreach (var entity in Source.Execute(dataSources, options, parameterTypes, parameterValues))
+            foreach (var entity in Source.Execute(dataSources, options, parameterTypes, parameterValues, cancellationToken))
             {
                 if (!groups.TryGetValue(entity, out var values))
                 {

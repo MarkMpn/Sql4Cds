@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
@@ -63,12 +64,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, CancellationToken cancellationToken)
         {
             // Build an internal hash table of the source indexed by the key column
             if (_hashTable == null)
             {
-                _hashTable = Source.Execute(dataSources, options, parameterTypes, parameterValues)
+                _hashTable = Source.Execute(dataSources, options, parameterTypes, parameterValues, cancellationToken)
                     .GroupBy(e => e[KeyColumn])
                     .ToDictionary(g => g.Key, g => g.ToList());
             }

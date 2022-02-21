@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Data.SqlTypes;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 
@@ -62,7 +63,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             };
         }
 
-        public string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        public string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, CancellationToken cancellationToken)
         {
             using (_timer.Run())
             {
@@ -79,7 +80,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     else if (Source != null)
                     {
                         var source = (IDataExecutionPlanNodeInternal)Source.Clone();
-                        var record = source.Execute(dataSources, options, parameterTypes, parameterValues).First();
+                        var record = source.Execute(dataSources, options, parameterTypes, parameterValues, cancellationToken).First();
                         result = ((SqlInt32)record[SourceColumn]).Value == 1;
                     }
                     else

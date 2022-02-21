@@ -58,7 +58,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // All required columns must already have been added during the original folding of the HashMatchAggregateNode
         }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, CancellationToken cancellationToken)
         {
             var schema = Source.GetSchema(dataSources, parameterTypes);
             var groupByCols = GetGroupingColumns(schema);
@@ -74,8 +74,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             options.Progress(0, $"Partitioning {GetDisplayName(0, meta)}...");
 
             // Get the minimum and maximum primary keys from the source
-            var minKey = GetMinMaxKey(fetchXmlNode, dataSources, options, parameterTypes, parameterValues, false);
-            var maxKey = GetMinMaxKey(fetchXmlNode, dataSources, options, parameterTypes, parameterValues, true);
+            var minKey = GetMinMaxKey(fetchXmlNode, dataSources, options, parameterTypes, parameterValues, false, cancellationToken);
+            var maxKey = GetMinMaxKey(fetchXmlNode, dataSources, options, parameterTypes, parameterValues, true, cancellationToken);
 
             if (minKey.IsNull || maxKey.IsNull || minKey == maxKey)
                 throw new QueryExecutionException("Cannot partition query");
@@ -182,7 +182,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         try
                         {
                             // Execute the query for this partition
-                            ExecuteAggregate(ds, options, partitionParameterTypes, partitionParameterValues, aggregates, groups, fetch, partition.MinValue, partition.MaxValue);
+                            ExecuteAggregate(ds, options, partitionParameterTypes, partitionParameterValues, aggregates, groups, fetch, partition.MinValue, partition.MaxValue, cancellationToken);
 
                             lock (_lock)
                             {
@@ -283,12 +283,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private void ExecuteAggregate(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, Dictionary<string, AggregateFunction> aggregates, ConcurrentDictionary<Entity, Dictionary<string, AggregateFunctionState>> groups, FetchXmlScan fetchXmlNode, SqlDateTime minValue, SqlDateTime maxValue)
+        private void ExecuteAggregate(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, Dictionary<string, AggregateFunction> aggregates, ConcurrentDictionary<Entity, Dictionary<string, AggregateFunctionState>> groups, FetchXmlScan fetchXmlNode, SqlDateTime minValue, SqlDateTime maxValue, CancellationToken cancellationToken)
         {
             parameterValues["@PartitionStart"] = minValue;
             parameterValues["@PartitionEnd"] = maxValue;
 
-            var results = fetchXmlNode.Execute(dataSources, options, parameterTypes, parameterValues);
+            var results = fetchXmlNode.Execute(dataSources, options, parameterTypes, parameterValues, cancellationToken);
 
             foreach (var entity in results)
             {
@@ -303,7 +303,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private SqlDateTime GetMinMaxKey(FetchXmlScan fetchXmlNode, IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, bool max)
+        private SqlDateTime GetMinMaxKey(FetchXmlScan fetchXmlNode, IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, bool max, CancellationToken cancellationToken)
         {
             // Create a new FetchXmlScan node with a copy of the original query
             var minMaxNode = new FetchXmlScan
@@ -329,7 +329,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             try
             {
-                var result = minMaxNode.Execute(dataSources, options, parameterTypes, parameterValues).FirstOrDefault();
+                var result = minMaxNode.Execute(dataSources, options, parameterTypes, parameterValues, cancellationToken).FirstOrDefault();
 
                 if (result == null)
                     return SqlDateTime.Null;

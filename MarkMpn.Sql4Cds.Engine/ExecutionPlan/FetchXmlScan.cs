@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.ServiceModel;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Xml.Serialization;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
@@ -148,7 +149,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public bool ReturnFullSchema { get; set; }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, CancellationToken cancellationToken)
         {
             PagesRetrieved = 0;
 
@@ -217,7 +218,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             // Move on to subsequent pages
-            while (AllPages && res.MoreRecords && options.ContinueRetrieve(count))
+            while (AllPages && res.MoreRecords && !cancellationToken.IsCancellationRequested && options.ContinueRetrieve(count))
             {
                 if (!(Parent is PartitionedAggregateNode))
                     options.Progress(0, $"Retrieved {count:N0} {GetDisplayName(count, meta)}...");
