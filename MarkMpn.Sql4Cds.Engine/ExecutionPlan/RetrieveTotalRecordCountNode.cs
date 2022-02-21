@@ -4,7 +4,6 @@ using System.ComponentModel;
 using System.Data.SqlTypes;
 using System.Linq;
 using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
@@ -28,7 +27,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Description("The logical name of the entity to get the record count for")]
         public string EntityName { get; set; }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, CancellationToken cancellationToken)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
 
             if (!dataSources.TryGetValue(DataSource, out var dataSource))

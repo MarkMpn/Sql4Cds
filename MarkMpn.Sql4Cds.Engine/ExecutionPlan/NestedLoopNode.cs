@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
@@ -31,7 +30,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("Outer References")]
         public Dictionary<string,string> OuterReferences { get; set; }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, CancellationToken cancellationToken)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
             var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
             var innerParameterTypes = GetInnerParameterTypes(leftSchema, parameterTypes);
@@ -50,7 +49,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var mergedSchema = GetSchema(dataSources, parameterTypes, true);
             var joinCondition = JoinCondition?.Compile(mergedSchema, parameterTypes);
 
-            foreach (var left in LeftSource.Execute(dataSources, options, parameterTypes, parameterValues, cancellationToken))
+            foreach (var left in LeftSource.Execute(dataSources, options, parameterTypes, parameterValues))
             {
                 var innerParameters = parameterValues;
 
@@ -70,7 +69,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var hasRight = false;
 
-                foreach (var right in RightSource.Execute(dataSources, options, innerParameterTypes, innerParameters, cancellationToken))
+                foreach (var right in RightSource.Execute(dataSources, options, innerParameterTypes, innerParameters))
                 {
                     var merged = Merge(left, leftSchema, right, rightSchema);
 

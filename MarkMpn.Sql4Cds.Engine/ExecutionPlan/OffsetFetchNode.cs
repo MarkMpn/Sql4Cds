@@ -4,7 +4,6 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
 using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
@@ -33,7 +32,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public IDataExecutionPlanNodeInternal Source { get; set; }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, CancellationToken cancellationToken)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
             var offset = SqlTypeConverter.ChangeType<int>(Offset.Compile(null, parameterTypes)(null, parameterValues, options));
             var fetch = SqlTypeConverter.ChangeType<int>(Fetch.Compile(null, parameterTypes)(null, parameterValues, options));
@@ -44,7 +43,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (fetch <= 0)
                 throw new QueryExecutionException("The number of rows provided for a FETCH clause must be greater then zero.");
 
-            return Source.Execute(dataSources, options, parameterTypes, parameterValues, cancellationToken)
+            return Source.Execute(dataSources, options, parameterTypes, parameterValues)
                 .Skip(offset)
                 .Take(fetch);
         }

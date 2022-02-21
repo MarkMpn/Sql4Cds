@@ -5,7 +5,6 @@ using System.Data.SqlTypes;
 using System.Globalization;
 using System.Linq;
 using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
@@ -48,7 +47,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public IDataExecutionPlanNodeInternal Source { get; set; }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, CancellationToken cancellationToken)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
             var topCount = Top.Compile(null, parameterTypes)(null, parameterValues, options);
 
@@ -57,9 +56,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 int count;
 
                 if (Source is TableSpoolNode spool && spool.SpoolType == SpoolType.Eager)
-                    count = spool.GetCount(dataSources, options, parameterTypes, parameterValues, cancellationToken);
+                    count = spool.GetCount(dataSources, options, parameterTypes, parameterValues);
                 else
-                    count = Source.Execute(dataSources, options, parameterTypes, parameterValues, cancellationToken).Count();
+                    count = Source.Execute(dataSources, options, parameterTypes, parameterValues).Count();
 
                 topCount = (int)(count * SqlTypeConverter.ChangeType<float>(topCount) / 100);
             }
@@ -68,14 +67,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (!WithTies)
             {
-                return Source.Execute(dataSources, options, parameterTypes, parameterValues, cancellationToken)
+                return Source.Execute(dataSources, options, parameterTypes, parameterValues)
                     .Take(top);
             }
 
             Entity lastRow = null;
             var tieComparer = new DistinctEqualityComparer(TieColumns);
 
-            return Source.Execute(dataSources, options, parameterTypes, parameterValues, cancellationToken)
+            return Source.Execute(dataSources, options, parameterTypes, parameterValues)
                 .TakeWhile((entity, index) =>
                 {
                     if (index == top - 1)

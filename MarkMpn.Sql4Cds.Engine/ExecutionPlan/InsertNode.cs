@@ -50,7 +50,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        public override string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected, CancellationToken cancellationToken)
+        public override string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected)
         {
             _executionCount++;
 
@@ -67,7 +67,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 using (_timer.Run())
                 {
-                    entities = GetDmlSourceEntities(dataSources, options, parameterTypes, parameterValues, out var schema, cancellationToken);
+                    entities = GetDmlSourceEntities(dataSources, options, parameterTypes, parameterValues, out var schema);
 
                     // Precompile mappings with type conversions
                     meta = dataSource.Metadata[LogicalName];
@@ -78,7 +78,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 // Check again that the update is allowed. Don't count any UI interaction in the execution time
-                if (cancellationToken.IsCancellationRequested || !options.ConfirmInsert(entities.Count, meta))
+                if (options.Cancelled || !options.ConfirmInsert(entities.Count, meta))
                     throw new OperationCanceledException("INSERT cancelled by user");
 
                 using (_timer.Run())
@@ -97,7 +97,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         },
                         out recordsAffected,
                         parameterValues,
-                        cancellationToken,
                         LogicalName == "listmember" || meta.IsIntersect == true ? null : (Action<OrganizationResponse>) ((r) => SetIdentity(r, parameterValues))
                         );
                 }

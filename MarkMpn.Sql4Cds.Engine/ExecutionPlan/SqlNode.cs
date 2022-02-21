@@ -6,7 +6,6 @@ using System.Data.SqlClient;
 using System.Data.SqlTypes;
 using System.Linq;
 using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
@@ -53,7 +52,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
         }
 
-        public DataTable Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, CancellationToken cancellationToken)
+        public DataTable Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
             _executionCount++;
             var startTime = DateTime.Now;
@@ -114,7 +113,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         }
 
                         var result = new DataTable();
-                        cancellationToken.Register(() => cmd.Cancel());
 
                         using (var adapter = new SqlDataAdapter(cmd))
                         {

@@ -1,22 +1,25 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
-    class ChangeDatabaseOptionsWrapper : IQueryExecutionOptions
+    class CancellationTokenOptionsWrapper : IQueryExecutionOptions
     {
         private readonly IQueryExecutionOptions _options;
 
-        public ChangeDatabaseOptionsWrapper(IQueryExecutionOptions options)
+        public CancellationTokenOptionsWrapper(IQueryExecutionOptions options, CancellationTokenSource cts)
         {
             _options = options;
-            PrimaryDataSource = options.PrimaryDataSource;
+            CancellationTokenSource = cts;
         }
 
-        public bool Cancelled => _options.Cancelled;
+        public CancellationTokenSource CancellationTokenSource { get; }
+
+        public bool Cancelled => CancellationTokenSource.IsCancellationRequested;
 
         public bool BlockUpdateWithoutWhere => _options.BlockUpdateWithoutWhere;
 
@@ -40,7 +43,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public bool BypassCustomPlugins => _options.BypassCustomPlugins;
 
-        public string PrimaryDataSource { get; set; }
+        public string PrimaryDataSource => _options.PrimaryDataSource;
 
         public Guid UserId => _options.UserId;
 

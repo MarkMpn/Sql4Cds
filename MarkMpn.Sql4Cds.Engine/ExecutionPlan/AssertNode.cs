@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
@@ -35,9 +34,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("Error Message")]
         public string ErrorMessage { get; set; }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string,object> parameterValues, CancellationToken cancellationToken)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string,object> parameterValues)
         {
-            foreach (var entity in Source.Execute(dataSources, options, parameterTypes, parameterValues, cancellationToken))
+            foreach (var entity in Source.Execute(dataSources, options, parameterTypes, parameterValues))
             {
                 if (!Assertion(entity))
                     throw new ApplicationException(ErrorMessage);

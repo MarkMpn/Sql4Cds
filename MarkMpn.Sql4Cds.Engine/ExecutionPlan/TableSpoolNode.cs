@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
@@ -97,27 +96,27 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("Spool Type")]
         public SpoolType SpoolType { get; set; }
 
-        internal int GetCount(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, CancellationToken cancellationToken)
+        internal int GetCount(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
             if (_eagerSpool == null)
-                _eagerSpool = Source.Execute(dataSources, options, parameterTypes, parameterValues, cancellationToken).ToArray();
+                _eagerSpool = Source.Execute(dataSources, options, parameterTypes, parameterValues).ToArray();
 
             return _eagerSpool.Length;
         }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, CancellationToken cancellationToken)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
             if (SpoolType == SpoolType.Eager)
             {
                 if (_eagerSpool == null)
-                    _eagerSpool = Source.Execute(dataSources, options, parameterTypes, parameterValues, cancellationToken).ToArray();
+                    _eagerSpool = Source.Execute(dataSources, options, parameterTypes, parameterValues).ToArray();
 
                 return _eagerSpool;
             }
             else
             {
                 if (_lazyCache == null)
-                    _lazyCache = new CachedList<Entity>(Source.Execute(dataSources, options, parameterTypes, parameterValues, cancellationToken));
+                    _lazyCache = new CachedList<Entity>(Source.Execute(dataSources, options, parameterTypes, parameterValues));
 
                 return _lazyCache;
             }

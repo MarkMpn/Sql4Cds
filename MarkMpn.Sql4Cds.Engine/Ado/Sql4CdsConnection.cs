@@ -124,9 +124,6 @@ namespace MarkMpn.Sql4Cds.Engine
 
         internal IQueryExecutionOptions Options => _options;
 
-        /// <summary>
-        /// Indicates if any <see cref="SqlEntityReference"/> values should be returned as a <see cref="Guid"/>
-        /// </summary>
         public bool ReturnEntityReferenceAsGuid { get; set; }
 
         public override string ConnectionString { get; set; }

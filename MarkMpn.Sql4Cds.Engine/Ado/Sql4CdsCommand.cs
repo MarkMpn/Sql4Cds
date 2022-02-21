@@ -19,9 +19,6 @@ using Microsoft.Xrm.Tooling.Connector;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
-    /// <summary>
-    /// Executes SQL commands against a <see cref="Sql4CdsConnection"/>
-    /// </summary>
     public class Sql4CdsCommand : DbCommand
     {
         private Sql4CdsConnection _connection;
@@ -31,19 +28,10 @@ namespace MarkMpn.Sql4Cds.Engine
         private IRootExecutionPlanNode[] _plan;
         private CancellationTokenSource _cts;
 
-        /// <summary>
-        /// Creates a new <see cref="Sql4CdsCommand"/>
-        /// </summary>
-        /// <param name="connection">The <see cref="Sql4CdsConnection"/> to create the command for</param>
         public Sql4CdsCommand(Sql4CdsConnection connection) : this(connection, string.Empty)
         {
         }
 
-        /// <summary>
-        /// Creates a new <see cref="Sql4CdsCommand"/>
-        /// </summary>
-        /// <param name="connection">The <see cref="Sql4CdsConnection"/> to create the command for</param>
-        /// <param name="commandText">The SQL command to initialize the new <see cref="Sql4CdsCommand"/> with</param>
         public Sql4CdsCommand(Sql4CdsConnection connection, string commandText)
         {
             _connection = connection;
@@ -53,6 +41,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
             _planBuilder = new ExecutionPlanBuilder(_connection.DataSources.Values, _connection.Options);
         }
+
+        public IRootExecutionPlanNode[] Plan => _plan;
 
         public override string CommandText
         {
@@ -81,9 +71,6 @@ namespace MarkMpn.Sql4Cds.Engine
         
         public override UpdateRowSource UpdatedRowSource { get; set; }
 
-        /// <summary>
-        /// Occurs when a statement within a SQL command has finished executing
-        /// </summary>
         public event EventHandler<StatementCompletedEventArgs> StatementCompleted;
 
         internal void OnStatementCompleted(IRootExecutionPlanNode node, int recordsAffected)
@@ -154,16 +141,6 @@ namespace MarkMpn.Sql4Cds.Engine
                 return;
 
             GeneratePlan(true);
-        }
-
-        /// <summary>
-        /// Prepares the command for execution
-        /// </summary>
-        /// <param name="useTDSEndpointDirectly">Indicates if the command should be executed directly against the TDS endpoint</param>
-        public void Prepare(out bool useTDSEndpointDirectly)
-        {
-            Prepare();
-            useTDSEndpointDirectly = _useTDSEndpointDirectly;
         }
 
         /// <summary>
@@ -241,8 +218,9 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             _cts = CommandTimeout == 0 ? new CancellationTokenSource() : new CancellationTokenSource(TimeSpan.FromSeconds(CommandTimeout));
-            
-            return new Sql4CdsDataReader(this, _plan, _connection.Options, behavior, _cts.Token);
+            var options = new CancellationTokenOptionsWrapper(_connection.Options, _cts);
+
+            return new Sql4CdsDataReader(this, options, behavior);
         }
     }
 }

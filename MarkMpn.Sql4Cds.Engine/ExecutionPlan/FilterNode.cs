@@ -4,7 +4,6 @@ using System.ComponentModel;
 using System.Linq;
 using System.Reflection;
 using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
@@ -33,12 +32,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public IDataExecutionPlanNodeInternal Source { get; set; }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, CancellationToken cancellationToken)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
             var schema = Source.GetSchema(dataSources, parameterTypes);
             var filter = Filter.Compile(schema, parameterTypes);
 
-            foreach (var entity in Source.Execute(dataSources, options, parameterTypes, parameterValues, cancellationToken))
+            foreach (var entity in Source.Execute(dataSources, options, parameterTypes, parameterValues))
             {
                 if (filter(entity, parameterValues, options))
                     yield return entity;

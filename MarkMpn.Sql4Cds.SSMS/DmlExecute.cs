@@ -82,10 +82,7 @@ namespace MarkMpn.Sql4Cds.SSMS
 
                     try
                     {
-                        cmd.Prepare(out var useTDSEndpointDirectly);
-
-                        if (useTDSEndpointDirectly)
-                            return;
+                        cmd.Prepare();
                     }
                     catch (Exception ex)
                     {
@@ -93,6 +90,9 @@ namespace MarkMpn.Sql4Cds.SSMS
                         ShowError(sqlScriptEditorControl, textSpan, ex);
                         return;
                     }
+
+                    if (cmd.Plan == null)
+                        return;
 
                     // We need to execute the DML statements directly
                     CancelDefault = true;

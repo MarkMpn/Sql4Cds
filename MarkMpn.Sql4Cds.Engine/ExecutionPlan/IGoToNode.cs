@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
-using System.Threading;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
@@ -19,6 +18,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="parameterTypes">The types of any parameters available to the query</param>
         /// <param name="parameterValues">The values of any parameters available to the query</param>
         /// <returns>The label which should be executed next</returns>
-        string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, CancellationToken cancellationToken);
+        string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues);
     }
 }
