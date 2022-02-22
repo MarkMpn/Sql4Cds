@@ -38,7 +38,7 @@ namespace MarkMpn.Sql4Cds
 
         public bool UseTSQLEndpoint { get; set; }
 
-        public bool UseRetrieveTotalRecordCount { get; set; } = true;
+        public bool UseRetrieveTotalRecordCount { get; set; }
 
         public bool ShowIntellisenseTooltips { get; set; } = true;
 
