@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
+using System.Windows.Forms;
 using Microsoft.SqlServer.Management.QueryExecution;
 
 namespace MarkMpn.Sql4Cds.SSMS
@@ -38,7 +39,10 @@ namespace MarkMpn.Sql4Cds.SSMS
 
         public DisplaySQLResultsControlWrapper(object obj) : base(obj)
         {
+            ResultsTabCtrl = (TabControl) GetField(obj, "m_resultsTabCtrl");
         }
+
+        public TabControl ResultsTabCtrl { get; }
 
         public void StartExecution()
         {

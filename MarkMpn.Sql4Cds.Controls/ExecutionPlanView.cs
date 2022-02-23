@@ -11,9 +11,9 @@ using System.Windows.Forms;
 using MarkMpn.Sql4Cds.Engine;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 
-namespace MarkMpn.Sql4Cds
+namespace MarkMpn.Sql4Cds.Controls
 {
-    class ExecutionPlanView : ScrollableControl
+    public class ExecutionPlanView : ScrollableControl
     {
         class Line
         {

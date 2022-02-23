@@ -231,6 +231,10 @@
       <HintPath>..\packages\Newtonsoft.Json.13.0.1\lib\net45\Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="PresentationFramework" />
+    <Reference Include="SQLEditors">
+      <HintPath>References\SQLEditors.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="SqlPackageBase">
       <HintPath>References\SqlPackageBase.dll</HintPath>
       <Private>False</Private>
@@ -327,6 +331,10 @@
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\MarkMpn.Sql4Cds.Controls\MarkMpn.Sql4Cds.Controls.csproj">
+      <Project>{04c2d073-de54-4628-b876-5965d0b75b6e}</Project>
+      <Name>MarkMpn.Sql4Cds.Controls</Name>
+    </ProjectReference>
     <ProjectReference Include="..\MarkMpn.Sql4Cds.Engine.NetFx\MarkMpn.Sql4Cds.Engine.NetFx.csproj">
       <Project>{23288bb2-0d6f-4329-9a5c-4c659567a652}</Project>
       <Name>MarkMpn.Sql4Cds.Engine.NetFx</Name>

@@ -101,7 +101,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var script = (TSqlScript)fragment;
             script.Accept(new ReplacePrimaryFunctionsVisitor());
-            var optimizer = new ExecutionPlanOptimizer(DataSources, Options, _parameterTypes, EstimatedPlanOnly);
+            var optimizer = new ExecutionPlanOptimizer(DataSources, Options, _parameterTypes, !EstimatedPlanOnly);
 
             // Convert each statement in turn to the appropriate query type
             foreach (var batch in script.Batches)
@@ -2835,6 +2835,13 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 dataNode.EstimateRowsOut(DataSources, Options, parameterTypes);
                 return dataNode.EstimatedRowsOut;
+            }
+            else
+            {
+                foreach (var child in source.GetSources())
+                {
+                    EstimateRowsOut(child, parameterTypes);
+                }
             }
 
             return 0;

@@ -28,6 +28,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MarkMpn.Sql4Cds.Engine.NetC
 EndProject
 Project("{D954291E-2A0B-460D-934E-DC6B0785DB48}") = "MarkMpn.Sql4Cds.Engine.FetchXml", "MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.FetchXml.shproj", "{460A4174-B9EA-413A-AF83-C27C0686E98F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MarkMpn.Sql4Cds.Controls", "MarkMpn.Sql4Cds.Controls\MarkMpn.Sql4Cds.Controls.csproj", "{04C2D073-DE54-4628-B876-5965D0B75B6E}"
+EndProject
 Global
 	GlobalSection(SharedMSBuildProjectFiles) = preSolution
 		MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.projitems*{23288bb2-0d6f-4329-9a5c-4c659567a652}*SharedItemsImports = 4
@@ -112,6 +114,14 @@ Global
 		{A570CBCA-D09C-40D5-A318-A95C8FBBD593}.Release|Any CPU.Build.0 = Release|Any CPU
 		{A570CBCA-D09C-40D5-A318-A95C8FBBD593}.Release|x86.ActiveCfg = Release|Any CPU
 		{A570CBCA-D09C-40D5-A318-A95C8FBBD593}.Release|x86.Build.0 = Release|Any CPU
+		{04C2D073-DE54-4628-B876-5965D0B75B6E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{04C2D073-DE54-4628-B876-5965D0B75B6E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{04C2D073-DE54-4628-B876-5965D0B75B6E}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{04C2D073-DE54-4628-B876-5965D0B75B6E}.Debug|x86.Build.0 = Debug|Any CPU
+		{04C2D073-DE54-4628-B876-5965D0B75B6E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{04C2D073-DE54-4628-B876-5965D0B75B6E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{04C2D073-DE54-4628-B876-5965D0B75B6E}.Release|x86.ActiveCfg = Release|Any CPU
+		{04C2D073-DE54-4628-B876-5965D0B75B6E}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

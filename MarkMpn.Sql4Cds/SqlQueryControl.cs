@@ -17,6 +17,7 @@ using System.Windows.Forms;
 using System.Xml;
 using System.Xml.Serialization;
 using AutocompleteMenuNS;
+using MarkMpn.Sql4Cds.Controls;
 using MarkMpn.Sql4Cds.Engine;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using McTools.Xrm.Connection;
@@ -1066,7 +1067,7 @@ namespace MarkMpn.Sql4Cds
                     AutoEllipsis = true,
                     UseMnemonic = false
                 };
-                var planView = new ExecutionPlanView { Dock = DockStyle.Fill, Executed = args.Execute, Exception = ex, DataSources = DataSources };
+                var planView = new ExecutionPlanView { Dock = DockStyle.Fill, Executed = args.Execute, Exception = ex, DataSources = DataSources.ToDictionary(kvp => kvp.Key, kvp => (Engine.DataSource)kvp.Value) };
                 planView.Plan = query;
                 planView.NodeSelected += (s, e) => _properties.SelectedObject = planView.Selected;
                 planView.DoubleClick += (s, e) =>

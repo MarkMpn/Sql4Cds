@@ -22,9 +22,12 @@ namespace MarkMpn.Sql4Cds.SSMS
         public SqlScriptEditorControlWrapper(object obj) : base(obj)
         {
             Results = new DisplaySQLResultsControlWrapper(GetField(obj, "m_sqlResultsControl"));
+            ServiceProvider = new ServiceProvider((Microsoft.VisualStudio.OLE.Interop.IServiceProvider)GetField(obj, "m_serviceProvider"));
         }
 
         public DisplaySQLResultsControlWrapper Results { get; }
+
+        public IServiceProvider ServiceProvider { get; }
 
         public ITextSpan GetSelectedTextSpan()
         {
@@ -40,6 +43,8 @@ namespace MarkMpn.Sql4Cds.SSMS
                 return (bool) GetProperty(execSettings, "SetQuotedIdentifier");
             }
         }
+
+        public bool IsWithShowPlan => (bool)GetProperty(Target, nameof(IsWithShowPlan));
 
         public void StandardPrepareBeforeExecute()
         {

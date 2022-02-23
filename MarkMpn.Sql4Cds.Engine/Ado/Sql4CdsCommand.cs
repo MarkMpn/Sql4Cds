@@ -150,7 +150,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <returns>The root nodes of the plan</returns>
         public IRootExecutionPlanNode[] GeneratePlan(bool compileForExecution)
         {
-            _planBuilder.EstimatedPlanOnly = compileForExecution;
+            _planBuilder.EstimatedPlanOnly = !compileForExecution;
             var plan = _planBuilder.Build(CommandText, ((Sql4CdsParameterCollection)Parameters).GetParameterTypes(), out _useTDSEndpointDirectly);
 
             if (compileForExecution)
