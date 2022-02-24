@@ -27,9 +27,10 @@ namespace MarkMpn.Sql4Cds.Engine
         private int _instructionPointer;
         private IDataReaderExecutionPlanNode _readerQuery;
         private IDataReader _reader;
+        private bool _error;
         private int _rows;
         private bool _closed;
-
+        
         public Sql4CdsDataReader(Sql4CdsCommand command, IQueryExecutionOptions options, CommandBehavior behavior)
         {
             _connection = (Sql4CdsConnection)command.Connection;
@@ -57,59 +58,67 @@ namespace MarkMpn.Sql4Cds.Engine
 
         private bool Execute(Dictionary<string, DataTypeReference> parameterTypes, Dictionary<string, object> parameterValues)
         {
-            while (_instructionPointer < _command.Plan.Length && !_options.CancellationToken.IsCancellationRequested)
+            try
             {
-                var node = _command.Plan[_instructionPointer];
-
-                if (node is IDataReaderExecutionPlanNode dataSetNode)
+                while (_instructionPointer < _command.Plan.Length && !_options.CancellationToken.IsCancellationRequested)
                 {
-                    _readerQuery = (IDataReaderExecutionPlanNode)dataSetNode.Clone();
-                    _reader = _readerQuery.Execute(_connection.DataSources, _options, parameterTypes, parameterValues);
-                    _rows = 0;
-                    _instructionPointer++;
-                    return true;
-                }
-                else if (node is IDmlQueryExecutionPlanNode dmlNode)
-                {
-                    dmlNode = (IDmlQueryExecutionPlanNode)dmlNode.Clone();
-                    var msg = dmlNode.Execute(_connection.DataSources, _options, parameterTypes, parameterValues, out var recordsAffected);
+                    var node = _command.Plan[_instructionPointer];
 
-                    if (!String.IsNullOrEmpty(msg))
-                        _connection.OnInfoMessage(dmlNode, msg);
-
-                    _command.OnStatementCompleted(dmlNode, recordsAffected);
-
-                    if (recordsAffected != -1)
+                    if (node is IDataReaderExecutionPlanNode dataSetNode)
                     {
-                        if (_recordsAffected == -1)
-                            _recordsAffected = 0;
-
-                        _recordsAffected += recordsAffected;
+                        _readerQuery = (IDataReaderExecutionPlanNode)dataSetNode.Clone();
+                        _reader = _readerQuery.Execute(_connection.DataSources, _options, parameterTypes, parameterValues);
+                        _rows = 0;
+                        _instructionPointer++;
+                        return true;
                     }
-                }
-                else if (node is IGoToNode cond)
-                {
-                    cond = (IGoToNode)cond.Clone();
-                    var label = cond.Execute(_connection.DataSources, _options, parameterTypes, parameterValues);
+                    else if (node is IDmlQueryExecutionPlanNode dmlNode)
+                    {
+                        dmlNode = (IDmlQueryExecutionPlanNode)dmlNode.Clone();
+                        var msg = dmlNode.Execute(_connection.DataSources, _options, parameterTypes, parameterValues, out var recordsAffected);
 
-                    if (label != null)
-                        _instructionPointer = _labelIndexes[label];
-                }
-                else if (node is GotoLabelNode)
-                {
-                    // NOOP
-                }
-                else
-                {
-                    throw new NotImplementedException("Unexpected node type " + node.GetType().Name);
-                }
+                        if (!String.IsNullOrEmpty(msg))
+                            _connection.OnInfoMessage(dmlNode, msg);
 
-                if (node is IImpersonateRevertExecutionPlanNode)
-                {
-                    // TODO: Update options.UserId
-                }
+                        _command.OnStatementCompleted(dmlNode, recordsAffected);
 
-                _instructionPointer++;
+                        if (recordsAffected != -1)
+                        {
+                            if (_recordsAffected == -1)
+                                _recordsAffected = 0;
+
+                            _recordsAffected += recordsAffected;
+                        }
+                    }
+                    else if (node is IGoToNode cond)
+                    {
+                        cond = (IGoToNode)cond.Clone();
+                        var label = cond.Execute(_connection.DataSources, _options, parameterTypes, parameterValues);
+
+                        if (label != null)
+                            _instructionPointer = _labelIndexes[label];
+                    }
+                    else if (node is GotoLabelNode)
+                    {
+                        // NOOP
+                    }
+                    else
+                    {
+                        throw new NotImplementedException("Unexpected node type " + node.GetType().Name);
+                    }
+
+                    if (node is IImpersonateRevertExecutionPlanNode)
+                    {
+                        // TODO: Update options.UserId
+                    }
+
+                    _instructionPointer++;
+                }
+            }
+            catch
+            {
+                _error = true;
+                throw;
             }
 
             return false;
@@ -304,7 +313,19 @@ namespace MarkMpn.Sql4Cds.Engine
             if (_reader == null)
                 throw new InvalidOperationException();
 
-            var read = _reader.Read();
+            bool read;
+
+            try
+            {
+                read = _reader.Read();
+            }
+            catch
+            {
+                _error = true;
+                _reader = null;
+                _readerQuery = null;
+                throw;
+            }
 
             if (read)
             {
@@ -351,13 +372,16 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public override void Close()
         {
-            while (_reader != null && Read())
-                ;
-
-            while (NextResult())
+            if (!_error)
             {
-                while (Read())
+                while (_reader != null && Read())
                     ;
+
+                while (NextResult())
+                {
+                    while (Read())
+                        ;
+                }
             }
 
             _closed = true;
