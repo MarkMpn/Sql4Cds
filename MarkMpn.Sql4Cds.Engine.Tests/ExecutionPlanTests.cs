@@ -2636,10 +2636,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(2, select.ColumnSet.Count);
             Assert.AreEqual("contact.fullname", select.ColumnSet[0].SourceColumn);
             Assert.AreEqual("fullname", select.ColumnSet[0].OutputColumn);
-            Assert.AreEqual("fullname", select.ColumnSet[0].PhysicalOutputColumn);
             Assert.AreEqual("Expr1", select.ColumnSet[1].SourceColumn);
             Assert.AreEqual("fullname", select.ColumnSet[1].OutputColumn);
-            Assert.AreEqual("fullname1", select.ColumnSet[1].PhysicalOutputColumn);
             var computeScalar = AssertNode<ComputeScalarNode>(select.Source);
             var fetch = AssertNode<FetchXmlScan>(computeScalar.Source);
             AssertFetchXml(fetch, @"

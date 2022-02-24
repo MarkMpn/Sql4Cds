@@ -72,24 +72,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             ExpandWildcardColumns(dataSources, parameterTypes);
 
-            // Ensure column names are unique
-            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            foreach (var col in ColumnSet)
-            {
-                col.PhysicalOutputColumn = col.OutputColumn;
-
-                if (!names.Add(col.PhysicalOutputColumn))
-                {
-                    var suffix = 1;
-
-                    while (!names.Add(col.OutputColumn + suffix))
-                        suffix++;
-
-                    col.PhysicalOutputColumn += suffix;
-                }
-            }
-
             return new[] { this };
         }
 
@@ -299,12 +281,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// The requested name of the column in the output data
         /// </summary>
         public string OutputColumn { get; set; }
-
-        /// <summary>
-        /// A unique name for the column in the output data
-        /// </summary>
-        [Browsable(false)]
-        public string PhysicalOutputColumn { get; set; }
 
         /// <summary>
         /// Indicates this is a placeholder for all columns from the source data (SELECT *)

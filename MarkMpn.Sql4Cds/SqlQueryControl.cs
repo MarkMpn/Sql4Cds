@@ -698,7 +698,7 @@ namespace MarkMpn.Sql4Cds
                 if (error is QueryExecutionException queryExecution)
                 {
                     if (plan == null)
-                        plan = queryExecution.Node as IRootExecutionPlanNode;
+                        plan = GetRootNode(queryExecution.Node);
 
                     messageSuffix = "\r\nSee the Execution Plan tab for details of where this error occurred";
                     ShowResult(plan, new ExecuteParams { Execute = true, IncludeFetchXml = true, Sql = plan?.Sql }, null, null, queryExecution);
@@ -745,6 +745,19 @@ namespace MarkMpn.Sql4Cds
             BusyChanged?.Invoke(this, EventArgs.Empty);
 
             _editor.Focus();
+        }
+
+        private IRootExecutionPlanNode GetRootNode(IExecutionPlanNode node)
+        {
+            while (node != null)
+            {
+                if (node is IRootExecutionPlanNode root)
+                    return root;
+
+                node = node.Parent;
+            }
+
+            return null;
         }
 
         private string GetErrorMessage(Exception error)
@@ -886,8 +899,15 @@ namespace MarkMpn.Sql4Cds
                     {
                         while (!reader.IsClosed)
                         {
+                            var columnNames = new List<string>();
+                            for (var i = 0; i < reader.FieldCount; i++)
+                                columnNames.Add(reader.GetName(i));
+
                             var dataTable = new DataTable();
                             dataTable.Load(reader);
+
+                            for (var i = 0; i < columnNames.Count; i++)
+                                dataTable.Columns[i].Caption = columnNames[i];
 
                             Execute(() => ShowResult(null, args, dataTable, null, null));
                         }
