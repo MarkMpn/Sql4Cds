@@ -1021,11 +1021,8 @@ namespace MarkMpn.Sql4Cds
                         OpenRecord(er);
                 };
 
-                grid.HandleCreated += (s, e) =>
-                {
-                    if (Settings.Instance.AutoSizeColumns)
-                        grid.AutoResizeColumns();
-                };
+                if (Settings.Instance.AutoSizeColumns)
+                    grid.DataBindingComplete += (s, e) => ((DataGridView)s).AutoResizeColumns();
 
                 grid.RowPostPaint += (s, e) =>
                 {
