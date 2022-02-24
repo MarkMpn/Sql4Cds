@@ -59,10 +59,5 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 context.SetEntityMetadata(entity);
             }
         }
-
-        protected SqlString ToSqlString(string str)
-        {
-            return new SqlString(str, CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace);
-        }
     }
 }

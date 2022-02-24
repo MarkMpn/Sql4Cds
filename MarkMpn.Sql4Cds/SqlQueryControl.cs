@@ -882,14 +882,14 @@ namespace MarkMpn.Sql4Cds
                             Execute(() => SyncUsername());
                     };
 
-                    using (var reader = (ISql4CdsDataReader) cmd.ExecuteReader())
+                    using (var reader = cmd.ExecuteReader())
                     {
                         while (!reader.IsClosed)
                         {
-                            var node = reader.CurrentResultQuery;
-                            var dataTable = reader.GetCurrentDataTable();
+                            var dataTable = new DataTable();
+                            dataTable.Load(reader);
 
-                            Execute(() => ShowResult(node, args, dataTable, null, null));
+                            Execute(() => ShowResult(null, args, dataTable, null, null));
                         }
                     }
                 }

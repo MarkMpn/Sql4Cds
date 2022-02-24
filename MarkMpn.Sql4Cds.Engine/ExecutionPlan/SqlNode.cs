@@ -20,16 +20,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Executes SQL using the TDS endpoint
     /// </summary>
-    class SqlNode : BaseNode, IDataSetExecutionPlanNode
+    class SqlNode : BaseNode, IDataReaderExecutionPlanNode
     {
+        private readonly Timer _timer = new Timer();
         private int _executionCount;
-        private TimeSpan _duration;
 
         public SqlNode() { }
 
         public override int ExecutionCount => _executionCount;
 
-        public override TimeSpan Duration => _duration;
+        public override TimeSpan Duration => _timer.Duration;
 
         [Category("Data Source")]
         [Description("The data source this query is executed against")]
@@ -52,137 +52,87 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
         }
 
-        public DataTable Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        public IDataReader Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
             _executionCount++;
-            var startTime = DateTime.Now;
 
-            try
+            using (_timer.Run())
             {
-                if (!dataSources.TryGetValue(DataSource, out var dataSource))
-                    throw new QueryExecutionException("Missing datasource " + DataSource);
-
-                if (options.UseLocalTimeZone)
-                    throw new QueryExecutionException("Cannot use automatic local time zone conversion with the TDS Endpoint");
-
-#if NETCOREAPP
-                if (!(dataSource.Connection is ServiceClient svc))
-                    throw new QueryExecutionException($"IOrganizationService implementation needs to be ServiceClient for use with the TDS Endpoint, got {dataSource.Connection.GetType()}");
-#else
-                if (!(dataSource.Connection is CrmServiceClient svc))
-                    throw new QueryExecutionException($"IOrganizationService implementation needs to be CrmServiceClient for use with the TDS Endpoint, got {dataSource.Connection.GetType()}");
-#endif
-
-                if (svc.CallerId != Guid.Empty)
-                    throw new QueryExecutionException("Cannot use impersonation with the TDS Endpoint");
-
-                if (String.IsNullOrEmpty(svc.CurrentAccessToken))
-                    throw new QueryExecutionException("OAuth must be used to authenticate with the TDS Endpoint");
-
-#if NETCOREAPP
-                using (var con = new SqlConnection("server=" + svc.ConnectedOrgUriActual.Host))
-#else
-                using (var con = new SqlConnection("server=" + svc.CrmConnectOrgUriActual.Host))
-#endif
+                try
                 {
+                    if (!dataSources.TryGetValue(DataSource, out var dataSource))
+                        throw new QueryExecutionException("Missing datasource " + DataSource);
+
+                    if (options.UseLocalTimeZone)
+                        throw new QueryExecutionException("Cannot use automatic local time zone conversion with the TDS Endpoint");
+
+#if NETCOREAPP
+                    if (!(dataSource.Connection is ServiceClient svc))
+                        throw new QueryExecutionException($"IOrganizationService implementation needs to be ServiceClient for use with the TDS Endpoint, got {dataSource.Connection.GetType()}");
+#else
+                    if (!(dataSource.Connection is CrmServiceClient svc))
+                        throw new QueryExecutionException($"IOrganizationService implementation needs to be CrmServiceClient for use with the TDS Endpoint, got {dataSource.Connection.GetType()}");
+#endif
+
+                    if (svc.CallerId != Guid.Empty)
+                        throw new QueryExecutionException("Cannot use impersonation with the TDS Endpoint");
+
+                    if (String.IsNullOrEmpty(svc.CurrentAccessToken))
+                        throw new QueryExecutionException("OAuth must be used to authenticate with the TDS Endpoint");
+
+#if NETCOREAPP
+                    var con = new SqlConnection("server=" + svc.ConnectedOrgUriActual.Host);
+#else
+                    var con = new SqlConnection("server=" + svc.CrmConnectOrgUriActual.Host);
+#endif
                     con.AccessToken = svc.CurrentAccessToken;
                     con.Open();
 
-                    using (var cmd = con.CreateCommand())
+                    var cmd = con.CreateCommand();
+                    cmd.CommandTimeout = (int)TimeSpan.FromMinutes(2).TotalSeconds;
+                    cmd.CommandText = Sql;
+
+                    foreach (var paramValue in parameterValues)
                     {
-                        cmd.CommandTimeout = (int)TimeSpan.FromMinutes(2).TotalSeconds;
-                        cmd.CommandText = Sql;
+                        if (paramValue.Key.StartsWith("@@"))
+                            continue;
 
-                        foreach (var paramValue in parameterValues)
-                        {
-                            if (paramValue.Key.StartsWith("@@"))
-                                continue;
+                        if (!Parameters.Contains(paramValue.Key))
+                            continue;
 
-                            if (!Parameters.Contains(paramValue.Key))
-                                continue;
+                        var param = cmd.CreateParameter();
+                        param.ParameterName = paramValue.Key;
 
-                            var param = cmd.CreateParameter();
-                            param.ParameterName = paramValue.Key;
+                        if (paramValue.Value is SqlEntityReference er)
+                            param.Value = (SqlGuid)er;
+                        else
+                            param.Value = paramValue.Value;
 
-                            if (paramValue.Value is SqlEntityReference er)
-                                param.Value = (SqlGuid)er;
-                            else
-                                param.Value = paramValue.Value;
-
-                            cmd.Parameters.Add(param);
-                        }
-
-                        var result = new DataTable();
-                        options.CancellationToken.Register(() => cmd.Cancel());
-
-                        using (var adapter = new SqlDataAdapter(cmd))
-                        {
-                            adapter.Fill(result);
-                        }
-
-                        // SQL doesn't know the data type of NULL, so SELECT NULL will be returned with a schema type
-                        // of SqlInt32. This causes problems trying to convert it to other types for updates/inserts,
-                        // so change all-null columns to object
-                        // https://github.com/MarkMpn/Sql4Cds/issues/122
-                        var nullColumns = result.Columns
-                            .Cast<DataColumn>()
-                            .Select((col, colIndex) => result.Rows
-                                .Cast<DataRow>()
-                                .Select(row => DBNull.Value.Equals(row[colIndex]))
-                                .All(isNull => isNull)
-                                )
-                            .ToArray();
-
-                        var columnSqlTypes = result.Columns
-                            .Cast<DataColumn>()
-                            .Select((col, colIndex) => nullColumns[colIndex] ? typeof(object) : SqlTypeConverter.NetToSqlType(col.DataType))
-                            .ToArray();
-                        var columnNullValues = columnSqlTypes
-                            .Select(type => SqlTypeConverter.GetNullValue(type))
-                            .ToArray();
-
-                        // Values will be stored as BCL types, convert them to SqlXxx types for consistency with IDataExecutionPlanNodes
-                        var sqlTable = new DataTable();
-
-                        for (var i = 0; i < result.Columns.Count; i++)
-                            sqlTable.Columns.Add(result.Columns[i].ColumnName, columnSqlTypes[i]);
-
-                        foreach (DataRow row in result.Rows)
-                        {
-                            var sqlRow = sqlTable.Rows.Add();
-
-                            for (var i = 0; i < result.Columns.Count; i++)
-                            {
-                                var sqlValue = DBNull.Value.Equals(row[i]) ? columnNullValues[i] : SqlTypeConverter.NetToSqlType(DataSource, row[i]);
-                                sqlRow[i] = sqlValue;
-                            }
-                        }
-
-                        if (Parent == null || Parent is IGoToNode)
-                            parameterValues["@@ROWCOUNT"] = (SqlInt32)sqlTable.Rows.Count;
-
-                        return sqlTable;
+                        cmd.Parameters.Add(param);
                     }
-                }
-            }
-            catch (QueryExecutionException ex)
-            {
-                if (ex.Node == null)
-                    ex.Node = this;
 
-                throw;
-            }
-            catch (Exception ex)
-            {
-                throw new QueryExecutionException(ex.Message, ex)
+                    options.CancellationToken.Register(() => cmd.Cancel());
+                    var reader = new SqlDataReaderWrapper(cmd.ExecuteReader(), cmd, con, Parent == null ? parameterValues : null);
+
+                    if (Parent != null)
+                        reader.ConvertToSqlTypes = true;
+
+                    return reader;
+                }
+                catch (QueryExecutionException ex)
                 {
-                    Node = this
-                };
-            }
-            finally
-            {
-                var endTime = DateTime.Now;
-                _duration += (endTime - startTime);
+                    if (ex.Node == null)
+                        ex.Node = this;
+
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    throw new QueryExecutionException(ex.Message, ex)
+                    {
+                        Node = this
+                    };
+                }
             }
         }
 

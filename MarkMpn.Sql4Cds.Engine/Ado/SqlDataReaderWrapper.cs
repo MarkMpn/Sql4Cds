@@ -9,7 +9,7 @@ using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
-    class SqlDataReaderWrapper : DbDataReader, ISql4CdsDataReader
+    class SqlDataReaderWrapper : DbDataReader
     {
         private Sql4CdsConnection _connection;
         private SqlConnection _sqlConnection;
@@ -175,14 +175,6 @@ namespace MarkMpn.Sql4Cds.Engine
         public override void Close()
         {
             _sqlDataReader.Close();
-        }
-
-        public DataTable GetCurrentDataTable()
-        {
-            var table = new DataTable();
-            table.Load(this);
-            _connection.OnInfoMessage(_node, $"({table.Rows.Count} row{(table.Rows.Count == 1 ? "" : "s")} affected)");
-            return table;
         }
 
         protected override void Dispose(bool disposing)

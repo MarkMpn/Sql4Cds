@@ -16,10 +16,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Converts a data stream to a full data table
     /// </summary>
-    class SelectNode : BaseNode, ISingleSourceExecutionPlanNode, IDataSetExecutionPlanNode
+    class SelectNode : BaseNode, ISingleSourceExecutionPlanNode, IDataReaderExecutionPlanNode
     {
-        private TimeSpan _duration;
         private int _executionCount;
+        private readonly Timer _timer = new Timer();
 
         /// <summary>
         /// The columns that should be included in the query results
@@ -44,53 +44,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public int Length { get; set; }
 
-        public override TimeSpan Duration => _duration;
+        public override TimeSpan Duration => _timer.Duration;
 
         public override int ExecutionCount => _executionCount;
 
-        public DataTable Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        public IDataReader Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
             _executionCount++;
-            var startTime = DateTime.Now;
 
-            try
-            {
-                var schema = Source.GetSchema(dataSources, parameterTypes);
-                var dataTable = new DataTable();
-
-                foreach (var col in ColumnSet)
-                {
-                    var sourceName = col.SourceColumn;
-                    if (!schema.ContainsColumn(sourceName, out sourceName))
-                        throw new QueryExecutionException($"Missing column {col.SourceColumn}") { Node = this };
-
-                    var dataCol = dataTable.Columns.Add(col.PhysicalOutputColumn, schema.Schema[sourceName].ToNetType(out _));
-                    dataCol.Caption = col.OutputColumn;
-                }
-
-                foreach (var entity in Source.Execute(dataSources, options, parameterTypes, parameterValues))
-                {
-                    var row = dataTable.NewRow();
-
-                    foreach (var col in ColumnSet)
-                    {
-                        if (!entity.Contains(col.SourceColumn))
-                            throw new QueryExecutionException($"Missing column {col.SourceColumn}") { Node = this };
-
-                        row[col.PhysicalOutputColumn] = entity[col.SourceColumn];
-                    }
-
-                    dataTable.Rows.Add(row);
-                }
-
-                parameterValues["@@ROWCOUNT"] = (SqlInt32)dataTable.Rows.Count;
-                return dataTable;
-            }
-            finally
-            {
-                var endTime = DateTime.Now;
-                _duration += (endTime - startTime);
-            }
+            var schema = Source.GetSchema(dataSources, parameterTypes);
+            var source = Source.Execute(dataSources, options, parameterTypes, parameterValues);
+            return new SelectDataReader(ColumnSet, _timer, schema, source, parameterValues);
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()

@@ -118,7 +118,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             if (Source is IDataExecutionPlanNodeInternal dataNode)
                 Source = dataNode.FoldQuery(dataSources, options, parameterTypes, hints);
-            else if (Source is IDataSetExecutionPlanNode dataSetNode)
+            else if (Source is IDataReaderExecutionPlanNode dataSetNode)
                 Source = dataSetNode.FoldQuery(dataSources, options, parameterTypes, hints).Single();
 
             return new[] { this };
@@ -148,11 +148,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 schema = dataSource.GetSchema(dataSources, parameterTypes);
                 entities = dataSource.Execute(dataSources, options, parameterTypes, parameterValues).ToList();
             }
-            else if (Source is IDataSetExecutionPlanNode dataSetSource)
+            else if (Source is IDataReaderExecutionPlanNode dataSetSource)
             {
-                var dataTable = dataSetSource.Execute(dataSources, options, parameterTypes, parameterValues);
+                var dataReader = dataSetSource.Execute(dataSources, options, parameterTypes, parameterValues);
 
                 // Store the values under the column index as well as name for compatibility with INSERT ... SELECT ...
+                var dataTable = new DataTable();
+                dataTable.Load(dataReader);
                 schema = new NodeSchema();
 
                 for (var i = 0; i < dataTable.Columns.Count; i++)
@@ -194,7 +196,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="attributes">The attributes in the target metadata</param>
         /// <param name="dateTimeKind">The time zone that datetime values are supplied in</param>
         /// <returns></returns>
-        protected Dictionary<string, Func<Entity, object>> CompileColumnMappings(EntityMetadata metadata, IDictionary<string,string> mappings, INodeSchema schema, IDictionary<string, AttributeMetadata> attributes, DateTimeKind dateTimeKind)
+        protected Dictionary<string, Func<Entity, object>> CompileColumnMappings(EntityMetadata metadata, IDictionary<string,string> mappings, INodeSchema schema, IDictionary<string, AttributeMetadata> attributes, DateTimeKind dateTimeKind, List<Entity> entities)
         {
             var attributeAccessors = new Dictionary<string, Func<Entity, object>>();
             var entityParam = Expression.Parameter(typeof(Entity));
@@ -213,15 +215,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     continue;
 
                 var sourceType = schema.Schema[sourceColumnName];
+                var sourceNetType = sourceType.ToNetType(out _);
                 var destType = attr.GetAttributeType();
                 var destSqlType = SqlTypeConverter.NetToSqlType(destType);
 
                 var expr = (Expression)Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(sourceColumnName));
                 var originalExpr = expr;
 
-                if (sourceType.ToNetType(out _) == typeof(object))
+                if (sourceNetType == typeof(object))
                 {
                     // null literal
+                    expr = Expression.Constant(null, destType);
+                    expr = Expr.Box(expr);
+                }
+                else if (sourceNetType == typeof(SqlInt32) && !SqlTypeConverter.CanChangeTypeExplicit(sourceNetType, destSqlType) && entities.All(e => ((SqlInt32)e[sourceColumnName]).IsNull))
+                {
+                    // null literal from TDS endpoint is typed as SqlInt32
                     expr = Expression.Constant(null, destType);
                     expr = Expr.Box(expr);
                 }

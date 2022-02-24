@@ -730,14 +730,16 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataTable = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataTable = new DataTable();
+            dataTable.Load(dataReader);
 
-            Assert.AreEqual((SqlInt32)1, dataTable.Rows.Count);
-            Assert.AreEqual((SqlInt32)3, dataTable.Rows[0]["a"]);
-            Assert.AreEqual((SqlInt32)4, dataTable.Rows[0]["b"]);
-            Assert.AreEqual((SqlMoney)3M, dataTable.Rows[0]["c"]);
-            Assert.AreEqual((SqlMoney)5M, dataTable.Rows[0]["d"]);
-            Assert.AreEqual((SqlMoney)4.5M, dataTable.Rows[0]["e"]);
+            Assert.AreEqual(1, dataTable.Rows.Count);
+            Assert.AreEqual(3, dataTable.Rows[0]["a"]);
+            Assert.AreEqual(4, dataTable.Rows[0]["b"]);
+            Assert.AreEqual(3M, dataTable.Rows[0]["c"]);
+            Assert.AreEqual(5M, dataTable.Rows[0]["d"]);
+            Assert.AreEqual(4.5M, dataTable.Rows[0]["e"]);
         }
 
         [TestMethod]
@@ -777,7 +779,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataTable = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataTable = new DataTable();
+            dataTable.Load(dataReader);
 
             Assert.AreEqual(1, dataTable.Rows.Count);
             Assert.AreEqual(guid2, ((SqlEntityReference)dataTable.Rows[0]["contactid"]).Id);
@@ -820,7 +824,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataTable = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataTable = new DataTable();
+            dataTable.Load(dataReader);
 
             Assert.AreEqual(1, dataTable.Rows.Count);
             Assert.AreEqual(guid1, ((SqlEntityReference)dataTable.Rows[0]["contactid"]).Id);
@@ -860,7 +866,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataTable = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataTable = new DataTable();
+            dataTable.Load(dataReader);
 
             Assert.AreEqual(1, dataTable.Rows.Count);
             Assert.AreEqual(guid2, ((SqlEntityReference)dataTable.Rows[0]["contactid"]).Id);
@@ -996,16 +1004,18 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataTable = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataTable = new DataTable();
+            dataTable.Load(dataReader);
 
             Assert.AreEqual(1, dataTable.Rows.Count);
 
             var row = dataTable.Rows[0];
-            Assert.AreEqual(ToSqlString("Mark"), row["trim"]);
-            Assert.AreEqual(ToSqlString("Mark "), row["ltrim"]);
-            Assert.AreEqual(ToSqlString(" Mark"), row["rtrim"]);
-            Assert.AreEqual(ToSqlString("Mar"), row["substring23"]);
-            Assert.AreEqual((SqlInt32)5, row["len"]);
+            Assert.AreEqual("Mark", row["trim"]);
+            Assert.AreEqual("Mark ", row["ltrim"]);
+            Assert.AreEqual(" Mark", row["rtrim"]);
+            Assert.AreEqual("Mar", row["substring23"]);
+            Assert.AreEqual(5, row["len"]);
         }
 
         [TestMethod]
@@ -1035,11 +1045,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataTable = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataTable = new DataTable();
+            dataTable.Load(dataReader);
 
             Assert.AreEqual(1, dataTable.Rows.Count);
-            Assert.AreEqual(ToSqlString("Mark"), dataTable.Rows[0]["firstname"]);
-            Assert.AreEqual(ToSqlString("Hello Mark"), dataTable.Rows[0]["greeting"]);
+            Assert.AreEqual("Mark", dataTable.Rows[0]["firstname"]);
+            Assert.AreEqual("Hello Mark", dataTable.Rows[0]["greeting"]);
         }
 
         private IDictionary<string, DataSource> GetDataSources(XrmFakedContext context)
@@ -1082,12 +1094,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataTable = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataTable = new DataTable();
+            dataTable.Load(dataReader);
 
             Assert.AreEqual(1, dataTable.Rows.Count);
-            Assert.AreEqual(SqlString.Null, dataTable.Rows[0]["firstname"]);
-            Assert.AreEqual(SqlString.Null, dataTable.Rows[0]["greeting"]);
-            Assert.AreEqual(ToSqlString("old"), dataTable.Rows[0]["age"]);
+            Assert.AreEqual(DBNull.Value, dataTable.Rows[0]["firstname"]);
+            Assert.AreEqual(DBNull.Value, dataTable.Rows[0]["greeting"]);
+            Assert.AreEqual("old", dataTable.Rows[0]["age"]);
         }
 
         [TestMethod]
@@ -1126,11 +1140,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataTable = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataTable = new DataTable();
+            dataTable.Load(dataReader);
 
             Assert.AreEqual(2, dataTable.Rows.Count);
-            Assert.AreEqual(ToSqlString("Data"), dataTable.Rows[0]["firstname"]);
-            Assert.AreEqual(ToSqlString("Mark"), dataTable.Rows[1]["firstname"]);
+            Assert.AreEqual("Data", dataTable.Rows[0]["firstname"]);
+            Assert.AreEqual("Mark", dataTable.Rows[1]["firstname"]);
         }
 
         [TestMethod]
@@ -1170,11 +1186,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataTable = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataTable = new DataTable();
+            dataTable.Load(dataReader);
 
             Assert.AreEqual(2, dataTable.Rows.Count);
-            Assert.AreEqual(ToSqlString("8"), dataTable.Rows[0]["surname"]);
-            Assert.AreEqual(ToSqlString("Carrington"), dataTable.Rows[1]["surname"]);
+            Assert.AreEqual("8", dataTable.Rows[0]["surname"]);
+            Assert.AreEqual("Carrington", dataTable.Rows[1]["surname"]);
         }
 
         [TestMethod]
@@ -1213,11 +1231,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataTable = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataTable = new DataTable();
+            dataTable.Load(dataReader);
 
             Assert.AreEqual(2, dataTable.Rows.Count);
-            Assert.AreEqual(ToSqlString("8, Data"), dataTable.Rows[0]["fullname"]);
-            Assert.AreEqual(ToSqlString("Carrington, Mark"), dataTable.Rows[1]["fullname"]);
+            Assert.AreEqual("8, Data", dataTable.Rows[0]["fullname"]);
+            Assert.AreEqual("Carrington, Mark", dataTable.Rows[1]["fullname"]);
         }
 
         [TestMethod]
@@ -1256,11 +1276,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataTable = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataTable = new DataTable();
+            dataTable.Load(dataReader);
 
             Assert.AreEqual(2, dataTable.Rows.Count);
-            Assert.AreEqual(ToSqlString("8, Data"), dataTable.Rows[0]["fullname"]);
-            Assert.AreEqual(ToSqlString("Carrington, Mark"), dataTable.Rows[1]["fullname"]);
+            Assert.AreEqual("8, Data", dataTable.Rows[0]["fullname"]);
+            Assert.AreEqual("Carrington, Mark", dataTable.Rows[1]["fullname"]);
         }
 
         [TestMethod]
@@ -1297,12 +1319,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataTable = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataTable = new DataTable();
+            dataTable.Load(dataReader);
 
             Assert.AreEqual(1, dataTable.Rows.Count);
             Assert.AreEqual(guid2, ((SqlEntityReference)dataTable.Rows[0]["contactid"]).Id);
-            Assert.AreEqual(new SqlDateTime(2020, 1, 2, 0, 30, 0), dataTable.Rows[0]["nextday"]);
-            Assert.AreEqual((SqlInt32)30, dataTable.Rows[0]["minute"]);
+            Assert.AreEqual(new DateTime(2020, 1, 2, 0, 30, 0), dataTable.Rows[0]["nextday"]);
+            Assert.AreEqual(30, dataTable.Rows[0]["minute"]);
         }
 
         [TestMethod]
@@ -1382,16 +1406,19 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataTable = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataTable = new DataTable();
+            dataTable.Load(dataReader);
+
             Assert.AreEqual(2, dataTable.Rows.Count);
 
-            Assert.AreEqual(ToSqlString("Doe"), dataTable.Rows[0]["lastname"]);
-            Assert.AreEqual((SqlInt32)2, dataTable.Rows[0]["nummarks"]);
-            Assert.AreEqual(ToSqlString("D"), dataTable.Rows[0]["lastinitial"]);
+            Assert.AreEqual("Doe", dataTable.Rows[0]["lastname"]);
+            Assert.AreEqual(2, dataTable.Rows[0]["nummarks"]);
+            Assert.AreEqual("D", dataTable.Rows[0]["lastinitial"]);
 
-            Assert.AreEqual(ToSqlString("Carrington"), dataTable.Rows[1]["lastname"]);
-            Assert.AreEqual((SqlInt32)1, dataTable.Rows[1]["nummarks"]);
-            Assert.AreEqual(ToSqlString("C"), dataTable.Rows[1]["lastinitial"]);
+            Assert.AreEqual("Carrington", dataTable.Rows[1]["lastname"]);
+            Assert.AreEqual(1, dataTable.Rows[1]["nummarks"]);
+            Assert.AreEqual("C", dataTable.Rows[1]["lastinitial"]);
         }
 
         [TestMethod]
@@ -1443,7 +1470,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataTable = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataTable = new DataTable();
+            dataTable.Load(dataReader);
+
             Assert.AreEqual(2, dataTable.Rows.Count);
 
             Assert.AreEqual(guid1, ((SqlEntityReference)dataTable.Rows[0]["contactid"]).Id);
@@ -1498,11 +1528,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataTable = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataTable = new DataTable();
+            dataTable.Load(dataReader);
+
             Assert.AreEqual(2, dataTable.Rows.Count);
 
-            Assert.AreEqual(ToSqlString("Carrington"), dataTable.Rows[0]["lastname"]);
-            Assert.AreEqual(ToSqlString("BLoggs"), dataTable.Rows[1]["lastname"]);
+            Assert.AreEqual("Carrington", dataTable.Rows[0]["lastname"]);
+            Assert.AreEqual("Bloggs", dataTable.Rows[1]["lastname"]);
         }
 
         [TestMethod]
@@ -1549,10 +1582,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataTable = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataTable = new DataTable();
+            dataTable.Load(dataReader);
+
             Assert.AreEqual(1, dataTable.Rows.Count);
 
-            Assert.AreEqual((SqlInt32)2, dataTable.Rows[0]["distinctnames"]);
+            Assert.AreEqual(2, dataTable.Rows[0]["distinctnames"]);
         }
 
         [TestMethod]
@@ -1602,11 +1638,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataTable = alternativeQuery.Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = alternativeQuery.Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataTable = new DataTable();
+            dataTable.Load(dataReader);
+
             Assert.AreEqual(2, dataTable.Rows.Count);
 
-            Assert.AreEqual(ToSqlString("Data8"), dataTable.Rows[0]["name"]);
-            Assert.AreEqual((SqlInt32)2, dataTable.Rows[0][select.ColumnSet[1].SourceColumn]);
+            Assert.AreEqual("Data8", dataTable.Rows[0]["name"]);
+            Assert.AreEqual(2, dataTable.Rows[0][select.ColumnSet[1].SourceColumn]);
         }
 
         [TestMethod]
@@ -1654,10 +1693,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataTable = select.Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = select.Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataTable = new DataTable();
+            dataTable.Load(dataReader);
+
             Assert.AreEqual(1, dataTable.Rows.Count);
 
-            Assert.AreEqual(ToSqlString("Data8"), dataTable.Rows[0]["name"]);
+            Assert.AreEqual("Data8", dataTable.Rows[0]["name"]);
         }
 
         [TestMethod]
@@ -1986,9 +2028,12 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataTable = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
-            Assert.AreEqual(SqlDecimal.Null, dataTable.Rows[0]["half"]);
-            Assert.AreEqual((SqlDecimal)1M, dataTable.Rows[1]["half"]);
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataTable = new DataTable();
+            dataTable.Load(dataReader);
+
+            Assert.AreEqual(DBNull.Value, dataTable.Rows[0]["half"]);
+            Assert.AreEqual(1M, dataTable.Rows[1]["half"]);
         }
 
         [TestMethod]
@@ -2017,7 +2062,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataTable = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataTable = new DataTable();
+            dataTable.Load(dataReader);
+
             Assert.AreEqual(account2, ((SqlEntityReference)dataTable.Rows[0]["accountid"]).Id);
         }
 
@@ -2040,7 +2088,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual("name = 'test'", filterNode.Filter.ToSql());
             var optionsetNode = (GlobalOptionSetQueryNode)filterNode.Source;
 
-            var dataTable = selectNode.Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = selectNode.Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataTable = new DataTable();
+            dataTable.Load(dataReader);
 
             Assert.AreEqual(1, dataTable.Rows.Count);
         }
@@ -2061,12 +2111,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var sortNode = (SortNode)selectNode.Source;
             var metadataNode = (MetadataQueryNode)sortNode.Source;
 
-            var dataTable = selectNode.Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = selectNode.Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataTable = new DataTable();
+            dataTable.Load(dataReader);
 
             Assert.AreEqual(3, dataTable.Rows.Count);
-            Assert.AreEqual(ToSqlString("account"), dataTable.Rows[0]["logicalname"]);
-            Assert.AreEqual(ToSqlString("contact"), dataTable.Rows[1]["logicalname"]);
-            Assert.AreEqual(ToSqlString("new_customentity"), dataTable.Rows[2]["logicalname"]);
+            Assert.AreEqual("account", dataTable.Rows[0]["logicalname"]);
+            Assert.AreEqual("contact", dataTable.Rows[1]["logicalname"]);
+            Assert.AreEqual("new_customentity", dataTable.Rows[2]["logicalname"]);
         }
 
         [TestMethod]
@@ -2079,17 +2131,19 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
             var queries = planBuilder.Build(query, null, out _);
 
-            var dataTable = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataTable = new DataTable();
+            dataTable.Load(dataReader);
 
             Assert.AreEqual(7, dataTable.Rows.Count);
             var row = 0;
-            Assert.AreEqual(ToSqlString("new_boolprop"), dataTable.Rows[row++]["logicalname1"]);
-            Assert.AreEqual(ToSqlString("new_customentityid"), dataTable.Rows[row++]["logicalname1"]);
-            Assert.AreEqual(ToSqlString("new_name"), dataTable.Rows[row++]["logicalname1"]);
-            Assert.AreEqual(ToSqlString("new_optionsetvalue"), dataTable.Rows[row++]["logicalname1"]);
-            Assert.AreEqual(ToSqlString("new_optionsetvaluecollection"), dataTable.Rows[row++]["logicalname1"]);
-            Assert.AreEqual(ToSqlString("new_optionsetvaluename"), dataTable.Rows[row++]["logicalname1"]);
-            Assert.AreEqual(ToSqlString("new_parentid"), dataTable.Rows[row++]["logicalname1"]);
+            Assert.AreEqual("new_boolprop", dataTable.Rows[row++]["logicalname1"]);
+            Assert.AreEqual("new_customentityid", dataTable.Rows[row++]["logicalname1"]);
+            Assert.AreEqual("new_name", dataTable.Rows[row++]["logicalname1"]);
+            Assert.AreEqual("new_optionsetvalue", dataTable.Rows[row++]["logicalname1"]);
+            Assert.AreEqual("new_optionsetvaluecollection", dataTable.Rows[row++]["logicalname1"]);
+            Assert.AreEqual("new_optionsetvaluename", dataTable.Rows[row++]["logicalname1"]);
+            Assert.AreEqual("new_parentid", dataTable.Rows[row++]["logicalname1"]);
         }
 
         [TestMethod]
@@ -2137,12 +2191,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             CollectionAssert.AreEqual(new[] { "new_optionsetvalue", "new_optionsetvaluename" }, select.ColumnSet.Select(c => c.OutputColumn).ToList());
 
-            var dataTable = select.Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = select.Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataTable = new DataTable();
+            dataTable.Load(dataReader);
 
-            Assert.AreEqual(SqlInt32.Null, dataTable.Rows[0]["new_optionsetvalue"]);
-            Assert.AreEqual(SqlString.Null, dataTable.Rows[0]["new_optionsetvaluename"]);
-            Assert.AreEqual((SqlInt32)(int)Metadata.New_OptionSet.Value1, dataTable.Rows[1]["new_optionsetvalue"]);
-            Assert.AreEqual(ToSqlString(Metadata.New_OptionSet.Value1.ToString()), dataTable.Rows[1]["new_optionsetvaluename"]);
+            Assert.AreEqual(DBNull.Value, dataTable.Rows[0]["new_optionsetvalue"]);
+            Assert.AreEqual(DBNull.Value, dataTable.Rows[0]["new_optionsetvaluename"]);
+            Assert.AreEqual((int)Metadata.New_OptionSet.Value1, dataTable.Rows[1]["new_optionsetvalue"]);
+            Assert.AreEqual(Metadata.New_OptionSet.Value1.ToString(), dataTable.Rows[1]["new_optionsetvaluename"]);
         }
 
         [TestMethod]
@@ -2486,12 +2542,15 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataTable = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
-            Assert.AreEqual((SqlInt32)2, dataTable.Rows[0]["ci0"]);
-            Assert.AreEqual((SqlInt32)2, dataTable.Rows[0]["ci1"]);
-            Assert.AreEqual((SqlInt32)2, dataTable.Rows[0]["ci2"]);
-            Assert.AreEqual((SqlInt32)7, dataTable.Rows[0]["ci3"]);
-            Assert.AreEqual((SqlInt32)0, dataTable.Rows[0]["ci8"]);
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataTable = new DataTable();
+            dataTable.Load(dataReader);
+
+            Assert.AreEqual(2, dataTable.Rows[0]["ci0"]);
+            Assert.AreEqual(2, dataTable.Rows[0]["ci1"]);
+            Assert.AreEqual(2, dataTable.Rows[0]["ci2"]);
+            Assert.AreEqual(7, dataTable.Rows[0]["ci3"]);
+            Assert.AreEqual(0, dataTable.Rows[0]["ci8"]);
         }
 
         [TestMethod]
@@ -2514,8 +2573,11 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataTable = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
-            Assert.AreEqual(new SqlDateTime(2000, 1, 1), dataTable.Rows[0]["converted"]);
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataTable = new DataTable();
+            dataTable.Load(dataReader);
+
+            Assert.AreEqual(new DateTime(2000, 1, 1), dataTable.Rows[0]["converted"]);
         }
 
         [TestMethod]
@@ -2550,11 +2612,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataTable = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
-            Assert.AreEqual(ToSqlString("M"), dataTable.Rows[0]["initial"]);
-            Assert.AreEqual((SqlInt32)2, dataTable.Rows[0]["count"]);
-            Assert.AreEqual(ToSqlString("R"), dataTable.Rows[1]["initial"]);
-            Assert.AreEqual((SqlInt32)1, dataTable.Rows[1]["count"]);
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataTable = new DataTable();
+            dataTable.Load(dataReader);
+
+            Assert.AreEqual("M", dataTable.Rows[0]["initial"]);
+            Assert.AreEqual(2, dataTable.Rows[0]["count"]);
+            Assert.AreEqual("R", dataTable.Rows[1]["initial"]);
+            Assert.AreEqual(1, dataTable.Rows[1]["count"]);
         }
 
         private void AssertFetchXml(IRootExecutionPlanNode[] queries, string fetchXml)

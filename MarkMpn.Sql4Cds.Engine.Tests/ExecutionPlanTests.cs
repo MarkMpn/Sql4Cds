@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Data.SqlTypes;
 using System.IO;
 using System.Linq;
@@ -2938,9 +2939,12 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             };
 
             var result = select.Execute(_localDataSource, this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
-            Assert.AreEqual(2, result.Rows.Count);
-            Assert.AreEqual(SqlTypeConverter.UseDefaultCollation("Mark"), result.Rows[0][0]);
-            Assert.AreEqual(SqlTypeConverter.UseDefaultCollation("Mark"), result.Rows[1][0]);
+            var dataTable = new DataTable();
+            dataTable.Load(result);
+
+            Assert.AreEqual(2, dataTable.Rows.Count);
+            Assert.AreEqual("Mark", dataTable.Rows[0][0]);
+            Assert.AreEqual("Mark", dataTable.Rows[1][0]);
         }
 
         [TestMethod]
@@ -3360,13 +3364,15 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             foreach (var plan in plans)
             {
-                if (plan is IDataSetExecutionPlanNode selectQuery)
+                if (plan is IDataReaderExecutionPlanNode selectQuery)
                 {
                     var results = selectQuery.Execute(_dataSources, this, parameterTypes, parameterValues);
+                    var dataTable = new DataTable();
+                    dataTable.Load(results);
 
-                    Assert.AreEqual(1, results.Rows.Count);
-                    Assert.AreEqual(1, results.Columns.Count);
-                    Assert.AreEqual((SqlInt32)1, results.Rows[0][0]);
+                    Assert.AreEqual(1, dataTable.Rows.Count);
+                    Assert.AreEqual(1, dataTable.Columns.Count);
+                    Assert.AreEqual(1, dataTable.Rows[0][0]);
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
@@ -3414,13 +3420,15 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             foreach (var plan in plans)
             {
-                if (plan is IDataSetExecutionPlanNode selectQuery)
+                if (plan is IDataReaderExecutionPlanNode selectQuery)
                 {
                     var results = selectQuery.Execute(_dataSources, this, parameterTypes, parameterValues);
+                    var dataTable = new DataTable();
+                    dataTable.Load(results);
 
-                    Assert.AreEqual(1, results.Rows.Count);
-                    Assert.AreEqual(1, results.Columns.Count);
-                    Assert.AreEqual((SqlInt32)1, results.Rows[0][0]);
+                    Assert.AreEqual(1, dataTable.Rows.Count);
+                    Assert.AreEqual(1, dataTable.Columns.Count);
+                    Assert.AreEqual(1, dataTable.Rows[0][0]);
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
@@ -3473,13 +3481,15 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             foreach (var plan in plans)
             {
-                if (plan is IDataSetExecutionPlanNode selectQuery)
+                if (plan is IDataReaderExecutionPlanNode selectQuery)
                 {
                     var results = selectQuery.Execute(_dataSources, this, parameterTypes, parameterValues);
+                    var dataTable = new DataTable();
+                    dataTable.Load(results);
 
-                    Assert.AreEqual(1, results.Rows.Count);
-                    Assert.AreEqual(1, results.Columns.Count);
-                    Assert.AreEqual(ToSqlString("100"), results.Rows[0][0]);
+                    Assert.AreEqual(1, dataTable.Rows.Count);
+                    Assert.AreEqual(1, dataTable.Columns.Count);
+                    Assert.AreEqual("100", dataTable.Rows[0][0]);
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
@@ -3506,13 +3516,15 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             foreach (var plan in plans)
             {
-                if (plan is IDataSetExecutionPlanNode selectQuery)
+                if (plan is IDataReaderExecutionPlanNode selectQuery)
                 {
                     var results = selectQuery.Execute(_dataSources, this, parameterTypes, parameterValues);
+                    var dataTable = new DataTable();
+                    dataTable.Load(results);
 
-                    Assert.AreEqual(1, results.Rows.Count);
-                    Assert.AreEqual(1, results.Columns.Count);
-                    Assert.AreEqual(ToSqlString("tes"), results.Rows[0][0]);
+                    Assert.AreEqual(1, dataTable.Rows.Count);
+                    Assert.AreEqual(1, dataTable.Columns.Count);
+                    Assert.AreEqual("tes", dataTable.Rows[0][0]);
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
@@ -3598,13 +3610,15 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             foreach (var plan in plans)
             {
-                if (plan is IDataSetExecutionPlanNode selectQuery)
+                if (plan is IDataReaderExecutionPlanNode selectQuery)
                 {
                     var results = selectQuery.Execute(_localDataSource, this, parameterTypes, parameterValues);
+                    var dataTable = new DataTable();
+                    dataTable.Load(results);
 
-                    Assert.AreEqual(1, results.Rows.Count);
-                    Assert.AreEqual(1, results.Columns.Count);
-                    Assert.AreEqual(ToSqlString("Z"), results.Rows[0][0]);
+                    Assert.AreEqual(1, dataTable.Rows.Count);
+                    Assert.AreEqual(1, dataTable.Columns.Count);
+                    Assert.AreEqual("Z", dataTable.Rows[0][0]);
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
@@ -3631,13 +3645,15 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             foreach (var plan in plans)
             {
-                if (plan is IDataSetExecutionPlanNode selectQuery)
+                if (plan is IDataReaderExecutionPlanNode selectQuery)
                 {
                     var results = selectQuery.Execute(_dataSources, this, parameterTypes, parameterValues);
+                    var dataTable = new DataTable();
+                    dataTable.Load(results);
 
-                    Assert.AreEqual(1, results.Rows.Count);
-                    Assert.AreEqual(1, results.Columns.Count);
-                    Assert.AreEqual(ToSqlString("t"), results.Rows[0][0]);
+                    Assert.AreEqual(1, dataTable.Rows.Count);
+                    Assert.AreEqual(1, dataTable.Columns.Count);
+                    Assert.AreEqual("t", dataTable.Rows[0][0]);
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {

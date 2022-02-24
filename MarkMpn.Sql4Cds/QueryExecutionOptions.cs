@@ -51,7 +51,7 @@ namespace MarkMpn.Sql4Cds
 
         private void ConfirmInsert(object sender, ConfirmDmlStatementEventArgs e)
         {
-            e.Cancel |= ConfirmInsert((Sql4CdsConnection)sender, e.Count, e.Metadata);
+            e.Cancel |= !ConfirmInsert((Sql4CdsConnection)sender, e.Count, e.Metadata);
         }
 
         private bool ConfirmInsert(Sql4CdsConnection con, int count, EntityMetadata meta)
@@ -73,7 +73,7 @@ namespace MarkMpn.Sql4Cds
 
         private void ConfirmUpdate(object sender, ConfirmDmlStatementEventArgs e)
         {
-            e.Cancel |= ConfirmUpdate((Sql4CdsConnection)sender, e.Count, e.Metadata);
+            e.Cancel |= !ConfirmUpdate((Sql4CdsConnection)sender, e.Count, e.Metadata);
         }
 
         private bool ConfirmUpdate(Sql4CdsConnection con, int count, EntityMetadata meta)
@@ -95,7 +95,7 @@ namespace MarkMpn.Sql4Cds
 
         private void ConfirmDelete(object sender, ConfirmDmlStatementEventArgs e)
         {
-            e.Cancel |= ConfirmDelete((Sql4CdsConnection)sender, e.Count, e.Metadata);
+            e.Cancel |= !ConfirmDelete((Sql4CdsConnection)sender, e.Count, e.Metadata);
         }
 
         private bool ConfirmDelete(Sql4CdsConnection con, int count, EntityMetadata meta)
@@ -127,7 +127,7 @@ namespace MarkMpn.Sql4Cds
 
         private void ConfirmRetrieve(object sender, ConfirmRetrieveEventArgs e)
         {
-            e.Cancel |= ContinueRetrieve(e.Count);
+            e.Cancel |= !ContinueRetrieve(e.Count);
 
             if (!e.Cancel)
                 RetrievingNextPage();
