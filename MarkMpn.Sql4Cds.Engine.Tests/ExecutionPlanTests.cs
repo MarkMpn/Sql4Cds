@@ -3043,6 +3043,34 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void AliasedAttribute()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT name AS n1 FROM account WHERE name = 'test'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual("account.n1", select.ColumnSet[0].SourceColumn);
+            Assert.AreEqual("n1", select.ColumnSet[0].OutputColumn);
+
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' alias='n1' />
+                        <filter>
+                            <condition attribute='name' operator='eq' value='test' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
         public void MultipleAliases()
         {
             var metadata = new AttributeMetadataCache(_service);
@@ -3055,14 +3083,16 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, plans.Length);
 
             var select = AssertNode<SelectNode>(plans[0]);
-            Assert.AreEqual("account.n1", select.ColumnSet[0].SourceColumn);
-            Assert.AreEqual("account.n1", select.ColumnSet[1].SourceColumn);
+            Assert.AreEqual("account.name", select.ColumnSet[0].SourceColumn);
+            Assert.AreEqual("account.name", select.ColumnSet[1].SourceColumn);
+            Assert.AreEqual("n1", select.ColumnSet[0].OutputColumn);
+            Assert.AreEqual("n2", select.ColumnSet[1].OutputColumn);
 
             var fetch = AssertNode<FetchXmlScan>(select.Source);
             AssertFetchXml(fetch, @"
                 <fetch>
                     <entity name='account'>
-                        <attribute name='name' alias='n1' />
+                        <attribute name='name' />
                         <filter>
                             <condition attribute='name' operator='eq' value='test' />
                         </filter>
@@ -3775,6 +3805,29 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             Assert.AreEqual(1, cond.TrueStatements.Length);
             AssertNode<InsertNode>(cond.TrueStatements[0]);
+        }
+
+        [TestMethod]
+        public void DuplicatedAliases()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT name, createdon AS name FROM account";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <attribute name='createdon' />
+                    </entity>
+                </fetch>");
         }
     }
 }

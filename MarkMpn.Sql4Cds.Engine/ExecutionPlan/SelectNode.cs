@@ -84,7 +84,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 // Check if there are any aliases we can apply to the source FetchXml
                 var schema = fetchXml.GetSchema(dataSources, parameterTypes);
-                var processedSourceColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var hasStar = columnSet.Any(col => col.AllColumns && col.SourceColumn == null);
                 var aliasStars = new HashSet<string>(columnSet.Where(col => col.AllColumns && col.SourceColumn != null).Select(col => col.SourceColumn.Replace(".*", "")).Distinct(StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase);
 
@@ -128,29 +127,69 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         {
                             var sourceCol = col.SourceColumn;
                             schema.ContainsColumn(sourceCol, out sourceCol);
-                            var attr = fetchXml.AddAttribute(sourceCol, null, dataSource.Metadata, out var added, out var linkEntity);
-
-                            // Check if we can fold the alias down to the FetchXML too. Don't do this if the name isn't valid for FetchXML
-                            if (sourceCol != col.SourceColumn)
-                                parts = col.SourceColumn.Split('.');
-
-                            if (!col.OutputColumn.Equals(parts.Last(), StringComparison.OrdinalIgnoreCase) && FetchXmlScan.IsValidAlias(col.OutputColumn))
-                            {
-                                if (added || (!processedSourceColumns.Contains(sourceCol) && !fetchXml.IsAliasReferenced(attr.alias)))
-                                {
-                                    // Don't fold the alias if there's also a sort on the same attribute, as it breaks paging
-                                    // https://markcarrington.dev/2019/12/10/inside-fetchxml-pt-4-order/#sorting_&_aliases
-                                    var items = linkEntity?.Items ?? fetchXml.Entity.Items;
-
-                                    if (items == null || !items.OfType<FetchOrderType>().Any(order => order.attribute == attr.name) || !fetchXml.AllPages)
-                                        attr.alias = col.OutputColumn;
-                                }
-
-                                col.SourceColumn = sourceCol.Split('.')[0] + "." + (attr.alias ?? attr.name);
-                            }
-
-                            processedSourceColumns.Add(sourceCol);
+                            fetchXml.AddAttribute(sourceCol, null, dataSource.Metadata, out _, out _);
                         }
+                    }
+                }
+
+                // Finally, check what aliases we can fold down to the FetchXML.
+                // Ignore:
+                // 1. columns that have more than 1 alias
+                // 2. aliases that are invalid for FetchXML
+                // 3. attributes that are included via an <all-attributes/>
+                if (!hasStar)
+                {
+                    var aliasedColumns = columnSet
+                        .Select(c =>
+                        {
+                            var sourceCol = c.SourceColumn;
+                            schema.ContainsColumn(sourceCol, out sourceCol);
+
+                            return new { Mapping = c, SourceColumn = sourceCol, Alias = c.OutputColumn };
+                        })
+                        .GroupBy(c => c.SourceColumn, StringComparer.OrdinalIgnoreCase)
+                        .Where(g => g.Count() == 1) // Don't fold aliases if there are multiple aliases for the same source column
+                        .Select(g => g.Single())
+                        .GroupBy(c => c.Alias, StringComparer.OrdinalIgnoreCase)
+                        .Where(g => g.Count() == 1) // Don't fold aliases if there are multiple columns using the same alias
+                        .Select(g => g.Single())
+                        .Where(c =>
+                        {
+                            var parts = c.SourceColumn.Split('.');
+
+                            if (parts.Length > 1 && aliasStars.Contains(parts[0]))
+                                return false; // Don't fold aliases if we're using an <all-attributes/>
+
+                            if (c.Alias.Equals(parts.Last(), StringComparison.OrdinalIgnoreCase))
+                                return false; // Don't fold aliases if we're using the original source name
+
+                            if (!FetchXmlScan.IsValidAlias(c.Alias))
+                                return false; // Don't fold aliases if they contain invalid characters
+
+                            return true;
+                        })
+                        .Select(c =>
+                        {
+                            var attr = fetchXml.AddAttribute(c.SourceColumn, null, dataSource.Metadata, out _, out var linkEntity);
+                            return new { Mapping = c.Mapping, SourceColumn = c.SourceColumn, Alias = c.Alias, Attr = attr, LinkEntity = linkEntity };
+                        })
+                        .Where(c =>
+                        {
+                            var items = c.LinkEntity?.Items ?? fetchXml.Entity.Items;
+
+                            // Don't fold the alias if there's also a sort on the same attribute, as it breaks paging
+                            // https://markcarrington.dev/2019/12/10/inside-fetchxml-pt-4-order/#sorting_&_aliases
+                            if (items != null && items.OfType<FetchOrderType>().Any(order => order.attribute == c.Attr.name) && fetchXml.AllPages)
+                                return false;
+
+                            return true;
+                        })
+                        .ToList();
+
+                    foreach (var aliasedColumn in aliasedColumns)
+                    {
+                        aliasedColumn.Attr.alias = aliasedColumn.Alias;
+                        aliasedColumn.Mapping.SourceColumn = aliasedColumn.SourceColumn.Split('.')[0] + "." + aliasedColumn.Alias;
                     }
                 }
             }
