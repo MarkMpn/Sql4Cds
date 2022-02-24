@@ -33,7 +33,7 @@ namespace MarkMpn.Sql4Cds
             con.BlockUpdateWithoutWhere = Settings.Instance.BlockUpdateWithoutWhere;
             con.UseBulkDelete = Settings.Instance.UseBulkDelete;
             con.BatchSize = Settings.Instance.BatchSize;
-            con.UseTDSEndpoint = Settings.Instance.UseTSQLEndpoint && execute;
+            con.UseTDSEndpoint = Settings.Instance.UseTSQLEndpoint && (execute || !Settings.Instance.ShowFetchXMLInEstimatedExecutionPlans);
             con.UseRetrieveTotalRecordCount = Settings.Instance.UseRetrieveTotalRecordCount;
             con.MaxDegreeOfParallelism = Settings.Instance.MaxDegreeOfPaallelism;
             con.UseLocalTimeZone = Settings.Instance.ShowLocalTimes;

@@ -32,6 +32,7 @@ namespace MarkMpn.Sql4Cds
             bypassCustomPluginsCheckBox.Checked = settings.BypassCustomPlugins;
             localTimesComboBox.SelectedIndex = settings.ShowLocalTimes ? 1 : 0;
             tsqlEndpointCheckBox.Checked = settings.UseTSQLEndpoint;
+            showFetchXMLInEstimatedExecutionPlansCheckBox.Checked = settings.ShowFetchXMLInEstimatedExecutionPlans;
             retrieveTotalRecordCountCheckbox.Checked = settings.UseRetrieveTotalRecordCount;
             showTooltipsCheckbox.Checked = settings.ShowIntellisenseTooltips;
             maxDopUpDown.Value = settings.MaxDegreeOfPaallelism;
@@ -103,6 +104,7 @@ namespace MarkMpn.Sql4Cds
                 _settings.BypassCustomPlugins = bypassCustomPluginsCheckBox.Checked;
                 _settings.ShowLocalTimes = localTimesComboBox.SelectedIndex == 1;
                 _settings.UseTSQLEndpoint = tsqlEndpointCheckBox.Checked;
+                _settings.ShowFetchXMLInEstimatedExecutionPlans = showFetchXMLInEstimatedExecutionPlansCheckBox.Checked;
                 _settings.UseRetrieveTotalRecordCount = retrieveTotalRecordCountCheckbox.Checked;
                 _settings.ShowIntellisenseTooltips = showTooltipsCheckbox.Checked;
                 _settings.MaxDegreeOfPaallelism = (int) maxDopUpDown.Value;
@@ -137,6 +139,14 @@ namespace MarkMpn.Sql4Cds
             }
 
             System.Diagnostics.Process.Start(url);
+        }
+
+        private void tsqlEndpointCheckBox_CheckedChanged(object sender, EventArgs e)
+        {
+            showFetchXMLInEstimatedExecutionPlansCheckBox.Enabled = tsqlEndpointCheckBox.Checked;
+
+            if (!tsqlEndpointCheckBox.Checked)
+                showFetchXMLInEstimatedExecutionPlansCheckBox.Checked = true;
         }
     }
 }

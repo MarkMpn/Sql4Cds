@@ -86,6 +86,7 @@
             this.nativeSqlRadioButton = new System.Windows.Forms.RadioButton();
             this.simpleSqlRadioButton = new System.Windows.Forms.RadioButton();
             this.label17 = new System.Windows.Forms.Label();
+            this.showFetchXMLInEstimatedExecutionPlansCheckBox = new System.Windows.Forms.CheckBox();
             this.topPanel.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox)).BeginInit();
             this.panel2.SuspendLayout();
@@ -155,7 +156,7 @@
             this.panel2.Margin = new System.Windows.Forms.Padding(2);
             this.panel2.Name = "panel2";
             this.panel2.Size = new System.Drawing.Size(441, 45);
-            this.panel2.TabIndex = 4;
+            this.panel2.TabIndex = 2;
             // 
             // cancelButton
             // 
@@ -295,7 +296,7 @@
             this.bulkDeleteCheckbox.Location = new System.Drawing.Point(9, 76);
             this.bulkDeleteCheckbox.Name = "bulkDeleteCheckbox";
             this.bulkDeleteCheckbox.Size = new System.Drawing.Size(152, 17);
-            this.bulkDeleteCheckbox.TabIndex = 20;
+            this.bulkDeleteCheckbox.TabIndex = 7;
             this.bulkDeleteCheckbox.Text = "Use bulk delete operations";
             this.bulkDeleteCheckbox.UseVisualStyleBackColor = true;
             // 
@@ -305,7 +306,7 @@
             this.label8.Location = new System.Drawing.Point(331, 26);
             this.label8.Name = "label8";
             this.label8.Size = new System.Drawing.Size(42, 13);
-            this.label8.TabIndex = 16;
+            this.label8.TabIndex = 3;
             this.label8.Text = "records";
             // 
             // batchSizeUpDown
@@ -323,7 +324,7 @@
             0});
             this.batchSizeUpDown.Name = "batchSizeUpDown";
             this.batchSizeUpDown.Size = new System.Drawing.Size(102, 20);
-            this.batchSizeUpDown.TabIndex = 15;
+            this.batchSizeUpDown.TabIndex = 2;
             this.batchSizeUpDown.Value = new decimal(new int[] {
             1,
             0,
@@ -336,7 +337,7 @@
             this.label9.Location = new System.Drawing.Point(6, 26);
             this.label9.Name = "label9";
             this.label9.Size = new System.Drawing.Size(211, 13);
-            this.label9.TabIndex = 14;
+            this.label9.TabIndex = 1;
             this.label9.Text = "Insert/Update/Delete records in batches of";
             // 
             // bypassCustomPluginsCheckBox
@@ -345,7 +346,7 @@
             this.bypassCustomPluginsCheckBox.Location = new System.Drawing.Point(9, 99);
             this.bypassCustomPluginsCheckBox.Name = "bypassCustomPluginsCheckBox";
             this.bypassCustomPluginsCheckBox.Size = new System.Drawing.Size(133, 17);
-            this.bypassCustomPluginsCheckBox.TabIndex = 25;
+            this.bypassCustomPluginsCheckBox.TabIndex = 8;
             this.bypassCustomPluginsCheckBox.Text = "Bypass custom plugins";
             this.bypassCustomPluginsCheckBox.UseVisualStyleBackColor = true;
             // 
@@ -385,7 +386,7 @@
             this.label12.Location = new System.Drawing.Point(173, 52);
             this.label12.Name = "label12";
             this.label12.Size = new System.Drawing.Size(77, 13);
-            this.label12.TabIndex = 19;
+            this.label12.TabIndex = 6;
             this.label12.Text = "worker threads";
             // 
             // localTimesComboBox
@@ -395,20 +396,20 @@
             this.localTimesComboBox.Items.AddRange(new object[] {
             "UTC times",
             "Local times"});
-            this.localTimesComboBox.Location = new System.Drawing.Point(137, 167);
+            this.localTimesComboBox.Location = new System.Drawing.Point(137, 190);
             this.localTimesComboBox.Margin = new System.Windows.Forms.Padding(2);
             this.localTimesComboBox.Name = "localTimesComboBox";
             this.localTimesComboBox.Size = new System.Drawing.Size(203, 21);
-            this.localTimesComboBox.TabIndex = 24;
+            this.localTimesComboBox.TabIndex = 13;
             // 
             // label11
             // 
             this.label11.AutoSize = true;
-            this.label11.Location = new System.Drawing.Point(5, 170);
+            this.label11.Location = new System.Drawing.Point(5, 193);
             this.label11.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
             this.label11.Name = "label11";
             this.label11.Size = new System.Drawing.Size(128, 13);
-            this.label11.TabIndex = 23;
+            this.label11.TabIndex = 12;
             this.label11.Text = "Treat date/time values as";
             // 
             // maxDopUpDown
@@ -421,7 +422,7 @@
             0});
             this.maxDopUpDown.Name = "maxDopUpDown";
             this.maxDopUpDown.Size = new System.Drawing.Size(102, 20);
-            this.maxDopUpDown.TabIndex = 18;
+            this.maxDopUpDown.TabIndex = 5;
             this.maxDopUpDown.Value = new decimal(new int[] {
             10,
             0,
@@ -434,16 +435,16 @@
             this.label13.Location = new System.Drawing.Point(6, 52);
             this.label13.Name = "label13";
             this.label13.Size = new System.Drawing.Size(53, 13);
-            this.label13.TabIndex = 17;
+            this.label13.TabIndex = 4;
             this.label13.Text = "Use up to";
             // 
             // retrieveTotalRecordCountCheckbox
             // 
             this.retrieveTotalRecordCountCheckbox.AutoSize = true;
-            this.retrieveTotalRecordCountCheckbox.Location = new System.Drawing.Point(9, 145);
+            this.retrieveTotalRecordCountCheckbox.Location = new System.Drawing.Point(9, 168);
             this.retrieveTotalRecordCountCheckbox.Name = "retrieveTotalRecordCountCheckbox";
             this.retrieveTotalRecordCountCheckbox.Size = new System.Drawing.Size(286, 17);
-            this.retrieveTotalRecordCountCheckbox.TabIndex = 22;
+            this.retrieveTotalRecordCountCheckbox.TabIndex = 11;
             this.retrieveTotalRecordCountCheckbox.Text = "Use RetrieveTotalRecordCount request where possible";
             this.retrieveTotalRecordCountCheckbox.UseVisualStyleBackColor = true;
             // 
@@ -453,9 +454,10 @@
             this.tsqlEndpointCheckBox.Location = new System.Drawing.Point(9, 122);
             this.tsqlEndpointCheckBox.Name = "tsqlEndpointCheckBox";
             this.tsqlEndpointCheckBox.Size = new System.Drawing.Size(235, 17);
-            this.tsqlEndpointCheckBox.TabIndex = 21;
+            this.tsqlEndpointCheckBox.TabIndex = 9;
             this.tsqlEndpointCheckBox.Text = "Use TDS Endpoint where possible (Preview)";
             this.tsqlEndpointCheckBox.UseVisualStyleBackColor = true;
+            this.tsqlEndpointCheckBox.CheckedChanged += new System.EventHandler(this.tsqlEndpointCheckBox_CheckedChanged);
             // 
             // autoSizeColumnsCheckBox
             // 
@@ -463,7 +465,7 @@
             this.autoSizeColumnsCheckBox.Location = new System.Drawing.Point(6, 29);
             this.autoSizeColumnsCheckBox.Name = "autoSizeColumnsCheckBox";
             this.autoSizeColumnsCheckBox.Size = new System.Drawing.Size(158, 17);
-            this.autoSizeColumnsCheckBox.TabIndex = 0;
+            this.autoSizeColumnsCheckBox.TabIndex = 1;
             this.autoSizeColumnsCheckBox.Text = "Auto-size columns to fit data";
             this.autoSizeColumnsCheckBox.UseVisualStyleBackColor = true;
             // 
@@ -499,10 +501,11 @@
             this.tabControl1.Name = "tabControl1";
             this.tabControl1.SelectedIndex = 0;
             this.tabControl1.Size = new System.Drawing.Size(417, 295);
-            this.tabControl1.TabIndex = 5;
+            this.tabControl1.TabIndex = 1;
             // 
             // tabPage1
             // 
+            this.tabPage1.Controls.Add(this.showFetchXMLInEstimatedExecutionPlansCheckBox);
             this.tabPage1.Controls.Add(this.pictureBox6);
             this.tabPage1.Controls.Add(this.pictureBox5);
             this.tabPage1.Controls.Add(this.pictureBox4);
@@ -547,7 +550,7 @@
             // 
             this.pictureBox5.Cursor = System.Windows.Forms.Cursors.Hand;
             this.pictureBox5.Image = global::MarkMpn.Sql4Cds.Properties.Resources.StatusHelp_16x;
-            this.pictureBox5.Location = new System.Drawing.Point(301, 145);
+            this.pictureBox5.Location = new System.Drawing.Point(301, 168);
             this.pictureBox5.Name = "pictureBox5";
             this.pictureBox5.Size = new System.Drawing.Size(16, 16);
             this.pictureBox5.TabIndex = 30;
@@ -696,7 +699,7 @@
             this.localDateFormatCheckbox.Location = new System.Drawing.Point(6, 75);
             this.localDateFormatCheckbox.Name = "localDateFormatCheckbox";
             this.localDateFormatCheckbox.Size = new System.Drawing.Size(203, 17);
-            this.localDateFormatCheckbox.TabIndex = 2;
+            this.localDateFormatCheckbox.TabIndex = 3;
             this.localDateFormatCheckbox.Text = "Show date/time values in local format";
             this.localDateFormatCheckbox.UseVisualStyleBackColor = true;
             // 
@@ -706,7 +709,7 @@
             this.rememberSessionCheckbox.Location = new System.Drawing.Point(6, 52);
             this.rememberSessionCheckbox.Name = "rememberSessionCheckbox";
             this.rememberSessionCheckbox.Size = new System.Drawing.Size(148, 17);
-            this.rememberSessionCheckbox.TabIndex = 1;
+            this.rememberSessionCheckbox.TabIndex = 2;
             this.rememberSessionCheckbox.Text = "Remember session details";
             this.rememberSessionCheckbox.UseVisualStyleBackColor = true;
             // 
@@ -776,6 +779,19 @@
             this.label17.Size = new System.Drawing.Size(317, 13);
             this.label17.TabIndex = 0;
             this.label17.Text = "When converting FetchXML to SQL (e.g. from FetchXML Builder):";
+            // 
+            // showFetchXMLInEstimatedExecutionPlansCheckBox
+            // 
+            this.showFetchXMLInEstimatedExecutionPlansCheckBox.AutoSize = true;
+            this.showFetchXMLInEstimatedExecutionPlansCheckBox.Checked = true;
+            this.showFetchXMLInEstimatedExecutionPlansCheckBox.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.showFetchXMLInEstimatedExecutionPlansCheckBox.Enabled = false;
+            this.showFetchXMLInEstimatedExecutionPlansCheckBox.Location = new System.Drawing.Point(31, 145);
+            this.showFetchXMLInEstimatedExecutionPlansCheckBox.Name = "showFetchXMLInEstimatedExecutionPlansCheckBox";
+            this.showFetchXMLInEstimatedExecutionPlansCheckBox.Size = new System.Drawing.Size(241, 17);
+            this.showFetchXMLInEstimatedExecutionPlansCheckBox.TabIndex = 10;
+            this.showFetchXMLInEstimatedExecutionPlansCheckBox.Text = "Show FetchXML in estimated execution plans";
+            this.showFetchXMLInEstimatedExecutionPlansCheckBox.UseVisualStyleBackColor = true;
             // 
             // SettingsForm
             // 
@@ -886,5 +902,6 @@
         private System.Windows.Forms.RadioButton simpleSqlRadioButton;
         private System.Windows.Forms.Label label17;
         private ScintillaNET.Scintilla nativeSqlScintilla;
+        private System.Windows.Forms.CheckBox showFetchXMLInEstimatedExecutionPlansCheckBox;
     }
 }
