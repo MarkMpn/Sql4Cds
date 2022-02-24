@@ -34,6 +34,8 @@
             this.tsbConnect = new System.Windows.Forms.ToolStripButton();
             this.tsbChangeConnection = new System.Windows.Forms.ToolStripButton();
             this.toolStripSeparator = new System.Windows.Forms.ToolStripSeparator();
+            this.tscbConnection = new System.Windows.Forms.ToolStripComboBox();
+            this.toolStripSeparator1 = new System.Windows.Forms.ToolStripSeparator();
             this.tsbNewQuery = new System.Windows.Forms.ToolStripButton();
             this.tsbOpen = new System.Windows.Forms.ToolStripButton();
             this.tsbSave = new System.Windows.Forms.ToolStripButton();
@@ -42,7 +44,9 @@
             this.tsbStop = new System.Windows.Forms.ToolStripButton();
             this.tsbPreviewFetchXml = new System.Windows.Forms.ToolStripButton();
             this.tsbFetchXMLBuilder = new System.Windows.Forms.ToolStripButton();
-            this.tsbPowerBi = new System.Windows.Forms.ToolStripButton();
+            this.tsbConvertToFetchXMLSplitButton = new System.Windows.Forms.ToolStripSplitButton();
+            this.fetchXMLToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.powerBIMToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripSeparator3 = new System.Windows.Forms.ToolStripSeparator();
             this.tsbIncludeFetchXml = new System.Windows.Forms.ToolStripButton();
             this.tssSeparator1 = new System.Windows.Forms.ToolStripSeparator();
@@ -51,8 +55,6 @@
             this.tslAboutLink = new System.Windows.Forms.ToolStripLabel();
             this.dockPanel = new WeifenLuo.WinFormsUI.Docking.DockPanel();
             this.saveSessionTimer = new System.Windows.Forms.Timer(this.components);
-            this.tscbConnection = new System.Windows.Forms.ToolStripComboBox();
-            this.toolStripSeparator1 = new System.Windows.Forms.ToolStripSeparator();
             this.toolStripMenu.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -72,7 +74,7 @@
             this.tsbStop,
             this.tsbPreviewFetchXml,
             this.tsbFetchXMLBuilder,
-            this.tsbPowerBi,
+            this.tsbConvertToFetchXMLSplitButton,
             this.toolStripSeparator3,
             this.tsbIncludeFetchXml,
             this.tssSeparator1,
@@ -113,6 +115,21 @@
             // 
             this.toolStripSeparator.Name = "toolStripSeparator";
             this.toolStripSeparator.Size = new System.Drawing.Size(6, 25);
+            // 
+            // tscbConnection
+            // 
+            this.tscbConnection.AutoCompleteMode = System.Windows.Forms.AutoCompleteMode.SuggestAppend;
+            this.tscbConnection.AutoCompleteSource = System.Windows.Forms.AutoCompleteSource.ListItems;
+            this.tscbConnection.Enabled = false;
+            this.tscbConnection.Name = "tscbConnection";
+            this.tscbConnection.Size = new System.Drawing.Size(121, 25);
+            this.tscbConnection.ToolTipText = "Available Databases (Ctrl+U)";
+            this.tscbConnection.SelectedIndexChanged += new System.EventHandler(this.tscbConnection_SelectedIndexChanged);
+            // 
+            // toolStripSeparator1
+            // 
+            this.toolStripSeparator1.Name = "toolStripSeparator1";
+            this.toolStripSeparator1.Size = new System.Drawing.Size(6, 25);
             // 
             // tsbNewQuery
             // 
@@ -197,16 +214,35 @@
             this.tsbFetchXMLBuilder.Text = "Edit in FetchXML Builder";
             this.tsbFetchXMLBuilder.Click += new System.EventHandler(this.tsbFetchXMLBuilder_Click);
             // 
-            // tsbPowerBi
+            // tsbConvertToFetchXMLSplitButton
             // 
-            this.tsbPowerBi.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Image;
-            this.tsbPowerBi.Enabled = false;
-            this.tsbPowerBi.Image = ((System.Drawing.Image)(resources.GetObject("tsbPowerBi.Image")));
-            this.tsbPowerBi.ImageTransparentColor = System.Drawing.Color.Magenta;
-            this.tsbPowerBi.Name = "tsbPowerBi";
-            this.tsbPowerBi.Size = new System.Drawing.Size(23, 22);
-            this.tsbPowerBi.Text = "Generate Power BI Query";
-            this.tsbPowerBi.Click += new System.EventHandler(this.tsbPowerBi_Click);
+            this.tsbConvertToFetchXMLSplitButton.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.fetchXMLToolStripMenuItem,
+            this.powerBIMToolStripMenuItem});
+            this.tsbConvertToFetchXMLSplitButton.Enabled = false;
+            this.tsbConvertToFetchXMLSplitButton.Image = ((System.Drawing.Image)(resources.GetObject("tsbConvertToFetchXMLSplitButton.Image")));
+            this.tsbConvertToFetchXMLSplitButton.ImageTransparentColor = System.Drawing.Color.Magenta;
+            this.tsbConvertToFetchXMLSplitButton.Name = "tsbConvertToFetchXMLSplitButton";
+            this.tsbConvertToFetchXMLSplitButton.Size = new System.Drawing.Size(81, 22);
+            this.tsbConvertToFetchXMLSplitButton.Text = "Convert";
+            this.tsbConvertToFetchXMLSplitButton.ToolTipText = "Convert the SQL query to FetchXML";
+            this.tsbConvertToFetchXMLSplitButton.Click += new System.EventHandler(this.fetchXMLToolStripMenuItem_Click);
+            // 
+            // fetchXMLToolStripMenuItem
+            // 
+            this.fetchXMLToolStripMenuItem.Image = ((System.Drawing.Image)(resources.GetObject("fetchXMLToolStripMenuItem.Image")));
+            this.fetchXMLToolStripMenuItem.Name = "fetchXMLToolStripMenuItem";
+            this.fetchXMLToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
+            this.fetchXMLToolStripMenuItem.Text = "FetchXML";
+            this.fetchXMLToolStripMenuItem.Click += new System.EventHandler(this.fetchXMLToolStripMenuItem_Click);
+            // 
+            // powerBIMToolStripMenuItem
+            // 
+            this.powerBIMToolStripMenuItem.Image = ((System.Drawing.Image)(resources.GetObject("powerBIMToolStripMenuItem.Image")));
+            this.powerBIMToolStripMenuItem.Name = "powerBIMToolStripMenuItem";
+            this.powerBIMToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
+            this.powerBIMToolStripMenuItem.Text = "Power BI (M)";
+            this.powerBIMToolStripMenuItem.Click += new System.EventHandler(this.powerBIMToolStripMenuItem_Click);
             // 
             // toolStripSeparator3
             // 
@@ -256,7 +292,7 @@
             this.tslAboutLink.Image = global::MarkMpn.Sql4Cds.Properties.Resources.SQL4CDS_Icon_16;
             this.tslAboutLink.IsLink = true;
             this.tslAboutLink.Name = "tslAboutLink";
-            this.tslAboutLink.Size = new System.Drawing.Size(184, 22);
+            this.tslAboutLink.Size = new System.Drawing.Size(184, 16);
             this.tslAboutLink.Text = "SQL 4 CDS by Mark Carrington";
             this.tslAboutLink.ToolTipText = "Documentation";
             this.tslAboutLink.Click += new System.EventHandler(this.tslAboutLink_Click);
@@ -275,21 +311,6 @@
             // 
             this.saveSessionTimer.Interval = 60000;
             this.saveSessionTimer.Tick += new System.EventHandler(this.saveSessionTimer_Tick);
-            // 
-            // tscbConnection
-            // 
-            this.tscbConnection.AutoCompleteMode = System.Windows.Forms.AutoCompleteMode.SuggestAppend;
-            this.tscbConnection.AutoCompleteSource = System.Windows.Forms.AutoCompleteSource.ListItems;
-            this.tscbConnection.Enabled = false;
-            this.tscbConnection.Name = "tscbConnection";
-            this.tscbConnection.Size = new System.Drawing.Size(121, 25);
-            this.tscbConnection.ToolTipText = "Available Databases (Ctrl+U)";
-            this.tscbConnection.SelectedIndexChanged += new System.EventHandler(this.tscbConnection_SelectedIndexChanged);
-            // 
-            // toolStripSeparator1
-            // 
-            this.toolStripSeparator1.Name = "toolStripSeparator1";
-            this.toolStripSeparator1.Size = new System.Drawing.Size(6, 25);
             // 
             // PluginControl
             // 
@@ -329,8 +350,10 @@
         private System.Windows.Forms.ToolStripButton tsbChangeConnection;
         private System.Windows.Forms.Timer saveSessionTimer;
         private System.Windows.Forms.ToolStripButton tsbFetchXMLBuilder;
-        private System.Windows.Forms.ToolStripButton tsbPowerBi;
         private System.Windows.Forms.ToolStripComboBox tscbConnection;
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator1;
+        private System.Windows.Forms.ToolStripSplitButton tsbConvertToFetchXMLSplitButton;
+        private System.Windows.Forms.ToolStripMenuItem fetchXMLToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem powerBIMToolStripMenuItem;
     }
 }

@@ -4,6 +4,7 @@ using System.Collections.Specialized;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Windows.Forms;
 using System.Xml.Serialization;
 using MarkMpn.Sql4Cds.Engine;
@@ -464,7 +465,7 @@ namespace MarkMpn.Sql4Cds
                 tscbConnection.Enabled = false;
                 tsbExecute.Enabled = false;
                 tsbPreviewFetchXml.Enabled = false;
-                tsbPowerBi.Enabled = false;
+                tsbConvertToFetchXMLSplitButton.Enabled = false;
                 return;
             }
 
@@ -472,7 +473,7 @@ namespace MarkMpn.Sql4Cds
             tscbConnection.Text = query.Connection.ConnectionName;
             tsbExecute.Enabled = query.Connection != null && !query.Busy;
             tsbPreviewFetchXml.Enabled = query.Connection != null && !query.Busy;
-            tsbPowerBi.Enabled = query.Connection != null && !query.Busy;
+            tsbConvertToFetchXMLSplitButton.Enabled = query.Connection != null && !query.Busy;
         }
 
         private void tsbStop_Click(object sender, EventArgs e)
@@ -546,7 +547,7 @@ namespace MarkMpn.Sql4Cds
             OnOutgoingMessage(this, args);
         }
 
-        private void tsbPowerBi_Click(object sender, EventArgs e)
+        private void powerBIMToolStripMenuItem_Click(object sender, EventArgs e)
         {
             if (!(dockPanel.ActiveDocument is SqlQueryControl sql))
                 return;
@@ -568,6 +569,76 @@ let
 in
   DataverseSQL";
             CreateM(m);
+        }
+
+        private void fetchXMLToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (!(dockPanel.ActiveDocument is SqlQueryControl sql))
+                return;
+
+            using (var con = new Sql4CdsConnection(sql.DataSources.Values.ToList()))
+            using (var cmd = con.CreateCommand())
+            {
+                new QueryExecutionOptions(this, null).ApplySettings(con, cmd, false);
+                con.UseTDSEndpoint = false;
+                cmd.CommandText = sql.Sql;
+
+                try
+                {
+                    var queries = cmd.GeneratePlan(false);
+
+                    foreach (var query in queries)
+                    {
+                        _ai.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name, ["Source"] = "XrmToolBox" });
+
+                        var sb = new StringBuilder();
+                        sb.Append("<!--\r\nCreated from query:\r\n\r\n");
+                        sb.Append(query.Sql);
+
+                        var nodes = GetAllNodes(query).ToList();
+                        var fetchXmlNodes = nodes.OfType<IFetchXmlExecutionPlanNode>().ToList();
+
+                        if (fetchXmlNodes.Count == 0)
+                            continue;
+
+                        if (nodes.Count < fetchXmlNodes.Count)
+                        {
+                            sb.Append("\r\n‼ WARNING ‼\r\n");
+                            sb.Append("This query requires additional processing. This FetchXML gives the required data, but needs additional processing to format it in the same way as returned by the TDS Endpoint or SQL 4 CDS.\r\n\r\n");
+                            sb.Append("See the estimated execution plan to see what extra processing is performed by SQL 4 CDS");
+                        }
+
+                        sb.Append("\r\n\r\n-->");
+
+                        foreach (var fetchXml in nodes.OfType<IFetchXmlExecutionPlanNode>())
+                        {
+                            sb.Append("\r\n\r\n");
+                            sb.Append(fetchXml.FetchXmlString);
+                        }
+
+                        CreateFetchXML(sb.ToString());
+                    }
+                }
+                catch (NotSupportedQueryFragmentException ex)
+                {
+                    MessageBox.Show(this, "The query could not be converted to FetchXML: " + ex.Message, "Query Not Supported", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+                catch (QueryParseException ex)
+                {
+                    MessageBox.Show(this, "The query could not be parsed: " + ex.Message, "Query Parsing Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+        }
+
+        private IEnumerable<IExecutionPlanNode> GetAllNodes(IExecutionPlanNode node)
+        {
+            foreach (var source in node.GetSources())
+            {
+                yield return source;
+
+                foreach (var subSource in GetAllNodes(source))
+                    yield return subSource;
+            }
         }
 
         private void tscbConnection_SelectedIndexChanged(object sender, EventArgs e)

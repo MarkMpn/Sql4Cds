@@ -125,7 +125,7 @@ namespace MarkMpn.Sql4Cds.SSMS
                             {
                                 editPoint.Insert("\r\n‼ WARNING ‼\r\n");
                                 editPoint.Insert("This query requires additional processing. This FetchXML gives the required data, but needs additional processing to format it in the same way as returned by the TDS Endpoint or SQL 4 CDS.\r\n\r\n");
-                                editPoint.Insert("Learn more at https://markcarrington.dev/sql-4-cds/additional-processing/\r\n\r\n");
+                                editPoint.Insert("See the estimated execution plan to see what extra processing is performed by SQL 4 CDS");
                             }
 
                             editPoint.Insert("\r\n\r\n-->");
