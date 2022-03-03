@@ -12,6 +12,7 @@ using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Metadata.Query;
+using Microsoft.Xrm.Sdk.Query;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -298,7 +299,41 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
-            return 100;
+            var entityCount = 100;
+            var attributesPerEntity = 1;
+            var relationshipsPerEntity = 1;
+
+            if (Query.Criteria.FilterOperator == LogicalOperator.And &&
+                Query.Criteria.Conditions.Any(c => c.PropertyName == nameof(EntityMetadata.LogicalName) && c.ConditionOperator == MetadataConditionOperator.Equals))
+            {
+                entityCount = 1;
+            }
+
+            if (MetadataSource.HasFlag(MetadataSource.Attribute))
+            {
+                attributesPerEntity = 100;
+
+                if (Query.AttributeQuery.Criteria.FilterOperator == LogicalOperator.And &&
+                    Query.AttributeQuery.Criteria.Conditions.Any(c => c.PropertyName == nameof(AttributeMetadata.LogicalName) && c.ConditionOperator == MetadataConditionOperator.Equals))
+                {
+                    attributesPerEntity = 1;
+                }
+            }
+
+            if (MetadataSource.HasFlag(MetadataSource.OneToManyRelationship) ||
+                MetadataSource.HasFlag(MetadataSource.ManyToOneRelationship) ||
+                MetadataSource.HasFlag(MetadataSource.ManyToManyRelationship))
+            {
+                relationshipsPerEntity = 5;
+
+                if (Query.RelationshipQuery.Criteria.FilterOperator == LogicalOperator.And &&
+                    Query.RelationshipQuery.Criteria.Conditions.Any(c => c.PropertyName == nameof(RelationshipMetadataBase.SchemaName) && c.ConditionOperator == MetadataConditionOperator.Equals))
+                {
+                    relationshipsPerEntity = 1;
+                }
+            }
+
+            return entityCount * attributesPerEntity * relationshipsPerEntity;
         }
 
         public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
