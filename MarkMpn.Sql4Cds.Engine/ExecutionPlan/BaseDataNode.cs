@@ -28,6 +28,29 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private TimeSpan _additionalDuration;
         private int _rowsOut;
 
+        [Category("Statistics")]
+        [Description("Returns the number of rows that the query optimizer estimates this node will generate")]
+        [BrowsableInEstimatedPlan(true)]
+        public int EstimatedRowsOut { get; protected set; }
+
+        /// <summary>
+        /// Returns the number of times the node has been executed
+        /// </summary>
+        public override int ExecutionCount => _executionCount;
+
+        /// <summary>
+        /// Returns the time that the node has taken to execute
+        /// </summary>
+        public override TimeSpan Duration => _timer.Duration + _additionalDuration;
+
+        /// <summary>
+        /// Returns the number of rows that the node has generated
+        /// </summary>
+        [Category("Statistics")]
+        [Description("Returns the number of rows that the node has generated")]
+        [BrowsableInEstimatedPlan(false)]
+        public int RowsOut => _rowsOut;
+
         /// <summary>
         /// Executes the query and produces a stram of data in the results
         /// </summary>
@@ -111,25 +134,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         }
 
         protected abstract int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes);
-
-        public int EstimatedRowsOut { get; protected set; }
-
-        /// <summary>
-        /// Returns the number of times the node has been executed
-        /// </summary>
-        public override int ExecutionCount => _executionCount;
-
-        /// <summary>
-        /// Returns the time that the node has taken to execute
-        /// </summary>
-        public override TimeSpan Duration => _timer.Duration + _additionalDuration;
-
-        /// <summary>
-        /// Returns the number of rows that the node has generated
-        /// </summary>
-        [Category("Statistics")]
-        [Description("Returns the number of rows that the node has generated")]
-        public int RowsOut => _rowsOut;
 
         /// <summary>
         /// Adds the execution statistics from another node into the summary for this node

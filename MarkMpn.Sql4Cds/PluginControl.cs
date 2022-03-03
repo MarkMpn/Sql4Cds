@@ -415,11 +415,11 @@ namespace MarkMpn.Sql4Cds
             if (sql != null)
             {
                 _properties.Connections = sql.DataSources;
-                _properties.SelectedObject = new ConnectionPropertiesWrapper(sql.Connection);
+                _properties.SelectObject(new ConnectionPropertiesWrapper(sql.Connection), false);
             }
             else
             {
-                _properties.SelectedObject = null;
+                _properties.SelectObject(null, false);
             }
         }
 

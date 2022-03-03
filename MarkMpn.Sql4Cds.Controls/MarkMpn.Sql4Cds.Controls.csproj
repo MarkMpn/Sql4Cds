@@ -58,7 +58,6 @@
       <SubType>Component</SubType>
     </Compile>
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="ExecutionPlanNodeTypeDescriptor.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\MarkMpn.Sql4Cds.Engine.NetFx\MarkMpn.Sql4Cds.Engine.NetFx.csproj">

@@ -28,6 +28,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)DataSource.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DisconnectedException.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlanBuilder.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlanNodeTypeDescriptor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlanOptimizer.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\Aggregate.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\AliasNode.cs" />

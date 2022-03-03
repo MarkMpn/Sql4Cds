@@ -11,16 +11,18 @@ using MarkMpn.Sql4Cds.Engine;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 
-namespace MarkMpn.Sql4Cds.Controls
+namespace MarkMpn.Sql4Cds.Engine
 {
     public class ExecutionPlanNodeTypeDescriptor : CustomTypeDescriptor
     {
         private readonly object _obj;
+        private readonly bool _estimated;
         private readonly Func<string, object> _connections;
 
-        public ExecutionPlanNodeTypeDescriptor(object obj, Func<string, object> connections)
+        public ExecutionPlanNodeTypeDescriptor(object obj, bool estimated, Func<string, object> connections)
         {
             _obj = obj;
+            _estimated = estimated;
             _connections = connections;
         }
 
@@ -39,7 +41,8 @@ namespace MarkMpn.Sql4Cds.Controls
                 .Where(p => p.PropertyType != typeof(IExecutionPlanNode))
                 .Where(p => p.DeclaringType != typeof(TSqlFragment))
                 .Where(p => p.GetCustomAttribute<BrowsableAttribute>()?.Browsable != false)
-                .Select(p => new WrappedPropertyDescriptor(_obj, p, _connections))
+                .Where(p => (p.GetCustomAttribute<BrowsableInEstimatedPlanAttribute>()?.Estimated ?? _estimated) == _estimated)
+                .Select(p => new WrappedPropertyDescriptor(_obj, p, _estimated, _connections))
                 .ToArray());
         }
 
@@ -49,19 +52,32 @@ namespace MarkMpn.Sql4Cds.Controls
         }
     }
 
+    [AttributeUsage(AttributeTargets.Property, AllowMultiple = false)]
+    class BrowsableInEstimatedPlanAttribute : Attribute
+    {
+        public BrowsableInEstimatedPlanAttribute(bool estimated)
+        {
+            Estimated = estimated;
+        }
+
+        public bool Estimated { get; }
+    }
+
     class WrappedPropertyDescriptor : PropertyDescriptor
     {
         private readonly object _target;
         private readonly PropertyInfo _prop;
         private readonly object _value;
+        private readonly bool _estimated;
         private readonly Func<string, object> _connections;
         private readonly string _originalValue;
 
-        public WrappedPropertyDescriptor(object target, PropertyInfo prop, Func<string, object> connections) : base(prop.Name, GetAttributes(target, prop, connections))
+        public WrappedPropertyDescriptor(object target, PropertyInfo prop, bool estimated, Func<string, object> connections) : base(prop.Name, GetAttributes(target, prop, connections))
         {
             _target = target;
             _prop = prop;
             _value = prop.GetValue(target);
+            _estimated = estimated;
             _connections = connections;
 
             if (prop.Name == "DataSource" && Category == "Data Source" && PropertyType == typeof(string) && connections != null && connections((string)_value) != null)
@@ -171,7 +187,7 @@ namespace MarkMpn.Sql4Cds.Controls
             var type = _value.GetType();
 
             if (type.IsClass && type != typeof(string))
-                return new ExecutionPlanNodeTypeDescriptor(_value, _connections);
+                return new ExecutionPlanNodeTypeDescriptor(_value, _estimated, _connections);
 
             return _value;
         }

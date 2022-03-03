@@ -131,7 +131,7 @@ namespace MarkMpn.Sql4Cds.SSMS
                         _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = stmt.Statement.GetType().Name, ["Source"] = "SSMS" });
 
                         if (tabPage != null)
-                            ShowPlan(sqlScriptEditorControl, tabPage, stmt.Statement, dataSource);
+                            ShowPlan(sqlScriptEditorControl, tabPage, stmt.Statement, dataSource, true);
 
                         resultFlag |= 1; // Success
                     };
@@ -272,7 +272,7 @@ namespace MarkMpn.Sql4Cds.SSMS
                         foreach (var query in plans)
                         {
                             _ai.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name, ["Source"] = "SSMS" });
-                            ShowPlan(sqlScriptEditorControl, tabPage, query, dataSource);
+                            ShowPlan(sqlScriptEditorControl, tabPage, query, dataSource, false);
                         }
                     }
 
@@ -308,11 +308,11 @@ namespace MarkMpn.Sql4Cds.SSMS
             return tabPage;
         }
 
-        private void ShowPlan(SqlScriptEditorControlWrapper sqlScriptEditorControl, TabPage tabPage, IRootExecutionPlanNode query, DataSource dataSource)
+        private void ShowPlan(SqlScriptEditorControlWrapper sqlScriptEditorControl, TabPage tabPage, IRootExecutionPlanNode query, DataSource dataSource, bool executed)
         {
             if (tabPage.InvokeRequired)
             {
-                tabPage.Invoke((Action) (() => ShowPlan(sqlScriptEditorControl, tabPage, query, dataSource)));
+                tabPage.Invoke((Action) (() => ShowPlan(sqlScriptEditorControl, tabPage, query, dataSource, executed)));
                 return;
             }
 
@@ -330,10 +330,10 @@ namespace MarkMpn.Sql4Cds.SSMS
                 AutoEllipsis = true,
                 UseMnemonic = false
             };
-            var planView = new ExecutionPlanView { Dock = DockStyle.Fill, Executed = false, DataSources = new Dictionary<string, DataSource> { [dataSource.Name] = dataSource } };
+            var planView = new ExecutionPlanView { Dock = DockStyle.Fill, Executed = executed, DataSources = new Dictionary<string, DataSource> { [dataSource.Name] = dataSource } };
             planView.Plan = query;
 
-            planView.NodeSelected += (s, e) => ShowProperties(sqlScriptEditorControl, planView.Selected);
+            planView.NodeSelected += (s, e) => ShowProperties(sqlScriptEditorControl, planView.Selected, executed);
             planView.DoubleClick += (s, e) =>
             {
                 if (planView.Selected is IFetchXmlExecutionPlanNode fetchXml)
@@ -353,13 +353,13 @@ namespace MarkMpn.Sql4Cds.SSMS
             editPoint.Insert(fetchXmlString);
         }
 
-        private void ShowProperties(SqlScriptEditorControlWrapper sqlScriptEditorControl, IExecutionPlanNode selected)
+        private void ShowProperties(SqlScriptEditorControlWrapper sqlScriptEditorControl, IExecutionPlanNode selected, bool executed)
         {
             var trackSelection = (Microsoft.SqlServer.Management.UI.VSIntegration.ITrackSelection) sqlScriptEditorControl.ServiceProvider.GetService(typeof(Microsoft.SqlServer.Management.UI.VSIntegration.ITrackSelection));
             var selection = new SelectionService();
 
             if (selected != null)
-                selection.SelectObjects(1, new[] { new ExecutionPlanNodeTypeDescriptor(selected, null) }, 0);
+                selection.SelectObjects(1, new[] { new ExecutionPlanNodeTypeDescriptor(selected, !executed, null) }, 0);
 
             trackSelection.OnSelectChange(selection);
         }

@@ -23,6 +23,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Category("Statistics")]
         [Description("The number of times this node has been executed")]
         [DisplayName("Execution Count")]
+        [BrowsableInEstimatedPlan(false)]
         public abstract int ExecutionCount { get; }
 
         /// <summary>
@@ -30,6 +31,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("Statistics")]
         [Description("The total time this node has taken, including the time of any child nodes")]
+        [BrowsableInEstimatedPlan(false)]
         public abstract TimeSpan Duration { get; }
 
         /// <summary>
