@@ -280,6 +280,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return false;
         }
 
+        public void RemoveSorts()
+        {
+            // Remove any existing sorts
+            if (Entity.Items != null)
+            {
+                Entity.Items = Entity.Items.Where(i => !(i is FetchOrderType)).ToArray();
+
+                foreach (var linkEntity in Entity.GetLinkEntities().Where(le => le.Items != null))
+                    linkEntity.Items = linkEntity.Items.Where(i => !(i is FetchOrderType)).ToArray();
+            }
+        }
+
         private void OnRetrievedEntity(Entity entity, INodeSchema schema, IQueryExecutionOptions options, IAttributeMetadataCache metadata)
         {
             // Expose any formatted values for OptionSetValue and EntityReference values

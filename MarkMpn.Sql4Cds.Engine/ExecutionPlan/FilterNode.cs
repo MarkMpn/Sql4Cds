@@ -59,6 +59,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
             Source.Parent = this;
 
+            var foldedFilters = false;
+
             // Foldable correlated IN queries "lefttable.column IN (SELECT righttable.column FROM righttable WHERE ...) are created as:
             // Filter: Expr2 is not null
             // -> FoldableJoin (LeftOuter SemiJoin) Expr2 = righttable.column in DefinedValues; righttable.column in RightAttribute
@@ -191,6 +193,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                         // Remove the filter and replace with an "in" link-entity
                         Filter = Filter.RemoveCondition(notNullFilter);
+                        foldedFilters = true;
 
                         linkToAdd = new FetchLinkEntityType
                         {
@@ -251,6 +254,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     // Remove the filter and replace with an "exists" link-entity
                     Filter = Filter.RemoveCondition(notNullFilter);
+                    foldedFilters = true;
 
                     linkToAdd = new FetchLinkEntityType
                     {
@@ -337,6 +341,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     };
 
                     Filter = filter;
+                    foldedFilters = true;
                 }
             }
 
@@ -372,6 +377,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                     ((FetchLinkEntityType)kvp.Key).AddItem(le);
                             }
                         }
+
+                        foldedFilters = true;
                     }
                 }
 
@@ -391,12 +398,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         meta.Query.RelationshipQuery = new RelationshipQueryExpression();
 
                     meta.Query.RelationshipQuery.AddFilter(relationshipFilter);
+
+                    if (entityFilter != null || attributeFilter != null || relationshipFilter != null)
+                        foldedFilters = true;
                 }
             }
 
             foreach (var addedLink in addedLinks)
                 addedLink.SemiJoin = true;
 
+            // Some of the filters have been folded into the source. Fold the sources again as the filter can have changed estimated row
+            // counts and lead to a better execution plan.
+            if (foldedFilters)
+                Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
+
+            // All the filters have been folded into the source. 
             if (Filter == null)
                 return Source;
 

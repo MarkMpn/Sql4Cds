@@ -244,14 +244,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!dataSources.TryGetValue(fetchXml.DataSource, out var dataSource))
                     throw new QueryExecutionException("Missing datasource " + fetchXml.DataSource);
 
-                // Remove any existing sorts
-                if (fetchXml.Entity.Items != null)
-                {
-                    fetchXml.Entity.Items = fetchXml.Entity.Items.Where(i => !(i is FetchOrderType)).ToArray();
-
-                    foreach (var linkEntity in fetchXml.Entity.GetLinkEntities().Where(le => le.Items != null))
-                        linkEntity.Items = linkEntity.Items.Where(i => !(i is FetchOrderType)).ToArray();
-                }
+                fetchXml.RemoveSorts();
 
                 var fetchSchema = fetchXml.GetSchema(dataSources, parameterTypes);
                 var entity = fetchXml.Entity;
