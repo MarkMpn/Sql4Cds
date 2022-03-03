@@ -16,10 +16,12 @@ namespace MarkMpn.Sql4Cds.Controls
     public class ExecutionPlanNodeTypeDescriptor : CustomTypeDescriptor
     {
         private readonly object _obj;
+        private readonly Func<string, object> _connections;
 
-        public ExecutionPlanNodeTypeDescriptor(object obj)
+        public ExecutionPlanNodeTypeDescriptor(object obj, Func<string, object> connections)
         {
             _obj = obj;
+            _connections = connections;
         }
 
         public override AttributeCollection GetAttributes()
@@ -37,23 +39,13 @@ namespace MarkMpn.Sql4Cds.Controls
                 .Where(p => p.PropertyType != typeof(IExecutionPlanNode))
                 .Where(p => p.DeclaringType != typeof(TSqlFragment))
                 .Where(p => p.GetCustomAttribute<BrowsableAttribute>()?.Browsable != false)
-                .Select(p => new WrappedPropertyDescriptor(_obj, p))
+                .Select(p => new WrappedPropertyDescriptor(_obj, p, _connections))
                 .ToArray());
         }
 
         public override object GetPropertyOwner(PropertyDescriptor pd)
         {
             return _obj;
-        }
-
-        public override string GetComponentName()
-        {
-            return _obj.ToString();
-        }
-
-        public override string GetClassName()
-        {
-            return string.Empty;
         }
     }
 
@@ -62,12 +54,22 @@ namespace MarkMpn.Sql4Cds.Controls
         private readonly object _target;
         private readonly PropertyInfo _prop;
         private readonly object _value;
+        private readonly Func<string, object> _connections;
+        private readonly string _originalValue;
 
-        public WrappedPropertyDescriptor(object target, PropertyInfo prop) : base(prop.Name, GetAttributes(target, prop))
+        public WrappedPropertyDescriptor(object target, PropertyInfo prop, Func<string, object> connections) : base(prop.Name, GetAttributes(target, prop, connections))
         {
             _target = target;
             _prop = prop;
             _value = prop.GetValue(target);
+            _connections = connections;
+
+            if (prop.Name == "DataSource" && Category == "Data Source" && PropertyType == typeof(string) && connections != null && connections((string)_value) != null)
+            {
+                _prop = null;
+                _originalValue = (string)_value;
+                _value = connections(_originalValue);
+            }
         }
 
         public WrappedPropertyDescriptor(object target, string name, object value) : base(name, GetAttributes(value.GetType()))
@@ -76,10 +78,13 @@ namespace MarkMpn.Sql4Cds.Controls
             _value = value;
         }
 
-        private static Attribute[] GetAttributes(object target, PropertyInfo prop)
+        private static Attribute[] GetAttributes(object target, PropertyInfo prop, Func<string, object> connections)
         {
             var baseAttributes = Attribute.GetCustomAttributes(prop);
             var value = prop.GetValue(target);
+
+            if (prop.Name == "DataSource" && baseAttributes.OfType<CategoryAttribute>().FirstOrDefault()?.Category == "Data Source" && prop.PropertyType == typeof(string) && connections != null && connections((string)value) != null)
+                value = connections((string)value);
 
             if (value != null)
                 return GetAttributes(value.GetType()).Concat(baseAttributes).ToArray();
@@ -140,7 +145,7 @@ namespace MarkMpn.Sql4Cds.Controls
                     if (typeof(MultiPartIdentifier).IsAssignableFrom(type))
                         return new MultiPartIdentifierConverter();
 
-                    return new SimpleNameExpandableObjectConverter(_prop == null || (_value != null && _prop != null && type != _prop.PropertyType) ? $"({type.Name})" : $"({Name})");
+                    return new SimpleNameExpandableObjectConverter(_originalValue != null ? _originalValue : _value is TSqlFragment sql ? sql.ToSql() : _prop == null || (_value != null && _prop != null && type != _prop.PropertyType) ? $"({type.Name})" : $"({Name})");
                 }
 
                 return base.Converter;
@@ -166,7 +171,7 @@ namespace MarkMpn.Sql4Cds.Controls
             var type = _value.GetType();
 
             if (type.IsClass && type != typeof(string))
-                return new ExecutionPlanNodeTypeDescriptor(_value);
+                return new ExecutionPlanNodeTypeDescriptor(_value, _connections);
 
             return _value;
         }

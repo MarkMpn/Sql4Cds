@@ -359,7 +359,7 @@ namespace MarkMpn.Sql4Cds.SSMS
             var selection = new SelectionService();
 
             if (selected != null)
-                selection.SelectObjects(1, new[] { new ExecutionPlanNodeTypeDescriptor(selected) }, 0);
+                selection.SelectObjects(1, new[] { new ExecutionPlanNodeTypeDescriptor(selected, null) }, 0);
 
             trackSelection.OnSelectChange(selection);
         }
