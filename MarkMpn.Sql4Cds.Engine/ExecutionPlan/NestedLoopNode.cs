@@ -175,7 +175,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var rightEstimate = RightSource.EstimatedRowsOut;
 
-            if (JoinType == QualifiedJoinType.Inner)
+            if (OuterReferences != null && OuterReferences.Count > 0)
+                return leftEstimate * rightEstimate;
+            else if (JoinType == QualifiedJoinType.Inner)
                 return Math.Min(leftEstimate, rightEstimate);
             else
                 return Math.Max(leftEstimate, rightEstimate);

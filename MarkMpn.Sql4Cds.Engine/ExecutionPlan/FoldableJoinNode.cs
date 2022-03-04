@@ -349,7 +349,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 OuterReferences = new Dictionary<string, string>
                 {
                     [leftAttr] = outerReference
-                }
+                },
+                JoinCondition = AdditionalJoinCriteria
             };
 
             // Merge joins might have added sorts already. They're not needed any longer, so remove them.
@@ -363,7 +364,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             else if (nestedLoop.RightSource is FetchXmlScan rightFetch)
                 rightFetch.RemoveSorts();
 
-            folded = nestedLoop;
+            folded = nestedLoop.FoldQuery(dataSources, options, parameterTypes, hints);
             return true;
         }
 

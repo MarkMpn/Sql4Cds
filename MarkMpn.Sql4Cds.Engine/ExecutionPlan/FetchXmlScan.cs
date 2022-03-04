@@ -1010,7 +1010,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return 1;
             }
 
-            return (int) (rowCount * filterMultiple);
+            var estimate = (int) (rowCount * filterMultiple);
+
+            // An estimate of 1 or 0 can cause big differences to the query plan that might be very inefficient if the estimate
+            // is wrong. If we're not really sure that the won't just be a single row, make sure we return at least 2.
+            if (estimate <= 1 && rowCount > 1)
+                estimate = 2;
+
+            return estimate;
         }
 
         private double EstimateFilterRate(EntityMetadata metadata, filter filter, ITableSizeCache tableSize, out bool singleRow)
@@ -1083,6 +1090,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                             if (attribute is EnumAttributeMetadata enumAttr)
                                 conditionMultiple = 1.0 / enumAttr.OptionSet.Options.Count;
+                            else if (attribute is BooleanAttributeMetadata)
+                                conditionMultiple = 0.5;
                             else
                                 conditionMultiple = 0.01;
                         }
