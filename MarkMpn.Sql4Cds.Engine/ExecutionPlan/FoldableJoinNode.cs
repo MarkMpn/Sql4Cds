@@ -322,27 +322,37 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (leftSource.EstimatedRowsOut > 1)
                 return false;
             
+            // Add the filter to the inner side of the nested loop
             var outerReference = $"@Cond{++_nestedLoopCount}";
+            var filteredRightSource = new FilterNode
+            {
+                Source = rightSource,
+                Filter = new BooleanComparisonExpression
+                {
+                    FirstExpression = rightAttribute,
+                    ComparisonType = BooleanComparisonType.Equals,
+                    SecondExpression = new VariableReference { Name = outerReference }
+                }
+            };
+            var foldedRightSource = filteredRightSource.FoldQuery(dataSources, options, parameterTypes, hints);
+
+            // If we can't fold the filter down to the data source, there's no benefit from doing this so stick with the
+            // original join type
+            if (foldedRightSource == filteredRightSource)
+                return false;
+
             var nestedLoop = new NestedLoopNode
             {
                 JoinType = joinType,
                 LeftSource = leftSource,
-                RightSource = new FilterNode
-                {
-                    Source = rightSource,
-                    Filter = new BooleanComparisonExpression
-                    {
-                        FirstExpression = rightAttribute,
-                        ComparisonType = BooleanComparisonType.Equals,
-                        SecondExpression = new VariableReference { Name = outerReference }
-                    }
-                },
+                RightSource = foldedRightSource,
                 OuterReferences = new Dictionary<string, string>
                 {
                     [leftAttr] = outerReference
                 }
             };
 
+            // Merge joins might have added sorts already. They're not needed any longer, so remove them.
             if (nestedLoop.LeftSource is SortNode leftSort)
                 nestedLoop.LeftSource = leftSort.Source;
             else if (nestedLoop.LeftSource is FetchXmlScan leftFetch)
@@ -353,7 +363,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             else if (nestedLoop.RightSource is FetchXmlScan rightFetch)
                 rightFetch.RemoveSorts();
 
-            folded = nestedLoop.FoldQuery(dataSources, options, parameterTypes, hints);
+            folded = nestedLoop;
             return true;
         }
 

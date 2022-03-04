@@ -3868,7 +3868,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <filter>
                             <condition attribute='accountid' operator='eq' value='@Cond1' />
                         </filter>
-                        <order attribute='accountid' />
                     </entity>
                 </fetch>");
             var contactFetch = AssertNode<FetchXmlScan>(nestedLoop1.RightSource);
@@ -3879,7 +3878,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <filter>
                             <condition attribute='contactid' operator='eq' value='@Cond2' />
                         </filter>
-                        <order attribute='contactid' />
                     </entity>
                 </fetch>");
         }
