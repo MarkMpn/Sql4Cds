@@ -875,6 +875,7 @@ namespace MarkMpn.Sql4Cds
             using (var cmd = con.CreateCommand())
             {
                 new QueryExecutionOptions(this, backgroundWorker).ApplySettings(con, cmd, args.Execute);
+                cmd.CommandTimeout = 0;
 
                 cmd.CommandText = args.Sql;
 
