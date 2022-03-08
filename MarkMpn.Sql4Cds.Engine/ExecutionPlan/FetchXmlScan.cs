@@ -554,7 +554,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!FetchXml.aggregate)
                 schema.PrimaryKey = $"{Alias}.{meta.PrimaryIdAttribute}";
 
-            AddSchemaAttributes(schema, dataSource.Metadata, entity.name, Alias, entity.Items);
+            AddSchemaAttributes(schema, dataSource.Metadata, entity.name, Alias, entity.Items, true);
 
             _lastSchema = schema;
             _lastSchemaFetchXml = fetchXmlString;
@@ -638,43 +638,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Regex.IsMatch(alias, "^[A-Za-z_][A-Za-z0-9_]*$");
         }
 
-        internal bool IsAliasReferenced(string alias)
-        {
-            var entity = FetchXml.Items.OfType<FetchEntityType>().Single();
-            return IsAliasReferenced(entity.Items, alias);
-        }
-
-        private bool IsAliasReferenced(object[] items, string alias)
-        {
-            if (items == null)
-                return false;
-
-            var hasSort = items.OfType<FetchOrderType>().Any(sort => sort.alias != null && sort.alias.Equals(alias, StringComparison.OrdinalIgnoreCase));
-
-            if (hasSort)
-                return true;
-
-            var hasCondition = items.OfType<condition>().Any(condition => condition.alias != null && condition.alias.Equals(alias, StringComparison.OrdinalIgnoreCase));
-
-            if (hasCondition)
-                return true;
-
-            foreach (var filter in items.OfType<filter>())
-            {
-                if (IsAliasReferenced(filter.Items, alias))
-                    return true;
-            }
-
-            foreach (var linkEntity in items.OfType<FetchLinkEntityType>())
-            {
-                if (IsAliasReferenced(linkEntity.Items, alias))
-                    return true;
-            }
-
-            return false;
-        }
-
-        private void AddSchemaAttributes(NodeSchema schema, IAttributeMetadataCache metadata, string entityName, string alias, object[] items)
+        private void AddSchemaAttributes(NodeSchema schema, IAttributeMetadataCache metadata, string entityName, string alias, object[] items, bool innerJoin)
         {
             if (items == null && !ReturnFullSchema)
                 return;
@@ -693,7 +657,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     var fullName = $"{alias}.{attrMetadata.LogicalName}";
                     var attrType = attrMetadata.GetAttributeSqlType();
-                    AddSchemaAttribute(schema, fullName, attrMetadata.LogicalName, attrType, attrMetadata);
+                    AddSchemaAttribute(schema, fullName, attrMetadata.LogicalName, attrType, attrMetadata, innerJoin);
                 }
             }
 
@@ -730,7 +694,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         attrAlias = attribute.name;
                     }
 
-                    AddSchemaAttribute(schema, fullName, attrAlias, attrType, attrMetadata);
+                    AddSchemaAttribute(schema, fullName, attrAlias, attrType, attrMetadata, innerJoin);
                 }
 
                 if (items.OfType<allattributes>().Any())
@@ -747,7 +711,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         var attrName = attrMetadata.LogicalName;
                         var fullName = $"{alias}.{attrName}";
 
-                        AddSchemaAttribute(schema, fullName, attrName, attrType, attrMetadata);
+                        AddSchemaAttribute(schema, fullName, attrName, attrType, attrMetadata, innerJoin);
                     }
                 }
 
@@ -800,15 +764,46 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         }
                     }
 
-                    AddSchemaAttributes(schema, metadata, linkEntity.name, linkEntity.alias, linkEntity.Items);
+                    AddSchemaAttributes(schema, metadata, linkEntity.name, linkEntity.alias, linkEntity.Items, innerJoin && linkEntity.linktype == "inner");
+                }
+
+                if (innerJoin)
+                {
+                    foreach (var filter in items.OfType<filter>())
+                        AddNotNullFilters(schema, alias, filter);
                 }
             }
         }
 
-        private void AddSchemaAttribute(NodeSchema schema, string fullName, string simpleName, Type type, AttributeMetadata attrMetadata)
+        private void AddNotNullFilters(NodeSchema schema, string alias, filter filter)
         {
+            if (filter.type == filterType.or)
+                return;
+
+            if (filter.Items == null)
+                return;
+
+            foreach (var cond in filter.Items.OfType<condition>())
+            {
+                if (cond.@operator == @operator.@null || cond.@operator == @operator.ne || cond.@operator == @operator.nebusinessid || cond.@operator == @operator.neq || cond.@operator == @operator.neuserid)
+                    continue;
+
+                var fullname = (cond.entityname ?? alias) + "." + (cond.alias ?? cond.attribute);
+
+                if (schema.ContainsColumn(fullname, out fullname))
+                    schema.NotNullColumns.Add(fullname);
+            }
+
+            foreach (var subFilter in filter.Items.OfType<filter>())
+                AddNotNullFilters(schema, alias, subFilter);
+        }
+
+        private void AddSchemaAttribute(NodeSchema schema, string fullName, string simpleName, Type type, AttributeMetadata attrMetadata, bool innerJoin)
+        {
+            var notNull = innerJoin && (attrMetadata.RequiredLevel?.Value == AttributeRequiredLevel.SystemRequired || attrMetadata.LogicalName == "createdon" || attrMetadata.LogicalName == "createdby" || attrMetadata.AttributeOf == "createdby");
+
             // Add the logical attribute
-            AddSchemaAttribute(schema, fullName, simpleName, type);
+            AddSchemaAttribute(schema, fullName, simpleName, type, notNull);
 
             if (attrMetadata.IsPrimaryId == true)
                 _primaryKeyColumns[fullName] = attrMetadata.EntityLogicalName;
@@ -818,20 +813,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Add standard virtual attributes
             if (attrMetadata is EnumAttributeMetadata || attrMetadata is BooleanAttributeMetadata)
-                AddSchemaAttribute(schema, fullName + "name", attrMetadata.LogicalName + "name", typeof(SqlString));
+                AddSchemaAttribute(schema, fullName + "name", attrMetadata.LogicalName + "name", typeof(SqlString), notNull);
 
             if (attrMetadata is LookupAttributeMetadata lookup)
             {
-                AddSchemaAttribute(schema, fullName + "name", attrMetadata.LogicalName + "name", typeof(SqlString));
+                AddSchemaAttribute(schema, fullName + "name", attrMetadata.LogicalName + "name", typeof(SqlString), notNull);
 
                 if (lookup.Targets?.Length > 1 && lookup.AttributeType != AttributeTypeCode.PartyList)
-                    AddSchemaAttribute(schema, fullName + "type", attrMetadata.LogicalName + "type", typeof(SqlString));
+                    AddSchemaAttribute(schema, fullName + "type", attrMetadata.LogicalName + "type", typeof(SqlString), notNull);
             }
         }
 
-        private void AddSchemaAttribute(NodeSchema schema, string fullName, string simpleName, Type type)
+        private void AddSchemaAttribute(NodeSchema schema, string fullName, string simpleName, Type type, bool notNull)
         {
             schema.Schema[fullName] = type.ToSqlType();
+
+            if (notNull)
+                schema.NotNullColumns.Add(fullName);
 
             if (simpleName == null)
                 return;

@@ -3850,33 +3850,21 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, plans.Length);
 
             var select = AssertNode<SelectNode>(plans[0]);
-            var nestedLoop1 = AssertNode<NestedLoopNode>(select.Source);
-            Assert.AreEqual(QualifiedJoinType.LeftOuter, nestedLoop1.JoinType);
-            Assert.AreEqual(1, nestedLoop1.OuterReferences.Count);
-            Assert.AreEqual("@Cond2", nestedLoop1.OuterReferences["account.primarycontactid"]);
-            var nestedLoop2 = AssertNode<NestedLoopNode>(nestedLoop1.LeftSource);
-            Assert.AreEqual(QualifiedJoinType.LeftOuter, nestedLoop2.JoinType);
-            Assert.AreEqual(1, nestedLoop2.OuterReferences.Count);
-            Assert.AreEqual("@Cond1", nestedLoop2.OuterReferences["entity.metadataid"]);
-            var meta = AssertNode<MetadataQueryNode>(nestedLoop2.LeftSource);
-            var accountFetch = AssertNode<FetchXmlScan>(nestedLoop2.RightSource);
-            AssertFetchXml(accountFetch, @"
+            var nestedLoop = AssertNode<NestedLoopNode>(select.Source);
+            Assert.AreEqual(QualifiedJoinType.LeftOuter, nestedLoop.JoinType);
+            Assert.AreEqual(1, nestedLoop.OuterReferences.Count);
+            Assert.AreEqual("@Cond1", nestedLoop.OuterReferences["entity.metadataid"]);
+            var meta = AssertNode<MetadataQueryNode>(nestedLoop.LeftSource);
+            var fetch = AssertNode<FetchXmlScan>(nestedLoop.RightSource);
+            AssertFetchXml(fetch, @"
                 <fetch>
                     <entity name='account'>
                         <attribute name='name' />
-                        <attribute name='primarycontactid' />
+                        <link-entity name='contact' alias='contact' from='contactid' to='primarycontactid' link-type='outer'>
+                            <attribute name='firstname' />
+                        </link-entity>
                         <filter>
                             <condition attribute='accountid' operator='eq' value='@Cond1' />
-                        </filter>
-                    </entity>
-                </fetch>");
-            var contactFetch = AssertNode<FetchXmlScan>(nestedLoop1.RightSource);
-            AssertFetchXml(contactFetch, @"
-                <fetch>
-                    <entity name='contact'>
-                        <attribute name='firstname' />
-                        <filter>
-                            <condition attribute='contactid' operator='eq' value='@Cond2' />
                         </filter>
                     </entity>
                 </fetch>");

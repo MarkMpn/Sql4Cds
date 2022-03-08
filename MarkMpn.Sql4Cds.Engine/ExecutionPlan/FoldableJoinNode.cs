@@ -55,17 +55,172 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
             var rightSchema = RightSource.GetSchema(dataSources, parameterTypes);
+            var leftFetch = LeftSource as FetchXmlScan;
+            var rightFetch = RightSource as FetchXmlScan;
 
-            if (LeftSource is FetchXmlScan leftFetch && RightSource is FetchXmlScan rightFetch && FoldFetchXmlJoin(dataSources, options, parameterTypes, hints, leftFetch, leftSchema, rightFetch, rightSchema, out var folded))
+            if (leftFetch != null && rightFetch != null && FoldFetchXmlJoin(dataSources, options, parameterTypes, hints, leftFetch, leftSchema, rightFetch, rightSchema, out var folded))
+                return folded;
+
+            if (LeftSource is BaseJoinNode leftJoin && rightFetch != null && FoldFetchXmlJoin(dataSources, options, parameterTypes, hints, leftJoin, rightFetch, rightSchema, out folded))
+                return folded;
+
+            if (RightSource is BaseJoinNode rightJoin && leftFetch != null && FoldFetchXmlJoin(dataSources, options, parameterTypes, hints, rightJoin, leftFetch, leftSchema, out folded))
                 return folded;
 
             if (LeftSource is MetadataQueryNode leftMeta && RightSource is MetadataQueryNode rightMeta && JoinType == QualifiedJoinType.Inner && FoldMetadataJoin(dataSources, options, parameterTypes, hints, leftMeta, leftSchema, rightMeta, rightSchema, out folded))
                 return folded;
 
+            // Add not-null filter on join keys
+            // Inner join - both must be non-null
+            // Left outer join - right key must be non-null
+            // Right outer join - left key must be non-null
+            if (JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.RightOuter)
+                LeftSource = AddNotNullFilter(LeftSource, LeftAttribute, dataSources, options, parameterTypes, hints);
+
+            if (JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.LeftOuter)
+                RightSource = AddNotNullFilter(RightSource, RightAttribute, dataSources, options, parameterTypes, hints);
+
             if (FoldSingleRowJoinToNestedLoop(dataSources, options, parameterTypes, hints, leftSchema, rightSchema, out folded))
                 return folded;
 
             return this;
+        }
+
+        private IDataExecutionPlanNodeInternal AddNotNullFilter(IDataExecutionPlanNodeInternal source, ColumnReferenceExpression attribute, IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        {
+            var schema = source.GetSchema(dataSources, parameterTypes);
+            if (!schema.ContainsColumn(attribute.GetColumnName(), out var colName))
+                return source;
+
+            if (schema.NotNullColumns.Contains(colName))
+                return source;
+
+            var filter = new FilterNode
+            {
+                Source = source,
+                Filter = new BooleanIsNullExpression
+                {
+                    Expression = attribute,
+                    IsNot = true
+                }
+            };
+
+            var folded = filter.FoldQuery(dataSources, options, parameterTypes, hints);
+
+            if (folded != filter)
+            {
+                folded.Parent = this;
+                return folded;
+            }
+
+            return source;
+        }
+
+        private bool FoldFetchXmlJoin(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints, BaseJoinNode join, FetchXmlScan fetch, INodeSchema fetchSchema, out IDataExecutionPlanNodeInternal folded)
+        {
+            folded = null;
+
+            if (JoinType == QualifiedJoinType.FullOuter)
+                return false;
+
+            if (JoinType == QualifiedJoinType.Inner && join.JoinType != QualifiedJoinType.Inner)
+                return false;
+
+            if (JoinType == QualifiedJoinType.LeftOuter && fetch == LeftSource)
+                return false;
+
+            if (JoinType == QualifiedJoinType.RightOuter && fetch == RightSource)
+                return false;
+
+            if ((join.JoinType == QualifiedJoinType.Inner || join.JoinType == QualifiedJoinType.RightOuter) && join.LeftSource is FetchXmlScan leftInnerFetch)
+            {
+                var leftSource = leftInnerFetch;
+                var leftSchema = leftInnerFetch.GetSchema(dataSources, parameterTypes);
+                var rightSource = fetch;
+                var rightSchema = fetchSchema;
+
+                if (fetch == LeftSource)
+                {
+                    Swap(ref leftSource, ref rightSource);
+                    Swap(ref leftSchema, ref rightSchema);
+                }
+
+                if (FoldFetchXmlJoin(dataSources, options, parameterTypes, hints, leftSource, leftSchema, rightSource, rightSchema, out folded))
+                {
+                    folded.Parent = join;
+                    join.LeftSource = folded;
+                    folded = ConvertManyToManyMergeJoinToHashJoin(join, dataSources, options, parameterTypes, hints);
+                    return true;
+                }
+            }
+
+            if ((join.JoinType == QualifiedJoinType.Inner || join.JoinType == QualifiedJoinType.LeftOuter) && join.RightSource is FetchXmlScan rightInnerFetch)
+            {
+                var leftSource = rightInnerFetch;
+                var leftSchema = rightInnerFetch.GetSchema(dataSources, parameterTypes);
+                var rightSource = fetch;
+                var rightSchema = fetchSchema;
+
+                if (fetch == LeftSource)
+                {
+                    Swap(ref leftSource, ref rightSource);
+                    Swap(ref leftSchema, ref rightSchema);
+                }
+
+                if (FoldFetchXmlJoin(dataSources, options, parameterTypes, hints, leftSource, leftSchema, rightSource, rightSchema, out folded))
+                {
+                    folded.Parent = join;
+                    join.RightSource = folded;
+                    folded = join;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private IDataExecutionPlanNodeInternal ConvertManyToManyMergeJoinToHashJoin(BaseJoinNode join, IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        {
+            // If folding the inner join has caused a one-to-many merge join to become a many-to-many merge join,
+            // which we don't currently support, switch it to be a hash join
+            if (!(join is MergeJoinNode merge))
+                return join;
+
+            var leftSchema = join.LeftSource.GetSchema(dataSources, parameterTypes);
+            if (leftSchema.ContainsColumn(merge.LeftAttribute.GetColumnName(), out var leftKey) &&
+                leftKey == leftSchema.PrimaryKey)
+                return join;
+
+            var hash = new HashJoinNode
+            {
+                AdditionalJoinCriteria = merge.AdditionalJoinCriteria,
+                JoinType = merge.JoinType,
+                LeftAttribute = merge.LeftAttribute,
+                LeftSource = merge.LeftSource,
+                Parent = merge.Parent,
+                RightAttribute = merge.RightAttribute,
+                RightSource = merge.RightSource,
+                SemiJoin = merge.SemiJoin
+            };
+
+            foreach (var kvp in merge.DefinedValues)
+                hash.DefinedValues.Add(kvp);
+
+            // Remove any sorts previously added by the merge join
+            if (hash.LeftSource is SortNode leftSort)
+                hash.LeftSource = leftSort.Source;
+            else if (hash.LeftSource is FetchXmlScan leftFetch)
+                leftFetch.RemoveSorts();
+
+            if (hash.RightSource is SortNode rightSort)
+                hash.RightSource = rightSort.Source;
+            else if (hash.RightSource is FetchXmlScan rightFetch)
+                rightFetch.RemoveSorts();
+
+            hash.LeftSource.Parent = hash;
+            hash.RightSource.Parent = hash;
+
+            return hash.FoldQuery(dataSources, options, parameterTypes, hints);
         }
 
         private bool FoldFetchXmlJoin(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints, FetchXmlScan leftFetch, INodeSchema leftSchema, FetchXmlScan rightFetch, INodeSchema rightSchema, out IDataExecutionPlanNodeInternal folded)

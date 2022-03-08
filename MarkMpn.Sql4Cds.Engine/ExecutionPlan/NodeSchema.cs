@@ -34,6 +34,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Aliases[kvp.Key] = new List<string>(kvp.Value);
 
             SortOrder.AddRange(copy.SortOrder);
+
+            foreach (var col in copy.NotNullColumns)
+                NotNullColumns.Add(col);
         }
 
         /// <summary>
@@ -54,6 +57,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public Dictionary<string, List<string>> Aliases { get; set; } = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
 
         IReadOnlyDictionary<string, IReadOnlyList<string>> INodeSchema.Aliases => Aliases.ToDictionary(kvp => kvp.Key, kvp => (IReadOnlyList<string>) kvp.Value);
+
+        public HashSet<string> NotNullColumns { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        IReadOnlyList<string> INodeSchema.NotNullColumns => NotNullColumns.ToList().AsReadOnly();
 
         public List<string> SortOrder { get; set; } = new List<string>();
 
@@ -127,6 +134,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// A list of the columns by which the data is sorted
         /// </summary>
         IReadOnlyList<string> SortOrder { get; }
+
+        /// <summary>
+        /// A list of the columns which are known to be non-null
+        /// </summary>
+        IReadOnlyList<string> NotNullColumns { get; }
 
         /// <summary>
         /// Checks if a column exists in the schema

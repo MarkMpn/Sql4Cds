@@ -135,6 +135,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     schema.Aliases[alias.Key].AddRange(alias.Value);
                 }
+
+                if (((JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.LeftOuter) && subSchema == outerSchema) ||
+                    ((JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.RightOuter) && subSchema == innerSchema))
+                {
+                    foreach (var col in subSchema.NotNullColumns)
+                        schema.NotNullColumns.Add(col);
+                }
             }
 
             foreach (var definedValue in DefinedValues)
