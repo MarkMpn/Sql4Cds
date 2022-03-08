@@ -3872,5 +3872,32 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     </entity>
                 </fetch>");
         }
+
+        [TestMethod]
+        public void NotEqualExcludesNull()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                SELECT name FROM account WHERE name <> 'Data8'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <filter>
+                            <condition attribute='name' operator='ne' value='Data8' />
+                            <condition attribute='name' operator='not-null' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
     }
 }

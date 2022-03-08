@@ -876,6 +876,71 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }).ToArray()
                 };
             }
+
+            if (op == @operator.ne || op == @operator.nebusinessid || op == @operator.neq || op == @operator.neuserid)
+            {
+                // FetchXML not-equal type operators treat NULL as not-equal to values, but T-SQL treats them as not-not-equal. Add
+                // an extra not-null condition to keep it compatible with T-SQL
+                if (condition != null)
+                {
+                    filter = new filter
+                    {
+                        type = filterType.and,
+                        Items = new[]
+                        {
+                            condition,
+                            new condition
+                            {
+                                entityname = condition.entityname,
+                                attribute = condition.attribute,
+                                @operator = @operator.notnull
+                            }
+                        }
+                    };
+                    condition = null;
+                }
+                else if (ft == filterType.and)
+                {
+                    filter.Items = filter.Items
+                        .Cast<condition>()
+                        .SelectMany(c => new[]
+                        {
+                            c,
+                            new condition
+                            {
+                                entityname = c.entityname,
+                                attribute = c.attribute,
+                                @operator = @operator.notnull
+                            }
+                        })
+                        .ToArray();
+                }
+                else
+                {
+                    filter = new filter
+                    {
+                        type = filterType.or,
+                        Items = filter.Items
+                            .Cast<condition>()
+                            .Select(c => new filter
+                            {
+                                type = filterType.and,
+                                Items = new[]
+                                {
+                                    c,
+                                    new condition
+                                    {
+                                        entityname = c.entityname,
+                                        attribute = c.attribute,
+                                        @operator = @operator.notnull
+                                    }
+                                }
+                            })
+                            .ToArray()
+                    };
+                }
+            }
+
             return true;
         }
 
