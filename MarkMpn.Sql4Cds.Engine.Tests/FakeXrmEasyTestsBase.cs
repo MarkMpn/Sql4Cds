@@ -56,6 +56,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.PrimaryIdAttribute)).SetValue(entity, entity.LogicalName + "id");
                 var attr = entity.Attributes.Single(a => a.LogicalName == entity.LogicalName + "id");
                 typeof(AttributeMetadata).GetProperty(nameof(AttributeMetadata.IsPrimaryId)).SetValue(attr, true);
+                attr.RequiredLevel = new AttributeRequiredLevelManagedProperty(AttributeRequiredLevel.SystemRequired);
                 context.SetEntityMetadata(entity);
             }
         }

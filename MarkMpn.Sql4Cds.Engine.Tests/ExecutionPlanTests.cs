@@ -245,6 +245,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     <entity name='account'>
                         <attribute name='accountid' />
                         <attribute name='name' />
+                        <filter>
+                            <condition attribute='name' operator='not-null' />
+                        </filter>
                     </entity>
                 </fetch>");
             var contactComputeScalar = AssertNode<ComputeScalarNode>(join.RightSource);

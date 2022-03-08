@@ -108,6 +108,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (folded != this)
                 return folded;
 
+            if (SemiJoin)
+                return folded;
+
             // If we can't fold this query, try to make sure the smaller table is used as the left input to reduce the
             // number of records held in memory in the hash table
             LeftSource.EstimateRowsOut(dataSources, options, parameterTypes);
