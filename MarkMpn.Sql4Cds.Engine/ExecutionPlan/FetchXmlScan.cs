@@ -777,10 +777,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private void AddNotNullFilters(NodeSchema schema, string alias, filter filter)
         {
-            if (filter.type == filterType.or)
+            if (filter.Items == null)
                 return;
 
-            if (filter.Items == null)
+            if (filter.type == filterType.or && filter.Items.Length > 1)
                 return;
 
             foreach (var cond in filter.Items.OfType<condition>())
