@@ -101,6 +101,37 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return schema;
         }
 
+        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        {
+            var folded = base.FoldQuery(dataSources, options, parameterTypes, hints);
+
+            if (folded != this)
+                return folded;
+
+            // If we can't fold this query, try to make sure the smaller table is used as the left input to reduce the
+            // number of records held in memory in the hash table
+            LeftSource.EstimateRowsOut(dataSources, options, parameterTypes);
+            RightSource.EstimateRowsOut(dataSources, options, parameterTypes);
+
+            if (LeftSource.EstimatedRowsOut > RightSource.EstimatedRowsOut)
+            {
+                var leftSource = LeftSource;
+                LeftSource = RightSource;
+                RightSource = leftSource;
+
+                var leftAttr = LeftAttribute;
+                LeftAttribute = RightAttribute;
+                RightAttribute = leftAttr;
+
+                if (JoinType == QualifiedJoinType.LeftOuter)
+                    JoinType = QualifiedJoinType.RightOuter;
+                else if (JoinType == QualifiedJoinType.RightOuter)
+                    JoinType = QualifiedJoinType.LeftOuter;
+            }
+
+            return this;
+        }
+
         public override object Clone()
         {
             var clone = new HashJoinNode
