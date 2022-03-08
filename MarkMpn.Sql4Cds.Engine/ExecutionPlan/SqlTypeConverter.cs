@@ -860,13 +860,27 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (value != null && value.GetType() == type)
                 return value;
 
-            var key = value.GetType().FullName + " -> " + type.FullName;
-            var conversion = _conversions.GetOrAdd(key, _ => CompileConversion(value.GetType(), type));
+            var conversion = GetConversion(value.GetType(), type);
             return conversion(value);
+        }
+
+        /// <summary>
+        /// Gets a function to convert from one type to another
+        /// </summary>
+        /// <param name="sourceType">The type to convert from</param>
+        /// <param name="destType">The type to convert to</param>
+        /// <returns>A function that converts between the requested types</returns>
+        public static Func<object, object> GetConversion(Type sourceType, Type destType)
+        {
+            var key = sourceType.FullName + " -> " + destType.FullName;
+            return _conversions.GetOrAdd(key, _ => CompileConversion(sourceType, destType));
         }
 
         private static Func<object, object> CompileConversion(Type sourceType, Type destType)
         {
+            if (sourceType == destType)
+                return (object value) => value;
+
             var param = Expression.Parameter(typeof(object));
             var expression = (Expression) Expression.Convert(param, sourceType);
 

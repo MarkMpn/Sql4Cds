@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data.SqlTypes;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -31,10 +32,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Build the hash table
             var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
             leftSchema.ContainsColumn(LeftAttribute.GetColumnName(), out var leftCol);
+            var leftColType = leftSchema.Schema[leftCol].ToNetType(out _);
+            var rightSchema = RightSource.GetSchema(dataSources, parameterTypes);
+            rightSchema.ContainsColumn(RightAttribute.GetColumnName(), out var rightCol);
+            var rightColType = rightSchema.Schema[rightCol].ToNetType(out _);
+
+            if (!SqlTypeConverter.CanMakeConsistentTypes(leftColType, rightColType, out var keyType))
+                throw new QueryExecutionException($"Cannot match key types {leftColType.Name} and {rightColType.Name}");
+
+            var leftKeyConverter = SqlTypeConverter.GetConversion(leftColType, keyType);
+            var rightKeyConverter = SqlTypeConverter.GetConversion(rightColType, keyType);
 
             foreach (var entity in LeftSource.Execute(dataSources, options, parameterTypes, parameterValues))
             {
-                var key = entity[leftCol];
+                var key = leftKeyConverter(entity[leftCol]);
 
                 if (!_hashTable.TryGetValue(key, out var list))
                 {
@@ -46,12 +57,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             // Probe the hash table using the right source
-            var rightSchema = RightSource.GetSchema(dataSources, parameterTypes);
-            rightSchema.ContainsColumn(RightAttribute.GetColumnName(), out var rightCol);
-
             foreach (var entity in RightSource.Execute(dataSources, options, parameterTypes, parameterValues))
             {
-                var key = entity[rightCol];
+                var key = rightKeyConverter(entity[rightCol]);
                 var matched = false;
 
                 if (_hashTable.TryGetValue(key, out var list))
