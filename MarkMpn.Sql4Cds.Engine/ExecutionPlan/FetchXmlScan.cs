@@ -438,6 +438,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private void FindParameterizedConditions(filter filter, object[] items)
         {
+            if (items == null)
+                return;
+
             foreach (var condition in items.OfType<condition>().Where(c => c.value != null && c.value.StartsWith("@")))
                 _parameterizedConditions[condition.value] = new ParameterizedCondition(filter, condition);
 

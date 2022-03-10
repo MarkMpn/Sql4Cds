@@ -3899,5 +3899,68 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     </entity>
                 </fetch>");
         }
+
+        [TestMethod]
+        public void DoNotFoldFilterOnNameVirtualAttributeWithTooManyJoins()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                select top 10 a.name
+                from account a
+                    join contact c1 on c1.parentcustomerid = a.accountid
+                    join contact c2 on c2.parentcustomerid = a.accountid
+                    join contact c3 on c3.parentcustomerid = a.accountid
+                    join contact c4 on c4.parentcustomerid = a.accountid
+                    join contact c5 on c5.parentcustomerid = a.accountid
+                    join contact c6 on c6.parentcustomerid = a.accountid
+                    join contact c7 on c7.parentcustomerid = a.accountid
+                    join contact c8 on c8.parentcustomerid = a.accountid
+                    join contact c9 on c9.parentcustomerid = a.accountid
+                    join contact c10 on c10.parentcustomerid = a.accountid
+                    join contact c11 on c11.parentcustomerid = a.accountid
+                where a.primarycontactidname = 'Test'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var top = AssertNode<TopNode>(select.Source);
+            var join = AssertNode<HashJoinNode>(top.Source);
+            var fetch1 = AssertNode<FetchXmlScan>(join.LeftSource);
+            AssertFetchXml(fetch1, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='parentcustomerid' />
+                        <filter>
+                            <condition attribute='parentcustomerid' operator='not-null' />
+                        </filter>
+                    </entity>
+                </fetch>");
+            var fetch2 = AssertNode<FetchXmlScan>(join.RightSource);
+            AssertFetchXml(fetch2, @"
+                <fetch>
+                    <entity name='contact'>
+                        <link-entity name='account' alias='a' from='accountid' to='parentcustomerid' link-type='inner'>
+                            <attribute name='name' />
+                            <attribute name='accountid' />
+                            <link-entity name='contact' alias='c2' from='parentcustomerid' to='accountid' link-type='inner' />
+                            <link-entity name='contact' alias='c3' from='parentcustomerid' to='accountid' link-type='inner' />
+                            <link-entity name='contact' alias='c4' from='parentcustomerid' to='accountid' link-type='inner' />
+                            <link-entity name='contact' alias='c5' from='parentcustomerid' to='accountid' link-type='inner' />
+                            <link-entity name='contact' alias='c6' from='parentcustomerid' to='accountid' link-type='inner' />
+                            <link-entity name='contact' alias='c7' from='parentcustomerid' to='accountid' link-type='inner' />
+                            <link-entity name='contact' alias='c8' from='parentcustomerid' to='accountid' link-type='inner' />
+                            <link-entity name='contact' alias='c9' from='parentcustomerid' to='accountid' link-type='inner' />
+                            <link-entity name='contact' alias='c10' from='parentcustomerid' to='accountid' link-type='inner' />
+                        </link-entity>
+                        <filter>
+                            <condition attribute='primarycontactidname' entityname='a' operator='eq' value='Test' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
     }
 }

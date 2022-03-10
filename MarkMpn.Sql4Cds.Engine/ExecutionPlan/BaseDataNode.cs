@@ -771,13 +771,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var baseItems = entityAlias == targetEntityAlias ? items : ((FetchLinkEntityType)target).Items;
                     baseItems = baseItems ?? Array.Empty<object>();
 
+                    // TODO: Track how many new joins are required. Check that's still below the limit for FetchXML
+                    // before adding them. If it will take us over the limit, do not fold the filter
+                    if (!additionalLinkEntities.TryGetValue(target, out var toAdd))
+                    {
+                        toAdd = new List<FetchLinkEntityType>();
+                        additionalLinkEntities[target] = toAdd;
+                    }
+
+                    var newLinkEntities = new List<FetchLinkEntityType>();
+
                     var conditions = lookupAttr.Targets.Select(targetType =>
                     {
                         var targetMetadata = metadata[targetType];
                         var join = baseItems.OfType<FetchLinkEntityType>().FirstOrDefault(link => link.name == targetMetadata.LogicalName && link.from == targetMetadata.PrimaryIdAttribute && link.to == attribute.LogicalName && link.linktype == "outer");
 
-                        if (join == null && additionalLinkEntities.TryGetValue(target, out var tempLinkEntities))
-                            join = tempLinkEntities.FirstOrDefault(link => link.name == targetMetadata.LogicalName && link.from == targetMetadata.PrimaryIdAttribute && link.to == attribute.LogicalName && link.linktype == "outer");
+                        if (join == null)
+                            join = toAdd.Concat(newLinkEntities).FirstOrDefault(link => link.name == targetMetadata.LogicalName && link.from == targetMetadata.PrimaryIdAttribute && link.to == attribute.LogicalName && link.linktype == "outer");
 
                         if (join == null)
                         {
@@ -791,13 +801,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 SemiJoin = true
                             };
 
-                            if (!additionalLinkEntities.TryGetValue(target, out var toAdd))
-                            {
-                                toAdd = new List<FetchLinkEntityType>();
-                                additionalLinkEntities[target] = toAdd;
-                            }
-
-                            toAdd.Add(join);
+                            newLinkEntities.Add(join);
                         }
 
                         return new condition
@@ -807,21 +811,28 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         };
                     }).ToArray();
 
-                    if (op == @operator.@null || conditions.Length == 1)
-                        ft = filterType.and;
-                    else
-                        ft = filterType.or;
+                    var linkEntityCount = entity.GetLinkEntities().Count() + additionalLinkEntities.Values.Select(le => le.Count).Sum();
 
-                    attrNames = conditions.Select(c => c.attribute).ToArray();
-                    entityAliases = conditions.Select(c => c.entityname).ToArray();
-
-                    if (entityAliases.Length == 1)
+                    if (linkEntityCount + newLinkEntities.Count <= 10)
                     {
-                        entityAlias = entityAliases[0];
-                        attrName = attrNames[0];
-                    }
+                        toAdd.AddRange(newLinkEntities);
 
-                    virtualAttributeHandled = true;
+                        if (op == @operator.@null || conditions.Length == 1)
+                            ft = filterType.and;
+                        else
+                            ft = filterType.or;
+
+                        attrNames = conditions.Select(c => c.attribute).ToArray();
+                        entityAliases = conditions.Select(c => c.entityname).ToArray();
+
+                        if (entityAliases.Length == 1)
+                        {
+                            entityAlias = entityAliases[0];
+                            attrName = attrNames[0];
+                        }
+
+                        virtualAttributeHandled = true;
+                    }
                 }
 
                 if (!virtualAttributeHandled)
