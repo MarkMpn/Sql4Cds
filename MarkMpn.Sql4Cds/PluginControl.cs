@@ -124,6 +124,9 @@ namespace MarkMpn.Sql4Cds
         {
             var svc = con.ServiceClient;
 
+            if (con.IsFromSdkLoginCtrl)
+                return svc;
+
             if (svc.ActiveAuthenticationType == Microsoft.Xrm.Tooling.Connector.AuthenticationType.OAuth)
                 return svc.Clone();
 
