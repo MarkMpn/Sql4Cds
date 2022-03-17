@@ -2266,7 +2266,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var query = "SELECT accountid FROM account WHERE primarycontactidname = 'Mark Carrington'";
 
-
             var metadata = new AttributeMetadataCache(_service);
 
             // Add metadata for primarycontactidname virtual attribute
@@ -2286,10 +2285,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 <fetch>
                     <entity name='account'>
                         <attribute name='accountid' />
-                        <link-entity name='contact' from='contactid' to='primarycontactid' alias='account_primarycontactid' link-type='outer'>
-                        </link-entity>
                         <filter>
-                            <condition entityname='account_primarycontactid' attribute='fullname' operator='eq' value='Mark Carrington' />
+                            <condition attribute='primarycontactidname' operator='eq' value='Mark Carrington' />
                         </filter>
                     </entity>
                 </fetch>");
@@ -2398,10 +2395,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 WHERE c.fullname IN (SELECT fullname FROM contact WHERE firstname = 'Mark')";
 
             var metadata = new AttributeMetadataCache(_service);
-            var lookup = (LookupAttributeMetadata)metadata["contact"].Attributes.Single(a => a.LogicalName == "parentcustomerid");
-            lookup.Targets = new[] { "contact", "account" };
-            var parentcustomeridtype = new StringAttributeMetadata { LogicalName = "parentcustomeridtype" };
-            typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.Attributes)).SetValue(metadata["contact"], metadata["contact"].Attributes.Concat(new[] { parentcustomeridtype }).ToArray());
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new OptionsWrapper(this) { UseTDSEndpoint = true });
             var queries = planBuilder.Build(query, null, out _);
 

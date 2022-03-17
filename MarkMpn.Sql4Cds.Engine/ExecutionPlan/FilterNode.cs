@@ -421,29 +421,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (!dataSources.TryGetValue(fetchXml.DataSource, out var dataSource))
                         throw new NotSupportedQueryFragmentException("Missing datasource " + fetchXml.DataSource);
 
-                    var additionalLinkEntities = new Dictionary<object, List<FetchLinkEntityType>>();
-
                     // If the criteria are ANDed, see if any of the individual conditions can be translated to FetchXML
-                    Filter = ExtractFetchXMLFilters(dataSource.Metadata, options, Filter, schema, null, fetchXml.Entity.name, fetchXml.Alias, fetchXml.Entity.Items, out var fetchFilter, additionalLinkEntities);
+                    Filter = ExtractFetchXMLFilters(dataSource.Metadata, options, Filter, schema, null, fetchXml.Entity.name, fetchXml.Alias, fetchXml.Entity.Items, parameterTypes, out var fetchFilter);
 
                     if (fetchFilter != null)
                     {
                         fetchXml.Entity.AddItem(fetchFilter);
-
-                        foreach (var kvp in additionalLinkEntities)
-                        {
-                            if (kvp.Key is FetchEntityType e)
-                            {
-                                foreach (var le in kvp.Value)
-                                    fetchXml.Entity.AddItem(le);
-                            }
-                            else
-                            {
-                                foreach (var le in kvp.Value)
-                                    ((FetchLinkEntityType)kvp.Key).AddItem(le);
-                            }
-                        }
-
                         foldedFilters = true;
                     }
                 }
@@ -624,9 +607,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        private BooleanExpression ExtractFetchXMLFilters(IAttributeMetadataCache metadata, IQueryExecutionOptions options, BooleanExpression criteria, INodeSchema schema, string allowedPrefix, string targetEntityName, string targetEntityAlias, object[] items, out filter filter, IDictionary<object, List<FetchLinkEntityType>> additionalLinkEntities)
+        private BooleanExpression ExtractFetchXMLFilters(IAttributeMetadataCache metadata, IQueryExecutionOptions options, BooleanExpression criteria, INodeSchema schema, string allowedPrefix, string targetEntityName, string targetEntityAlias, object[] items, IDictionary<string, DataTypeReference> parameterTypes, out filter filter)
         {
-            if (TranslateFetchXMLCriteria(metadata, options, criteria, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out filter, additionalLinkEntities))
+            if (TranslateFetchXMLCriteria(metadata, options, criteria, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, parameterTypes, out filter))
                 return null;
 
             if (!(criteria is BooleanBinaryExpression bin))
@@ -635,8 +618,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (bin.BinaryExpressionType != BooleanBinaryExpressionType.And)
                 return criteria;
 
-            bin.FirstExpression = ExtractFetchXMLFilters(metadata, options, bin.FirstExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out var lhsFilter, additionalLinkEntities);
-            bin.SecondExpression = ExtractFetchXMLFilters(metadata, options, bin.SecondExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out var rhsFilter, additionalLinkEntities);
+            bin.FirstExpression = ExtractFetchXMLFilters(metadata, options, bin.FirstExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, parameterTypes, out var lhsFilter);
+            bin.SecondExpression = ExtractFetchXMLFilters(metadata, options, bin.SecondExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, parameterTypes, out var rhsFilter);
 
             filter = (lhsFilter != null && rhsFilter != null) ? new filter { Items = new object[] { lhsFilter, rhsFilter } } : lhsFilter ?? rhsFilter;
 

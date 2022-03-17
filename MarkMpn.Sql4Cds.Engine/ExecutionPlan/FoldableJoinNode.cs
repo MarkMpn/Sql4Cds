@@ -290,26 +290,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // If there are any additional join criteria, either they must be able to be translated to FetchXml criteria
             // in the new link entity or we must be using an inner join so we can use a post-filter node
             var additionalCriteria = AdditionalJoinCriteria;
-            var additionalLinkEntities = new Dictionary<object, List<FetchLinkEntityType>>();
 
-            if (TranslateFetchXMLCriteria(dataSource.Metadata, options, additionalCriteria, rightSchema, rightFetch.Alias, rightEntity.name, rightFetch.Alias, rightEntity.Items, out var filter, additionalLinkEntities))
+            if (TranslateFetchXMLCriteria(dataSource.Metadata, options, additionalCriteria, rightSchema, rightFetch.Alias, rightEntity.name, rightFetch.Alias, rightEntity.Items, parameterTypes, out var filter))
             {
                 rightEntity.AddItem(filter);
-
-                foreach (var kvp in additionalLinkEntities)
-                {
-                    if (kvp.Key is FetchEntityType e)
-                    {
-                        foreach (var le in kvp.Value)
-                            rightEntity.AddItem(le);
-                    }
-                    else
-                    {
-                        foreach (var le in kvp.Value)
-                            ((FetchLinkEntityType)kvp.Key).AddItem(le);
-                    }
-                }
-
                 additionalCriteria = null;
             }
 

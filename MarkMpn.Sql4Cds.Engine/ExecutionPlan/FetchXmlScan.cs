@@ -1089,7 +1089,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         {
                             var attribute = metadata.Attributes.Single(a => a.LogicalName.Equals(condition.attribute, StringComparison.OrdinalIgnoreCase));
 
-                            if (attribute is EnumAttributeMetadata enumAttr)
+                            if (attribute is EntityNameAttributeMetadata entityNameAttr)
+                                conditionMultiple = 0.01;
+                            else if (attribute is EnumAttributeMetadata enumAttr)
                                 conditionMultiple = 1.0 / enumAttr.OptionSet.Options.Count;
                             else if (attribute is BooleanAttributeMetadata)
                                 conditionMultiple = 0.5;

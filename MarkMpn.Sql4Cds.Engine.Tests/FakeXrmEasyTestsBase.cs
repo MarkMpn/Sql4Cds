@@ -47,6 +47,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             SetPrimaryIdAttributes(_context);
             SetPrimaryIdAttributes(_context2);
+
+            SetLookupTargets(_context);
+            SetLookupTargets(_context2);
         }
 
         private void SetPrimaryIdAttributes(XrmFakedContext context)
@@ -57,6 +60,36 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 var attr = entity.Attributes.Single(a => a.LogicalName == entity.LogicalName + "id");
                 typeof(AttributeMetadata).GetProperty(nameof(AttributeMetadata.IsPrimaryId)).SetValue(attr, true);
                 attr.RequiredLevel = new AttributeRequiredLevelManagedProperty(AttributeRequiredLevel.SystemRequired);
+                context.SetEntityMetadata(entity);
+            }
+        }
+
+        private void SetLookupTargets(XrmFakedContext context)
+        {
+            foreach (var entity in context.CreateMetadataQuery())
+            {
+                if (entity.LogicalName == "account")
+                {
+                    typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.ObjectTypeCode)).SetValue(entity, 1);
+                    context.SetEntityMetadata(entity);
+                }
+
+                if (entity.LogicalName != "contact")
+                    continue;
+
+                typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.ObjectTypeCode)).SetValue(entity, 2);
+
+                var attr = (LookupAttributeMetadata) entity.Attributes.Single(a => a.LogicalName == "parentcustomerid");
+                attr.Targets = new[] { "account", "contact" };
+
+                var nameAttr = new StringAttributeMetadata { LogicalName = attr.LogicalName + "name" };
+                typeof(AttributeMetadata).GetProperty(nameof(AttributeMetadata.AttributeOf)).SetValue(nameAttr, attr.LogicalName);
+
+                var typeAttr = new EntityNameAttributeMetadata { LogicalName = attr.LogicalName + "type" };
+                typeof(AttributeMetadata).GetProperty(nameof(AttributeMetadata.AttributeOf)).SetValue(typeAttr, attr.LogicalName);
+
+                var attributes = entity.Attributes.Concat(new AttributeMetadata[] { nameAttr, typeAttr }).ToArray();
+                typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.Attributes)).SetValue(entity, attributes);
                 context.SetEntityMetadata(entity);
             }
         }
