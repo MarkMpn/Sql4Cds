@@ -874,6 +874,7 @@ namespace MarkMpn.Sql4Cds
             using (var con = new Sql4CdsConnection(DataSources.Values.ToList()))
             using (var cmd = con.CreateCommand())
             {
+                con.ChangeDatabase(Connection.ConnectionName);
                 new QueryExecutionOptions(this, backgroundWorker).ApplySettings(con, cmd, args.Execute);
                 cmd.CommandTimeout = 0;
 
