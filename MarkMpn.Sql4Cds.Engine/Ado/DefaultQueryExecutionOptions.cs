@@ -57,6 +57,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 joinOperators.Add(JoinOperator.Exists);
             }
 
+            JoinOperatorsAvailable = joinOperators;
             ColumnComparisonAvailable = version >= new Version("9.1.0.19251");
         }
 
