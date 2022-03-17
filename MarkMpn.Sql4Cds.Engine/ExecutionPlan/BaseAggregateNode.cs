@@ -279,5 +279,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             Source.AddRequiredColumns(dataSources, parameterTypes, scalarRequiredColumns);
         }
+
+        protected override IEnumerable<string> GetVariablesInternal()
+        {
+            return Aggregates
+                .Select(agg => agg.Value.SqlExpression)
+                .Where(expr => expr != null)
+                .SelectMany(expr => expr.GetVariables())
+                .Distinct();
+        }
     }
 }

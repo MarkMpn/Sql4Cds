@@ -146,6 +146,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Math.Max(0, Math.Min(top, sourceCount));
         }
 
+        protected override IEnumerable<string> GetVariablesInternal()
+        {
+            return Top.GetVariables();
+        }
+
         public override object Clone()
         {
             var clone = new TopNode

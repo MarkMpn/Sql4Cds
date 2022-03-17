@@ -183,6 +183,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return Math.Max(leftEstimate, rightEstimate);
         }
 
+        protected override IEnumerable<string> GetVariablesInternal()
+        {
+            return JoinCondition.GetVariables();
+        }
+
         public override object Clone()
         {
             var clone = new NestedLoopNode

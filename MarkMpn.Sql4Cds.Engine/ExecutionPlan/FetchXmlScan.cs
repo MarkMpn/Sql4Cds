@@ -22,12 +22,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             private readonly filter _filter;
             private readonly condition _condition;
+            private readonly conditionValue _value;
             private readonly filter _contradiction;
 
-            public ParameterizedCondition(filter filter, condition condition)
+            public ParameterizedCondition(filter filter, condition condition, conditionValue value)
             {
                 _filter = filter;
                 _condition = condition;
+                _value = value;
                 _contradiction = new filter
                 {
                     Items = new object[]
@@ -66,7 +68,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         formatted = dto.ToString("yyyy-MM-ddTHH':'mm':'ss.FFFzzz");
                     }
 
-                    _condition.value = formatted;
+                    if (_value != null)
+                        _value.Value = formatted;
+                    else
+                        _condition.value = formatted;
                 }
             }
         }
@@ -162,7 +167,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (parameterValues != null)
             {
                 if (_parameterizedConditions == null)
-                    FindParameterizedConditions();
+                    _parameterizedConditions = FindParameterizedConditions();
 
                 foreach (var param in parameterValues)
                 {
@@ -429,26 +434,32 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 PrefixAliasedScalarAttributes(entity, linkEntity.Items, linkEntity.alias);
         }
 
-        private void FindParameterizedConditions()
+        private Dictionary<string, ParameterizedCondition> FindParameterizedConditions()
         {
-            _parameterizedConditions = new Dictionary<string, ParameterizedCondition>();
-
-            FindParameterizedConditions(null, Entity.Items);
+            var parameterizedConditions = new Dictionary<string, ParameterizedCondition>(StringComparer.OrdinalIgnoreCase);
+            FindParameterizedConditions(parameterizedConditions, null, null, Entity.Items);
+            return parameterizedConditions;
         }
 
-        private void FindParameterizedConditions(filter filter, object[] items)
+        private void FindParameterizedConditions(Dictionary<string, ParameterizedCondition>  parameterizedConditions, filter filter, condition condition, object[] items)
         {
             if (items == null)
                 return;
 
-            foreach (var condition in items.OfType<condition>().Where(c => c.value != null && c.value.StartsWith("@")))
-                _parameterizedConditions[condition.value] = new ParameterizedCondition(filter, condition);
+            foreach (var cond in items.OfType<condition>().Where(c => c.IsVariable))
+                parameterizedConditions[cond.value] = new ParameterizedCondition(filter, cond, null);
+
+            foreach (var value in items.OfType<conditionValue>().Where(v => v.IsVariable))
+                parameterizedConditions[value.Value] = new ParameterizedCondition(filter, condition, value);
+
+            foreach (var cond in items.OfType<condition>().Where(c => c.Items != null))
+                FindParameterizedConditions(parameterizedConditions, filter, cond, condition.Items.Cast<object>().ToArray());
 
             foreach (var subFilter in items.OfType<filter>())
-                FindParameterizedConditions(subFilter, subFilter.Items);
+                FindParameterizedConditions(parameterizedConditions, subFilter, null, subFilter.Items);
 
             foreach (var link in items.OfType<FetchLinkEntityType>())
-                FindParameterizedConditions(null, link.Items);
+                FindParameterizedConditions(parameterizedConditions, null, null, link.Items);
         }
 
         private void FindEntityNameGroupings(IAttributeMetadataCache metadata)
@@ -594,6 +605,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (Entity.Items != null)
                 {
+                    // TODO: What about if there is already an all-attributes element? What should we return?
                     var existing = Entity.Items.OfType<FetchAttributeType>().FirstOrDefault(a => a.name == attr.name || a.alias == attr.name);
                     if (existing != null && (predicate == null || predicate(existing)))
                     {
@@ -1139,6 +1151,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 multiple = 1;
 
             return multiple;
+        }
+
+        protected override IEnumerable<string> GetVariablesInternal()
+        {
+            return FindParameterizedConditions().Keys;
         }
 
         public override string ToString()

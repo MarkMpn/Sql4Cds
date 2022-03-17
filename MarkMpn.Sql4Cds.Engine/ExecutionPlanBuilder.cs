@@ -1678,7 +1678,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     // get all the related records and spool that in memory to get the relevant results in the nested loop. Need to understand how 
                     // many rows are likely from the outer query to work out if this is going to be more efficient or not.
                     if (innerQuery.Source is ISingleSourceExecutionPlanNode loopRightSourceSimple)
-                        InsertCorrelatedSubquerySpool(loopRightSourceSimple, source, hints, parameterTypes);
+                        InsertCorrelatedSubquerySpool(loopRightSourceSimple, source, hints, parameterTypes, references.Values.ToArray());
 
                     var definedValue = $"Expr{++_colNameCounter}";
 
@@ -1799,7 +1799,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     // get all the related records and spool that in memory to get the relevant results in the nested loop. Need to understand how 
                     // many rows are likely from the outer query to work out if this is going to be more efficient or not.
                     if (innerQuery.Source is ISingleSourceExecutionPlanNode loopRightSourceSimple)
-                        InsertCorrelatedSubquerySpool(loopRightSourceSimple, source, hints, parameterTypes);
+                        InsertCorrelatedSubquerySpool(loopRightSourceSimple, source, hints, parameterTypes, references.Values.ToArray());
 
                     // We only need one record to check for EXISTS
                     if (!(innerQuery.Source is TopNode) && !(innerQuery.Source is OffsetFetchNode))
@@ -2540,7 +2540,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
                     else if (loopRightSource is ISingleSourceExecutionPlanNode loopRightSourceSimple)
                     {
-                        InsertCorrelatedSubquerySpool(loopRightSourceSimple, node, hints, parameterTypes);
+                        InsertCorrelatedSubquerySpool(loopRightSourceSimple, node, hints, parameterTypes, outerReferences.Values.ToArray());
                     }
 
                     // Add a nested loop to call the subquery
@@ -2702,7 +2702,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return true;
         }
         
-        private void InsertCorrelatedSubquerySpool(ISingleSourceExecutionPlanNode node, IDataExecutionPlanNode outerSource, IList<OptimizerHint> hints, IDictionary<string, DataTypeReference> parameterTypes)
+        private void InsertCorrelatedSubquerySpool(ISingleSourceExecutionPlanNode node, IDataExecutionPlanNode outerSource, IList<OptimizerHint> hints, IDictionary<string, DataTypeReference> parameterTypes, string[] outerReferences)
         {
             if (hints.Any(hint => hint.HintKind == OptimizerHintKind.NoPerformanceSpool))
                 return;
@@ -2714,7 +2714,6 @@ namespace MarkMpn.Sql4Cds.Engine
             var lastCorrelatedStep = node;
             ISingleSourceExecutionPlanNode parentNode = null;
             FilterNode filter = null;
-            FetchXmlScan fetchXml = null;
 
             while (node != null)
             {
@@ -2724,72 +2723,20 @@ namespace MarkMpn.Sql4Cds.Engine
                     break;
                 }
 
-                if (node is FetchXmlScan fetch)
-                {
-                    fetchXml = fetch;
+                if (node is FetchXmlScan)
                     break;
-                }
 
                 parentNode = node;
 
-                if (node is AssertNode assert)
-                {
-                    node = assert.Source as ISingleSourceExecutionPlanNode;
-                }
-                else if (node is HashMatchAggregateNode agg)
-                {
-                    if (agg.Aggregates.Values.Any(a => a.SqlExpression != null && a.SqlExpression.GetVariables().Any()))
-                        lastCorrelatedStep = agg;
+                if (node is IDataExecutionPlanNodeInternal dataNode && dataNode.GetVariables(false).Intersect(outerReferences).Any())
+                    lastCorrelatedStep = node;
 
-                    node = agg.Source as ISingleSourceExecutionPlanNode;
-                }
-                else if (node is ComputeScalarNode cs)
-                {
-                    if (cs.Columns.Values.Any(col => col.GetVariables().Any()))
-                        lastCorrelatedStep = cs;
-
-                    node = cs.Source as ISingleSourceExecutionPlanNode;
-                }
-                else if (node is SortNode sort)
-                {
-                    if (sort.Sorts.Any(s => s.Expression.GetVariables().Any()))
-                        lastCorrelatedStep = sort;
-
-                    node = sort.Source as ISingleSourceExecutionPlanNode;
-                }
-                else if (node is TopNode top)
-                {
-                    if (top.Top.GetVariables().Any())
-                        lastCorrelatedStep = top;
-
-                    node = top.Source as ISingleSourceExecutionPlanNode;
-                }
-                else if (node is OffsetFetchNode offset)
-                {
-                    if (offset.Offset.GetVariables().Any() || offset.Fetch.GetVariables().Any())
-                        lastCorrelatedStep = offset;
-
-                    node = offset.Source as ISingleSourceExecutionPlanNode;
-                }
-                else if (node is AliasNode alias)
-                {
-                    node = alias.Source as ISingleSourceExecutionPlanNode;
-                }
-                else
-                {
-                    return;
-                }
+                node = node.Source as ISingleSourceExecutionPlanNode;
             }
 
-            if (filter != null)
-            {
-                fetchXml = filter.Source as FetchXmlScan;
-
-                // TODO: If the filter is on a join we need to do some more complex checking that there's no outer references
-                // in use by the join before we know we can safely spool the results
-                if (fetchXml == null)
-                    return;
-            }
+            // If anything in the filter's source uses the outer reference we can't spool ths results
+            if (filter != null && filter.Source.GetVariables(true).Intersect(outerReferences).Any())
+                return;
 
             if (filter != null && filter.Filter.GetVariables().Any())
             {
@@ -3211,7 +3158,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
                     else if (rhs is ISingleSourceExecutionPlanNode loopRightSourceSimple)
                     {
-                        InsertCorrelatedSubquerySpool(loopRightSourceSimple, lhs, hints, parameterTypes);
+                        InsertCorrelatedSubquerySpool(loopRightSourceSimple, lhs, hints, parameterTypes, lhsReferences.Values.ToArray());
                     }
                 }
 

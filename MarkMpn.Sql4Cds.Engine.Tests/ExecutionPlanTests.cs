@@ -1057,11 +1057,11 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var subAggregate = AssertNode<StreamAggregateNode>(subAssert.Source);
             var subAggregateFetch = AssertNode<FetchXmlScan>(subAggregate.Source);
             AssertFetchXml(subAggregateFetch, @"
-                <fetch>
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
                     <entity name='account'>
                         <attribute name='name' />
                         <filter>
-                            <condition attribute='createdon' operator='eq' value='@Expr2' />
+                            <condition attribute='createdon' operator='eq' value='@Expr2' generator:IsVariable='true' />
                         </filter>
                     </entity>
                 </fetch>");
@@ -3860,14 +3860,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var meta = AssertNode<MetadataQueryNode>(nestedLoop.LeftSource);
             var fetch = AssertNode<FetchXmlScan>(nestedLoop.RightSource);
             AssertFetchXml(fetch, @"
-                <fetch>
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
                     <entity name='account'>
                         <attribute name='name' />
                         <link-entity name='contact' alias='contact' from='contactid' to='primarycontactid' link-type='outer'>
                             <attribute name='firstname' />
                         </link-entity>
                         <filter>
-                            <condition attribute='accountid' operator='eq' value='@Cond1' />
+                            <condition attribute='accountid' operator='eq' value='@Cond1' generator:IsVariable='true' />
                         </filter>
                     </entity>
                 </fetch>");

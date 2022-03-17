@@ -109,6 +109,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return "Offset";
         }
 
+        protected override IEnumerable<string> GetVariablesInternal()
+        {
+            return Offset.GetVariables().Union(Fetch.GetVariables());
+        }
+
         public override object Clone()
         {
             var clone = new OffsetFetchNode

@@ -664,7 +664,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return false;
 
             var value = literals == null ? null : literals.Length == 1 ? literals[0] is Literal l ? l.Value : literals[0] is VariableReference v ? v.Name : null : null;
-            var values = literals == null ? null : literals.Select(lit => new conditionValue { Value = lit is Literal lit1 ? lit1.Value : lit is VariableReference var1 ? var1.Name : null }).ToArray();
+            var isVariable = literals != null && literals.Length == 1 && literals[0] is VariableReference;
+            var values = literals == null ? null : literals.Select(lit => new conditionValue { Value = lit is Literal lit1 ? lit1.Value : lit is VariableReference var1 ? var1.Name : null, IsVariable = lit is VariableReference }).ToArray();
 
             var usesItems = values != null && values.Length > 1 || op == @operator.@in || op == @operator.notin || op == @operator.containvalues || op == @operator.notcontainvalues;
 
@@ -719,6 +720,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     for (var i = 0; i < literals.Length; i++)
                     {
+                        if (!(literals[i] is Literal))
+                            continue;
+
                         var matchingOptions = enumAttr.OptionSet.Options.Where(o => o.Label.UserLocalizedLabel.Label.Equals(values[i].Value, StringComparison.InvariantCultureIgnoreCase)).ToList();
 
                         if (matchingOptions.Count == 1)
@@ -741,6 +745,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     for (var i = 0; i < literals.Length; i++)
                     {
+                        if (!(literals[i] is Literal))
+                            continue;
+
                         if (boolAttr.OptionSet.TrueOption.Label.UserLocalizedLabel.Label.Equals(values[i].Value, StringComparison.InvariantCultureIgnoreCase))
                         {
                             values[i] = new conditionValue { Value = "1" };
@@ -841,7 +848,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 attribute = attrName.ToLowerInvariant(),
                 @operator = op,
                 value = usesItems ? null : value,
-                Items = usesItems ? values : null
+                Items = usesItems ? values : null,
+                IsVariable = isVariable
             };
 
             if (op == @operator.ne || op == @operator.nebusinessid || op == @operator.neq || op == @operator.neuserid)
@@ -931,6 +939,35 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var linkEntity = entity.FindLinkEntity(alias);
 
             return linkEntity.name;
+        }
+
+        /// <summary>
+        /// Gets the variables that are in use by this node and optionally its sources
+        /// </summary>
+        /// <param name="recurse">Indicates if the returned list should include the variables used by the sources of this node</param>
+        /// <returns>A sequence of variables names that are in use by this node</returns>
+        public IEnumerable<string> GetVariables(bool recurse)
+        {
+            var variables = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            if (recurse)
+            {
+                foreach (var source in GetSources().OfType<IDataExecutionPlanNodeInternal>())
+                    variables.UnionWith(source.GetVariables(true));
+            }
+
+            variables.UnionWith(GetVariablesInternal());
+
+            return variables;
+        }
+
+        /// <summary>
+        /// Gets the variables that are in use by this node
+        /// </summary>
+        /// <returns>A sequence of variables names that are in use by this node</returns>
+        protected virtual IEnumerable<string> GetVariablesInternal()
+        {
+            return Array.Empty<string>();
         }
 
         public abstract object Clone();

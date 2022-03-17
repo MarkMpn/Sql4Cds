@@ -49,5 +49,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         /// <returns></returns>
         INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes);
+
+        /// <summary>
+        /// Gets the variables that are in use by this node and optionally its sources
+        /// </summary>
+        /// <param name="recurse">Indicates if the returned list should include the variables used by the sources of this node</param>
+        /// <returns>A sequence of variables names that are in use by this node</returns>
+        IEnumerable<string> GetVariables(bool recurse);
     }
 }

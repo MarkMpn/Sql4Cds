@@ -74,6 +74,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Values.Count;
         }
 
+        protected override IEnumerable<string> GetVariablesInternal()
+        {
+            return Values
+                .SelectMany(row => row.Values)
+                .SelectMany(expr => expr.GetVariables())
+                .Distinct();
+        }
+
         public override object Clone()
         {
             var clone = new ConstantScanNode

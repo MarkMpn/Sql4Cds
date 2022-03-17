@@ -571,5 +571,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             return schema;
         }
+
+        protected override IEnumerable<string> GetVariablesInternal()
+        {
+            if (AdditionalJoinCriteria == null)
+                return Array.Empty<string>();
+
+            return AdditionalJoinCriteria.GetVariables();
+        }
     }
 }

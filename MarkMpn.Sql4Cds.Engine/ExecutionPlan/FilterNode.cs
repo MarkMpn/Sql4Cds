@@ -940,6 +940,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Source.EstimatedRowsOut * 8 / 10;
         }
 
+        protected override IEnumerable<string> GetVariablesInternal()
+        {
+            return Filter.GetVariables();
+        }
+
         public override object Clone()
         {
             var clone = new FilterNode

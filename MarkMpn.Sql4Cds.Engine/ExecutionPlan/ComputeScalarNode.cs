@@ -117,6 +117,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Source.EstimatedRowsOut;
         }
 
+        protected override IEnumerable<string> GetVariablesInternal()
+        {
+            return Columns
+                .Values
+                .SelectMany(expr => expr.GetVariables())
+                .Distinct();
+        }
+
         public override object Clone()
         {
             var clone = new ComputeScalarNode

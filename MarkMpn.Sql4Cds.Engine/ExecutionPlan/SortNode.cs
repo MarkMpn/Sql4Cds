@@ -452,6 +452,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Source.EstimatedRowsOut;
         }
 
+        protected override IEnumerable<string> GetVariablesInternal()
+        {
+            return Sorts
+                .SelectMany(sort => sort.GetVariables())
+                .Distinct();
+        }
+
         public override object Clone()
         {
             var clone = new SortNode

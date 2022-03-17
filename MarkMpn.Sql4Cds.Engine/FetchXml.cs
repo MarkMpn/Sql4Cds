@@ -221,6 +221,9 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml {
 
         [XmlAttribute]
         public string valueof { get; set; }
+
+        [XmlAttribute(Namespace = "MarkMpn.SQL4CDS")]
+        public bool IsVariable { get; set; }
     }
     
     /// <remarks/>
@@ -269,6 +272,9 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml {
                 this.valueField = value;
             }
         }
+
+        [XmlAttribute(Namespace = "MarkMpn.SQL4CDS")]
+        public bool IsVariable { get; set; }
     }
     
     /// <remarks/>
