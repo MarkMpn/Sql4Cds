@@ -973,19 +973,19 @@ namespace MarkMpn.Sql4Cds
 
                 grid.CellFormatting += (s, e) =>
                 {
-                    if (e.Value is INullable nullable && nullable.IsNull || e.Value is DBNull)
+                    if (e.Value is DBNull)
                     {
                         e.Value = "NULL";
                         e.CellStyle.BackColor = Color.FromArgb(0xff, 0xff, 0xe1);
                         e.FormattingApplied = true;
                     }
-                    else if (e.Value is SqlBoolean b)
+                    else if (e.Value is bool b)
                     {
-                        e.Value = b.Value ? "1" : "0";
+                        e.Value = b ? "1" : "0";
                     }
-                    else if (!Settings.Instance.LocalFormatDates && e.Value is SqlDateTime dt)
+                    else if (!Settings.Instance.LocalFormatDates && e.Value is DateTime dt)
                     {
-                        e.Value = dt.Value.ToString("yyyy-MM-dd HH:mm:ss.fff");
+                        e.Value = dt.ToString("yyyy-MM-dd HH:mm:ss.fff");
                     }
                     else if (e.Value is SqlEntityReference)
                     {
