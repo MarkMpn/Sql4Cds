@@ -339,6 +339,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     break;
                 }
 
+                // Can't add the link if it's got any filter conditions with an entityname
+                if (linkToAdd.GetConditions().Any(c => !String.IsNullOrEmpty(c.entityname)))
+                    break;
+
                 // Remove any attributes from the new linkentity
                 var tempEntity = new FetchEntityType { Items = new object[] { linkToAdd } };
 

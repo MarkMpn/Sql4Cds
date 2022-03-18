@@ -861,7 +861,148 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<Microsoft.SqlServer.TransactSql.ScriptDom.OptimizerHint> hints)
         {
+            NormalizeFilters();
             return this;
+        }
+
+        private void NormalizeFilters()
+        {
+            MoveFiltersToLinkEntities();
+            RemoveEmptyFilters();
+            MergeRootFilters();
+            MergeSingleConditionFilters();
+        }
+
+        private void MoveFiltersToLinkEntities()
+        {
+            // If we've got AND-ed conditions that have an entityname that refers to an inner-joined link entity, move
+            // the condition to that link entity
+            var innerLinkEntities = Entity.GetLinkEntities(innerOnly: true).ToDictionary(le => le.alias, StringComparer.OrdinalIgnoreCase);
+
+            Entity.Items = MoveFiltersToLinkEntities(innerLinkEntities, Entity.Items);
+        }
+
+        private object[] MoveFiltersToLinkEntities(Dictionary<string, FetchLinkEntityType> innerLinkEntities, object[] items)
+        {
+            if (items == null)
+                return items;
+
+            var toRemove = items
+                .OfType<condition>()
+                .Where(c => !String.IsNullOrEmpty(c.entityname))
+                .Where(c => innerLinkEntities.ContainsKey(c.entityname))
+                .ToList();
+
+            foreach (var condition in toRemove)
+            {
+                filter filter = null;
+
+                if (innerLinkEntities[condition.entityname].Items != null)
+                    filter = innerLinkEntities[condition.entityname].Items.OfType<filter>().Where(f => f.type == filterType.and).FirstOrDefault();
+
+                if (filter == null)
+                {
+                    filter = new filter { Items = new object[] { condition } };
+                    innerLinkEntities[condition.entityname].AddItem(filter);
+                }
+                else
+                {
+                    filter.AddItem(condition);
+                }
+
+                condition.entityname = null;
+            }
+
+            foreach (var subFilter in items.OfType<filter>().Where(f => f.type == filterType.and))
+                subFilter.Items = MoveFiltersToLinkEntities(innerLinkEntities, subFilter.Items);
+
+            return items.Except(toRemove).ToArray();
+        }
+
+        private void RemoveEmptyFilters()
+        {
+            Entity.Items = RemoveEmptyFilters(Entity.Items);
+
+            foreach (var linkEntity in Entity.GetLinkEntities())
+                linkEntity.Items = RemoveEmptyFilters(linkEntity.Items);
+        }
+
+        private object[] RemoveEmptyFilters(object[] items)
+        {
+            if (items == null)
+                return items;
+
+            foreach (var filter in items.OfType<filter>())
+                filter.Items = RemoveEmptyFilters(filter.Items);
+
+            var emptyFilters = items
+                .OfType<filter>()
+                .Where(f => f.Items == null || f.Items.Length == 0)
+                .ToList();
+
+            return items.Except(emptyFilters).ToArray();
+        }
+
+        private void MergeRootFilters()
+        {
+            Entity.Items = MergeRootFilters(Entity.Items);
+
+            foreach (var linkEntity in Entity.GetLinkEntities())
+                linkEntity.Items = MergeRootFilters(linkEntity.Items);
+        }
+
+        private object[] MergeRootFilters(object[] items)
+        {
+            if (items == null)
+                return items;
+
+            var rootFilters = items.OfType<filter>().Cast<object>().ToArray();
+
+            if (rootFilters.Length < 2)
+                return items;
+
+            return items
+                .Except(rootFilters)
+                .Concat(new object[] { new filter { Items = rootFilters } })
+                .ToArray();
+        }
+
+        private void MergeSingleConditionFilters()
+        {
+            MergeSingleConditionFilters(Entity.Items);
+
+            foreach (var linkEntity in Entity.GetLinkEntities())
+                MergeSingleConditionFilters(linkEntity.Items);
+        }
+
+        private void MergeSingleConditionFilters(object[] items)
+        {
+            if (items == null)
+                return;
+
+            var filter = items.OfType<filter>().SingleOrDefault();
+
+            if (filter == null)
+                return;
+
+            MergeSingleConditionFilters(filter);
+        }
+
+        private void MergeSingleConditionFilters(filter filter)
+        {
+            var singleConditionFilters = filter.Items
+                .OfType<filter>()
+                .Where(f => f.Items != null && f.Items.Length == 1 && f.Items.OfType<condition>().Count() == 1)
+                .ToDictionary(f => f, f => (condition)f.Items[0]);
+
+            for (var i = 0; i < filter.Items.Length; i++)
+            {
+                if (filter.Items[i] is filter subFilter && singleConditionFilters.TryGetValue(subFilter, out var condition))
+                    filter.Items[i] = condition;
+            }
+
+            foreach (var subFilter in filter.Items.OfType<filter>())
+                MergeSingleConditionFilters(subFilter);
         }
 
         public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)

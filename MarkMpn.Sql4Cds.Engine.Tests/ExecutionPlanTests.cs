@@ -1207,8 +1207,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <attribute name='createdon' />
                         <filter>
                             <condition attribute='employees' operator='gt' value='10' />
-                        </filter>
-                        <filter>
                             <condition attribute='createdon' operator='not-null' />
                         </filter>
                     </entity>
@@ -2244,10 +2242,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     <entity name='contact'>
                         <link-entity name='account' alias='a' from='accountid' to='parentcustomerid' link-type='inner'>
                             <attribute name='accountid' />
+                            <filter>
+                                <condition attribute='name' operator='eq' value='bar' />
+                            </filter>
                         </link-entity>
-                        <filter>
-                            <condition entityname='a' attribute='name' operator='eq' value='bar' />
-                        </filter>
                     </entity>
                 </fetch>");
         }
@@ -2459,15 +2457,15 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     <entity name='contact'>
                         <link-entity name='account' alias='account' from='accountid' to='parentcustomerid' link-type='inner'>
                             <attribute name='name' />
+                            <filter>
+                                <condition attribute='name' operator='like' value='Data8%' />
+                            </filter>
                         </link-entity>
                         <link-entity name='contact' alias='Expr1' from='createdon' to='createdon' link-type='in'>
                             <filter>
                                 <condition attribute='firstname' operator='eq' value='Mark' />
                             </filter>
                         </link-entity>
-                        <filter>
-                            <condition entityname='account' attribute='name' operator='like' value='Data8%' />
-                        </filter>
                     </entity>
                 </fetch>");
             }
@@ -2502,8 +2500,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <link-entity name='contact' alias='contact' from='createdon' to='createdon' link-type='exists'>
                             <filter>
                                 <condition attribute='firstname' operator='eq' value='Mark' />
-                            </filter>
-                            <filter>
                                 <condition attribute='createdon' operator='not-null' />
                             </filter>
                         </link-entity>
@@ -3955,10 +3951,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                             <link-entity name='contact' alias='c8' from='parentcustomerid' to='accountid' link-type='inner' />
                             <link-entity name='contact' alias='c9' from='parentcustomerid' to='accountid' link-type='inner' />
                             <link-entity name='contact' alias='c10' from='parentcustomerid' to='accountid' link-type='inner' />
+                            <filter>
+                                <condition attribute='primarycontactidname' operator='eq' value='Test' />
+                            </filter>
                         </link-entity>
-                        <filter>
-                            <condition attribute='primarycontactidname' entityname='a' operator='eq' value='Test' />
-                        </filter>
                     </entity>
                 </fetch>");
         }
