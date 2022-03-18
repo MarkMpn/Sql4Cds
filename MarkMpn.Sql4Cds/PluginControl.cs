@@ -314,7 +314,6 @@ namespace MarkMpn.Sql4Cds
 
             if (param.TryGetValue("FetchXml", out var xml) && xml is string xmlStr && !String.IsNullOrEmpty(xmlStr))
             {
-                var fetch = DeserializeFetchXml(xmlStr);
                 var options = new FetchXml2SqlOptions();
 
                 if ((bool)param["ConvertOnly"])
@@ -338,11 +337,13 @@ namespace MarkMpn.Sql4Cds
                     }
                     catch
                     {
+                        var fetch = DeserializeFetchXml(xmlStr);
                         sql = FetchXml2Sql.Convert(con.ServiceClient, metadata, fetch, options, out _);
                     }
                 }
                 else
                 {
+                    var fetch = DeserializeFetchXml(xmlStr);
                     sql = FetchXml2Sql.Convert(con.ServiceClient, metadata, fetch, options, out _);
                 }
 
