@@ -223,7 +223,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             // Move on to subsequent pages
-            while (AllPages && res.MoreRecords && !options.ContinueRetrieve(count))
+            while (AllPages && res.MoreRecords && options.ContinueRetrieve(count))
             {
                 if (!(Parent is PartitionedAggregateNode))
                     options.Progress(0, $"Retrieved {count:N0} {GetDisplayName(count, meta)}...");
