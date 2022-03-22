@@ -264,7 +264,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     column.OutputColumn,  // ColumnName
                     i,                    // ColumnOrdinal
-                    4000,                 // ColumnSize
+                    Int32.MaxValue,       // ColumnSize
                     255,                  // NumericPrecision
                     255,                  // NumericScale
                     false,                // IsUnique
