@@ -106,6 +106,41 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
+            if (Source is ConstantScanNode constant)
+            {
+                // Copy/rename any columns using the new aliases
+                foreach (var col in ColumnSet)
+                {
+                    var sourceColumn = col.SourceColumn.Split('.').Last();
+
+                    if (String.IsNullOrEmpty(constant.Alias) && col.OutputColumn != col.SourceColumn ||
+                        !String.IsNullOrEmpty(constant.Alias) && col.OutputColumn != constant.Alias + "." + col.SourceColumn)
+                    {
+                        constant.Schema[col.OutputColumn] = constant.Schema[sourceColumn];
+
+                        foreach (var row in constant.Values)
+                            row[col.OutputColumn] = row[sourceColumn];
+                    }
+                }
+
+                // Remove any unused columns
+                var unusedColumns = constant.Schema.Keys
+                    .Where(sourceCol => !ColumnSet.Any(col => col.SourceColumn.Split('.').Last() == sourceCol))
+                    .ToList();
+
+                foreach (var col in unusedColumns)
+                {
+                    constant.Schema.Remove(col);
+
+                    foreach (var row in constant.Values)
+                        row.Remove(col);
+                }
+
+                // Change the alias of the whole constant scan
+                constant.Alias = Alias;
+                return constant;
+            }
+
             return this;
         }
 

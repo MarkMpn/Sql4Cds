@@ -72,6 +72,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             ExpandWildcardColumns(dataSources, parameterTypes);
 
+            if (Source is AliasNode alias)
+            {
+                var aliasColumns = alias.ColumnSet.ToDictionary(col => alias.Alias + "." + col.OutputColumn, col => col.SourceColumn);
+
+                foreach (var col in ColumnSet)
+                    col.SourceColumn = aliasColumns[col.SourceColumn];
+
+                Source = alias.Source;
+                Source.Parent = this;
+            }
+
             return new[] { this };
         }
 
@@ -315,6 +326,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// The name of the column in the source data
         /// </summary>
         public string SourceColumn { get; set; }
+
+        /// <summary>
+        /// The expression that provides the value for the column
+        /// </summary>
+        /// <remarks>
+        /// Used for error reporting only
+        /// </remarks>
+        public TSqlFragment SourceExpression { get; set; }
 
         /// <summary>
         /// The requested name of the column in the output data

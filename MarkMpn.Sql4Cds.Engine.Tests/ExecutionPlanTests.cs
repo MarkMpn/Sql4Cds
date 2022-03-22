@@ -3374,10 +3374,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, setVariable.Variables.Count);
             Assert.AreEqual("@test", setVariable.Variables[0].VariableName);
             Assert.AreEqual("Expr1", setVariable.Variables[0].SourceColumn);
-            var setCompute = AssertNode<ComputeScalarNode>(setVariable.Source);
-            Assert.AreEqual("CONVERT (INT, 1)", setCompute.Columns["Expr1"].ToSql());
-            var setConstantScan = AssertNode<ConstantScanNode>(setCompute.Source);
+            var setConstantScan = AssertNode<ConstantScanNode>(setVariable.Source);
             Assert.AreEqual(1, setConstantScan.Values.Count);
+            Assert.AreEqual("CONVERT (INT, 1)", setConstantScan.Values[0]["Expr1"].ToSql());
 
             var select = AssertNode<SelectNode>(plans[2]);
             Assert.AreEqual("Expr2", select.ColumnSet[0].SourceColumn);
@@ -3430,10 +3429,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, setVariable.Variables.Count);
             Assert.AreEqual("@test", setVariable.Variables[0].VariableName);
             Assert.AreEqual("Expr1", setVariable.Variables[0].SourceColumn);
-            var setCompute = AssertNode<ComputeScalarNode>(setVariable.Source);
-            Assert.AreEqual("CONVERT (INT, 1)", setCompute.Columns["Expr1"].ToSql());
-            var setConstantScan = AssertNode<ConstantScanNode>(setCompute.Source);
+            var setConstantScan = AssertNode<ConstantScanNode>(setVariable.Source);
             Assert.AreEqual(1, setConstantScan.Values.Count);
+            Assert.AreEqual("CONVERT (INT, 1)", setConstantScan.Values[0]["Expr1"].ToSql());
 
             var select = AssertNode<SelectNode>(plans[2]);
             Assert.AreEqual("Expr2", select.ColumnSet[0].SourceColumn);
@@ -4109,6 +4107,36 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <filter>
                             <condition attribute='parentcustomeridtype' operator='not-null' />
                         </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void SubqueriesInValueList()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"SELECT a FROM (VALUES ('a'), ((SELECT TOP 1 firstname FROM contact)), ('b'), (1)) AS MyTable (a)";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var concat = AssertNode<ConcatenateNode>(select.Source);
+            var a = AssertNode<ConstantScanNode>(concat.Sources[0]);
+            var firstname = AssertNode<ComputeScalarNode>(concat.Sources[1]);
+            var loop = AssertNode<NestedLoopNode>(firstname.Source);
+            var firstnamePlaceholder = AssertNode<ConstantScanNode>(loop.LeftSource);
+            var fetch = AssertNode<FetchXmlScan>(loop.RightSource);
+            var b = AssertNode<ConstantScanNode>(concat.Sources[2]);
+            var one = AssertNode<ConstantScanNode>(concat.Sources[3]);
+
+            AssertFetchXml(fetch, @"
+                <fetch top='1'>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
                     </entity>
                 </fetch>");
         }

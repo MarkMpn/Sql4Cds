@@ -40,7 +40,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var value = new Entity();
 
                 foreach (var col in Schema)
-                    value[$"{Alias}.{col.Key}"] = new ConvertCall { Parameter = expressions[col.Key], DataType = col.Value }.Compile(null, parameterTypes)(null, parameterValues, options);
+                    value[PrefixWithAlias(col.Key)] = expressions[col.Key].Compile(null, parameterTypes)(null, parameterValues, options);
 
                 yield return value;
             }
@@ -55,9 +55,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             return new NodeSchema
             {
-                Schema = Schema.ToDictionary(kvp => $"{Alias}.{kvp.Key}", kvp => kvp.Value),
-                Aliases = Schema.ToDictionary(kvp => kvp.Key, kvp => new List<string> { $"{Alias}.{kvp.Key}" })
+                Schema = Schema.ToDictionary(kvp => PrefixWithAlias(kvp.Key), kvp => kvp.Value),
+                Aliases = Schema.ToDictionary(kvp => kvp.Key, kvp => new List<string> { PrefixWithAlias(kvp.Key) })
             };
+        }
+
+        private string PrefixWithAlias(string columnName)
+        {
+            if (String.IsNullOrEmpty(Alias))
+                return columnName;
+
+            return Alias + "." + columnName;
         }
 
         public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)

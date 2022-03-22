@@ -88,7 +88,38 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 return computeScalar;
             }
+            
+            if (Source is ConstantScanNode constant && String.IsNullOrEmpty(constant.Alias))
+            {
+                var folded = new List<string>();
 
+                foreach (var calc in Columns)
+                {
+                    if (calc.Value is ConvertCall c1 && c1.Parameter is Literal ||
+                        calc.Value is CastCall c2 && c2.Parameter is Literal ||
+                        calc.Value is Literal)
+                    {
+                        foreach (var row in constant.Values)
+                            row[calc.Key] = calc.Value;
+
+                        folded.Add(calc.Key);
+
+                        if (calc.Value is ConvertCall convert)
+                            constant.Schema[calc.Key] = convert.DataType;
+                        else if (calc.Value is CastCall cast)
+                            constant.Schema[calc.Key] = cast.DataType;
+                        else
+                            constant.Schema[calc.Key] = calc.Value.GetType(null, null, parameterTypes).ToSqlType();
+                    }
+                }
+
+                if (folded.Count == Columns.Count)
+                    return constant;
+
+                foreach (var col in folded)
+                    Columns.Remove(col);
+            }
+            
             Source.Parent = this;
             return this;
         }

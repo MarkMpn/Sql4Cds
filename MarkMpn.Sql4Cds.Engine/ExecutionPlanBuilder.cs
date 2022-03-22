@@ -603,7 +603,7 @@ namespace MarkMpn.Sql4Cds.Engine
             string[] columns;
 
             if (insert.InsertSpecification.InsertSource is ValuesInsertSource values)
-                source = ConvertInsertValuesSource(values, out columns);
+                source = ConvertInsertValuesSource(values, insert.OptimizerHints, null, null, _parameterTypes, out columns);
             else if (insert.InsertSpecification.InsertSource is SelectInsertSource select)
                 source = ConvertInsertSelectSource(select, insert.OptimizerHints, out columns);
             else
@@ -612,7 +612,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return ConvertInsertSpecification(target, insert.InsertSpecification.Columns, source, columns);
         }
 
-        private ConstantScanNode ConvertInsertValuesSource(ValuesInsertSource values, out string[] columns)
+        private IDataExecutionPlanNodeInternal ConvertInsertValuesSource(ValuesInsertSource values, IList<OptimizerHint> hints, INodeSchema outerSchema, Dictionary<string, string> outerReferences, IDictionary<string, DataTypeReference> parameterTypes, out string[] columns)
         {
             // Convert the values to an InlineDerviedTable
             var table = new InlineDerivedTable
@@ -627,7 +627,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 table.RowValues.Add(row);
 
             columns = table.Columns.Select(col => col.Value).ToArray();
-            return ConvertInlineDerivedTable(table);
+            return ConvertInlineDerivedTable(table, hints, outerSchema, outerReferences, parameterTypes);
         }
 
         private IExecutionPlanNodeInternal ConvertInsertSelectSource(SelectInsertSource selectSource, IList<OptimizerHint> hints, out string[] columns)
@@ -690,7 +690,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var attributes = metadata.Attributes.ToDictionary(attr => attr.LogicalName, StringComparer.OrdinalIgnoreCase);
             var attributeNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var virtualTypeAttributes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var schema = sourceColumns == null ? null : ((IDataExecutionPlanNodeInternal)source).GetSchema(DataSources, null);
+            var schema = sourceColumns == null ? null : ((IDataExecutionPlanNodeInternal)source).GetSchema(DataSources, _parameterTypes);
 
             // Check all target columns are valid for create
             foreach (var col in targetColumns)
@@ -1463,7 +1463,8 @@ namespace MarkMpn.Sql4Cds.Engine
                     concat.ColumnSet.Add(new ConcatenateColumn
                     {
                         OutputColumn = $"Expr{++_colNameCounter}",
-                        SourceColumns = { col.SourceColumn }
+                        SourceColumns = { col.SourceColumn },
+                        SourceExpressions = { col.SourceExpression }
                     });
                 }
             }
@@ -1474,7 +1475,10 @@ namespace MarkMpn.Sql4Cds.Engine
                 throw new NotSupportedQueryFragmentException("UNION must have the same number of columns in each query", binary);
 
             for (var i = 0; i < concat.ColumnSet.Count; i++)
+            {
                 concat.ColumnSet[i].SourceColumns.Add(right.ColumnSet[i].SourceColumn);
+                concat.ColumnSet[i].SourceExpressions.Add(right.ColumnSet[i].SourceExpression);
+            }
 
             var node = (IDataExecutionPlanNodeInternal)concat;
 
@@ -1489,7 +1493,7 @@ namespace MarkMpn.Sql4Cds.Engine
             node = ConvertOffsetClause(node, binary.OffsetClause, parameterTypes);
 
             var select = new SelectNode { Source = node };
-            select.ColumnSet.AddRange(concat.ColumnSet.Select((col, i) => new SelectColumn { SourceColumn = col.OutputColumn, OutputColumn = left.ColumnSet[i].OutputColumn }));
+            select.ColumnSet.AddRange(concat.ColumnSet.Select((col, i) => new SelectColumn { SourceColumn = col.OutputColumn, SourceExpression = col.SourceExpressions[0], OutputColumn = left.ColumnSet[i].OutputColumn }));
 
             return select;
         }
@@ -2373,6 +2377,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         select.ColumnSet.Add(new SelectColumn
                         {
                             SourceColumn = colName,
+                            SourceExpression = scalar.Expression,
                             OutputColumn = alias
                         });
                     }
@@ -2389,6 +2394,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         select.ColumnSet.Add(new SelectColumn
                         {
                             SourceColumn = alias,
+                            SourceExpression = scalar.Expression,
                             OutputColumn = scalar.ColumnName?.Value ?? alias
                         });
                     }
@@ -2403,6 +2409,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     select.ColumnSet.Add(new SelectColumn
                     {
                         SourceColumn = colName,
+                        SourceExpression = star,
                         AllColumns = true
                     });
                 }
@@ -2535,8 +2542,11 @@ namespace MarkMpn.Sql4Cds.Engine
                     // If it is correlated, add a spool where possible closer to the data source
                     if (outerReferences.Count == 0)
                     {
-                        var spool = new TableSpoolNode { Source = loopRightSource, SpoolType = SpoolType.Lazy };
-                        loopRightSource = spool;
+                        if (EstimateRowsOut(node, parameterTypes) > 1)
+                        {
+                            var spool = new TableSpoolNode { Source = loopRightSource, SpoolType = SpoolType.Lazy };
+                            loopRightSource = spool;
+                        }
                     }
                     else if (loopRightSource is ISingleSourceExecutionPlanNode loopRightSourceSimple)
                     {
@@ -3120,7 +3130,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             if (reference is InlineDerivedTable inlineDerivedTable)
-                return ConvertInlineDerivedTable(inlineDerivedTable);
+                return ConvertInlineDerivedTable(inlineDerivedTable, hints, outerSchema, outerReferences, parameterTypes);
 
             if (reference is UnqualifiedJoin unqualifiedJoin)
             {
@@ -3178,7 +3188,7 @@ namespace MarkMpn.Sql4Cds.Engine
             throw new NotSupportedQueryFragmentException("Unhandled table reference", reference);
         }
 
-        private ConstantScanNode ConvertInlineDerivedTable(InlineDerivedTable inlineDerivedTable)
+        private IDataExecutionPlanNodeInternal ConvertInlineDerivedTable(InlineDerivedTable inlineDerivedTable, IList<OptimizerHint> hints, INodeSchema outerSchema, Dictionary<string, string> outerReferences, IDictionary<string, DataTypeReference> parameterTypes)
         {
             // Check all the rows have the expected number of values and column names are unique
             var columnNames = inlineDerivedTable.Columns.Select(col => col.Value).ToList();
@@ -3193,40 +3203,65 @@ namespace MarkMpn.Sql4Cds.Engine
             if (firstMismatchRow != null)
                 throw new NotSupportedQueryFragmentException($"Expected {columnNames.Count} columns, got {firstMismatchRow.ColumnValues.Count}", firstMismatchRow);
 
-            // Work out the column types
-            var types = inlineDerivedTable.RowValues[0].ColumnValues.Select(val => val.GetType(null, null, _parameterTypes)).ToList();
+            var rows = inlineDerivedTable.RowValues.Select(row => CreateSelectRow(row, inlineDerivedTable.Columns)).ToArray();
+            var select = (QueryExpression) rows[0];
 
-            foreach (var row in inlineDerivedTable.RowValues.Skip(1))
+            for (var i = 1; i < rows.Length; i++)
             {
-                for (var colIndex = 0; colIndex < types.Count; colIndex++)
+                select = new BinaryQueryExpression
                 {
-                    if (!SqlTypeConverter.CanMakeConsistentTypes(types[colIndex], row.ColumnValues[colIndex].GetType(null, null, _parameterTypes), out var colType))
-                        throw new NotSupportedQueryFragmentException("No available implicit type conversion", row.ColumnValues[colIndex]);
+                    FirstQueryExpression = select,
+                    SecondQueryExpression = rows[i],
+                    All = true
+                };
+            }
 
-                    types[colIndex] = colType;
+            var converted = ConvertSelectStatement(select, hints, outerSchema, outerReferences, parameterTypes);
+            var source = converted.Source;
+
+            // Make sure expected column names are used
+            if (source is ConcatenateNode concat)
+            {
+                for (var i = 0; i < inlineDerivedTable.Columns.Count; i++)
+                {
+                    concat.ColumnSet[i].OutputColumn = inlineDerivedTable.Columns[i].Value;
+                    converted.ColumnSet[i].SourceColumn = inlineDerivedTable.Columns[i].Value;
+                }
+            }
+            else if (source is ComputeScalarNode compute)
+            {
+                for (var i = 0; i < converted.ColumnSet.Count; i++)
+                {
+                    if (converted.ColumnSet[i].SourceColumn != converted.ColumnSet[i].OutputColumn && compute.Columns.TryGetValue(converted.ColumnSet[i].SourceColumn, out var expr))
+                    {
+                        compute.Columns[converted.ColumnSet[i].OutputColumn] = expr;
+                        compute.Columns.Remove(converted.ColumnSet[i].SourceColumn);
+                        converted.ColumnSet[i].SourceColumn = converted.ColumnSet[i].OutputColumn;
+                    }
                 }
             }
 
-            // Convert the values
-            var constantScan = new ConstantScanNode();
+            // Make sure expected table name is used
+            if (!String.IsNullOrEmpty(inlineDerivedTable.Alias?.Value))
+                source = new AliasNode(converted, inlineDerivedTable.Alias);
 
-            foreach (var row in inlineDerivedTable.RowValues)
+            return source;
+        }
+
+        private QuerySpecification CreateSelectRow(RowValue row, IList<Identifier> columns)
+        {
+            var querySpec = new QuerySpecification();
+            
+            for (var i = 0; i < columns.Count; i++)
             {
-                var values = new Dictionary<string, ScalarExpression>();
-
-                for (var colIndex = 0; colIndex < types.Count; colIndex++)
-                    values[columnNames[colIndex]] = row.ColumnValues[colIndex];
-
-                constantScan.Values.Add(values);
+                querySpec.SelectElements.Add(new SelectScalarExpression
+                {
+                    Expression = row.ColumnValues[i],
+                    ColumnName = new IdentifierOrValueExpression { Identifier = columns[i] }
+                });
             }
 
-            // Build the schema
-            for (var colIndex = 0; colIndex < types.Count; colIndex++)
-                constantScan.Schema[inlineDerivedTable.Columns[colIndex].Value] = types[colIndex].ToSqlType();
-
-            constantScan.Alias = inlineDerivedTable.Alias.Value;
-
-            return constantScan;
+            return querySpec;
         }
 
         private string ConvertQueryHints(IList<OptimizerHint> hints)
