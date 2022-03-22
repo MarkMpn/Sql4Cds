@@ -973,7 +973,7 @@ namespace MarkMpn.Sql4Cds
 
                 grid.CellFormatting += (s, e) =>
                 {
-                    if (e.Value is DBNull)
+                    if (e.Value is DBNull || (e.Value is INullable nullable && nullable.IsNull))
                     {
                         e.Value = "NULL";
                         e.CellStyle.BackColor = Color.FromArgb(0xff, 0xff, 0xe1);
