@@ -34,9 +34,9 @@ SET    statecode = 1, statuscode = 2
 WHERE  emailaddress1 IS NULL
 ```
 
-💡 Although you are writing SQL, you are not directly running the queries against the back-end database. All data retrieval and
-modification is done through the supported Dataverse API. Running an UPDATE/INSERT/DELETE command against the underlying SQL
-database is unsafe, but the same query in SQL 4 CDS is translated to safe & supported API requests.
+> ✅ Although you are writing SQL, you are not directly running the queries against the back-end database. All data retrieval and
+> modification is done through the supported Dataverse API. Running an UPDATE/INSERT/DELETE command against the underlying SQL
+> database is unsafe, but the same query in SQL 4 CDS is translated to safe & supported API requests.
 
 The engine converts all the SQL syntax that has a direct equivalent in FetchXML. It also attempts to support some more SQL features
 that do not have an equivalent in FetchXML, such as calculated fields, `HAVING` clauses and more.
