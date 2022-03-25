@@ -871,7 +871,7 @@ namespace MarkMpn.Sql4Cds
 
             backgroundWorker.ReportProgress(0, "Executing query...");
 
-            using (var con = new Sql4CdsConnection(DataSources.Values.ToList()))
+            using (var con = new Sql4CdsConnection(DataSources.Values.ToArray()))
             using (var cmd = con.CreateCommand())
             {
                 con.ChangeDatabase(Connection.ConnectionName);

@@ -580,7 +580,7 @@ in
             if (!(dockPanel.ActiveDocument is SqlQueryControl sql))
                 return;
 
-            using (var con = new Sql4CdsConnection(sql.DataSources.Values.ToList()))
+            using (var con = new Sql4CdsConnection(sql.DataSources.Values.ToArray()))
             using (var cmd = con.CreateCommand())
             {
                 new QueryExecutionOptions(this, null).ApplySettings(con, cmd, false);

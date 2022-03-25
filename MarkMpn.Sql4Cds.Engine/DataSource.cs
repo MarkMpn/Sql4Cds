@@ -1,5 +1,11 @@
 ﻿using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Query;
+#if NETCOREAPP
+using Microsoft.PowerPlatform.Dataverse.Client;
+#else
+using Microsoft.Xrm.Tooling.Connector;
+#endif
 
 namespace MarkMpn.Sql4Cds.Engine
 {
@@ -8,6 +14,44 @@ namespace MarkMpn.Sql4Cds.Engine
     /// </summary>
     public class DataSource
     {
+        /// <summary>
+        /// Creates a new <see cref="DataSource"/> using default values based on an existing connection.
+        /// </summary>
+        /// <param name="org">The <see cref="IOrganizationService"/> that provides the connection to the instance</param>
+        public DataSource(IOrganizationService org)
+        {
+            string name;
+
+#if NETCOREAPP
+            if (org is ServiceClient svc)
+            {
+                name = svc.ConnectedOrgUniqueName;
+            }
+#else
+            if (org is CrmServiceClient svc)
+            {
+                name = svc.ConnectedOrgUniqueName;
+            }
+#endif
+            else
+            {
+                var orgDetails = org.RetrieveMultiple(new QueryExpression("organization") { ColumnSet = new ColumnSet("name") }).Entities[0];
+                name = orgDetails.GetAttributeValue<string>("name");
+            }
+
+            Connection = org;
+            Metadata = new AttributeMetadataCache(org);
+            Name = name;
+            TableSizeCache = new TableSizeCache(org, Metadata);
+        }
+
+        /// <summary>
+        /// Creates a new <see cref="DataSource"/>
+        /// </summary>
+        public DataSource()
+        {
+        }
+
         /// <summary>
         /// The identifier for this instance
         /// </summary>

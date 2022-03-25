@@ -37,8 +37,8 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// Creates a new <see cref="Sql4CdsConnection"/> using the specified <see cref="IOrganizationService"/>
         /// </summary>
-        /// <param name="svc">The <see cref="IOrganizationService"/> to use</param>
-        public Sql4CdsConnection(IOrganizationService svc) : this(BuildDataSources(svc))
+        /// <param name="svc">The list of <see cref="IOrganizationService"/>s to use</param>
+        public Sql4CdsConnection(params IOrganizationService[] svc) : this(BuildDataSources(svc))
         {
         }
 
@@ -46,12 +46,12 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Creates a new <see cref="Sql4CdsConnection"/> using the specified list of data sources
         /// </summary>
         /// <param name="dataSources">The list of data sources to use</param>
-        public Sql4CdsConnection(IReadOnlyList<DataSource> dataSources)
+        public Sql4CdsConnection(params DataSource[] dataSources)
         {
             if (dataSources == null)
                 throw new ArgumentNullException(nameof(dataSources));
 
-            if (dataSources.Count == 0)
+            if (dataSources.Length == 0)
                 throw new ArgumentOutOfRangeException("At least one data source must be supplied");
 
             var options = new DefaultQueryExecutionOptions(dataSources[0], CancellationToken.None);
@@ -77,29 +77,14 @@ namespace MarkMpn.Sql4Cds.Engine
             return svc;
         }
 
-        private static IReadOnlyList<DataSource> BuildDataSources(IOrganizationService org)
+        private static DataSource[] BuildDataSources(IOrganizationService[] org)
         {
-            var metadata = new AttributeMetadataCache(org);
-            var name = "local";
+            var dataSources = new DataSource[org.Length];
 
-#if NETCOREAPP
-            if (org is ServiceClient svc)
-                name = svc.ConnectedOrgUniqueName;
-#else
-            if (org is CrmServiceClient svc)
-                name = svc.ConnectedOrgUniqueName;
-#endif
+            for (var i = 0; i < org.Length; i++)
+                dataSources[i] = new DataSource(org[i]);
 
-            return new []
-            {
-                new DataSource
-                {
-                    Connection = org,
-                    Metadata = metadata,
-                    Name = name,
-                    TableSizeCache = new TableSizeCache(org, metadata)
-                }
-            };
+            return dataSources;
         }
 
         public event EventHandler<InfoMessageEventArgs> InfoMessage;
