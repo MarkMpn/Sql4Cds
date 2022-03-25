@@ -333,6 +333,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <remarks>
         /// Used for error reporting only
         /// </remarks>
+        [Browsable(false)]
         public TSqlFragment SourceExpression { get; set; }
 
         /// <summary>
