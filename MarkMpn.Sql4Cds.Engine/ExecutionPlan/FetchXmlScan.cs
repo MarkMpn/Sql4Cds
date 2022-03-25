@@ -42,7 +42,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             public void SetValue(object value, IQueryExecutionOptions options)
             {
-                if (value == null)
+                if (value == null || (value is INullable nullable && nullable.IsNull))
                 {
                     if (_filter.Items.Contains(_contradiction))
                         return;

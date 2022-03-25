@@ -256,6 +256,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var field2 = comparison.SecondExpression as ColumnReferenceExpression;
                 var variable = comparison.SecondExpression as VariableReference;
                 var parameterless = comparison.SecondExpression as ParameterlessCall;
+                var globalVariable = comparison.SecondExpression as GlobalVariableExpression;
                 var expr = comparison.SecondExpression;
                 var type = comparison.ComparisonType;
 
@@ -268,13 +269,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 // If we couldn't find the pattern `column = value` or `column = func()`, try looking in the opposite order
-                if (field == null && literal == null && func == null && variable == null && parameterless == null)
+                if (field == null && literal == null && func == null && variable == null && parameterless == null && globalVariable == null)
                 {
                     field = comparison.SecondExpression as ColumnReferenceExpression;
                     literal = comparison.FirstExpression as Literal;
                     func = comparison.FirstExpression as FunctionCall;
                     variable = comparison.FirstExpression as VariableReference;
                     parameterless = comparison.FirstExpression as ParameterlessCall;
+                    globalVariable = comparison.FirstExpression as GlobalVariableExpression;
                     expr = comparison.FirstExpression;
                     field2 = null;
 
@@ -300,7 +302,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 // If we still couldn't find the column name and value, this isn't a pattern we can support in FetchXML
-                if (field == null || (literal == null && func == null && variable == null && parameterless == null && (field2 == null || !options.ColumnComparisonAvailable) && !expr.IsConstantValueExpression(schema, options, out literal)))
+                if (field == null || (literal == null && func == null && variable == null && parameterless == null && globalVariable == null && (field2 == null || !options.ColumnComparisonAvailable) && !expr.IsConstantValueExpression(schema, options, out literal)))
                     return false;
 
                 // Select the correct FetchXML operator
@@ -346,6 +348,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 else if (variable != null)
                 {
                     values = new[] { variable };
+                }
+                else if (globalVariable != null)
+                {
+                    values = new[] { globalVariable };
                 }
                 else if (func != null && Enum.TryParse<@operator>(func.FunctionName.Value.ToLower(), out var customOperator))
                 {
@@ -663,9 +669,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (attribute != null && attribute.AttributeType == AttributeTypeCode.PartyList)
                 return false;
 
-            var value = literals == null ? null : literals.Length == 1 ? literals[0] is Literal l ? l.Value : literals[0] is VariableReference v ? v.Name : null : null;
-            var isVariable = literals != null && literals.Length == 1 && literals[0] is VariableReference;
-            var values = literals == null ? null : literals.Select(lit => new conditionValue { Value = lit is Literal lit1 ? lit1.Value : lit is VariableReference var1 ? var1.Name : null, IsVariable = lit is VariableReference }).ToArray();
+            var values = literals == null ? null : literals
+                .Select(lit => new conditionValue
+                {
+                    Value = lit is Literal lit1
+                    ? lit1.Value
+                    : lit is VariableReference var1
+                        ? var1.Name
+                        : lit is GlobalVariableExpression glob
+                            ? glob.Name
+                            : null,
+                    IsVariable = lit is VariableReference || lit is GlobalVariableExpression
+                })
+                .ToArray();
+
+            var value = values == null || values.Length != 1 ? null : values[0].Value;
+            var isVariable = values == null || values.Length != 1 ? false : values[0].IsVariable;
 
             var usesItems = values != null && values.Length > 1 || op == @operator.@in || op == @operator.notin || op == @operator.containvalues || op == @operator.notcontainvalues;
 
@@ -813,12 +832,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (op != @operator.eq && op != @operator.ne && op != @operator.neq && op != @operator.@in && op != @operator.notin)
                     return false;
 
-                for (var i = 0; i < literals.Length; i++)
+                for (var i = 0; i < values.Length; i++)
                 {
-                    if (literals[i] is VariableReference variable)
+                    if (values[i].IsVariable)
                     {
                         // Variables must be an integer type
-                        var variableType = parameterTypes[variable.Name].ToNetType(out _);
+                        var variableType = parameterTypes[values[i].Value].ToNetType(out _);
 
                         if (variableType != typeof(SqlInt32))
                             return false;
