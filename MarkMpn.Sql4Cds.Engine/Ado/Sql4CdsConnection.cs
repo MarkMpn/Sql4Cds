@@ -24,7 +24,7 @@ namespace MarkMpn.Sql4Cds.Engine
     /// </summary>
     public class Sql4CdsConnection : DbConnection
     {
-        private readonly Dictionary<string, DataSource> _dataSources;
+        private readonly IDictionary<string, DataSource> _dataSources;
         private readonly ChangeDatabaseOptionsWrapper _options;
         private readonly Dictionary<string, DataTypeReference> _globalVariableTypes;
         private readonly Dictionary<string, object> _globalVariableValues;
@@ -49,18 +49,18 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// Creates a new <see cref="Sql4CdsConnection"/> using the specified list of data sources
         /// </summary>
-        /// <param name="dataSources">The list of data sources to use</param>
-        public Sql4CdsConnection(params DataSource[] dataSources)
+        /// <param name="dataSources">The list of data sources to use, indexed by <see cref="DataSource.Name"/></param>
+        public Sql4CdsConnection(IDictionary<string, DataSource> dataSources)
         {
             if (dataSources == null)
                 throw new ArgumentNullException(nameof(dataSources));
 
-            if (dataSources.Length == 0)
+            if (dataSources.Count == 0)
                 throw new ArgumentOutOfRangeException("At least one data source must be supplied");
 
-            var options = new DefaultQueryExecutionOptions(dataSources[0], CancellationToken.None);
+            var options = new DefaultQueryExecutionOptions(dataSources.First().Value, CancellationToken.None);
 
-            _dataSources = dataSources.ToDictionary(ds => ds.Name, StringComparer.OrdinalIgnoreCase);
+            _dataSources = dataSources;
             _options = new ChangeDatabaseOptionsWrapper(this, options);
 
             _globalVariableTypes = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase)
@@ -92,12 +92,15 @@ namespace MarkMpn.Sql4Cds.Engine
             return svc;
         }
 
-        private static DataSource[] BuildDataSources(IOrganizationService[] org)
+        private static IDictionary<string, DataSource> BuildDataSources(IOrganizationService[] orgs)
         {
-            var dataSources = new DataSource[org.Length];
+            var dataSources = new Dictionary<string, DataSource>(StringComparer.OrdinalIgnoreCase);
 
-            for (var i = 0; i < org.Length; i++)
-                dataSources[i] = new DataSource(org[i]);
+            foreach (var org in orgs)
+            {
+                var ds = new DataSource(org);
+                dataSources[ds.Name] = ds;
+            }
 
             return dataSources;
         }
@@ -112,7 +115,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 handler(this, new InfoMessageEventArgs(node, message));
         }
 
-        internal Dictionary<string, DataSource> DataSources => _dataSources;
+        internal IDictionary<string, DataSource> DataSources => _dataSources;
 
         internal IQueryExecutionOptions Options => _options;
 

@@ -84,9 +84,9 @@ namespace MarkMpn.Sql4Cds
         private ExecuteParams _params;
         private int _rowCount;
         private ToolStripControlHost _progressHost;
-
         private bool _addingResult;
         private IDictionary<int, TextRange> _messageLocations;
+        private readonly Sql4CdsConnection _connection;
 
         static SqlQueryControl()
         {
@@ -122,11 +122,19 @@ namespace MarkMpn.Sql4Cds
             splitContainer.Panel1.Controls.Add(_editor);
             Icon = _sqlIcon;
 
+            _connection = new Sql4CdsConnection(DataSources);
+            _connection.InfoMessage += (s, msg) =>
+            {
+                Execute(() => ShowResult(msg.Statement, null, null, msg.Message, null));
+            };
+
             ChangeConnection(con);
         }
 
-        public IDictionary<string, DataSource> DataSources { get; private set; }
+        public IDictionary<string, DataSource> DataSources { get; }
+
         public Action<string> ShowFetchXML { get; }
+        
         public string Filename
         {
             get { return _filename; }
@@ -139,6 +147,7 @@ namespace MarkMpn.Sql4Cds
             }
         }
         public ConnectionDetail Connection => _con;
+        
         public string Sql => String.IsNullOrEmpty(_editor.SelectedText) ? _editor.Text : _editor.SelectedText;
 
         internal void ChangeConnection(ConnectionDetail con)
@@ -372,6 +381,7 @@ namespace MarkMpn.Sql4Cds
                     return;
 
                 var autocompleteDataSources = DataSources.Values
+                    .Cast<XtbDataSource>()
                     .Select(ds =>
                     {
                         EntityCache.TryGetEntities(ds.ConnectionDetail.MetadataCacheLoader, ds.Connection, out var entities);
@@ -494,6 +504,7 @@ namespace MarkMpn.Sql4Cds
                 var text = _control._editor.Text;
 
                 var autocompleteDataSources = _control.DataSources.Values
+                    .Cast<XtbDataSource>()
                     .Select(ds =>
                     {
                         EntityCache.TryGetEntities(ds.ConnectionDetail.MetadataCacheLoader, ds.Connection, out var entities);
@@ -871,22 +882,16 @@ namespace MarkMpn.Sql4Cds
 
             backgroundWorker.ReportProgress(0, "Executing query...");
 
-            using (var con = new Sql4CdsConnection(DataSources.Values.ToArray()))
-            using (var cmd = con.CreateCommand())
+            using (var cmd = _connection.CreateCommand())
             {
-                con.ChangeDatabase(Connection.ConnectionName);
-                new QueryExecutionOptions(this, backgroundWorker).ApplySettings(con, cmd, args.Execute);
+                _connection.ChangeDatabase(Connection.ConnectionName);
+                new QueryExecutionOptions(this, backgroundWorker).ApplySettings(_connection, cmd, args.Execute);
                 cmd.CommandTimeout = 0;
 
                 cmd.CommandText = args.Sql;
 
                 if (args.Execute)
                 {
-                    con.InfoMessage += (s, msg) =>
-                    {
-                        Execute(() => ShowResult(msg.Statement, args, null, msg.Message, null));
-                    };
-
                     cmd.StatementCompleted += (s, stmt) =>
                     {
                         _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = stmt.Statement.GetType().Name, ["Source"] = "XrmToolBox" });
@@ -1106,7 +1111,7 @@ namespace MarkMpn.Sql4Cds
             if (!DataSources.TryGetValue(entityReference.DataSource, out var dataSource))
                 return;
 
-            var url = dataSource.ConnectionDetail.GetEntityReferenceUrl(entityReference);
+            var url = ((XtbDataSource) dataSource).ConnectionDetail.GetEntityReferenceUrl(entityReference);
             Process.Start(url);
         }
 

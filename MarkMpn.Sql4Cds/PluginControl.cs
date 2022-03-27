@@ -106,7 +106,7 @@ namespace MarkMpn.Sql4Cds
             {
                 var metadata = new SharedMetadataCache(con, GetNewServiceClient(con));
 
-                _dataSources[con.ConnectionName] = new DataSource
+                _dataSources[con.ConnectionName] = new XtbDataSource
                 {
                     ConnectionDetail = con,
                     Connection = GetNewServiceClient(con),
@@ -580,7 +580,7 @@ in
             if (!(dockPanel.ActiveDocument is SqlQueryControl sql))
                 return;
 
-            using (var con = new Sql4CdsConnection(sql.DataSources.Values.ToArray()))
+            using (var con = new Sql4CdsConnection(sql.DataSources))
             using (var cmd = con.CreateCommand())
             {
                 new QueryExecutionOptions(this, null).ApplySettings(con, cmd, false);

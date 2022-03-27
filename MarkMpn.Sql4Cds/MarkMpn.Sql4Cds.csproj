@@ -250,7 +250,7 @@
     <Compile Include="Autocomplete.cs" />
     <Compile Include="ConnectionExtensions.cs" />
     <Compile Include="ConnectionPropertiesWrapper.cs" />
-    <Compile Include="DataSource.cs" />
+    <Compile Include="XtbDataSource.cs" />
     <Compile Include="EntityCache.cs" />
     <Compile Include="MQueryControl.cs">
       <SubType>Form</SubType>

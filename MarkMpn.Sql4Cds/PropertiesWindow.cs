@@ -22,7 +22,7 @@ namespace MarkMpn.Sql4Cds
             if (value != null)
                 value = new ExecutionPlanNodeTypeDescriptor(value, estimated, dataSourceName =>
                 {
-                    if (!Connections.TryGetValue(dataSourceName, out var dataSource))
+                    if (!Connections.TryGetValue(dataSourceName, out var ds) || !(ds is XtbDataSource dataSource))
                         return null;
 
                     return new ConnectionPropertiesWrapper(dataSource.ConnectionDetail);
