@@ -188,6 +188,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 var cmd = con.CreateCommand();
                 cmd.CommandTimeout = (int)TimeSpan.FromMinutes(2).TotalSeconds;
                 cmd.CommandText = CommandText;
+                cmd.StatementCompleted += (_, e) => _connection.GlobalVariableValues["@@ROWCOUNT"] = (SqlInt32) e.RecordCount;
 
                 if (Parameters.Count > 0)
                 {

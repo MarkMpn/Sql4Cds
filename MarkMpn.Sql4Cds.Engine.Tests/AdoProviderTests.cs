@@ -373,5 +373,25 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 CollectionAssert.AreEqual(new[] { "3", "4", "end" }, results);
             }
         }
+        
+        [TestMethod]
+        public void GlobalVariablesPreservedBetweenCommands()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource.Values.ToArray()))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "INSERT INTO account (name) VALUES ('test')";
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = "SELECT @@IDENTITY";
+                var accountId = (SqlEntityReference)cmd.ExecuteScalar();
+
+                cmd.CommandText = "SELECT @@ROWCOUNT";
+                var rowCount = (int)cmd.ExecuteScalar();
+
+                Assert.AreEqual("test", _context.Data["account"][accountId.Id].GetAttributeValue<string>("name"));
+                Assert.AreEqual(1, rowCount);
+            }
+        }
     }
 }

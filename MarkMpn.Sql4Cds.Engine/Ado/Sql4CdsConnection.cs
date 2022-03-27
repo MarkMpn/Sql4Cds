@@ -8,6 +8,8 @@ using System.Text;
 using Microsoft.Crm.Sdk.Messages;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using System.Threading;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
+using System.Data.SqlTypes;
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
 #else
@@ -24,6 +26,8 @@ namespace MarkMpn.Sql4Cds.Engine
     {
         private readonly Dictionary<string, DataSource> _dataSources;
         private readonly ChangeDatabaseOptionsWrapper _options;
+        private readonly Dictionary<string, DataTypeReference> _globalVariableTypes;
+        private readonly Dictionary<string, object> _globalVariableValues;
 
         /// <summary>
         /// Creates a new <see cref="Sql4CdsConnection"/> using the specified XRM connection string
@@ -58,6 +62,17 @@ namespace MarkMpn.Sql4Cds.Engine
 
             _dataSources = dataSources.ToDictionary(ds => ds.Name, StringComparer.OrdinalIgnoreCase);
             _options = new ChangeDatabaseOptionsWrapper(this, options);
+
+            _globalVariableTypes = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["@@IDENTITY"] = typeof(SqlEntityReference).ToSqlType(),
+                ["@@ROWCOUNT"] = typeof(SqlInt32).ToSqlType()
+            };
+            _globalVariableValues = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["@@IDENTITY"] = SqlEntityReference.Null,
+                ["@@ROWCOUNT"] = (SqlInt32)0
+            };
         }
 
         private static IOrganizationService Connect(string connectionString)
@@ -196,6 +211,10 @@ namespace MarkMpn.Sql4Cds.Engine
             set => _options.QuotedIdentifiers = value;
         }
 
+        internal Dictionary<string, DataTypeReference> GlobalVariableTypes => _globalVariableTypes;
+
+        internal Dictionary<string, object> GlobalVariableValues => _globalVariableValues;
+
         /// <summary>
         /// Triggered before one or more records are about to be deleted
         /// </summary>
@@ -323,7 +342,7 @@ namespace MarkMpn.Sql4Cds.Engine
         {
         }
 
-        protected override DbTransaction BeginDbTransaction(IsolationLevel isolationLevel)
+        protected override DbTransaction BeginDbTransaction(System.Data.IsolationLevel isolationLevel)
         {
             throw new NotSupportedException("Transactions are not supported");
         }

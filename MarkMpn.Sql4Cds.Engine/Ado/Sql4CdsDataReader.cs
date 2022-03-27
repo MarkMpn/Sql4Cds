@@ -42,10 +42,11 @@ namespace MarkMpn.Sql4Cds.Engine
             _parameterTypes = ((Sql4CdsParameterCollection)command.Parameters).GetParameterTypes();
             _parameterValues = ((Sql4CdsParameterCollection)command.Parameters).GetParameterValues();
 
-            _parameterTypes["@@IDENTITY"] = typeof(SqlEntityReference).ToSqlType();
-            _parameterTypes["@@ROWCOUNT"] = typeof(SqlInt32).ToSqlType();
-            _parameterValues["@@IDENTITY"] = SqlEntityReference.Null;
-            _parameterValues["@@ROWCOUNT"] = (SqlInt32)0;
+            foreach (var paramType in _connection.GlobalVariableTypes)
+                _parameterTypes[paramType.Key] = paramType.Value;
+
+            foreach (var paramValue in _connection.GlobalVariableValues)
+                _parameterValues[paramValue.Key] = paramValue.Value;
 
             _labelIndexes = command.Plan
                 .Select((node, index) => new { node, index })
@@ -119,6 +120,11 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 _error = true;
                 throw;
+            }
+            finally
+            {
+                foreach (var paramName in _connection.GlobalVariableValues.Keys.ToArray())
+                    _connection.GlobalVariableValues[paramName] = parameterValues[paramName];
             }
 
             return false;
