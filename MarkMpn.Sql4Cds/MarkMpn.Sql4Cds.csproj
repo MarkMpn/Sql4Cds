@@ -43,8 +43,8 @@
       <HintPath>..\packages\MscrmTools.Xrm.Connection.1.2021.5.42\lib\net462\McTools.Xrm.Connection.WinForms.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="Microsoft.ApplicationInsights, Version=2.16.0.18277, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
-      <HintPath>..\packages\Microsoft.ApplicationInsights.2.16.0\lib\net46\Microsoft.ApplicationInsights.dll</HintPath>
+    <Reference Include="Microsoft.ApplicationInsights, Version=2.20.0.103, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <HintPath>..\packages\Microsoft.ApplicationInsights.2.20.0\lib\net46\Microsoft.ApplicationInsights.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.Crm.Sdk.Proxy, Version=9.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
       <HintPath>..\packages\Microsoft.CrmSdk.CoreAssemblies.9.0.2.33\lib\net462\Microsoft.Crm.Sdk.Proxy.dll</HintPath>

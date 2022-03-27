@@ -86,9 +86,10 @@ namespace MarkMpn.Sql4Cds.SSMS
                 // Store the options being used for these queries so we can cancel them later
                 var dataSource = GetDataSource();
 
-                using (var con = new Sql4CdsConnection(new[] { dataSource }))
+                using (var con = new Sql4CdsConnection(new Dictionary<string, DataSource>(StringComparer.OrdinalIgnoreCase) { [dataSource.Name] = dataSource }))
                 using (var cmd = con.CreateCommand())
                 {
+                    con.ApplicationName = "SSMS";
                     var options = new QueryExecutionOptions(sqlScriptEditorControl, Package.Settings, true, cmd);
                     options.ApplySettings(con);
                     cmd.CommandText = sql;
@@ -128,8 +129,6 @@ namespace MarkMpn.Sql4Cds.SSMS
 
                     cmd.StatementCompleted += (s, stmt) =>
                     {
-                        _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = stmt.Statement.GetType().Name, ["Source"] = "SSMS" });
-
                         if (tabPage != null)
                             ShowPlan(sqlScriptEditorControl, tabPage, stmt.Statement, dataSource, true);
 
@@ -175,8 +174,6 @@ namespace MarkMpn.Sql4Cds.SSMS
                                     resultFlag |= 1; // Success
                                 }
                             }
-
-                            _ai.TrackException(error, new Dictionary<string, string> { ["Sql"] = sql, ["Source"] = "SSMS" });
 
                             AddException(sqlScriptEditorControl, textSpan, error);
                             resultFlag |= 2; // Failure
@@ -232,9 +229,10 @@ namespace MarkMpn.Sql4Cds.SSMS
                 // Store the options being used for these queries so we can cancel them later
                 var dataSource = GetDataSource();
 
-                using (var con = new Sql4CdsConnection(new[] { dataSource }))
+                using (var con = new Sql4CdsConnection(new Dictionary<string, DataSource>(StringComparer.OrdinalIgnoreCase) { [dataSource.Name] = dataSource }))
                 using (var cmd = con.CreateCommand())
                 {
+                    con.ApplicationName = "SSMS";
                     var options = new QueryExecutionOptions(sqlScriptEditorControl, Package.Settings, !Package.Settings.ShowFetchXMLInEstimatedExecutionPlans, cmd);
                     options.ApplySettings(con);
                     cmd.CommandText = sql;
@@ -270,10 +268,7 @@ namespace MarkMpn.Sql4Cds.SSMS
                         sqlScriptEditorControl.Results.ResultsTabCtrl.SelectedTab = tabPage;
 
                         foreach (var query in plans)
-                        {
-                            _ai.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name, ["Source"] = "SSMS" });
                             ShowPlan(sqlScriptEditorControl, tabPage, query, dataSource, false);
-                        }
                     }
 
                     var resultFlag = 1; // Success

@@ -10,6 +10,7 @@ using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using System.Threading;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using System.Data.SqlTypes;
+using Microsoft.ApplicationInsights;
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
 #else
@@ -28,6 +29,7 @@ namespace MarkMpn.Sql4Cds.Engine
         private readonly ChangeDatabaseOptionsWrapper _options;
         private readonly Dictionary<string, DataTypeReference> _globalVariableTypes;
         private readonly Dictionary<string, object> _globalVariableValues;
+        private readonly TelemetryClient _ai;
 
         /// <summary>
         /// Creates a new <see cref="Sql4CdsConnection"/> using the specified XRM connection string
@@ -73,6 +75,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 ["@@IDENTITY"] = SqlEntityReference.Null,
                 ["@@ROWCOUNT"] = (SqlInt32)0
             };
+
+            _ai = new TelemetryClient(new Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration("79761278-a908-4575-afbf-2f4d82560da6"));
         }
 
         private static IOrganizationService Connect(string connectionString)
@@ -214,9 +218,16 @@ namespace MarkMpn.Sql4Cds.Engine
             set => _options.QuotedIdentifiers = value;
         }
 
+        /// <summary>
+        /// Returns or sets the name of the application using the connection
+        /// </summary>
+        public string ApplicationName { get; set; }
+
         internal Dictionary<string, DataTypeReference> GlobalVariableTypes => _globalVariableTypes;
 
         internal Dictionary<string, object> GlobalVariableValues => _globalVariableValues;
+
+        internal TelemetryClient TelemetryClient => _ai;
 
         /// <summary>
         /// Triggered before one or more records are about to be deleted

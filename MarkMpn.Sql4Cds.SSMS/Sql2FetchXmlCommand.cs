@@ -101,9 +101,10 @@ namespace MarkMpn.Sql4Cds.SSMS
 
                 try
                 {
-                    using (var con = new Sql4CdsConnection(new[] { dataSource }))
+                    using (var con = new Sql4CdsConnection(new Dictionary<string, DataSource>(StringComparer.OrdinalIgnoreCase) { [dataSource.Name] = dataSource }))
                     using (var cmd = con.CreateCommand())
                     {
+                        con.ApplicationName = "SSMS";
                         new QueryExecutionOptions(sqlScriptEditorControl, Package.Settings, false, cmd).ApplySettings(con);
                         cmd.CommandText = sql;
 
@@ -111,8 +112,6 @@ namespace MarkMpn.Sql4Cds.SSMS
 
                         foreach (var query in queries)
                         {
-                            _ai.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name, ["Source"] = "SSMS" });
-
                             var window = Dte.ItemOperations.NewFile("General\\XML File");
 
                             var editPoint = ActiveDocument.EndPoint.CreateEditPoint();

@@ -123,6 +123,7 @@ namespace MarkMpn.Sql4Cds
             Icon = _sqlIcon;
 
             _connection = new Sql4CdsConnection(DataSources);
+            _connection.ApplicationName = "XrmToolBox";
             _connection.InfoMessage += (s, msg) =>
             {
                 Execute(() => ShowResult(msg.Statement, null, null, msg.Message, null));
@@ -741,7 +742,6 @@ namespace MarkMpn.Sql4Cds
                     error = partialSuccess.InnerException;
                 }
 
-                _ai.TrackException(error, new Dictionary<string, string> { ["Sql"] = _params.Sql, ["Source"] = "XrmToolBox" });
                 _log(e.Error.ToString());
 
                 AddMessage(index, length, GetErrorMessage(error) + messageSuffix, true);
@@ -894,8 +894,6 @@ namespace MarkMpn.Sql4Cds
                 {
                     cmd.StatementCompleted += (s, stmt) =>
                     {
-                        _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = stmt.Statement.GetType().Name, ["Source"] = "XrmToolBox" });
-
                         Execute(() => ShowResult(stmt.Statement, args, null, null, null));
 
                         if (stmt.Statement is IImpersonateRevertExecutionPlanNode)
@@ -925,10 +923,7 @@ namespace MarkMpn.Sql4Cds
                     var plan = cmd.GeneratePlan(false);
 
                     foreach (var query in plan)
-                    {
-                        _ai.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name, ["Source"] = "XrmToolBox" });
                         Execute(() => ShowResult(query, args, null, null, null));
-                    }
                 }
             }
 

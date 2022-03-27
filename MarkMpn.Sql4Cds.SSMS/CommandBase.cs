@@ -110,7 +110,7 @@ namespace MarkMpn.Sql4Cds.SSMS
         }
 
         /// <summary>
-        /// Gets the Dataverse connectoin details for the active query
+        /// Gets the Dataverse connection details for the active query
         /// </summary>
         /// <returns>The <see cref="DataSource"/> instance representing this connection</returns>
         protected DataSource GetDataSource()

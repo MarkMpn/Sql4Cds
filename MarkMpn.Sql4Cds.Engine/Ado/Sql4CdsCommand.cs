@@ -75,6 +75,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
         internal void OnStatementCompleted(IRootExecutionPlanNode node, int recordsAffected)
         {
+            _connection.TelemetryClient.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = node.GetType().Name, ["Source"] = _connection.ApplicationName });
+
             var handler = StatementCompleted;
 
             if (handler != null)
@@ -150,13 +152,28 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <returns>The root nodes of the plan</returns>
         public IRootExecutionPlanNode[] GeneratePlan(bool compileForExecution)
         {
-            _planBuilder.EstimatedPlanOnly = !compileForExecution;
-            var plan = _planBuilder.Build(CommandText, ((Sql4CdsParameterCollection)Parameters).GetParameterTypes(), out _useTDSEndpointDirectly);
+            try
+            {
+                _planBuilder.EstimatedPlanOnly = !compileForExecution;
+                var plan = _planBuilder.Build(CommandText, ((Sql4CdsParameterCollection)Parameters).GetParameterTypes(), out _useTDSEndpointDirectly);
 
-            if (compileForExecution)
-                _plan = plan;
+                if (compileForExecution)
+                {
+                    _plan = plan;
+                }
+                else
+                {
+                    foreach (var query in plan)
+                        _connection.TelemetryClient.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name, ["Source"] = _connection.ApplicationName });
+                }
 
-            return plan;
+                return plan;
+            }
+            catch (Exception ex)
+            {
+                _connection.TelemetryClient.TrackException(ex, new Dictionary<string, string> { ["Sql"] = CommandText, ["Source"] = _connection.ApplicationName });
+                throw;
+            }
         }
 
         protected override DbParameter CreateDbParameter()
@@ -173,55 +190,63 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             Prepare();
 
-            if (_useTDSEndpointDirectly)
+            try
             {
+                if (_useTDSEndpointDirectly)
+                {
 #if NETCOREAPP
                 var svc = (ServiceClient)_connection.DataSources[_connection.Database].Connection;
                 var con = new SqlConnection("server=" + svc.ConnectedOrgUriActual.Host);
 #else
-                var svc = (CrmServiceClient)_connection.DataSources[_connection.Database].Connection;
-                var con = new SqlConnection("server=" + svc.CrmConnectOrgUriActual.Host);
+                    var svc = (CrmServiceClient)_connection.DataSources[_connection.Database].Connection;
+                    var con = new SqlConnection("server=" + svc.CrmConnectOrgUriActual.Host);
 #endif
-                con.AccessToken = svc.CurrentAccessToken;
-                con.Open();
+                    con.AccessToken = svc.CurrentAccessToken;
+                    con.Open();
 
-                var cmd = con.CreateCommand();
-                cmd.CommandTimeout = (int)TimeSpan.FromMinutes(2).TotalSeconds;
-                cmd.CommandText = CommandText;
-                cmd.StatementCompleted += (_, e) => _connection.GlobalVariableValues["@@ROWCOUNT"] = (SqlInt32) e.RecordCount;
+                    var cmd = con.CreateCommand();
+                    cmd.CommandTimeout = (int)TimeSpan.FromMinutes(2).TotalSeconds;
+                    cmd.CommandText = CommandText;
+                    cmd.StatementCompleted += (_, e) => _connection.GlobalVariableValues["@@ROWCOUNT"] = (SqlInt32)e.RecordCount;
 
-                if (Parameters.Count > 0)
-                {
-                    var dom = new TSql150Parser(_connection.Options.QuotedIdentifiers);
-                    var fragment = dom.Parse(new StringReader(CommandText), out _);
-                    var variables = new VariableCollectingVisitor();
-                    fragment.Accept(variables);
-                    var requiredParameters = new HashSet<string>(variables.Variables.Select(v => v.Name), StringComparer.OrdinalIgnoreCase);
-
-                    foreach (Sql4CdsParameter sql4cdsParam in Parameters)
+                    if (Parameters.Count > 0)
                     {
-                        if (!requiredParameters.Contains(sql4cdsParam.ParameterName))
-                            continue;
+                        var dom = new TSql150Parser(_connection.Options.QuotedIdentifiers);
+                        var fragment = dom.Parse(new StringReader(CommandText), out _);
+                        var variables = new VariableCollectingVisitor();
+                        fragment.Accept(variables);
+                        var requiredParameters = new HashSet<string>(variables.Variables.Select(v => v.Name), StringComparer.OrdinalIgnoreCase);
 
-                        var param = cmd.CreateParameter();
-                        param.ParameterName = sql4cdsParam.ParameterName;
+                        foreach (Sql4CdsParameter sql4cdsParam in Parameters)
+                        {
+                            if (!requiredParameters.Contains(sql4cdsParam.ParameterName))
+                                continue;
 
-                        if (sql4cdsParam.Value is SqlEntityReference er)
-                            param.Value = (SqlGuid)er;
-                        else
-                            param.Value = sql4cdsParam.Value;
+                            var param = cmd.CreateParameter();
+                            param.ParameterName = sql4cdsParam.ParameterName;
 
-                        cmd.Parameters.Add(param);
+                            if (sql4cdsParam.Value is SqlEntityReference er)
+                                param.Value = (SqlGuid)er;
+                            else
+                                param.Value = sql4cdsParam.Value;
+
+                            cmd.Parameters.Add(param);
+                        }
                     }
+
+                    return new SqlDataReaderWrapper(_connection, this, con, cmd, _connection.Database);
                 }
 
-                return new SqlDataReaderWrapper(_connection, this, con, cmd, _connection.Database);
+                _cts = CommandTimeout == 0 ? new CancellationTokenSource() : new CancellationTokenSource(TimeSpan.FromSeconds(CommandTimeout));
+                var options = new CancellationTokenOptionsWrapper(_connection.Options, _cts);
+
+                return new Sql4CdsDataReader(this, options, behavior);
             }
-
-            _cts = CommandTimeout == 0 ? new CancellationTokenSource() : new CancellationTokenSource(TimeSpan.FromSeconds(CommandTimeout));
-            var options = new CancellationTokenOptionsWrapper(_connection.Options, _cts);
-
-            return new Sql4CdsDataReader(this, options, behavior);
+            catch (Exception ex)
+            {
+                _connection.TelemetryClient.TrackException(ex, new Dictionary<string, string> { ["Sql"] = CommandText, ["Source"] = _connection.ApplicationName });
+                throw;
+            }
         }
     }
 }
