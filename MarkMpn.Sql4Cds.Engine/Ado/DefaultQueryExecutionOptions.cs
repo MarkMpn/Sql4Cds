@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
+using Microsoft.PowerPlatform.Dataverse.Client.Extensions;
 #else
 using Microsoft.Xrm.Tooling.Connector;
 #endif
