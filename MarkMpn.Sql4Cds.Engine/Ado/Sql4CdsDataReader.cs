@@ -175,8 +175,11 @@ namespace MarkMpn.Sql4Cds.Engine
         public override long GetBytes(int ordinal, long dataOffset, byte[] buffer, int bufferOffset, int length)
         {
             var bytes = (byte[])this[ordinal];
-            length = (int) Math.Min(length, bytes.Length - dataOffset);
 
+            if (buffer == null)
+                return bytes.Length;
+
+            length = (int) Math.Min(length, bytes.Length - dataOffset);
             Array.Copy(bytes, dataOffset, buffer, bufferOffset, length);
             return length;
         }
@@ -189,8 +192,11 @@ namespace MarkMpn.Sql4Cds.Engine
         public override long GetChars(int ordinal, long dataOffset, char[] buffer, int bufferOffset, int length)
         {
             var chars = ((string)this[ordinal]).ToCharArray();
-            length = (int)Math.Min(length, chars.Length - dataOffset);
 
+            if (buffer == null)
+                return chars.Length;
+
+            length = (int)Math.Min(length, chars.Length - dataOffset);
             Array.Copy(chars, dataOffset, buffer, bufferOffset, length);
             return length;
         }

@@ -99,8 +99,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public long GetBytes(int i, long fieldOffset, byte[] buffer, int bufferoffset, int length)
         {
             var bytes = (byte[])this[i];
-            length = (int)Math.Min(length, bytes.Length - fieldOffset);
 
+            if (buffer == null)
+                return bytes.Length;
+
+            length = (int)Math.Min(length, bytes.Length - fieldOffset);
             Array.Copy(bytes, fieldOffset, buffer, bufferoffset, length);
             return length;
         }
@@ -113,8 +116,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public long GetChars(int i, long fieldoffset, char[] buffer, int bufferoffset, int length)
         {
             var chars = ((string)this[i]).ToCharArray();
-            length = (int)Math.Min(length, chars.Length - fieldoffset);
 
+            if (buffer == null)
+                return chars.Length;
+
+            length = (int)Math.Min(length, chars.Length - fieldoffset);
             Array.Copy(chars, fieldoffset, buffer, bufferoffset, length);
             return length;
         }
