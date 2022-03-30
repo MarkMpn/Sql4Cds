@@ -5,6 +5,7 @@ using System.Xml;
 using Microsoft.Xrm.Sdk.Query;
 using System.Net.Sockets;
 using Microsoft.Xrm.Sdk;
+using System.Data.SqlClient;
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
 #else
@@ -125,6 +126,29 @@ namespace MarkMpn.Sql4Cds.Engine
 #else
             _cache[svc.CrmConnectOrgUriActual.Host] = true;
 #endif
+        }
+
+        /// <summary>
+        /// Opens a connection to the TDS Endpoint
+        /// </summary>
+        /// <param name="svc">The <see cref="IOrganizationService"/> instance to connect to</param>
+        /// <returns>A <see cref="SqlConnection"/> connected to the same instance</returns>
+        public static SqlConnection Connect(IOrganizationService org)
+        {
+#if NETCOREAPP
+            if (!(org is ServiceClient svc))
+                throw new ArgumentOutOfRangeException(nameof(org), "Only ServiceClient instances are supported");
+
+            var con = new SqlConnection("server=" + svc.ConnectedOrgUriActual.Host);
+#else
+            if (!(org is CrmServiceClient svc))
+                throw new ArgumentOutOfRangeException(nameof(org), "Only CrmServiceClient instances are supported");
+
+            var con = new SqlConnection("server=" + svc.CrmConnectOrgUriActual.Host);
+#endif
+            con.AccessToken = svc.CurrentAccessToken;
+            con.Open();
+            return con;
         }
 
 #if NETCOREAPP

@@ -80,13 +80,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (String.IsNullOrEmpty(svc.CurrentAccessToken))
                         throw new QueryExecutionException("OAuth must be used to authenticate with the TDS Endpoint");
 
-#if NETCOREAPP
-                    var con = new SqlConnection("server=" + svc.ConnectedOrgUriActual.Host);
-#else
-                    var con = new SqlConnection("server=" + svc.CrmConnectOrgUriActual.Host);
-#endif
-                    con.AccessToken = svc.CurrentAccessToken;
-                    con.Open();
+                    var con = TDSEndpoint.Connect(svc);
 
                     var cmd = con.CreateCommand();
                     cmd.CommandTimeout = (int)TimeSpan.FromMinutes(2).TotalSeconds;
