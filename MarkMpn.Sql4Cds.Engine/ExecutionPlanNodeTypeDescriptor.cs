@@ -50,6 +50,14 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             return _obj;
         }
+
+        public override string GetClassName()
+        {
+            if (_obj is IExecutionPlanNode)
+                return _obj.ToString();
+
+            return base.GetClassName();
+        }
     }
 
     [AttributeUsage(AttributeTargets.Property, AllowMultiple = false)]
