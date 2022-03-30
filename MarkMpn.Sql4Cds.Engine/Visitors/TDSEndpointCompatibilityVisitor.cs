@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
 using System.Text;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
@@ -14,17 +15,24 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
     /// <seealso cref="https://docs.microsoft.com/en-us/powerapps/developer/data-platform/how-dataverse-sql-differs-from-transact-sql?tabs=not-supported"/>
     class TDSEndpointCompatibilityVisitor : TSqlFragmentVisitor
     {
+        private readonly IDbConnection _con;
         private readonly IAttributeMetadataCache _metadata;
         private readonly Dictionary<string, string> _tableNames;
+        private readonly HashSet<string> _supportedTables;
         private bool? _isEntireBatch;
         private TSqlFragment _root;
 
         /// <summary>
         /// Creates a new <see cref="TDSEndpointCompatibilityVisitor"/>
         /// </summary>
+        /// <param name="con">A connection to the TDS Endpoint</param>
         /// <param name="metadata">The metadata cache for the primary data source</param>
-        public TDSEndpointCompatibilityVisitor(IAttributeMetadataCache metadata, bool? isEntireBatch = null, Dictionary<string, string> outerTableNames = null)
+        /// <param name="isEntireBatch">Indicates if this query is the entire SQL batch, or a single statement within it</param>
+        /// <param name="outerTableNames">A mapping of table aliases to table names available from the outer query</param>
+        /// <param name="supportedTables">A pre-calculated list of supported tables</param>
+        public TDSEndpointCompatibilityVisitor(IDbConnection con, IAttributeMetadataCache metadata, bool? isEntireBatch = null, Dictionary<string, string> outerTableNames = null, HashSet<string> supportedTables = null)
         {
+            _con = con;
             _metadata = metadata;
             _tableNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             _isEntireBatch = isEntireBatch;
@@ -33,6 +41,26 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             {
                 foreach (var kvp in outerTableNames)
                     _tableNames[kvp.Key] = kvp.Value;
+            }
+
+            if (supportedTables != null)
+            {
+                _supportedTables = supportedTables;
+            }
+            else
+            {
+                _supportedTables = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                using (var cmd = con.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT name FROM sys.tables";
+
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        while (reader.Read())
+                            _supportedTables.Add(reader.GetString(0));
+                    }
+                }
             }
 
             IsCompatible = true;
@@ -65,10 +93,9 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                 return;
             }
 
-            var entity = TryGetEntity(node.SchemaObject.BaseIdentifier.Value);
-            if (entity?.DataProviderId != null)
+            if (!_supportedTables.Contains(node.SchemaObject.BaseIdentifier.Value))
             {
-                // No access to entities with custom data providers
+                // Table does not exist in TDS endpoint
                 IsCompatible = false;
                 return;
             }
@@ -184,7 +211,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             // Name resolution needs to be scoped to the query, so create a new sub-visitor
             if (IsCompatible && _root != node)
             {
-                var subVisitor = new TDSEndpointCompatibilityVisitor(_metadata, _isEntireBatch, _tableNames);
+                var subVisitor = new TDSEndpointCompatibilityVisitor(_con, _metadata, _isEntireBatch, _tableNames, _supportedTables);
                 node.Accept(subVisitor);
 
                 if (!subVisitor.IsCompatible)
@@ -201,7 +228,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             // Name resolution needs to be scoped to the query, so create a new sub-visitor
             if (IsCompatible && _root != node)
             {
-                var subVisitor = new TDSEndpointCompatibilityVisitor(_metadata, _isEntireBatch);
+                var subVisitor = new TDSEndpointCompatibilityVisitor(_con, _metadata, _isEntireBatch, supportedTables: _supportedTables);
                 node.Accept(subVisitor);
 
                 if (!subVisitor.IsCompatible)
@@ -218,7 +245,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             // Name resolution needs to be scoped to the query, so create a new sub-visitor
             if (IsCompatible && _root != node)
             {
-                var subVisitor = new TDSEndpointCompatibilityVisitor(_metadata, _isEntireBatch);
+                var subVisitor = new TDSEndpointCompatibilityVisitor(_con, _metadata, _isEntireBatch, supportedTables: _supportedTables);
                 node.Accept(subVisitor);
 
                 if (!subVisitor.IsCompatible)

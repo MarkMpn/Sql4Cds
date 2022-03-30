@@ -87,13 +87,30 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (TDSEndpoint.CanUseTDSEndpoint(Options, DataSources[Options.PrimaryDataSource].Connection))
             {
-                var tdsEndpointCompatibilityVisitor = new TDSEndpointCompatibilityVisitor(DataSources[Options.PrimaryDataSource].Metadata);
-                fragment.Accept(tdsEndpointCompatibilityVisitor);
-
-                if (tdsEndpointCompatibilityVisitor.IsCompatible)
+                using (var con = TDSEndpoint.Connect(DataSources[Options.PrimaryDataSource].Connection))
                 {
-                    useTDSEndpointDirectly = true;
-                    return null;
+                    var tdsEndpointCompatibilityVisitor = new TDSEndpointCompatibilityVisitor(con, DataSources[Options.PrimaryDataSource].Metadata);
+                    fragment.Accept(tdsEndpointCompatibilityVisitor);
+
+                    if (tdsEndpointCompatibilityVisitor.IsCompatible)
+                    {
+                        useTDSEndpointDirectly = true;
+                        var sqlNode = new SqlNode
+                        {
+                            DataSource = Options.PrimaryDataSource,
+                            Sql = sql,
+                            Index = 0,
+                            Length = sql.Length
+                        };
+
+                        if (parameters != null)
+                        {
+                            foreach (var param in parameters.Keys)
+                                sqlNode.Parameters.Add(param);
+                        }
+
+                        return new IRootExecutionPlanNode[] { sqlNode };
+                    }
                 }
             }
 
@@ -1296,25 +1313,28 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             if (TDSEndpoint.CanUseTDSEndpoint(Options, DataSources[Options.PrimaryDataSource].Connection))
             {
-                var tdsEndpointCompatibilityVisitor = new TDSEndpointCompatibilityVisitor(DataSources[Options.PrimaryDataSource].Metadata, false);
-                select.Accept(tdsEndpointCompatibilityVisitor);
-
-                if (tdsEndpointCompatibilityVisitor.IsCompatible)
+                using (var con = TDSEndpoint.Connect(DataSources[Options.PrimaryDataSource].Connection))
                 {
-                    select.ScriptTokenStream = null;
-                    var sql = new SqlNode
+                    var tdsEndpointCompatibilityVisitor = new TDSEndpointCompatibilityVisitor(con, DataSources[Options.PrimaryDataSource].Metadata, false);
+                    select.Accept(tdsEndpointCompatibilityVisitor);
+
+                    if (tdsEndpointCompatibilityVisitor.IsCompatible)
                     {
-                        DataSource = Options.PrimaryDataSource,
-                        Sql = select.ToSql()
-                    };
+                        select.ScriptTokenStream = null;
+                        var sql = new SqlNode
+                        {
+                            DataSource = Options.PrimaryDataSource,
+                            Sql = select.ToSql()
+                        };
 
-                    var variables = new VariableCollectingVisitor();
-                    select.Accept(variables);
+                        var variables = new VariableCollectingVisitor();
+                        select.Accept(variables);
 
-                    foreach (var variable in variables.Variables)
-                        sql.Parameters.Add(variable.Name);
+                        foreach (var variable in variables.Variables)
+                            sql.Parameters.Add(variable.Name);
 
-                    return sql;
+                        return sql;
+                    }
                 }
             }
 
