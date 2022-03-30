@@ -258,18 +258,11 @@ namespace MarkMpn.Sql4Cds.SSMS
                     sqlScriptEditorControl.ToggleResultsControl(true);
                     sqlScriptEditorControl.Results.StartExecution();
 
-                    if (plans == null)
-                    {
-                        sqlScriptEditorControl.Results.AddStringToMessages("Entire query will be executed directly by TDS Endpoint - SQL 4 CDS is not required for this query");
-                    }
-                    else
-                    {
-                        var tabPage = AddShowPlanTab(sqlScriptEditorControl);
-                        sqlScriptEditorControl.Results.ResultsTabCtrl.SelectedTab = tabPage;
+                    var tabPage = AddShowPlanTab(sqlScriptEditorControl);
+                    sqlScriptEditorControl.Results.ResultsTabCtrl.SelectedTab = tabPage;
 
-                        foreach (var query in plans)
-                            ShowPlan(sqlScriptEditorControl, tabPage, query, dataSource, false);
-                    }
+                    foreach (var query in plans)
+                        ShowPlan(sqlScriptEditorControl, tabPage, query, dataSource, false);
 
                     var resultFlag = 1; // Success
 
