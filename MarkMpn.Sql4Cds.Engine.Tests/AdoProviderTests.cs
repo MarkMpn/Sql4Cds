@@ -393,5 +393,30 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 Assert.AreEqual(1, rowCount);
             }
         }
+
+        [TestMethod]
+        public void CaseInsensitiveDml()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "INSERT INTO account (Name) VALUES ('ProperCase')";
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = "SELECT @@IDENTITY";
+                var accountId = (SqlEntityReference)cmd.ExecuteScalar();
+
+                Assert.AreEqual("ProperCase", _context.Data["account"][accountId.Id].GetAttributeValue<string>("name"));
+
+                cmd.CommandText = "UPDATE account SET NAME = 'UpperCase' WHERE AccountId = @AccountId";
+                var param = cmd.CreateParameter();
+                param.ParameterName = "@accountid";
+                param.Value = accountId.Id;
+                cmd.Parameters.Add(param);
+                cmd.ExecuteNonQuery();
+
+                Assert.AreEqual("UpperCase", _context.Data["account"][accountId.Id].GetAttributeValue<string>("name"));
+            }
+        }
     }
 }

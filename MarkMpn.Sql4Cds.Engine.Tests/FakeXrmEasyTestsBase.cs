@@ -42,7 +42,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             _dataSources = new[] { _dataSource, _dataSource2 }.ToDictionary(ds => ds.Name);
             _localDataSource = new Dictionary<string, DataSource>
             {
-                ["local"] = _dataSource
+                ["local"] = new DataSource { Name = "local", Connection = _service, Metadata = _dataSource.Metadata, TableSizeCache = _dataSource.TableSizeCache }
             };
 
             SetPrimaryIdAttributes(_context);

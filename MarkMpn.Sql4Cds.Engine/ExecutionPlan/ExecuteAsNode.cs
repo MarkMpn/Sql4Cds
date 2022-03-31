@@ -61,7 +61,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     // Precompile mappings with type conversions
                     var meta = dataSource.Metadata["systemuser"];
                     var attributes = meta.Attributes.ToDictionary(a => a.LogicalName);
-                    var attributeAccessors = CompileColumnMappings(meta, new Dictionary<string, string> { ["systemuserid"] = UserIdSource }, schema, attributes, DateTimeKind.Unspecified, entities);
+                    var attributeAccessors = CompileColumnMappings(meta, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["systemuserid"] = UserIdSource }, schema, attributes, DateTimeKind.Unspecified, entities);
                     var userIdAccessor = attributeAccessors["systemuserid"];
 
                     var userId = (Guid)userIdAccessor(entities[0]);

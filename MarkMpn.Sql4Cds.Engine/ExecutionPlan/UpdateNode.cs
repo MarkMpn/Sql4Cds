@@ -81,7 +81,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     // Precompile mappings with type conversions
                     meta = dataSource.Metadata[LogicalName];
-                    attributes = meta.Attributes.ToDictionary(a => a.LogicalName);
+                    attributes = meta.Attributes.ToDictionary(a => a.LogicalName, StringComparer.OrdinalIgnoreCase);
                     var dateTimeKind = options.UseLocalTimeZone ? DateTimeKind.Local : DateTimeKind.Utc;
                     var fullMappings = new Dictionary<string, string>(ColumnMappings);
                     fullMappings[meta.PrimaryIdAttribute] = PrimaryIdSource;

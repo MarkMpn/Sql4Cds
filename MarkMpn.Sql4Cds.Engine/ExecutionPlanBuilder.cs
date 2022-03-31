@@ -1227,11 +1227,15 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (virtualTypeAttributes.Contains(targetAttrName))
                     {
                         targetType = typeof(SqlString);
+
+                        var targetAttribute = attributes[targetAttrName.Substring(0, targetAttrName.Length - 4)];
+                        targetAttrName = targetAttribute.LogicalName + targetAttrName.Substring(targetAttrName.Length - 4, 4).ToLower();
                     }
                     else
                     {
                         var targetAttribute = attributes[targetAttrName];
                         targetType = targetAttribute.GetAttributeSqlType();
+                        targetAttrName = targetAttribute.LogicalName;
 
                         // If we're updating a lookup field, the field type will be a SqlEntityReference. Change this to
                         // a SqlGuid so we can accept any guid values, including from TDS endpoint where SqlEntityReference

@@ -101,7 +101,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     // Precompile mappings with type conversions
                     meta = dataSource.Metadata[LogicalName];
-                    var attributes = meta.Attributes.ToDictionary(a => a.LogicalName);
+                    var attributes = meta.Attributes.ToDictionary(a => a.LogicalName, StringComparer.OrdinalIgnoreCase);
                     var dateTimeKind = options.UseLocalTimeZone ? DateTimeKind.Local : DateTimeKind.Utc;
                     var primaryKey = meta.PrimaryIdAttribute;
                     string secondaryKey = null;
