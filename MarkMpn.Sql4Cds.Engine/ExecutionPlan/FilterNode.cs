@@ -208,13 +208,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         var rightSorts = (rightFetch.Entity.Items ?? Array.Empty<object>()).OfType<FetchOrderType>().ToList();
 
-                        if (rightSorts.Count != 1)
-                            break;
+                        if (rightSorts.Count == 0)
+                        {
+                            // Implicit sort on primary key
+                            attribute = rightFetch.GetSchema(dataSources, parameterTypes).PrimaryKey;
+                        }
+                        else
+                        {
+                            if (rightSorts.Count != 1)
+                                break;
 
-                        if (!String.IsNullOrEmpty(rightSorts[0].alias))
-                            break;
+                            if (!String.IsNullOrEmpty(rightSorts[0].alias))
+                                break;
 
-                        attribute = $"{rightFetch.Alias}.{rightSorts[0].attribute}";
+                            attribute = $"{rightFetch.Alias}.{rightSorts[0].attribute}";
+                        }
                     }
 
                     if (!merge.RightAttribute.GetColumnName().Equals(attribute, StringComparison.OrdinalIgnoreCase))
@@ -235,8 +243,40 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (notNullFilter == null)
                         break;
 
-                    // We can fold IN to a simple left outer join where the attribute is the primary key
-                    if (!rightFetch.FetchXml.distinct && rightSchema.PrimaryKey == attribute)
+                    // If IN query is on matching primary keys (SELECT name FROM account WHERE accountid IN (SELECT accountid FROM account WHERE ...))
+                    // we can eliminate the left join and rewrite as SELECT name FROM account WHERE ....
+                    // Can't do this if there is any conflict in join aliases
+                    if (leftFetch.Entity.name == rightFetch.Entity.name &&
+                        merge.LeftAttribute.GetColumnName() == leftFetch.Alias + "." + dataSources[leftFetch.DataSource].Metadata[leftFetch.Entity.name].PrimaryIdAttribute &&
+                        merge.RightAttribute.GetColumnName() == rightFetch.Alias + "." + dataSources[rightFetch.DataSource].Metadata[rightFetch.Entity.name].PrimaryIdAttribute &&
+                        !leftFetch.Entity.GetLinkEntities().Select(l => l.alias).Intersect(rightFetch.Entity.GetLinkEntities().Select(l => l.alias), StringComparer.OrdinalIgnoreCase).Any())
+                    {
+                        if (rightFetch.Entity.Items != null)
+                        {
+                            // Remove any attributes from the subquery. Mark all joins as semi joins so no more attributes will
+                            // be added to them using a SELECT * query
+                            rightFetch.Entity.Items = rightFetch.Entity.Items.Where(i => !(i is FetchAttributeType || i is allattributes)).ToArray();
+
+                            foreach (var link in rightFetch.Entity.GetLinkEntities())
+                            {
+                                link.SemiJoin = true;
+
+                                if (link.Items != null)
+                                    link.Items = link.Items.Where(i => !(i is FetchAttributeType || i is allattributes)).ToArray();
+                            }
+
+                            foreach (var item in rightFetch.Entity.Items)
+                                leftFetch.Entity.AddItem(item);
+                        }
+
+                        Filter = Filter.RemoveCondition(notNullFilter);
+                        foldedFilters = true;
+
+                        linkToAdd = null;
+                    }
+                    // We can fold IN to a simple left outer join where the attribute is the primary key. Can't do this
+                    // if there are any inner joins though.
+                    else if (!rightFetch.FetchXml.distinct && rightSchema.PrimaryKey == attribute && !rightFetch.Entity.GetLinkEntities().Any(link => link.linktype == "inner"))
                     {
                         // Replace the filter on the defined value name with a filter on the primary key column
                         notNullFilter.Expression = attribute.ToColumnReference();
@@ -339,22 +379,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     break;
                 }
 
-                // Can't add the link if it's got any filter conditions with an entityname
-                if (linkToAdd.GetConditions().Any(c => !String.IsNullOrEmpty(c.entityname)))
-                    break;
+                if (linkToAdd != null)
+                {
+                    // Can't add the link if it's got any filter conditions with an entityname
+                    if (linkToAdd.GetConditions().Any(c => !String.IsNullOrEmpty(c.entityname)))
+                        break;
 
-                // Remove any attributes from the new linkentity
-                var tempEntity = new FetchEntityType { Items = new object[] { linkToAdd } };
+                    // Remove any attributes from the new linkentity
+                    var tempEntity = new FetchEntityType { Items = new object[] { linkToAdd } };
 
-                foreach (var link in tempEntity.GetLinkEntities())
-                    link.Items = (link.Items ?? Array.Empty<object>()).Where(i => !(i is FetchAttributeType) && !(i is allattributes)).ToArray();
+                    foreach (var link in tempEntity.GetLinkEntities())
+                        link.Items = (link.Items ?? Array.Empty<object>()).Where(i => !(i is FetchAttributeType) && !(i is allattributes)).ToArray();
 
-                if (leftAlias.Equals(leftFetch.Alias, StringComparison.OrdinalIgnoreCase))
-                    leftFetch.Entity.AddItem(linkToAdd);
-                else
-                    leftFetch.Entity.FindLinkEntity(leftAlias).AddItem(linkToAdd);
+                    if (leftAlias.Equals(leftFetch.Alias, StringComparison.OrdinalIgnoreCase))
+                        leftFetch.Entity.AddItem(linkToAdd);
+                    else
+                        leftFetch.Entity.FindLinkEntity(leftAlias).AddItem(linkToAdd);
 
-                addedLinks.Add(linkToAdd);
+                    addedLinks.Add(linkToAdd);
+                }
 
                 joins.Remove(join);
 
