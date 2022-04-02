@@ -87,7 +87,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (TDSEndpoint.CanUseTDSEndpoint(Options, DataSources[Options.PrimaryDataSource].Connection))
             {
-                using (var con = TDSEndpoint.Connect(DataSources[Options.PrimaryDataSource].Connection))
+                using (var con = DataSources[Options.PrimaryDataSource].Connection == null ? null : TDSEndpoint.Connect(DataSources[Options.PrimaryDataSource].Connection))
                 {
                     var tdsEndpointCompatibilityVisitor = new TDSEndpointCompatibilityVisitor(con, DataSources[Options.PrimaryDataSource].Metadata);
                     fragment.Accept(tdsEndpointCompatibilityVisitor);
@@ -1317,7 +1317,7 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             if (TDSEndpoint.CanUseTDSEndpoint(Options, DataSources[Options.PrimaryDataSource].Connection))
             {
-                using (var con = TDSEndpoint.Connect(DataSources[Options.PrimaryDataSource].Connection))
+                using (var con = DataSources[Options.PrimaryDataSource].Connection == null ? null : TDSEndpoint.Connect(DataSources[Options.PrimaryDataSource].Connection))
                 {
                     var tdsEndpointCompatibilityVisitor = new TDSEndpointCompatibilityVisitor(con, DataSources[Options.PrimaryDataSource].Metadata, false);
                     select.Accept(tdsEndpointCompatibilityVisitor);

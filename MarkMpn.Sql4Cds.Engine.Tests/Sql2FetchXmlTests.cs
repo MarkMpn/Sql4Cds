@@ -1999,7 +1999,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new OptionsWrapper(this) { UseTDSEndpoint = true });
             var queries = planBuilder.Build(query, null, out var useTDSEndpointDirectly);
             Assert.IsTrue(useTDSEndpointDirectly);
-            Assert.IsNull(queries);
+            Assert.AreEqual(1, queries.Length);
+            Assert.IsInstanceOfType(queries[0], typeof(SqlNode));
         }
 
         [TestMethod]

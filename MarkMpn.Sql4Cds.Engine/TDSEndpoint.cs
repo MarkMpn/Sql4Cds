@@ -135,6 +135,9 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <returns>A <see cref="SqlConnection"/> connected to the same instance</returns>
         public static SqlConnection Connect(IOrganizationService org)
         {
+            if (org == null)
+                throw new ArgumentNullException(nameof(org));
+
 #if NETCOREAPP
             if (!(org is ServiceClient svc))
                 throw new ArgumentOutOfRangeException(nameof(org), "Only ServiceClient instances are supported");

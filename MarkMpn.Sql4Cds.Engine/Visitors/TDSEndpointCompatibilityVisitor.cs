@@ -47,7 +47,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             {
                 _supportedTables = supportedTables;
             }
-            else
+            else if (con != null)
             {
                 _supportedTables = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -93,7 +93,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                 return;
             }
 
-            if (!_supportedTables.Contains(node.SchemaObject.BaseIdentifier.Value))
+            if (_supportedTables != null && !_supportedTables.Contains(node.SchemaObject.BaseIdentifier.Value))
             {
                 // Table does not exist in TDS endpoint
                 IsCompatible = false;
