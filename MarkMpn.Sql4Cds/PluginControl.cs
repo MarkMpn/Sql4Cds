@@ -187,10 +187,6 @@ namespace MarkMpn.Sql4Cds
                     }
                 }
             }
-            else
-            {
-                tsbNewQuery_Click(this, EventArgs.Empty);
-            }
         }
 
         private void tsbExecute_Click(object sender, EventArgs e)
@@ -525,6 +521,35 @@ namespace MarkMpn.Sql4Cds
 
         public override void ClosingPlugin(PluginCloseInfo info)
         {
+            var unsavedDocuments = dockPanel.Documents
+                .OfType<SqlQueryControl>()
+                .Where(query => query.Modified)
+                .ToArray();
+
+            if (unsavedDocuments.Length > 0 && !Settings.Instance.RememberSession)
+            {
+                using (var form = new ConfirmCloseForm(unsavedDocuments.Select(query => query.DisplayName).ToArray(), !info.Silent))
+                {
+                    switch (form.ShowDialog())
+                    {
+                        case DialogResult.Yes:
+                            foreach (var doc in unsavedDocuments)
+                            {
+                                if (!doc.Save())
+                                {
+                                    info.Cancel = true;
+                                    return;
+                                }
+                            }
+                            break;
+
+                        case DialogResult.Cancel:
+                            info.Cancel = true;
+                            return;
+                    }
+                }
+            }
+
             if (Settings.Instance.RememberSession)
                 SaveSettings();
 

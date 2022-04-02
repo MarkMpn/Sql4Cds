@@ -248,6 +248,12 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Autocomplete.cs" />
+    <Compile Include="ConfirmCloseForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="ConfirmCloseForm.Designer.cs">
+      <DependentUpon>ConfirmCloseForm.cs</DependentUpon>
+    </Compile>
     <Compile Include="ConnectionExtensions.cs" />
     <Compile Include="ConnectionPropertiesWrapper.cs" />
     <Compile Include="XtbDataSource.cs" />
@@ -315,6 +321,9 @@
     </None>
   </ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="ConfirmCloseForm.resx">
+      <DependentUpon>ConfirmCloseForm.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="MQueryControl.resx">
       <DependentUpon>MQueryControl.cs</DependentUpon>
     </EmbeddedResource>

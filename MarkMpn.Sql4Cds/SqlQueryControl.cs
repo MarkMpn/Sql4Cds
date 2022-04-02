@@ -99,8 +99,7 @@ namespace MarkMpn.Sql4Cds
         public SqlQueryControl(ConnectionDetail con, IDictionary<string, DataSource> dataSources, TelemetryClient ai, Action<string> showFetchXml, Action<string> log, PropertiesWindow properties)
         {
             InitializeComponent();
-            _displayName = $"Query {++_queryCounter}";
-            _modified = true;
+            _displayName = $"SQLQuery{++_queryCounter}.sql";
             ShowFetchXML = showFetchXml;
             DataSources = dataSources;
             _editor = CreateSqlEditor();
@@ -147,9 +146,37 @@ namespace MarkMpn.Sql4Cds
                 SyncTitle();
             }
         }
+
+        public bool Modified => _modified;
+
+        public string DisplayName => _displayName + (_modified ? " *" : "");
+
         public ConnectionDetail Connection => _con;
         
         public string Sql => String.IsNullOrEmpty(_editor.SelectedText) ? _editor.Text : _editor.SelectedText;
+
+        protected override void OnClosing(CancelEventArgs e)
+        {
+            base.OnClosing(e);
+
+            if (_modified)
+            {
+                using (var form = new ConfirmCloseForm(new[] { DisplayName }, true))
+                {
+                    switch (form.ShowDialog())
+                    {
+                        case DialogResult.Yes:
+                            if (!Save())
+                                e.Cancel = true;
+                            break;
+
+                        case DialogResult.Cancel:
+                            e.Cancel = true;
+                            break;
+                    }
+                }
+            }
+        }
 
         internal void ChangeConnection(ConnectionDetail con)
         {
@@ -199,7 +226,12 @@ namespace MarkMpn.Sql4Cds
             _editor.Focus();
         }
 
-        public void Save()
+        void IDocumentWindow.Save()
+        {
+            this.Save();
+        }
+
+        public bool Save()
         {
             if (Filename == null)
             {
@@ -208,7 +240,7 @@ namespace MarkMpn.Sql4Cds
                     save.Filter = "SQL Scripts (*.sql)|*.sql";
 
                     if (save.ShowDialog() != DialogResult.OK)
-                        return;
+                        return false;
 
                     Filename = save.FileName;
                 }
@@ -217,6 +249,7 @@ namespace MarkMpn.Sql4Cds
             File.WriteAllText(Filename, _editor.Text);
             _modified = false;
             SyncTitle();
+            return true;
         }
 
         public void InsertText(string text)
