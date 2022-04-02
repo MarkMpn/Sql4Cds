@@ -6,7 +6,7 @@ SQL 4 CDS provides an [engine](https://www.nuget.org/packages/MarkMpn.Sql4Cds.En
 [XrmToolBox tool](https://www.xrmtoolbox.com/plugins/MarkMpn.SQL4CDS/) and [SSMS plugin](https://markcarrington.dev/sql-4-cds/sql-4-cds-ssms-edition/)
 for using standard SQL syntax to query data stored in Microsoft Dataverse / Dynamics 365.
 
-It converts the provided SQL query into the corresponding [FetchXML](https://docs.microsoft.com/en-us/powerapps/developer/common-data-service/fetchxml-schema)
+It converts the provided SQL query into the corresponding [FetchXML](https://docs.microsoft.com/en-us/powerapps/developer/common-data-service/fetchxml-schema?WT.mc_id=DX-MVP-5004203)
 syntax and allows the associated query to be executed, including the following types of query:
 
 * `SELECT`
@@ -44,13 +44,13 @@ that do not have an equivalent in FetchXML, such as calculated fields, `HAVING` 
 When executing a query it will take into account specific Dataverse features to improve the performance or results compared to
 simply executing the FetchXML directly, e.g.:
 
-* Faster `SELECT count(*) FROM entity` query execution using [RetrieveTotalRecordCountRequest](https://docs.microsoft.com/dotnet/api/microsoft.crm.sdk.messages.retrievetotalrecordcountrequest)
+* Faster `SELECT count(*) FROM entity` query execution using [RetrieveTotalRecordCountRequest](https://docs.microsoft.com/dotnet/api/microsoft.crm.sdk.messages.retrievetotalrecordcountrequest?WT.mc_id=DX-MVP-5004203)
 * Automatically retrieving multiple pages of large result sets
 * Work around `AggregateQueryRecordLimit` errors by retrieving all the individual records and applying the aggregation in-memory.
 
 As well as querying data with FetchXML, SQL 4 CDS can also query metadata by translating the SQL query into a
-[RetrieveMetadataChangesRequest](https://docs.microsoft.com/dotnet/api/microsoft.xrm.sdk.messages.retrievemetadatachangesrequest) or 
-[RetrieveAllOptionSetsRequest](https://docs.microsoft.com/dotnet/api/microsoft.xrm.sdk.messages.retrievealloptionsetsrequest):
+[RetrieveMetadataChangesRequest](https://docs.microsoft.com/dotnet/api/microsoft.xrm.sdk.messages.retrievemetadatachangesrequest?WT.mc_id=DX-MVP-5004203) or 
+[RetrieveAllOptionSetsRequest](https://docs.microsoft.com/dotnet/api/microsoft.xrm.sdk.messages.retrievealloptionsetsrequest?WT.mc_id=DX-MVP-5004203):
 
 ```sql
 -- Find attributes without a description
@@ -102,7 +102,7 @@ using (var cmd = con.CreateCommand())
 }
 ```
 
-The connection string should be any [standard XRM connection string](https://docs.microsoft.com/en-us/powerapps/developer/data-platform/xrm-tooling/use-connection-strings-xrm-tooling-connect).
+The connection string should be any [standard XRM connection string](https://docs.microsoft.com/en-us/powerapps/developer/data-platform/xrm-tooling/use-connection-strings-xrm-tooling-connect?WT.mc_id=DX-MVP-5004203).
 
 If you already have an `IOrganizationService` connection to the instance you want to use, you can pass that to the
 constructor instead of the connection string.
@@ -115,7 +115,6 @@ data from a specific instance using `instancename.dbo.tablename`.
 
 There are various properties available on the `Sql4CdsConnection` class that you can use to control exactly how your queries are executed:
 
-|--|--|
 | Property | Description |
 |--|--|
 | `BatchSize` | When executing DML operations, how many requests should be sent to the server at once? |
@@ -127,13 +126,12 @@ There are various properties available on the `Sql4CdsConnection` class that you
 | `BlockUpdateWithoutWhere` | Indicates if an error should be produced if running a UPDATE query without a corresponding WHERE clause. |
 | `UseBulkDelete` | Set to `true` to use a bulk delete job instead of deleting individual records for a DELETE query. |
 | `ReturnEntityReferenceAsGuid` | Indicates if lookup values should be returned as simple `Guid` values rather than the default `SqlEntityReference` type. |
-| `UseRetrieveTotalRecordCount` | Indicates if a [RetrieveTotalRecordCountRequest](https://docs.microsoft.com/dotnet/api/microsoft.crm.sdk.messages.retrievetotalrecordcountrequest) request should be used for simple `COUNT(*)` queries. This lets the query run faster but may produce out-of-date results. |
+| `UseRetrieveTotalRecordCount` | Indicates if a [RetrieveTotalRecordCountRequest](https://docs.microsoft.com/dotnet/api/microsoft.crm.sdk.messages.retrievetotalrecordcountrequest?WT.mc_id=DX-MVP-5004203) request should be used for simple `COUNT(*)` queries. This lets the query run faster but may produce out-of-date results. |
 | `QuotedIdentifiers` | Indicates if `"` can be used to quote identifiers such as column and table names. Equivalent to `SET QUOTED_IDENTIFIERS ON`. |
 
 There are also events that you can attach to to receive notifications while a query is executing. The `InfoMessage` and `StatementCompleted` events follow the pattern
 provided by the SqlClient classes for SQL Server, but add extra data specific to SQL 4 CDS.
 
-|--|--|
 | Event | Description |
 |--|--|
 | `PreDelete`<br />`PreInsert`<br />`PreUpdate` | These events on the connection are raised just before an INSERT/DELETE/UPDATE command is about to be executed. The event argument includes the metadata of the entity type that will be affected along with the number of rows. The event handler can prevent the operation by setting the `Cancel` property of the event argument to `true`. Cancelling the operation will also cancel the entire batch. |
