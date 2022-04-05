@@ -11,9 +11,14 @@
     <iconUrl>https://markcarrington.dev/sql4cds-icon/</iconUrl>
     <description>Convert SQL queries to FetchXml and execute them against Dataverse / D365</description>
     <summary>Convert SQL queries to FetchXml and execute them against Dataverse / D365</summary>
-    <releaseNotes>Improved aggregate results when grouping by lookup columns
-Detect use of window functions
-Fixed use of DATEPART groupings when using UTC timezone
+    <releaseNotes>Support for variables, WHILE, IF and GOTO statements
+@@IDENTITY and @@ROWCOUNT global variables
+PRINT statement support
+Query optimizer improvements
+Support subqueries in INSERT VALUES statements
+Fixed case sensitivity of column names in UPDATE statements
+ADO.NET provider
+Improved TDS Endpoint compatibility detection
     </releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>
