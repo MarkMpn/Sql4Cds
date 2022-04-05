@@ -4193,5 +4193,24 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     </entity>
                 </fetch>");
         }
+
+        [TestMethod]
+        public void InsertParameters()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"DECLARE @name varchar(100) = 'test'; INSERT INTO account (name) VALUES (@name)";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(3, plans.Length);
+
+            AssertNode<DeclareVariablesNode>(plans[0]);
+            AssertNode<AssignVariablesNode>(plans[1]);
+            var insert = AssertNode<InsertNode>(plans[2]);
+            var compute = AssertNode<ComputeScalarNode>(insert.Source);
+            var constant = AssertNode<ConstantScanNode>(compute.Source);
+        }
     }
 }

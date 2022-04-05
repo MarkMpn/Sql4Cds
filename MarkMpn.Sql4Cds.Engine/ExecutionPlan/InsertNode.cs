@@ -191,6 +191,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             parameterValues["@@IDENTITY"] = new SqlEntityReference(DataSource, LogicalName, create.id);
         }
 
+        protected override void RenameSourceColumns(IDictionary<string, string> columnRenamings)
+        {
+            foreach (var kvp in ColumnMappings.ToList())
+            {
+                if (columnRenamings.TryGetValue(kvp.Value, out var renamed))
+                    ColumnMappings[kvp.Key] = renamed;
+            }
+        }
+
         public override string ToString()
         {
             return "INSERT";

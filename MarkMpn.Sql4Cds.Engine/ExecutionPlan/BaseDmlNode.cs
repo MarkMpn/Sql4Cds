@@ -121,8 +121,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             else if (Source is IDataReaderExecutionPlanNode dataSetNode)
                 Source = dataSetNode.FoldQuery(dataSources, options, parameterTypes, hints).Single();
 
+            if (Source is AliasNode alias)
+            {
+                Source = alias.Source;
+                RenameSourceColumns(alias.ColumnSet.ToDictionary(col => alias.Alias + "." + col.OutputColumn, col => col.SourceColumn, StringComparer.OrdinalIgnoreCase));
+            }
+
             return new[] { this };
         }
+
+        /// <summary>
+        /// Changes the name of source columns
+        /// </summary>
+        /// <param name="columnRenamings">A dictionary of old source column names to the corresponding new column names</param>
+        protected abstract void RenameSourceColumns(IDictionary<string, string> columnRenamings);
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
         {

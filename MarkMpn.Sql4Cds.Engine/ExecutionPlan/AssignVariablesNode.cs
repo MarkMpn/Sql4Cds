@@ -59,6 +59,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
+        protected override void RenameSourceColumns(IDictionary<string, string> columnRenamings)
+        {
+            foreach (var variable in Variables)
+            {
+                if (columnRenamings.TryGetValue(variable.SourceColumn, out var renamed))
+                    variable.SourceColumn = renamed;
+            }
+        }
+
         public override object Clone()
         {
             var clone = new AssignVariablesNode

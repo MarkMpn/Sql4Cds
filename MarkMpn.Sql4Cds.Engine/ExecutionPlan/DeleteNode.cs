@@ -81,6 +81,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return new[] { this };
         }
 
+        protected override void RenameSourceColumns(IDictionary<string, string> columnRenamings)
+        {
+            if (columnRenamings.TryGetValue(PrimaryIdSource, out var primaryIdSourceRenamed))
+                PrimaryIdSource = primaryIdSourceRenamed;
+
+            if (SecondaryIdSource != null && columnRenamings.TryGetValue(SecondaryIdSource, out var secondaryIdSourceRenamed))
+                SecondaryIdSource = secondaryIdSourceRenamed;
+        }
+
         public override string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected)
         {
             _executionCount++;

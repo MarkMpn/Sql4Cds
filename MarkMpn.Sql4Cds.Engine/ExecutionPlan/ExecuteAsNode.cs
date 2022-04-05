@@ -97,6 +97,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
+        protected override void RenameSourceColumns(IDictionary<string, string> columnRenamings)
+        {
+            if (columnRenamings.TryGetValue(UserIdSource, out var userIdSourceRenamed))
+                UserIdSource = userIdSourceRenamed;
+        }
+
         public override string ToString()
         {
             return "EXECUTE AS";
