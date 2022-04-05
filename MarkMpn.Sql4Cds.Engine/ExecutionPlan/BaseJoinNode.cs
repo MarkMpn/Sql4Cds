@@ -154,5 +154,37 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             return RightSource.GetSchema(dataSources, parameterTypes);
         }
+
+        public override string ToString()
+        {
+            var name = base.ToString();
+            name += "\r\n(";
+
+            switch (JoinType)
+            {
+                case QualifiedJoinType.Inner:
+                    name += "Inner";
+                    break;
+
+                case QualifiedJoinType.LeftOuter:
+                    name += "Left Outer";
+                    break;
+
+                case QualifiedJoinType.RightOuter:
+                    name += "Right Outer";
+                    break;
+
+                case QualifiedJoinType.FullOuter:
+                    name += "Full Outer";
+                    break;
+            }
+
+            if (SemiJoin)
+                name += " Semi";
+
+            name += " Join)";
+
+            return name;
+        }
     }
 }
