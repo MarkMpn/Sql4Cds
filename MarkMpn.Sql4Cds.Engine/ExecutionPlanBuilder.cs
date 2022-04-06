@@ -1214,7 +1214,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 update.Source = select.Source;
                 update.PrimaryIdSource = $"{targetAlias}.{targetMetadata.PrimaryIdAttribute}";
 
-                var schema = select.Source.GetSchema(DataSources, null);
+                var schema = select.Source.GetSchema(DataSources, _parameterTypes);
 
                 foreach (var assignment in setClauses.Cast<AssignmentSetClause>())
                 {

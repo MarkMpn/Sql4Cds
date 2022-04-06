@@ -4254,5 +4254,37 @@ END";
                     </entity>
                 </fetch>");
         }
+
+        [TestMethod]
+        public void UpdateParameters()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"declare @name varchar(100) = 'Data8', @employees int = 10
+UPDATE account SET employees = @employees WHERE name = @name";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(4, plans.Length);
+
+            AssertNode<DeclareVariablesNode>(plans[0]);
+            AssertNode<AssignVariablesNode>(plans[1]);
+            AssertNode<AssignVariablesNode>(plans[2]);
+            var update = AssertNode<UpdateNode>(plans[3]);
+            var compute = AssertNode<ComputeScalarNode>(update.Source);
+            Assert.AreEqual(compute.Columns[update.ColumnMappings["employees"]].ToSql(), "@employees");
+            var fetch = AssertNode<FetchXmlScan>(compute.Source);
+
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                        <filter>
+                            <condition attribute='name' operator='eq' value='@name' generator:IsVariable='true' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
     }
 }
