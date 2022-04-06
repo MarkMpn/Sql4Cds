@@ -453,7 +453,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 parameterizedConditions[value.Value] = new ParameterizedCondition(filter, condition, value);
 
             foreach (var cond in items.OfType<condition>().Where(c => c.Items != null))
-                FindParameterizedConditions(parameterizedConditions, filter, cond, condition.Items.Cast<object>().ToArray());
+                FindParameterizedConditions(parameterizedConditions, filter, cond, cond.Items.Cast<object>().ToArray());
 
             foreach (var subFilter in items.OfType<filter>())
                 FindParameterizedConditions(parameterizedConditions, subFilter, null, subFilter.Items);
