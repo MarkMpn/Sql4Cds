@@ -114,6 +114,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var innerParameterTypes = GetInnerParameterTypes(leftSchema, parameterTypes);
             RightSource = RightSource.FoldQuery(dataSources, options, innerParameterTypes, hints);
             RightSource.Parent = this;
+
+            if (RightSource is TableSpoolNode spool)
+            {
+                LeftSource.EstimateRowsOut(dataSources, options, parameterTypes);
+                if (LeftSource.EstimatedRowsOut <= 1)
+                {
+                    RightSource = spool.Source;
+                    RightSource.Parent = this;
+                }
+            }
+
             return this;
         }
 

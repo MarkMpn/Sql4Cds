@@ -4212,5 +4212,47 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var compute = AssertNode<ComputeScalarNode>(insert.Source);
             var constant = AssertNode<ConstantScanNode>(compute.Source);
         }
+
+        [TestMethod]
+        public void NotExistsParameters()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"DECLARE @firstname AS VARCHAR (100) = 'Mark', @lastname AS VARCHAR (100) = 'Carrington';
+
+IF NOT EXISTS (SELECT * FROM contact WHERE firstname = @firstname AND lastname = @lastname)
+BEGIN
+    INSERT INTO contact (firstname, lastname)
+    VALUES              (@firstname, @lastname);
+END";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(4, plans.Length);
+
+            AssertNode<DeclareVariablesNode>(plans[0]);
+            AssertNode<AssignVariablesNode>(plans[1]);
+            AssertNode<AssignVariablesNode>(plans[2]);
+            var cond = AssertNode<ConditionalNode>(plans[3]);
+            var compute = AssertNode<ComputeScalarNode>(cond.Source);
+            var loop = AssertNode<NestedLoopNode>(compute.Source);
+            var constant = AssertNode<ConstantScanNode>(loop.LeftSource);
+            var fetch = AssertNode<FetchXmlScan>(loop.RightSource);
+            var insert = AssertNode<InsertNode>(cond.TrueStatements[0]);
+            var insertCompute = AssertNode<ComputeScalarNode>(insert.Source);
+            var insertConstant = AssertNode<ConstantScanNode>(insertCompute.Source);
+
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS' top='1'>
+                    <entity name='contact'>
+                        <attribute name='contactid' />
+                        <filter>
+                            <condition attribute='firstname' operator='eq' value='@firstname' generator:IsVariable='true' />
+                            <condition attribute='lastname' operator='eq' value='@lastname' generator:IsVariable='true' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
     }
 }

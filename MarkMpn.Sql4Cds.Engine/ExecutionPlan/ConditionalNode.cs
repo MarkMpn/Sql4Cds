@@ -69,23 +69,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public IRootExecutionPlanNodeInternal[] FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
-            if (hints != null && hints.OfType<DoNotCompileConditionsHint>().Any())
-            {
-                TrueStatements = TrueStatements
-                    .SelectMany(s => s.FoldQuery(dataSources, options, parameterTypes, hints))
-                    .ToArray();
-
-                FalseStatements = FalseStatements
-                    ?.SelectMany(s => s.FoldQuery(dataSources, options, parameterTypes, hints))
-                    ?.ToArray();
-
-                return new[] { this };
-            }
-
-            var statements = new List<IRootExecutionPlanNodeInternal>();
-
             TrueLabel = Guid.NewGuid().ToString();
             FalseLabel = Guid.NewGuid().ToString();
+
+            Source = Source?.FoldQuery(dataSources, options, parameterTypes, hints);
+
+            TrueStatements = TrueStatements
+                .SelectMany(s => s.FoldQuery(dataSources, options, parameterTypes, hints))
+                .ToArray();
+
+            FalseStatements = FalseStatements
+                ?.SelectMany(s => s.FoldQuery(dataSources, options, parameterTypes, hints))
+                ?.ToArray();
+
+            if (hints != null && hints.OfType<DoNotCompileConditionsHint>().Any())
+                return new[] { this };
+
+            var statements = new List<IRootExecutionPlanNodeInternal>();
 
             statements.AddRange(
                 new GoToNode
@@ -104,8 +104,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             statements.Add(new GotoLabelNode { Label = TrueLabel });
 
-            foreach (var stmt in TrueStatements)
-                statements.AddRange(stmt.FoldQuery(dataSources, options, parameterTypes, hints));
+            statements.AddRange(TrueStatements);
 
             if (FalseStatements == null)
             {
@@ -134,8 +133,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 statements.Add(new GotoLabelNode { Label = FalseLabel });
 
-                foreach (var stmt in FalseStatements)
-                    statements.AddRange(stmt.FoldQuery(dataSources, options, parameterTypes, hints));
+                statements.AddRange(FalseStatements);
 
                 statements.Add(new GotoLabelNode { Label = endLabel });
             }
