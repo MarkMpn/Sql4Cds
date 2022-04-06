@@ -124,6 +124,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (Source is AliasNode alias)
             {
                 Source = alias.Source;
+                Source.Parent = this;
                 RenameSourceColumns(alias.ColumnSet.ToDictionary(col => alias.Alias + "." + col.OutputColumn, col => col.SourceColumn, StringComparer.OrdinalIgnoreCase));
             }
 
