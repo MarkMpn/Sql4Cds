@@ -226,7 +226,7 @@
             this.tsbConvertToFetchXMLSplitButton.Size = new System.Drawing.Size(81, 22);
             this.tsbConvertToFetchXMLSplitButton.Text = "Convert";
             this.tsbConvertToFetchXMLSplitButton.ToolTipText = "Convert the SQL query to FetchXML";
-            this.tsbConvertToFetchXMLSplitButton.Click += new System.EventHandler(this.fetchXMLToolStripMenuItem_Click);
+            this.tsbConvertToFetchXMLSplitButton.ButtonClick += new System.EventHandler(this.fetchXMLToolStripMenuItem_Click);
             // 
             // fetchXMLToolStripMenuItem
             // 
