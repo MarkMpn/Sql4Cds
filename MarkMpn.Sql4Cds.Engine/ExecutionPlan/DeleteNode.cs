@@ -47,7 +47,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("SecondaryId Source")]
         public string SecondaryIdSource { get; set; }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
         {
             if (!requiredColumns.Contains(PrimaryIdSource))
                 requiredColumns.Add(PrimaryIdSource);
@@ -58,11 +58,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        public override IRootExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
+        public override IRootExecutionPlanNodeInternal[] FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
             var result = base.FoldQuery(dataSources, options, parameterTypes, hints);
 
-            if (result != this)
+            if (result.Length != 1 || result[0] != this)
                 return result;
 
             if (!dataSources.TryGetValue(DataSource, out var dataSource))
@@ -75,13 +75,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 PrimaryIdSource.Equals($"{fetch.Alias}.{dataSource.Metadata[LogicalName].PrimaryIdAttribute}") &&
                 String.IsNullOrEmpty(SecondaryIdSource))
             {
-                return new BulkDeleteJobNode { DataSource = DataSource, FetchXmlString = fetch.FetchXmlString };
+                return new[] { new BulkDeleteJobNode { DataSource = DataSource, FetchXmlString = fetch.FetchXmlString } };
             }
 
-            return this;
+            return new[] { this };
         }
 
-        public override string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override void RenameSourceColumns(IDictionary<string, string> columnRenamings)
+        {
+            if (columnRenamings.TryGetValue(PrimaryIdSource, out var primaryIdSourceRenamed))
+                PrimaryIdSource = primaryIdSourceRenamed;
+
+            if (SecondaryIdSource != null && columnRenamings.TryGetValue(SecondaryIdSource, out var secondaryIdSourceRenamed))
+                SecondaryIdSource = secondaryIdSourceRenamed;
+        }
+
+        public override string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected)
         {
             _executionCount++;
 
@@ -101,7 +110,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     // Precompile mappings with type conversions
                     meta = dataSource.Metadata[LogicalName];
-                    var attributes = meta.Attributes.ToDictionary(a => a.LogicalName);
+                    var attributes = meta.Attributes.ToDictionary(a => a.LogicalName, StringComparer.OrdinalIgnoreCase);
                     var dateTimeKind = options.UseLocalTimeZone ? DateTimeKind.Local : DateTimeKind.Utc;
                     var primaryKey = meta.PrimaryIdAttribute;
                     string secondaryKey = null;
@@ -127,7 +136,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (secondaryKey != null)
                         fullMappings[secondaryKey] = SecondaryIdSource;
 
-                    var attributeAccessors = CompileColumnMappings(meta, fullMappings, schema, attributes, dateTimeKind);
+                    var attributeAccessors = CompileColumnMappings(meta, fullMappings, schema, attributes, dateTimeKind, entities);
                     primaryIdAccessor = attributeAccessors[primaryKey];
 
                     if (SecondaryIdSource != null)
@@ -135,7 +144,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 // Check again that the update is allowed. Don't count any UI interaction in the execution time
-                if (options.Cancelled || !options.ConfirmDelete(entities.Count, meta))
+                if (options.CancellationToken.IsCancellationRequested || !options.ConfirmDelete(entities.Count, meta))
                     throw new OperationCanceledException("DELETE cancelled by user");
 
                 using (_timer.Run())
@@ -151,7 +160,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             InProgressUppercase = "Deleting",
                             InProgressLowercase = "deleting",
                             CompletedLowercase = "deleted"
-                        });
+                        },
+                        out recordsAffected,
+                        parameterValues);
                 }
             }
             catch (QueryExecutionException ex)
@@ -208,6 +219,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override string ToString()
         {
             return "DELETE";
+        }
+
+        public override object Clone()
+        {
+            var clone = new DeleteNode
+            {
+                DataSource = DataSource,
+                Index = Index,
+                Length = Length,
+                LogicalName = LogicalName,
+                PrimaryIdSource = PrimaryIdSource,
+                SecondaryIdSource = SecondaryIdSource,
+                Source = (IExecutionPlanNodeInternal)Source.Clone(),
+                Sql = Sql
+            };
+
+            clone.Source.Parent = clone;
+            return clone;
         }
     }
 }

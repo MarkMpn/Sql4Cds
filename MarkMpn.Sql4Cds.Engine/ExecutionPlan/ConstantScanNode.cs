@@ -18,7 +18,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// The list of values to be returned
         /// </summary>
         [Browsable(false)]
-        public List<Entity> Values { get; } = new List<Entity>();
+        public List<IDictionary<string, ScalarExpression>> Values { get; } = new List<IDictionary<string, ScalarExpression>>();
 
         /// <summary>
         /// The alias for the data source
@@ -31,15 +31,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// The types of values to be returned
         /// </summary>
         [Browsable(false)]
-        public Dictionary<string, Type> Schema { get; } = new Dictionary<string, Type>();
+        public Dictionary<string, DataTypeReference> Schema { get; private set; } = new Dictionary<string, DataTypeReference>();
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            foreach (var value in Values)
+            foreach (var expressions in Values)
             {
-                foreach (var col in Schema.Keys)
-                    value[$"{Alias}.{col}"] = value[col];
-                
+                var value = new Entity();
+
+                foreach (var col in Schema)
+                    value[PrefixWithAlias(col.Key)] = expressions[col.Key].Compile(null, parameterTypes)(null, parameterValues, options);
+
                 yield return value;
             }
         }
@@ -49,27 +51,56 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Array.Empty<IDataExecutionPlanNode>();
         }
 
-        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
             return new NodeSchema
             {
-                Schema = Schema.ToDictionary(kvp => $"{Alias}.{kvp.Key}", kvp => kvp.Value),
-                Aliases = Schema.ToDictionary(kvp => kvp.Key, kvp => new List<string> { $"{Alias}.{kvp.Key}" })
+                Schema = Schema.ToDictionary(kvp => PrefixWithAlias(kvp.Key), kvp => kvp.Value),
+                Aliases = Schema.ToDictionary(kvp => kvp.Key, kvp => new List<string> { PrefixWithAlias(kvp.Key) })
             };
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
+        private string PrefixWithAlias(string columnName)
+        {
+            if (String.IsNullOrEmpty(Alias))
+                return columnName;
+
+            return Alias + "." + columnName;
+        }
+
+        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
             return this;
         }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
         {
         }
 
-        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
             return Values.Count;
+        }
+
+        protected override IEnumerable<string> GetVariablesInternal()
+        {
+            return Values
+                .SelectMany(row => row.Values)
+                .SelectMany(expr => expr.GetVariables())
+                .Distinct();
+        }
+
+        public override object Clone()
+        {
+            var clone = new ConstantScanNode
+            {
+                Alias = Alias,
+                Schema = Schema
+            };
+
+            clone.Values.AddRange(Values);
+
+            return clone;
         }
     }
 }

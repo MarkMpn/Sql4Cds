@@ -37,9 +37,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// The data source to sort
         /// </summary>
         [Browsable(false)]
-        public IDataExecutionPlanNode Source { get; set; }
+        public IDataExecutionPlanNodeInternal Source { get; set; }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
             var source = Source.Execute(dataSources, options, parameterTypes, parameterValues);
             var schema = GetSchema(dataSources, parameterTypes);
@@ -115,7 +115,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private void SortSubset(List<Entity> subset, INodeSchema schema, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues, List<Func<Entity, IDictionary<string, object>, IQueryExecutionOptions, object>> expressions, IQueryExecutionOptions options)
+        private void SortSubset(List<Entity> subset, INodeSchema schema, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, List<Func<Entity, IDictionary<string, object>, IQueryExecutionOptions, object>> expressions, IQueryExecutionOptions options)
         {
             // Simple case if there's no need to do any further sorting
             if (subset.Count <= 1)
@@ -153,7 +153,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
             var schema = new NodeSchema(Source.GetSchema(dataSources, parameterTypes));
             schema.SortOrder.Clear();
@@ -172,7 +172,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return schema;
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
+        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
             Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
 
@@ -185,7 +185,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return FoldSorts(dataSources, options, parameterTypes);
         }
 
-        private IDataExecutionPlanNode FoldSorts(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        private IDataExecutionPlanNodeInternal FoldSorts(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
             var tryCatch = Source as TryCatchNode;
             
@@ -244,14 +244,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!dataSources.TryGetValue(fetchXml.DataSource, out var dataSource))
                     throw new QueryExecutionException("Missing datasource " + fetchXml.DataSource);
 
-                // Remove any existing sorts
-                if (fetchXml.Entity.Items != null)
-                {
-                    fetchXml.Entity.Items = fetchXml.Entity.Items.Where(i => !(i is FetchOrderType)).ToArray();
-
-                    foreach (var linkEntity in fetchXml.Entity.GetLinkEntities().Where(le => le.Items != null))
-                        linkEntity.Items = linkEntity.Items.Where(i => !(i is FetchOrderType)).ToArray();
-                }
+                fetchXml.RemoveSorts();
 
                 var fetchSchema = fetchXml.GetSchema(dataSources, parameterTypes);
                 var entity = fetchXml.Entity;
@@ -441,7 +434,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return null;
         }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
         {
             var sortColumns = Sorts.SelectMany(s => s.Expression.GetColumns()).Distinct();
 
@@ -454,9 +447,30 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
-            return Source.EstimateRowsOut(dataSources, options, parameterTypes);
+            return Source.EstimatedRowsOut;
+        }
+
+        protected override IEnumerable<string> GetVariablesInternal()
+        {
+            return Sorts
+                .SelectMany(sort => sort.GetVariables())
+                .Distinct();
+        }
+
+        public override object Clone()
+        {
+            var clone = new SortNode
+            {
+                PresortedCount = PresortedCount,
+                Source = (IDataExecutionPlanNodeInternal)Source.Clone()
+            };
+
+            clone.Sorts.AddRange(Sorts);
+            clone.Source.Parent = clone;
+
+            return clone;
         }
     }
 }

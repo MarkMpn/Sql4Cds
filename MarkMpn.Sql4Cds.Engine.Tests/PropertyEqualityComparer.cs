@@ -10,7 +10,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 {
     static class PropertyEqualityAssert
     {
-        public static void Equals(object x, object y)
+        public static new void Equals(object x, object y)
         {
             Equals("root", x, y);
         }

@@ -26,9 +26,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// The data source to use for the calculations
         /// </summary>
         [Browsable(false)]
-        public IDataExecutionPlanNode Source { get; set; }
+        public IDataExecutionPlanNodeInternal Source { get; set; }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
             var schema = Source.GetSchema(dataSources, parameterTypes);
             var columns = Columns
@@ -44,14 +44,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
             // Copy the source schema and add in the additional computed columns
             var sourceSchema = Source.GetSchema(dataSources, parameterTypes);
             var schema = new NodeSchema(sourceSchema);
 
             foreach (var calc in Columns)
-                schema.Schema[calc.Key] = calc.Value.GetType(sourceSchema, null, parameterTypes);
+            {
+                if (calc.Value is ConvertCall convert)
+                    schema.Schema[calc.Key] = convert.DataType;
+                else if (calc.Value is CastCall cast)
+                    schema.Schema[calc.Key] = cast.DataType;
+                else
+                    schema.Schema[calc.Key] = calc.Value.GetType(sourceSchema, null, parameterTypes).ToSqlType();
+            }
 
             return schema;
         }
@@ -61,7 +68,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
+        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
             Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
 
@@ -81,12 +88,43 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 return computeScalar;
             }
+            
+            if (Source is ConstantScanNode constant && String.IsNullOrEmpty(constant.Alias))
+            {
+                var folded = new List<string>();
 
+                foreach (var calc in Columns)
+                {
+                    if (calc.Value is ConvertCall c1 && c1.Parameter is Literal ||
+                        calc.Value is CastCall c2 && c2.Parameter is Literal ||
+                        calc.Value is Literal)
+                    {
+                        foreach (var row in constant.Values)
+                            row[calc.Key] = calc.Value;
+
+                        folded.Add(calc.Key);
+
+                        if (calc.Value is ConvertCall convert)
+                            constant.Schema[calc.Key] = convert.DataType;
+                        else if (calc.Value is CastCall cast)
+                            constant.Schema[calc.Key] = cast.DataType;
+                        else
+                            constant.Schema[calc.Key] = calc.Value.GetType(null, null, parameterTypes).ToSqlType();
+                    }
+                }
+
+                if (folded.Count == Columns.Count)
+                    return constant;
+
+                foreach (var col in folded)
+                    Columns.Remove(col);
+            }
+            
             Source.Parent = this;
             return this;
         }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
         {
             var schema = Source.GetSchema(dataSources, parameterTypes);
 
@@ -105,9 +143,32 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
-            return Source.EstimateRowsOut(dataSources, options, parameterTypes);
+            return Source.EstimatedRowsOut;
+        }
+
+        protected override IEnumerable<string> GetVariablesInternal()
+        {
+            return Columns
+                .Values
+                .SelectMany(expr => expr.GetVariables())
+                .Distinct();
+        }
+
+        public override object Clone()
+        {
+            var clone = new ComputeScalarNode
+            {
+                Source = (IDataExecutionPlanNodeInternal)Source.Clone()
+            };
+
+            clone.Source.Parent = clone;
+
+            foreach (var kvp in Columns)
+                clone.Columns.Add(kvp.Key, kvp.Value);
+
+            return clone;
         }
     }
 }

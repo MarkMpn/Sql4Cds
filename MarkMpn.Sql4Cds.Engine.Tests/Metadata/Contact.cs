@@ -29,6 +29,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests.Metadata
         [RelationshipSchemaName("contact_account")]
         public Account Account { get; set; }
 
+        [AttributeLogicalName("parentcustomerid")]
+        [RelationshipSchemaName("contact_parent_contact")]
+        public Contact ParentContact { get; set; }
+
         [AttributeLogicalName("createdon")]
         public DateTime? CreatedOn { get; set; }
     }

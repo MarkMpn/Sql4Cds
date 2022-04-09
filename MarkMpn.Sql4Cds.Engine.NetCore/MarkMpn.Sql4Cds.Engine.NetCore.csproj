@@ -9,7 +9,8 @@
   <Import Project="..\MarkMpn.Sql4Cds.Engine\MarkMpn.Sql4Cds.Engine.projitems" Label="Shared" />
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.PowerPlatform.Dataverse.Client" Version="0.5.10" />
+    <PackageReference Include="Microsoft.ApplicationInsights" Version="2.20.0" />
+    <PackageReference Include="Microsoft.PowerPlatform.Dataverse.Client" Version="0.6.1" />
     <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="150.4897.1" />
     <PackageReference Include="System.Data.SqlClient" Version="4.8.3" />
   </ItemGroup>

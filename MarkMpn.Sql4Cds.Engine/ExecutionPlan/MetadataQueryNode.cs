@@ -12,6 +12,7 @@ using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Metadata.Query;
+using Microsoft.Xrm.Sdk.Query;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -25,6 +26,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             public string SqlName { get; set; }
             public string PropertyName { get; set; }
             public Func<object,object> Accessor { get; set; }
+            public Type SqlType { get; set; }
             public Type Type { get; set; }
         }
 
@@ -33,7 +35,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             public string SqlName { get; set; }
             public string PropertyName { get; set; }
             public IDictionary<Type, Func<object,object>> Accessors { get; set; }
-            public Type Type { get; set; }
+            public Type SqlType { get; set; }
+            public bool IsNullable { get; set; }
         }
 
         private IDictionary<string, MetadataProperty> _entityCols;
@@ -47,6 +50,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private static readonly Dictionary<string, MetadataProperty> _manyToManyRelationshipProps;
         private static readonly Type[] _attributeTypes;
         private static readonly Dictionary<string, AttributeProperty> _attributeProps;
+        private static readonly string[] _entityNotNullProps;
+        private static readonly string[] _attributeNotNullProps;
+        private static readonly string[] _oneToManyRelationshipNotNullProps;
+        private static readonly string[] _manyToManyRelationshipNotNullProps;
 
         static MetadataQueryNode()
         {
@@ -64,7 +71,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _entityProps = typeof(EntityMetadata)
                 .GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .Where(p => !excludedEntityProps.Contains(p.Name))
-                .ToDictionary(p => p.Name, p => new MetadataProperty { SqlName = p.Name.ToLowerInvariant(), PropertyName = p.Name, Type = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType)) }, StringComparer.OrdinalIgnoreCase);
+                .ToDictionary(p => p.Name, p => new MetadataProperty { SqlName = p.Name.ToLowerInvariant(), PropertyName = p.Name, Type = p.PropertyType, SqlType = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType)) }, StringComparer.OrdinalIgnoreCase);
 
             var excludedOneToManyRelationshipProps = new[]
             {
@@ -77,7 +84,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _oneToManyRelationshipProps = typeof(OneToManyRelationshipMetadata)
                 .GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .Where(p => !excludedOneToManyRelationshipProps.Contains(p.Name))
-                .ToDictionary(p => p.Name, p => new MetadataProperty { SqlName = p.Name.ToLowerInvariant(), PropertyName = p.Name, Type = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType)) }, StringComparer.OrdinalIgnoreCase);
+                .ToDictionary(p => p.Name, p => new MetadataProperty { SqlName = p.Name.ToLowerInvariant(), PropertyName = p.Name, Type = p.PropertyType, SqlType = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType)) }, StringComparer.OrdinalIgnoreCase);
 
             var excludedManyToManyRelationshipProps = new[]
             {
@@ -89,7 +96,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _manyToManyRelationshipProps = typeof(ManyToManyRelationshipMetadata)
                 .GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .Where(p => !excludedManyToManyRelationshipProps.Contains(p.Name))
-                .ToDictionary(p => p.Name, p => new MetadataProperty { SqlName = p.Name.ToLowerInvariant(), PropertyName = p.Name, Type = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType)) }, StringComparer.OrdinalIgnoreCase);
+                .ToDictionary(p => p.Name, p => new MetadataProperty { SqlName = p.Name.ToLowerInvariant(), PropertyName = p.Name, Type = p.PropertyType, SqlType = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType)) }, StringComparer.OrdinalIgnoreCase);
 
             // Get a list of all attribute types
             _attributeTypes = typeof(AttributeMetadata).Assembly
@@ -106,6 +113,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     // Work out the consistent type for each property
                     Type type = null;
+                    var isNullable = false;
 
                     foreach (var prop in g)
                     {
@@ -119,6 +127,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             type = null;
                             break;
                         }
+
+                        if (!isNullable && IsNullable(prop.Property.PropertyType))
+                            isNullable = false;
                     }
 
                     if (type == null)
@@ -128,12 +139,51 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         SqlName = g.Key.ToLowerInvariant(),
                         PropertyName = g.Key,
-                        Type = type,
-                        Accessors = g.ToDictionary(p => p.Type, p => GetPropertyAccessor(p.Property, type))
+                        SqlType = type,
+                        Accessors = g.ToDictionary(p => p.Type, p => GetPropertyAccessor(p.Property, type)),
+                        IsNullable = isNullable
                     };
                 })
                 .Where(p => p != null)
                 .ToDictionary(p => p.SqlName, StringComparer.OrdinalIgnoreCase);
+
+            _entityNotNullProps = _entityProps.Values
+                .Where(p => !IsNullable(p.Type))
+                .Select(p => p.PropertyName)
+                .Union(new[] { nameof(EntityMetadata.MetadataId), nameof(EntityMetadata.LogicalName), nameof(EntityMetadata.SchemaName), nameof(EntityMetadata.PrimaryIdAttribute) })
+                .ToArray();
+
+            _attributeNotNullProps = _attributeProps.Values
+                .Where(p => !p.IsNullable)
+                .Select(p => p.PropertyName)
+                .Union(new[] { nameof(AttributeMetadata.MetadataId), nameof(AttributeMetadata.LogicalName), nameof(AttributeMetadata.SchemaName), nameof(AttributeMetadata.EntityLogicalName) })
+                .ToArray();
+
+            _oneToManyRelationshipNotNullProps = _oneToManyRelationshipProps.Values
+                .Where(p => !IsNullable(p.Type))
+                .Select(p => p.PropertyName)
+                .Union(new[] { nameof(OneToManyRelationshipMetadata.MetadataId), nameof(OneToManyRelationshipMetadata.SchemaName), nameof(OneToManyRelationshipMetadata.ReferencedEntity), nameof(OneToManyRelationshipMetadata.ReferencedAttribute), nameof(OneToManyRelationshipMetadata.ReferencingEntity), nameof(OneToManyRelationshipMetadata.ReferencingAttribute) })
+                .ToArray();
+
+            _manyToManyRelationshipNotNullProps = _manyToManyRelationshipProps.Values
+                .Where(p => !IsNullable(p.Type))
+                .Select(p => p.PropertyName)
+                .Union(new[] { nameof(ManyToManyRelationshipMetadata.MetadataId), nameof(ManyToManyRelationshipMetadata.Entity1LogicalName), nameof(ManyToManyRelationshipMetadata.Entity1IntersectAttribute), nameof(ManyToManyRelationshipMetadata.Entity2LogicalName), nameof(ManyToManyRelationshipMetadata.Entity2IntersectAttribute), nameof(ManyToManyRelationshipMetadata.IntersectEntityName) })
+                .ToArray();
+        }
+
+        private static bool IsNullable(Type type)
+        {
+            if (!type.IsValueType)
+                return true;
+
+            if (type.IsGenericType)
+                type = type.GetGenericTypeDefinition();
+
+            if (type == typeof(Nullable<>))
+                return true;
+
+            return false;
         }
 
         /// <summary>
@@ -204,9 +254,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("Metadata Query")]
         [Description("The metadata query to be executed")]
-        public EntityQueryExpression Query { get; } = new EntityQueryExpression();
+        public EntityQueryExpression Query { get; private set; } = new EntityQueryExpression();
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
         {
             _entityCols = new Dictionary<string, MetadataProperty>();
             _attributeCols = new Dictionary<string, AttributeProperty>();
@@ -296,17 +346,68 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
-            return 100;
+            var entityCount = 100;
+            var attributesPerEntity = 1;
+            var relationshipsPerEntity = 1;
+
+            if (HasEqualityFilter(Query.Criteria, nameof(EntityMetadata.LogicalName)))
+            {
+                entityCount = 1;
+            }
+
+            if (MetadataSource.HasFlag(MetadataSource.Attribute))
+            {
+                attributesPerEntity = 100;
+
+                if (HasEqualityFilter(Query.AttributeQuery?.Criteria, nameof(AttributeMetadata.LogicalName)))
+                {
+                    attributesPerEntity = 1;
+                }
+            }
+
+            if (MetadataSource.HasFlag(MetadataSource.OneToManyRelationship) ||
+                MetadataSource.HasFlag(MetadataSource.ManyToOneRelationship) ||
+                MetadataSource.HasFlag(MetadataSource.ManyToManyRelationship))
+            {
+                relationshipsPerEntity = 5;
+
+                if (HasEqualityFilter(Query.RelationshipQuery?.Criteria, nameof(RelationshipMetadataBase.SchemaName)))
+                {
+                    relationshipsPerEntity = 1;
+                }
+            }
+
+            return entityCount * attributesPerEntity * relationshipsPerEntity;
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
+        private bool HasEqualityFilter(MetadataFilterExpression filter, string propName)
+        {
+            if (filter == null)
+                return false;
+
+            if (filter.FilterOperator == LogicalOperator.Or && (filter.Conditions.Count + filter.Filters.Count) > 1)
+                return false;
+
+            foreach (var cond in filter.Conditions)
+            {
+                if (cond.PropertyName == propName && cond.ConditionOperator == MetadataConditionOperator.Equals)
+                    return true;
+            }
+
+            if (filter.Filters.Any(subFilter => HasEqualityFilter(subFilter, propName)))
+                return true;
+
+            return false;
+        }
+
+        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
             return this;
         }
 
-        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
             var schema = new NodeSchema();
             var childCount = 0;
@@ -320,7 +421,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 foreach (var prop in entityProps)
                 {
-                    schema.Schema[$"{EntityAlias}.{prop.SqlName}"] = prop.Type;
+                    var fullName = $"{EntityAlias}.{prop.SqlName}";
+                    schema.Schema[fullName] = prop.SqlType.ToSqlType();
 
                     if (!schema.Aliases.TryGetValue(prop.SqlName, out var aliases))
                     {
@@ -328,7 +430,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         schema.Aliases[prop.SqlName] = aliases;
                     }
 
-                    aliases.Add($"{EntityAlias}.{prop.SqlName}");
+                    aliases.Add(fullName);
+
+                    if (_entityNotNullProps.Contains(prop.PropertyName) || HasNotNullFilter(Query.Criteria, prop.PropertyName))
+                        schema.NotNullColumns.Add(fullName);
                 }
 
                 schema.PrimaryKey = $"{EntityAlias}.{nameof(EntityMetadata.MetadataId)}";
@@ -343,7 +448,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 foreach (var prop in attributeProps)
                 {
-                    schema.Schema[$"{AttributeAlias}.{prop.SqlName}"] = prop.Type;
+                    var fullName = $"{AttributeAlias}.{prop.SqlName}";
+                    schema.Schema[fullName] = prop.SqlType.ToSqlType();
 
                     if (!schema.Aliases.TryGetValue(prop.SqlName, out var aliases))
                     {
@@ -351,7 +457,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         schema.Aliases[prop.SqlName] = aliases;
                     }
 
-                    aliases.Add($"{AttributeAlias}.{prop.SqlName}");
+                    aliases.Add(fullName);
+
+                    if (_attributeNotNullProps.Contains(prop.PropertyName) || HasNotNullFilter(Query.AttributeQuery?.Criteria, prop.PropertyName))
+                        schema.NotNullColumns.Add(fullName);
                 }
 
                 schema.PrimaryKey = $"{AttributeAlias}.{nameof(AttributeMetadata.MetadataId)}";
@@ -367,7 +476,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 foreach (var prop in relationshipProps)
                 {
-                    schema.Schema[$"{OneToManyRelationshipAlias}.{prop.SqlName}"] = prop.Type;
+                    var fullName = $"{OneToManyRelationshipAlias}.{prop.SqlName}";
+                    schema.Schema[fullName] = prop.SqlType.ToSqlType();
 
                     if (!schema.Aliases.TryGetValue(prop.SqlName, out var aliases))
                     {
@@ -375,7 +485,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         schema.Aliases[prop.SqlName] = aliases;
                     }
 
-                    aliases.Add($"{OneToManyRelationshipAlias}.{prop.SqlName}");
+                    aliases.Add(fullName);
+
+                    if (_oneToManyRelationshipNotNullProps.Contains(prop.PropertyName) || HasNotNullFilter(Query.RelationshipQuery?.Criteria, prop.PropertyName))
+                        schema.NotNullColumns.Add(fullName);
                 }
 
                 schema.PrimaryKey = $"{OneToManyRelationshipAlias}.{nameof(RelationshipMetadataBase.MetadataId)}";
@@ -391,7 +504,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 foreach (var prop in relationshipProps)
                 {
-                    schema.Schema[$"{ManyToOneRelationshipAlias}.{prop.SqlName}"] = prop.Type;
+                    var fullName = $"{ManyToOneRelationshipAlias}.{prop.SqlName}";
+                    schema.Schema[fullName] = prop.SqlType.ToSqlType();
 
                     if (!schema.Aliases.TryGetValue(prop.SqlName, out var aliases))
                     {
@@ -399,7 +513,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         schema.Aliases[prop.SqlName] = aliases;
                     }
 
-                    aliases.Add($"{ManyToOneRelationshipAlias}.{prop.SqlName}");
+                    aliases.Add(fullName);
+
+                    if (_oneToManyRelationshipNotNullProps.Contains(prop.PropertyName) || HasNotNullFilter(Query.RelationshipQuery?.Criteria, prop.PropertyName))
+                        schema.NotNullColumns.Add(fullName);
                 }
 
                 schema.PrimaryKey = $"{ManyToOneRelationshipAlias}.{nameof(RelationshipMetadataBase.MetadataId)}";
@@ -415,7 +532,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 foreach (var prop in relationshipProps)
                 {
-                    schema.Schema[$"{ManyToManyRelationshipAlias}.{prop.SqlName}"] = prop.Type;
+                    var fullName = $"{ManyToManyRelationshipAlias}.{prop.SqlName}";
+                    schema.Schema[fullName] = prop.SqlType.ToSqlType();
 
                     if (!schema.Aliases.TryGetValue(prop.SqlName, out var aliases))
                     {
@@ -423,7 +541,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         schema.Aliases[prop.SqlName] = aliases;
                     }
 
-                    aliases.Add($"{ManyToManyRelationshipAlias}.{prop.SqlName}");
+                    aliases.Add(fullName);
+
+                    if (_manyToManyRelationshipNotNullProps.Contains(prop.PropertyName) || HasNotNullFilter(Query.RelationshipQuery?.Criteria, prop.PropertyName))
+                        schema.NotNullColumns.Add(fullName);
                 }
 
                 schema.PrimaryKey = $"{ManyToManyRelationshipAlias}.{nameof(RelationshipMetadataBase.MetadataId)}";
@@ -434,6 +555,38 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 schema.PrimaryKey = null;
 
             return schema;
+        }
+
+        private bool HasNotNullFilter(MetadataFilterExpression filter, string prop)
+        {
+            if (filter == null)
+                return false;
+
+            if (filter.FilterOperator == LogicalOperator.Or && (filter.Conditions.Count + filter.Filters.Count) > 1)
+                return false;
+
+            foreach (var cond in filter.Conditions)
+            {
+                if (cond.PropertyName != prop)
+                    continue;
+
+                if (cond.ConditionOperator == MetadataConditionOperator.Equals)
+                    return cond.Value != null;
+
+                if (cond.ConditionOperator == MetadataConditionOperator.NotEquals)
+                    return cond.Value == null;
+
+                if (cond.ConditionOperator == MetadataConditionOperator.GreaterThan || cond.ConditionOperator == MetadataConditionOperator.LessThan)
+                    return true;
+
+                if (cond.ConditionOperator == MetadataConditionOperator.In)
+                    return Array.IndexOf((Array)cond.Value, null) == -1;
+
+                if (cond.ConditionOperator == MetadataConditionOperator.NotIn)
+                    return Array.IndexOf((Array)cond.Value, null) != -1;
+            }
+
+            return false;
         }
 
         internal static Type GetPropertyType(Type propType)
@@ -519,7 +672,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Array.Empty<IDataExecutionPlanNode>();
         }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
             if (MetadataSource.HasFlag(MetadataSource.Attribute))
             {
@@ -606,7 +759,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         if (!prop.Value.Accessors.TryGetValue(result.Attribute.GetType(), out var accessor))
                         {
-                            converted[prop.Key] = SqlTypeConverter.GetNullValue(prop.Value.Type);
+                            converted[prop.Key] = SqlTypeConverter.GetNullValue(prop.Value.SqlType);
                             continue;
                         }
 
@@ -643,6 +796,27 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 yield return converted;
             }
+        }
+
+        public override object Clone()
+        {
+            return new MetadataQueryNode
+            {
+                AttributeAlias = AttributeAlias,
+                DataSource = DataSource,
+                EntityAlias= EntityAlias,
+                ManyToManyRelationshipAlias = ManyToManyRelationshipAlias,
+                ManyToManyRelationshipJoin = ManyToManyRelationshipJoin,
+                ManyToOneRelationshipAlias = ManyToOneRelationshipAlias,
+                MetadataSource = MetadataSource,
+                OneToManyRelationshipAlias = OneToManyRelationshipAlias,
+                Query = Query,
+                _attributeCols = _attributeCols,
+                _entityCols = _entityCols,
+                _manyToManyRelationshipCols = _manyToManyRelationshipCols,
+                _manyToOneRelationshipCols = _manyToOneRelationshipCols,
+                _oneToManyRelationshipCols = _oneToManyRelationshipCols
+            };
         }
     }
 

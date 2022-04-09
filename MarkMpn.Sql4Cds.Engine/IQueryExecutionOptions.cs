@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Threading;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
 
@@ -8,12 +9,12 @@ namespace MarkMpn.Sql4Cds.Engine
     /// <summary>
     /// The options to apply to control the execution of a query
     /// </summary>
-    public interface IQueryExecutionOptions
+    interface IQueryExecutionOptions
     {
         /// <summary>
         /// Indicates that the query should be cancelled
         /// </summary>
-        bool Cancelled { get; }
+        CancellationToken CancellationToken { get; }
 
         /// <summary>
         /// Allows the query execution to report progress
@@ -84,11 +85,6 @@ namespace MarkMpn.Sql4Cds.Engine
         bool UseRetrieveTotalRecordCount { get; }
 
         /// <summary>
-        /// The language code to retrieve results in
-        /// </summary>
-        int LocaleId { get; }
-
-        /// <summary>
         /// The maximum number of worker threads to use to execute DML queries
         /// </summary>
         int MaxDegreeOfParallelism { get; }
@@ -114,11 +110,6 @@ namespace MarkMpn.Sql4Cds.Engine
         bool BypassCustomPlugins { get; }
 
         /// <summary>
-        /// A notification that the query is about to retrieve another page of data
-        /// </summary>
-        void RetrievingNextPage();
-
-        /// <summary>
         /// Returns the name of the primary data source the query is being executed in
         /// </summary>
         string PrimaryDataSource { get; }
@@ -127,5 +118,10 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Returns the unique identifier of the current user
         /// </summary>
         Guid UserId { get; }
+
+        /// <summary>
+        /// Returns or sets a value indicating if SQL will be parsed using quoted identifiers
+        /// </summary>
+        bool QuotedIdentifiers { get; }
     }
 }

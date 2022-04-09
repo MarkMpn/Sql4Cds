@@ -38,7 +38,7 @@ namespace MarkMpn.Sql4Cds
 
         public bool UseTSQLEndpoint { get; set; }
 
-        public bool UseRetrieveTotalRecordCount { get; set; } = true;
+        public bool UseRetrieveTotalRecordCount { get; set; }
 
         public bool ShowIntellisenseTooltips { get; set; } = true;
 
@@ -59,6 +59,8 @@ namespace MarkMpn.Sql4Cds
         public bool LocalFormatDates { get; set; }
 
         public bool UseNativeSqlConversion { get; set; }
+
+        public bool ShowFetchXMLInEstimatedExecutionPlans { get; set; } = true;
     }
 
     public class TabContent

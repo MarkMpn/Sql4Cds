@@ -44,11 +44,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("FetchXML")]
         public string FetchXmlString { get; set; }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
         {
         }
 
-        public string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        public string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected)
         {
             _executionCount++;
 
@@ -75,6 +75,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     var resp = (BulkDeleteResponse)dataSource.Connection.Execute(req);
 
+                    recordsAffected = -1;
                     return $"Bulk delete job started: {resp.JobId}";
                 }
             }
@@ -91,9 +92,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public IRootExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
+        public IRootExecutionPlanNodeInternal[] FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
-            return this;
+            return new[] { this };
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
@@ -104,6 +105,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override string ToString()
         {
             return "BULK DELETE";
+        }
+
+        public object Clone()
+        {
+            return new BulkDeleteJobNode
+            {
+                DataSource = DataSource,
+                Sql = Sql,
+                Index = Index,
+                Length = Length
+            };
         }
     }
 }

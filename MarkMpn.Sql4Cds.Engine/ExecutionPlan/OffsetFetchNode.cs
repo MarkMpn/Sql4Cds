@@ -30,9 +30,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public ScalarExpression Fetch { get; set; }
 
         [Browsable(false)]
-        public IDataExecutionPlanNode Source { get; set; }
+        public IDataExecutionPlanNodeInternal Source { get; set; }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
             var offset = SqlTypeConverter.ChangeType<int>(Offset.Compile(null, parameterTypes)(null, parameterValues, options));
             var fetch = SqlTypeConverter.ChangeType<int>(Fetch.Compile(null, parameterTypes)(null, parameterValues, options));
@@ -43,13 +43,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (fetch <= 0)
                 throw new QueryExecutionException("The number of rows provided for a FETCH clause must be greater then zero.");
 
-
             return Source.Execute(dataSources, options, parameterTypes, parameterValues)
                 .Skip(offset)
                 .Take(fetch);
         }
 
-        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
             return Source.GetSchema(dataSources, parameterTypes);
         }
@@ -59,7 +58,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
+        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
             Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
             Source.Parent = this;
@@ -86,14 +85,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return this;
         }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
         {
             Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
-            var sourceCount = Source.EstimateRowsOut(dataSources, options, parameterTypes);
+            var sourceCount = Source.EstimatedRowsOut;
 
             if (!Offset.IsConstantValueExpression(null, options, out var offsetLiteral) ||
                 !Fetch.IsConstantValueExpression(null, options, out var fetchLiteral))
@@ -108,6 +107,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override string ToString()
         {
             return "Offset";
+        }
+
+        protected override IEnumerable<string> GetVariablesInternal()
+        {
+            return Offset.GetVariables().Union(Fetch.GetVariables());
+        }
+
+        public override object Clone()
+        {
+            var clone = new OffsetFetchNode
+            {
+                Fetch = Fetch,
+                Offset = Offset,
+                Source = (IDataExecutionPlanNodeInternal)Source.Clone()
+            };
+
+            clone.Source.Parent = clone;
+            return clone;
         }
     }
 }

@@ -9,14 +9,31 @@
     <Import_RootNamespace>MarkMpn.Sql4Cds.Engine</Import_RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)Ado\CancellationTokenOptionsWrapper.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Ado\ChangeDatabaseOptionsWrapper.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Ado\ConfirmDmlStatementEventArgs.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Ado\ConfirmRetrieveEventArgs.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Ado\DefaultQueryExecutionOptions.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Ado\InfoMessageEventArgs.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Ado\ProgressEventArgs.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Ado\Sql4CdsCommand.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Ado\Sql4CdsConnection.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Ado\Sql4CdsDataReader.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Ado\Sql4CdsException.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Ado\Sql4CdsParameter.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Ado\Sql4CdsParameterCollection.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Ado\SqlDataReaderWrapper.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Ado\StatementCompletedEventArgs.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)AttributeMetadataCache.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DataSource.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DisconnectedException.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlanBuilder.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlanNodeTypeDescriptor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlanOptimizer.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\Aggregate.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\AliasNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\AssertNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\AssignVariablesNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\BaseAggregateNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\BaseDataNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\BaseDmlNode.cs" />
@@ -25,7 +42,10 @@
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\BulkDeleteJobNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ComputeScalarNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ConcatenateNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ConditionalNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ConstantScanNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ContinueBreakNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\DeclareVariablesNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\DeleteNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\DistinctEqualityComparer.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\DistinctNode.cs" />
@@ -35,8 +55,11 @@
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\FilterNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\FoldableJoinNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\GlobalOptionSetQueryNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\GotoLabelNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\GoToNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\HashJoinNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\HashMatchAggregateNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\IGoToNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\IDataExecutionPlanNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\IDataSetExecutionPlanNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\IDmlQueryExecutionPlanNode.cs" />
@@ -54,11 +77,14 @@
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\NodeSchema.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\OffsetFetchNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\PartitionedAggregateNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\PrintNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\QueryExecutionException.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\RetrieveTotalRecordCountNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\RevertNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\SelectDataReader.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\SelectNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\SortNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\SqlDataReaderWrapper.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\SqlNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\SqlTypeConverter.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\StreamAggregateNode.cs" />
@@ -77,7 +103,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)FetchXmlExtensions.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)IAttributeMetadataCache.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)IQueryExecutionOptions.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)JoinConditionVisitor.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Visitors\JoinConditionVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)MetadataExtensions.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)MetadataQueryExtensions.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)MetaMetadataCache.cs" />
@@ -86,7 +112,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)QueryParseException.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)SqlEntityReference.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)TableSizeCache.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)TSqlEndpoint.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)TDSEndpoint.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)TSqlFragmentExtensions.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\AggregateCollectingVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\BooleanRewriteVisitor.cs" />
@@ -99,6 +125,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\RewriteVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\RewriteVisitorBase.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\ScalarSubqueryVisitor.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Visitors\TDSEndpointCompatibilityVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\UpdateTargetVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\VariableCollectingVisitor.cs" />
   </ItemGroup>

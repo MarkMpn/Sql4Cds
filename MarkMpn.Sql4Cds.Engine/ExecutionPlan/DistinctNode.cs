@@ -27,9 +27,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// The data source to take the values from
         /// </summary>
         [Browsable(false)]
-        public IDataExecutionPlanNode Source { get; set; }
+        public IDataExecutionPlanNodeInternal Source { get; set; }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
             var distinct = new HashSet<Entity>(new DistinctEqualityComparer(Columns));
 
@@ -40,7 +40,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
             var schema = Source.GetSchema(dataSources, parameterTypes);
 
@@ -56,7 +56,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
+        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
             Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
             Source.Parent = this;
@@ -155,7 +155,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return aggregate;
         }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
         {
             foreach (var col in Columns)
             {
@@ -166,13 +166,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
             // TODO: Is there any metadata available that could help give a better estimate for this?
             // Maybe get the schema and check if any of the columns included in the DISTINCT list are the
             // primary key and if so return the entire count, if some are optionset then there's a known list
-            var totalCount = Source.EstimateRowsOut(dataSources, options, parameterTypes);
+            var totalCount = Source.EstimatedRowsOut;
             return totalCount * 8 / 10;
+        }
+
+        public override object Clone()
+        {
+            var clone = new DistinctNode
+            {
+                Source = (IDataExecutionPlanNodeInternal)Source.Clone()
+            };
+
+            clone.Source.Parent = clone;
+            clone.Columns.AddRange(Columns);
+
+            return clone;
         }
     }
 }

@@ -14,11 +14,16 @@ using Microsoft.Xrm.Tooling.Connector;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    class RevertNode : BaseNode, IImpersonateRevertExecutionPlanNode
+    class RevertNode : BaseNode, IRootExecutionPlanNodeInternal, IImpersonateRevertExecutionPlanNode
     {
         private int _executionCount;
         private readonly Timer _timer = new Timer();
 
+        /// <summary>
+        /// The instance that this node will be executed against
+        /// </summary>
+        [Category("Data Source")]
+        [Description("The data source this query is executed against")]
         public string DataSource { get; set; }
 
         /// <summary>
@@ -43,11 +48,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override TimeSpan Duration => _timer.Duration;
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
         {
         }
 
-        public string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        public string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected)
         {
             _executionCount++;
 
@@ -72,6 +77,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     else
                         throw new QueryExecutionException("Unexpected organization service type") { Node = this };
 
+                    recordsAffected = -1;
                     return "Reverted impersonation";
                 }
             }
@@ -88,9 +94,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public IRootExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
+        public IRootExecutionPlanNodeInternal[] FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
-            return this;
+            return new[] { this };
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
@@ -101,6 +107,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override string ToString()
         {
             return "REVERT";
+        }
+
+        public object Clone()
+        {
+            return new RevertNode
+            {
+                DataSource = DataSource,
+                Sql = Sql,
+                Index = Index,
+                Length = Length
+            };
         }
     }
 }

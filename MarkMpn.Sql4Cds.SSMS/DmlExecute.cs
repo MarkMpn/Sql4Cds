@@ -1,19 +1,25 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Linq;
+using System.Windows.Forms;
 using EnvDTE;
 using EnvDTE80;
+using MarkMpn.Sql4Cds.Controls;
+//using MarkMpn.Sql4Cds.Controls;
 using MarkMpn.Sql4Cds.Engine;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using Microsoft.SqlServer.Management.QueryExecution;
 using Microsoft.SqlServer.Management.UI.VSIntegration;
 using Microsoft.VisualStudio.Shell;
+using Microsoft.VisualStudio.Shell.Interop;
 
 namespace MarkMpn.Sql4Cds.SSMS
 {
     class DmlExecute : CommandBase
     {
         private readonly IDictionary<TextDocument, QueryExecutionOptions> _options;
+        private bool _addingResult;
         
         public DmlExecute(Sql4CdsPackage package, DTE2 dte) : base(package, dte)
         {
@@ -26,11 +32,17 @@ namespace MarkMpn.Sql4Cds.SSMS
             var cancel = dte.Commands.Item("Query.CancelExecutingQuery");
             QueryCancelEvent = dte.Events.CommandEvents[cancel.Guid, cancel.ID];
             QueryCancelEvent.BeforeExecute += OnCancelQuery;
+
+            var estimatedPlan = dte.Commands.Item("Query.DisplayEstimatedExecutionPlan");
+            EstimatedPlanEvent = dte.Events.CommandEvents[estimatedPlan.Guid, estimatedPlan.ID];
+            EstimatedPlanEvent.BeforeExecute += OnShowEstimatedPlan;
         }
 
         public CommandEvents QueryExecuteEvent { get; private set; }
 
         public CommandEvents QueryCancelEvent { get; private set; }
+
+        public CommandEvents EstimatedPlanEvent { get; private set; }
 
         /// <summary>
         /// Gets the instance of the command.
@@ -66,87 +78,87 @@ namespace MarkMpn.Sql4Cds.SSMS
                 var textSpan = sqlScriptEditorControl.GetSelectedTextSpan();
                 var sql = textSpan.Text;
 
-                // Quick check first so we don't spend a long time connecting to CDS just to find there's a simple SELECT query
-                if (sql.IndexOf("INSERT", StringComparison.OrdinalIgnoreCase) == -1 &&
-                    sql.IndexOf("UPDATE", StringComparison.OrdinalIgnoreCase) == -1 &&
-                    sql.IndexOf("DELETE", StringComparison.OrdinalIgnoreCase) == -1)
-                    return;
-
                 // Allow user to bypass SQL 4 CDS logic in case of problematic queries
                 if (sql.IndexOf("Bypass SQL 4 CDS", StringComparison.OrdinalIgnoreCase) != -1 ||
                     sql.IndexOf("Bypass SQL4CDS", StringComparison.OrdinalIgnoreCase) != -1)
                     return;
 
                 // Store the options being used for these queries so we can cancel them later
-                var options = new QueryExecutionOptions(sqlScriptEditorControl, Package.Settings);
-                var metadata = GetMetadataCache();
-                var org = ConnectCDS();
-                var dataSource = new DataSource { Name = "local", Metadata = metadata, TableSizeCache = new TableSizeCache(org, metadata), Connection = org };
+                var dataSource = GetDataSource();
 
-                // We've possibly got a DML statement, so parse the query properly to get the details
-                var converter = new ExecutionPlanBuilder(new[] { dataSource }, options)
+                using (var con = new Sql4CdsConnection(new Dictionary<string, DataSource>(StringComparer.OrdinalIgnoreCase) { [dataSource.Name] = dataSource }))
+                using (var cmd = con.CreateCommand())
                 {
-                    TDSEndpointAvailable = true,
-                    QuotedIdentifiers = sqlScriptEditorControl.QuotedIdentifiers
-                };
-                IRootExecutionPlanNode[] queries;
+                    con.ApplicationName = "SSMS";
+                    var options = new QueryExecutionOptions(sqlScriptEditorControl, Package.Settings, true, cmd);
+                    options.ApplySettings(con);
+                    cmd.CommandText = sql;
 
-                try
-                {
-                    queries = converter.Build(sql);
-                }
-                catch (Exception ex)
-                {
-                    CancelDefault = true;
-                    ShowError(sqlScriptEditorControl, textSpan, ex);
-                    return;
-                }
-
-                var dmlQueries = queries.OfType<IDmlQueryExecutionPlanNode>().ToArray();
-                var hasSelect = queries.Length > dmlQueries.Length;
-                var hasDml = dmlQueries.Length > 0;
-
-                if (hasSelect && hasDml)
-                {
-                    // Can't mix SELECT and DML queries as we can't show results in the grid and SSMS can't execute the DML queries
-                    CancelDefault = true;
-                    ShowError(sqlScriptEditorControl, textSpan, new ApplicationException("Cannot mix SELECT queries with DML queries. Execute SELECT statements in a separate batch to INSERT/UPDATE/DELETE"));
-                    return;
-                }
-
-                if (hasSelect)
-                    return;
-
-                // We need to execute the DML statements directly
-                CancelDefault = true;
-
-                // Show the queries starting to run
-                sqlScriptEditorControl.StandardPrepareBeforeExecute();
-                sqlScriptEditorControl.OnExecutionStarted(sqlScriptEditorControl, EventArgs.Empty);
-                sqlScriptEditorControl.ToggleResultsControl(true);
-                sqlScriptEditorControl.Results.StartExecution();
-
-                _options[ActiveDocument] = options;
-                var doc = ActiveDocument;
-
-                // Run the queries in a background thread
-                var task = new System.Threading.Tasks.Task(async () =>
-                {
-                    var resultFlag = 0;
-
-                    foreach (var query in dmlQueries)
+                    try
                     {
-                        if (options.Cancelled)
-                            break;
+                        cmd.Prepare();
+                    }
+                    catch (Exception ex)
+                    {
+                        CancelDefault = true;
+                        ShowError(sqlScriptEditorControl, textSpan, ex);
+                        return;
+                    }
 
+                    if (cmd.Plan == null)
+                        return;
+
+                    // We need to execute the DML statements directly
+                    CancelDefault = true;
+
+                    // Show the queries starting to run
+                    sqlScriptEditorControl.StandardPrepareBeforeExecute();
+                    sqlScriptEditorControl.OnExecutionStarted(sqlScriptEditorControl, EventArgs.Empty);
+                    sqlScriptEditorControl.ToggleResultsControl(true);
+                    sqlScriptEditorControl.Results.StartExecution();
+
+                    _options[ActiveDocument] = options;
+                    var doc = ActiveDocument;
+                    var resultFlag = 0;
+                    var tabPage = sqlScriptEditorControl.IsWithShowPlan ? AddShowPlanTab(sqlScriptEditorControl) : null;
+
+                    con.InfoMessage += (s, msg) =>
+                    {
+                        sqlScriptEditorControl.Results.AddStringToMessages(msg.Message + "\r\n\r\n");
+                    };
+
+                    cmd.StatementCompleted += (s, stmt) =>
+                    {
+                        if (tabPage != null)
+                            ShowPlan(sqlScriptEditorControl, tabPage, stmt.Statement, dataSource, true);
+
+                        resultFlag |= 1; // Success
+                    };
+
+                    // Run the queries in a background thread
+                    var task = new System.Threading.Tasks.Task(async () =>
+                    {
                         try
                         {
-                            _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name, ["Source"] = "SSMS" });
-                            var msg = query.Execute(new Dictionary<string, DataSource>(StringComparer.OrdinalIgnoreCase) { [dataSource.Name] = dataSource }, options, null, null);
+                            // SSMS grid doesn't know how to show entity references, so show as simple guids
+                            con.ReturnEntityReferenceAsGuid = true;
 
-                            sqlScriptEditorControl.Results.AddStringToMessages(msg + "\r\n\r\n");
+                            using (var reader = cmd.ExecuteReader())
+                            {
+                                while (!reader.IsClosed)
+                                {
+                                    var resultSet = QEResultSetWrapper.Create(reader);
+                                    resultSet.Initialize(false);
 
-                            resultFlag |= 1; // Success
+                                    var gridContainer = ResultSetAndGridContainerWrapper.Create(resultSet, true, 1024);
+                                    sqlScriptEditorControl.Results.AddGridContainer(gridContainer);
+                                    gridContainer.StartRetrievingData();
+                                    gridContainer.UpdateGrid();
+
+                                    if (!reader.NextResult())
+                                        break;
+                                }
+                            }
                         }
                         catch (Exception ex)
                         {
@@ -163,25 +175,23 @@ namespace MarkMpn.Sql4Cds.SSMS
                                 }
                             }
 
-                            _ai.TrackException(error, new Dictionary<string, string> { ["Sql"] = sql, ["Source"] = "SSMS" });
-
                             AddException(sqlScriptEditorControl, textSpan, error);
                             resultFlag |= 2; // Failure
                         }
-                    }
 
-                    if (options.Cancelled)
-                        resultFlag = 4; // Cancel
+                        if (options.IsCancelled)
+                            resultFlag = 4; // Cancel
 
-                    await Package.JoinableTaskFactory.SwitchToMainThreadAsync();
+                        await Package.JoinableTaskFactory.SwitchToMainThreadAsync();
 
-                    sqlScriptEditorControl.Results.OnSqlExecutionCompletedInt(resultFlag);
+                        sqlScriptEditorControl.Results.OnSqlExecutionCompletedInt(resultFlag);
 
-                    _options.Remove(doc);
-                });
+                        _options.Remove(doc);
+                    });
 
-                options.Task = task;
-                task.Start();
+                    options.Task = task;
+                    task.Start();
+                }
             }
             catch (Exception ex)
             {
@@ -196,6 +206,229 @@ namespace MarkMpn.Sql4Cds.SSMS
 
             options.Cancel();
             CancelDefault = true;
+        }
+
+        private void OnShowEstimatedPlan(string Guid, int ID, object CustomIn, object CustomOut, ref bool CancelDefault)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            try
+            {
+                if (ActiveDocument == null)
+                    return;
+
+                if (!IsDataverse())
+                    return;
+
+                // Get the SQL editor object
+                var scriptFactory = new ScriptFactoryWrapper(ServiceCache.ScriptFactory);
+                var sqlScriptEditorControl = scriptFactory.GetCurrentlyActiveFrameDocView(ServiceCache.VSMonitorSelection, false, out _);
+                var textSpan = sqlScriptEditorControl.GetSelectedTextSpan();
+                var sql = textSpan.Text;
+
+                // Store the options being used for these queries so we can cancel them later
+                var dataSource = GetDataSource();
+
+                using (var con = new Sql4CdsConnection(new Dictionary<string, DataSource>(StringComparer.OrdinalIgnoreCase) { [dataSource.Name] = dataSource }))
+                using (var cmd = con.CreateCommand())
+                {
+                    con.ApplicationName = "SSMS";
+                    var options = new QueryExecutionOptions(sqlScriptEditorControl, Package.Settings, !Package.Settings.ShowFetchXMLInEstimatedExecutionPlans, cmd);
+                    options.ApplySettings(con);
+                    cmd.CommandText = sql;
+
+                    IRootExecutionPlanNode[] plans;
+
+                    try
+                    {
+                        plans = cmd.GeneratePlan(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        CancelDefault = true;
+                        ShowError(sqlScriptEditorControl, textSpan, ex);
+                        return;
+                    }
+
+                    CancelDefault = true;
+
+                    // Show the queries starting to run
+                    sqlScriptEditorControl.StandardPrepareBeforeExecute();
+                    sqlScriptEditorControl.OnExecutionStarted(sqlScriptEditorControl, EventArgs.Empty);
+                    sqlScriptEditorControl.ToggleResultsControl(true);
+                    sqlScriptEditorControl.Results.StartExecution();
+
+                    var tabPage = AddShowPlanTab(sqlScriptEditorControl);
+                    sqlScriptEditorControl.Results.ResultsTabCtrl.SelectedTab = tabPage;
+
+                    foreach (var query in plans)
+                        ShowPlan(sqlScriptEditorControl, tabPage, query, dataSource, false);
+
+                    var resultFlag = 1; // Success
+
+                    sqlScriptEditorControl.Results.OnSqlExecutionCompletedInt(resultFlag);
+                }
+            }
+            catch (Exception ex)
+            {
+                VsShellUtilities.LogError("SQL 4 CDS", ex.ToString());
+            }
+        }
+
+        private TabPage AddShowPlanTab(SqlScriptEditorControlWrapper sqlScriptEditorControl)
+        {
+            // Add a tab to the results
+            var tabPage = new TabPage("SQL 4 CDS Execution Plan");
+            tabPage.ImageIndex = 5; // EstimatedShowPlanImageIndex
+            sqlScriptEditorControl.Results.ResultsTabCtrl.TabPages.Insert(1, tabPage);
+
+            var flp = new FlowLayoutPanel
+            {
+                AutoScroll = true,
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.TopDown,
+                Margin = new Padding(0),
+                WrapContents = false
+            };
+            flp.ClientSizeChanged += ResizeLayoutPanel;
+            tabPage.Controls.Add(flp);
+
+            return tabPage;
+        }
+
+        private void ShowPlan(SqlScriptEditorControlWrapper sqlScriptEditorControl, TabPage tabPage, IRootExecutionPlanNode query, DataSource dataSource, bool executed)
+        {
+            if (tabPage.InvokeRequired)
+            {
+                tabPage.Invoke((Action) (() => ShowPlan(sqlScriptEditorControl, tabPage, query, dataSource, executed)));
+                return;
+            }
+
+            var plan = new Panel();
+            var fetchLabel = new Label
+            {
+                Text = query.Sql,
+                AutoSize = false,
+                Dock = DockStyle.Top,
+                Height = 32,
+                BorderStyle = BorderStyle.FixedSingle,
+                Padding = new Padding(4),
+                BackColor = SystemColors.Info,
+                ForeColor = SystemColors.InfoText,
+                AutoEllipsis = true,
+                UseMnemonic = false
+            };
+            var planView = new ExecutionPlanView { Dock = DockStyle.Fill, Executed = executed, DataSources = new Dictionary<string, DataSource> { [dataSource.Name] = dataSource } };
+            planView.Plan = query;
+
+            planView.NodeSelected += (s, e) => ShowProperties(sqlScriptEditorControl, planView.Selected, executed);
+            planView.DoubleClick += (s, e) =>
+            {
+                if (planView.Selected is IFetchXmlExecutionPlanNode fetchXml)
+                    ShowFetchXML(fetchXml.FetchXmlString);
+            };
+            plan.Controls.Add(planView);
+            plan.Controls.Add(fetchLabel);
+
+            AddControl(plan, tabPage);
+        }
+
+        private void ShowFetchXML(string fetchXmlString)
+        {
+            var window = Dte.ItemOperations.NewFile("General\\XML File");
+
+            var editPoint = ActiveDocument.EndPoint.CreateEditPoint();
+            editPoint.Insert(fetchXmlString);
+        }
+
+        private void ShowProperties(SqlScriptEditorControlWrapper sqlScriptEditorControl, IExecutionPlanNode selected, bool executed)
+        {
+            var trackSelection = (Microsoft.SqlServer.Management.UI.VSIntegration.ITrackSelection) sqlScriptEditorControl.ServiceProvider.GetService(typeof(Microsoft.SqlServer.Management.UI.VSIntegration.ITrackSelection));
+            var selection = new SelectionService();
+
+            if (selected != null)
+                selection.SelectObjects(1, new[] { new ExecutionPlanNodeTypeDescriptor(selected, !executed, null) }, 0);
+
+            trackSelection.OnSelectChange(selection);
+        }
+
+        private void ResizeLayoutPanel(object sender, EventArgs e)
+        {
+            if (_addingResult)
+                return;
+
+            var flp = (FlowLayoutPanel)sender;
+            var prevHeight = 0;
+
+            foreach (Control control in flp.Controls)
+            {
+                control.Width = flp.ClientSize.Width;
+                prevHeight += control.Height + control.Margin.Top + control.Margin.Bottom;
+            }
+
+            if (flp.Controls.Count > 0)
+            {
+                var lastControl = flp.Controls[flp.Controls.Count - 1];
+                prevHeight -= lastControl.Height;
+                var minHeight = GetMinHeight(lastControl, flp.ClientSize.Height * 2 / 3);
+                if (prevHeight + minHeight > flp.ClientSize.Height)
+                    lastControl.Height = minHeight;
+                else
+                    lastControl.Height = flp.ClientSize.Height - prevHeight;
+            }
+        }
+
+        private void AddControl(Control control, TabPage tabPage)
+        {
+            _addingResult = true;
+
+            var flp = (FlowLayoutPanel)tabPage.Controls[0];
+            flp.HorizontalScroll.Enabled = false;
+
+            if (flp.Controls.Count == 0)
+            {
+                control.Height = flp.Height;
+                control.Margin = Padding.Empty;
+            }
+            else
+            {
+                control.Margin = new Padding(0, 0, 0, 3);
+
+                if (flp.Controls.Count == 1)
+                    flp.Controls[0].Margin = control.Margin;
+
+                if (flp.Controls.Count > 0)
+                    flp.Controls[flp.Controls.Count - 1].Height = GetMinHeight(flp.Controls[flp.Controls.Count - 1], flp.ClientSize.Height * 2 / 3);
+
+                control.Height = GetMinHeight(control, flp.ClientSize.Height * 2 / 3);
+
+                var prevHeight = flp.Controls.OfType<Control>().Sum(c => c.Height + c.Margin.Top + c.Margin.Bottom);
+                if (prevHeight + control.Height < flp.ClientSize.Height)
+                    control.Height = flp.ClientSize.Height - prevHeight;
+            }
+
+            control.Width = flp.ClientSize.Width;
+
+            flp.Controls.Add(control);
+
+            if (control.Width > flp.ClientSize.Width)
+            {
+                foreach (Control child in flp.Controls)
+                    child.Width = flp.ClientSize.Width;
+            }
+
+            _addingResult = false;
+        }
+
+        private int GetMinHeight(Control control, int max)
+        {
+            if (control is Panel panel)
+                return panel.Controls.OfType<Control>().Sum(child => GetMinHeight(child, max));
+
+            if (control is ExecutionPlanView plan)
+                return plan.AutoScrollMinSize.Height;
+
+            return control.Height;
         }
 
         private void ShowError(SqlScriptEditorControlWrapper sqlScriptEditorControl, ITextSpan textSpan, Exception ex)

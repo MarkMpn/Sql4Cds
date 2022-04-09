@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Crm.Sdk.Messages;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
@@ -38,7 +39,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("Column Mappings")]
         public IDictionary<string, string> ColumnMappings { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
         {
             foreach (var col in ColumnMappings.Values)
             {
@@ -49,7 +50,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        public override string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        public override string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected)
         {
             _executionCount++;
 
@@ -70,14 +71,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     // Precompile mappings with type conversions
                     meta = dataSource.Metadata[LogicalName];
-                    attributes = meta.Attributes.ToDictionary(a => a.LogicalName);
+                    attributes = meta.Attributes.ToDictionary(a => a.LogicalName, StringComparer.OrdinalIgnoreCase);
                     var dateTimeKind = options.UseLocalTimeZone ? DateTimeKind.Local : DateTimeKind.Utc;
-                    attributeAccessors = CompileColumnMappings(meta, ColumnMappings, schema, attributes, dateTimeKind);
+                    attributeAccessors = CompileColumnMappings(meta, ColumnMappings, schema, attributes, dateTimeKind, entities);
                     attributeAccessors.TryGetValue(meta.PrimaryIdAttribute, out primaryIdAccessor);
                 }
 
                 // Check again that the update is allowed. Don't count any UI interaction in the execution time
-                if (options.Cancelled || !options.ConfirmInsert(entities.Count, meta))
+                if (options.CancellationToken.IsCancellationRequested || !options.ConfirmInsert(entities.Count, meta))
                     throw new OperationCanceledException("INSERT cancelled by user");
 
                 using (_timer.Run())
@@ -93,7 +94,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             InProgressUppercase = "Inserting",
                             InProgressLowercase = "inserting",
                             CompletedLowercase = "inserted"
-                        });
+                        },
+                        out recordsAffected,
+                        parameterValues,
+                        LogicalName == "listmember" || meta.IsIntersect == true ? null : (Action<OrganizationResponse>) ((r) => SetIdentity(r, parameterValues))
+                        );
                 }
             }
             catch (QueryExecutionException ex)
@@ -180,9 +185,44 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return new CreateRequest { Target = insert };
         }
 
+        private void SetIdentity(OrganizationResponse response, IDictionary<string, object> parameterValues)
+        {
+            var create = (CreateResponse)response;
+            parameterValues["@@IDENTITY"] = new SqlEntityReference(DataSource, LogicalName, create.id);
+        }
+
+        protected override void RenameSourceColumns(IDictionary<string, string> columnRenamings)
+        {
+            foreach (var kvp in ColumnMappings.ToList())
+            {
+                if (columnRenamings.TryGetValue(kvp.Value, out var renamed))
+                    ColumnMappings[kvp.Key] = renamed;
+            }
+        }
+
         public override string ToString()
         {
             return "INSERT";
+        }
+
+        public override object Clone()
+        {
+            var clone = new InsertNode
+            {
+                DataSource = DataSource,
+                Index = Index,
+                Length = Length,
+                LogicalName = LogicalName,
+                Source = (IExecutionPlanNodeInternal)Source.Clone(),
+                Sql = Sql
+            };
+
+            foreach (var kvp in ColumnMappings)
+                clone.ColumnMappings.Add(kvp);
+
+            clone.Source.Parent = clone;
+
+            return clone;
         }
     }
 }

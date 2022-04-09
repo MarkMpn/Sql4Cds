@@ -11,9 +11,9 @@ using System.Windows.Forms;
 using MarkMpn.Sql4Cds.Engine;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 
-namespace MarkMpn.Sql4Cds
+namespace MarkMpn.Sql4Cds.Controls
 {
-    class ExecutionPlanView : ScrollableControl
+    public class ExecutionPlanView : ScrollableControl
     {
         class Line
         {
@@ -43,8 +43,6 @@ namespace MarkMpn.Sql4Cds
         public bool Executed { get; set; }
 
         public IDictionary<string, DataSource> DataSources { get; set; }
-
-        public IQueryExecutionOptions Options { get; set; }
 
         public IExecutionPlanNode Plan
         {
@@ -108,7 +106,7 @@ namespace MarkMpn.Sql4Cds
 
                 _nodeLocations[child] = fullRect;
 
-                var rows = child is IDataExecutionPlanNode dataChild ? Executed ? dataChild.RowsOut : dataChild.EstimateRowsOut(DataSources.Values.Cast<Engine.DataSource>().ToDictionary(ds => ds.Name, StringComparer.OrdinalIgnoreCase), Options, null) : 1;
+                var rows = child is IDataExecutionPlanNode dataChild ? Executed ? dataChild.RowsOut : dataChild.EstimatedRowsOut : 1;
                 var width = rows == 0 ? 1 : (int)Math.Log10(rows);
                 _lines.Add(new Line { Source = child, Start = new Point(iconRect.Left, parentIconRect.Top == iconRect.Top ? (parentIconRect.Top + (i + 1) * lineYSpacing) : (iconRect.Top + iconRect.Height / 2)), End = new Point(parentIconRect.Right, parentIconRect.Top + (i + 1) * lineYSpacing), Width = width });
 
@@ -145,22 +143,21 @@ namespace MarkMpn.Sql4Cds
                 {
                     using (var stream = GetType().Assembly.GetManifestResourceStream(GetType(), "Images." + kvp.Key.GetType().Name + ".ico"))
                     {
-                        if (stream == null)
-                        {
-                            e.Graphics.DrawRectangle(Pens.Black, iconRect);
+                        Image image;
 
-                            using (var x = new Pen(Color.Red, 4))
-                            {
-                                e.Graphics.DrawLine(x, iconRect.Left, iconRect.Top, iconRect.Right, iconRect.Bottom);
-                                e.Graphics.DrawLine(x, iconRect.Left, iconRect.Bottom, iconRect.Right, iconRect.Top);
-                            }
+                        if (stream != null)
+                        {
+                            image = Bitmap.FromStream(stream);
                         }
                         else
                         {
-                            var image = Bitmap.FromStream(stream);
-
-                            e.Graphics.DrawImage(image, iconRect);
+                            using (var fallbackStream = GetType().Assembly.GetManifestResourceStream(GetType(), "Images.FallbackNode.ico"))
+                            {
+                                image = Bitmap.FromStream(fallbackStream);
+                            }
                         }
+
+                        e.Graphics.DrawImage(image, iconRect);
                     }
 
                     if (Exception?.Node == kvp.Key)
@@ -177,7 +174,7 @@ namespace MarkMpn.Sql4Cds
                     var label = GetLabel(kvp.Key);
                     var stringFormat = new StringFormat { Alignment = StringAlignment.Center };
 
-                    if (kvp.Key == Selected)
+                    if (Focused && kvp.Key == Selected)
                     {
                         e.Graphics.FillRectangle(SystemBrushes.Highlight, labelRect);
                         e.Graphics.DrawString(label, Font, SystemBrushes.HighlightText, labelRect, stringFormat);
@@ -281,6 +278,7 @@ namespace MarkMpn.Sql4Cds
         protected override void OnMouseClick(MouseEventArgs e)
         {
             base.OnMouseClick(e);
+            Focus();
 
             var hit = false;
 
@@ -308,6 +306,22 @@ namespace MarkMpn.Sql4Cds
                 Selected = null;
                 OnNodeSelected(EventArgs.Empty);
             }
+        }
+
+        protected override void OnGotFocus(EventArgs e)
+        {
+            base.OnGotFocus(e);
+
+            if (Selected != null)
+                Invalidate(Selected);
+        }
+
+        protected override void OnLostFocus(EventArgs e)
+        {
+            base.OnLostFocus(e);
+
+            if (Selected != null)
+                Invalidate(Selected);
         }
 
         private void Invalidate(IExecutionPlanNode node)

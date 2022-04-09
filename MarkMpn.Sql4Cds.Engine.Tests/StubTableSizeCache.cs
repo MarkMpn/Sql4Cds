@@ -17,7 +17,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     case "account": return 30000;
                     case "contact": return 100000;
-                    default: throw new ArgumentOutOfRangeException(nameof(logicalName));
+                    case "systemuser": return 100;
+                    case "new_customentity": return 1000;
+                    default: throw new ArgumentOutOfRangeException(nameof(logicalName), "Unknown entity name " + logicalName);
                 }
             }
         }

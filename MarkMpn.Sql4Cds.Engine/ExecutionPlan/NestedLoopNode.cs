@@ -30,16 +30,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("Outer References")]
         public Dictionary<string,string> OuterReferences { get; set; }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
             var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
             var innerParameterTypes = GetInnerParameterTypes(leftSchema, parameterTypes);
             if (OuterReferences != null)
             {
                 if (parameterTypes == null)
-                    innerParameterTypes = new Dictionary<string, Type>();
+                    innerParameterTypes = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
                 else
-                    innerParameterTypes = new Dictionary<string, Type>(parameterTypes);
+                    innerParameterTypes = new Dictionary<string, DataTypeReference>(parameterTypes, StringComparer.OrdinalIgnoreCase);
 
                 foreach (var kvp in OuterReferences)
                     innerParameterTypes[kvp.Value] = leftSchema.Schema[kvp.Key];
@@ -87,16 +87,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private IDictionary<string, Type> GetInnerParameterTypes(INodeSchema leftSchema, IDictionary<string, Type> parameterTypes)
+        private IDictionary<string, DataTypeReference> GetInnerParameterTypes(INodeSchema leftSchema, IDictionary<string, DataTypeReference> parameterTypes)
         {
             var innerParameterTypes = parameterTypes;
 
             if (OuterReferences != null)
             {
                 if (parameterTypes == null)
-                    innerParameterTypes = new Dictionary<string, Type>();
+                    innerParameterTypes = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
                 else
-                    innerParameterTypes = new Dictionary<string, Type>(parameterTypes);
+                    innerParameterTypes = new Dictionary<string, DataTypeReference>(parameterTypes, StringComparer.OrdinalIgnoreCase);
 
                 foreach (var kvp in OuterReferences)
                     innerParameterTypes[kvp.Value] = leftSchema.Schema[kvp.Key];
@@ -105,7 +105,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return innerParameterTypes;
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
+        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
             var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
             LeftSource = LeftSource.FoldQuery(dataSources, options, parameterTypes, hints);
@@ -114,10 +114,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var innerParameterTypes = GetInnerParameterTypes(leftSchema, parameterTypes);
             RightSource = RightSource.FoldQuery(dataSources, options, innerParameterTypes, hints);
             RightSource.Parent = this;
+
+            if (RightSource is TableSpoolNode spool)
+            {
+                LeftSource.EstimateRowsOut(dataSources, options, parameterTypes);
+                if (LeftSource.EstimatedRowsOut <= 1)
+                {
+                    RightSource = spool.Source;
+                    RightSource.Parent = this;
+                }
+            }
+
             return this;
         }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
         {
             if (JoinCondition != null)
             {
@@ -146,27 +157,67 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             RightSource.AddRequiredColumns(dataSources, parameterTypes, rightColumns);
         }
 
-        protected override INodeSchema GetRightSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        protected override INodeSchema GetRightSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
             var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
             var innerParameterTypes = GetInnerParameterTypes(leftSchema, parameterTypes);
             return RightSource.GetSchema(dataSources, innerParameterTypes);
         }
 
-        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        public override void EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
-            var leftEstimate = LeftSource.EstimateRowsOut(dataSources, options, parameterTypes);
+            LeftSource.EstimateRowsOut(dataSources, options, parameterTypes);
+
+            var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
+            var innerParameterTypes = GetInnerParameterTypes(leftSchema, parameterTypes);
+
+            RightSource.EstimateRowsOut(dataSources, options, innerParameterTypes);
+
+            EstimatedRowsOut = EstimateRowsOutInternal(dataSources, options, parameterTypes);
+        }
+
+        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        {
+            var leftEstimate = LeftSource.EstimatedRowsOut;
 
             // We tend to use a nested loop with an assert node for scalar subqueries - we'll return one record for each record in the outer loop
             if (RightSource is AssertNode)
                 return leftEstimate;
 
-            var rightEstimate = RightSource.EstimateRowsOut(dataSources, options, parameterTypes);
+            var rightEstimate = RightSource.EstimatedRowsOut;
 
-            if (JoinType == QualifiedJoinType.Inner)
+            if (OuterReferences != null && OuterReferences.Count > 0)
+                return leftEstimate * rightEstimate;
+            else if (JoinType == QualifiedJoinType.Inner)
                 return Math.Min(leftEstimate, rightEstimate);
             else
                 return Math.Max(leftEstimate, rightEstimate);
+        }
+
+        protected override IEnumerable<string> GetVariablesInternal()
+        {
+            return JoinCondition.GetVariables();
+        }
+
+        public override object Clone()
+        {
+            var clone = new NestedLoopNode
+            {
+                JoinCondition = JoinCondition,
+                JoinType = JoinType,
+                LeftSource = (IDataExecutionPlanNodeInternal)LeftSource.Clone(),
+                OuterReferences = OuterReferences,
+                RightSource = (IDataExecutionPlanNodeInternal)RightSource.Clone(),
+                SemiJoin = SemiJoin
+            };
+
+            foreach (var kvp in DefinedValues)
+                clone.DefinedValues.Add(kvp);
+
+            clone.LeftSource.Parent = clone;
+            clone.RightSource.Parent = clone;
+
+            return clone;
         }
     }
 }

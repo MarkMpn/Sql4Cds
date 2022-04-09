@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
@@ -10,7 +11,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 {
     class StubOptions : IQueryExecutionOptions
     {
-        bool IQueryExecutionOptions.Cancelled => false;
+        CancellationToken IQueryExecutionOptions.CancellationToken => CancellationToken.None;
 
         bool IQueryExecutionOptions.BlockUpdateWithoutWhere => false;
 
@@ -23,8 +24,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         bool IQueryExecutionOptions.UseTDSEndpoint => false;
 
         bool IQueryExecutionOptions.UseRetrieveTotalRecordCount => true;
-
-        int IQueryExecutionOptions.LocaleId => 1033;
 
         int IQueryExecutionOptions.MaxDegreeOfParallelism => 10;
 
@@ -60,12 +59,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
         }
 
-        void IQueryExecutionOptions.RetrievingNextPage()
-        {
-        }
-
         string IQueryExecutionOptions.PrimaryDataSource => "local";
 
         Guid IQueryExecutionOptions.UserId => Guid.NewGuid();
+
+        bool IQueryExecutionOptions.QuotedIdentifiers => true;
     }
 }

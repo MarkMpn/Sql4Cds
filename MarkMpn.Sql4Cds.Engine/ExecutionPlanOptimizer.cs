@@ -17,15 +17,21 @@ namespace MarkMpn.Sql4Cds.Engine
     /// </summary>
     class ExecutionPlanOptimizer
     {
-        public ExecutionPlanOptimizer(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options)
+        public ExecutionPlanOptimizer(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, bool compileConditions)
         {
             DataSources = dataSources;
             Options = options;
+            ParameterTypes = parameterTypes;
+            CompileConditions = compileConditions;
         }
 
         public IDictionary<string, DataSource> DataSources { get; }
 
         public IQueryExecutionOptions Options { get; }
+
+        public IDictionary<string, DataTypeReference> ParameterTypes { get; }
+
+        public bool CompileConditions { get; }
 
         /// <summary>
         /// Optimizes an execution plan
@@ -33,18 +39,29 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="node">The root node of the execution plan</param>
         /// <param name="hints">Any optimizer hints to apply</param>
         /// <returns>A new execution plan node</returns>
-        public IRootExecutionPlanNode Optimize(IRootExecutionPlanNode node, IList<OptimizerHint> hints)
+        public IRootExecutionPlanNodeInternal[] Optimize(IRootExecutionPlanNodeInternal node, IList<OptimizerHint> hints)
         {
+            if (!CompileConditions)
+            {
+                if (hints == null)
+                    hints = new List<OptimizerHint>();
+
+                hints.Add(new ConditionalNode.DoNotCompileConditionsHint());
+            }
+
             // Move any additional operators down to the FetchXml
-            node = node.FoldQuery(DataSources, Options, null, hints);
+            var nodes = node.FoldQuery(DataSources, Options, ParameterTypes, hints);
 
-            // Ensure all required columns are added to the FetchXML
-            node.AddRequiredColumns(DataSources, null, new List<string>());
+            foreach (var n in nodes)
+            {
+                // Ensure all required columns are added to the FetchXML
+                n.AddRequiredColumns(DataSources, ParameterTypes, new List<string>());
 
-            //Sort the items in the FetchXml nodes to match examples in documentation
-            SortFetchXmlElements(node);
+                // Sort the items in the FetchXml nodes to match examples in documentation
+                SortFetchXmlElements(n);
+            }
 
-            return node;
+            return nodes;
         }
 
         private void SortFetchXmlElements(IExecutionPlanNode node)

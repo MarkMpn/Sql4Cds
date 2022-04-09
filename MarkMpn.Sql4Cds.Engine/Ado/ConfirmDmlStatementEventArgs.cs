@@ -1,0 +1,35 @@
+﻿using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Text;
+using Microsoft.Xrm.Sdk.Metadata;
+
+namespace MarkMpn.Sql4Cds.Engine
+{
+    /// <summary>
+    /// Contains information about a DML statement (INSERT/UPDATE/DELETE) that is about to be executed
+    /// </summary>
+    public class ConfirmDmlStatementEventArgs : CancelEventArgs
+    {
+        /// <summary>
+        /// Creates a new <see cref="ConfirmDmlStatementEventArgs"/>
+        /// </summary>
+        /// <param name="count">The number of records that will be affected</param>
+        /// <param name="metadata">The metadata of the entity that will be affected</param>
+        internal ConfirmDmlStatementEventArgs(int count, EntityMetadata metadata)
+        {
+            Count = count;
+            Metadata = metadata;
+        }
+
+        /// <summary>
+        /// Returns the number of records that will be affected by the operation
+        /// </summary>
+        public int Count { get; }
+
+        /// <summary>
+        /// Returns the metadata of the entity that will be affected
+        /// </summary>
+        public EntityMetadata Metadata { get; }
+    }
+}

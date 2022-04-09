@@ -4,6 +4,7 @@ using System.Collections.Specialized;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Windows.Forms;
 using System.Xml.Serialization;
 using MarkMpn.Sql4Cds.Engine;
@@ -105,7 +106,7 @@ namespace MarkMpn.Sql4Cds
             {
                 var metadata = new SharedMetadataCache(con, GetNewServiceClient(con));
 
-                _dataSources[con.ConnectionName] = new DataSource
+                _dataSources[con.ConnectionName] = new XtbDataSource
                 {
                     ConnectionDetail = con,
                     Connection = GetNewServiceClient(con),
@@ -122,6 +123,9 @@ namespace MarkMpn.Sql4Cds
         private IOrganizationService GetNewServiceClient(ConnectionDetail con)
         {
             var svc = con.ServiceClient;
+
+            if (con.IsFromSdkLoginCtrl)
+                return svc;
 
             if (svc.ActiveAuthenticationType == Microsoft.Xrm.Tooling.Connector.AuthenticationType.OAuth)
                 return svc.Clone();
@@ -182,10 +186,6 @@ namespace MarkMpn.Sql4Cds
                         ((Form)query).Close();
                     }
                 }
-            }
-            else
-            {
-                tsbNewQuery_Click(this, EventArgs.Empty);
             }
         }
 
@@ -310,7 +310,6 @@ namespace MarkMpn.Sql4Cds
 
             if (param.TryGetValue("FetchXml", out var xml) && xml is string xmlStr && !String.IsNullOrEmpty(xmlStr))
             {
-                var fetch = DeserializeFetchXml(xmlStr);
                 var options = new FetchXml2SqlOptions();
 
                 if ((bool)param["ConvertOnly"])
@@ -334,11 +333,13 @@ namespace MarkMpn.Sql4Cds
                     }
                     catch
                     {
+                        var fetch = DeserializeFetchXml(xmlStr);
                         sql = FetchXml2Sql.Convert(con.ServiceClient, metadata, fetch, options, out _);
                     }
                 }
                 else
                 {
+                    var fetch = DeserializeFetchXml(xmlStr);
                     sql = FetchXml2Sql.Convert(con.ServiceClient, metadata, fetch, options, out _);
                 }
 
@@ -414,11 +415,11 @@ namespace MarkMpn.Sql4Cds
             if (sql != null)
             {
                 _properties.Connections = sql.DataSources;
-                _properties.SelectedObject = new ConnectionPropertiesWrapper(sql.Connection);
+                _properties.SelectObject(new ConnectionPropertiesWrapper(sql.Connection), false);
             }
             else
             {
-                _properties.SelectedObject = null;
+                _properties.SelectObject(null, false);
             }
         }
 
@@ -464,7 +465,7 @@ namespace MarkMpn.Sql4Cds
                 tscbConnection.Enabled = false;
                 tsbExecute.Enabled = false;
                 tsbPreviewFetchXml.Enabled = false;
-                tsbPowerBi.Enabled = false;
+                tsbConvertToFetchXMLSplitButton.Enabled = false;
                 return;
             }
 
@@ -472,7 +473,7 @@ namespace MarkMpn.Sql4Cds
             tscbConnection.Text = query.Connection.ConnectionName;
             tsbExecute.Enabled = query.Connection != null && !query.Busy;
             tsbPreviewFetchXml.Enabled = query.Connection != null && !query.Busy;
-            tsbPowerBi.Enabled = query.Connection != null && !query.Busy;
+            tsbConvertToFetchXMLSplitButton.Enabled = query.Connection != null && !query.Busy;
         }
 
         private void tsbStop_Click(object sender, EventArgs e)
@@ -520,6 +521,35 @@ namespace MarkMpn.Sql4Cds
 
         public override void ClosingPlugin(PluginCloseInfo info)
         {
+            var unsavedDocuments = dockPanel.Documents
+                .OfType<SqlQueryControl>()
+                .Where(query => query.Modified)
+                .ToArray();
+
+            if (unsavedDocuments.Length > 0 && !Settings.Instance.RememberSession)
+            {
+                using (var form = new ConfirmCloseForm(unsavedDocuments.Select(query => query.DisplayName).ToArray(), !info.Silent))
+                {
+                    switch (form.ShowDialog())
+                    {
+                        case DialogResult.Yes:
+                            foreach (var doc in unsavedDocuments)
+                            {
+                                if (!doc.Save())
+                                {
+                                    info.Cancel = true;
+                                    return;
+                                }
+                            }
+                            break;
+
+                        case DialogResult.Cancel:
+                            info.Cancel = true;
+                            return;
+                    }
+                }
+            }
+
             if (Settings.Instance.RememberSession)
                 SaveSettings();
 
@@ -546,7 +576,7 @@ namespace MarkMpn.Sql4Cds
             OnOutgoingMessage(this, args);
         }
 
-        private void tsbPowerBi_Click(object sender, EventArgs e)
+        private void powerBIMToolStripMenuItem_Click(object sender, EventArgs e)
         {
             if (!(dockPanel.ActiveDocument is SqlQueryControl sql))
                 return;
@@ -568,6 +598,76 @@ let
 in
   DataverseSQL";
             CreateM(m);
+        }
+
+        private void fetchXMLToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (!(dockPanel.ActiveDocument is SqlQueryControl sql))
+                return;
+
+            using (var con = new Sql4CdsConnection(sql.DataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                new QueryExecutionOptions(this, null).ApplySettings(con, cmd, false);
+                con.UseTDSEndpoint = false;
+                cmd.CommandText = sql.Sql;
+
+                try
+                {
+                    var queries = cmd.GeneratePlan(false);
+
+                    foreach (var query in queries)
+                    {
+                        _ai.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name, ["Source"] = "XrmToolBox" });
+
+                        var sb = new StringBuilder();
+                        sb.Append("<!--\r\nCreated from query:\r\n\r\n");
+                        sb.Append(query.Sql);
+
+                        var nodes = GetAllNodes(query).ToList();
+                        var fetchXmlNodes = nodes.OfType<IFetchXmlExecutionPlanNode>().ToList();
+
+                        if (fetchXmlNodes.Count == 0)
+                            continue;
+
+                        if (nodes.Count < fetchXmlNodes.Count)
+                        {
+                            sb.Append("\r\n‼ WARNING ‼\r\n");
+                            sb.Append("This query requires additional processing. This FetchXML gives the required data, but needs additional processing to format it in the same way as returned by the TDS Endpoint or SQL 4 CDS.\r\n\r\n");
+                            sb.Append("See the estimated execution plan to see what extra processing is performed by SQL 4 CDS");
+                        }
+
+                        sb.Append("\r\n\r\n-->");
+
+                        foreach (var fetchXml in nodes.OfType<IFetchXmlExecutionPlanNode>())
+                        {
+                            sb.Append("\r\n\r\n");
+                            sb.Append(fetchXml.FetchXmlString);
+                        }
+
+                        CreateFetchXML(sb.ToString());
+                    }
+                }
+                catch (NotSupportedQueryFragmentException ex)
+                {
+                    MessageBox.Show(this, "The query could not be converted to FetchXML: " + ex.Message, "Query Not Supported", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+                catch (QueryParseException ex)
+                {
+                    MessageBox.Show(this, "The query could not be parsed: " + ex.Message, "Query Parsing Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+        }
+
+        private IEnumerable<IExecutionPlanNode> GetAllNodes(IExecutionPlanNode node)
+        {
+            foreach (var source in node.GetSources())
+            {
+                yield return source;
+
+                foreach (var subSource in GetAllNodes(source))
+                    yield return subSource;
+            }
         }
 
         private void tscbConnection_SelectedIndexChanged(object sender, EventArgs e)

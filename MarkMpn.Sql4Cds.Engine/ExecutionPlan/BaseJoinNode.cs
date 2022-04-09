@@ -18,13 +18,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// The first data source to merge
         /// </summary>
         [Browsable(false)]
-        public IDataExecutionPlanNode LeftSource { get; set; }
+        public IDataExecutionPlanNodeInternal LeftSource { get; set; }
 
         /// <summary>
         /// The second data source to merge
         /// </summary>
         [Browsable(false)]
-        public IDataExecutionPlanNode RightSource { get; set; }
+        public IDataExecutionPlanNodeInternal RightSource { get; set; }
 
         /// <summary>
         /// The type of join to apply
@@ -70,7 +70,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             else
             {
                 foreach (var attr in leftSchema.Schema)
-                    merged[attr.Key] = SqlTypeConverter.GetNullValue(attr.Value);
+                    merged[attr.Key] = SqlTypeConverter.GetNullValue(attr.Value.ToNetType(out _));
             }
 
             if (rightEntity != null)
@@ -81,13 +81,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             else
             {
                 foreach (var attr in rightSchema.Schema)
-                    merged[attr.Key] = SqlTypeConverter.GetNullValue(attr.Value);
+                    merged[attr.Key] = SqlTypeConverter.GetNullValue(attr.Value.ToNetType(out _));
             }
 
             foreach (var definedValue in DefinedValues)
             {
                 if (rightEntity == null)
-                    merged[definedValue.Key] = SqlTypeConverter.GetNullValue(rightSchema.Schema[definedValue.Value]);
+                    merged[definedValue.Key] = SqlTypeConverter.GetNullValue(rightSchema.Schema[definedValue.Value].ToNetType(out _));
                 else
                     merged[definedValue.Key] = rightEntity[definedValue.Value];
             }
@@ -101,12 +101,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return RightSource;
         }
 
-        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
             return GetSchema(dataSources, parameterTypes, false);
         }
 
-        protected virtual INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, bool includeSemiJoin)
+        protected virtual INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, bool includeSemiJoin)
         {
             var outerSchema = LeftSource.GetSchema(dataSources, parameterTypes);
             var innerSchema = GetRightSchema(dataSources, parameterTypes);
@@ -135,6 +135,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     schema.Aliases[alias.Key].AddRange(alias.Value);
                 }
+
+                if (((JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.LeftOuter) && subSchema == outerSchema) ||
+                    ((JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.RightOuter) && subSchema == innerSchema))
+                {
+                    foreach (var col in subSchema.NotNullColumns)
+                        schema.NotNullColumns.Add(col);
+                }
             }
 
             foreach (var definedValue in DefinedValues)
@@ -143,9 +150,41 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return schema;
         }
 
-        protected virtual INodeSchema GetRightSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        protected virtual INodeSchema GetRightSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
             return RightSource.GetSchema(dataSources, parameterTypes);
+        }
+
+        public override string ToString()
+        {
+            var name = base.ToString();
+            name += "\r\n(";
+
+            switch (JoinType)
+            {
+                case QualifiedJoinType.Inner:
+                    name += "Inner";
+                    break;
+
+                case QualifiedJoinType.LeftOuter:
+                    name += "Left Outer";
+                    break;
+
+                case QualifiedJoinType.RightOuter:
+                    name += "Right Outer";
+                    break;
+
+                case QualifiedJoinType.FullOuter:
+                    name += "Full Outer";
+                    break;
+            }
+
+            if (SemiJoin)
+                name += " Semi";
+
+            name += " Join)";
+
+            return name;
         }
     }
 }

@@ -3,7 +3,7 @@ using System.Linq;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 
-namespace MarkMpn.Sql4Cds.Engine
+namespace MarkMpn.Sql4Cds.Engine.Visitors
 {
     internal class JoinConditionVisitor : TSqlConcreteFragmentVisitor
     {

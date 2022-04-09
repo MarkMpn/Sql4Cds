@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
+using System.Windows.Forms;
 using Microsoft.SqlServer.Management.QueryExecution;
 
 namespace MarkMpn.Sql4Cds.SSMS
@@ -38,11 +39,14 @@ namespace MarkMpn.Sql4Cds.SSMS
 
         public DisplaySQLResultsControlWrapper(object obj) : base(obj)
         {
+            ResultsTabCtrl = (TabControl) GetField(obj, "m_resultsTabCtrl");
         }
+
+        public TabControl ResultsTabCtrl { get; }
 
         public void StartExecution()
         {
-            PrepareForExecution(true);
+            PrepareForExecution(false);
             IsExecuting = true;
 
             // Cancel method expects execution options to have been set at the start - create some default ones now
@@ -100,6 +104,11 @@ namespace MarkMpn.Sql4Cds.SSMS
             var result = Enum.ToObject(ScriptExecutionResult, resultFlag);
             var resultsArg = Activator.CreateInstance(ScriptExecutionCompletedEventArgs, BindingFlags.CreateInstance | BindingFlags.NonPublic | BindingFlags.Instance, null, new[] { result }, null);
             InvokeMethod(Target, "OnSqlExecutionCompletedInt", Target, resultsArg);
+        }
+
+        public void AddGridContainer(ResultSetAndGridContainerWrapper grid)
+        {
+            InvokeMethod(Target, "AddGridContainer", grid.Target);
         }
     }
 }

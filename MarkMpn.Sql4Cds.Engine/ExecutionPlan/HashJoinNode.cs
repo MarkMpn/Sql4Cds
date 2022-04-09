@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data.SqlTypes;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -22,7 +23,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private IDictionary<object, List<OuterRecord>> _hashTable;
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
             _hashTable = new Dictionary<object, List<OuterRecord>>();
             var mergedSchema = GetSchema(dataSources, parameterTypes, true);
@@ -31,10 +32,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Build the hash table
             var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
             leftSchema.ContainsColumn(LeftAttribute.GetColumnName(), out var leftCol);
+            var leftColType = leftSchema.Schema[leftCol].ToNetType(out _);
+            var rightSchema = RightSource.GetSchema(dataSources, parameterTypes);
+            rightSchema.ContainsColumn(RightAttribute.GetColumnName(), out var rightCol);
+            var rightColType = rightSchema.Schema[rightCol].ToNetType(out _);
+
+            if (!SqlTypeConverter.CanMakeConsistentTypes(leftColType, rightColType, out var keyType))
+                throw new QueryExecutionException($"Cannot match key types {leftColType.Name} and {rightColType.Name}");
+
+            var leftKeyConverter = SqlTypeConverter.GetConversion(leftColType, keyType);
+            var rightKeyConverter = SqlTypeConverter.GetConversion(rightColType, keyType);
 
             foreach (var entity in LeftSource.Execute(dataSources, options, parameterTypes, parameterValues))
             {
-                var key = entity[leftCol];
+                var key = leftKeyConverter(entity[leftCol]);
 
                 if (!_hashTable.TryGetValue(key, out var list))
                 {
@@ -46,12 +57,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             // Probe the hash table using the right source
-            var rightSchema = RightSource.GetSchema(dataSources, parameterTypes);
-            rightSchema.ContainsColumn(RightAttribute.GetColumnName(), out var rightCol);
-
             foreach (var entity in RightSource.Execute(dataSources, options, parameterTypes, parameterValues))
             {
-                var key = entity[rightCol];
+                var key = rightKeyConverter(entity[rightCol]);
                 var matched = false;
 
                 if (_hashTable.TryGetValue(key, out var list))
@@ -83,7 +91,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
             var schema = base.GetSchema(dataSources, parameterTypes);
 
@@ -91,6 +99,62 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 ((NodeSchema)schema).SortOrder.Add(sortColumn);
 
             return schema;
+        }
+
+        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        {
+            var folded = base.FoldQuery(dataSources, options, parameterTypes, hints);
+
+            if (folded != this)
+                return folded;
+
+            if (SemiJoin)
+                return folded;
+
+            // If we can't fold this query, try to make sure the smaller table is used as the left input to reduce the
+            // number of records held in memory in the hash table
+            LeftSource.EstimateRowsOut(dataSources, options, parameterTypes);
+            RightSource.EstimateRowsOut(dataSources, options, parameterTypes);
+
+            if (LeftSource.EstimatedRowsOut > RightSource.EstimatedRowsOut)
+            {
+                var leftSource = LeftSource;
+                LeftSource = RightSource;
+                RightSource = leftSource;
+
+                var leftAttr = LeftAttribute;
+                LeftAttribute = RightAttribute;
+                RightAttribute = leftAttr;
+
+                if (JoinType == QualifiedJoinType.LeftOuter)
+                    JoinType = QualifiedJoinType.RightOuter;
+                else if (JoinType == QualifiedJoinType.RightOuter)
+                    JoinType = QualifiedJoinType.LeftOuter;
+            }
+
+            return this;
+        }
+
+        public override object Clone()
+        {
+            var clone = new HashJoinNode
+            {
+                AdditionalJoinCriteria = AdditionalJoinCriteria,
+                JoinType = JoinType,
+                LeftAttribute = LeftAttribute,
+                LeftSource = (IDataExecutionPlanNodeInternal)LeftSource.Clone(),
+                RightAttribute = RightAttribute,
+                RightSource = (IDataExecutionPlanNodeInternal)RightSource.Clone(),
+                SemiJoin = SemiJoin
+            };
+
+            foreach (var kvp in DefinedValues)
+                clone.DefinedValues.Add(kvp);
+
+            clone.LeftSource.Parent = clone;
+            clone.RightSource.Parent = clone;
+
+            return clone;
         }
     }
 }

@@ -11,14 +11,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// </summary>
     class StreamAggregateNode : BaseAggregateNode
     {
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
+        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
             Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
             Source.Parent = this;
             return this;
         }
 
-        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
             var schema = base.GetSchema(dataSources, parameterTypes);
             var groupByCols = GetGroupingColumns(schema);
@@ -27,7 +27,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return schema;
         }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
             var schema = Source.GetSchema(dataSources, parameterTypes);
             var groupByCols = GetGroupingColumns(schema);
@@ -87,6 +87,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 yield return result;
             }
+        }
+
+        public override object Clone()
+        {
+            var clone = new StreamAggregateNode
+            {
+                Source = (IDataExecutionPlanNodeInternal)Source.Clone()
+            };
+
+            foreach (var kvp in Aggregates)
+                clone.Aggregates.Add(kvp.Key, kvp.Value);
+
+            clone.GroupBy.AddRange(GroupBy);
+            clone.Source.Parent = clone;
+
+            return clone;
         }
     }
 }

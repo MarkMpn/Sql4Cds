@@ -17,6 +17,7 @@ using System.Windows.Forms;
 using System.Xml;
 using System.Xml.Serialization;
 using AutocompleteMenuNS;
+using MarkMpn.Sql4Cds.Controls;
 using MarkMpn.Sql4Cds.Engine;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using McTools.Xrm.Connection;
@@ -78,14 +79,14 @@ namespace MarkMpn.Sql4Cds
         private static Icon _sqlIcon;
         private readonly AutocompleteMenu _autocomplete;
         private ToolTip _tooltip;
-        private bool _cancellable;
+        private CancellationTokenSource _cts;
         private Stopwatch _stopwatch;
         private ExecuteParams _params;
         private int _rowCount;
         private ToolStripControlHost _progressHost;
-
         private bool _addingResult;
         private IDictionary<int, TextRange> _messageLocations;
+        private readonly Sql4CdsConnection _connection;
 
         static SqlQueryControl()
         {
@@ -98,8 +99,7 @@ namespace MarkMpn.Sql4Cds
         public SqlQueryControl(ConnectionDetail con, IDictionary<string, DataSource> dataSources, TelemetryClient ai, Action<string> showFetchXml, Action<string> log, PropertiesWindow properties)
         {
             InitializeComponent();
-            _displayName = $"Query {++_queryCounter}";
-            _modified = true;
+            _displayName = $"SQLQuery{++_queryCounter}.sql";
             ShowFetchXML = showFetchXml;
             DataSources = dataSources;
             _editor = CreateSqlEditor();
@@ -121,11 +121,20 @@ namespace MarkMpn.Sql4Cds
             splitContainer.Panel1.Controls.Add(_editor);
             Icon = _sqlIcon;
 
+            _connection = new Sql4CdsConnection(DataSources);
+            _connection.ApplicationName = "XrmToolBox";
+            _connection.InfoMessage += (s, msg) =>
+            {
+                Execute(() => ShowResult(msg.Statement, null, null, msg.Message, null));
+            };
+
             ChangeConnection(con);
         }
 
-        public IDictionary<string, DataSource> DataSources { get; private set; }
+        public IDictionary<string, DataSource> DataSources { get; }
+
         public Action<string> ShowFetchXML { get; }
+        
         public string Filename
         {
             get { return _filename; }
@@ -137,8 +146,37 @@ namespace MarkMpn.Sql4Cds
                 SyncTitle();
             }
         }
+
+        public bool Modified => _modified;
+
+        public string DisplayName => _displayName + (_modified ? " *" : "");
+
         public ConnectionDetail Connection => _con;
+        
         public string Sql => String.IsNullOrEmpty(_editor.SelectedText) ? _editor.Text : _editor.SelectedText;
+
+        protected override void OnClosing(CancelEventArgs e)
+        {
+            base.OnClosing(e);
+
+            if (_modified)
+            {
+                using (var form = new ConfirmCloseForm(new[] { DisplayName }, true))
+                {
+                    switch (form.ShowDialog())
+                    {
+                        case DialogResult.Yes:
+                            if (!Save())
+                                e.Cancel = true;
+                            break;
+
+                        case DialogResult.Cancel:
+                            e.Cancel = true;
+                            break;
+                    }
+                }
+            }
+        }
 
         internal void ChangeConnection(ConnectionDetail con)
         {
@@ -188,7 +226,12 @@ namespace MarkMpn.Sql4Cds
             _editor.Focus();
         }
 
-        public void Save()
+        void IDocumentWindow.Save()
+        {
+            this.Save();
+        }
+
+        public bool Save()
         {
             if (Filename == null)
             {
@@ -197,7 +240,7 @@ namespace MarkMpn.Sql4Cds
                     save.Filter = "SQL Scripts (*.sql)|*.sql";
 
                     if (save.ShowDialog() != DialogResult.OK)
-                        return;
+                        return false;
 
                     Filename = save.FileName;
                 }
@@ -206,6 +249,7 @@ namespace MarkMpn.Sql4Cds
             File.WriteAllText(Filename, _editor.Text);
             _modified = false;
             SyncTitle();
+            return true;
         }
 
         public void InsertText(string text)
@@ -371,6 +415,7 @@ namespace MarkMpn.Sql4Cds
                     return;
 
                 var autocompleteDataSources = DataSources.Values
+                    .Cast<XtbDataSource>()
                     .Select(ds =>
                     {
                         EntityCache.TryGetEntities(ds.ConnectionDetail.MetadataCacheLoader, ds.Connection, out var entities);
@@ -493,6 +538,7 @@ namespace MarkMpn.Sql4Cds
                 var text = _control._editor.Text;
 
                 var autocompleteDataSources = _control.DataSources.Values
+                    .Cast<XtbDataSource>()
                     .Select(ds =>
                     {
                         EntityCache.TryGetEntities(ds.ConnectionDetail.MetadataCacheLoader, ds.Connection, out var entities);
@@ -550,13 +596,17 @@ namespace MarkMpn.Sql4Cds
 
         public bool Cancellable
         {
-            get { return _cancellable; }
+            get { return _cts != null; }
             set
             {
-                if (_cancellable == value)
+                if (Cancellable == value)
                     return;
 
-                _cancellable = value;
+                if (value)
+                    _cts = new CancellationTokenSource();
+                else
+                    _cts = null;
+
                 CancellableChanged?.Invoke(this, EventArgs.Empty);
             }
         }
@@ -566,29 +616,18 @@ namespace MarkMpn.Sql4Cds
         public void Cancel()
         {
             backgroundWorker.ReportProgress(0, "Cancelling query...");
-            backgroundWorker.CancelAsync();
+            _cts.Cancel();
         }
 
-        private void AddResult(Control results, Control fetchXml, int rowCount)
+        private void AddResult(Control results, int rowCount)
         {
-            if (results != null)
+            if (!tabControl.TabPages.Contains(resultsTabPage))
             {
-                if (!tabControl.TabPages.Contains(resultsTabPage))
-                {
-                    tabControl.TabPages.Insert(0, resultsTabPage);
-                    tabControl.SelectedTab = resultsTabPage;
-                }
-
-                AddControl(results, resultsTabPage);
+                tabControl.TabPages.Insert(0, resultsTabPage);
+                tabControl.SelectedTab = resultsTabPage;
             }
 
-            if (fetchXml != null)
-            {
-                if (!tabControl.TabPages.Contains(fetchXmlTabPage))
-                    tabControl.TabPages.Insert(tabControl.TabPages.Count - 1, fetchXmlTabPage);
-
-                AddControl(fetchXml, fetchXmlTabPage);
-            }
+            AddControl(results, resultsTabPage);
 
             _rowCount += rowCount;
 
@@ -596,6 +635,14 @@ namespace MarkMpn.Sql4Cds
                 rowsLabel.Text = "1 row";
             else
                 rowsLabel.Text = $"{_rowCount:N0} rows";
+        }
+
+        private void AddExecutionPlan(Control executionPlan)
+        {
+            if (!tabControl.TabPages.Contains(fetchXmlTabPage))
+                tabControl.TabPages.Insert(tabControl.TabPages.Count - 1, fetchXmlTabPage);
+
+            AddControl(executionPlan, fetchXmlTabPage);
         }
 
         private void AddControl(Control control, TabPage tabPage)
@@ -695,8 +742,11 @@ namespace MarkMpn.Sql4Cds
 
                 if (error is QueryExecutionException queryExecution)
                 {
+                    if (plan == null)
+                        plan = GetRootNode(queryExecution.Node);
+
                     messageSuffix = "\r\nSee the Execution Plan tab for details of where this error occurred";
-                    ShowResult(plan, new ExecuteParams { Execute = true, IncludeFetchXml = true, Sql = plan.Sql }, null, null, queryExecution);
+                    ShowResult(plan, new ExecuteParams { Execute = true, IncludeFetchXml = true, Sql = plan?.Sql }, null, null, queryExecution);
 
                     if (queryExecution.InnerException != null)
                         error = queryExecution.InnerException;
@@ -725,7 +775,6 @@ namespace MarkMpn.Sql4Cds
                     error = partialSuccess.InnerException;
                 }
 
-                _ai.TrackException(error, new Dictionary<string, string> { ["Sql"] = _params.Sql, ["Source"] = "XrmToolBox" });
                 _log(e.Error.ToString());
 
                 AddMessage(index, length, GetErrorMessage(error) + messageSuffix, true);
@@ -740,6 +789,19 @@ namespace MarkMpn.Sql4Cds
             BusyChanged?.Invoke(this, EventArgs.Empty);
 
             _editor.Focus();
+        }
+
+        private IRootExecutionPlanNode GetRootNode(IExecutionPlanNode node)
+        {
+            while (node != null)
+            {
+                if (node is IRootExecutionPlanNode root)
+                    return root;
+
+                node = node.Parent;
+            }
+
+            return null;
         }
 
         private string GetErrorMessage(Exception error)
@@ -853,60 +915,52 @@ namespace MarkMpn.Sql4Cds
 
             backgroundWorker.ReportProgress(0, "Executing query...");
 
-            var options = new QueryExecutionOptions(_con, DataSources[_con.ConnectionName].Connection, backgroundWorker, this);
-            var converter = new ExecutionPlanBuilder(DataSources.Values, options);
-            converter.QuotedIdentifiers = Settings.Instance.QuotedIdentifiers;
-
-            if (Settings.Instance.UseTSQLEndpoint &&
-                args.Execute &&
-                !String.IsNullOrEmpty(((CrmServiceClient)DataSources[_con.ConnectionName].Connection).CurrentAccessToken))
-                converter.TDSEndpointAvailable = true;
-
-            var queries = converter.Build(args.Sql);
-
-            if (args.Execute)
+            using (var cmd = _connection.CreateCommand())
             {
-                foreach (var query in queries)
+                _connection.ChangeDatabase(Connection.ConnectionName);
+                new QueryExecutionOptions(this, backgroundWorker).ApplySettings(_connection, cmd, args.Execute);
+                cmd.CommandTimeout = 0;
+
+                cmd.CommandText = args.Sql;
+
+                if (args.Execute)
                 {
-                    _ai.TrackEvent("Execute", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name, ["Source"] = "XrmToolBox" });
-
-                    try
+                    cmd.StatementCompleted += (s, stmt) =>
                     {
-                        if (query is IDataSetExecutionPlanNode dataQuery)
+                        Execute(() => ShowResult(stmt.Statement, args, null, null, null));
+
+                        if (stmt.Statement is IImpersonateRevertExecutionPlanNode)
+                            Execute(() => SyncUsername());
+                    };
+
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        while (!reader.IsClosed)
                         {
-                            var result = dataQuery.Execute(DataSources.Values.Cast<Engine.DataSource>().ToDictionary(ds => ds.Name, StringComparer.OrdinalIgnoreCase), options, null, null);
+                            var columnNames = new List<string>();
+                            for (var i = 0; i < reader.FieldCount; i++)
+                                columnNames.Add(reader.GetName(i));
 
-                            Execute(() => ShowResult(query, args, result, null, null));
+                            var dataTable = new DataTable();
+                            dataTable.Load(reader);
+
+                            for (var i = 0; i < columnNames.Count; i++)
+                                dataTable.Columns[i].Caption = columnNames[i];
+
+                            Execute(() => ShowResult(null, args, dataTable, null, null));
                         }
-                        else if (query is IDmlQueryExecutionPlanNode dmlQuery)
-                        {
-                            var result = dmlQuery.Execute(DataSources.Values.Cast<Engine.DataSource>().ToDictionary(ds => ds.Name, StringComparer.OrdinalIgnoreCase), options, null, null);
-
-                            Execute(() => ShowResult(query, args, null, result, null));
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        throw new QueryException(query, ex);
-                    }
-
-                    if (query is IImpersonateRevertExecutionPlanNode)
-                    {
-                        options.SyncUserId();
-                        Execute(() => SyncUsername());
                     }
                 }
-            }
-            else
-            {
-                foreach (var query in queries)
+                else
                 {
-                    _ai.TrackEvent("Convert", new Dictionary<string, string> { ["QueryType"] = query.GetType().Name, ["Source"] = "XrmToolBox" });
-                    Execute(() => ShowResult(query, args, null, null, null));
+                    var plan = cmd.GeneratePlan(false);
+
+                    foreach (var query in plan)
+                        Execute(() => ShowResult(query, args, null, null, null));
                 }
             }
 
-            if (options.Cancelled)
+            if (Cancellable && _cts.Token.IsCancellationRequested)
             {
                 e.Cancel = true;
                 AddMessage(-1, 0, "Query was cancelled by user", true);
@@ -915,10 +969,6 @@ namespace MarkMpn.Sql4Cds
 
         private void ShowResult(IRootExecutionPlanNode query, ExecuteParams args, DataTable results, string msg, QueryExecutionException ex)
         {
-            Control result = null;
-            Control plan = null;
-            var rowCount = 0;
-
             if (results != null)
             {
                 var grid = new DataGridView();
@@ -956,19 +1006,19 @@ namespace MarkMpn.Sql4Cds
 
                 grid.CellFormatting += (s, e) =>
                 {
-                    if (e.Value is INullable nullable && nullable.IsNull || e.Value is DBNull)
+                    if (e.Value is DBNull || (e.Value is INullable nullable && nullable.IsNull))
                     {
                         e.Value = "NULL";
                         e.CellStyle.BackColor = Color.FromArgb(0xff, 0xff, 0xe1);
                         e.FormattingApplied = true;
                     }
-                    else if (e.Value is SqlBoolean b)
+                    else if (e.Value is bool b)
                     {
-                        e.Value = b.Value ? "1" : "0";
+                        e.Value = b ? "1" : "0";
                     }
-                    else if (!Settings.Instance.LocalFormatDates && e.Value is SqlDateTime dt)
+                    else if (!Settings.Instance.LocalFormatDates && e.Value is DateTime dt)
                     {
-                        e.Value = dt.Value.ToString("yyyy-MM-dd HH:mm:ss.fff");
+                        e.Value = dt.ToString("yyyy-MM-dd HH:mm:ss.fff");
                     }
                     else if (e.Value is SqlEntityReference)
                     {
@@ -1026,11 +1076,8 @@ namespace MarkMpn.Sql4Cds
                         OpenRecord(er);
                 };
 
-                grid.HandleCreated += (s, e) =>
-                {
-                    if (Settings.Instance.AutoSizeColumns)
-                        grid.AutoResizeColumns();
-                };
+                if (Settings.Instance.AutoSizeColumns)
+                    grid.DataBindingComplete += (s, e) => ((DataGridView)s).AutoResizeColumns();
 
                 grid.RowPostPaint += (s, e) =>
                 {
@@ -1048,20 +1095,17 @@ namespace MarkMpn.Sql4Cds
                     e.Graphics.DrawString(rowIdx, this.Font, SystemBrushes.ControlText, headerBounds, centerFormat);
                 };
 
-                result = grid;
+                var rowCount = results.Rows.Count;
 
-                rowCount = results.Rows.Count;
-
-                AddMessage(query.Index, query.Length, $"({rowCount} row{(rowCount == 1 ? "" : "s")} affected)", false);
+                AddResult(grid, rowCount);
             }
             else if (msg != null)
             {
                 AddMessage(query.Index, query.Length, msg, false);
             }
-
-            if (args.IncludeFetchXml)
+            else if (args.IncludeFetchXml)
             {
-                plan = new Panel();
+                var plan = new Panel();
                 var fetchLabel = new System.Windows.Forms.Label
                 {
                     Text = query.Sql,
@@ -1075,10 +1119,9 @@ namespace MarkMpn.Sql4Cds
                     AutoEllipsis = true,
                     UseMnemonic = false
                 };
-                var options = new QueryExecutionOptions(_con, DataSources[_con.ConnectionName].Connection, backgroundWorker, this);
-                var planView = new ExecutionPlanView { Dock = DockStyle.Fill, Executed = args.Execute, Exception = ex, DataSources = DataSources, Options = options };
+                var planView = new ExecutionPlanView { Dock = DockStyle.Fill, Executed = args.Execute, Exception = ex, DataSources = DataSources.ToDictionary(kvp => kvp.Key, kvp => (Engine.DataSource)kvp.Value) };
                 planView.Plan = query;
-                planView.NodeSelected += (s, e) => _properties.SelectedObject = planView.Selected;
+                planView.NodeSelected += (s, e) => _properties.SelectObject(planView.Selected, !args.Execute);
                 planView.DoubleClick += (s, e) =>
                 {
                     if (planView.Selected is IFetchXmlExecutionPlanNode fetchXml)
@@ -1086,9 +1129,9 @@ namespace MarkMpn.Sql4Cds
                 };
                 plan.Controls.Add(planView);
                 plan.Controls.Add(fetchLabel);
-            }
 
-            AddResult(result, plan, rowCount);
+                AddExecutionPlan(plan);
+            }
         }
 
         private void OpenRecord(SqlEntityReference entityReference)
@@ -1096,7 +1139,7 @@ namespace MarkMpn.Sql4Cds
             if (!DataSources.TryGetValue(entityReference.DataSource, out var dataSource))
                 return;
 
-            var url = dataSource.ConnectionDetail.GetEntityReferenceUrl(entityReference);
+            var url = ((XtbDataSource) dataSource).ConnectionDetail.GetEntityReferenceUrl(entityReference);
             Process.Start(url);
         }
 

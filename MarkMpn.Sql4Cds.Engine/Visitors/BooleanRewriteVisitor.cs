@@ -58,5 +58,11 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             Rewrite(node, n => n.Expression);
             base.ExplicitVisit(node);
         }
+
+        public override void ExplicitVisit(SearchedWhenClause node)
+        {
+            Rewrite(node, n => n.WhenExpression);
+            base.ExplicitVisit(node);
+        }
     }
 }

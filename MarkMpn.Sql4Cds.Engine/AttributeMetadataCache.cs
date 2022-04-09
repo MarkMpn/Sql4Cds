@@ -19,6 +19,7 @@ namespace MarkMpn.Sql4Cds.Engine
         private readonly ISet<string> _loading;
         private readonly IDictionary<string, EntityMetadata> _minimalMetadata;
         private readonly ISet<string> _minimalLoading;
+        private readonly IDictionary<string, Exception> _invalidEntities;
 
         /// <summary>
         /// Creates a new <see cref="AttributeMetadataCache"/>
@@ -31,6 +32,7 @@ namespace MarkMpn.Sql4Cds.Engine
             _loading = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             _minimalMetadata = new Dictionary<string, EntityMetadata>(StringComparer.OrdinalIgnoreCase);
             _minimalLoading = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            _invalidEntities = new Dictionary<string, Exception>(StringComparer.OrdinalIgnoreCase);
         }
 
         /// <inheritdoc cref="IAttributeMetadataCache.this{string}"/>
@@ -41,14 +43,25 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (_metadata.TryGetValue(name, out var value))
                     return value;
 
-                var metadata = (RetrieveEntityResponse)_org.Execute(new RetrieveEntityRequest
-                {
-                    LogicalName = name.ToLowerInvariant(),
-                    EntityFilters = EntityFilters.Attributes | EntityFilters.Relationships
-                });
+                if (_invalidEntities.TryGetValue(name, out var cachedEx))
+                    throw cachedEx;
 
-                _metadata[name] = metadata.EntityMetadata;
-                return metadata.EntityMetadata;
+                try
+                {
+                    var metadata = (RetrieveEntityResponse)_org.Execute(new RetrieveEntityRequest
+                    {
+                        LogicalName = name.ToLowerInvariant(),
+                        EntityFilters = EntityFilters.Attributes | EntityFilters.Relationships
+                    });
+
+                    _metadata[name] = metadata.EntityMetadata;
+                    return metadata.EntityMetadata;
+                }
+                catch (Exception ex)
+                {
+                    _invalidEntities[name] = ex;
+                    throw;
+                }
             }
         }
 

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk.Metadata;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
@@ -22,6 +23,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Category("Statistics")]
         [Description("The number of times this node has been executed")]
         [DisplayName("Execution Count")]
+        [BrowsableInEstimatedPlan(false)]
         public abstract int ExecutionCount { get; }
 
         /// <summary>
@@ -29,6 +31,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Category("Statistics")]
         [Description("The total time this node has taken, including the time of any child nodes")]
+        [BrowsableInEstimatedPlan(false)]
         public abstract TimeSpan Duration { get; }
 
         /// <summary>
@@ -43,7 +46,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="metadata">The <see cref="IAttributeMetadataCache"/> to use to get metadata</param>
         /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
         /// <param name="requiredColumns">The names of columns that are required by the parent node</param>
-        public abstract void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns);
+        public abstract void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns);
 
         /// <summary>
         /// Gets the name to show for an entity

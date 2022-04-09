@@ -35,6 +35,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 throw new NotSupportedQueryFragmentException($"The column '{duplicateColumn.Key}' was specified multiple times", identifier);
         }
 
+        private AliasNode()
+        {
+        }
+
         /// <summary>
         /// The alias to apply to the results of the subquery
         /// </summary>
@@ -54,9 +58,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// The data source of the query
         /// </summary>
         [Browsable(false)]
-        public IDataExecutionPlanNode Source { get; set; }
+        public IDataExecutionPlanNodeInternal Source { get; set; }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
         {
             var mappings = ColumnSet.Where(col => !col.AllColumns).ToDictionary(col => col.OutputColumn, col => col.SourceColumn);
             ColumnSet.Clear();
@@ -84,7 +88,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
+        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
             Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
             Source.Parent = this;
@@ -102,10 +106,45 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
+            if (Source is ConstantScanNode constant)
+            {
+                // Copy/rename any columns using the new aliases
+                foreach (var col in ColumnSet)
+                {
+                    var sourceColumn = col.SourceColumn.Split('.').Last();
+
+                    if (String.IsNullOrEmpty(constant.Alias) && col.OutputColumn != col.SourceColumn ||
+                        !String.IsNullOrEmpty(constant.Alias) && col.OutputColumn != constant.Alias + "." + col.SourceColumn)
+                    {
+                        constant.Schema[col.OutputColumn] = constant.Schema[sourceColumn];
+
+                        foreach (var row in constant.Values)
+                            row[col.OutputColumn] = row[sourceColumn];
+                    }
+                }
+
+                // Remove any unused columns
+                var unusedColumns = constant.Schema.Keys
+                    .Where(sourceCol => !ColumnSet.Any(col => col.SourceColumn.Split('.').Last() == sourceCol))
+                    .ToList();
+
+                foreach (var col in unusedColumns)
+                {
+                    constant.Schema.Remove(col);
+
+                    foreach (var row in constant.Values)
+                        row.Remove(col);
+                }
+
+                // Change the alias of the whole constant scan
+                constant.Alias = Alias;
+                return constant;
+            }
+
             return this;
         }
 
-        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
             // Map the base names to the alias names
             var sourceSchema = Source.GetSchema(dataSources, parameterTypes);
@@ -160,7 +199,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 schema.SortOrder.Add(outputColumn);
         }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
             foreach (var entity in Source.Execute(dataSources, options, parameterTypes, parameterValues))
             {
@@ -179,14 +218,28 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return "Subquery Alias";
         }
 
-        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
-            return Source.EstimateRowsOut(dataSources, options, parameterTypes);
+            return Source.EstimatedRowsOut;
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
         {
             yield return Source;
+        }
+
+        public override object Clone()
+        {
+            var clone = new AliasNode
+            {
+                Alias = Alias,
+                Source = (IDataExecutionPlanNodeInternal)Source.Clone()
+            };
+
+            clone.Source.Parent = clone;
+            clone.ColumnSet.AddRange(ColumnSet);
+
+            return clone;
         }
     }
 }

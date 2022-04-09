@@ -9,6 +9,7 @@ using System.ServiceModel;
 using System.Text.RegularExpressions;
 using System.Xml.Serialization;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
@@ -21,12 +22,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             private readonly filter _filter;
             private readonly condition _condition;
+            private readonly conditionValue _value;
             private readonly filter _contradiction;
 
-            public ParameterizedCondition(filter filter, condition condition)
+            public ParameterizedCondition(filter filter, condition condition, conditionValue value)
             {
                 _filter = filter;
                 _condition = condition;
+                _value = value;
                 _contradiction = new filter
                 {
                     Items = new object[]
@@ -39,7 +42,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             public void SetValue(object value, IQueryExecutionOptions options)
             {
-                if (value == null)
+                if (value == null || (value is INullable nullable && nullable.IsNull))
                 {
                     if (_filter.Items.Contains(_contradiction))
                         return;
@@ -65,7 +68,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         formatted = dto.ToString("yyyy-MM-ddTHH':'mm':'ss.FFFzzz");
                     }
 
-                    _condition.value = formatted;
+                    if (_value != null)
+                        _value.Value = formatted;
+                    else
+                        _condition.value = formatted;
                 }
             }
         }
@@ -102,7 +108,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// The FetchXML query
         /// </summary>
         [Browsable(false)]
-        public FetchType FetchXml { get; set; }
+        public FetchXml.FetchType FetchXml { get; set; }
 
         /// <summary>
         /// The main &lt;entity&gt; node in the <see cref="FetchXml"/>
@@ -147,7 +153,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public bool ReturnFullSchema { get; set; }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
             PagesRetrieved = 0;
 
@@ -161,7 +167,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (parameterValues != null)
             {
                 if (_parameterizedConditions == null)
-                    FindParameterizedConditions();
+                    _parameterizedConditions = FindParameterizedConditions();
 
                 foreach (var param in parameterValues)
                 {
@@ -180,7 +186,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 options.Progress(0, $"Retrieving {GetDisplayName(0, meta)}...");
 
             // Get the first page of results
-            options.RetrievingNextPage();
+            if (!options.ContinueRetrieve(0))
+                yield break;
 
             // Ensure we reset the page number & cookie for subsequent executions
             if (_resetPage)
@@ -228,7 +235,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 FetchXml.pagingcookie = res.PagingCookie;
 
-                options.RetrievingNextPage();
                 var nextPage = dataSource.Connection.RetrieveMultiple(new FetchExpression(Serialize(FetchXml)));
                 PagesRetrieved++;
 
@@ -277,6 +283,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             lookupAttr = null;
             return false;
+        }
+
+        public void RemoveSorts()
+        {
+            // Remove any existing sorts
+            if (Entity.Items != null)
+            {
+                Entity.Items = Entity.Items.Where(i => !(i is FetchOrderType)).ToArray();
+
+                foreach (var linkEntity in Entity.GetLinkEntities().Where(le => le.Items != null))
+                    linkEntity.Items = linkEntity.Items.Where(i => !(i is FetchOrderType)).ToArray();
+            }
         }
 
         private void OnRetrievedEntity(Entity entity, INodeSchema schema, IQueryExecutionOptions options, IAttributeMetadataCache metadata)
@@ -390,7 +408,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (entity.Attributes.TryGetValue(col.Key, out var value) && value != null)
                     sqlValue = SqlTypeConverter.NetToSqlType(DataSource, value);
                 else
-                    sqlValue = SqlTypeConverter.GetNullValue(col.Value);
+                    sqlValue = SqlTypeConverter.GetNullValue(col.Value.ToNetType(out _));
 
                 if (_primaryKeyColumns.TryGetValue(col.Key, out var logicalName) && sqlValue is SqlGuid guid)
                     sqlValue = new SqlEntityReference(DataSource, logicalName, guid);
@@ -416,23 +434,32 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 PrefixAliasedScalarAttributes(entity, linkEntity.Items, linkEntity.alias);
         }
 
-        private void FindParameterizedConditions()
+        private Dictionary<string, ParameterizedCondition> FindParameterizedConditions()
         {
-            _parameterizedConditions = new Dictionary<string, ParameterizedCondition>();
-
-            FindParameterizedConditions(null, Entity.Items);
+            var parameterizedConditions = new Dictionary<string, ParameterizedCondition>(StringComparer.OrdinalIgnoreCase);
+            FindParameterizedConditions(parameterizedConditions, null, null, Entity.Items);
+            return parameterizedConditions;
         }
 
-        private void FindParameterizedConditions(filter filter, object[] items)
+        private void FindParameterizedConditions(Dictionary<string, ParameterizedCondition>  parameterizedConditions, filter filter, condition condition, object[] items)
         {
-            foreach (var condition in items.OfType<condition>().Where(c => c.value != null && c.value.StartsWith("@")))
-                _parameterizedConditions[condition.value] = new ParameterizedCondition(filter, condition);
+            if (items == null)
+                return;
+
+            foreach (var cond in items.OfType<condition>().Where(c => c.IsVariable))
+                parameterizedConditions[cond.value] = new ParameterizedCondition(filter, cond, null);
+
+            foreach (var value in items.OfType<conditionValue>().Where(v => v.IsVariable))
+                parameterizedConditions[value.Value] = new ParameterizedCondition(filter, condition, value);
+
+            foreach (var cond in items.OfType<condition>().Where(c => c.Items != null))
+                FindParameterizedConditions(parameterizedConditions, filter, cond, cond.Items.Cast<object>().ToArray());
 
             foreach (var subFilter in items.OfType<filter>())
-                FindParameterizedConditions(subFilter, subFilter.Items);
+                FindParameterizedConditions(parameterizedConditions, subFilter, null, subFilter.Items);
 
             foreach (var link in items.OfType<FetchLinkEntityType>())
-                FindParameterizedConditions(null, link.Items);
+                FindParameterizedConditions(parameterizedConditions, null, null, link.Items);
         }
 
         private void FindEntityNameGroupings(IAttributeMetadataCache metadata)
@@ -482,9 +509,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         /// <param name="fetch">The FetchXML query object to convert</param>
         /// <returns>The string representation of the query</returns>
-        internal static string Serialize(FetchType fetch)
+        internal static string Serialize(FetchXml.FetchType fetch)
         {
-            var serializer = new XmlSerializer(typeof(FetchType));
+            var serializer = new XmlSerializer(typeof(FetchXml.FetchType));
 
             using (var writer = new StringWriter())
             using (var xmlWriter = System.Xml.XmlWriter.Create(writer, new System.Xml.XmlWriterSettings
@@ -502,12 +529,27 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
+        /// <summary>
+        /// Converts the FetchXML string to a query object
+        /// </summary>
+        /// <param name="fetchXml">The FetchXML string to convert</param>
+        /// <returns>The object representation of the query</returns>
+        internal static FetchXml.FetchType Deserialize(string fetchXml)
+        {
+            var serializer = new XmlSerializer(typeof(FetchXml.FetchType));
+
+            using (var reader = new StringReader(fetchXml))
+            {
+                return (FetchXml.FetchType)serializer.Deserialize(reader);
+            }
+        }
+
         public override IEnumerable<IExecutionPlanNode> GetSources()
         {
             return Array.Empty<IDataExecutionPlanNode>();
         }
 
-        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
             if (!dataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
@@ -526,7 +568,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!FetchXml.aggregate)
                 schema.PrimaryKey = $"{Alias}.{meta.PrimaryIdAttribute}";
 
-            AddSchemaAttributes(schema, dataSource.Metadata, entity.name, Alias, entity.Items);
+            AddSchemaAttributes(schema, dataSource.Metadata, entity.name, Alias, entity.Items, true);
 
             _lastSchema = schema;
             _lastSchemaFetchXml = fetchXmlString;
@@ -563,6 +605,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (Entity.Items != null)
                 {
+                    // TODO: What about if there is already an all-attributes element? What should we return?
                     var existing = Entity.Items.OfType<FetchAttributeType>().FirstOrDefault(a => a.name == attr.name || a.alias == attr.name);
                     if (existing != null && (predicate == null || predicate(existing)))
                     {
@@ -610,43 +653,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Regex.IsMatch(alias, "^[A-Za-z_][A-Za-z0-9_]*$");
         }
 
-        internal bool IsAliasReferenced(string alias)
-        {
-            var entity = FetchXml.Items.OfType<FetchEntityType>().Single();
-            return IsAliasReferenced(entity.Items, alias);
-        }
-
-        private bool IsAliasReferenced(object[] items, string alias)
-        {
-            if (items == null)
-                return false;
-
-            var hasSort = items.OfType<FetchOrderType>().Any(sort => sort.alias != null && sort.alias.Equals(alias, StringComparison.OrdinalIgnoreCase));
-
-            if (hasSort)
-                return true;
-
-            var hasCondition = items.OfType<condition>().Any(condition => condition.alias != null && condition.alias.Equals(alias, StringComparison.OrdinalIgnoreCase));
-
-            if (hasCondition)
-                return true;
-
-            foreach (var filter in items.OfType<filter>())
-            {
-                if (IsAliasReferenced(filter.Items, alias))
-                    return true;
-            }
-
-            foreach (var linkEntity in items.OfType<FetchLinkEntityType>())
-            {
-                if (IsAliasReferenced(linkEntity.Items, alias))
-                    return true;
-            }
-
-            return false;
-        }
-
-        private void AddSchemaAttributes(NodeSchema schema, IAttributeMetadataCache metadata, string entityName, string alias, object[] items)
+        private void AddSchemaAttributes(NodeSchema schema, IAttributeMetadataCache metadata, string entityName, string alias, object[] items, bool innerJoin)
         {
             if (items == null && !ReturnFullSchema)
                 return;
@@ -665,7 +672,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     var fullName = $"{alias}.{attrMetadata.LogicalName}";
                     var attrType = attrMetadata.GetAttributeSqlType();
-                    AddSchemaAttribute(schema, fullName, attrMetadata.LogicalName, attrType, attrMetadata);
+                    AddSchemaAttribute(schema, fullName, attrMetadata.LogicalName, attrType, attrMetadata, innerJoin);
                 }
             }
 
@@ -702,7 +709,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         attrAlias = attribute.name;
                     }
 
-                    AddSchemaAttribute(schema, fullName, attrAlias, attrType, attrMetadata);
+                    AddSchemaAttribute(schema, fullName, attrAlias, attrType, attrMetadata, innerJoin);
                 }
 
                 if (items.OfType<allattributes>().Any())
@@ -719,7 +726,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         var attrName = attrMetadata.LogicalName;
                         var fullName = $"{alias}.{attrName}";
 
-                        AddSchemaAttribute(schema, fullName, attrName, attrType, attrMetadata);
+                        AddSchemaAttribute(schema, fullName, attrName, attrType, attrMetadata, innerJoin);
                     }
                 }
 
@@ -772,15 +779,46 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         }
                     }
 
-                    AddSchemaAttributes(schema, metadata, linkEntity.name, linkEntity.alias, linkEntity.Items);
+                    AddSchemaAttributes(schema, metadata, linkEntity.name, linkEntity.alias, linkEntity.Items, innerJoin && linkEntity.linktype == "inner");
+                }
+
+                if (innerJoin)
+                {
+                    foreach (var filter in items.OfType<filter>())
+                        AddNotNullFilters(schema, alias, filter);
                 }
             }
         }
 
-        private void AddSchemaAttribute(NodeSchema schema, string fullName, string simpleName, Type type, AttributeMetadata attrMetadata)
+        private void AddNotNullFilters(NodeSchema schema, string alias, filter filter)
         {
+            if (filter.Items == null)
+                return;
+
+            if (filter.type == filterType.or && filter.Items.Length > 1)
+                return;
+
+            foreach (var cond in filter.Items.OfType<condition>())
+            {
+                if (cond.@operator == @operator.@null || cond.@operator == @operator.ne || cond.@operator == @operator.nebusinessid || cond.@operator == @operator.neq || cond.@operator == @operator.neuserid)
+                    continue;
+
+                var fullname = (cond.entityname ?? alias) + "." + (cond.alias ?? cond.attribute);
+
+                if (schema.ContainsColumn(fullname, out fullname))
+                    schema.NotNullColumns.Add(fullname);
+            }
+
+            foreach (var subFilter in filter.Items.OfType<filter>())
+                AddNotNullFilters(schema, alias, subFilter);
+        }
+
+        private void AddSchemaAttribute(NodeSchema schema, string fullName, string simpleName, Type type, AttributeMetadata attrMetadata, bool innerJoin)
+        {
+            var notNull = innerJoin && (attrMetadata.RequiredLevel?.Value == AttributeRequiredLevel.SystemRequired || attrMetadata.LogicalName == "createdon" || attrMetadata.LogicalName == "createdby" || attrMetadata.AttributeOf == "createdby");
+
             // Add the logical attribute
-            AddSchemaAttribute(schema, fullName, simpleName, type);
+            AddSchemaAttribute(schema, fullName, simpleName, type, notNull);
 
             if (attrMetadata.IsPrimaryId == true)
                 _primaryKeyColumns[fullName] = attrMetadata.EntityLogicalName;
@@ -790,20 +828,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Add standard virtual attributes
             if (attrMetadata is EnumAttributeMetadata || attrMetadata is BooleanAttributeMetadata)
-                AddSchemaAttribute(schema, fullName + "name", attrMetadata.LogicalName + "name", typeof(SqlString));
+                AddSchemaAttribute(schema, fullName + "name", attrMetadata.LogicalName + "name", typeof(SqlString), notNull);
 
             if (attrMetadata is LookupAttributeMetadata lookup)
             {
-                AddSchemaAttribute(schema, fullName + "name", attrMetadata.LogicalName + "name", typeof(SqlString));
+                AddSchemaAttribute(schema, fullName + "name", attrMetadata.LogicalName + "name", typeof(SqlString), notNull);
 
                 if (lookup.Targets?.Length > 1 && lookup.AttributeType != AttributeTypeCode.PartyList)
-                    AddSchemaAttribute(schema, fullName + "type", attrMetadata.LogicalName + "type", typeof(SqlString));
+                    AddSchemaAttribute(schema, fullName + "type", attrMetadata.LogicalName + "type", typeof(SqlString), notNull);
             }
         }
 
-        private void AddSchemaAttribute(NodeSchema schema, string fullName, string simpleName, Type type)
+        private void AddSchemaAttribute(NodeSchema schema, string fullName, string simpleName, Type type, bool notNull)
         {
-            schema.Schema[fullName] = type;
+            schema.Schema[fullName] = type.ToSqlType();
+
+            if (notNull)
+                schema.NotNullColumns.Add(fullName);
 
             if (simpleName == null)
                 return;
@@ -818,12 +859,153 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 simpleColumnNameAliases.Add(fullName);
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<Microsoft.SqlServer.TransactSql.ScriptDom.OptimizerHint> hints)
+        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<Microsoft.SqlServer.TransactSql.ScriptDom.OptimizerHint> hints)
         {
+            NormalizeFilters();
             return this;
         }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        private void NormalizeFilters()
+        {
+            MoveFiltersToLinkEntities();
+            RemoveEmptyFilters();
+            MergeRootFilters();
+            MergeSingleConditionFilters();
+        }
+
+        private void MoveFiltersToLinkEntities()
+        {
+            // If we've got AND-ed conditions that have an entityname that refers to an inner-joined link entity, move
+            // the condition to that link entity
+            var innerLinkEntities = Entity.GetLinkEntities(innerOnly: true).ToDictionary(le => le.alias, StringComparer.OrdinalIgnoreCase);
+
+            Entity.Items = MoveFiltersToLinkEntities(innerLinkEntities, Entity.Items);
+        }
+
+        private object[] MoveFiltersToLinkEntities(Dictionary<string, FetchLinkEntityType> innerLinkEntities, object[] items)
+        {
+            if (items == null)
+                return items;
+
+            var toRemove = items
+                .OfType<condition>()
+                .Where(c => !String.IsNullOrEmpty(c.entityname))
+                .Where(c => innerLinkEntities.ContainsKey(c.entityname))
+                .ToList();
+
+            foreach (var condition in toRemove)
+            {
+                filter filter = null;
+
+                if (innerLinkEntities[condition.entityname].Items != null)
+                    filter = innerLinkEntities[condition.entityname].Items.OfType<filter>().Where(f => f.type == filterType.and).FirstOrDefault();
+
+                if (filter == null)
+                {
+                    filter = new filter { Items = new object[] { condition } };
+                    innerLinkEntities[condition.entityname].AddItem(filter);
+                }
+                else
+                {
+                    filter.AddItem(condition);
+                }
+
+                condition.entityname = null;
+            }
+
+            foreach (var subFilter in items.OfType<filter>().Where(f => f.type == filterType.and))
+                subFilter.Items = MoveFiltersToLinkEntities(innerLinkEntities, subFilter.Items);
+
+            return items.Except(toRemove).ToArray();
+        }
+
+        private void RemoveEmptyFilters()
+        {
+            Entity.Items = RemoveEmptyFilters(Entity.Items);
+
+            foreach (var linkEntity in Entity.GetLinkEntities())
+                linkEntity.Items = RemoveEmptyFilters(linkEntity.Items);
+        }
+
+        private object[] RemoveEmptyFilters(object[] items)
+        {
+            if (items == null)
+                return items;
+
+            foreach (var filter in items.OfType<filter>())
+                filter.Items = RemoveEmptyFilters(filter.Items);
+
+            var emptyFilters = items
+                .OfType<filter>()
+                .Where(f => f.Items == null || f.Items.Length == 0)
+                .ToList();
+
+            return items.Except(emptyFilters).ToArray();
+        }
+
+        private void MergeRootFilters()
+        {
+            Entity.Items = MergeRootFilters(Entity.Items);
+
+            foreach (var linkEntity in Entity.GetLinkEntities())
+                linkEntity.Items = MergeRootFilters(linkEntity.Items);
+        }
+
+        private object[] MergeRootFilters(object[] items)
+        {
+            if (items == null)
+                return items;
+
+            var rootFilters = items.OfType<filter>().Cast<object>().ToArray();
+
+            if (rootFilters.Length < 2)
+                return items;
+
+            return items
+                .Except(rootFilters)
+                .Concat(new object[] { new filter { Items = rootFilters } })
+                .ToArray();
+        }
+
+        private void MergeSingleConditionFilters()
+        {
+            MergeSingleConditionFilters(Entity.Items);
+
+            foreach (var linkEntity in Entity.GetLinkEntities())
+                MergeSingleConditionFilters(linkEntity.Items);
+        }
+
+        private void MergeSingleConditionFilters(object[] items)
+        {
+            if (items == null)
+                return;
+
+            var filter = items.OfType<filter>().SingleOrDefault();
+
+            if (filter == null)
+                return;
+
+            MergeSingleConditionFilters(filter);
+        }
+
+        private void MergeSingleConditionFilters(filter filter)
+        {
+            var singleConditionFilters = filter.Items
+                .OfType<filter>()
+                .Where(f => f.Items != null && f.Items.Length == 1 && f.Items.OfType<condition>().Count() == 1)
+                .ToDictionary(f => f, f => (condition)f.Items[0]);
+
+            for (var i = 0; i < filter.Items.Length; i++)
+            {
+                if (filter.Items[i] is filter subFilter && singleConditionFilters.TryGetValue(subFilter, out var condition))
+                    filter.Items[i] = condition;
+            }
+
+            foreach (var subFilter in filter.Items.OfType<filter>())
+                MergeSingleConditionFilters(subFilter);
+        }
+
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
         {
             if (!dataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
@@ -913,7 +1095,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return items.OfType<FetchAttributeType>().Any() || items.OfType<allattributes>().Any();
         }
 
-        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
             if (FetchXml.aggregateSpecified && FetchXml.aggregate)
             {
@@ -982,7 +1164,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return 1;
             }
 
-            return (int) (rowCount * filterMultiple);
+            var estimate = (int) (rowCount * filterMultiple);
+
+            // An estimate of 1 or 0 can cause big differences to the query plan that might be very inefficient if the estimate
+            // is wrong. If we're not really sure that the won't just be a single row, make sure we return at least 2.
+            if (estimate <= 1 && rowCount > 1)
+                estimate = 2;
+
+            return estimate;
         }
 
         private double EstimateFilterRate(EntityMetadata metadata, filter filter, ITableSizeCache tableSize, out bool singleRow)
@@ -1053,8 +1242,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         {
                             var attribute = metadata.Attributes.Single(a => a.LogicalName.Equals(condition.attribute, StringComparison.OrdinalIgnoreCase));
 
-                            if (attribute is EnumAttributeMetadata enumAttr)
+                            if (attribute is EntityNameAttributeMetadata entityNameAttr)
+                                conditionMultiple = 0.01;
+                            else if (attribute is EnumAttributeMetadata enumAttr)
                                 conditionMultiple = 1.0 / enumAttr.OptionSet.Options.Count;
+                            else if (attribute is BooleanAttributeMetadata)
+                                conditionMultiple = 0.5;
                             else
                                 conditionMultiple = 0.01;
                         }
@@ -1101,9 +1294,31 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return multiple;
         }
 
+        protected override IEnumerable<string> GetVariablesInternal()
+        {
+            return FindParameterizedConditions().Keys;
+        }
+
         public override string ToString()
         {
             return "FetchXML Query";
+        }
+
+        public override object Clone()
+        {
+            return new FetchXmlScan
+            {
+                Alias = Alias,
+                AllPages = AllPages,
+                DataSource = DataSource,
+                FetchXml = Deserialize(FetchXmlString),
+                ReturnFullSchema = ReturnFullSchema,
+                _entityNameGroupings = _entityNameGroupings,
+                _lastSchema = _lastSchema,
+                _lastSchemaAlias = _lastSchemaAlias,
+                _lastSchemaFetchXml = _lastSchemaFetchXml,
+                _primaryKeyColumns = _primaryKeyColumns,
+            };
         }
     }
 }

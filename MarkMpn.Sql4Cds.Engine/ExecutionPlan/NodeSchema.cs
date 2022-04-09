@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -33,6 +34,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Aliases[kvp.Key] = new List<string>(kvp.Value);
 
             SortOrder.AddRange(copy.SortOrder);
+
+            foreach (var col in copy.NotNullColumns)
+                NotNullColumns.Add(col);
         }
 
         /// <summary>
@@ -43,9 +47,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// A mapping of column names to the types of data stored in them
         /// </summary>
-        public Dictionary<string, Type> Schema { get; set; } = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, DataTypeReference> Schema { get; set; } = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
 
-        IReadOnlyDictionary<string, Type> INodeSchema.Schema => Schema;
+        IReadOnlyDictionary<string, DataTypeReference> INodeSchema.Schema => Schema;
 
         /// <summary>
         /// A mapping of names that can be used as column aliases to the list of columns the name could refer to
@@ -53,6 +57,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public Dictionary<string, List<string>> Aliases { get; set; } = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
 
         IReadOnlyDictionary<string, IReadOnlyList<string>> INodeSchema.Aliases => Aliases.ToDictionary(kvp => kvp.Key, kvp => (IReadOnlyList<string>) kvp.Value);
+
+        public HashSet<string> NotNullColumns { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        IReadOnlyList<string> INodeSchema.NotNullColumns => NotNullColumns.ToList().AsReadOnly();
 
         public List<string> SortOrder { get; set; } = new List<string>();
 
@@ -115,7 +123,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// A mapping of column names to the types of data stored in them
         /// </summary>
-        IReadOnlyDictionary<string, Type> Schema { get; }
+        IReadOnlyDictionary<string, DataTypeReference> Schema { get; }
 
         /// <summary>
         /// A mapping of names that can be used as column aliases to the list of columns the name could refer to
@@ -126,6 +134,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// A list of the columns by which the data is sorted
         /// </summary>
         IReadOnlyList<string> SortOrder { get; }
+
+        /// <summary>
+        /// A list of the columns which are known to be non-null
+        /// </summary>
+        IReadOnlyList<string> NotNullColumns { get; }
 
         /// <summary>
         /// Checks if a column exists in the schema

@@ -21,12 +21,35 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// A base class for execution plan nodes that generate a stream of data
     /// </summary>
-    abstract class BaseDataNode : BaseNode, IDataExecutionPlanNode
+    abstract class BaseDataNode : BaseNode, IDataExecutionPlanNodeInternal
     {
         private int _executionCount;
         private readonly Timer _timer = new Timer();
         private TimeSpan _additionalDuration;
         private int _rowsOut;
+
+        [Category("Statistics")]
+        [Description("Returns the number of rows that the query optimizer estimates this node will generate")]
+        [BrowsableInEstimatedPlan(true)]
+        public int EstimatedRowsOut { get; protected set; }
+
+        /// <summary>
+        /// Returns the number of times the node has been executed
+        /// </summary>
+        public override int ExecutionCount => _executionCount;
+
+        /// <summary>
+        /// Returns the time that the node has taken to execute
+        /// </summary>
+        public override TimeSpan Duration => _timer.Duration + _additionalDuration;
+
+        /// <summary>
+        /// Returns the number of rows that the node has generated
+        /// </summary>
+        [Category("Statistics")]
+        [Description("Returns the number of rows that the node has generated")]
+        [BrowsableInEstimatedPlan(false)]
+        public int RowsOut => _rowsOut;
 
         /// <summary>
         /// Executes the query and produces a stram of data in the results
@@ -37,7 +60,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
         /// <param name="parameterValues">A mapping of parameter names to their current values</param>
         /// <returns>A stream of <see cref="Entity"/> records</returns>
-        public IEnumerable<Entity> Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        public IEnumerable<Entity> Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
             // Track execution times roughly using Environment.TickCount. Stopwatch provides more accurate results
             // but gives a large performance penalty.
@@ -64,7 +87,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
-            while (!options.Cancelled)
+            while (!options.CancellationToken.IsCancellationRequested)
             {
                 Entity current;
 
@@ -102,24 +125,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
         /// <param name="tableSize">A cache of the number of records in each table</param>
         /// <returns>The number of rows the node is estimated to return</returns>
-        public abstract int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes);
+        public virtual void EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        {
+            foreach (var child in GetSources().OfType<IDataExecutionPlanNodeInternal>())
+                child.EstimateRowsOut(dataSources, options, parameterTypes);
 
-        /// <summary>
-        /// Returns the number of times the node has been executed
-        /// </summary>
-        public override int ExecutionCount => _executionCount;
+            EstimatedRowsOut = EstimateRowsOutInternal(dataSources, options, parameterTypes);
+        }
 
-        /// <summary>
-        /// Returns the time that the node has taken to execute
-        /// </summary>
-        public override TimeSpan Duration => _timer.Duration + _additionalDuration;
-
-        /// <summary>
-        /// Returns the number of rows that the node has generated
-        /// </summary>
-        [Category("Statistics")]
-        [Description("Returns the number of rows that the node has generated")]
-        public int RowsOut => _rowsOut;
+        protected abstract int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes);
 
         /// <summary>
         /// Adds the execution statistics from another node into the summary for this node
@@ -141,7 +155,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
         /// <param name="parameterValues">A mapping of parameter names to their current values</param>
         /// <returns>A stream of <see cref="Entity"/> records</returns>
-        protected abstract IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues);
+        protected abstract IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues);
 
         /// <summary>
         /// Gets the details of columns produced by the node
@@ -149,7 +163,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="metadata">The <see cref="IAttributeMetadataCache"/> to use to get metadata</param>
         /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
         /// <returns>Details of the columns produced by the node</returns>
-        public abstract INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes);
+        public abstract INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes);
 
         /// <summary>
         /// Attempts to fold this node into its source to simplify the query
@@ -159,7 +173,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
         /// <param name="hints">Any optimizer hints to apply</param>
         /// <returns>The node that should be used in place of this node</returns>
-        public abstract IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints);
+        public abstract IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints);
 
         /// <summary>
         /// Translates filter criteria from ScriptDom to FetchXML
@@ -172,12 +186,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="targetEntityName">The logical name of the root entity that the FetchXML query is targetting</param>
         /// <param name="targetEntityAlias">The alias of the root entity that the FetchXML query is targetting</param>
         /// <param name="items">The child items of the root entity in the FetchXML query</param>
+        /// <param name="parameterTypes">The types of any parameters that can be used</param>
         /// <param name="filter">The FetchXML version of the <paramref name="criteria"/> that is generated by this method</param>
-        /// <param name="additionalLinkEntities">Any additional link entities that need to be added to the entity/link entities in the query</param>
         /// <returns><c>true</c> if the <paramref name="criteria"/> can be translated to FetchXML, or <c>false</c> otherwise</returns>
-        protected bool TranslateFetchXMLCriteria(IAttributeMetadataCache metadata, IQueryExecutionOptions options, BooleanExpression criteria, INodeSchema schema, string allowedPrefix, string targetEntityName, string targetEntityAlias, object[] items, out filter filter, IDictionary<object,List<FetchLinkEntityType>> additionalLinkEntities)
+        protected bool TranslateFetchXMLCriteria(IAttributeMetadataCache metadata, IQueryExecutionOptions options, BooleanExpression criteria, INodeSchema schema, string allowedPrefix, string targetEntityName, string targetEntityAlias, object[] items, IDictionary<string, DataTypeReference> parameterTypes, out filter filter)
         {
-            if (!TranslateFetchXMLCriteria(metadata, options, criteria, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out var condition, out filter, additionalLinkEntities))
+            if (!TranslateFetchXMLCriteria(metadata, options, criteria, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, parameterTypes, out var condition, out filter))
                 return false;
 
             if (condition != null)
@@ -197,20 +211,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="targetEntityName">The logical name of the root entity that the FetchXML query is targetting</param>
         /// <param name="targetEntityAlias">The alias of the root entity that the FetchXML query is targetting</param>
         /// <param name="items">The child items of the root entity in the FetchXML query</param>
+        /// <param name="parameterTypes">The types of any parameters that can be used</param>
         /// <param name="filter">The FetchXML version of the <paramref name="criteria"/> that is generated by this method when it covers multiple conditions</param>
         /// <param name="condition">The FetchXML version of the <paramref name="criteria"/> that is generated by this method when it is for a single condition only</param>
-        /// <param name="additionalLinkEntities">Any additional link entities that need to be added to the entity/link entities in the query</param>
         /// <returns><c>true</c> if the <paramref name="criteria"/> can be translated to FetchXML, or <c>false</c> otherwise</returns>
-        private bool TranslateFetchXMLCriteria(IAttributeMetadataCache metadata, IQueryExecutionOptions options, BooleanExpression criteria, INodeSchema schema, string allowedPrefix, string targetEntityName, string targetEntityAlias, object[] items, out condition condition, out filter filter, IDictionary<object,List<FetchLinkEntityType>> additionalLinkEntities)
+        private bool TranslateFetchXMLCriteria(IAttributeMetadataCache metadata, IQueryExecutionOptions options, BooleanExpression criteria, INodeSchema schema, string allowedPrefix, string targetEntityName, string targetEntityAlias, object[] items, IDictionary<string, DataTypeReference> parameterTypes, out condition condition, out filter filter)
         {
             condition = null;
             filter = null;
 
             if (criteria is BooleanBinaryExpression binary)
             {
-                if (!TranslateFetchXMLCriteria(metadata, options, binary.FirstExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out var lhsCondition, out var lhsFilter, additionalLinkEntities))
+                if (!TranslateFetchXMLCriteria(metadata, options, binary.FirstExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, parameterTypes, out var lhsCondition, out var lhsFilter))
                     return false;
-                if (!TranslateFetchXMLCriteria(metadata, options, binary.SecondExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out var rhsCondition, out var rhsFilter, additionalLinkEntities))
+                if (!TranslateFetchXMLCriteria(metadata, options, binary.SecondExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, parameterTypes, out var rhsCondition, out var rhsFilter))
                     return false;
 
                 filter = new filter
@@ -227,7 +241,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (criteria is BooleanParenthesisExpression paren)
             {
-                return TranslateFetchXMLCriteria(metadata, options, paren.Expression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out condition, out filter, additionalLinkEntities);
+                return TranslateFetchXMLCriteria(metadata, options, paren.Expression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, parameterTypes, out condition, out filter);
             }
 
             if (criteria is BooleanComparisonExpression comparison)
@@ -242,6 +256,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var field2 = comparison.SecondExpression as ColumnReferenceExpression;
                 var variable = comparison.SecondExpression as VariableReference;
                 var parameterless = comparison.SecondExpression as ParameterlessCall;
+                var globalVariable = comparison.SecondExpression as GlobalVariableExpression;
                 var expr = comparison.SecondExpression;
                 var type = comparison.ComparisonType;
 
@@ -254,13 +269,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 // If we couldn't find the pattern `column = value` or `column = func()`, try looking in the opposite order
-                if (field == null && literal == null && func == null && variable == null && parameterless == null)
+                if (field == null && literal == null && func == null && variable == null && parameterless == null && globalVariable == null)
                 {
                     field = comparison.SecondExpression as ColumnReferenceExpression;
                     literal = comparison.FirstExpression as Literal;
                     func = comparison.FirstExpression as FunctionCall;
                     variable = comparison.FirstExpression as VariableReference;
                     parameterless = comparison.FirstExpression as ParameterlessCall;
+                    globalVariable = comparison.FirstExpression as GlobalVariableExpression;
                     expr = comparison.FirstExpression;
                     field2 = null;
 
@@ -286,7 +302,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 // If we still couldn't find the column name and value, this isn't a pattern we can support in FetchXML
-                if (field == null || (literal == null && func == null && variable == null && parameterless == null && (field2 == null || !options.ColumnComparisonAvailable) && !expr.IsConstantValueExpression(schema, options, out literal)))
+                if (field == null || (literal == null && func == null && variable == null && parameterless == null && globalVariable == null && (field2 == null || !options.ColumnComparisonAvailable) && !expr.IsConstantValueExpression(schema, options, out literal)))
                     return false;
 
                 // Select the correct FetchXML operator
@@ -332,6 +348,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 else if (variable != null)
                 {
                     values = new[] { variable };
+                }
+                else if (globalVariable != null)
+                {
+                    values = new[] { globalVariable };
                 }
                 else if (func != null && Enum.TryParse<@operator>(func.FunctionName.Value.ToLower(), out var customOperator))
                 {
@@ -434,7 +454,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (field2 == null)
                 {
-                    return TranslateFetchXMLCriteriaWithVirtualAttributes(meta, entityAlias, attrName, op, values, metadata, options, targetEntityAlias, items, additionalLinkEntities, out condition, out filter);
+                    return TranslateFetchXMLCriteriaWithVirtualAttributes(meta, entityAlias, attrName, op, values, metadata, options, targetEntityAlias, items, parameterTypes, out condition, out filter);
                 }
                 else
                 {
@@ -497,7 +517,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var entityName = AliasToEntityName(targetEntityAlias, targetEntityName, items, entityAlias);
                 var meta = metadata[entityName];
 
-                return TranslateFetchXMLCriteriaWithVirtualAttributes(meta, entityAlias, attrName, inPred.NotDefined ? @operator.notin : @operator.@in, inPred.Values.Cast<Literal>().ToArray(), metadata, options, targetEntityAlias, items, additionalLinkEntities, out condition, out filter);
+                return TranslateFetchXMLCriteriaWithVirtualAttributes(meta, entityAlias, attrName, inPred.NotDefined ? @operator.notin : @operator.@in, inPred.Values.Cast<Literal>().ToArray(), metadata, options, targetEntityAlias, items, parameterTypes, out condition, out filter);
             }
 
             if (criteria is BooleanIsNullExpression isNull)
@@ -520,7 +540,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var entityName = AliasToEntityName(targetEntityAlias, targetEntityName, items, entityAlias);
                 var meta = metadata[entityName];
 
-                return TranslateFetchXMLCriteriaWithVirtualAttributes(meta, entityAlias, attrName, isNull.IsNot ? @operator.notnull : @operator.@null, null, metadata, options, targetEntityAlias, items, additionalLinkEntities, out condition, out filter);
+                return TranslateFetchXMLCriteriaWithVirtualAttributes(meta, entityAlias, attrName, isNull.IsNot ? @operator.notnull : @operator.@null, null, metadata, options, targetEntityAlias, items, parameterTypes, out condition, out filter);
             }
 
             if (criteria is LikePredicate like)
@@ -549,7 +569,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var entityName = AliasToEntityName(targetEntityAlias, targetEntityName, items, entityAlias);
                 var meta = metadata[entityName];
 
-                return TranslateFetchXMLCriteriaWithVirtualAttributes(meta, entityAlias, attrName, like.NotDefined ? @operator.notlike : @operator.like, new[] { value }, metadata, options, targetEntityAlias, items, additionalLinkEntities, out condition, out filter);
+                return TranslateFetchXMLCriteriaWithVirtualAttributes(meta, entityAlias, attrName, like.NotDefined ? @operator.notlike : @operator.like, new[] { value }, metadata, options, targetEntityAlias, items, parameterTypes, out condition, out filter);
             }
 
             if (criteria is FullTextPredicate ||
@@ -596,7 +616,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!(attr is MultiSelectPicklistAttributeMetadata))
                     return false;
 
-                return TranslateFetchXMLCriteriaWithVirtualAttributes(meta, entityAlias, attrName, not == null ? @operator.containvalues : @operator.notcontainvalues, valueParts.Select(v => new IntegerLiteral { Value = v }).ToArray(), metadata, options, targetEntityAlias, items, additionalLinkEntities, out condition, out filter);
+                return TranslateFetchXMLCriteriaWithVirtualAttributes(meta, entityAlias, attrName, not == null ? @operator.containvalues : @operator.notcontainvalues, valueParts.Select(v => new IntegerLiteral { Value = v }).ToArray(), metadata, options, targetEntityAlias, items, parameterTypes, out condition, out filter);
             }
 
             return false;
@@ -613,11 +633,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="metadata">The <see cref="IAttributeMetadataCache"/> to use to get metadata</param>
         /// <param name="targetEntityAlias">The alias of the root entity that the FetchXML query is targetting</param>
         /// <param name="items">The child items of the root entity in the FetchXML query</param>
+        /// <param name="options">The options that control how the query will be executed</param>
+        /// <param name="parameterTypes">The types of any parameters that can be used</param>
         /// <param name="filter">The FetchXML version of the <paramref name="criteria"/> that is generated by this method when it covers multiple conditions</param>
         /// <param name="condition">The FetchXML version of the <paramref name="criteria"/> that is generated by this method when it is for a single condition only</param>
-        /// <param name="additionalLinkEntities">Any additional link entities that need to be added to the entity/link entities in the query</param>
         /// <returns><c>true</c> if the condition can be translated to FetchXML, or <c>false</c> otherwise</returns>
-        private bool TranslateFetchXMLCriteriaWithVirtualAttributes(EntityMetadata meta, string entityAlias, string attrName, @operator op, ValueExpression[] literals, IAttributeMetadataCache metadata, IQueryExecutionOptions options, string targetEntityAlias, object[] items, IDictionary<object, List<FetchLinkEntityType>> additionalLinkEntities, out condition condition, out filter filter)
+        private bool TranslateFetchXMLCriteriaWithVirtualAttributes(EntityMetadata meta, string entityAlias, string attrName, @operator op, ValueExpression[] literals, IAttributeMetadataCache metadata, IQueryExecutionOptions options, string targetEntityAlias, object[] items, IDictionary<string, DataTypeReference> parameterTypes, out condition condition, out filter filter)
         {
             condition = null;
             filter = null;
@@ -648,11 +669,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (attribute != null && attribute.AttributeType == AttributeTypeCode.PartyList)
                 return false;
 
-            var value = literals == null ? null : literals.Length == 1 ? literals[0] is Literal l ? l.Value : literals[0] is VariableReference v ? v.Name : null : null;
-            var values = literals == null ? null : literals.Select(lit => new conditionValue { Value = lit is Literal lit1 ? lit1.Value : lit is VariableReference var1 ? var1.Name : null }).ToArray();
-            var entityAliases = new[] { entityAlias };
-            var attrNames = new[] { attrName };
-            var ft = filterType.and;
+            var values = literals == null ? null : literals
+                .Select(lit => new conditionValue
+                {
+                    Value = lit is Literal lit1
+                    ? lit1.Value
+                    : lit is VariableReference var1
+                        ? var1.Name
+                        : lit is GlobalVariableExpression glob
+                            ? glob.Name
+                            : null,
+                    IsVariable = lit is VariableReference || lit is GlobalVariableExpression
+                })
+                .ToArray();
+
+            var value = values == null || values.Length != 1 ? null : values[0].Value;
+            var isVariable = values == null || values.Length != 1 ? false : values[0].IsVariable;
 
             var usesItems = values != null && values.Length > 1 || op == @operator.@in || op == @operator.notin || op == @operator.containvalues || op == @operator.notcontainvalues;
 
@@ -707,6 +739,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     for (var i = 0; i < literals.Length; i++)
                     {
+                        if (!(literals[i] is Literal))
+                            continue;
+
                         var matchingOptions = enumAttr.OptionSet.Options.Where(o => o.Label.UserLocalizedLabel.Label.Equals(values[i].Value, StringComparison.InvariantCultureIgnoreCase)).ToList();
 
                         if (matchingOptions.Count == 1)
@@ -729,6 +764,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     for (var i = 0; i < literals.Length; i++)
                     {
+                        if (!(literals[i] is Literal))
+                            continue;
+
                         if (boolAttr.OptionSet.TrueOption.Label.UserLocalizedLabel.Label.Equals(values[i].Value, StringComparison.InvariantCultureIgnoreCase))
                         {
                             values[i] = new conditionValue { Value = "1" };
@@ -748,120 +786,112 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     value = values[0].Value;
                 }
 
-                // If filtering on the display name of a lookup value, add a join to the target type and filter
-                // on the primary name attribute instead.
-                if (attributeSuffix == "name" && attribute is LookupAttributeMetadata lookupAttr)
+                if (attribute is LookupAttributeMetadata lookupAttr)
                 {
-                    var entity = additionalLinkEntities.Keys.OfType<FetchEntityType>().SingleOrDefault() ?? new FetchEntityType { Items = items };
-                    var target = entityAlias == targetEntityAlias ? (object)entity : entity.FindLinkEntity(entityAlias);
-                    var baseItems = entityAlias == targetEntityAlias ? items : ((FetchLinkEntityType)target).Items;
-                    baseItems = baseItems ?? Array.Empty<object>();
-
-                    var conditions = lookupAttr.Targets.Select(targetType =>
+                    // Check the real name of the underlying virtual attribute. We use the consistent suffixes "name" and "type" but
+                    // it's not always the same under the hood.
+                    if (attributeSuffix == "name")
                     {
-                        var targetMetadata = metadata[targetType];
-                        var join = baseItems.OfType<FetchLinkEntityType>().FirstOrDefault(link => link.name == targetMetadata.LogicalName && link.from == targetMetadata.PrimaryIdAttribute && link.to == attribute.LogicalName && link.linktype == "outer");
-
-                        if (join == null && additionalLinkEntities.TryGetValue(target, out var tempLinkEntities))
-                            join = tempLinkEntities.FirstOrDefault(link => link.name == targetMetadata.LogicalName && link.from == targetMetadata.PrimaryIdAttribute && link.to == attribute.LogicalName && link.linktype == "outer");
-
-                        if (join == null)
-                        {
-                            join = new FetchLinkEntityType
-                            {
-                                name = targetMetadata.LogicalName,
-                                from = targetMetadata.PrimaryIdAttribute,
-                                to = attribute.LogicalName,
-                                alias = lookupAttr.Targets.Length == 1 ? $"{meta.LogicalName}_{attribute.LogicalName}" : $"{meta.LogicalName}_{attribute.LogicalName}_{targetType}",
-                                linktype = "outer",
-                                SemiJoin = true
-                            };
-
-                            if (!additionalLinkEntities.TryGetValue(target, out var toAdd))
-                            {
-                                toAdd = new List<FetchLinkEntityType>();
-                                additionalLinkEntities[target] = toAdd;
-                            }
-
-                            toAdd.Add(join);
-                        }
-
-                        return new condition
-                        {
-                            entityname = join.alias,
-                            attribute = targetMetadata.PrimaryNameAttribute
-                        };
-                    }).ToArray();
-
-                    if (op == @operator.@null || conditions.Length == 1)
-                        ft = filterType.and;
+                        attribute = meta.Attributes
+                            .OfType<StringAttributeMetadata>()
+                            .SingleOrDefault(a => a.AttributeOf == attrName && a.AttributeType == AttributeTypeCode.String && a.YomiOf == null);
+                    }
                     else
-                        ft = filterType.or;
-
-                    attrNames = conditions.Select(c => c.attribute).ToArray();
-                    entityAliases = conditions.Select(c => c.entityname).ToArray();
-
-                    if (entityAliases.Length == 1)
                     {
-                        entityAlias = entityAliases[0];
-                        attrName = attrNames[0];
+                        attribute = meta.Attributes
+                            .SingleOrDefault(a => a.AttributeOf == attrName && a.AttributeType == AttributeTypeCode.EntityName);
                     }
 
-                    virtualAttributeHandled = true;
+                    if (attribute != null)
+                    {
+                        attrName = attribute.LogicalName;
+
+                        if (attributeSuffix == "name")
+                        {
+                            virtualAttributeHandled = true;
+                        }
+                        else
+                        {
+                            // Type attributes can only handle a limited set of operators
+                            if (op == @operator.@null || op == @operator.notnull || op == @operator.eq || op == @operator.ne || op == @operator.@in || op == @operator.notin)
+                            {
+                                virtualAttributeHandled = true;
+                            }
+                        }
+                    }
                 }
 
                 if (!virtualAttributeHandled)
                     return false;
             }
 
-            if (value != null && !Int32.TryParse(value, out _) && attribute?.AttributeType == AttributeTypeCode.EntityName)
+            if (values != null && attribute?.AttributeType == AttributeTypeCode.EntityName)
             {
+                // Filtering on entity name attributes is only possible for a limited set of operators. Values should be
+                // presented as object type codes rather than logical names
                 if (op != @operator.eq && op != @operator.ne && op != @operator.neq && op != @operator.@in && op != @operator.notin)
                     return false;
 
                 for (var i = 0; i < values.Length; i++)
                 {
-                    try
+                    if (values[i].IsVariable)
                     {
-                        // Convert the entity name to the object type code
-                        var targetMetadata = metadata[values[i].Value];
-                        values[i].Value = targetMetadata.ObjectTypeCode?.ToString();
+                        // Variables must be an integer type
+                        var variableType = parameterTypes[values[i].Value].ToNetType(out _);
+
+                        if (variableType != typeof(SqlInt32))
+                            return false;
                     }
-                    catch (FaultException ex)
+                    else if (!Int32.TryParse(values[i].Value, out _))
                     {
-                        throw new NotSupportedQueryFragmentException(ex.Message, literals[i]);
+                        try
+                        {
+                            // Convert the literal entity name to the object type code
+                            var targetMetadata = metadata[values[i].Value];
+                            values[i].Value = targetMetadata.ObjectTypeCode?.ToString();
+                        }
+                        catch
+                        {
+                            // If the entity name does not exist, use a placeholder value which can't match any real entity type
+                            values[i].Value = "0";
+                        }
                     }
                 }
 
                 value = values[0].Value;
             }
 
-            if (entityAliases.Length == 1)
+            condition = new condition
             {
-                condition = new condition
-                {
-                    entityname = StandardizeAlias(entityAlias, targetEntityAlias, items),
-                    attribute = attrName.ToLowerInvariant(),
-                    @operator = op,
-                    value = usesItems ? null : value,
-                    Items = usesItems ? values : null
-                };
-            }
-            else
+                entityname = StandardizeAlias(entityAlias, targetEntityAlias, items),
+                attribute = attrName.ToLowerInvariant(),
+                @operator = op,
+                value = usesItems ? null : value,
+                Items = usesItems ? values : null,
+                IsVariable = isVariable
+            };
+
+            if (op == @operator.ne || op == @operator.nebusinessid || op == @operator.neq || op == @operator.neuserid)
             {
+                // FetchXML not-equal type operators treat NULL as not-equal to values, but T-SQL treats them as not-not-equal. Add
+                // an extra not-null condition to keep it compatible with T-SQL
                 filter = new filter
                 {
-                    type = ft,
-                    Items = entityAliases.Select((ea, i) => new condition
+                    type = filterType.and,
+                    Items = new[]
                     {
-                        entityname = StandardizeAlias(ea, targetEntityAlias, items),
-                        attribute = attrNames[i].ToLowerInvariant(),
-                        @operator = op,
-                        value = usesItems ? null : value,
-                        Items = usesItems ? values : null
-                    }).ToArray()
+                        condition,
+                        new condition
+                        {
+                            entityname = condition.entityname,
+                            attribute = condition.attribute,
+                            @operator = @operator.notnull
+                        }
+                    }
                 };
+                condition = null;
             }
+
             return true;
         }
 
@@ -929,5 +959,36 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             return linkEntity.name;
         }
+
+        /// <summary>
+        /// Gets the variables that are in use by this node and optionally its sources
+        /// </summary>
+        /// <param name="recurse">Indicates if the returned list should include the variables used by the sources of this node</param>
+        /// <returns>A sequence of variables names that are in use by this node</returns>
+        public IEnumerable<string> GetVariables(bool recurse)
+        {
+            var variables = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            if (recurse)
+            {
+                foreach (var source in GetSources().OfType<IDataExecutionPlanNodeInternal>())
+                    variables.UnionWith(source.GetVariables(true));
+            }
+
+            variables.UnionWith(GetVariablesInternal());
+
+            return variables;
+        }
+
+        /// <summary>
+        /// Gets the variables that are in use by this node
+        /// </summary>
+        /// <returns>A sequence of variables names that are in use by this node</returns>
+        protected virtual IEnumerable<string> GetVariablesInternal()
+        {
+            return Array.Empty<string>();
+        }
+
+        public abstract object Clone();
     }
 }

@@ -81,14 +81,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public int Length { get; set; }
 
         [Browsable(false)]
-        public IExecutionPlanNode Source { get; set; }
+        public IExecutionPlanNodeInternal Source { get; set; }
 
         /// <summary>
         /// The instance that this node will be executed against
         /// </summary>
         [Category("Data Source")]
         [Description("The data source this query is executed against")]
-        public string DataSource { get; set; }
+        public virtual string DataSource { get; set; }
 
         /// <summary>
         /// Changes system settings to optimise for parallel connections
@@ -105,7 +105,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
         /// <param name="parameterValues">A mapping of parameter names to their current values</param>
         /// <returns>A log message to display</returns>
-        public abstract string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues);
+        public abstract string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected);
 
         /// <summary>
         /// Attempts to fold this node into its source to simplify the query
@@ -114,15 +114,28 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="options"><see cref="IQueryExecutionOptions"/> to indicate how the query can be executed</param>
         /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
         /// <returns>The node that should be used in place of this node</returns>
-        public virtual IRootExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
+        public virtual IRootExecutionPlanNodeInternal[] FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
-            if (Source is IDataExecutionPlanNode dataNode)
+            if (Source is IDataExecutionPlanNodeInternal dataNode)
                 Source = dataNode.FoldQuery(dataSources, options, parameterTypes, hints);
-            else if (Source is IDataSetExecutionPlanNode dataSetNode)
-                Source = dataSetNode.FoldQuery(dataSources, options, parameterTypes, hints);
+            else if (Source is IDataReaderExecutionPlanNode dataSetNode)
+                Source = dataSetNode.FoldQuery(dataSources, options, parameterTypes, hints).Single();
 
-            return this;
+            if (Source is AliasNode alias)
+            {
+                Source = alias.Source;
+                Source.Parent = this;
+                RenameSourceColumns(alias.ColumnSet.ToDictionary(col => alias.Alias + "." + col.OutputColumn, col => col.SourceColumn, StringComparer.OrdinalIgnoreCase));
+            }
+
+            return new[] { this };
         }
+
+        /// <summary>
+        /// Changes the name of source columns
+        /// </summary>
+        /// <param name="columnRenamings">A dictionary of old source column names to the corresponding new column names</param>
+        protected abstract void RenameSourceColumns(IDictionary<string, string> columnRenamings);
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
         {
@@ -139,27 +152,29 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="parameterValues">A mapping of parameter names to their current values</param>
         /// <param name="schema">The schema of the data source</param>
         /// <returns>The entities to perform the DML operation on</returns>
-        protected List<Entity> GetDmlSourceEntities(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues, out INodeSchema schema)
+        protected List<Entity> GetDmlSourceEntities(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out INodeSchema schema)
         {
             List<Entity> entities;
 
-            if (Source is IDataExecutionPlanNode dataSource)
+            if (Source is IDataExecutionPlanNodeInternal dataSource)
             {
                 schema = dataSource.GetSchema(dataSources, parameterTypes);
                 entities = dataSource.Execute(dataSources, options, parameterTypes, parameterValues).ToList();
             }
-            else if (Source is IDataSetExecutionPlanNode dataSetSource)
+            else if (Source is IDataReaderExecutionPlanNode dataSetSource)
             {
-                var dataTable = dataSetSource.Execute(dataSources, options, parameterTypes, parameterValues);
+                var dataReader = dataSetSource.Execute(dataSources, options, parameterTypes, parameterValues, CommandBehavior.Default);
 
                 // Store the values under the column index as well as name for compatibility with INSERT ... SELECT ...
+                var dataTable = new DataTable();
+                dataTable.Load(dataReader);
                 schema = new NodeSchema();
 
                 for (var i = 0; i < dataTable.Columns.Count; i++)
                 {
                     var col = dataTable.Columns[i];
-                    ((NodeSchema)schema).Schema[col.ColumnName] = col.DataType;
-                    ((NodeSchema)schema).Schema[i.ToString()] = col.DataType;
+                    ((NodeSchema)schema).Schema[col.ColumnName] = col.DataType.ToSqlType();
+                    ((NodeSchema)schema).Schema[i.ToString()] = col.DataType.ToSqlType();
                 }
 
                 entities = dataTable.Rows
@@ -194,7 +209,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="attributes">The attributes in the target metadata</param>
         /// <param name="dateTimeKind">The time zone that datetime values are supplied in</param>
         /// <returns></returns>
-        protected Dictionary<string, Func<Entity, object>> CompileColumnMappings(EntityMetadata metadata, IDictionary<string,string> mappings, INodeSchema schema, IDictionary<string, AttributeMetadata> attributes, DateTimeKind dateTimeKind)
+        protected Dictionary<string, Func<Entity, object>> CompileColumnMappings(EntityMetadata metadata, IDictionary<string,string> mappings, INodeSchema schema, IDictionary<string, AttributeMetadata> attributes, DateTimeKind dateTimeKind, List<Entity> entities)
         {
             var attributeAccessors = new Dictionary<string, Func<Entity, object>>();
             var entityParam = Expression.Parameter(typeof(Entity));
@@ -213,15 +228,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     continue;
 
                 var sourceType = schema.Schema[sourceColumnName];
+                var sourceNetType = sourceType.ToNetType(out _);
                 var destType = attr.GetAttributeType();
                 var destSqlType = SqlTypeConverter.NetToSqlType(destType);
 
                 var expr = (Expression)Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(sourceColumnName));
                 var originalExpr = expr;
 
-                if (sourceType == typeof(object))
+                if (sourceNetType == typeof(object))
                 {
                     // null literal
+                    expr = Expression.Constant(null, destType);
+                    expr = Expr.Box(expr);
+                }
+                else if (sourceNetType == typeof(SqlInt32) && !SqlTypeConverter.CanChangeTypeExplicit(sourceNetType, destSqlType) && entities.All(e => ((SqlInt32)e[sourceColumnName]).IsNull))
+                {
+                    // null literal from TDS endpoint is typed as SqlInt32
                     expr = Expression.Constant(null, destType);
                     expr = Expr.Box(expr);
                 }
@@ -236,7 +258,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         // Special case: intersect attributes can be simple guids
                         if (metadata.IsIntersect != true)
                         {
-                            if (sourceType == typeof(SqlEntityReference))
+                            if (sourceType.Name?.BaseIdentifier.Value == typeof(SqlEntityReference).FullName)
                             {
                                 expr = SqlTypeConverter.Convert(originalExpr, sourceType);
                                 convertedExpr = SqlTypeConverter.Convert(expr, typeof(EntityReference));
@@ -343,7 +365,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="requestGenerator">A function to generate a DML request from a data source entity</param>
         /// <param name="operationNames">The constant strings to use in log messages</param>
         /// <returns>The final log message</returns>
-        protected string ExecuteDmlOperation(IOrganizationService org, IQueryExecutionOptions options, List<Entity> entities, EntityMetadata meta, Func<Entity,OrganizationRequest> requestGenerator, OperationNames operationNames)
+        protected string ExecuteDmlOperation(IOrganizationService org, IQueryExecutionOptions options, List<Entity> entities, EntityMetadata meta, Func<Entity,OrganizationRequest> requestGenerator, OperationNames operationNames, out int recordsAffected, IDictionary<string, object> parameterValues, Action<OrganizationResponse> responseHandler = null)
         {
             var inProgressCount = 0;
             var count = 0;
@@ -392,7 +414,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         },
                         (entity, loopState, index, threadLocalState) =>
                         {
-                            if (options.Cancelled)
+                            if (options.CancellationToken.IsCancellationRequested)
                             {
                                 loopState.Stop();
                                 return threadLocalState;
@@ -408,8 +430,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 var newCount = Interlocked.Increment(ref inProgressCount);
                                 var progress = (double)newCount / entities.Count;
                                 options.Progress(progress, $"{operationNames.InProgressUppercase} {newCount:N0} of {entities.Count:N0} {GetDisplayName(0, meta)} ({progress:P0})...");
-                                threadLocalState.Service.Execute(request);
+                                var response = threadLocalState.Service.Execute(request);
                                 Interlocked.Increment(ref count);
+
+                                responseHandler?.Invoke(response);
                             }
                             else
                             {
@@ -424,7 +448,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                             Settings = new ExecuteMultipleSettings
                                             {
                                                 ContinueOnError = false,
-                                                ReturnResponses = false
+                                                ReturnResponses = responseHandler != null
                                             }
                                         }
                                     };
@@ -439,9 +463,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                     options.Progress(progress, $"{operationNames.InProgressUppercase} {GetDisplayName(0, meta)} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
                                     var resp = (ExecuteMultipleResponse)threadLocalState.Service.Execute(threadLocalState.EMR);
 
+                                    if (responseHandler != null)
+                                    {
+                                        foreach (var item in resp.Responses)
+                                        {
+                                            if (item.Response != null)
+                                                responseHandler(item.Response);
+                                        }
+                                    }
+
                                     if (resp.IsFaulted)
                                     {
-                                        var error = resp.Responses[0];
+                                        var error = resp.Responses.First(r => r.Fault != null);
                                         Interlocked.Add(ref count, error.RequestIndex);
                                         throw new ApplicationException($"Error {operationNames.InProgressLowercase} {GetDisplayName(0, meta)} - " + error.Fault.Message);
                                     }
@@ -465,9 +498,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 options.Progress(progress, $"{operationNames.InProgressUppercase} {GetDisplayName(0, meta)} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
                                 var resp = (ExecuteMultipleResponse)threadLocalState.Service.Execute(threadLocalState.EMR);
 
+                                if (responseHandler != null)
+                                {
+                                    foreach (var item in resp.Responses)
+                                    {
+                                        if (item.Response != null)
+                                            responseHandler(item.Response);
+                                    }
+                                }
+
                                 if (resp.IsFaulted)
                                 {
-                                    var error = resp.Responses[0];
+                                    var error = resp.Responses.First(r => r.Fault != null);
                                     Interlocked.Add(ref count, error.RequestIndex);
                                     throw new ApplicationException($"Error {operationNames.InProgressLowercase} {GetDisplayName(0, meta)} - " + error.Fault.Message);
                                 }
@@ -490,7 +532,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 throw new PartialSuccessException($"{count:N0} {GetDisplayName(count, meta)} {operationNames.CompletedLowercase}", ex);
             }
 
+            recordsAffected = count;
+            parameterValues["@@ROWCOUNT"] = (SqlInt32)count;
             return $"{count:N0} {GetDisplayName(count, meta)} {operationNames.CompletedLowercase}";
         }
+
+        public abstract object Clone();
     }
 }

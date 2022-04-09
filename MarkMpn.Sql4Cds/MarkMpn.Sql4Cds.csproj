@@ -43,8 +43,8 @@
       <HintPath>..\packages\MscrmTools.Xrm.Connection.1.2021.5.42\lib\net462\McTools.Xrm.Connection.WinForms.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="Microsoft.ApplicationInsights, Version=2.16.0.18277, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
-      <HintPath>..\packages\Microsoft.ApplicationInsights.2.16.0\lib\net46\Microsoft.ApplicationInsights.dll</HintPath>
+    <Reference Include="Microsoft.ApplicationInsights, Version=2.20.0.103, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <HintPath>..\packages\Microsoft.ApplicationInsights.2.20.0\lib\net46\Microsoft.ApplicationInsights.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.Crm.Sdk.Proxy, Version=9.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
       <HintPath>..\packages\Microsoft.CrmSdk.CoreAssemblies.9.0.2.33\lib\net462\Microsoft.Crm.Sdk.Proxy.dll</HintPath>
@@ -248,13 +248,16 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Autocomplete.cs" />
+    <Compile Include="ConfirmCloseForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="ConfirmCloseForm.Designer.cs">
+      <DependentUpon>ConfirmCloseForm.cs</DependentUpon>
+    </Compile>
     <Compile Include="ConnectionExtensions.cs" />
     <Compile Include="ConnectionPropertiesWrapper.cs" />
-    <Compile Include="DataSource.cs" />
+    <Compile Include="XtbDataSource.cs" />
     <Compile Include="EntityCache.cs" />
-    <Compile Include="ExecutionPlanView.cs">
-      <SubType>Component</SubType>
-    </Compile>
     <Compile Include="MQueryControl.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -313,13 +316,14 @@
   <ItemGroup>
     <None Include="app.config" />
     <None Include="ILMergeConfig.json" />
-    <EmbeddedResource Include="Images\PartitionedAggregateNode.ico" />
-    <EmbeddedResource Include="Images\StreamAggregateNode.ico" />
     <None Include="packages.config">
       <SubType>Designer</SubType>
     </None>
   </ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="ConfirmCloseForm.resx">
+      <DependentUpon>ConfirmCloseForm.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="MQueryControl.resx">
       <DependentUpon>MQueryControl.cs</DependentUpon>
     </EmbeddedResource>
@@ -350,6 +354,10 @@
     <ProjectReference Include="..\AutocompleteMenu\AutocompleteMenu-ScintillaNET.csproj">
       <Project>{43cbc9aa-6a8e-463f-83a9-aff3124afdb6}</Project>
       <Name>AutocompleteMenu-ScintillaNET</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\MarkMpn.Sql4Cds.Controls\MarkMpn.Sql4Cds.Controls.csproj">
+      <Project>{04c2d073-de54-4628-b876-5965d0b75b6e}</Project>
+      <Name>MarkMpn.Sql4Cds.Controls</Name>
     </ProjectReference>
     <ProjectReference Include="..\MarkMpn.Sql4Cds.Engine.NetFx\MarkMpn.Sql4Cds.Engine.NetFx.csproj">
       <Project>{23288bb2-0d6f-4329-9a5c-4c659567a652}</Project>
@@ -391,77 +399,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Resources\progress.gif" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Images\AssertNode.ico" />
-    <EmbeddedResource Include="Images\ComputeScalarNode.ico" />
-    <EmbeddedResource Include="Images\FetchXmlScan.ico" />
-    <EmbeddedResource Include="Images\HashMatchAggregateNode.ico" />
-    <EmbeddedResource Include="Images\NestedLoopNode.ico" />
-    <EmbeddedResource Include="Images\SelectNode.ico" />
-    <EmbeddedResource Include="Images\SortNode.ico" />
-    <EmbeddedResource Include="Images\TopNode.ico" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Images\ConcatenateNode.ico" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Images\FilterNode.ico" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Images\DistinctNode.ico" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Images\ConstantScanNode.ico" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Images\MergeJoinNode.ico" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Images\TryCatchNode.ico" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Images\TableSpoolNode.ico" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Images\OffsetFetchNode.ico" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Images\HashJoinNode.ico" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Images\IndexSpoolNode.ico" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Images\MetadataQueryNode.ico" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Images\GlobalOptionSetQueryNode.ico" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Images\UpdateNode.ico" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Images\AliasNode.ico" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Images\SqlNode.ico" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Images\RetrieveTotalRecordCountNode.ico" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Images\DeleteNode.ico" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Images\InsertNode.ico" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Images\ExecuteAsNode.ico" />
-    <EmbeddedResource Include="Images\RevertNode.ico" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Images\BulkDeleteJobNode.ico" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Resources\Disconnect_Filled_16x.png" />

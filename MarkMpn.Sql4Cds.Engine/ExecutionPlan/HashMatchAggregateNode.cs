@@ -23,7 +23,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     {
         private bool _folded;
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
             var schema = Source.GetSchema(dataSources, parameterTypes);
             var groupByCols = GetGroupingColumns(schema);
@@ -58,7 +58,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
+        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
             if (_folded)
                 return this;
@@ -383,7 +383,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!canUseFetchXmlAggregate)
                     return nonFetchXmlAggregate;
 
-                IDataExecutionPlanNode firstTry = fetchXml;
+                IDataExecutionPlanNodeInternal firstTry = fetchXml;
 
                 // If the main aggregate query fails due to having over 50K records, check if we can retry with partitioning. We
                 // need a createdon field to be available for this to work.
@@ -407,7 +407,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         Source = partitionedFetchXml
                     };
                     partitionedFetchXml.Parent = partitionedAggregates;
-                    var partitionedResults = (IDataExecutionPlanNode)partitionedAggregates;
+                    var partitionedResults = (IDataExecutionPlanNodeInternal)partitionedAggregates;
 
                     partitionedAggregates.GroupBy.AddRange(GroupBy);
 
@@ -524,7 +524,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return FoldToStreamAggregate(dataSources, options, parameterTypes, hints);
         }
 
-        private IDataExecutionPlanNode FoldToStreamAggregate(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
+        private IDataExecutionPlanNodeInternal FoldToStreamAggregate(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
             // Use stream aggregate where possible - if there are no grouping fields or the groups can be folded into sorts
             var streamAggregate = new StreamAggregateNode { Source = Source };
@@ -552,6 +552,35 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return streamAggregate;
+        }
+
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
+        {
+            // Columns required by previous nodes must be derived from this node, so no need to pass them through.
+            // Just calculate the columns that are required to calculate the groups & aggregates
+            var scalarRequiredColumns = new List<string>();
+            if (GroupBy != null)
+                scalarRequiredColumns.AddRange(GroupBy.Select(g => g.GetColumnName()));
+
+            scalarRequiredColumns.AddRange(Aggregates.Where(agg => agg.Value.SqlExpression != null).SelectMany(agg => agg.Value.SqlExpression.GetColumns()).Distinct());
+
+            Source.AddRequiredColumns(dataSources, parameterTypes, scalarRequiredColumns);
+        }
+
+        public override object Clone()
+        {
+            var clone = new HashMatchAggregateNode
+            {
+                Source = (IDataExecutionPlanNodeInternal)Source.Clone()
+            };
+
+            foreach (var kvp in Aggregates)
+                clone.Aggregates.Add(kvp.Key, kvp.Value);
+
+            clone.GroupBy.AddRange(GroupBy);
+            clone.Source.Parent = clone;
+
+            return clone;
         }
     }
 }

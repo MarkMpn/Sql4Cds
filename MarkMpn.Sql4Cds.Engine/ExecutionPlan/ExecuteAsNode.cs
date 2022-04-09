@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
@@ -30,7 +31,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("UserId Source")]
         public string UserIdSource { get; set; }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
         {
             if (!requiredColumns.Contains(UserIdSource))
                 requiredColumns.Add(UserIdSource);
@@ -38,7 +39,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        public override string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        public override string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected)
         {
             _executionCount++;
 
@@ -60,7 +61,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     // Precompile mappings with type conversions
                     var meta = dataSource.Metadata["systemuser"];
                     var attributes = meta.Attributes.ToDictionary(a => a.LogicalName);
-                    var attributeAccessors = CompileColumnMappings(meta, new Dictionary<string, string> { ["systemuserid"] = UserIdSource }, schema, attributes, DateTimeKind.Unspecified);
+                    var attributeAccessors = CompileColumnMappings(meta, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["systemuserid"] = UserIdSource }, schema, attributes, DateTimeKind.Unspecified, entities);
                     var userIdAccessor = attributeAccessors["systemuserid"];
 
                     var userId = (Guid)userIdAccessor(entities[0]);
@@ -79,6 +80,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     else
                         throw new QueryExecutionException("Unexpected organization service type");
 
+                    recordsAffected = -1;
                     return $"Impersonated user {userId}";
                 }
             }
@@ -95,9 +97,31 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
+        protected override void RenameSourceColumns(IDictionary<string, string> columnRenamings)
+        {
+            if (columnRenamings.TryGetValue(UserIdSource, out var userIdSourceRenamed))
+                UserIdSource = userIdSourceRenamed;
+        }
+
         public override string ToString()
         {
             return "EXECUTE AS";
+        }
+
+        public override object Clone()
+        {
+            var clone = new ExecuteAsNode
+            {
+                DataSource = DataSource,
+                Index = Index,
+                Length = Length,
+                Source = (IExecutionPlanNodeInternal)Source.Clone(),
+                Sql = Sql,
+                UserIdSource = UserIdSource
+            };
+
+            clone.Source.Parent = clone;
+            return clone;
         }
     }
 }

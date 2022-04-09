@@ -36,6 +36,14 @@ steps:
     command: restore
     restoreSolution: '**/*.sln'
 
+- task: DotNetCoreCLI@2
+  displayName: dotnet restore
+  inputs:
+    command: restore
+    projects: '**/*.csproj'
+    feedsToUse: 'select'
+    includeNuGetOrg: true
+
 - task: VSBuild@1
   displayName: Build
   inputs:

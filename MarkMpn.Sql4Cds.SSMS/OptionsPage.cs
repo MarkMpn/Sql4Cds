@@ -47,6 +47,12 @@ namespace MarkMpn.Sql4Cds.SSMS
         [DefaultValue(false)]
         public bool UseNativeSqlConversion { get; set; }
 
+        [Category("Behavior")]
+        [DisplayName("Show FetchXML in Estimated Execution Plans")]
+        [Description("Shows FetchXML versions of the estimated execution plan instead of the TDS Endpoint version. Assists with converting queries to FetchXML but does not show the actual execution plan that will be used for most queries.")]
+        [DefaultValue(true)]
+        public bool ShowFetchXMLInEstimatedExecutionPlans { get; set; } = true;
+
         [Category("Version")]
         [DisplayName("Installed")]
         [Description("Installed version of SQL 4 CDS - SSMS Edition")]

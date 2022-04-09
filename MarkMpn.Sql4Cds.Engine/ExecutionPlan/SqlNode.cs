@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
 using System.Data.SqlClient;
+using System.Data.SqlTypes;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -19,14 +21,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Executes SQL using the TDS endpoint
     /// </summary>
-    class SqlNode : BaseNode, IDataSetExecutionPlanNode
+    class SqlNode : BaseNode, IDataReaderExecutionPlanNode
     {
+        private readonly Timer _timer = new Timer();
         private int _executionCount;
-        private TimeSpan _duration;
+
+        public SqlNode() { }
 
         public override int ExecutionCount => _executionCount;
 
-        public override TimeSpan Duration => _duration;
+        public override TimeSpan Duration => _timer.Duration;
 
         [Category("Data Source")]
         [Description("The data source this query is executed against")]
@@ -42,120 +46,164 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public int Length { get; set; }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        [Browsable(false)]
+        public HashSet<string> Parameters { get; private set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
         {
         }
 
-        public DataTable Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        public IDataReader Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, CommandBehavior behavior)
         {
             _executionCount++;
-            var startTime = DateTime.Now;
 
-            try
+            using (_timer.Run())
             {
-                if (!dataSources.TryGetValue(DataSource, out var dataSource))
-                    throw new QueryExecutionException("Missing datasource " + DataSource);
-
-                if (options.UseLocalTimeZone)
-                    throw new QueryExecutionException("Cannot use automatic local time zone conversion with the TDS Endpoint");
-
-#if NETCOREAPP
-                if (!(dataSource.Connection is ServiceClient svc))
-                    throw new QueryExecutionException($"IOrganizationService implementation needs to be ServiceClient for use with the TDS Endpoint, got {dataSource.Connection.GetType()}");
-#else
-                if (!(dataSource.Connection is CrmServiceClient svc))
-                    throw new QueryExecutionException($"IOrganizationService implementation needs to be CrmServiceClient for use with the TDS Endpoint, got {dataSource.Connection.GetType()}");
-#endif
-
-                if (svc.CallerId != Guid.Empty)
-                    throw new QueryExecutionException("Cannot use impersonation with the TDS Endpoint");
-
-#if NETCOREAPP
-                using (var con = new SqlConnection("server=" + svc.ConnectedOrgUriActual.Host))
-#else
-                using (var con = new SqlConnection("server=" + svc.CrmConnectOrgUriActual.Host))
-#endif
+                try
                 {
-                    con.AccessToken = svc.CurrentAccessToken;
-                    con.Open();
+                    if (!dataSources.TryGetValue(DataSource, out var dataSource))
+                        throw new QueryExecutionException("Missing datasource " + DataSource);
 
-                    using (var cmd = con.CreateCommand())
+                    if (options.UseLocalTimeZone)
+                        throw new QueryExecutionException("Cannot use automatic local time zone conversion with the TDS Endpoint");
+
+#if NETCOREAPP
+                    if (!(dataSource.Connection is ServiceClient svc))
+                        throw new QueryExecutionException($"IOrganizationService implementation needs to be ServiceClient for use with the TDS Endpoint, got {dataSource.Connection.GetType()}");
+#else
+                    if (!(dataSource.Connection is CrmServiceClient svc))
+                        throw new QueryExecutionException($"IOrganizationService implementation needs to be CrmServiceClient for use with the TDS Endpoint, got {dataSource.Connection.GetType()}");
+#endif
+
+                    if (svc.CallerId != Guid.Empty)
+                        throw new QueryExecutionException("Cannot use impersonation with the TDS Endpoint");
+
+                    if (String.IsNullOrEmpty(svc.CurrentAccessToken))
+                        throw new QueryExecutionException("OAuth must be used to authenticate with the TDS Endpoint");
+
+                    var con = TDSEndpoint.Connect(svc);
+
+                    var cmd = con.CreateCommand();
+                    cmd.CommandTimeout = (int)TimeSpan.FromMinutes(2).TotalSeconds;
+                    cmd.CommandText = ApplyCommandBehavior(Sql, behavior, options);
+
+                    foreach (var paramValue in parameterValues)
                     {
-                        cmd.CommandTimeout = (int)TimeSpan.FromMinutes(2).TotalSeconds;
-                        cmd.CommandText = Sql;
-                        var result = new DataTable();
+                        if (paramValue.Key.StartsWith("@@"))
+                            continue;
 
-                        using (var adapter = new SqlDataAdapter(cmd))
+                        if (!Parameters.Contains(paramValue.Key))
+                            continue;
+
+                        var param = cmd.CreateParameter();
+                        param.ParameterName = paramValue.Key;
+
+                        if (paramValue.Value is SqlEntityReference er)
+                            param.Value = (SqlGuid)er;
+                        else
+                            param.Value = paramValue.Value;
+
+                        cmd.Parameters.Add(param);
+                    }
+
+                    options.CancellationToken.Register(() => cmd.Cancel());
+                    var reader = new SqlDataReaderWrapper(cmd.ExecuteReader(behavior), cmd, con, Parent == null ? parameterValues : null);
+
+                    if (Parent != null)
+                        reader.ConvertToSqlTypes = true;
+
+                    return reader;
+                }
+                catch (QueryExecutionException ex)
+                {
+                    if (ex.Node == null)
+                        ex.Node = this;
+
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    throw new QueryExecutionException(ex.Message, ex)
+                    {
+                        Node = this
+                    };
+                }
+            }
+        }
+
+        internal static string ApplyCommandBehavior(string sql, CommandBehavior behavior, IQueryExecutionOptions options)
+        {
+            if (behavior == CommandBehavior.Default)
+                return sql;
+
+            // TDS Endpoint doesn't support command behavior flags, so fake them by modifying the SQL query
+            var dom = new TSql150Parser(options.QuotedIdentifiers);
+            var script = (TSqlScript) dom.Parse(new StringReader(sql), out _);
+
+            if (behavior.HasFlag(CommandBehavior.SchemaOnly))
+            {
+                // Add an impossible WHERE clause to prevent any data being returned
+                foreach (var batch in script.Batches)
+                {
+                    foreach (var select in batch.Statements.OfType<SelectStatement>())
+                    {
+                        if (select.QueryExpression is QuerySpecification querySpec)
                         {
-                            adapter.Fill(result);
-                        }
-
-                        // SQL doesn't know the data type of NULL, so SELECT NULL will be returned with a schema type
-                        // of SqlInt32. This causes problems trying to convert it to other types for updates/inserts,
-                        // so change all-null columns to object
-                        // https://github.com/MarkMpn/Sql4Cds/issues/122
-                        var nullColumns = result.Columns
-                            .Cast<DataColumn>()
-                            .Select((col, colIndex) => result.Rows
-                                .Cast<DataRow>()
-                                .Select(row => DBNull.Value.Equals(row[colIndex]))
-                                .All(isNull => isNull)
-                                )
-                            .ToArray();
-
-                        var columnSqlTypes = result.Columns
-                            .Cast<DataColumn>()
-                            .Select((col, colIndex) => nullColumns[colIndex] ? typeof(object) : SqlTypeConverter.NetToSqlType(col.DataType))
-                            .ToArray();
-                        var columnNullValues = columnSqlTypes
-                            .Select(type => SqlTypeConverter.GetNullValue(type))
-                            .ToArray();
-
-                        // Values will be stored as BCL types, convert them to SqlXxx types for consistency with IDataExecutionPlanNodes
-                        var sqlTable = new DataTable();
-
-                        for (var i = 0; i < result.Columns.Count; i++)
-                            sqlTable.Columns.Add(result.Columns[i].ColumnName, columnSqlTypes[i]);
-
-                        foreach (DataRow row in result.Rows)
-                        {
-                            var sqlRow = sqlTable.Rows.Add();
-
-                            for (var i = 0; i < result.Columns.Count; i++)
+                            var contradiction = new BooleanComparisonExpression
                             {
-                                var sqlValue = DBNull.Value.Equals(row[i]) ? columnNullValues[i] : SqlTypeConverter.NetToSqlType(DataSource, row[i]);
-                                sqlRow[i] = sqlValue;
-                            }
-                        }
+                                FirstExpression = new IntegerLiteral { Value = "0" },
+                                ComparisonType = BooleanComparisonType.Equals,
+                                SecondExpression = new IntegerLiteral { Value = "1" },
+                            };
 
-                        return sqlTable;
+                            if (querySpec.WhereClause == null)
+                                querySpec.WhereClause = new WhereClause { SearchCondition = contradiction };
+                            else
+                                querySpec.WhereClause.SearchCondition = new BooleanBinaryExpression { FirstExpression = querySpec.WhereClause.SearchCondition, BinaryExpressionType = BooleanBinaryExpressionType.And, SecondExpression = contradiction };
+                        }
                     }
                 }
             }
-            catch (QueryExecutionException ex)
-            {
-                if (ex.Node == null)
-                    ex.Node = this;
 
-                throw;
-            }
-            catch (Exception ex)
+            if (behavior.HasFlag(CommandBehavior.SingleRow) || behavior.HasFlag(CommandBehavior.SingleResult))
             {
-                throw new QueryExecutionException(ex.Message, ex)
+                // Remove all SELECT statements after the first one
+                var foundFirstSelect = false;
+
+                foreach (var batch in script.Batches)
                 {
-                    Node = this
-                };
+                    foreach (var select in batch.Statements.OfType<SelectStatement>().ToArray())
+                    {
+                        if (!foundFirstSelect)
+                            foundFirstSelect = true;
+                        else
+                            batch.Statements.Remove(select);
+                    }
+                }
             }
-            finally
+
+            if (behavior.HasFlag(CommandBehavior.SingleRow))
             {
-                var endTime = DateTime.Now;
-                _duration += (endTime - startTime);
+                // Add a TOP 1 clause to the first SELECT statement
+                foreach (var batch in script.Batches)
+                {
+                    foreach (var select in batch.Statements.OfType<SelectStatement>())
+                    {
+                        if (select.QueryExpression is QuerySpecification querySpec)
+                        {
+                            querySpec.TopRowFilter = new TopRowFilter { Expression = new IntegerLiteral { Value = "1" } };
+                        }
+                    }
+                }
             }
+
+            script.ScriptTokenStream = null;
+            return script.ToSql();
         }
 
-        public IRootExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
+        public IRootExecutionPlanNodeInternal[] FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
-            return this;
+            return new[] { this };
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
@@ -166,6 +214,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override string ToString()
         {
             return "TDS Endpoint";
+        }
+
+        public object Clone()
+        {
+            return new SqlNode
+            {
+                DataSource = DataSource,
+                Sql = Sql,
+                Index = Index,
+                Length = Length,
+                Parameters = Parameters
+            };
         }
     }
 }

@@ -52,9 +52,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public bool IsScalarAggregate => GroupBy.Count == 0;
 
         [Browsable(false)]
-        public IDataExecutionPlanNode Source { get; set; }
+        public IDataExecutionPlanNodeInternal Source { get; set; }
 
-        protected void InitializeAggregates(INodeSchema schema, IDictionary<string, Type> parameterTypes)
+        protected void InitializeAggregates(INodeSchema schema, IDictionary<string, DataTypeReference> parameterTypes)
         {
             foreach (var aggregate in Aggregates.Where(agg => agg.Value.SqlExpression != null))
             {
@@ -76,7 +76,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        protected void InitializePartitionedAggregates(INodeSchema schema, IDictionary<string, Type> parameterTypes)
+        protected void InitializePartitionedAggregates(INodeSchema schema, IDictionary<string, DataTypeReference> parameterTypes)
         {
             foreach (var aggregate in Aggregates)
             {
@@ -164,7 +164,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return aggregateStates.Select(kvp => new KeyValuePair<string, object>(kvp.Key, kvp.Value.AggregateFunction.GetValue(kvp.Value.State)));
         }
 
-        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
             var sourceSchema = Source.GetSchema(dataSources, parameterTypes);
             var schema = new NodeSchema();
@@ -206,7 +206,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         break;
                 }
 
-                schema.Schema[aggregate.Key] = aggregateType;
+                schema.Schema[aggregate.Key] = aggregateType.ToSqlType();
             }
 
             return schema;
@@ -259,15 +259,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return false;
         }
 
-        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
             if (GroupBy.Count == 0)
                 return 1;
 
-            return Source.EstimateRowsOut(dataSources, options, parameterTypes) * 4 / 10;
+            return Source.EstimatedRowsOut * 4 / 10;
         }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
         {
             // Columns required by previous nodes must be derived from this node, so no need to pass them through.
             // Just calculate the columns that are required to calculate the groups & aggregates
@@ -278,6 +278,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             scalarRequiredColumns.AddRange(Aggregates.Where(agg => agg.Value.SqlExpression != null).SelectMany(agg => agg.Value.SqlExpression.GetColumns()).Distinct());
 
             Source.AddRequiredColumns(dataSources, parameterTypes, scalarRequiredColumns);
+        }
+
+        protected override IEnumerable<string> GetVariablesInternal()
+        {
+            return Aggregates
+                .Select(agg => agg.Value.SqlExpression)
+                .Where(expr => expr != null)
+                .SelectMany(expr => expr.GetVariables())
+                .Distinct();
         }
     }
 }

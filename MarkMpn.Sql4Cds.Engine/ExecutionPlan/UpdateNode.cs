@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
@@ -45,7 +46,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("Column Mappings")]
         public IDictionary<string, string> ColumnMappings { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
         {
             if (!requiredColumns.Contains(PrimaryIdSource))
                 requiredColumns.Add(PrimaryIdSource);
@@ -59,7 +60,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        public override string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        public override string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected)
         {
             _executionCount++;
 
@@ -80,16 +81,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     // Precompile mappings with type conversions
                     meta = dataSource.Metadata[LogicalName];
-                    attributes = meta.Attributes.ToDictionary(a => a.LogicalName);
+                    attributes = meta.Attributes.ToDictionary(a => a.LogicalName, StringComparer.OrdinalIgnoreCase);
                     var dateTimeKind = options.UseLocalTimeZone ? DateTimeKind.Local : DateTimeKind.Utc;
                     var fullMappings = new Dictionary<string, string>(ColumnMappings);
                     fullMappings[meta.PrimaryIdAttribute] = PrimaryIdSource;
-                    attributeAccessors = CompileColumnMappings(meta, fullMappings, schema, attributes, dateTimeKind);
+                    attributeAccessors = CompileColumnMappings(meta, fullMappings, schema, attributes, dateTimeKind, entities);
                     primaryIdAccessor = attributeAccessors[meta.PrimaryIdAttribute];
                 }
 
                 // Check again that the update is allowed. Don't count any UI interaction in the execution time
-                if (options.Cancelled || !options.ConfirmUpdate(entities.Count, meta))
+                if (options.CancellationToken.IsCancellationRequested || !options.ConfirmUpdate(entities.Count, meta))
                     throw new OperationCanceledException("UPDATE cancelled by user");
 
                 using (_timer.Run())
@@ -125,7 +126,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             InProgressUppercase = "Updating",
                             InProgressLowercase = "updating",
                             CompletedLowercase = "updated"
-                        });
+                        },
+                        out recordsAffected,
+                        parameterValues);
                 }
             }
             catch (QueryExecutionException ex)
@@ -141,9 +144,41 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
+        protected override void RenameSourceColumns(IDictionary<string, string> columnRenamings)
+        {
+            if (columnRenamings.TryGetValue(PrimaryIdSource, out var primaryIdSourceRenamed))
+                PrimaryIdSource = primaryIdSourceRenamed;
+
+            foreach (var kvp in ColumnMappings.ToList())
+            {
+                if (columnRenamings.TryGetValue(kvp.Value, out var renamed))
+                    ColumnMappings[kvp.Key] = renamed;
+            }
+        }
+
         public override string ToString()
         {
             return "UPDATE";
+        }
+
+        public override object Clone()
+        {
+            var clone = new UpdateNode
+            {
+                DataSource = DataSource,
+                Index = Index,
+                Length = Length,
+                LogicalName = LogicalName,
+                PrimaryIdSource = PrimaryIdSource,
+                Source = (IExecutionPlanNodeInternal)Source.Clone(),
+                Sql = Sql
+            };
+
+            foreach (var kvp in ColumnMappings)
+                clone.ColumnMappings.Add(kvp);
+
+            clone.Source.Parent = clone;
+            return clone;
         }
     }
 }

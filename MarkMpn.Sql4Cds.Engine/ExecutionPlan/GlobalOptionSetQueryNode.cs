@@ -82,7 +82,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Description("The alias to use for the dataset")]
         public string Alias { get; set; }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
         {
             _optionsetCols = new Dictionary<string, OptionSetProperty>();
 
@@ -101,23 +101,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
             return 100;
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
+        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
             return this;
         }
 
-        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
             var schema = new NodeSchema();
 
             foreach (var prop in _optionsetProps.Values)
             {
-                schema.Schema[$"{Alias}.{prop.Name}"] = prop.Type;
+                schema.Schema[$"{Alias}.{prop.Name}"] = prop.Type.ToSqlType();
 
                 if (!schema.Aliases.TryGetValue(prop.Name, out var aliases))
                 {
@@ -138,7 +138,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Array.Empty<IExecutionPlanNode>();
         }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
             if (!dataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
@@ -162,6 +162,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 yield return converted;
             }
+        }
+
+        public override object Clone()
+        {
+            return new GlobalOptionSetQueryNode
+            {
+                Alias = Alias,
+                DataSource = DataSource,
+                _optionsetCols = _optionsetCols
+            };
         }
     }
 }

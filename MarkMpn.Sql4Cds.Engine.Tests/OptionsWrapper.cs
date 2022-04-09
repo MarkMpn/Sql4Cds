@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
@@ -16,14 +17,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             _options = options;
 
-            Cancelled = options.Cancelled;
+            CancellationToken = options.CancellationToken;
             BlockUpdateWithoutWhere = options.BlockUpdateWithoutWhere;
             BlockDeleteWithoutWhere = options.BlockDeleteWithoutWhere;
             UseBulkDelete = options.UseBulkDelete;
             BatchSize = options.BatchSize;
             UseTDSEndpoint = options.UseTDSEndpoint;
             UseRetrieveTotalRecordCount = options.UseRetrieveTotalRecordCount;
-            LocaleId = options.LocaleId;
             MaxDegreeOfParallelism = options.MaxDegreeOfParallelism;
             ColumnComparisonAvailable = options.ColumnComparisonAvailable;
             UseLocalTimeZone = options.UseLocalTimeZone;
@@ -31,9 +31,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             BypassCustomPlugins = options.BypassCustomPlugins;
             PrimaryDataSource = options.PrimaryDataSource;
             UserId = options.UserId;
+            QuotedIdentifiers = options.QuotedIdentifiers;
         }
 
-        public bool Cancelled { get; set; }
+        public CancellationToken CancellationToken { get; set; }
 
         public bool BlockUpdateWithoutWhere { get; set; }
 
@@ -46,8 +47,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public bool UseTDSEndpoint { get; set; }
 
         public bool UseRetrieveTotalRecordCount { get; set; }
-
-        public int LocaleId { get; set; }
 
         public int MaxDegreeOfParallelism { get; set; }
 
@@ -62,6 +61,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public string PrimaryDataSource { get; set; }
 
         public Guid UserId { get; set; }
+
+        public bool QuotedIdentifiers { get; set; }
 
         public bool ConfirmDelete(int count, EntityMetadata meta)
         {
@@ -86,11 +87,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void Progress(double? progress, string message)
         {
             _options.Progress(progress, message);
-        }
-
-        public void RetrievingNextPage()
-        {
-            _options.RetrievingNextPage();
         }
     }
 }

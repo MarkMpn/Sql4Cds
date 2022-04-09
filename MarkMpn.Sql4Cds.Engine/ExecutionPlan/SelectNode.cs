@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
+using System.Data.SqlTypes;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -15,10 +16,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Converts a data stream to a full data table
     /// </summary>
-    class SelectNode : BaseNode, ISingleSourceExecutionPlanNode, IDataSetExecutionPlanNode
+    class SelectNode : BaseNode, ISingleSourceExecutionPlanNode, IDataReaderExecutionPlanNode
     {
-        private TimeSpan _duration;
         private int _executionCount;
+        private readonly Timer _timer = new Timer();
 
         /// <summary>
         /// The columns that should be included in the query results
@@ -32,7 +33,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// The data source to select from
         /// </summary>
         [Browsable(false)]
-        public IDataExecutionPlanNode Source { get; set; }
+        public IDataExecutionPlanNodeInternal Source { get; set; }
 
         [Browsable(false)]
         public string Sql { get; set; }
@@ -43,52 +44,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public int Length { get; set; }
 
-        public override TimeSpan Duration => _duration;
+        public override TimeSpan Duration => _timer.Duration;
 
         public override int ExecutionCount => _executionCount;
 
-        public DataTable Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        public IDataReader Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, CommandBehavior behavior)
         {
             _executionCount++;
-            var startTime = DateTime.Now;
 
-            try
-            {
-                var schema = Source.GetSchema(dataSources, parameterTypes);
-                var dataTable = new DataTable();
+            var schema = Source.GetSchema(dataSources, parameterTypes);
+            var source = behavior.HasFlag(CommandBehavior.SchemaOnly) ? Array.Empty<Entity>() : Source.Execute(dataSources, options, parameterTypes, parameterValues);
 
-                foreach (var col in ColumnSet)
-                {
-                    var sourceName = col.SourceColumn;
-                    if (!schema.ContainsColumn(sourceName, out sourceName))
-                        throw new QueryExecutionException($"Missing column {col.SourceColumn}") { Node = this };
+            if (behavior.HasFlag(CommandBehavior.SingleRow))
+                source = source.Take(1);
 
-                    var dataCol = dataTable.Columns.Add(col.PhysicalOutputColumn, schema.Schema[sourceName]);
-                    dataCol.Caption = col.OutputColumn;
-                }
-
-                foreach (var entity in Source.Execute(dataSources, options, parameterTypes, parameterValues))
-                {
-                    var row = dataTable.NewRow();
-
-                    foreach (var col in ColumnSet)
-                    {
-                        if (!entity.Contains(col.SourceColumn))
-                            throw new QueryExecutionException($"Missing column {col.SourceColumn}") { Node = this };
-
-                        row[col.PhysicalOutputColumn] = entity[col.SourceColumn];
-                    }
-
-                    dataTable.Rows.Add(row);
-                }
-
-                return dataTable;
-            }
-            finally
-            {
-                var endTime = DateTime.Now;
-                _duration += (endTime - startTime);
-            }
+            return new SelectDataReader(ColumnSet, _timer, schema, source, parameterValues);
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
@@ -96,7 +66,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        public IRootExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
+        public IRootExecutionPlanNodeInternal[] FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
             Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
             Source.Parent = this;
@@ -106,28 +76,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             ExpandWildcardColumns(dataSources, parameterTypes);
 
-            // Ensure column names are unique
-            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            foreach (var col in ColumnSet)
+            if (Source is AliasNode alias)
             {
-                col.PhysicalOutputColumn = col.OutputColumn;
+                var aliasColumns = alias.ColumnSet.ToDictionary(col => alias.Alias + "." + col.OutputColumn, col => col.SourceColumn);
 
-                if (!names.Add(col.PhysicalOutputColumn))
-                {
-                    var suffix = 1;
+                foreach (var col in ColumnSet)
+                    col.SourceColumn = aliasColumns[col.SourceColumn];
 
-                    while (!names.Add(col.OutputColumn + suffix))
-                        suffix++;
-
-                    col.PhysicalOutputColumn += suffix;
-                }
+                Source = alias.Source;
+                Source.Parent = this;
             }
 
-            return this;
+            return new[] { this };
         }
 
-        internal static void FoldFetchXmlColumns(IDataExecutionPlanNode source, List<SelectColumn> columnSet, IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        internal static void FoldFetchXmlColumns(IDataExecutionPlanNode source, List<SelectColumn> columnSet, IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
             if (source is FetchXmlScan fetchXml)
             {
@@ -136,7 +99,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 // Check if there are any aliases we can apply to the source FetchXml
                 var schema = fetchXml.GetSchema(dataSources, parameterTypes);
-                var processedSourceColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var hasStar = columnSet.Any(col => col.AllColumns && col.SourceColumn == null);
                 var aliasStars = new HashSet<string>(columnSet.Where(col => col.AllColumns && col.SourceColumn != null).Select(col => col.SourceColumn.Replace(".*", "")).Distinct(StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase);
 
@@ -180,29 +142,69 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         {
                             var sourceCol = col.SourceColumn;
                             schema.ContainsColumn(sourceCol, out sourceCol);
-                            var attr = fetchXml.AddAttribute(sourceCol, null, dataSource.Metadata, out var added, out var linkEntity);
-
-                            // Check if we can fold the alias down to the FetchXML too. Don't do this if the name isn't valid for FetchXML
-                            if (sourceCol != col.SourceColumn)
-                                parts = col.SourceColumn.Split('.');
-
-                            if (!col.OutputColumn.Equals(parts.Last(), StringComparison.OrdinalIgnoreCase) && FetchXmlScan.IsValidAlias(col.OutputColumn))
-                            {
-                                if (added || (!processedSourceColumns.Contains(sourceCol) && !fetchXml.IsAliasReferenced(attr.alias)))
-                                {
-                                    // Don't fold the alias if there's also a sort on the same attribute, as it breaks paging
-                                    // https://markcarrington.dev/2019/12/10/inside-fetchxml-pt-4-order/#sorting_&_aliases
-                                    var items = linkEntity?.Items ?? fetchXml.Entity.Items;
-
-                                    if (items == null || !items.OfType<FetchOrderType>().Any(order => order.attribute == attr.name) || !fetchXml.AllPages)
-                                        attr.alias = col.OutputColumn;
-                                }
-
-                                col.SourceColumn = sourceCol.Split('.')[0] + "." + (attr.alias ?? attr.name);
-                            }
-
-                            processedSourceColumns.Add(sourceCol);
+                            fetchXml.AddAttribute(sourceCol, null, dataSource.Metadata, out _, out _);
                         }
+                    }
+                }
+
+                // Finally, check what aliases we can fold down to the FetchXML.
+                // Ignore:
+                // 1. columns that have more than 1 alias
+                // 2. aliases that are invalid for FetchXML
+                // 3. attributes that are included via an <all-attributes/>
+                if (!hasStar)
+                {
+                    var aliasedColumns = columnSet
+                        .Select(c =>
+                        {
+                            var sourceCol = c.SourceColumn;
+                            schema.ContainsColumn(sourceCol, out sourceCol);
+
+                            return new { Mapping = c, SourceColumn = sourceCol, Alias = c.OutputColumn };
+                        })
+                        .GroupBy(c => c.SourceColumn, StringComparer.OrdinalIgnoreCase)
+                        .Where(g => g.Count() == 1) // Don't fold aliases if there are multiple aliases for the same source column
+                        .Select(g => g.Single())
+                        .GroupBy(c => c.Alias, StringComparer.OrdinalIgnoreCase)
+                        .Where(g => g.Count() == 1) // Don't fold aliases if there are multiple columns using the same alias
+                        .Select(g => g.Single())
+                        .Where(c =>
+                        {
+                            var parts = c.SourceColumn.Split('.');
+
+                            if (parts.Length > 1 && aliasStars.Contains(parts[0]))
+                                return false; // Don't fold aliases if we're using an <all-attributes/>
+
+                            if (c.Alias.Equals(parts.Last(), StringComparison.OrdinalIgnoreCase))
+                                return false; // Don't fold aliases if we're using the original source name
+
+                            if (!FetchXmlScan.IsValidAlias(c.Alias))
+                                return false; // Don't fold aliases if they contain invalid characters
+
+                            return true;
+                        })
+                        .Select(c =>
+                        {
+                            var attr = fetchXml.AddAttribute(c.SourceColumn, null, dataSource.Metadata, out _, out var linkEntity);
+                            return new { Mapping = c.Mapping, SourceColumn = c.SourceColumn, Alias = c.Alias, Attr = attr, LinkEntity = linkEntity };
+                        })
+                        .Where(c =>
+                        {
+                            var items = c.LinkEntity?.Items ?? fetchXml.Entity.Items;
+
+                            // Don't fold the alias if there's also a sort on the same attribute, as it breaks paging
+                            // https://markcarrington.dev/2019/12/10/inside-fetchxml-pt-4-order/#sorting_&_aliases
+                            if (items != null && items.OfType<FetchOrderType>().Any(order => order.attribute == c.Attr.name) && fetchXml.AllPages)
+                                return false;
+
+                            return true;
+                        })
+                        .ToList();
+
+                    foreach (var aliasedColumn in aliasedColumns)
+                    {
+                        aliasedColumn.Attr.alias = aliasedColumn.Alias;
+                        aliasedColumn.Mapping.SourceColumn = aliasedColumn.SourceColumn.Split('.')[0] + "." + aliasedColumn.Alias;
                     }
                 }
             }
@@ -250,12 +252,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public void ExpandWildcardColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public void ExpandWildcardColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
             ExpandWildcardColumns(Source, ColumnSet, dataSources, parameterTypes);
         }
 
-        internal static void ExpandWildcardColumns(IDataExecutionPlanNode source, List<SelectColumn> columnSet, IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        internal static void ExpandWildcardColumns(IDataExecutionPlanNodeInternal source, List<SelectColumn> columnSet, IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
             // Expand any AllColumns
             if (columnSet.Any(col => col.AllColumns))
@@ -286,12 +288,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        IRootExecutionPlanNode IRootExecutionPlanNode.FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
-        {
-            return this.FoldQuery(dataSources, options, parameterTypes, hints);
-        }
-
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
         {
             foreach (var col in ColumnSet.Select(c => c.SourceColumn + (c.AllColumns ? ".*" : "")))
             {
@@ -306,6 +303,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             return "SELECT";
         }
+
+        public object Clone()
+        {
+            var clone = new SelectNode
+            {
+                Source = (IDataExecutionPlanNodeInternal)Source.Clone(),
+                Sql = Sql,
+                Index = Index,
+                Length = Length
+            };
+
+            clone.ColumnSet.AddRange(ColumnSet);
+            clone.Source.Parent = clone;
+
+            return clone;
+        }
     }
 
     /// <summary>
@@ -319,15 +332,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public string SourceColumn { get; set; }
 
         /// <summary>
+        /// The expression that provides the value for the column
+        /// </summary>
+        /// <remarks>
+        /// Used for error reporting only
+        /// </remarks>
+        [Browsable(false)]
+        public TSqlFragment SourceExpression { get; set; }
+
+        /// <summary>
         /// The requested name of the column in the output data
         /// </summary>
         public string OutputColumn { get; set; }
-
-        /// <summary>
-        /// A unique name for the column in the output data
-        /// </summary>
-        [Browsable(false)]
-        public string PhysicalOutputColumn { get; set; }
 
         /// <summary>
         /// Indicates this is a placeholder for all columns from the source data (SELECT *)

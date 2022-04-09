@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Data.SqlTypes;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Serialization;
 using FakeXrmEasy;
@@ -28,7 +30,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             JoinOperator.LeftOuter
         };
 
-        bool IQueryExecutionOptions.Cancelled => false;
+        CancellationToken IQueryExecutionOptions.CancellationToken => CancellationToken.None;
 
         bool IQueryExecutionOptions.BlockUpdateWithoutWhere => false;
 
@@ -41,8 +43,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         bool IQueryExecutionOptions.UseTDSEndpoint => false;
 
         bool IQueryExecutionOptions.UseRetrieveTotalRecordCount => true;
-
-        int IQueryExecutionOptions.LocaleId => 1033;
 
         int IQueryExecutionOptions.MaxDegreeOfParallelism => 10;
 
@@ -78,13 +78,11 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
         }
 
-        void IQueryExecutionOptions.RetrievingNextPage()
-        {
-        }
-
         string IQueryExecutionOptions.PrimaryDataSource => "local";
 
         Guid IQueryExecutionOptions.UserId => Guid.NewGuid();
+
+        bool IQueryExecutionOptions.QuotedIdentifiers => true;
 
         [TestMethod]
         public void SimpleSelect()
@@ -94,7 +92,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT accountid, name FROM account";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -117,7 +115,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT * FROM account";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -151,7 +149,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT accountid, name FROM account INNER JOIN contact ON account.accountid = contact.parentcustomerid";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -182,7 +180,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     account
                     INNER JOIN contact ON account.accountid = contact.parentcustomerid AND contact.firstname = 'Mark'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -210,7 +208,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT accountid, name FROM account INNER JOIN contact ON account.name = contact.fullname";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -235,7 +233,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT accountid, name FROM account INNER JOIN contact ON account.name = (contact.firstname + ' ' + contact.lastname)";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -247,6 +245,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     <entity name='account'>
                         <attribute name='accountid' />
                         <attribute name='name' />
+                        <filter>
+                            <condition attribute='name' operator='not-null' />
+                        </filter>
                     </entity>
                 </fetch>");
             var contactComputeScalar = AssertNode<ComputeScalarNode>(join.RightSource);
@@ -275,7 +276,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 WHERE
                     name = 'Data8'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -308,7 +309,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 ORDER BY
                     name ASC";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -339,7 +340,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 ORDER BY
                     2 ASC";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -367,7 +368,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 FROM
                     account";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -395,7 +396,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 FROM
                     account";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -425,7 +426,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 ORDER BY name
                 OFFSET 100 ROWS FETCH NEXT 50 ROWS ONLY";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -455,7 +456,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     account
                 GROUP BY name";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -506,7 +507,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     account
                 GROUP BY name";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -557,7 +558,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     account
                 GROUP BY name";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -602,7 +603,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT accountid, name AS test FROM account";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -633,7 +634,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 HAVING
                     count(*) > 1";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -698,7 +699,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     account
                 GROUP BY DATEPART(month, createdon)";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -761,7 +762,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     name,
                     accountid";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -799,7 +800,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     name,
                     accountid";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -837,7 +838,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     name = 'Data8'
                     and (turnover + employees) = 100";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -867,7 +868,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var query = @"
                 SELECT count(*) FROM account";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -888,7 +889,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname FROM contact WHERE firstname = 'Mark'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -918,7 +919,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var query = @"
                 SELECT contactid FROM contact WHERE firstname + ' ' + lastname = 'Mark Carrington'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -945,7 +946,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT name FROM account WHERE accountid = parentcustomerid) AS accountname FROM contact WHERE firstname = 'Mark'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -979,7 +980,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT name FROM account WHERE createdon = contact.createdon) AS accountname FROM contact WHERE firstname = 'Mark'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1029,7 +1030,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var query = @"
                 SELECT TOP 10 firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT name FROM account WHERE createdon = contact.createdon) AS accountname FROM contact WHERE firstname = 'Mark'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1056,11 +1057,11 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var subAggregate = AssertNode<StreamAggregateNode>(subAssert.Source);
             var subAggregateFetch = AssertNode<FetchXmlScan>(subAggregate.Source);
             AssertFetchXml(subAggregateFetch, @"
-                <fetch>
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
                     <entity name='account'>
                         <attribute name='name' />
                         <filter>
-                            <condition attribute='createdon' operator='eq' value='@Expr2' />
+                            <condition attribute='createdon' operator='eq' value='@Expr2' generator:IsVariable='true' />
                         </filter>
                     </entity>
                 </fetch>");
@@ -1075,7 +1076,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT TOP 1 name FROM account) AS accountname FROM contact WHERE firstname = 'Mark'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1118,7 +1119,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT name FROM account WHERE createdon = contact.createdon) AS accountname FROM contact WHERE firstname = 'Mark'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1169,7 +1170,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT name FROM account WHERE createdon = contact.createdon AND employees > 10) AS accountname FROM contact WHERE firstname = 'Mark'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1206,8 +1207,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <attribute name='createdon' />
                         <filter>
                             <condition attribute='employees' operator='gt' value='10' />
-                        </filter>
-                        <filter>
                             <condition attribute='createdon' operator='not-null' />
                         </filter>
                     </entity>
@@ -1224,7 +1223,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT firstname + ' ' + name FROM account WHERE accountid = parentcustomerid) AS accountname FROM contact WHERE firstname = 'Mark'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1273,7 +1272,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var query = @"
                 SELECT firstname FROM contact ORDER BY (SELECT TOP 1 name FROM account WHERE accountid = parentcustomerid ORDER BY firstname)";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1314,7 +1313,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname FROM contact WHERE (SELECT name FROM account WHERE accountid = parentcustomerid) = 'Data8'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1350,7 +1349,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 FROM
                     account";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1380,7 +1379,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 UNION ALL
                 SELECT fullname FROM contact";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1424,7 +1423,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 WHERE
                     name in ('Data8', 'Mark Carrington')";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1460,7 +1459,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 WHERE
                     name in (SELECT firstname FROM contact)";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1501,7 +1500,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 WHERE
                     name in (SELECT firstname, lastname FROM contact)";
 
-            planBuilder.Build(query);
+            planBuilder.Build(query, null, out _);
         }
 
         [TestMethod]
@@ -1519,7 +1518,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 WHERE
                     primarycontactid in (SELECT contactid FROM contact WHERE firstname = 'Mark')";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1558,7 +1557,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 WHERE
                     name in (SELECT firstname FROM contact WHERE parentcustomerid = accountid)";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1607,7 +1606,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 WHERE
                     name not in (SELECT firstname FROM contact WHERE parentcustomerid = accountid)";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1656,7 +1655,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 WHERE
                     EXISTS (SELECT * FROM contact)";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1696,7 +1695,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 WHERE
                     EXISTS (SELECT * FROM contact WHERE contactid = primarycontactid)";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1732,7 +1731,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 WHERE
                     EXISTS (SELECT * FROM contact WHERE parentcustomerid = accountid)";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1777,7 +1776,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 WHERE
                     NOT EXISTS (SELECT * FROM contact WHERE parentcustomerid = accountid)";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1822,7 +1821,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 WHERE
                     name = 'Data8'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1854,7 +1853,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 WHERE
                     a.accountname = 'Data8'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1886,7 +1885,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 WHERE
                     name = 'Data8'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1896,8 +1895,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var constant = AssertNode<ConstantScanNode>(filter.Source);
 
             var schema = constant.GetSchema(_dataSources, null);
-            Assert.AreEqual(typeof(SqlInt32), schema.Schema["a.ID"]);
-            Assert.AreEqual(typeof(SqlString), schema.Schema["a.name"]);
+            Assert.AreEqual(typeof(SqlInt32), schema.Schema["a.ID"].ToNetType(out _));
+            Assert.AreEqual(typeof(SqlString), schema.Schema["a.name"].ToNetType(out _));
         }
 
         [TestMethod]
@@ -1914,7 +1913,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 WHERE
                     name = 'Data8'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1946,7 +1945,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     CROSS JOIN
                     contact";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -1991,7 +1990,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         WHERE  primarycontactid = contactid
                     ) a";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2029,7 +2028,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         WHERE  primarycontactid = contactid
                     ) a";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2068,7 +2067,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         ORDER BY firstname
                     ) a";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2121,7 +2120,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 WHERE
                     createdon = lastxdays(1)";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2149,7 +2148,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 SELECT logicalname
                 FROM   metadata.entity";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2172,7 +2171,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 FROM   metadata.entity
                 WHERE  objecttypecode = 1";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2196,7 +2195,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "UPDATE account SET name = 'foo' WHERE name = 'bar'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2226,7 +2225,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "UPDATE a SET name = 'foo' FROM account a INNER JOIN contact c ON a.accountid = c.parentcustomerid WHERE name = 'bar'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2243,10 +2242,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     <entity name='contact'>
                         <link-entity name='account' alias='a' from='accountid' to='parentcustomerid' link-type='inner'>
                             <attribute name='accountid' />
+                            <filter>
+                                <condition attribute='name' operator='eq' value='bar' />
+                            </filter>
                         </link-entity>
-                        <filter>
-                            <condition entityname='a' attribute='name' operator='eq' value='bar' />
-                        </filter>
                     </entity>
                 </fetch>");
         }
@@ -2259,7 +2258,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT accountid, name FROM account OPTION (OPTIMIZE FOR UNKNOWN, FORCE ORDER, RECOMPILE, USE HINT('DISABLE_OPTIMIZER_ROWGOAL'), USE HINT('ENABLE_QUERY_OPTIMIZER_HOTFIXES'), LOOP JOIN, MERGE JOIN, HASH JOIN, NO_PERFORMANCE_SPOOL, MAXRECURSION 2)";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2282,7 +2281,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT name, count(*) from account group by name order by 2 desc";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2335,7 +2334,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT name from account INNER JOIN contact ON left(name, 4) = left(firstname, 4) where name like 'Data8%' and firstname like 'Mark%'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2373,7 +2372,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT name from account where name like 'Data8%' and primarycontactid in (select contactid from contact where firstname = 'Mark')";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2408,7 +2407,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
                 var query = "SELECT name from account where name like 'Data8%' and createdon in (select createdon from contact where firstname = 'Mark')";
 
-                var plans = planBuilder.Build(query);
+                var plans = planBuilder.Build(query, null, out _);
 
                 Assert.AreEqual(1, plans.Length);
 
@@ -2447,7 +2446,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
                 var query = "SELECT name from account inner join contact on account.accountid = contact.parentcustomerid where name like 'Data8%' and contact.createdon in (select createdon from contact where firstname = 'Mark')";
 
-                var plans = planBuilder.Build(query);
+                var plans = planBuilder.Build(query, null, out _);
 
                 Assert.AreEqual(1, plans.Length);
 
@@ -2458,15 +2457,15 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     <entity name='contact'>
                         <link-entity name='account' alias='account' from='accountid' to='parentcustomerid' link-type='inner'>
                             <attribute name='name' />
+                            <filter>
+                                <condition attribute='name' operator='like' value='Data8%' />
+                            </filter>
                         </link-entity>
                         <link-entity name='contact' alias='Expr1' from='createdon' to='createdon' link-type='in'>
                             <filter>
                                 <condition attribute='firstname' operator='eq' value='Mark' />
                             </filter>
                         </link-entity>
-                        <filter>
-                            <condition entityname='account' attribute='name' operator='like' value='Data8%' />
-                        </filter>
                     </entity>
                 </fetch>");
             }
@@ -2488,7 +2487,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
                 var query = "SELECT name from account where name like 'Data8%' and exists (select * from contact where firstname = 'Mark' and createdon = account.createdon)";
 
-                var plans = planBuilder.Build(query);
+                var plans = planBuilder.Build(query, null, out _);
 
                 Assert.AreEqual(1, plans.Length);
 
@@ -2501,8 +2500,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <link-entity name='contact' alias='contact' from='createdon' to='createdon' link-type='exists'>
                             <filter>
                                 <condition attribute='firstname' operator='eq' value='Mark' />
-                            </filter>
-                            <filter>
                                 <condition attribute='createdon' operator='not-null' />
                             </filter>
                         </link-entity>
@@ -2526,7 +2523,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT DISTINCT accountid, name from account";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2549,7 +2546,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT DISTINCT accountid, name from account INNER JOIN contact ON account.accountid = contact.parentcustomerid";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2576,7 +2573,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "DELETE FROM account WHERE name = 'bar'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2603,7 +2600,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "INSERT INTO account (name) SELECT fullname FROM contact WHERE firstname = 'Mark'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2630,7 +2627,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT fullname, lastname + ', ' + firstname as fullname FROM contact WHERE firstname = 'Mark'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2638,10 +2635,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(2, select.ColumnSet.Count);
             Assert.AreEqual("contact.fullname", select.ColumnSet[0].SourceColumn);
             Assert.AreEqual("fullname", select.ColumnSet[0].OutputColumn);
-            Assert.AreEqual("fullname", select.ColumnSet[0].PhysicalOutputColumn);
             Assert.AreEqual("Expr1", select.ColumnSet[1].SourceColumn);
             Assert.AreEqual("fullname", select.ColumnSet[1].OutputColumn);
-            Assert.AreEqual("fullname1", select.ColumnSet[1].PhysicalOutputColumn);
             var computeScalar = AssertNode<ComputeScalarNode>(select.Source);
             var fetch = AssertNode<FetchXmlScan>(computeScalar.Source);
             AssertFetchXml(fetch, @"
@@ -2666,7 +2661,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT * FROM (SELECT fullname, lastname + ', ' + firstname as fullname FROM contact WHERE firstname = 'Mark') a";
 
-            planBuilder.Build(query);
+            planBuilder.Build(query, null, out _);
         }
 
         [TestMethod]
@@ -2679,7 +2674,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                           UNION
                           SELECT fullname, lastname + ', ' + firstname as fullname FROM contact WHERE firstname = 'Mark'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2712,7 +2707,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                             SELECT fullname, lastname + ', ' + firstname as fullname FROM contact WHERE firstname = 'Mark'
                           ) a";
 
-            planBuilder.Build(query);
+            planBuilder.Build(query, null, out _);
         }
 
         private T AssertNode<T>(IExecutionPlanNode node) where T : IExecutionPlanNode
@@ -2746,7 +2741,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = @"SELECT * FROM account WHERE accountid IN (SELECT parentcustomerid FROM contact)";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2795,7 +2790,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = @"SELECT contact.* FROM account WHERE accountid IN (SELECT parentcustomerid FROM contact)";
 
-            planBuilder.Build(query);
+            planBuilder.Build(query, null, out _);
         }
 
         [TestMethod]
@@ -2806,7 +2801,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = @"SELECT new_name, min(new_optionsetvalue) FROM new_customentity GROUP BY new_name";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2834,7 +2829,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             try
             {
-                planBuilder.Build(query);
+                planBuilder.Build(query, null, out _);
                 Assert.Fail();
             }
             catch (NotSupportedQueryFragmentException ex)
@@ -2856,7 +2851,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                                                GROUP BY firstname
                                                HAVING   count(*) > 1);";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2940,10 +2935,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 },
             };
 
-            var result = select.Execute(_localDataSource, this, null, null);
-            Assert.AreEqual(2, result.Rows.Count);
-            Assert.AreEqual(SqlTypeConverter.UseDefaultCollation("Mark"), result.Rows[0][0]);
-            Assert.AreEqual(SqlTypeConverter.UseDefaultCollation("Mark"), result.Rows[1][0]);
+            var result = select.Execute(_localDataSource, this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), CommandBehavior.Default);
+            var dataTable = new DataTable();
+            dataTable.Load(result);
+
+            Assert.AreEqual(2, dataTable.Rows.Count);
+            Assert.AreEqual("Mark", dataTable.Rows[0][0]);
+            Assert.AreEqual("Mark", dataTable.Rows[1][0]);
         }
 
         [TestMethod]
@@ -2954,7 +2952,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT parentcustomeridname FROM account INNER JOIN contact ON account.accountid = contact.parentcustomerid";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -2978,7 +2976,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT DISTINCT name AS n1, name AS n2 FROM account";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -3001,7 +2999,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT createdon, COUNT(*) FROM account GROUP BY createdon";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -3025,7 +3023,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT collectionschemaname + '.' + entitysetname FROM metadata.entity WHERE description LIKE '%test%'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -3044,6 +3042,34 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void AliasedAttribute()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT name AS n1 FROM account WHERE name = 'test'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual("account.n1", select.ColumnSet[0].SourceColumn);
+            Assert.AreEqual("n1", select.ColumnSet[0].OutputColumn);
+
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' alias='n1' />
+                        <filter>
+                            <condition attribute='name' operator='eq' value='test' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
         public void MultipleAliases()
         {
             var metadata = new AttributeMetadataCache(_service);
@@ -3051,19 +3077,21 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT name AS n1, name AS n2 FROM account WHERE name = 'test'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
             var select = AssertNode<SelectNode>(plans[0]);
-            Assert.AreEqual("account.n1", select.ColumnSet[0].SourceColumn);
-            Assert.AreEqual("account.n1", select.ColumnSet[1].SourceColumn);
+            Assert.AreEqual("account.name", select.ColumnSet[0].SourceColumn);
+            Assert.AreEqual("account.name", select.ColumnSet[1].SourceColumn);
+            Assert.AreEqual("n1", select.ColumnSet[0].OutputColumn);
+            Assert.AreEqual("n2", select.ColumnSet[1].OutputColumn);
 
             var fetch = AssertNode<FetchXmlScan>(select.Source);
             AssertFetchXml(fetch, @"
                 <fetch>
                     <entity name='account'>
-                        <attribute name='name' alias='n1' />
+                        <attribute name='name' />
                         <filter>
                             <condition attribute='name' operator='eq' value='test' />
                         </filter>
@@ -3091,13 +3119,17 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     Connection = _context2.GetOrganizationService(),
                     Metadata = metadata2,
                     TableSizeCache = new StubTableSizeCache()
+                },
+                new DataSource
+                {
+                    Name = "local" // Hack so that ((IQueryExecutionOptions)this).PrimaryDataSource = "local" doesn't cause test to fail
                 }
             };
             var planBuilder = new ExecutionPlanBuilder(datasources, this);
 
             var query = "SELECT uat.name, prod.name FROM uat.dbo.account AS uat INNER JOIN prod.dbo.account AS prod ON uat.accountid = prod.accountid WHERE uat.name <> prod.name AND uat.name LIKE '%test%'";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -3157,7 +3189,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 MONTH(a.createdon),
                 YEAR(a.createdon)";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -3189,7 +3221,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT CURRENT_TIMESTAMP, CURRENT_USER, GETDATE(), USER_NAME()";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -3206,7 +3238,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT name FROM account WHERE ownerid = CURRENT_USER";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -3231,7 +3263,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT name FROM account WHERE accountid IN ('0000000000000000-0000-0000-000000000000', '0000000000000000-0000-0000-000000000001')";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -3259,7 +3291,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT name + 'foo' FROM account ORDER BY 1";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -3286,7 +3318,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT DISTINCT name + 'foo' FROM account ORDER BY 1";
 
-            var plans = planBuilder.Build(query);
+            var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
@@ -3316,7 +3348,943 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var query = "SELECT COUNT(accountid) OVER(PARTITION BY accountid) AS test FROM account";
 
-            planBuilder.Build(query);
+            planBuilder.Build(query, null, out _);
+        }
+
+        [TestMethod]
+        public void DeclareVariableSetLiteralSelect()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                DECLARE @test int
+                SET @test = 1
+                SELECT @test";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(3, plans.Length);
+
+            var declare = AssertNode<DeclareVariablesNode>(plans[0]);
+            Assert.AreEqual(1, declare.Variables.Count);
+            Assert.AreEqual(typeof(SqlInt32), declare.Variables["@test"].ToNetType(out _));
+
+            var setVariable = AssertNode<AssignVariablesNode>(plans[1]);
+            Assert.AreEqual(1, setVariable.Variables.Count);
+            Assert.AreEqual("@test", setVariable.Variables[0].VariableName);
+            Assert.AreEqual("Expr1", setVariable.Variables[0].SourceColumn);
+            var setConstantScan = AssertNode<ConstantScanNode>(setVariable.Source);
+            Assert.AreEqual(1, setConstantScan.Values.Count);
+            Assert.AreEqual("CONVERT (INT, 1)", setConstantScan.Values[0]["Expr1"].ToSql());
+
+            var select = AssertNode<SelectNode>(plans[2]);
+            Assert.AreEqual("Expr2", select.ColumnSet[0].SourceColumn);
+            var selectCompute = AssertNode<ComputeScalarNode>(select.Source);
+            Assert.AreEqual("@test", selectCompute.Columns["Expr2"].ToSql());
+            var selectConstantScan = AssertNode<ConstantScanNode>(selectCompute.Source);
+            Assert.AreEqual(1, selectConstantScan.Values.Count);
+
+            var parameterTypes = new Dictionary<string, DataTypeReference>();
+            var parameterValues = new Dictionary<string, object>();
+
+            foreach (var plan in plans)
+            {
+                if (plan is IDataReaderExecutionPlanNode selectQuery)
+                {
+                    var results = selectQuery.Execute(_dataSources, this, parameterTypes, parameterValues, CommandBehavior.Default);
+                    var dataTable = new DataTable();
+                    dataTable.Load(results);
+
+                    Assert.AreEqual(1, dataTable.Rows.Count);
+                    Assert.AreEqual(1, dataTable.Columns.Count);
+                    Assert.AreEqual(1, dataTable.Rows[0][0]);
+                }
+                else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
+                {
+                    dmlQuery.Execute(_dataSources, this, parameterTypes, parameterValues, out _);
+                }
+            }
+        }
+
+        [TestMethod]
+        public void SetVariableInDeclaration()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                DECLARE @test int = 1
+                SELECT @test";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(3, plans.Length);
+
+            var declare = AssertNode<DeclareVariablesNode>(plans[0]);
+            Assert.AreEqual(1, declare.Variables.Count);
+            Assert.AreEqual(typeof(SqlInt32), declare.Variables["@test"].ToNetType(out _));
+
+            var setVariable = AssertNode<AssignVariablesNode>(plans[1]);
+            Assert.AreEqual(1, setVariable.Variables.Count);
+            Assert.AreEqual("@test", setVariable.Variables[0].VariableName);
+            Assert.AreEqual("Expr1", setVariable.Variables[0].SourceColumn);
+            var setConstantScan = AssertNode<ConstantScanNode>(setVariable.Source);
+            Assert.AreEqual(1, setConstantScan.Values.Count);
+            Assert.AreEqual("CONVERT (INT, 1)", setConstantScan.Values[0]["Expr1"].ToSql());
+
+            var select = AssertNode<SelectNode>(plans[2]);
+            Assert.AreEqual("Expr2", select.ColumnSet[0].SourceColumn);
+            var selectCompute = AssertNode<ComputeScalarNode>(select.Source);
+            Assert.AreEqual("@test", selectCompute.Columns["Expr2"].ToSql());
+            var selectConstantScan = AssertNode<ConstantScanNode>(selectCompute.Source);
+            Assert.AreEqual(1, selectConstantScan.Values.Count);
+
+            var parameterTypes = new Dictionary<string, DataTypeReference>();
+            var parameterValues = new Dictionary<string, object>();
+
+            foreach (var plan in plans)
+            {
+                if (plan is IDataReaderExecutionPlanNode selectQuery)
+                {
+                    var results = selectQuery.Execute(_dataSources, this, parameterTypes, parameterValues, CommandBehavior.Default);
+                    var dataTable = new DataTable();
+                    dataTable.Load(results);
+
+                    Assert.AreEqual(1, dataTable.Rows.Count);
+                    Assert.AreEqual(1, dataTable.Columns.Count);
+                    Assert.AreEqual(1, dataTable.Rows[0][0]);
+                }
+                else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
+                {
+                    dmlQuery.Execute(_dataSources, this, parameterTypes, parameterValues, out _);
+                }
+            }
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void UnknownVariable()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SET @test = 1";
+
+            planBuilder.Build(query, null, out _);
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void DuplicateVariable()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                DECLARE @test INT
+                DECLARE @test INT";
+
+            planBuilder.Build(query, null, out _);
+        }
+
+        [TestMethod]
+        public void VariableTypeConversionIntToString()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                DECLARE @test varchar(3)
+                SET @test = 100
+                SELECT @test";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            var parameterTypes = new Dictionary<string, DataTypeReference>();
+            var parameterValues = new Dictionary<string, object>();
+
+            foreach (var plan in plans)
+            {
+                if (plan is IDataReaderExecutionPlanNode selectQuery)
+                {
+                    var results = selectQuery.Execute(_dataSources, this, parameterTypes, parameterValues, CommandBehavior.Default);
+                    var dataTable = new DataTable();
+                    dataTable.Load(results);
+
+                    Assert.AreEqual(1, dataTable.Rows.Count);
+                    Assert.AreEqual(1, dataTable.Columns.Count);
+                    Assert.AreEqual("100", dataTable.Rows[0][0]);
+                }
+                else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
+                {
+                    dmlQuery.Execute(_dataSources, this, parameterTypes, parameterValues, out _);
+                }
+            }
+        }
+
+        [TestMethod]
+        public void VariableTypeConversionStringTruncation()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                DECLARE @test varchar(3)
+                SET @test = 'test'
+                SELECT @test";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            var parameterTypes = new Dictionary<string, DataTypeReference>();
+            var parameterValues = new Dictionary<string, object>();
+
+            foreach (var plan in plans)
+            {
+                if (plan is IDataReaderExecutionPlanNode selectQuery)
+                {
+                    var results = selectQuery.Execute(_dataSources, this, parameterTypes, parameterValues, CommandBehavior.Default);
+                    var dataTable = new DataTable();
+                    dataTable.Load(results);
+
+                    Assert.AreEqual(1, dataTable.Rows.Count);
+                    Assert.AreEqual(1, dataTable.Columns.Count);
+                    Assert.AreEqual("tes", dataTable.Rows[0][0]);
+                }
+                else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
+                {
+                    dmlQuery.Execute(_dataSources, this, parameterTypes, parameterValues, out _);
+                }
+            }
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void CannotCombineSetVariableAndDataRetrievalInSelect()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            // A SELECT statement that assigns a value to a variable must not be combined with data-retrieval operations
+            var query = @"
+                DECLARE @test varchar(3)
+                SELECT @test = name, accountid FROM account";
+
+            planBuilder.Build(query, null, out _);
+        }
+
+        [TestMethod]
+        public void SetVariableWithSelectUsesFinalValue()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                DECLARE @test varchar(3)
+                SELECT @test = name FROM account ORDER BY name
+                SELECT @test";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(3, plans.Length);
+
+            var declare = AssertNode<DeclareVariablesNode>(plans[0]);
+            Assert.AreEqual(1, declare.Variables.Count);
+            Assert.AreEqual(typeof(SqlString), declare.Variables["@test"].ToNetType(out _));
+
+            var setVariable = AssertNode<AssignVariablesNode>(plans[1]);
+            Assert.AreEqual(1, setVariable.Variables.Count);
+            Assert.AreEqual("@test", setVariable.Variables[0].VariableName);
+            Assert.AreEqual("Expr1", setVariable.Variables[0].SourceColumn);
+            var setCompute = AssertNode<ComputeScalarNode>(setVariable.Source);
+            Assert.AreEqual("CONVERT (VARCHAR (3), name)", setCompute.Columns["Expr1"].ToSql());
+            var setFetchXml = AssertNode<FetchXmlScan>(setCompute.Source);
+            AssertFetchXml(setFetchXml, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <order attribute='name' />
+                    </entity>
+                </fetch>");
+
+            var select = AssertNode<SelectNode>(plans[2]);
+            Assert.AreEqual("Expr2", select.ColumnSet[0].SourceColumn);
+            var selectCompute = AssertNode<ComputeScalarNode>(select.Source);
+            Assert.AreEqual("@test", selectCompute.Columns["Expr2"].ToSql());
+            var selectConstantScan = AssertNode<ConstantScanNode>(selectCompute.Source);
+            Assert.AreEqual(1, selectConstantScan.Values.Count);
+
+            _context.Data["account"] = new Dictionary<Guid, Entity>
+            {
+                [Guid.NewGuid()] = new Entity("account")
+                {
+                    ["name"] = "X"
+                },
+                [Guid.NewGuid()] = new Entity("account")
+                {
+                    ["name"] = "Z"
+                },
+                [Guid.NewGuid()] = new Entity("account")
+                {
+                    ["name"] = "Y"
+                },
+            };
+
+            var parameterTypes = new Dictionary<string, DataTypeReference>();
+            var parameterValues = new Dictionary<string, object>();
+
+            foreach (var plan in plans)
+            {
+                if (plan is IDataReaderExecutionPlanNode selectQuery)
+                {
+                    var results = selectQuery.Execute(_localDataSource, this, parameterTypes, parameterValues, CommandBehavior.Default);
+                    var dataTable = new DataTable();
+                    dataTable.Load(results);
+
+                    Assert.AreEqual(1, dataTable.Rows.Count);
+                    Assert.AreEqual(1, dataTable.Columns.Count);
+                    Assert.AreEqual("Z", dataTable.Rows[0][0]);
+                }
+                else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
+                {
+                    dmlQuery.Execute(_localDataSource, this, parameterTypes, parameterValues, out _);
+                }
+            }
+        }
+
+        [TestMethod]
+        public void VarCharLengthDefaultsTo1()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                DECLARE @test varchar
+                SET @test = 'test'
+                SELECT @test";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            var parameterTypes = new Dictionary<string, DataTypeReference>();
+            var parameterValues = new Dictionary<string, object>();
+
+            foreach (var plan in plans)
+            {
+                if (plan is IDataReaderExecutionPlanNode selectQuery)
+                {
+                    var results = selectQuery.Execute(_dataSources, this, parameterTypes, parameterValues, CommandBehavior.Default);
+                    var dataTable = new DataTable();
+                    dataTable.Load(results);
+
+                    Assert.AreEqual(1, dataTable.Rows.Count);
+                    Assert.AreEqual(1, dataTable.Columns.Count);
+                    Assert.AreEqual("t", dataTable.Rows[0][0]);
+                }
+                else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
+                {
+                    dmlQuery.Execute(_dataSources, this, parameterTypes, parameterValues, out _);
+                }
+            }
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void CursorVariableNotSupported()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                DECLARE @test CURSOR";
+
+            planBuilder.Build(query, null, out _);
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void TableVariableNotSupported()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                DECLARE @test TABLE (ID INT)";
+
+            planBuilder.Build(query, null, out _);
+        }
+
+        [TestMethod]
+        public void IfStatement()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this) { EstimatedPlanOnly = true };
+
+            var query = @"
+                IF @param1 = 1
+                BEGIN
+                    INSERT INTO account (name) VALUES ('one')
+                    DELETE FROM account WHERE accountid = @@IDENTITY
+                END
+                ELSE
+                    SELECT name FROM account";
+
+            var parameters = new Dictionary<string, DataTypeReference>
+            {
+                ["@param1"] = typeof(SqlInt32).ToSqlType()
+            };
+            var plans = planBuilder.Build(query, parameters, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var cond = AssertNode<ConditionalNode>(plans[0]);
+            Assert.AreEqual("@param1 = 1", cond.Condition.ToSql());
+            Assert.AreEqual(ConditionalNodeType.If, cond.Type);
+
+            Assert.AreEqual(2, cond.TrueStatements.Length);
+            AssertNode<InsertNode>(cond.TrueStatements[0]);
+            AssertNode<DeleteNode>(cond.TrueStatements[1]);
+
+            Assert.AreEqual(1, cond.FalseStatements.Length);
+            AssertNode<SelectNode>(cond.FalseStatements[0]);
+        }
+
+        [TestMethod]
+        public void WhileStatement()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this) { EstimatedPlanOnly = true };
+
+            var query = @"
+                WHILE @param1 < 10
+                BEGIN
+                    INSERT INTO account (name) VALUES (@param1)
+                    SET @param1 += 1
+                END";
+
+            var parameters = new Dictionary<string, DataTypeReference>
+            {
+                ["@param1"] = typeof(SqlInt32).ToSqlType()
+            };
+            var plans = planBuilder.Build(query, parameters, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var cond = AssertNode<ConditionalNode>(plans[0]);
+            Assert.AreEqual("@param1 < 10", cond.Condition.ToSql());
+            Assert.AreEqual(ConditionalNodeType.While, cond.Type);
+
+            Assert.AreEqual(2, cond.TrueStatements.Length);
+            AssertNode<InsertNode>(cond.TrueStatements[0]);
+            AssertNode<AssignVariablesNode>(cond.TrueStatements[1]);
+        }
+
+        [TestMethod]
+        public void IfNotExists()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this) { EstimatedPlanOnly = true };
+
+            var query = @"
+                IF NOT EXISTS(SELECT * FROM account WHERE name = @param1)
+                BEGIN
+                    INSERT INTO account (name) VALUES (@param1)
+                END";
+
+            var parameters = new Dictionary<string, DataTypeReference>
+            {
+                ["@param1"] = typeof(SqlString).ToSqlType()
+            };
+            var plans = planBuilder.Build(query, parameters, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var cond = AssertNode<ConditionalNode>(plans[0]);
+
+            Assert.AreEqual(1, cond.TrueStatements.Length);
+            AssertNode<InsertNode>(cond.TrueStatements[0]);
+        }
+
+        [TestMethod]
+        public void DuplicatedAliases()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT name, createdon AS name FROM account";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <attribute name='createdon' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void MetadataLeftJoinData()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                SELECT entity.logicalname, account.name, contact.firstname 
+                FROM 
+                    metadata.entity 
+                    LEFT OUTER JOIN account ON entity.metadataid = account.accountid 
+                    LEFT OUTER JOIN contact ON account.primarycontactid = contact.contactid
+                WHERE
+                    entity.logicalname = 'account'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var nestedLoop = AssertNode<NestedLoopNode>(select.Source);
+            Assert.AreEqual(QualifiedJoinType.LeftOuter, nestedLoop.JoinType);
+            Assert.AreEqual(1, nestedLoop.OuterReferences.Count);
+            Assert.AreEqual("@Cond1", nestedLoop.OuterReferences["entity.metadataid"]);
+            var meta = AssertNode<MetadataQueryNode>(nestedLoop.LeftSource);
+            var fetch = AssertNode<FetchXmlScan>(nestedLoop.RightSource);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <link-entity name='contact' alias='contact' from='contactid' to='primarycontactid' link-type='outer'>
+                            <attribute name='firstname' />
+                        </link-entity>
+                        <filter>
+                            <condition attribute='accountid' operator='eq' value='@Cond1' generator:IsVariable='true' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void NotEqualExcludesNull()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                SELECT name FROM account WHERE name <> 'Data8'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <filter>
+                            <condition attribute='name' operator='ne' value='Data8' />
+                            <condition attribute='name' operator='not-null' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void DoNotFoldFilterOnNameVirtualAttributeWithTooManyJoins()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                select top 10 a.name
+                from account a
+                    join contact c1 on c1.parentcustomerid = a.accountid
+                    join contact c2 on c2.parentcustomerid = a.accountid
+                    join contact c3 on c3.parentcustomerid = a.accountid
+                    join contact c4 on c4.parentcustomerid = a.accountid
+                    join contact c5 on c5.parentcustomerid = a.accountid
+                    join contact c6 on c6.parentcustomerid = a.accountid
+                    join contact c7 on c7.parentcustomerid = a.accountid
+                    join contact c8 on c8.parentcustomerid = a.accountid
+                    join contact c9 on c9.parentcustomerid = a.accountid
+                    join contact c10 on c10.parentcustomerid = a.accountid
+                    join contact c11 on c11.parentcustomerid = a.accountid
+                where a.primarycontactidname = 'Test'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var top = AssertNode<TopNode>(select.Source);
+            var join = AssertNode<HashJoinNode>(top.Source);
+            var fetch1 = AssertNode<FetchXmlScan>(join.LeftSource);
+            AssertFetchXml(fetch1, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='parentcustomerid' />
+                        <filter>
+                            <condition attribute='parentcustomerid' operator='not-null' />
+                        </filter>
+                    </entity>
+                </fetch>");
+            var fetch2 = AssertNode<FetchXmlScan>(join.RightSource);
+            AssertFetchXml(fetch2, @"
+                <fetch>
+                    <entity name='contact'>
+                        <link-entity name='account' alias='a' from='accountid' to='parentcustomerid' link-type='inner'>
+                            <attribute name='name' />
+                            <attribute name='accountid' />
+                            <link-entity name='contact' alias='c2' from='parentcustomerid' to='accountid' link-type='inner' />
+                            <link-entity name='contact' alias='c3' from='parentcustomerid' to='accountid' link-type='inner' />
+                            <link-entity name='contact' alias='c4' from='parentcustomerid' to='accountid' link-type='inner' />
+                            <link-entity name='contact' alias='c5' from='parentcustomerid' to='accountid' link-type='inner' />
+                            <link-entity name='contact' alias='c6' from='parentcustomerid' to='accountid' link-type='inner' />
+                            <link-entity name='contact' alias='c7' from='parentcustomerid' to='accountid' link-type='inner' />
+                            <link-entity name='contact' alias='c8' from='parentcustomerid' to='accountid' link-type='inner' />
+                            <link-entity name='contact' alias='c9' from='parentcustomerid' to='accountid' link-type='inner' />
+                            <link-entity name='contact' alias='c10' from='parentcustomerid' to='accountid' link-type='inner' />
+                            <filter>
+                                <condition attribute='primarycontactidname' operator='eq' value='Test' />
+                            </filter>
+                        </link-entity>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void FilterOnVirtualTypeAttributeEquals()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"SELECT firstname FROM contact WHERE parentcustomeridtype = 'contact'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <filter>
+                            <condition attribute='parentcustomeridtype' operator='eq' value='2' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void FilterOnVirtualTypeAttributeEqualsImpossible()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"SELECT firstname FROM contact WHERE parentcustomeridtype = 'non-existent-entity'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <filter>
+                            <condition attribute='parentcustomeridtype' operator='eq' value='0' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void FilterOnVirtualTypeAttributeNotEquals()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"SELECT firstname FROM contact WHERE parentcustomeridtype <> 'contact'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <filter>
+                            <condition attribute='parentcustomeridtype' operator='ne' value='2' />
+                            <condition attribute='parentcustomeridtype' operator='not-null' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void FilterOnVirtualTypeAttributeNotInImpossible()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"SELECT firstname FROM contact WHERE parentcustomeridtype NOT IN ('account', 'contact')";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <filter>
+                            <condition attribute='parentcustomeridtype' operator='not-in'>
+                                <value>1</value>
+                                <value>2</value>
+                            </condition>
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void FilterOnVirtualTypeAttributeNull()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"SELECT firstname FROM contact WHERE parentcustomeridtype IS NULL";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <filter>
+                            <condition attribute='parentcustomeridtype' operator='null' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void FilterOnVirtualTypeAttributeNotNull()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"SELECT firstname FROM contact WHERE parentcustomeridtype IS NOT NULL";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <filter>
+                            <condition attribute='parentcustomeridtype' operator='not-null' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void SubqueriesInValueList()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"SELECT a FROM (VALUES ('a'), ((SELECT TOP 1 firstname FROM contact)), ('b'), (1)) AS MyTable (a)";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var concat = AssertNode<ConcatenateNode>(select.Source);
+            var a = AssertNode<ConstantScanNode>(concat.Sources[0]);
+            var firstname = AssertNode<ComputeScalarNode>(concat.Sources[1]);
+            var loop = AssertNode<NestedLoopNode>(firstname.Source);
+            var firstnamePlaceholder = AssertNode<ConstantScanNode>(loop.LeftSource);
+            var fetch = AssertNode<FetchXmlScan>(loop.RightSource);
+            var b = AssertNode<ConstantScanNode>(concat.Sources[2]);
+            var one = AssertNode<ConstantScanNode>(concat.Sources[3]);
+
+            AssertFetchXml(fetch, @"
+                <fetch top='1'>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void FoldFilterOnIdentity()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"SELECT name FROM account WHERE accountid = @@IDENTITY";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <filter>
+                            <condition attribute='accountid' operator='eq' value='@@IDENTITY' generator:IsVariable='true' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void FoldPrimaryIdInQuery()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"SELECT name FROM account WHERE accountid IN (SELECT accountid FROM account INNER JOIN contact ON account.primarycontactid = contact.contactid WHERE name = 'Data8')";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <link-entity name='contact' alias='contact' from='contactid' to='primarycontactid' link-type='inner' />
+                        <filter>
+                            <condition attribute='name' operator='eq' value='Data8' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void InsertParameters()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"DECLARE @name varchar(100) = 'test'; INSERT INTO account (name) VALUES (@name)";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(3, plans.Length);
+
+            AssertNode<DeclareVariablesNode>(plans[0]);
+            AssertNode<AssignVariablesNode>(plans[1]);
+            var insert = AssertNode<InsertNode>(plans[2]);
+            var compute = AssertNode<ComputeScalarNode>(insert.Source);
+            var constant = AssertNode<ConstantScanNode>(compute.Source);
+        }
+
+        [TestMethod]
+        public void NotExistsParameters()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"DECLARE @firstname AS VARCHAR (100) = 'Mark', @lastname AS VARCHAR (100) = 'Carrington';
+
+IF NOT EXISTS (SELECT * FROM contact WHERE firstname = @firstname AND lastname = @lastname)
+BEGIN
+    INSERT INTO contact (firstname, lastname)
+    VALUES              (@firstname, @lastname);
+END";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(4, plans.Length);
+
+            AssertNode<DeclareVariablesNode>(plans[0]);
+            AssertNode<AssignVariablesNode>(plans[1]);
+            AssertNode<AssignVariablesNode>(plans[2]);
+            var cond = AssertNode<ConditionalNode>(plans[3]);
+            var compute = AssertNode<ComputeScalarNode>(cond.Source);
+            var loop = AssertNode<NestedLoopNode>(compute.Source);
+            var constant = AssertNode<ConstantScanNode>(loop.LeftSource);
+            var fetch = AssertNode<FetchXmlScan>(loop.RightSource);
+            var insert = AssertNode<InsertNode>(cond.TrueStatements[0]);
+            var insertCompute = AssertNode<ComputeScalarNode>(insert.Source);
+            var insertConstant = AssertNode<ConstantScanNode>(insertCompute.Source);
+
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS' top='1'>
+                    <entity name='contact'>
+                        <attribute name='contactid' />
+                        <filter>
+                            <condition attribute='firstname' operator='eq' value='@firstname' generator:IsVariable='true' />
+                            <condition attribute='lastname' operator='eq' value='@lastname' generator:IsVariable='true' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void UpdateParameters()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"declare @name varchar(100) = 'Data8', @employees int = 10
+UPDATE account SET employees = @employees WHERE name = @name";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(4, plans.Length);
+
+            AssertNode<DeclareVariablesNode>(plans[0]);
+            AssertNode<AssignVariablesNode>(plans[1]);
+            AssertNode<AssignVariablesNode>(plans[2]);
+            var update = AssertNode<UpdateNode>(plans[3]);
+            var compute = AssertNode<ComputeScalarNode>(update.Source);
+            Assert.AreEqual(compute.Columns[update.ColumnMappings["employees"]].ToSql(), "@employees");
+            var fetch = AssertNode<FetchXmlScan>(compute.Source);
+
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                        <filter>
+                            <condition attribute='name' operator='eq' value='@name' generator:IsVariable='true' />
+                        </filter>
+                    </entity>
+                </fetch>");
         }
     }
 }

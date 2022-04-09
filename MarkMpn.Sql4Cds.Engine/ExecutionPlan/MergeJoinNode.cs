@@ -16,7 +16,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// </summary>
     class MergeJoinNode : FoldableJoinNode
     {
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
             // https://sqlserverfast.com/epr/merge-join/
             // Implemented inner, left outer, right outer and full outer variants
@@ -110,7 +110,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return !hasLeft && !hasRight;
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
+        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
             var folded = base.FoldQuery(dataSources, options, parameterTypes, hints);
 
@@ -149,7 +149,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return this;
         }
 
-        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
             var schema = base.GetSchema(dataSources, parameterTypes);
             schema.ContainsColumn(LeftAttribute.GetColumnName(), out var left);
@@ -167,6 +167,28 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return schema;
+        }
+
+        public override object Clone()
+        {
+            var clone = new MergeJoinNode
+            {
+                AdditionalJoinCriteria = AdditionalJoinCriteria,
+                JoinType = JoinType,
+                LeftAttribute = LeftAttribute,
+                LeftSource = (IDataExecutionPlanNodeInternal)LeftSource.Clone(),
+                RightAttribute = RightAttribute,
+                RightSource =  (IDataExecutionPlanNodeInternal)RightSource.Clone(),
+                SemiJoin = SemiJoin
+            };
+
+            foreach (var kvp in DefinedValues)
+                clone.DefinedValues.Add(kvp);
+
+            clone.LeftSource.Parent = clone;
+            clone.RightSource.Parent = clone;
+
+            return clone;
         }
     }
 }

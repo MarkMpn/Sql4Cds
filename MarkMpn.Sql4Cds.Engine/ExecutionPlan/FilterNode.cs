@@ -30,9 +30,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// The data source to select from
         /// </summary>
         [Browsable(false)]
-        public IDataExecutionPlanNode Source { get; set; }
+        public IDataExecutionPlanNodeInternal Source { get; set; }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
             var schema = Source.GetSchema(dataSources, parameterTypes);
             var filter = Filter.Compile(schema, parameterTypes);
@@ -49,15 +49,83 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes)
+        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
-            return Source.GetSchema(dataSources, parameterTypes);
+            var schema = new NodeSchema(Source.GetSchema(dataSources, parameterTypes));
+
+            AddNotNullColumns(schema, Filter, false);
+
+            return schema;
         }
 
-        public override IDataExecutionPlanNode FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes, IList<OptimizerHint> hints)
+        private void AddNotNullColumns(NodeSchema schema, BooleanExpression filter, bool not)
+        {
+            if (filter is BooleanBinaryExpression binary)
+            {
+                if (binary.BinaryExpressionType == BooleanBinaryExpressionType.Or)
+                    return;
+
+                AddNotNullColumns(schema, binary.FirstExpression, not);
+                AddNotNullColumns(schema, binary.SecondExpression, not);
+            }
+
+            if (filter is BooleanIsNullExpression isNull)
+            {
+                if (not ^ isNull.IsNot)
+                    AddNotNullColumn(schema, isNull.Expression);
+            }
+
+            if (!not && filter is BooleanComparisonExpression cmp)
+            {
+                AddNotNullColumn(schema, cmp.FirstExpression);
+                AddNotNullColumn(schema, cmp.SecondExpression);
+            }
+
+            if (filter is BooleanParenthesisExpression paren)
+            {
+                AddNotNullColumns(schema, paren.Expression, not);
+            }
+
+            if (filter is BooleanNotExpression n)
+            {
+                AddNotNullColumns(schema, n.Expression, !not);
+            }
+
+            if (!not && filter is InPredicate inPred)
+            {
+                AddNotNullColumn(schema, inPred.Expression);
+            }
+
+            if (!not && filter is LikePredicate like)
+            {
+                AddNotNullColumn(schema, like.FirstExpression);
+                AddNotNullColumn(schema, like.SecondExpression);
+            }
+
+            if (!not && filter is FullTextPredicate fullText)
+            {
+                foreach (var col in fullText.Columns)
+                    AddNotNullColumn(schema, col);
+            }
+        }
+
+        private void AddNotNullColumn(NodeSchema schema, ScalarExpression expr)
+        {
+            if (!(expr is ColumnReferenceExpression col))
+                return;
+
+            if (!schema.ContainsColumn(col.GetColumnName(), out var colName))
+                return;
+
+            schema.NotNullColumns.Add(colName);
+        }
+
+        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
             Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
             Source.Parent = this;
+
+            var foldedFilters = false;
 
             // Foldable correlated IN queries "lefttable.column IN (SELECT righttable.column FROM righttable WHERE ...) are created as:
             // Filter: Expr2 is not null
@@ -140,13 +208,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         var rightSorts = (rightFetch.Entity.Items ?? Array.Empty<object>()).OfType<FetchOrderType>().ToList();
 
-                        if (rightSorts.Count != 1)
-                            break;
+                        if (rightSorts.Count == 0)
+                        {
+                            // Implicit sort on primary key
+                            attribute = rightFetch.GetSchema(dataSources, parameterTypes).PrimaryKey;
+                        }
+                        else
+                        {
+                            if (rightSorts.Count != 1)
+                                break;
 
-                        if (!String.IsNullOrEmpty(rightSorts[0].alias))
-                            break;
+                            if (!String.IsNullOrEmpty(rightSorts[0].alias))
+                                break;
 
-                        attribute = $"{rightFetch.Alias}.{rightSorts[0].attribute}";
+                            attribute = $"{rightFetch.Alias}.{rightSorts[0].attribute}";
+                        }
                     }
 
                     if (!merge.RightAttribute.GetColumnName().Equals(attribute, StringComparison.OrdinalIgnoreCase))
@@ -167,8 +243,40 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (notNullFilter == null)
                         break;
 
-                    // We can fold IN to a simple left outer join where the attribute is the primary key
-                    if (!rightFetch.FetchXml.distinct && rightSchema.PrimaryKey == attribute)
+                    // If IN query is on matching primary keys (SELECT name FROM account WHERE accountid IN (SELECT accountid FROM account WHERE ...))
+                    // we can eliminate the left join and rewrite as SELECT name FROM account WHERE ....
+                    // Can't do this if there is any conflict in join aliases
+                    if (leftFetch.Entity.name == rightFetch.Entity.name &&
+                        merge.LeftAttribute.GetColumnName() == leftFetch.Alias + "." + dataSources[leftFetch.DataSource].Metadata[leftFetch.Entity.name].PrimaryIdAttribute &&
+                        merge.RightAttribute.GetColumnName() == rightFetch.Alias + "." + dataSources[rightFetch.DataSource].Metadata[rightFetch.Entity.name].PrimaryIdAttribute &&
+                        !leftFetch.Entity.GetLinkEntities().Select(l => l.alias).Intersect(rightFetch.Entity.GetLinkEntities().Select(l => l.alias), StringComparer.OrdinalIgnoreCase).Any())
+                    {
+                        if (rightFetch.Entity.Items != null)
+                        {
+                            // Remove any attributes from the subquery. Mark all joins as semi joins so no more attributes will
+                            // be added to them using a SELECT * query
+                            rightFetch.Entity.Items = rightFetch.Entity.Items.Where(i => !(i is FetchAttributeType || i is allattributes)).ToArray();
+
+                            foreach (var link in rightFetch.Entity.GetLinkEntities())
+                            {
+                                link.SemiJoin = true;
+
+                                if (link.Items != null)
+                                    link.Items = link.Items.Where(i => !(i is FetchAttributeType || i is allattributes)).ToArray();
+                            }
+
+                            foreach (var item in rightFetch.Entity.Items)
+                                leftFetch.Entity.AddItem(item);
+                        }
+
+                        Filter = Filter.RemoveCondition(notNullFilter);
+                        foldedFilters = true;
+
+                        linkToAdd = null;
+                    }
+                    // We can fold IN to a simple left outer join where the attribute is the primary key. Can't do this
+                    // if there are any inner joins though.
+                    else if (!rightFetch.FetchXml.distinct && rightSchema.PrimaryKey == attribute && !rightFetch.Entity.GetLinkEntities().Any(link => link.linktype == "inner"))
                     {
                         // Replace the filter on the defined value name with a filter on the primary key column
                         notNullFilter.Expression = attribute.ToColumnReference();
@@ -191,6 +299,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                         // Remove the filter and replace with an "in" link-entity
                         Filter = Filter.RemoveCondition(notNullFilter);
+                        foldedFilters = true;
 
                         linkToAdd = new FetchLinkEntityType
                         {
@@ -251,6 +360,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     // Remove the filter and replace with an "exists" link-entity
                     Filter = Filter.RemoveCondition(notNullFilter);
+                    foldedFilters = true;
 
                     linkToAdd = new FetchLinkEntityType
                     {
@@ -269,18 +379,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     break;
                 }
 
-                // Remove any attributes from the new linkentity
-                var tempEntity = new FetchEntityType { Items = new object[] { linkToAdd } };
+                if (linkToAdd != null)
+                {
+                    // Can't add the link if it's got any filter conditions with an entityname
+                    if (linkToAdd.GetConditions().Any(c => !String.IsNullOrEmpty(c.entityname)))
+                        break;
 
-                foreach (var link in tempEntity.GetLinkEntities())
-                    link.Items = (link.Items ?? Array.Empty<object>()).Where(i => !(i is FetchAttributeType) && !(i is allattributes)).ToArray();
+                    // Remove any attributes from the new linkentity
+                    var tempEntity = new FetchEntityType { Items = new object[] { linkToAdd } };
 
-                if (leftAlias.Equals(leftFetch.Alias, StringComparison.OrdinalIgnoreCase))
-                    leftFetch.Entity.AddItem(linkToAdd);
-                else
-                    leftFetch.Entity.FindLinkEntity(leftAlias).AddItem(linkToAdd);
+                    foreach (var link in tempEntity.GetLinkEntities())
+                        link.Items = (link.Items ?? Array.Empty<object>()).Where(i => !(i is FetchAttributeType) && !(i is allattributes)).ToArray();
 
-                addedLinks.Add(linkToAdd);
+                    if (leftAlias.Equals(leftFetch.Alias, StringComparison.OrdinalIgnoreCase))
+                        leftFetch.Entity.AddItem(linkToAdd);
+                    else
+                        leftFetch.Entity.FindLinkEntity(leftAlias).AddItem(linkToAdd);
+
+                    addedLinks.Add(linkToAdd);
+                }
 
                 joins.Remove(join);
 
@@ -337,6 +454,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     };
 
                     Filter = filter;
+                    foldedFilters = true;
                 }
             }
 
@@ -350,28 +468,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (!dataSources.TryGetValue(fetchXml.DataSource, out var dataSource))
                         throw new NotSupportedQueryFragmentException("Missing datasource " + fetchXml.DataSource);
 
-                    var additionalLinkEntities = new Dictionary<object, List<FetchLinkEntityType>>();
-
                     // If the criteria are ANDed, see if any of the individual conditions can be translated to FetchXML
-                    Filter = ExtractFetchXMLFilters(dataSource.Metadata, options, Filter, schema, null, fetchXml.Entity.name, fetchXml.Alias, fetchXml.Entity.Items, out var fetchFilter, additionalLinkEntities);
+                    Filter = ExtractFetchXMLFilters(dataSource.Metadata, options, Filter, schema, null, fetchXml.Entity.name, fetchXml.Alias, fetchXml.Entity.Items, parameterTypes, out var fetchFilter);
 
                     if (fetchFilter != null)
                     {
                         fetchXml.Entity.AddItem(fetchFilter);
-
-                        foreach (var kvp in additionalLinkEntities)
-                        {
-                            if (kvp.Key is FetchEntityType e)
-                            {
-                                foreach (var le in kvp.Value)
-                                    fetchXml.Entity.AddItem(le);
-                            }
-                            else
-                            {
-                                foreach (var le in kvp.Value)
-                                    ((FetchLinkEntityType)kvp.Key).AddItem(le);
-                            }
-                        }
+                        foldedFilters = true;
                     }
                 }
 
@@ -391,12 +494,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         meta.Query.RelationshipQuery = new RelationshipQueryExpression();
 
                     meta.Query.RelationshipQuery.AddFilter(relationshipFilter);
+
+                    if (entityFilter != null || attributeFilter != null || relationshipFilter != null)
+                        foldedFilters = true;
                 }
             }
 
             foreach (var addedLink in addedLinks)
                 addedLink.SemiJoin = true;
 
+            // Some of the filters have been folded into the source. Fold the sources again as the filter can have changed estimated row
+            // counts and lead to a better execution plan.
+            if (foldedFilters)
+                Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
+
+            // All the filters have been folded into the source. 
             if (Filter == null)
                 return Source;
 
@@ -420,7 +532,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return null;
         }
 
-        private IEnumerable<IDataExecutionPlanNode> GetFoldableSources(IDataExecutionPlanNode source)
+        private IEnumerable<IDataExecutionPlanNodeInternal> GetFoldableSources(IDataExecutionPlanNodeInternal source)
         {
             if (source is FetchXmlScan)
             {
@@ -457,7 +569,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (source is TableSpoolNode)
                 yield break;
 
-            foreach (var subSource in source.GetSources().OfType<IDataExecutionPlanNode>())
+            foreach (var subSource in source.GetSources().OfType<IDataExecutionPlanNodeInternal>())
             {
                 foreach (var foldableSubSource in GetFoldableSources(subSource))
                     yield return foldableSubSource;
@@ -526,7 +638,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return false;
         }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, Type> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
         {
             var schema = Source.GetSchema(dataSources, parameterTypes);
 
@@ -542,9 +654,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        private BooleanExpression ExtractFetchXMLFilters(IAttributeMetadataCache metadata, IQueryExecutionOptions options, BooleanExpression criteria, INodeSchema schema, string allowedPrefix, string targetEntityName, string targetEntityAlias, object[] items, out filter filter, IDictionary<object, List<FetchLinkEntityType>> additionalLinkEntities)
+        private BooleanExpression ExtractFetchXMLFilters(IAttributeMetadataCache metadata, IQueryExecutionOptions options, BooleanExpression criteria, INodeSchema schema, string allowedPrefix, string targetEntityName, string targetEntityAlias, object[] items, IDictionary<string, DataTypeReference> parameterTypes, out filter filter)
         {
-            if (TranslateFetchXMLCriteria(metadata, options, criteria, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out filter, additionalLinkEntities))
+            if (TranslateFetchXMLCriteria(metadata, options, criteria, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, parameterTypes, out filter))
                 return null;
 
             if (!(criteria is BooleanBinaryExpression bin))
@@ -553,8 +665,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (bin.BinaryExpressionType != BooleanBinaryExpressionType.And)
                 return criteria;
 
-            bin.FirstExpression = ExtractFetchXMLFilters(metadata, options, bin.FirstExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out var lhsFilter, additionalLinkEntities);
-            bin.SecondExpression = ExtractFetchXMLFilters(metadata, options, bin.SecondExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out var rhsFilter, additionalLinkEntities);
+            bin.FirstExpression = ExtractFetchXMLFilters(metadata, options, bin.FirstExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, parameterTypes, out var lhsFilter);
+            bin.SecondExpression = ExtractFetchXMLFilters(metadata, options, bin.SecondExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, parameterTypes, out var rhsFilter);
 
             filter = (lhsFilter != null && rhsFilter != null) ? new filter { Items = new object[] { lhsFilter, rhsFilter } } : lhsFilter ?? rhsFilter;
 
@@ -870,9 +982,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return false;
         }
 
-        public override int EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, Type> parameterTypes)
+        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
-            return Source.EstimateRowsOut(dataSources, options, parameterTypes) * 8 / 10;
+            return Source.EstimatedRowsOut * 8 / 10;
+        }
+
+        protected override IEnumerable<string> GetVariablesInternal()
+        {
+            return Filter.GetVariables();
+        }
+
+        public override object Clone()
+        {
+            var clone = new FilterNode
+            {
+                Filter = Filter,
+                Source = (IDataExecutionPlanNodeInternal)Source.Clone()
+            };
+
+            clone.Source.Parent = clone;
+            return clone;
         }
     }
 }

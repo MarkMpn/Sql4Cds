@@ -15,7 +15,7 @@ namespace MarkMpn.Sql4Cds.SSMS
             Target = obj;
         }
 
-        protected object Target { get; }
+        public object Target { get; }
 
         protected static Type GetType(string typeName)
         {
