@@ -163,7 +163,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
             else if (Source is IDataReaderExecutionPlanNode dataSetSource)
             {
-                var dataReader = dataSetSource.Execute(dataSources, options, parameterTypes, parameterValues);
+                var dataReader = dataSetSource.Execute(dataSources, options, parameterTypes, parameterValues, CommandBehavior.Default);
 
                 // Store the values under the column index as well as name for compatibility with INSERT ... SELECT ...
                 var dataTable = new DataTable();

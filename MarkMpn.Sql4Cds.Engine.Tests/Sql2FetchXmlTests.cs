@@ -730,7 +730,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), CommandBehavior.Default);
             var dataTable = new DataTable();
             dataTable.Load(dataReader);
 
@@ -779,7 +779,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), CommandBehavior.Default);
             var dataTable = new DataTable();
             dataTable.Load(dataReader);
 
@@ -824,7 +824,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), CommandBehavior.Default);
             var dataTable = new DataTable();
             dataTable.Load(dataReader);
 
@@ -866,7 +866,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), CommandBehavior.Default);
             var dataTable = new DataTable();
             dataTable.Load(dataReader);
 
@@ -1004,7 +1004,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), CommandBehavior.Default);
             var dataTable = new DataTable();
             dataTable.Load(dataReader);
 
@@ -1045,7 +1045,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), CommandBehavior.Default);
             var dataTable = new DataTable();
             dataTable.Load(dataReader);
 
@@ -1094,7 +1094,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), CommandBehavior.Default);
             var dataTable = new DataTable();
             dataTable.Load(dataReader);
 
@@ -1140,7 +1140,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), CommandBehavior.Default);
             var dataTable = new DataTable();
             dataTable.Load(dataReader);
 
@@ -1186,7 +1186,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), CommandBehavior.Default);
             var dataTable = new DataTable();
             dataTable.Load(dataReader);
 
@@ -1231,7 +1231,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), CommandBehavior.Default);
             var dataTable = new DataTable();
             dataTable.Load(dataReader);
 
@@ -1276,7 +1276,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), CommandBehavior.Default);
             var dataTable = new DataTable();
             dataTable.Load(dataReader);
 
@@ -1319,7 +1319,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), CommandBehavior.Default);
             var dataTable = new DataTable();
             dataTable.Load(dataReader);
 
@@ -1406,7 +1406,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), CommandBehavior.Default);
             var dataTable = new DataTable();
             dataTable.Load(dataReader);
 
@@ -1470,7 +1470,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), CommandBehavior.Default);
             var dataTable = new DataTable();
             dataTable.Load(dataReader);
 
@@ -1528,7 +1528,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), CommandBehavior.Default);
             var dataTable = new DataTable();
             dataTable.Load(dataReader);
 
@@ -1582,7 +1582,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), CommandBehavior.Default);
             var dataTable = new DataTable();
             dataTable.Load(dataReader);
 
@@ -1638,7 +1638,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataReader = alternativeQuery.Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = alternativeQuery.Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), CommandBehavior.Default);
             var dataTable = new DataTable();
             dataTable.Load(dataReader);
 
@@ -1693,7 +1693,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataReader = select.Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = select.Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), CommandBehavior.Default);
             var dataTable = new DataTable();
             dataTable.Load(dataReader);
 
@@ -2029,7 +2029,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), CommandBehavior.Default);
             var dataTable = new DataTable();
             dataTable.Load(dataReader);
 
@@ -2063,7 +2063,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), CommandBehavior.Default);
             var dataTable = new DataTable();
             dataTable.Load(dataReader);
 
@@ -2089,7 +2089,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual("name = 'test'", filterNode.Filter.ToSql());
             var optionsetNode = (GlobalOptionSetQueryNode)filterNode.Source;
 
-            var dataReader = selectNode.Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = selectNode.Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), CommandBehavior.Default);
             var dataTable = new DataTable();
             dataTable.Load(dataReader);
 
@@ -2112,7 +2112,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var sortNode = (SortNode)selectNode.Source;
             var metadataNode = (MetadataQueryNode)sortNode.Source;
 
-            var dataReader = selectNode.Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = selectNode.Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), CommandBehavior.Default);
             var dataTable = new DataTable();
             dataTable.Load(dataReader);
 
@@ -2132,7 +2132,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
             var queries = planBuilder.Build(query, null, out _);
 
-            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), CommandBehavior.Default);
             var dataTable = new DataTable();
             dataTable.Load(dataReader);
 
@@ -2192,7 +2192,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             CollectionAssert.AreEqual(new[] { "new_optionsetvalue", "new_optionsetvaluename" }, select.ColumnSet.Select(c => c.OutputColumn).ToList());
 
-            var dataReader = select.Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = select.Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), CommandBehavior.Default);
             var dataTable = new DataTable();
             dataTable.Load(dataReader);
 
@@ -2536,7 +2536,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), CommandBehavior.Default);
             var dataTable = new DataTable();
             dataTable.Load(dataReader);
 
@@ -2567,7 +2567,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), CommandBehavior.Default);
             var dataTable = new DataTable();
             dataTable.Load(dataReader);
 
@@ -2606,7 +2606,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var dataReader = ((SelectNode)queries[0]).Execute(GetDataSources(_context), this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), CommandBehavior.Default);
             var dataTable = new DataTable();
             dataTable.Load(dataReader);
 

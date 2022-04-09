@@ -29,6 +29,7 @@ namespace MarkMpn.Sql4Cds.Engine
         private IDataReader _reader;
         private bool _error;
         private int _rows;
+        private int _resultSetsReturned;
         private bool _closed;
         
         public Sql4CdsDataReader(Sql4CdsCommand command, IQueryExecutionOptions options, CommandBehavior behavior)
@@ -67,11 +68,20 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     if (node is IDataReaderExecutionPlanNode dataSetNode)
                     {
-                        _readerQuery = (IDataReaderExecutionPlanNode)dataSetNode.Clone();
-                        _reader = _readerQuery.Execute(_connection.DataSources, _options, parameterTypes, parameterValues);
-                        _rows = 0;
-                        _instructionPointer++;
-                        return true;
+                        if (_resultSetsReturned == 0 || (!_behavior.HasFlag(CommandBehavior.SingleResult) && !_behavior.HasFlag(CommandBehavior.SingleRow)))
+                        {
+                            _readerQuery = (IDataReaderExecutionPlanNode)dataSetNode.Clone();
+                            _reader = _readerQuery.Execute(_connection.DataSources, _options, parameterTypes, parameterValues, _behavior);
+                            _resultSetsReturned++;
+                            _rows = 0;
+                            _instructionPointer++;
+                            return true;
+                        }
+                        else
+                        {
+                            _rows = 0;
+                            _instructionPointer++;
+                        }
                     }
                     else if (node is IDmlQueryExecutionPlanNode dmlNode)
                     {

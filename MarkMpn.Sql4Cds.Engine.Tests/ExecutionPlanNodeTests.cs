@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using FakeXrmEasy;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
@@ -712,6 +713,36 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 .ToArray();
 
             CollectionAssert.AreEqual(new[] { new { Name = "hello", Count = 2 } }, results);
+        }
+
+        [TestMethod]
+        public void SqlTransformSchemaOnly()
+        {
+            var sql = "SELECT name FROM account; DECLARE @id uniqueidentifier; SELECT name FROM account WHERE accountid = @id";
+            var transformed = SqlNode.ApplyCommandBehavior(sql, System.Data.CommandBehavior.SchemaOnly, new StubOptions());
+            transformed = Regex.Replace(transformed, "[ \\r\\n]+", " ").Trim();
+
+            Assert.AreEqual("SELECT name FROM account WHERE 0 = 1; DECLARE @id AS UNIQUEIDENTIFIER; SELECT name FROM account WHERE accountid = @id AND 0 = 1;", transformed);
+        }
+
+        [TestMethod]
+        public void SqlTransformSingleRow()
+        {
+            var sql = "SELECT name FROM account; DECLARE @id uniqueidentifier; SELECT name FROM account WHERE accountid = @id";
+            var transformed = SqlNode.ApplyCommandBehavior(sql, System.Data.CommandBehavior.SingleRow, new StubOptions());
+            transformed = Regex.Replace(transformed, "[ \\r\\n]+", " ").Trim();
+
+            Assert.AreEqual("SELECT TOP 1 name FROM account; DECLARE @id AS UNIQUEIDENTIFIER;", transformed);
+        }
+
+        [TestMethod]
+        public void SqlTransformSingleResult()
+        {
+            var sql = "SELECT name FROM account; DECLARE @id uniqueidentifier; SELECT name FROM account WHERE accountid = @id";
+            var transformed = SqlNode.ApplyCommandBehavior(sql, System.Data.CommandBehavior.SingleResult, new StubOptions());
+            transformed = Regex.Replace(transformed, "[ \\r\\n]+", " ").Trim();
+
+            Assert.AreEqual("SELECT name FROM account; DECLARE @id AS UNIQUEIDENTIFIER;", transformed);
         }
     }
 }

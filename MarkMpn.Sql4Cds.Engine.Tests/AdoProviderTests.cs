@@ -418,5 +418,107 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 Assert.AreEqual("UpperCase", _context.Data["account"][accountId.Id].GetAttributeValue<string>("name"));
             }
         }
+
+        [TestMethod]
+        public void ExecuteReaderSchemaOnly()
+        {
+            var id = Guid.NewGuid();
+
+            _context.Data["account"] = new Dictionary<Guid, Entity>
+            {
+                [id] = new Entity("account", id)
+                {
+                    ["accountid"] = id,
+                    ["name"] = "Test"
+                }
+            };
+
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "SELECT name FROM account";
+
+                using (var reader = cmd.ExecuteReader(CommandBehavior.SchemaOnly))
+                {
+                    var schema = reader.GetSchemaTable();
+                    Assert.AreEqual(1, schema.Rows.Count);
+                    Assert.AreEqual("name", schema.Rows[0]["ColumnName"]);
+                    Assert.AreEqual(typeof(string), schema.Rows[0]["DataType"]);
+
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
+
+        [TestMethod]
+        public void ExecuteReaderSingleRow()
+        {
+            var id1 = Guid.NewGuid();
+            var id2 = Guid.NewGuid();
+
+            _context.Data["account"] = new Dictionary<Guid, Entity>
+            {
+                [id1] = new Entity("account", id1)
+                {
+                    ["accountid"] = id1,
+                    ["name"] = "Test1"
+                },
+                [id2] = new Entity("account", id2)
+                {
+                    ["accountid"] = id2,
+                    ["name"] = "Test2"
+                }
+            };
+
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "SELECT name FROM account; SELECT accountid FROM account";
+
+                using (var reader = cmd.ExecuteReader(CommandBehavior.SingleRow))
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.IsFalse(reader.Read());
+
+                    Assert.IsFalse(reader.NextResult());
+                }
+            }
+        }
+
+        [TestMethod]
+        public void ExecuteReaderSingleResult()
+        {
+            var id1 = Guid.NewGuid();
+            var id2 = Guid.NewGuid();
+
+            _context.Data["account"] = new Dictionary<Guid, Entity>
+            {
+                [id1] = new Entity("account", id1)
+                {
+                    ["accountid"] = id1,
+                    ["name"] = "Test1"
+                },
+                [id2] = new Entity("account", id2)
+                {
+                    ["accountid"] = id2,
+                    ["name"] = "Test2"
+                }
+            };
+
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "SELECT name FROM account; SELECT accountid FROM account";
+
+                using (var reader = cmd.ExecuteReader(CommandBehavior.SingleResult))
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.IsTrue(reader.Read());
+                    Assert.IsFalse(reader.Read());
+
+                    Assert.IsFalse(reader.NextResult());
+                }
+            }
+        }
     }
 }

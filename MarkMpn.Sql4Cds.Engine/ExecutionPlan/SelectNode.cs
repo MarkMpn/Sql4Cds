@@ -48,12 +48,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override int ExecutionCount => _executionCount;
 
-        public IDataReader Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        public IDataReader Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, CommandBehavior behavior)
         {
             _executionCount++;
 
             var schema = Source.GetSchema(dataSources, parameterTypes);
-            var source = Source.Execute(dataSources, options, parameterTypes, parameterValues);
+            var source = behavior.HasFlag(CommandBehavior.SchemaOnly) ? Array.Empty<Entity>() : Source.Execute(dataSources, options, parameterTypes, parameterValues);
+
+            if (behavior.HasFlag(CommandBehavior.SingleRow))
+                source = source.Take(1);
+
             return new SelectDataReader(ColumnSet, _timer, schema, source, parameterValues);
         }
 

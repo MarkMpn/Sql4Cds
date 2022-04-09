@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Data;
 using System.Data.SqlClient;
 using System.Data.SqlTypes;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -52,7 +53,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
         }
 
-        public IDataReader Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        public IDataReader Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, CommandBehavior behavior)
         {
             _executionCount++;
 
@@ -84,7 +85,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     var cmd = con.CreateCommand();
                     cmd.CommandTimeout = (int)TimeSpan.FromMinutes(2).TotalSeconds;
-                    cmd.CommandText = Sql;
+                    cmd.CommandText = ApplyCommandBehavior(Sql, behavior, options);
 
                     foreach (var paramValue in parameterValues)
                     {
@@ -106,7 +107,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
 
                     options.CancellationToken.Register(() => cmd.Cancel());
-                    var reader = new SqlDataReaderWrapper(cmd.ExecuteReader(), cmd, con, Parent == null ? parameterValues : null);
+                    var reader = new SqlDataReaderWrapper(cmd.ExecuteReader(behavior), cmd, con, Parent == null ? parameterValues : null);
 
                     if (Parent != null)
                         reader.ConvertToSqlTypes = true;
@@ -128,6 +129,76 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     };
                 }
             }
+        }
+
+        internal static string ApplyCommandBehavior(string sql, CommandBehavior behavior, IQueryExecutionOptions options)
+        {
+            if (behavior == CommandBehavior.Default)
+                return sql;
+
+            // TDS Endpoint doesn't support command behavior flags, so fake them by modifying the SQL query
+            var dom = new TSql150Parser(options.QuotedIdentifiers);
+            var script = (TSqlScript) dom.Parse(new StringReader(sql), out _);
+
+            if (behavior.HasFlag(CommandBehavior.SchemaOnly))
+            {
+                // Add an impossible WHERE clause to prevent any data being returned
+                foreach (var batch in script.Batches)
+                {
+                    foreach (var select in batch.Statements.OfType<SelectStatement>())
+                    {
+                        if (select.QueryExpression is QuerySpecification querySpec)
+                        {
+                            var contradiction = new BooleanComparisonExpression
+                            {
+                                FirstExpression = new IntegerLiteral { Value = "0" },
+                                ComparisonType = BooleanComparisonType.Equals,
+                                SecondExpression = new IntegerLiteral { Value = "1" },
+                            };
+
+                            if (querySpec.WhereClause == null)
+                                querySpec.WhereClause = new WhereClause { SearchCondition = contradiction };
+                            else
+                                querySpec.WhereClause.SearchCondition = new BooleanBinaryExpression { FirstExpression = querySpec.WhereClause.SearchCondition, BinaryExpressionType = BooleanBinaryExpressionType.And, SecondExpression = contradiction };
+                        }
+                    }
+                }
+            }
+
+            if (behavior.HasFlag(CommandBehavior.SingleRow) || behavior.HasFlag(CommandBehavior.SingleResult))
+            {
+                // Remove all SELECT statements after the first one
+                var foundFirstSelect = false;
+
+                foreach (var batch in script.Batches)
+                {
+                    foreach (var select in batch.Statements.OfType<SelectStatement>().ToArray())
+                    {
+                        if (!foundFirstSelect)
+                            foundFirstSelect = true;
+                        else
+                            batch.Statements.Remove(select);
+                    }
+                }
+            }
+
+            if (behavior.HasFlag(CommandBehavior.SingleRow))
+            {
+                // Add a TOP 1 clause to the first SELECT statement
+                foreach (var batch in script.Batches)
+                {
+                    foreach (var select in batch.Statements.OfType<SelectStatement>())
+                    {
+                        if (select.QueryExpression is QuerySpecification querySpec)
+                        {
+                            querySpec.TopRowFilter = new TopRowFilter { Expression = new IntegerLiteral { Value = "1" } };
+                        }
+                    }
+                }
+            }
+
+            script.ScriptTokenStream = null;
+            return script.ToSql();
         }
 
         public IRootExecutionPlanNodeInternal[] FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)

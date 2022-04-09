@@ -2935,7 +2935,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 },
             };
 
-            var result = select.Execute(_localDataSource, this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>());
+            var result = select.Execute(_localDataSource, this, new Dictionary<string, DataTypeReference>(), new Dictionary<string, object>(), CommandBehavior.Default);
             var dataTable = new DataTable();
             dataTable.Load(result);
 
@@ -3392,7 +3392,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 if (plan is IDataReaderExecutionPlanNode selectQuery)
                 {
-                    var results = selectQuery.Execute(_dataSources, this, parameterTypes, parameterValues);
+                    var results = selectQuery.Execute(_dataSources, this, parameterTypes, parameterValues, CommandBehavior.Default);
                     var dataTable = new DataTable();
                     dataTable.Load(results);
 
@@ -3447,7 +3447,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 if (plan is IDataReaderExecutionPlanNode selectQuery)
                 {
-                    var results = selectQuery.Execute(_dataSources, this, parameterTypes, parameterValues);
+                    var results = selectQuery.Execute(_dataSources, this, parameterTypes, parameterValues, CommandBehavior.Default);
                     var dataTable = new DataTable();
                     dataTable.Load(results);
 
@@ -3508,7 +3508,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 if (plan is IDataReaderExecutionPlanNode selectQuery)
                 {
-                    var results = selectQuery.Execute(_dataSources, this, parameterTypes, parameterValues);
+                    var results = selectQuery.Execute(_dataSources, this, parameterTypes, parameterValues, CommandBehavior.Default);
                     var dataTable = new DataTable();
                     dataTable.Load(results);
 
@@ -3543,7 +3543,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 if (plan is IDataReaderExecutionPlanNode selectQuery)
                 {
-                    var results = selectQuery.Execute(_dataSources, this, parameterTypes, parameterValues);
+                    var results = selectQuery.Execute(_dataSources, this, parameterTypes, parameterValues, CommandBehavior.Default);
                     var dataTable = new DataTable();
                     dataTable.Load(results);
 
@@ -3637,7 +3637,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 if (plan is IDataReaderExecutionPlanNode selectQuery)
                 {
-                    var results = selectQuery.Execute(_localDataSource, this, parameterTypes, parameterValues);
+                    var results = selectQuery.Execute(_localDataSource, this, parameterTypes, parameterValues, CommandBehavior.Default);
                     var dataTable = new DataTable();
                     dataTable.Load(results);
 
@@ -3672,7 +3672,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 if (plan is IDataReaderExecutionPlanNode selectQuery)
                 {
-                    var results = selectQuery.Execute(_dataSources, this, parameterTypes, parameterValues);
+                    var results = selectQuery.Execute(_dataSources, this, parameterTypes, parameterValues, CommandBehavior.Default);
                     var dataTable = new DataTable();
                     dataTable.Load(results);
 

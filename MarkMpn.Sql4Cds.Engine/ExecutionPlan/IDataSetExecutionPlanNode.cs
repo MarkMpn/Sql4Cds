@@ -21,7 +21,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="options">The options that control how the query should be executed</param>
         /// <param name="parameterTypes">The types of the parameters that are available to the query</param>
         /// <param name="parameterValues">The values of the parameters that are available to the query</param>
+        /// <param name="behavior">Additional options to control how the command should be executed</param>
         /// <returns>A <see cref="IDataReader"/> that contains the results of the query</returns>
-        IDataReader Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues);
+        IDataReader Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, CommandBehavior behavior);
     }
 }
