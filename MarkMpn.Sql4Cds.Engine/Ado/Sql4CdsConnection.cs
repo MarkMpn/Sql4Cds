@@ -174,15 +174,6 @@ namespace MarkMpn.Sql4Cds.Engine
         }
 
         /// <summary>
-        /// Indicates if a <see cref="Microsoft.Crm.Sdk.Messages.RetrieveTotalRecordCountRequest"/> should be used for simple SELECT count(*) FROM table queries
-        /// </summary>
-        public bool UseRetrieveTotalRecordCount
-        {
-            get => _options.UseRetrieveTotalRecordCount;
-            set => _options.UseRetrieveTotalRecordCount = value;
-        }
-
-        /// <summary>
         /// The maximum number of worker threads to use to execute DML queries
         /// </summary>
         public int MaxDegreeOfParallelism

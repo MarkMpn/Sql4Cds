@@ -42,8 +42,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         bool IQueryExecutionOptions.UseTDSEndpoint => false;
 
-        bool IQueryExecutionOptions.UseRetrieveTotalRecordCount => true;
-
         int IQueryExecutionOptions.MaxDegreeOfParallelism => 10;
 
         bool IQueryExecutionOptions.ColumnComparisonAvailable => true;
@@ -54,19 +52,16 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         bool IQueryExecutionOptions.BypassCustomPlugins => false;
 
-        bool IQueryExecutionOptions.ConfirmInsert(int count, EntityMetadata meta)
+        void IQueryExecutionOptions.ConfirmInsert(ConfirmDmlStatementEventArgs e)
         {
-            return true;
         }
 
-        bool IQueryExecutionOptions.ConfirmDelete(int count, EntityMetadata meta)
+        void IQueryExecutionOptions.ConfirmDelete(ConfirmDmlStatementEventArgs e)
         {
-            return true;
         }
 
-        bool IQueryExecutionOptions.ConfirmUpdate(int count, EntityMetadata meta)
+        void IQueryExecutionOptions.ConfirmUpdate(ConfirmDmlStatementEventArgs e)
         {
-            return true;
         }
 
         bool IQueryExecutionOptions.ContinueRetrieve(int count)
@@ -857,27 +852,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         </filter>
                     </entity>
                 </fetch>");
-        }
-
-        [TestMethod]
-        public void RetrieveTotalRecordCountRequest()
-        {
-            var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
-
-            var query = @"
-                SELECT count(*) FROM account";
-
-            var plans = planBuilder.Build(query, null, out _);
-
-            Assert.AreEqual(1, plans.Length);
-
-            var select = AssertNode<SelectNode>(plans[0]);
-            var computeScalar = AssertNode<ComputeScalarNode>(select.Source);
-            Assert.AreEqual(1, computeScalar.Columns.Count);
-            Assert.AreEqual("account_count", computeScalar.Columns["count"].ToSql());
-            var count = AssertNode<RetrieveTotalRecordCountNode>(computeScalar.Source);
-            Assert.AreEqual("account", count.EntityName);
         }
 
         [TestMethod]
@@ -4285,6 +4259,154 @@ UPDATE account SET employees = @employees WHERE name = @name";
                         </filter>
                     </entity>
                 </fetch>");
+        }
+
+        [TestMethod]
+        public void CountUsesAggregateByDefault()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"SELECT count(*) FROM account";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var tryCatch1 = AssertNode<TryCatchNode>(select.Source);
+            var tryCatch2 = AssertNode<TryCatchNode>(tryCatch1.TrySource);
+            var fetch = AssertNode<FetchXmlScan>(tryCatch2.TrySource);
+
+            AssertFetchXml(fetch, @"
+                <fetch aggregate='true'>
+                    <entity name='account'>
+                        <attribute name='accountid' aggregate='count' alias='count' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void CountUsesRetrieveTotalRecordCountWithHint()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"SELECT count(*) FROM account OPTION (USE HINT ('RETRIEVE_TOTAL_RECORD_COUNT'))";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var computeScalar = AssertNode<ComputeScalarNode>(select.Source);
+            Assert.AreEqual(1, computeScalar.Columns.Count);
+            Assert.AreEqual("account_count", computeScalar.Columns["count"].ToSql());
+            var count = AssertNode<RetrieveTotalRecordCountNode>(computeScalar.Source);
+            Assert.AreEqual("account", count.EntityName);
+        }
+
+        [TestMethod]
+        public void MaxDOPUsesDefault()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"UPDATE account SET name = 'test'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var update = AssertNode<UpdateNode>(plans[0]);
+            Assert.AreEqual(((IQueryExecutionOptions)this).MaxDegreeOfParallelism, update.MaxDOP);
+        }
+
+        [TestMethod]
+        public void MaxDOPUsesHint()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"UPDATE account SET name = 'test' OPTION (MAXDOP 7)";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var update = AssertNode<UpdateNode>(plans[0]);
+            Assert.AreEqual(7, update.MaxDOP);
+        }
+
+        [TestMethod]
+        public void SubqueryUsesSpoolByDefault()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"SELECT accountid, (SELECT TOP 1 fullname FROM contact) FROM account";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var compute = AssertNode<ComputeScalarNode>(select.Source);
+            var loop = AssertNode<NestedLoopNode>(compute.Source);
+            var accountFetch = AssertNode<FetchXmlScan>(loop.LeftSource);
+            var spool = AssertNode<TableSpoolNode>(loop.RightSource);
+            var contactFetch = AssertNode<FetchXmlScan>(spool.Source);
+        }
+
+        [TestMethod]
+        public void SubqueryDoesntUseSpoolWithHint()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"SELECT accountid, (SELECT TOP 1 fullname FROM contact) FROM account OPTION (NO_PERFORMANCE_SPOOL)";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var compute = AssertNode<ComputeScalarNode>(select.Source);
+            var loop = AssertNode<NestedLoopNode>(compute.Source);
+            var accountFetch = AssertNode<FetchXmlScan>(loop.LeftSource);
+            var contactFetch = AssertNode<FetchXmlScan>(loop.RightSource);
+        }
+
+        [TestMethod]
+        public void BypassPluginExecutionUsesDefault()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"UPDATE account SET name = 'test'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var update = AssertNode<UpdateNode>(plans[0]);
+            Assert.AreEqual(false, update.BypassCustomPluginExecution);
+        }
+
+        [TestMethod]
+        public void BypassPluginExecutionUsesHint()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"UPDATE account SET name = 'test' OPTION (USE HINT ('BYPASS_CUSTOM_PLUGIN_EXECUTION'))";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var update = AssertNode<UpdateNode>(plans[0]);
+            Assert.AreEqual(true, update.BypassCustomPluginExecution);
         }
     }
 }

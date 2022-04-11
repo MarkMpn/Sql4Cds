@@ -74,8 +74,6 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public bool UseTDSEndpoint => true;
 
-        public bool UseRetrieveTotalRecordCount => false;
-
         public int MaxDegreeOfParallelism => 10;
 
         public bool ColumnComparisonAvailable { get; }
@@ -92,19 +90,16 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public bool QuotedIdentifiers => true;
 
-        public bool ConfirmDelete(int count, EntityMetadata meta)
+        public void ConfirmDelete(ConfirmDmlStatementEventArgs e)
         {
-            return true;
         }
 
-        public bool ConfirmInsert(int count, EntityMetadata meta)
+        public void ConfirmInsert(ConfirmDmlStatementEventArgs e)
         {
-            return true;
         }
 
-        public bool ConfirmUpdate(int count, EntityMetadata meta)
+        public void ConfirmUpdate(ConfirmDmlStatementEventArgs e)
         {
-            return true;
         }
 
         public bool ContinueRetrieve(int count)

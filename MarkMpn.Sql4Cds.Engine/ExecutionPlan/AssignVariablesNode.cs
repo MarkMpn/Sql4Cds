@@ -25,6 +25,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override TimeSpan Duration => _timer.Duration;
 
+        [Browsable(false)]
+        public override int MaxDOP { get; set; }
+
+        [Browsable(false)]
+        public override bool BypassCustomPluginExecution { get; set; }
+
         public override string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected)
         {
             _executionCount++;

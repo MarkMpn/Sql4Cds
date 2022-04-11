@@ -47,6 +47,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("SecondaryId Source")]
         public string SecondaryIdSource { get; set; }
 
+        [Category("Delete")]
+        public override int MaxDOP { get; set; }
+
+        [Category("Delete")]
+        public override bool BypassCustomPluginExecution { get; set; }
+
         public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
         {
             if (!requiredColumns.Contains(PrimaryIdSource))
@@ -144,7 +150,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 // Check again that the update is allowed. Don't count any UI interaction in the execution time
-                if (options.CancellationToken.IsCancellationRequested || !options.ConfirmDelete(entities.Count, meta))
+                var confirmArgs = new ConfirmDmlStatementEventArgs(entities.Count, meta, BypassCustomPluginExecution);
+                if (options.CancellationToken.IsCancellationRequested)
+                    confirmArgs.Cancel = true;
+                options.ConfirmDelete(confirmArgs);
+                if (confirmArgs.Cancel)
                     throw new OperationCanceledException("DELETE cancelled by user");
 
                 using (_timer.Run())
