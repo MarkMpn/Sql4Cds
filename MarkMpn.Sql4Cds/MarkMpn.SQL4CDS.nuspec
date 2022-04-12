@@ -22,17 +22,7 @@ plugins or integrations by writing familiar SQL and converting it.
 
 Using the preview TDS Endpoint, SELECT queries can also be run that aren't convertible to FetchXML.</description>
     <summary>Convert SQL queries to FetchXML and execute them against Dataverse / D365</summary>
-    <releaseNotes>Support for variables, WHILE, IF and GOTO statements
-@@IDENTITY and @@ROWCOUNT global variables
-PRINT statement support
-Query optimizer improvements
-Support subqueries in INSERT VALUES statements
-Fixed case sensitivity of column names in UPDATE statements
-Improved TDS Endpoint compatibility detection
-Fixed column autosizing
-New button to convert query directly to FetchXML
-Prompt to save files before closing
-    </releaseNotes>
+    <releaseNotes>Fixed running partitioned aggregate queries</releaseNotes>
     <copyright>Copyright © 2019 Mark Carrington</copyright>
     <language>en-GB</language>
     <tags>XrmToolBox SQL CDS</tags>
