@@ -195,6 +195,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         }
                         catch (Exception ex)
                         {
+                            if (ex is QueryExecutionException qee)
+                                qee.Node = this;
+
                             lock (_queue)
                             {
                                 if (!GetOrganizationServiceFault(ex, out var fault))
