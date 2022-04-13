@@ -85,8 +85,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 Items = new object[]
                 {
-                    new condition { attribute = "createdon", @operator = @operator.gt, value = "@PartitionStart" },
-                    new condition { attribute = "createdon", @operator = @operator.le, value = "@PartitionEnd" }
+                    new condition { attribute = "createdon", @operator = @operator.gt, value = "@PartitionStart", IsVariable = true },
+                    new condition { attribute = "createdon", @operator = @operator.le, value = "@PartitionEnd", IsVariable = true }
                 }
             });
 
@@ -195,6 +195,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         }
                         catch (Exception ex)
                         {
+                            if (ex is QueryExecutionException qee)
+                                qee.Node = this;
+
                             lock (_queue)
                             {
                                 if (!GetOrganizationServiceFault(ex, out var fault))
@@ -386,7 +389,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Source = (IDataExecutionPlanNodeInternal)Source.Clone()
             };
 
-            foreach (var kvp in clone.Aggregates)
+            foreach (var kvp in Aggregates)
                 clone.Aggregates.Add(kvp.Key, kvp.Value);
 
             clone.GroupBy.AddRange(GroupBy);

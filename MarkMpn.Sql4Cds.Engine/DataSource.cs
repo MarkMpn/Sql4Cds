@@ -20,7 +20,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="org">The <see cref="IOrganizationService"/> that provides the connection to the instance</param>
         public DataSource(IOrganizationService org)
         {
-            string name;
+            string name = null;
 
 #if NETCOREAPP
             if (org is ServiceClient svc)
@@ -33,7 +33,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 name = svc.ConnectedOrgUniqueName;
             }
 #endif
-            else
+            
+            if (name == null)
             {
                 var orgDetails = org.RetrieveMultiple(new QueryExpression("organization") { ColumnSet = new ColumnSet("name") }).Entities[0];
                 name = orgDetails.GetAttributeValue<string>("name");
