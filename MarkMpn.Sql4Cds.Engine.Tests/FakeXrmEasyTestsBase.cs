@@ -50,6 +50,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             SetLookupTargets(_context);
             SetLookupTargets(_context2);
+
+            SetMaxLength(_context);
+            SetMaxLength(_context2);
         }
 
         private void SetPrimaryIdAttributes(XrmFakedContext context)
@@ -79,7 +82,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
                 typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.ObjectTypeCode)).SetValue(entity, 2);
 
-                var attr = (LookupAttributeMetadata) entity.Attributes.Single(a => a.LogicalName == "parentcustomerid");
+                var attr = (LookupAttributeMetadata)entity.Attributes.Single(a => a.LogicalName == "parentcustomerid");
                 attr.Targets = new[] { "account", "contact" };
 
                 var nameAttr = new StringAttributeMetadata { LogicalName = attr.LogicalName + "name" };
@@ -91,6 +94,19 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 var attributes = entity.Attributes.Concat(new AttributeMetadata[] { nameAttr, typeAttr }).ToArray();
                 typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.Attributes)).SetValue(entity, attributes);
                 context.SetEntityMetadata(entity);
+            }
+        }
+
+        private void SetMaxLength(XrmFakedContext context)
+        {
+            foreach (var entity in context.CreateMetadataQuery())
+            {
+                if (entity.LogicalName == "account")
+                {
+                    var nameAttr = (StringAttributeMetadata)entity.Attributes.Single(a => a.LogicalName == "name");
+                    nameAttr.MaxLength = 100;
+                    context.SetEntityMetadata(entity);
+                }
             }
         }
     }

@@ -4,6 +4,7 @@ using System.Data.SqlTypes;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
 
@@ -78,10 +79,10 @@ namespace MarkMpn.Sql4Cds.Engine
             throw new ApplicationException("Unknown attribute type " + attrMetadata.GetType());
         }
 
-        public static Type GetAttributeSqlType(this AttributeMetadata attrMetadata)
+        public static DataTypeReference GetAttributeSqlType(this AttributeMetadata attrMetadata)
         {
             if (attrMetadata is MultiSelectPicklistAttributeMetadata)
-                return typeof(SqlString);
+                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { new MaxLiteral() } };
 
             var typeCode = attrMetadata.AttributeType;
 
@@ -89,61 +90,61 @@ namespace MarkMpn.Sql4Cds.Engine
                 typeCode = managedProp.ValueAttributeTypeCode;
 
             if (attrMetadata is BooleanAttributeMetadata || typeCode == AttributeTypeCode.Boolean)
-                return typeof(SqlBoolean);
+                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Bit };
 
             if (attrMetadata is DateTimeAttributeMetadata || typeCode == AttributeTypeCode.DateTime)
-                return typeof(SqlDateTime);
+                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.DateTime };
 
             if (attrMetadata is DecimalAttributeMetadata || typeCode == AttributeTypeCode.Decimal)
-                return typeof(SqlDecimal);
+                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Decimal }; // TODO: Precision/scale
 
             if (attrMetadata is DoubleAttributeMetadata || typeCode == AttributeTypeCode.Double)
-                return typeof(SqlDouble);
+                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Float }; // TODO: Precision/scale
 
             if (attrMetadata is EntityNameAttributeMetadata || typeCode == AttributeTypeCode.EntityName)
-                return typeof(SqlString);
+                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { new IntegerLiteral { Value = "50" } } };
 
             if (attrMetadata is ImageAttributeMetadata)
-                return typeof(SqlBinary);
+                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.VarBinary, Parameters = { new MaxLiteral() } };
 
             if (attrMetadata is IntegerAttributeMetadata || typeCode == AttributeTypeCode.Integer)
-                return typeof(SqlInt32);
+                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int };
 
             if (attrMetadata is BigIntAttributeMetadata || typeCode == AttributeTypeCode.BigInt)
-                return typeof(SqlInt64);
+                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.BigInt };
 
             if (typeCode == AttributeTypeCode.PartyList)
-                return typeof(SqlString);
+                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { new MaxLiteral() } };
 
             if (attrMetadata is LookupAttributeMetadata || attrMetadata.IsPrimaryId == true || typeCode == AttributeTypeCode.Lookup || typeCode == AttributeTypeCode.Customer || typeCode == AttributeTypeCode.Owner)
-                return typeof(SqlEntityReference);
+                return new UserDataTypeReference { Name = new SchemaObjectName { Identifiers = { new Identifier { Value = typeof(SqlEntityReference).FullName } } } };
 
             if (attrMetadata is MemoAttributeMetadata || typeCode == AttributeTypeCode.Memo)
-                return typeof(SqlString);
+                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { attrMetadata is MemoAttributeMetadata memo && memo.MaxLength != null ? (Literal) new IntegerLiteral { Value = memo.MaxLength.ToString() } : new MaxLiteral() } };
 
             if (attrMetadata is MoneyAttributeMetadata || typeCode == AttributeTypeCode.Money)
-                return typeof(SqlMoney);
+                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Money };
 
             if (attrMetadata is PicklistAttributeMetadata || typeCode == AttributeTypeCode.Picklist)
-                return typeof(SqlInt32);
+                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int };
 
             if (attrMetadata is StateAttributeMetadata || typeCode == AttributeTypeCode.State)
-                return typeof(SqlInt32);
+                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int };
 
             if (attrMetadata is StatusAttributeMetadata || typeCode == AttributeTypeCode.Status)
-                return typeof(SqlInt32);
+                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int };
 
             if (attrMetadata is StringAttributeMetadata || typeCode == AttributeTypeCode.String)
-                return typeof(SqlString);
+                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { attrMetadata is StringAttributeMetadata str && str.MaxLength != null ? (Literal)new IntegerLiteral { Value = str.MaxLength.ToString() } : new MaxLiteral() } };
 
             if (attrMetadata is UniqueIdentifierAttributeMetadata || typeCode == AttributeTypeCode.Uniqueidentifier)
-                return typeof(SqlGuid);
+                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.UniqueIdentifier };
 
             if (attrMetadata.AttributeTypeName == AttributeTypeDisplayName.FileType)
-                return typeof(SqlGuid);
+                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.UniqueIdentifier };
 
             if (attrMetadata.AttributeType == AttributeTypeCode.Virtual)
-                return typeof(SqlString);
+                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { new MaxLiteral() } };
 
             throw new ApplicationException("Unknown attribute type " + attrMetadata.GetType());
         }

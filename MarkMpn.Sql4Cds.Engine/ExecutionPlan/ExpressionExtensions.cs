@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -995,6 +996,47 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 throw new NotSupportedQueryFragmentException("Unknown type name", type);
 
             return targetType;
+        }
+
+        /// <summary>
+        /// Gets the size of the data that can be stored in a SQL <see cref="DataTypeReference"/>
+        /// </summary>
+        /// <param name="type">The data type to get the size of</param>
+        /// <returns>The size of the data type to report in <see cref="System.Data.IDataReader.GetSchemaTable"/></returns>
+        public static int GetSize(this DataTypeReference type)
+        {
+            if (!(type is SqlDataTypeReference dataType))
+            {
+                if (type is UserDataTypeReference udt && udt.Name.BaseIdentifier.Value == typeof(SqlEntityReference).FullName)
+                    dataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.UniqueIdentifier };
+                else
+                    throw new NotSupportedQueryFragmentException("Unsupported data type reference", type);
+            }
+
+            switch (dataType.SqlDataTypeOption)
+            {
+                case SqlDataTypeOption.VarChar:
+                case SqlDataTypeOption.NVarChar:
+                case SqlDataTypeOption.VarBinary:
+                case SqlDataTypeOption.Char:
+                case SqlDataTypeOption.NChar:
+                case SqlDataTypeOption.Binary:
+                    if (dataType.Parameters.Count == 1 && dataType.Parameters[0] is IntegerLiteral length && Int32.TryParse(length.Value, out var lengthValue))
+                        return lengthValue;
+                    else if (dataType.Parameters.Count == 1 && dataType.Parameters[0] is MaxLiteral)
+                        return Int32.MaxValue;
+                    else
+                        return 1;
+
+                case SqlDataTypeOption.Text:
+                case SqlDataTypeOption.NText:
+                case SqlDataTypeOption.Image:
+                    return Int32.MaxValue;
+            }
+
+            var netType = dataType.ToNetType(out _);
+            netType = netType.GetProperty("Value")?.PropertyType ?? netType;
+            return Marshal.SizeOf(netType);
         }
 
         private static readonly Dictionary<Type, DataTypeReference> _netTypeMapping = new Dictionary<Type, DataTypeReference>

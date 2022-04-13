@@ -83,6 +83,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
+        public const int LabelMaxLength = 200;
+
         private Dictionary<string, ParameterizedCondition> _parameterizedConditions;
         private HashSet<string> _entityNameGroupings;
         private Dictionary<string, string> _primaryKeyColumns;
@@ -672,7 +674,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     var fullName = $"{alias}.{attrMetadata.LogicalName}";
                     var attrType = attrMetadata.GetAttributeSqlType();
-                    AddSchemaAttribute(schema, fullName, attrMetadata.LogicalName, attrType, attrMetadata, innerJoin);
+                    AddSchemaAttribute(schema, metadata, fullName, attrMetadata.LogicalName, attrType, attrMetadata, innerJoin);
                 }
             }
 
@@ -685,7 +687,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     if (attribute.aggregateSpecified && (attribute.aggregate == Engine.FetchXml.AggregateType.count || attribute.aggregate == Engine.FetchXml.AggregateType.countcolumn) ||
                         attribute.dategroupingSpecified)
-                        attrType = typeof(SqlInt32);
+                        attrType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int };
 
                     string fullName;
                     string attrAlias;
@@ -709,7 +711,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         attrAlias = attribute.name;
                     }
 
-                    AddSchemaAttribute(schema, fullName, attrAlias, attrType, attrMetadata, innerJoin);
+                    AddSchemaAttribute(schema, metadata, fullName, attrAlias, attrType, attrMetadata, innerJoin);
                 }
 
                 if (items.OfType<allattributes>().Any())
@@ -726,7 +728,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         var attrName = attrMetadata.LogicalName;
                         var fullName = $"{alias}.{attrName}";
 
-                        AddSchemaAttribute(schema, fullName, attrName, attrType, attrMetadata, innerJoin);
+                        AddSchemaAttribute(schema, metadata, fullName, attrName, attrType, attrMetadata, innerJoin);
                     }
                 }
 
@@ -813,7 +815,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 AddNotNullFilters(schema, alias, subFilter);
         }
 
-        private void AddSchemaAttribute(NodeSchema schema, string fullName, string simpleName, Type type, AttributeMetadata attrMetadata, bool innerJoin)
+        private void AddSchemaAttribute(NodeSchema schema, IAttributeMetadataCache metadata, string fullName, string simpleName, DataTypeReference type, AttributeMetadata attrMetadata, bool innerJoin)
         {
             var notNull = innerJoin && (attrMetadata.RequiredLevel?.Value == AttributeRequiredLevel.SystemRequired || attrMetadata.LogicalName == "createdon" || attrMetadata.LogicalName == "createdby" || attrMetadata.AttributeOf == "createdby");
 
@@ -828,20 +830,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Add standard virtual attributes
             if (attrMetadata is EnumAttributeMetadata || attrMetadata is BooleanAttributeMetadata)
-                AddSchemaAttribute(schema, fullName + "name", attrMetadata.LogicalName + "name", typeof(SqlString), notNull);
+                AddSchemaAttribute(schema, fullName + "name", attrMetadata.LogicalName + "name", new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { new IntegerLiteral { Value = LabelMaxLength.ToString() } } }, notNull);
 
             if (attrMetadata is LookupAttributeMetadata lookup)
             {
-                AddSchemaAttribute(schema, fullName + "name", attrMetadata.LogicalName + "name", typeof(SqlString), notNull);
+                AddSchemaAttribute(schema, fullName + "name", attrMetadata.LogicalName + "name", new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { new IntegerLiteral { Value = lookup.Targets == null ? "100" : lookup.Targets.Select(e => ((StringAttributeMetadata)metadata[e].Attributes.SingleOrDefault(a => a.LogicalName == metadata[e].PrimaryNameAttribute))?.MaxLength ?? 100).Max().ToString() } } }, notNull);
 
                 if (lookup.Targets?.Length > 1 && lookup.AttributeType != AttributeTypeCode.PartyList)
-                    AddSchemaAttribute(schema, fullName + "type", attrMetadata.LogicalName + "type", typeof(SqlString), notNull);
+                    AddSchemaAttribute(schema, fullName + "type", attrMetadata.LogicalName + "type", new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { new IntegerLiteral { Value = lookup.Targets.Max(target => target.Length).ToString() } } }, notNull);
             }
         }
 
-        private void AddSchemaAttribute(NodeSchema schema, string fullName, string simpleName, Type type, bool notNull)
+        private void AddSchemaAttribute(NodeSchema schema, string fullName, string simpleName, DataTypeReference type, bool notNull)
         {
-            schema.Schema[fullName] = type.ToSqlType();
+            schema.Schema[fullName] = type;
 
             if (notNull)
                 schema.NotNullColumns.Add(fullName);

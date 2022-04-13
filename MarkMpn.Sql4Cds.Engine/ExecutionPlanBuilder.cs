@@ -795,7 +795,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         var attr = attributes[colName];
                         targetName = attr.LogicalName;
-                        targetType = attr.GetAttributeSqlType();
+                        targetType = attr.GetAttributeSqlType().ToNetType(out _);
 
                         // If we're inserting into a lookup field, the field type will be a SqlEntityReference. Change this to
                         // a SqlGuid so we can accept any guid values, including from TDS endpoint where SqlEntityReference
@@ -1234,7 +1234,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     else
                     {
                         var targetAttribute = attributes[targetAttrName];
-                        targetType = targetAttribute.GetAttributeSqlType();
+                        targetType = targetAttribute.GetAttributeSqlType().ToNetType(out _);
                         targetAttrName = targetAttribute.LogicalName;
 
                         // If we're updating a lookup field, the field type will be a SqlEntityReference. Change this to

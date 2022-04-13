@@ -263,14 +263,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             for (var i = 0; i < _columnSet.Count; i++)
             {
                 var column = _columnSet[i];
-                var providerType = _schema.Schema[_columnSet[i].SourceColumn].ToNetType(out _);
+                var sqlType = _schema.Schema[_columnSet[i].SourceColumn];
+                var providerType = sqlType.ToNetType(out _);
                 var type = ToClrType(providerType);
+                var size = sqlType.GetSize();
 
                 schemaTable.Rows.Add(new object[]
                 {
                     column.OutputColumn,  // ColumnName
                     i,                    // ColumnOrdinal
-                    Int32.MaxValue,       // ColumnSize
+                    size,                 // ColumnSize
                     255,                  // NumericPrecision
                     255,                  // NumericScale
                     false,                // IsUnique
