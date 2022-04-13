@@ -32,7 +32,6 @@ namespace MarkMpn.Sql4Cds.SSMS
             con.UseBulkDelete = false;
             con.BatchSize = _options.BatchSize;
             con.UseTDSEndpoint = _useTds;
-            con.UseRetrieveTotalRecordCount = false;
             con.MaxDegreeOfParallelism = _options.MaxDegreeOfParallelism;
             con.UseLocalTimeZone = false;
             con.BypassCustomPlugins = _options.BypassCustomPlugins;
