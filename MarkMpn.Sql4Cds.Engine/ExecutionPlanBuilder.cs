@@ -1558,6 +1558,14 @@ namespace MarkMpn.Sql4Cds.Engine
             // Add filters from HAVING
             node = ConvertHavingClause(node, hints, querySpec.HavingClause, parameterTypes, outerSchema, outerReferences, querySpec, nonAggregateSchema);
 
+            // Add DISTINCT
+            var distinct = querySpec.UniqueRowFilter == UniqueRowFilter.Distinct ? new DistinctNode { Source = node } : null;
+            node = distinct ?? node;
+
+            // Add SELECT
+            var selectNode = ConvertSelectClause(querySpec.SelectElements, hints, node, distinct, querySpec, parameterTypes, outerSchema, outerReferences, nonAggregateSchema);
+            node = selectNode.Source;
+
             // Add sorts from ORDER BY
             var selectFields = new List<ScalarExpression>();
             var preOrderSchema = node.GetSchema(DataSources, parameterTypes);
@@ -1585,10 +1593,6 @@ namespace MarkMpn.Sql4Cds.Engine
 
             node = ConvertOrderByClause(node, hints, querySpec.OrderByClause, selectFields.ToArray(), querySpec, parameterTypes, outerSchema, outerReferences, nonAggregateSchema);
 
-            // Add DISTINCT
-            var distinct = querySpec.UniqueRowFilter == UniqueRowFilter.Distinct ? new DistinctNode { Source = node } : null;
-            node = distinct ?? node;
-
             // Add TOP/OFFSET
             if (querySpec.TopRowFilter != null && querySpec.OffsetClause != null)
                 throw new NotSupportedQueryFragmentException("A TOP can not be used in the same query or sub-query as a OFFSET.", querySpec.TopRowFilter);
@@ -1596,8 +1600,7 @@ namespace MarkMpn.Sql4Cds.Engine
             node = ConvertTopClause(node, querySpec.TopRowFilter, querySpec.OrderByClause, parameterTypes);
             node = ConvertOffsetClause(node, querySpec.OffsetClause, parameterTypes);
 
-            // Add SELECT
-            var selectNode = ConvertSelectClause(querySpec.SelectElements, hints, node, distinct, querySpec, parameterTypes, outerSchema, outerReferences, nonAggregateSchema);
+            selectNode.Source = node;
 
             return selectNode;
         }
@@ -2269,6 +2272,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
 
                     orderBy.Expression = selectList[index];
+                    orderBy.ScriptTokenStream = null;
                 }
 
                 // Anything complex expression should be pre-calculated
@@ -2449,6 +2453,9 @@ namespace MarkMpn.Sql4Cds.Engine
                     distinct.Source = computeScalar;
                 else
                     select.Source = computeScalar;
+
+                var calculationRewrites = computeScalar.Columns.ToDictionary(kvp => kvp.Value, kvp => kvp.Key);
+                query.Accept(new RewriteVisitor(calculationRewrites));
             }
 
             if (distinct != null)
