@@ -4310,5 +4310,31 @@ UPDATE account SET employees = @employees WHERE name = @name";
                     </entity>
                 </fetch>");
         }
+
+        [TestMethod]
+        public void DistinctVirtualAttribute()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT DISTINCT new_optionsetvaluename FROM new_customentity";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var aggregate = AssertNode<StreamAggregateNode>(select.Source);
+            Assert.AreEqual(1, aggregate.GroupBy.Count);
+            Assert.AreEqual("new_customentity.new_optionsetvaluename", aggregate.GroupBy[0].ToSql());
+            var fetch = AssertNode<FetchXmlScan>(aggregate.Source);
+
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS' distinct='true'>
+                    <entity name='new_customentity'>
+                        <attribute name='new_optionsetvalue' />
+                        <order attribute='new_optionsetvalue' />
+                    </entity>
+                </fetch>");
+        }
     }
 }
