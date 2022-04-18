@@ -23,7 +23,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             UseBulkDelete = options.UseBulkDelete;
             BatchSize = options.BatchSize;
             UseTDSEndpoint = options.UseTDSEndpoint;
-            UseRetrieveTotalRecordCount = options.UseRetrieveTotalRecordCount;
             MaxDegreeOfParallelism = options.MaxDegreeOfParallelism;
             ColumnComparisonAvailable = options.ColumnComparisonAvailable;
             UseLocalTimeZone = options.UseLocalTimeZone;
@@ -64,19 +63,16 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         public bool QuotedIdentifiers { get; set; }
 
-        public bool ConfirmDelete(int count, EntityMetadata meta)
+        public void ConfirmDelete(ConfirmDmlStatementEventArgs e)
         {
-            return _options.ConfirmDelete(count, meta);
         }
 
-        public bool ConfirmInsert(int count, EntityMetadata meta)
+        public void ConfirmInsert(ConfirmDmlStatementEventArgs e)
         {
-            return _options.ConfirmInsert(count, meta);
         }
 
-        public bool ConfirmUpdate(int count, EntityMetadata meta)
+        public void ConfirmUpdate(ConfirmDmlStatementEventArgs e)
         {
-            return _options.ConfirmUpdate(count, meta);
         }
 
         public bool ContinueRetrieve(int count)

@@ -135,6 +135,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
             Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
+
+            if (hints.Any(hint => hint.HintKind == OptimizerHintKind.NoPerformanceSpool))
+                return Source;
+
             Source.Parent = this;
             return this;
         }

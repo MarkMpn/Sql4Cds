@@ -38,7 +38,6 @@ namespace MarkMpn.Sql4Cds
             _con.UseBulkDelete = Settings.Instance.UseBulkDelete;
             _con.BatchSize = Settings.Instance.BatchSize;
             _con.UseTDSEndpoint = Settings.Instance.UseTSQLEndpoint && (execute || !Settings.Instance.ShowFetchXMLInEstimatedExecutionPlans);
-            _con.UseRetrieveTotalRecordCount = Settings.Instance.UseRetrieveTotalRecordCount;
             _con.MaxDegreeOfParallelism = Settings.Instance.MaxDegreeOfPaallelism;
             _con.UseLocalTimeZone = Settings.Instance.ShowLocalTimes;
             _con.BypassCustomPlugins = Settings.Instance.BypassCustomPlugins;
@@ -55,15 +54,15 @@ namespace MarkMpn.Sql4Cds
 
         private void ConfirmInsert(object sender, ConfirmDmlStatementEventArgs e)
         {
-            e.Cancel |= !ConfirmInsert((Sql4CdsConnection)sender, e.Count, e.Metadata);
+            e.Cancel |= !ConfirmInsert((Sql4CdsConnection)sender, e);
         }
 
-        private bool ConfirmInsert(Sql4CdsConnection con, int count, EntityMetadata meta)
+        private bool ConfirmInsert(Sql4CdsConnection con, ConfirmDmlStatementEventArgs e)
         {
-            if (count > Settings.Instance.InsertWarnThreshold || con.BypassCustomPlugins)
+            if (e.Count > Settings.Instance.InsertWarnThreshold || e.BypassCustomPluginExecution)
             {
-                var msg = $"Insert will affect {count:N0} {GetDisplayName(count, meta)}.";
-                if (con.BypassCustomPlugins)
+                var msg = $"Insert will affect {e.Count:N0} {GetDisplayName(e.Count, e.Metadata)}.";
+                if (e.BypassCustomPluginExecution)
                     msg += "\r\n\r\nThis operation will bypass any custom plugins.";
 
                 var result = MessageBox.Show(_host, msg + "\r\n\r\nDo you want to proceed?", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
@@ -77,15 +76,15 @@ namespace MarkMpn.Sql4Cds
 
         private void ConfirmUpdate(object sender, ConfirmDmlStatementEventArgs e)
         {
-            e.Cancel |= !ConfirmUpdate((Sql4CdsConnection)sender, e.Count, e.Metadata);
+            e.Cancel |= !ConfirmUpdate((Sql4CdsConnection)sender, e);
         }
 
-        private bool ConfirmUpdate(Sql4CdsConnection con, int count, EntityMetadata meta)
+        private bool ConfirmUpdate(Sql4CdsConnection con, ConfirmDmlStatementEventArgs e)
         {
-            if (count > Settings.Instance.UpdateWarnThreshold || con.BypassCustomPlugins)
+            if (e.Count > Settings.Instance.UpdateWarnThreshold || e.BypassCustomPluginExecution)
             {
-                var msg = $"Update will affect {count:N0} {GetDisplayName(count, meta)}.";
-                if (con.BypassCustomPlugins)
+                var msg = $"Update will affect {e.Count:N0} {GetDisplayName(e.Count, e.Metadata)}.";
+                if (e.BypassCustomPluginExecution)
                     msg += "\r\n\r\nThis operation will bypass any custom plugins.";
 
                 var result = MessageBox.Show(_host, msg + "\r\n\r\nDo you want to proceed?", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
@@ -99,15 +98,15 @@ namespace MarkMpn.Sql4Cds
 
         private void ConfirmDelete(object sender, ConfirmDmlStatementEventArgs e)
         {
-            e.Cancel |= !ConfirmDelete((Sql4CdsConnection)sender, e.Count, e.Metadata);
+            e.Cancel |= !ConfirmDelete((Sql4CdsConnection)sender, e);
         }
 
-        private bool ConfirmDelete(Sql4CdsConnection con, int count, EntityMetadata meta)
+        private bool ConfirmDelete(Sql4CdsConnection con, ConfirmDmlStatementEventArgs e)
         {
-            if (count > Settings.Instance.DeleteWarnThreshold || con.BypassCustomPlugins)
+            if (e.Count > Settings.Instance.DeleteWarnThreshold || e.BypassCustomPluginExecution)
             {
-                var msg = $"Delete will affect {count:N0} {GetDisplayName(count, meta)}.";
-                if (con.BypassCustomPlugins)
+                var msg = $"Delete will affect {e.Count:N0} {GetDisplayName(e.Count, e.Metadata)}.";
+                if (e.BypassCustomPluginExecution)
                     msg += "\r\n\r\nThis operation will bypass any custom plugins.";
 
                 var result = MessageBox.Show(_host, msg + "\r\n\r\nDo you want to proceed?", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
