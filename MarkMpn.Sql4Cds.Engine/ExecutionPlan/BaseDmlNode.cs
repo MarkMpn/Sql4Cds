@@ -91,6 +91,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public virtual string DataSource { get; set; }
 
         /// <summary>
+        /// The maximum degree of paralellism to apply to this operation
+        /// </summary>
+        [Description("The maximum number of operations that will be performed in parallel")]
+        public abstract int MaxDOP { get; set; }
+
+        /// <summary>
+        /// Indicates if custom plugins should be skipped
+        /// </summary>
+        [DisplayName("Bypass Plugin Execution")]
+        [Description("Indicates if custom plugins should be skipped")]
+        public abstract bool BypassCustomPluginExecution { get; set; }
+
+        /// <summary>
         /// Changes system settings to optimise for parallel connections
         /// </summary>
         /// <returns>An object to dispose of to reset the settings to their original values</returns>
@@ -370,7 +383,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var inProgressCount = 0;
             var count = 0;
 
-            var maxDop = options.MaxDegreeOfParallelism;
+            var maxDop = MaxDOP;
 
 #if NETCOREAPP
             var svc = org as ServiceClient;
@@ -422,7 +435,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                             var request = requestGenerator(entity);
 
-                            if (options.BypassCustomPlugins)
+                            if (BypassCustomPluginExecution)
                                 request.Parameters["BypassCustomPluginExecution"] = true;
 
                             if (options.BatchSize == 1)

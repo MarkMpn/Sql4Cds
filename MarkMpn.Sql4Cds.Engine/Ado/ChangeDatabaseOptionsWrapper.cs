@@ -23,7 +23,6 @@ namespace MarkMpn.Sql4Cds.Engine
             BlockDeleteWithoutWhere = options.BlockDeleteWithoutWhere;
             UseBulkDelete = options.UseBulkDelete;
             BatchSize = options.BatchSize;
-            UseRetrieveTotalRecordCount = options.UseRetrieveTotalRecordCount;
             MaxDegreeOfParallelism = options.MaxDegreeOfParallelism;
             ColumnComparisonAvailable = options.ColumnComparisonAvailable;
             UseLocalTimeZone = options.UseLocalTimeZone;
@@ -43,8 +42,6 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public bool UseTDSEndpoint { get; set; }
 
-        public bool UseRetrieveTotalRecordCount { get; set; }
-
         public int MaxDegreeOfParallelism { get; set; }
 
         public bool ColumnComparisonAvailable { get; }
@@ -61,49 +58,31 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public bool QuotedIdentifiers { get; set; }
 
-        public bool ConfirmDelete(int count, EntityMetadata meta)
+        public void ConfirmDelete(ConfirmDmlStatementEventArgs e)
         {
-            var cancelled = !_options.ConfirmDelete(count, meta);
+            if (!e.Cancel)
+                _options.ConfirmDelete(e);
 
-            if (!cancelled)
-            {
-                var args = new ConfirmDmlStatementEventArgs(count, meta);
-                _connection.OnPreDelete(args);
-
-                cancelled = args.Cancel;
-            }
-
-            return !cancelled;
+            if (!e.Cancel)
+                _connection.OnPreDelete(e);
         }
 
-        public bool ConfirmInsert(int count, EntityMetadata meta)
+        public void ConfirmInsert(ConfirmDmlStatementEventArgs e)
         {
-            var cancelled = !_options.ConfirmInsert(count, meta);
+            if (!e.Cancel)
+                _options.ConfirmInsert(e);
 
-            if (!cancelled)
-            {
-                var args = new ConfirmDmlStatementEventArgs(count, meta);
-                _connection.OnPreInsert(args);
-
-                cancelled = args.Cancel;
-            }
-
-            return !cancelled;
+            if (!e.Cancel)
+                _connection.OnPreInsert(e);
         }
 
-        public bool ConfirmUpdate(int count, EntityMetadata meta)
+        public void ConfirmUpdate(ConfirmDmlStatementEventArgs e)
         {
-            var cancelled = !_options.ConfirmUpdate(count, meta);
+            if (!e.Cancel)
+                _options.ConfirmUpdate(e);
 
-            if (!cancelled)
-            {
-                var args = new ConfirmDmlStatementEventArgs(count, meta);
-                _connection.OnPreUpdate(args);
-
-                cancelled = args.Cancel;
-            }
-
-            return !cancelled;
+            if (!e.Cancel)
+                _connection.OnPreUpdate(e);
         }
 
         public bool ContinueRetrieve(int count)

@@ -51,6 +51,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             SetLookupTargets(_context);
             SetLookupTargets(_context2);
 
+            SetAttributeOf(_context);
+            SetAttributeOf(_context2);
+
             SetMaxLength(_context);
             SetMaxLength(_context2);
         }
@@ -93,6 +96,20 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
                 var attributes = entity.Attributes.Concat(new AttributeMetadata[] { nameAttr, typeAttr }).ToArray();
                 typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.Attributes)).SetValue(entity, attributes);
+                context.SetEntityMetadata(entity);
+            }
+        }
+
+        private void SetAttributeOf(XrmFakedContext context)
+        {
+            foreach (var entity in context.CreateMetadataQuery())
+            {
+                if (entity.LogicalName != "new_customentity")
+                    continue;
+
+                var attr = entity.Attributes.Single(a => a.LogicalName == "new_optionsetvaluename");
+                typeof(AttributeMetadata).GetProperty(nameof(AttributeMetadata.AttributeOf)).SetValue(attr, "new_optionsetvalue");
+
                 context.SetEntityMetadata(entity);
             }
         }

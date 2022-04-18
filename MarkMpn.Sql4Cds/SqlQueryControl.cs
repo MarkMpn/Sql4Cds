@@ -79,8 +79,10 @@ namespace MarkMpn.Sql4Cds
         private static Icon _sqlIcon;
         private readonly AutocompleteMenu _autocomplete;
         private ToolTip _tooltip;
-        private CancellationTokenSource _cts;
+        private bool _cancellable;
+        private bool _cancelled;
         private Stopwatch _stopwatch;
+        private Sql4CdsCommand _command;
         private ExecuteParams _params;
         private int _rowCount;
         private ToolStripControlHost _progressHost;
@@ -596,17 +598,13 @@ namespace MarkMpn.Sql4Cds
 
         public bool Cancellable
         {
-            get { return _cts != null; }
+            get { return _cancellable; }
             set
             {
                 if (Cancellable == value)
                     return;
 
-                if (value)
-                    _cts = new CancellationTokenSource();
-                else
-                    _cts = null;
-
+                _cancellable = value;
                 CancellableChanged?.Invoke(this, EventArgs.Empty);
             }
         }
@@ -616,7 +614,8 @@ namespace MarkMpn.Sql4Cds
         public void Cancel()
         {
             backgroundWorker.ReportProgress(0, "Cancelling query...");
-            _cts.Cancel();
+            _cancelled = true;
+            _command.Cancel();
         }
 
         private void AddResult(Control results, int rowCount)
@@ -707,6 +706,8 @@ namespace MarkMpn.Sql4Cds
             _stopwatch.Stop();
             timer.Enabled = false;
             Cancellable = false;
+            _cancelled = false;
+            _command = null;
 
             if (e.Cancelled)
             {
@@ -883,7 +884,6 @@ namespace MarkMpn.Sql4Cds
 
             Execute(() =>
             {
-                Cancellable = args.Execute;
                 _progressHost.Visible = true;
                 timerLabel.Text = "00:00:00";
                 _stopwatch.Restart();
@@ -916,15 +916,19 @@ namespace MarkMpn.Sql4Cds
             backgroundWorker.ReportProgress(0, "Executing query...");
 
             using (var cmd = _connection.CreateCommand())
+            using (var options = new QueryExecutionOptions(this, backgroundWorker, _connection, cmd))
             {
                 _connection.ChangeDatabase(Connection.ConnectionName);
-                new QueryExecutionOptions(this, backgroundWorker).ApplySettings(_connection, cmd, args.Execute);
+                options.ApplySettings(args.Execute);
                 cmd.CommandTimeout = 0;
 
                 cmd.CommandText = args.Sql;
 
                 if (args.Execute)
                 {
+                    _command = cmd;
+                    Execute(() => Cancellable = true);
+
                     cmd.StatementCompleted += (s, stmt) =>
                     {
                         Execute(() => ShowResult(stmt.Statement, args, null, null, null));
@@ -960,7 +964,7 @@ namespace MarkMpn.Sql4Cds
                 }
             }
 
-            if (Cancellable && _cts.Token.IsCancellationRequested)
+            if (Cancellable && _cancelled)
             {
                 e.Cancel = true;
                 AddMessage(-1, 0, "Query was cancelled by user", true);

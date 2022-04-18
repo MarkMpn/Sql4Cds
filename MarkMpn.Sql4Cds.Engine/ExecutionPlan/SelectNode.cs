@@ -155,6 +155,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!hasStar)
                 {
                     var aliasedColumns = columnSet
+                        .Where(c => !c.AllColumns)
                         .Select(c =>
                         {
                             var sourceCol = c.SourceColumn;

@@ -31,6 +31,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("UserId Source")]
         public string UserIdSource { get; set; }
 
+        [Browsable(false)]
+        public override int MaxDOP { get; set; }
+
+        [Browsable(false)]
+        public override bool BypassCustomPluginExecution { get; set; }
+
         public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
         {
             if (!requiredColumns.Contains(UserIdSource))

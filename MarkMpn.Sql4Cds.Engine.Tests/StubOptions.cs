@@ -23,8 +23,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         bool IQueryExecutionOptions.UseTDSEndpoint => false;
 
-        bool IQueryExecutionOptions.UseRetrieveTotalRecordCount => true;
-
         int IQueryExecutionOptions.MaxDegreeOfParallelism => 10;
 
         bool IQueryExecutionOptions.ColumnComparisonAvailable => true;
@@ -35,19 +33,16 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         bool IQueryExecutionOptions.BypassCustomPlugins => false;
 
-        bool IQueryExecutionOptions.ConfirmInsert(int count, EntityMetadata meta)
+        void IQueryExecutionOptions.ConfirmInsert(ConfirmDmlStatementEventArgs e)
         {
-            return true;
         }
 
-        bool IQueryExecutionOptions.ConfirmDelete(int count, EntityMetadata meta)
+        void IQueryExecutionOptions.ConfirmDelete(ConfirmDmlStatementEventArgs e)
         {
-            return true;
         }
 
-        bool IQueryExecutionOptions.ConfirmUpdate(int count, EntityMetadata meta)
+        void IQueryExecutionOptions.ConfirmUpdate(ConfirmDmlStatementEventArgs e)
         {
-            return true;
         }
 
         bool IQueryExecutionOptions.ContinueRetrieve(int count)

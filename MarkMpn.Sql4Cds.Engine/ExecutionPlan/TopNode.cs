@@ -108,11 +108,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // FetchXML can support TOP directly provided it's for no more than 5,000 records
             if (!Percent && !WithTies && Int32.TryParse(literal.Value, out var top) && top <= 5000)
             {
-                var fetchXml = Source as FetchXmlScan;
+                FetchXmlScan fetchXml = null;
 
-                // Skip over ComputeScalar nodes to fold the TOP into the previous FetchXML node
-                if (fetchXml == null && Source is ComputeScalarNode computeScalar)
-                    fetchXml = computeScalar.Source as FetchXmlScan;
+                // Skip over ComputeScalar or semi join nodes to fold the TOP into the previous FetchXML node
+                var source = Source;
+                while (fetchXml == null)
+                {
+                    if (source is ComputeScalarNode computeScalar)
+                        source = computeScalar.Source;
+                    else if (source is BaseJoinNode join && join.SemiJoin)
+                        source = join.LeftSource;
+                    else if (source is FetchXmlScan fetch)
+                        fetchXml = fetch;
+                    else
+                        break;
+                }
 
                 if (fetchXml != null)
                 {
@@ -122,7 +132,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (Source == fetchXml)
                         return fetchXml;
 
-                    return Source;
+                    return Source.FoldQuery(dataSources, options, parameterTypes, hints);
                 }
             }
 

@@ -38,8 +38,6 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         bool IQueryExecutionOptions.UseTDSEndpoint => false;
 
-        bool IQueryExecutionOptions.UseRetrieveTotalRecordCount => true;
-
         int IQueryExecutionOptions.MaxDegreeOfParallelism => 10;
 
         bool IQueryExecutionOptions.ColumnComparisonAvailable => true;
@@ -1843,7 +1841,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         [TestMethod]
         public void Count1ConvertedToCountStar()
         {
-            var query = "SELECT COUNT(1) FROM contact";
+            var query = "SELECT COUNT(1) FROM contact OPTION(USE HINT('RETRIEVE_TOTAL_RECORD_COUNT'))";
 
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
@@ -2667,19 +2665,16 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             return true;
         }
 
-        bool IQueryExecutionOptions.ConfirmInsert(int count, EntityMetadata meta)
+        void IQueryExecutionOptions.ConfirmInsert(ConfirmDmlStatementEventArgs e)
         {
-            return true;
         }
 
-        bool IQueryExecutionOptions.ConfirmUpdate(int count, EntityMetadata meta)
+        void IQueryExecutionOptions.ConfirmUpdate(ConfirmDmlStatementEventArgs e)
         {
-            return true;
         }
 
-        bool IQueryExecutionOptions.ConfirmDelete(int count, EntityMetadata meta)
+        void IQueryExecutionOptions.ConfirmDelete(ConfirmDmlStatementEventArgs e)
         {
-            return true;
         }
 
         private class RetrieveMetadataChangesHandler : IFakeMessageExecutor

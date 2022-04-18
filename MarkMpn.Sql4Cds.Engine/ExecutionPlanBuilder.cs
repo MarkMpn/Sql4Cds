@@ -626,7 +626,7 @@ namespace MarkMpn.Sql4Cds.Engine
             else
                 throw new NotSupportedQueryFragmentException("Unhandled INSERT source", insert.InsertSpecification.InsertSource);
 
-            return ConvertInsertSpecification(target, insert.InsertSpecification.Columns, source, columns);
+            return ConvertInsertSpecification(target, insert.InsertSpecification.Columns, source, columns, insert.OptimizerHints);
         }
 
         private IDataExecutionPlanNodeInternal ConvertInsertValuesSource(ValuesInsertSource values, IList<OptimizerHint> hints, INodeSchema outerSchema, Dictionary<string, string> outerReferences, IDictionary<string, DataTypeReference> parameterTypes, out string[] columns)
@@ -677,7 +677,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return dataSource;
         }
 
-        private InsertNode ConvertInsertSpecification(NamedTableReference target, IList<ColumnReferenceExpression> targetColumns, IExecutionPlanNodeInternal source, string[] sourceColumns)
+        private InsertNode ConvertInsertSpecification(NamedTableReference target, IList<ColumnReferenceExpression> targetColumns, IExecutionPlanNodeInternal source, string[] sourceColumns, IList<OptimizerHint> queryHints)
         {
             var dataSource = SelectDataSource(target.SchemaObject);
 
@@ -685,6 +685,8 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 DataSource = dataSource.Name,
                 LogicalName = target.SchemaObject.BaseIdentifier.Value,
+                MaxDOP = GetMaxDOP(queryHints),
+                BypassCustomPluginExecution = GetBypassPluginExecution(queryHints),
                 Source = source
             };
 
@@ -860,6 +862,34 @@ namespace MarkMpn.Sql4Cds.Engine
             return node;
         }
 
+        private int GetMaxDOP(IList<OptimizerHint> queryHints)
+        {
+            var maxDopHint = queryHints
+                .OfType<LiteralOptimizerHint>()
+                .Where(hint => hint.HintKind == OptimizerHintKind.MaxDop)
+                .FirstOrDefault();
+
+            if (maxDopHint != null)
+            {
+                if (!(maxDopHint.Value is IntegerLiteral maxDop) || !Int32.TryParse(maxDop.Value, out var value) || value < 1)
+                    throw new NotSupportedQueryFragmentException("MAXDOP requires a positive integer value");
+
+                return value;
+            }
+
+            return Options.MaxDegreeOfParallelism;
+        }
+
+        private bool GetBypassPluginExecution(IList<OptimizerHint> queryHints)
+        {
+            var bypassPluginExecution = queryHints
+                .OfType<UseHintList>()
+                .Where(hint => hint.Hints.Any(s => s.Value.Equals("BYPASS_CUSTOM_PLUGIN_EXECUTION", StringComparison.OrdinalIgnoreCase)))
+                .Any();
+
+            return bypassPluginExecution || Options.BypassCustomPlugins;
+        }
+
         private DeleteNode ConvertDeleteStatement(DeleteStatement delete)
         {
             if (delete.WithCtesAndXmlNamespaces != null)
@@ -993,7 +1023,9 @@ namespace MarkMpn.Sql4Cds.Engine
             var deleteNode = new DeleteNode
             {
                 LogicalName = targetMetadata.LogicalName,
-                DataSource = dataSource.Name
+                DataSource = dataSource.Name,
+                MaxDOP = GetMaxDOP(hints),
+                BypassCustomPluginExecution = GetBypassPluginExecution(hints),
             };
 
             if (source is SelectNode select)
@@ -1192,12 +1224,12 @@ namespace MarkMpn.Sql4Cds.Engine
             var source = ConvertSelectStatement(selectStatement);
 
             // Add UPDATE
-            var updateNode = ConvertSetClause(update.SetClauses, dataSource, source, targetLogicalName, targetAlias, attributeNames, virtualTypeAttributes);
+            var updateNode = ConvertSetClause(update.SetClauses, dataSource, source, targetLogicalName, targetAlias, attributeNames, virtualTypeAttributes, hints);
 
             return updateNode;
         }
 
-        private UpdateNode ConvertSetClause(IList<SetClause> setClauses, DataSource dataSource, IExecutionPlanNodeInternal node, string targetLogicalName, string targetAlias, HashSet<string> attributeNames, HashSet<string> virtualTypeAttributes)
+        private UpdateNode ConvertSetClause(IList<SetClause> setClauses, DataSource dataSource, IExecutionPlanNodeInternal node, string targetLogicalName, string targetAlias, HashSet<string> attributeNames, HashSet<string> virtualTypeAttributes, IList<OptimizerHint> queryHints)
         {
             var targetMetadata = dataSource.Metadata[targetLogicalName];
             var attributes = targetMetadata.Attributes.ToDictionary(attr => attr.LogicalName, StringComparer.OrdinalIgnoreCase);
@@ -1206,7 +1238,9 @@ namespace MarkMpn.Sql4Cds.Engine
             var update = new UpdateNode
             {
                 LogicalName = targetMetadata.LogicalName,
-                DataSource = dataSource.Name
+                DataSource = dataSource.Name,
+                MaxDOP = GetMaxDOP(queryHints),
+                BypassCustomPluginExecution = GetBypassPluginExecution(queryHints),
             };
 
             if (node is SelectNode select)
@@ -1558,6 +1592,14 @@ namespace MarkMpn.Sql4Cds.Engine
             // Add filters from HAVING
             node = ConvertHavingClause(node, hints, querySpec.HavingClause, parameterTypes, outerSchema, outerReferences, querySpec, nonAggregateSchema);
 
+            // Add DISTINCT
+            var distinct = querySpec.UniqueRowFilter == UniqueRowFilter.Distinct ? new DistinctNode { Source = node } : null;
+            node = distinct ?? node;
+
+            // Add SELECT
+            var selectNode = ConvertSelectClause(querySpec.SelectElements, hints, node, distinct, querySpec, parameterTypes, outerSchema, outerReferences, nonAggregateSchema);
+            node = selectNode.Source;
+
             // Add sorts from ORDER BY
             var selectFields = new List<ScalarExpression>();
             var preOrderSchema = node.GetSchema(DataSources, parameterTypes);
@@ -1585,10 +1627,6 @@ namespace MarkMpn.Sql4Cds.Engine
 
             node = ConvertOrderByClause(node, hints, querySpec.OrderByClause, selectFields.ToArray(), querySpec, parameterTypes, outerSchema, outerReferences, nonAggregateSchema);
 
-            // Add DISTINCT
-            var distinct = querySpec.UniqueRowFilter == UniqueRowFilter.Distinct ? new DistinctNode { Source = node } : null;
-            node = distinct ?? node;
-
             // Add TOP/OFFSET
             if (querySpec.TopRowFilter != null && querySpec.OffsetClause != null)
                 throw new NotSupportedQueryFragmentException("A TOP can not be used in the same query or sub-query as a OFFSET.", querySpec.TopRowFilter);
@@ -1596,8 +1634,7 @@ namespace MarkMpn.Sql4Cds.Engine
             node = ConvertTopClause(node, querySpec.TopRowFilter, querySpec.OrderByClause, parameterTypes);
             node = ConvertOffsetClause(node, querySpec.OffsetClause, parameterTypes);
 
-            // Add SELECT
-            var selectNode = ConvertSelectClause(querySpec.SelectElements, hints, node, distinct, querySpec, parameterTypes, outerSchema, outerReferences, nonAggregateSchema);
+            selectNode.Source = node;
 
             return selectNode;
         }
@@ -2269,6 +2306,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
 
                     orderBy.Expression = selectList[index];
+                    orderBy.ScriptTokenStream = null;
                 }
 
                 // Anything complex expression should be pre-calculated
@@ -2449,6 +2487,9 @@ namespace MarkMpn.Sql4Cds.Engine
                     distinct.Source = computeScalar;
                 else
                     select.Source = computeScalar;
+
+                var calculationRewrites = computeScalar.Columns.ToDictionary(kvp => kvp.Value, kvp => kvp.Key);
+                query.Accept(new RewriteVisitor(calculationRewrites));
             }
 
             if (distinct != null)

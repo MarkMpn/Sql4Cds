@@ -46,6 +46,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("Column Mappings")]
         public IDictionary<string, string> ColumnMappings { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
+        [Category("Update")]
+        public override int MaxDOP { get; set; }
+
+        [Category("Update")]
+        public override bool BypassCustomPluginExecution { get; set; }
+
         public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
         {
             if (!requiredColumns.Contains(PrimaryIdSource))
@@ -90,7 +96,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 // Check again that the update is allowed. Don't count any UI interaction in the execution time
-                if (options.CancellationToken.IsCancellationRequested || !options.ConfirmUpdate(entities.Count, meta))
+                var confirmArgs = new ConfirmDmlStatementEventArgs(entities.Count, meta, BypassCustomPluginExecution);
+                if (options.CancellationToken.IsCancellationRequested)
+                    confirmArgs.Cancel = true;
+                options.ConfirmUpdate(confirmArgs);
+                if (confirmArgs.Cancel)
                     throw new OperationCanceledException("UPDATE cancelled by user");
 
                 using (_timer.Run())

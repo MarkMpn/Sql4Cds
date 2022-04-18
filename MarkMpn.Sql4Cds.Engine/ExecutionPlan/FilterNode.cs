@@ -475,6 +475,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         fetchXml.Entity.AddItem(fetchFilter);
                         foldedFilters = true;
+
+                        // If we're re-adding a filter that was previously extracted to an IndexSpoolNode, remove the not-null condition that's
+                        // also been added
+                        if (Filter == null && fetchFilter.Items.Length == 1 && fetchFilter.Items[0] is condition c &&
+                            c.@operator == @operator.eq && c.IsVariable)
+                        {
+                            var notNull = fetchXml.Entity.Items
+                                .OfType<filter>()
+                                .Where(f => f.Items.Length == 1 && f.Items[0] is condition nn && nn.entityname == c.entityname && nn.attribute == c.attribute && nn.@operator == @operator.notnull)
+                                .ToList();
+
+                            fetchXml.Entity.Items = fetchXml.Entity.Items.Except(notNull).ToArray();
+                        }
                     }
                 }
 
