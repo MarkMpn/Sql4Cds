@@ -607,8 +607,9 @@ in
 
             using (var con = new Sql4CdsConnection(sql.DataSources))
             using (var cmd = con.CreateCommand())
+            using (var options = new QueryExecutionOptions(this, null, con, cmd))
             {
-                new QueryExecutionOptions(this, null).ApplySettings(con, cmd, false);
+                options.ApplySettings(false);
                 con.UseTDSEndpoint = false;
                 cmd.CommandText = sql.Sql;
 
