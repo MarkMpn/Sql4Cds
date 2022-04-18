@@ -118,12 +118,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             foreach (var entity in context.CreateMetadataQuery())
             {
-                if (entity.LogicalName == "account")
-                {
-                    var nameAttr = (StringAttributeMetadata)entity.Attributes.Single(a => a.LogicalName == "name");
-                    nameAttr.MaxLength = 100;
-                    context.SetEntityMetadata(entity);
-                }
+                foreach (var attr in entity.Attributes.OfType<StringAttributeMetadata>())
+                    attr.MaxLength = 100;
+
+                context.SetEntityMetadata(entity);
             }
         }
     }

@@ -301,7 +301,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 if (dataType.Parameters.Count == 1)
                 {
-                    if (Int32.TryParse(dataType.Parameters[0].Value, out var maxLength))
+                    if (dataType.Parameters[0].LiteralType == LiteralType.Integer && Int32.TryParse(dataType.Parameters[0].Value, out var maxLength))
                     {
                         if (maxLength < 1)
                             throw new NotSupportedQueryFragmentException("Length or precision specification 0 is invalid.", dataType);
@@ -329,7 +329,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             Expression.Constant(valueOnTruncate, typeof(string)),
                             Expression.Constant(exceptionOnTruncate, typeof(Exception)));
                     }
-                    else if (!dataType.Parameters[0].Value.Equals("max", StringComparison.OrdinalIgnoreCase))
+                    else if (dataType.Parameters[0].LiteralType != LiteralType.Max)
                     {
                         throw new NotSupportedQueryFragmentException("Invalid attributes specified for type " + dataType.SqlDataTypeOption, dataType);
                     }

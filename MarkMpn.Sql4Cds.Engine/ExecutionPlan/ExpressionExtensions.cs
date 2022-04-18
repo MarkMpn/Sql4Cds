@@ -1036,15 +1036,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var netType = dataType.ToNetType(out _);
             netType = netType.GetProperty("Value")?.PropertyType ?? netType;
+
+            if (netType == typeof(DateTime))
+                return 8;
+
             return Marshal.SizeOf(netType);
         }
 
         private static readonly Dictionary<Type, DataTypeReference> _netTypeMapping = new Dictionary<Type, DataTypeReference>
         {
             [typeof(SqlInt64)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.BigInt },
-            [typeof(SqlBinary)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Binary },
+            [typeof(SqlBinary)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Binary, Parameters = { new MaxLiteral() } },
             [typeof(SqlBoolean)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Bit },
-            [typeof(SqlString)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar },
+            [typeof(SqlString)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { new MaxLiteral() } },
             [typeof(SqlDateTime)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.DateTime },
             [typeof(SqlDecimal)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Decimal },
             [typeof(SqlDouble)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Float },
