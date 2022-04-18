@@ -59,15 +59,14 @@
             this.label11 = new System.Windows.Forms.Label();
             this.maxDopUpDown = new System.Windows.Forms.NumericUpDown();
             this.label13 = new System.Windows.Forms.Label();
-            this.retrieveTotalRecordCountCheckbox = new System.Windows.Forms.CheckBox();
             this.tsqlEndpointCheckBox = new System.Windows.Forms.CheckBox();
             this.autoSizeColumnsCheckBox = new System.Windows.Forms.CheckBox();
             this.quotedIdentifiersCheckbox = new System.Windows.Forms.CheckBox();
             this.showTooltipsCheckbox = new System.Windows.Forms.CheckBox();
             this.tabControl1 = new System.Windows.Forms.TabControl();
             this.tabPage1 = new System.Windows.Forms.TabPage();
+            this.showFetchXMLInEstimatedExecutionPlansCheckBox = new System.Windows.Forms.CheckBox();
             this.pictureBox6 = new System.Windows.Forms.PictureBox();
-            this.pictureBox5 = new System.Windows.Forms.PictureBox();
             this.pictureBox4 = new System.Windows.Forms.PictureBox();
             this.pictureBox2 = new System.Windows.Forms.PictureBox();
             this.pictureBox1 = new System.Windows.Forms.PictureBox();
@@ -86,7 +85,6 @@
             this.nativeSqlRadioButton = new System.Windows.Forms.RadioButton();
             this.simpleSqlRadioButton = new System.Windows.Forms.RadioButton();
             this.label17 = new System.Windows.Forms.Label();
-            this.showFetchXMLInEstimatedExecutionPlansCheckBox = new System.Windows.Forms.CheckBox();
             this.topPanel.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox)).BeginInit();
             this.panel2.SuspendLayout();
@@ -99,7 +97,6 @@
             this.tabControl1.SuspendLayout();
             this.tabPage1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox6)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.pictureBox5)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox4)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox2)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).BeginInit();
@@ -396,7 +393,7 @@
             this.localTimesComboBox.Items.AddRange(new object[] {
             "UTC times",
             "Local times"});
-            this.localTimesComboBox.Location = new System.Drawing.Point(137, 190);
+            this.localTimesComboBox.Location = new System.Drawing.Point(137, 167);
             this.localTimesComboBox.Margin = new System.Windows.Forms.Padding(2);
             this.localTimesComboBox.Name = "localTimesComboBox";
             this.localTimesComboBox.Size = new System.Drawing.Size(203, 21);
@@ -405,7 +402,7 @@
             // label11
             // 
             this.label11.AutoSize = true;
-            this.label11.Location = new System.Drawing.Point(5, 193);
+            this.label11.Location = new System.Drawing.Point(5, 170);
             this.label11.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
             this.label11.Name = "label11";
             this.label11.Size = new System.Drawing.Size(128, 13);
@@ -437,16 +434,6 @@
             this.label13.Size = new System.Drawing.Size(53, 13);
             this.label13.TabIndex = 4;
             this.label13.Text = "Use up to";
-            // 
-            // retrieveTotalRecordCountCheckbox
-            // 
-            this.retrieveTotalRecordCountCheckbox.AutoSize = true;
-            this.retrieveTotalRecordCountCheckbox.Location = new System.Drawing.Point(9, 168);
-            this.retrieveTotalRecordCountCheckbox.Name = "retrieveTotalRecordCountCheckbox";
-            this.retrieveTotalRecordCountCheckbox.Size = new System.Drawing.Size(286, 17);
-            this.retrieveTotalRecordCountCheckbox.TabIndex = 11;
-            this.retrieveTotalRecordCountCheckbox.Text = "Use RetrieveTotalRecordCount request where possible";
-            this.retrieveTotalRecordCountCheckbox.UseVisualStyleBackColor = true;
             // 
             // tsqlEndpointCheckBox
             // 
@@ -507,7 +494,6 @@
             // 
             this.tabPage1.Controls.Add(this.showFetchXMLInEstimatedExecutionPlansCheckBox);
             this.tabPage1.Controls.Add(this.pictureBox6);
-            this.tabPage1.Controls.Add(this.pictureBox5);
             this.tabPage1.Controls.Add(this.pictureBox4);
             this.tabPage1.Controls.Add(this.pictureBox2);
             this.tabPage1.Controls.Add(this.pictureBox1);
@@ -524,7 +510,6 @@
             this.tabPage1.Controls.Add(this.label8);
             this.tabPage1.Controls.Add(this.label13);
             this.tabPage1.Controls.Add(this.tsqlEndpointCheckBox);
-            this.tabPage1.Controls.Add(this.retrieveTotalRecordCountCheckbox);
             this.tabPage1.Location = new System.Drawing.Point(4, 22);
             this.tabPage1.Name = "tabPage1";
             this.tabPage1.Padding = new System.Windows.Forms.Padding(3);
@@ -545,19 +530,6 @@
             this.pictureBox6.Tag = "https://docs.microsoft.com/powerapps/developer/data-platform/api-limits#how-to-ma" +
     "ximize-throughput";
             this.pictureBox6.Click += new System.EventHandler(this.helpIcon_Click);
-            // 
-            // pictureBox5
-            // 
-            this.pictureBox5.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.pictureBox5.Image = global::MarkMpn.Sql4Cds.Properties.Resources.StatusHelp_16x;
-            this.pictureBox5.Location = new System.Drawing.Point(301, 168);
-            this.pictureBox5.Name = "pictureBox5";
-            this.pictureBox5.Size = new System.Drawing.Size(16, 16);
-            this.pictureBox5.TabIndex = 30;
-            this.pictureBox5.TabStop = false;
-            this.pictureBox5.Tag = "https://docs.microsoft.com/powerapps/developer/data-platform/use-fetchxml-aggrega" +
-    "tion#limitations";
-            this.pictureBox5.Click += new System.EventHandler(this.helpIcon_Click);
             // 
             // pictureBox4
             // 
@@ -826,7 +798,6 @@
             this.tabPage1.ResumeLayout(false);
             this.tabPage1.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox6)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.pictureBox5)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox4)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox2)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).EndInit();
@@ -870,7 +841,6 @@
         private System.Windows.Forms.Label label11;
         private System.Windows.Forms.CheckBox quotedIdentifiersCheckbox;
         private System.Windows.Forms.CheckBox tsqlEndpointCheckBox;
-        private System.Windows.Forms.CheckBox retrieveTotalRecordCountCheckbox;
         private System.Windows.Forms.CheckBox showTooltipsCheckbox;
         private System.Windows.Forms.Label label12;
         private System.Windows.Forms.NumericUpDown maxDopUpDown;
@@ -890,7 +860,6 @@
         private System.Windows.Forms.PictureBox pictureBox1;
         private System.Windows.Forms.PictureBox pictureBox3;
         private System.Windows.Forms.PictureBox pictureBox6;
-        private System.Windows.Forms.PictureBox pictureBox5;
         private System.Windows.Forms.PictureBox pictureBox4;
         private System.Windows.Forms.Label label15;
         private System.Windows.Forms.NumericUpDown insertWarnThresholdUpDown;
