@@ -15,37 +15,41 @@ using Microsoft.Xrm.Tooling.Connector;
 
 namespace MarkMpn.Sql4Cds
 {
-    class QueryExecutionOptions
+    class QueryExecutionOptions : IDisposable
     {
         private readonly Control _host;
         private readonly BackgroundWorker _worker;
+        private readonly Sql4CdsConnection _con;
+        private readonly Sql4CdsCommand _cmd;
         private int _retrievedPages;
 
-        public QueryExecutionOptions(Control host, BackgroundWorker worker)
+        public QueryExecutionOptions(Control host, BackgroundWorker worker, Sql4CdsConnection con, Sql4CdsCommand cmd)
         {
             _host = host;
             _worker = worker;
+            _con = con;
+            _cmd = cmd;
         }
 
-        public void ApplySettings(Sql4CdsConnection con, Sql4CdsCommand cmd, bool execute)
+        public void ApplySettings(bool execute)
         {
-            con.BlockDeleteWithoutWhere = Settings.Instance.BlockDeleteWithoutWhere;
-            con.BlockUpdateWithoutWhere = Settings.Instance.BlockUpdateWithoutWhere;
-            con.UseBulkDelete = Settings.Instance.UseBulkDelete;
-            con.BatchSize = Settings.Instance.BatchSize;
-            con.UseTDSEndpoint = Settings.Instance.UseTSQLEndpoint && (execute || !Settings.Instance.ShowFetchXMLInEstimatedExecutionPlans);
-            con.MaxDegreeOfParallelism = Settings.Instance.MaxDegreeOfPaallelism;
-            con.UseLocalTimeZone = Settings.Instance.ShowLocalTimes;
-            con.BypassCustomPlugins = Settings.Instance.BypassCustomPlugins;
-            con.QuotedIdentifiers = Settings.Instance.QuotedIdentifiers;
+            _con.BlockDeleteWithoutWhere = Settings.Instance.BlockDeleteWithoutWhere;
+            _con.BlockUpdateWithoutWhere = Settings.Instance.BlockUpdateWithoutWhere;
+            _con.UseBulkDelete = Settings.Instance.UseBulkDelete;
+            _con.BatchSize = Settings.Instance.BatchSize;
+            _con.UseTDSEndpoint = Settings.Instance.UseTSQLEndpoint && (execute || !Settings.Instance.ShowFetchXMLInEstimatedExecutionPlans);
+            _con.MaxDegreeOfParallelism = Settings.Instance.MaxDegreeOfPaallelism;
+            _con.UseLocalTimeZone = Settings.Instance.ShowLocalTimes;
+            _con.BypassCustomPlugins = Settings.Instance.BypassCustomPlugins;
+            _con.QuotedIdentifiers = Settings.Instance.QuotedIdentifiers;
 
-            con.PreInsert += ConfirmInsert;
-            con.PreUpdate += ConfirmUpdate;
-            con.PreDelete += ConfirmDelete;
-            con.PreRetrieve += ConfirmRetrieve;
-            con.Progress += Progress;
+            _con.PreInsert += ConfirmInsert;
+            _con.PreUpdate += ConfirmUpdate;
+            _con.PreDelete += ConfirmDelete;
+            _con.PreRetrieve += ConfirmRetrieve;
+            _con.Progress += Progress;
 
-            cmd.StatementCompleted += StatementCompleted;
+            _cmd.StatementCompleted += StatementCompleted;
         }
 
         private void ConfirmInsert(object sender, ConfirmDmlStatementEventArgs e)
@@ -158,6 +162,17 @@ namespace MarkMpn.Sql4Cds
         private void Progress(double? progress, string message)
         {
             _worker.ReportProgress(progress == null ? -1 : (int)(progress * 100), message);
+        }
+
+        public void Dispose()
+        {
+            _con.PreInsert -= ConfirmInsert;
+            _con.PreUpdate -= ConfirmUpdate;
+            _con.PreDelete -= ConfirmDelete;
+            _con.PreRetrieve -= ConfirmRetrieve;
+            _con.Progress -= Progress;
+
+            _cmd.StatementCompleted -= StatementCompleted;
         }
     }
 }

@@ -124,6 +124,37 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     RightSource.Parent = this;
                 }
             }
+            else if (JoinType == QualifiedJoinType.LeftOuter &&
+                SemiJoin &&
+                DefinedValues.Count == 1 &&
+                RightSource is AssertNode assert &&
+                assert.Source is StreamAggregateNode aggregate &&
+                aggregate.Aggregates.Count == 2 &&
+                aggregate.Aggregates[DefinedValues.Single().Value].AggregateType == AggregateType.First &&
+                aggregate.Source is IndexSpoolNode indexSpool &&
+                indexSpool.Source is FetchXmlScan fetch)
+            {
+                LeftSource.EstimateRowsOut(dataSources, options, parameterTypes);
+                fetch.EstimateRowsOut(dataSources, options, innerParameterTypes);
+                if (LeftSource.EstimatedRowsOut < 100 && fetch.EstimatedRowsOut > 5000)
+                {
+                    // Scalar subquery was folded to use an index spool due to an expected large number of outer records,
+                    // but the estimate has now changed (e.g. due to a TopNode being folded). Remove the index spool and replace
+                    // with filter
+                    var filter = new FilterNode
+                    {
+                        Source = fetch,
+                        Filter = new BooleanComparisonExpression
+                        {
+                            FirstExpression = indexSpool.KeyColumn.ToColumnReference(),
+                            ComparisonType = BooleanComparisonType.Equals,
+                            SecondExpression = new VariableReference { Name = indexSpool.SeekValue }
+                        },
+                        Parent = aggregate
+                    };
+                    aggregate.Source = filter.FoldQuery(dataSources, options, innerParameterTypes, hints);
+                }
+            }
 
             return this;
         }

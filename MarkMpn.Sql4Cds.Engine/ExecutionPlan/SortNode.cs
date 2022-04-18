@@ -187,6 +187,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private IDataExecutionPlanNodeInternal FoldSorts(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
+            PresortedCount = 0;
+
             var tryCatch = Source as TryCatchNode;
             
             while (tryCatch?.TrySource is TryCatchNode subTry)

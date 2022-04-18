@@ -3290,27 +3290,28 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var metadata = new AttributeMetadataCache(_service);
             var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
 
-            var query = "SELECT DISTINCT name + 'foo' FROM account ORDER BY 1";
+            var query = "SELECT DISTINCT account.accountid FROM metadata.entity INNER JOIN account ON entity.metadataid = account.accountid";
 
             var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
 
             var select = AssertNode<SelectNode>(plans[0]);
-            Assert.AreEqual("Expr1", select.ColumnSet.Single().SourceColumn);
+            Assert.AreEqual("account.accountid", select.ColumnSet.Single().SourceColumn);
             var aggregate = AssertNode<StreamAggregateNode>(select.Source);
-            Assert.AreEqual("Expr1", aggregate.GroupBy.Single().ToSql());
-            var sort = AssertNode<SortNode>(aggregate.Source);
-            Assert.AreEqual("Expr1", sort.Sorts.Single().ToSql());
-            var compute = AssertNode<ComputeScalarNode>(sort.Source);
-            Assert.AreEqual("name + 'foo'", compute.Columns["Expr1"].ToSql());
-            var fetch = AssertNode<FetchXmlScan>(compute.Source);
+            Assert.AreEqual("account.accountid", aggregate.GroupBy.Single().ToSql());
+            var merge = AssertNode<MergeJoinNode>(aggregate.Source);
+            var fetch = AssertNode<FetchXmlScan>(merge.LeftSource);
             AssertFetchXml(fetch, @"
                 <fetch>
                     <entity name='account'>
-                        <attribute name='name' />
+                        <attribute name='accountid' />
+                        <order attribute='accountid' />
                     </entity>
                 </fetch>");
+            var sort = AssertNode<SortNode>(merge.RightSource);
+            Assert.AreEqual("entity.metadataid", sort.Sorts[0].ToSql());
+            var meta = AssertNode<MetadataQueryNode>(sort.Source);
         }
 
         [TestMethod]
@@ -4407,6 +4408,77 @@ UPDATE account SET employees = @employees WHERE name = @name";
 
             var update = AssertNode<UpdateNode>(plans[0]);
             Assert.AreEqual(true, update.BypassCustomPluginExecution);
+        }
+
+        [TestMethod]
+        public void DistinctOrderByOptionSet()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT DISTINCT new_optionsetvalue FROM new_customentity ORDER BY new_optionsetvalue";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var sort = AssertNode<SortNode>(select.Source);
+            var fetch = AssertNode<FetchXmlScan>(sort.Source);
+
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS' distinct='true'>
+                    <entity name='new_customentity'>
+                        <attribute name='new_optionsetvalue' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void DistinctVirtualAttribute()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT DISTINCT new_optionsetvaluename FROM new_customentity";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var aggregate = AssertNode<StreamAggregateNode>(select.Source);
+            Assert.AreEqual(1, aggregate.GroupBy.Count);
+            Assert.AreEqual("new_customentity.new_optionsetvaluename", aggregate.GroupBy[0].ToSql());
+            var fetch = AssertNode<FetchXmlScan>(aggregate.Source);
+
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS' distinct='true'>
+                    <entity name='new_customentity'>
+                        <attribute name='new_optionsetvalue' />
+                        <order attribute='new_optionsetvalue' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void TopAliasStar()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT TOP 10 A.* FROM account A";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS' top='10'>
+                    <entity name='account'>
+                        <all-attributes />
+                    </entity>
+                </fetch>");
         }
     }
 }

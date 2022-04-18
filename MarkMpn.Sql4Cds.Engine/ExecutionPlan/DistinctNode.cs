@@ -79,6 +79,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 fetch.FetchXml.distinct = true;
                 fetch.FetchXml.distinctSpecified = true;
+                var metadata = dataSources[fetch.DataSource].Metadata;
+                var virtualAttr = false;
 
                 // Ensure there is a sort order applied to avoid paging issues
                 if (fetch.Entity.Items == null || !fetch.Entity.Items.OfType<FetchOrderType>().Any())
@@ -92,42 +94,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         if (!schema.ContainsColumn(column, out var normalized))
                             continue;
 
-                        if (!sortedAttributes.Add(normalized))
+                        var attr = fetch.AddAttribute(normalized, null, metadata, out _, out var linkEntity);
+
+                        if (attr.name != normalized.Split('.')[1])
+                            virtualAttr = true;
+
+                        if (!sortedAttributes.Add(linkEntity?.alias + "." + attr.name))
                             continue;
 
-                        var parts = normalized.Split('.');
-                        if (parts.Length != 2)
-                            continue;
-
-                        if (parts[0].Equals(fetch.Alias, StringComparison.OrdinalIgnoreCase))
-                        {
-                            var attr = dataSources[fetch.DataSource].Metadata[fetch.Entity.name].Attributes.SingleOrDefault(a => a.LogicalName.Equals(parts[1], StringComparison.OrdinalIgnoreCase));
-
-                            if (attr == null)
-                                continue;
-
-                            if (attr.AttributeOf != null && !sortedAttributes.Add(parts[0] + "." + attr.AttributeOf))
-                                continue;
-
-                            fetch.Entity.AddItem(new FetchOrderType { attribute = parts[1] });
-                        }
+                        if (linkEntity == null)
+                            fetch.Entity.AddItem(new FetchOrderType { attribute = attr.name });
                         else
-                        {
-                            var linkEntity = fetch.Entity.FindLinkEntity(parts[0]);
-                            var attr = dataSources[fetch.DataSource].Metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName.Equals(parts[1], StringComparison.OrdinalIgnoreCase));
-
-                            if (attr == null)
-                                continue;
-
-                            if (attr.AttributeOf != null && !sortedAttributes.Add(parts[0] + "." + attr.AttributeOf))
-                                continue;
-
-                            linkEntity.AddItem(new FetchOrderType { attribute = parts[1] });
-                        }
+                            linkEntity.AddItem(new FetchOrderType { attribute = attr.name });
                     }
                 }
 
-                return fetch;
+                if (!virtualAttr)
+                    return fetch;
+
+                schema = Source.GetSchema(dataSources, parameterTypes);
             }
 
             // If the data is already sorted by all the distinct columns we can use a stream aggregate instead.
