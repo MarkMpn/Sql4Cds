@@ -4336,5 +4336,27 @@ UPDATE account SET employees = @employees WHERE name = @name";
                     </entity>
                 </fetch>");
         }
+
+        [TestMethod]
+        public void TopAliasStar()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT TOP 10 A.* FROM account A";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS' top='10'>
+                    <entity name='account'>
+                        <all-attributes />
+                    </entity>
+                </fetch>");
+        }
     }
 }
