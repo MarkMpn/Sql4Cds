@@ -24,12 +24,12 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="date">The date value to add to</param>
         /// <returns>The modified date</returns>
         /// <see href="https://docs.microsoft.com/en-us/sql/t-sql/functions/dateadd-transact-sql?view=sql-server-ver15"/>
-        public static SqlDateTime DateAdd(string datepart, SqlDouble number, SqlDateTime date)
+        public static SqlDateTime DateAdd(SqlString datepart, SqlDouble number, SqlDateTime date)
         {
             if (number.IsNull || date.IsNull)
                 return SqlDateTime.Null;
 
-            var interval = DatePartToInterval(datepart);
+            var interval = DatePartToInterval(datepart.Value);
             var value = DateAndTime.DateAdd(interval, number.Value, date.Value);
 
             // DateAdd loses the Kind property for some interval types - add it back in again
@@ -47,12 +47,12 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="enddate">The second date to compare to</param>
         /// <returns>The number of whole <paramref name="datepart"/> units between <paramref name="startdate"/> and <paramref name="enddate"/></returns>
         /// <see href="https://docs.microsoft.com/en-us/sql/t-sql/functions/datediff-transact-sql?view=sql-server-ver15"/>
-        public static SqlInt32 DateDiff(string datepart, SqlDateTime startdate, SqlDateTime enddate)
+        public static SqlInt32 DateDiff(SqlString datepart, SqlDateTime startdate, SqlDateTime enddate)
         {
             if (startdate.IsNull || enddate.IsNull)
                 return SqlInt32.Null;
 
-            var interval = DatePartToInterval(datepart);
+            var interval = DatePartToInterval(datepart.Value);
             return (int) DateAndTime.DateDiff(interval, startdate.Value, enddate.Value);
         }
 
@@ -62,12 +62,12 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="datepart">The specific part of the <paramref name="date"/> argument for which DATEPART will return an integer</param>
         /// <param name="date">The date to extract the <paramref name="datepart"/> from</param>
         /// <returns>The <paramref name="datepart"/> of the <paramref name="date"/></returns>
-        public static SqlInt32 DatePart(string datepart, SqlDateTime date)
+        public static SqlInt32 DatePart(SqlString datepart, SqlDateTime date)
         {
             if (date.IsNull)
                 return SqlInt32.Null;
 
-            var interval = DatePartToInterval(datepart);
+            var interval = DatePartToInterval(datepart.Value);
             return DateAndTime.DatePart(interval, date.Value);
         }
 
@@ -224,7 +224,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="s">The string to get the prefix of</param>
         /// <param name="length">The number of characters to return</param>
         /// <returns>The first <paramref name="length"/> characters of the string <paramref name="s"/></returns>
-        public static SqlString Left(SqlString s, SqlInt32 length)
+        public static SqlString Left(SqlString s, [MaxLength] SqlInt32 length)
         {
             if (s.IsNull || length.IsNull)
                 return SqlString.Null;
@@ -241,7 +241,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="s">The string to get the suffix of</param>
         /// <param name="length">The number of characters to return</param>
         /// <returns>The last <paramref name="length"/> characters of the string <paramref name="s"/></returns>
-        public static SqlString Right(SqlString s, SqlInt32 length)
+        public static SqlString Right(SqlString s, [MaxLength] SqlInt32 length)
         {
             if (s.IsNull || length.IsNull)
                 return SqlString.Null;
@@ -287,7 +287,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="start">An integer that specifies where the returned characters start (the numbering is 1 based, meaning that the first character in the expression is 1)</param>
         /// <param name="length">A positive integer that specifies how many characters of the expression will be returned</param>
         /// <returns></returns>
-        public static SqlString Substring(SqlString expression, SqlInt32 start, SqlInt32 length)
+        public static SqlString Substring(SqlString expression, SqlInt32 start, [MaxLength] SqlInt32 length)
         {
             if (expression.IsNull || start.IsNull || length.IsNull)
                 return SqlString.Null;
@@ -314,7 +314,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="expression">A character expression where characters should be removed</param>
         /// <returns></returns>
-        public static SqlString Trim(SqlString expression)
+        public static SqlString Trim([MaxLength] SqlString expression)
         {
             if (expression.IsNull)
                 return expression;
@@ -327,7 +327,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="expression">A character expression where characters should be removed</param>
         /// <returns></returns>
-        public static SqlString LTrim(SqlString expression)
+        public static SqlString LTrim([MaxLength] SqlString expression)
         {
             if (expression.IsNull)
                 return expression;
@@ -340,7 +340,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="expression">A character expression where characters should be removed</param>
         /// <returns></returns>
-        public static SqlString RTrim(SqlString expression)
+        public static SqlString RTrim([MaxLength] SqlString expression)
         {
             if (expression.IsNull)
                 return expression;
@@ -644,5 +644,13 @@ namespace MarkMpn.Sql4Cds.Engine
 
             return new OptionSetValue(i.Value);
         }
+    }
+
+    /// <summary>
+    /// Indicates that the parameter gives the maximum length of the return value
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Parameter)]
+    class MaxLengthAttribute : Attribute
+    {
     }
 }

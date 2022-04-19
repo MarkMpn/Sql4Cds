@@ -65,13 +65,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     sourceExpression = new ConvertCall { Parameter = sourceExpression, DataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Decimal } };
 
                 aggregate.Value.Expression = sourceExpression.Compile(schema, parameterTypes);
+                aggregate.Value.SqlExpression.GetType(schema, null, parameterTypes, out var retType);
+                aggregate.Value.ReturnType = retType;
 
-                aggregate.Value.ReturnType = aggregate.Value.SqlExpression.GetType(schema, null, parameterTypes);
-
-                if (aggregate.Value.AggregateType == AggregateType.Average)
+                if (aggregate.Value.AggregateType == AggregateType.Average &&
+                    aggregate.Value.ReturnType is SqlDataTypeReference sqlRetType &&
+                    (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.TinyInt || sqlRetType.SqlDataTypeOption == SqlDataTypeOption.SmallInt))
                 {
-                    if (aggregate.Value.ReturnType == typeof(SqlByte) || aggregate.Value.ReturnType == typeof(SqlInt16))
-                        aggregate.Value.ReturnType = typeof(SqlInt32);
+                    aggregate.Value.ReturnType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int };
                 }
             }
         }
@@ -82,7 +83,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 var sourceExpression = aggregate.Key.ToColumnReference();
                 aggregate.Value.Expression = sourceExpression.Compile(schema, parameterTypes);
-                aggregate.Value.ReturnType = sourceExpression.GetType(schema, null, parameterTypes);
+                sourceExpression.GetType(schema, null, parameterTypes, out var retType);
+                aggregate.Value.ReturnType = retType;
             }
         }
 
@@ -192,21 +194,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var aggregate in Aggregates)
             {
-                Type aggregateType;
+                DataTypeReference aggregateType;
 
                 switch (aggregate.Value.AggregateType)
                 {
                     case AggregateType.Count:
                     case AggregateType.CountStar:
-                        aggregateType = typeof(SqlInt32);
+                        aggregateType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int };
                         break;
 
                     default:
-                        aggregateType = aggregate.Value.SqlExpression.GetType(sourceSchema, null, parameterTypes);
+                        aggregate.Value.SqlExpression.GetType(sourceSchema, null, parameterTypes, out aggregateType);
                         break;
                 }
 
-                schema.Schema[aggregate.Key] = aggregateType.ToSqlType();
+                schema.Schema[aggregate.Key] = aggregateType;
             }
 
             return schema;

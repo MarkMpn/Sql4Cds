@@ -256,7 +256,7 @@ namespace MarkMpn.Sql4Cds.Engine
             // Check the expression for errors. Ensure it can be converted to a string
             var expr = print.Expression;
 
-            if (print.Expression.GetType(null, null, _parameterTypes) != typeof(string))
+            if (print.Expression.GetType(null, null, _parameterTypes, out _) != typeof(string))
             {
                 expr = new ConvertCall
                 {
@@ -264,7 +264,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     Parameter = print.Expression
                 };
 
-                expr.GetType(null, null, _parameterTypes);
+                expr.GetType(null, null, _parameterTypes, out _);
             }
 
             return new PrintNode
@@ -284,7 +284,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (subqueryVisitor.Subqueries.Count == 0)
             {
                 // Check the predicate for errors
-                predicate.GetType(null, null, _parameterTypes);
+                predicate.GetType(null, null, _parameterTypes, out _);
             }
             else
             {
@@ -833,7 +833,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (targetLookupAttribute.Targets.Length > 1 &&
                         !virtualTypeAttributes.Contains(targetAttrName + "type") &&
                         targetLookupAttribute.AttributeType != AttributeTypeCode.PartyList &&
-                        (schema == null || node.ColumnMappings[targetAttrName].ToColumnReference().GetType(schema, null, null) != typeof(SqlEntityReference)))
+                        (schema == null || node.ColumnMappings[targetAttrName].ToColumnReference().GetType(schema, null, null, out _) != typeof(SqlEntityReference)))
                     {
                         // Special case: not required for listmember.entityid
                         if (metadata.LogicalName == "listmember" && targetLookupAttribute.LogicalName == "entityid")
@@ -1280,7 +1280,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     var sourceColName = select.ColumnSet.Single(col => col.OutputColumn == targetAttrName.ToLower()).SourceColumn;
                     var sourceCol = sourceColName.ToColumnReference();
-                    var sourceType = sourceCol.GetType(schema, null, null);
+                    var sourceType = sourceCol.GetType(schema, null, null, out _);
 
                     if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, targetType))
                         throw new NotSupportedQueryFragmentException($"Cannot convert value of type {sourceType} to {targetType}", assignment);
@@ -1654,7 +1654,7 @@ namespace MarkMpn.Sql4Cds.Engine
             foreach (var inSubquery in visitor.InSubqueries)
             {
                 // Validate the LHS expression
-                inSubquery.Expression.GetType(schema, null, parameterTypes);
+                inSubquery.Expression.GetType(schema, null, parameterTypes, out _);
 
                 // Each query of the format "col1 IN (SELECT col2 FROM source)" becomes a left outer join:
                 // LEFT JOIN source ON col1 = col2
@@ -1931,7 +1931,7 @@ namespace MarkMpn.Sql4Cds.Engine
             ConvertScalarSubqueries(havingClause.SearchCondition, hints, ref source, computeScalar, parameterTypes, query);
 
             // Validate the final expression
-            havingClause.SearchCondition.GetType(source.GetSchema(DataSources, parameterTypes), nonAggregateSchema, parameterTypes);
+            havingClause.SearchCondition.GetType(source.GetSchema(DataSources, parameterTypes), nonAggregateSchema, parameterTypes, out _);
 
             return new FilterNode
             {
@@ -1975,7 +1975,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         throw new NotSupportedQueryFragmentException("Unhandled GROUP BY expression", grouping);
 
                     // Validate the GROUP BY expression
-                    exprGroup.Expression.GetType(schema, null, parameterTypes);
+                    exprGroup.Expression.GetType(schema, null, parameterTypes, out _);
 
                     if (exprGroup.Expression is ColumnReferenceExpression col)
                     {
@@ -2140,7 +2140,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (converted.AggregateType == AggregateType.CountStar)
                     converted.SqlExpression = null;
                 else
-                    converted.SqlExpression.GetType(schema, null, parameterTypes);
+                    converted.SqlExpression.GetType(schema, null, parameterTypes, out _);
 
                 // Create a name for the column that holds the aggregate value in the result set.
                 string aggregateName;
@@ -2185,8 +2185,8 @@ namespace MarkMpn.Sql4Cds.Engine
             if (offsetClause == null)
                 return source;
 
-            var offsetType = offsetClause.OffsetExpression.GetType(null, null, parameterTypes);
-            var fetchType = offsetClause.FetchExpression.GetType(null, null, parameterTypes);
+            var offsetType = offsetClause.OffsetExpression.GetType(null, null, parameterTypes, out _);
+            var fetchType = offsetClause.FetchExpression.GetType(null, null, parameterTypes, out _);
 
             if (!SqlTypeConverter.CanChangeTypeImplicit(offsetType, typeof(SqlInt32)))
                 throw new NotSupportedQueryFragmentException("Unexpected OFFSET type", offsetClause.OffsetExpression);
@@ -2207,7 +2207,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (topRowFilter == null)
                 return source;
 
-            var topType = topRowFilter.Expression.GetType(null, null, parameterTypes);
+            var topType = topRowFilter.Expression.GetType(null, null, parameterTypes, out _);
             var targetType = topRowFilter.Percent ? typeof(SqlSingle) : typeof(SqlInt32);
 
             if (!SqlTypeConverter.CanChangeTypeImplicit(topType, targetType))
@@ -2322,7 +2322,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
 
                 // Validate the expression
-                orderBy.Expression.GetType(schema, nonAggregateSchema, parameterTypes);
+                orderBy.Expression.GetType(schema, nonAggregateSchema, parameterTypes, out _);
 
                 sort.Sorts.Add(orderBy);
             }
@@ -2351,7 +2351,7 @@ namespace MarkMpn.Sql4Cds.Engine
             ConvertScalarSubqueries(whereClause.SearchCondition, hints, ref source, computeScalar, parameterTypes, query);
 
             // Validate the final expression
-            whereClause.SearchCondition.GetType(source.GetSchema(DataSources, parameterTypes), null, parameterTypes);
+            whereClause.SearchCondition.GetType(source.GetSchema(DataSources, parameterTypes), null, parameterTypes, out _);
 
             return new FilterNode
             {
@@ -2431,7 +2431,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         if (!schema.ContainsColumn(colName, out colName))
                         {
                             // Column name isn't valid. Use the expression extensions to throw a consistent error message
-                            col.GetType(schema, nonAggregateSchema, parameterTypes);
+                            col.GetType(schema, nonAggregateSchema, parameterTypes, out _);
                         }
 
                         var alias = scalar.ColumnName?.Value ?? col.MultiPartIdentifier.Identifiers.Last().Value;
@@ -2520,7 +2520,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             // Check the type of this expression now so any errors can be reported
             var computeScalarSchema = computeScalar.Source.GetSchema(DataSources, parameterTypes);
-            expression.GetType(computeScalarSchema, nonAggregateSchema, parameterTypes);
+            expression.GetType(computeScalarSchema, nonAggregateSchema, parameterTypes, out _);
 
             var alias = $"Expr{++_colNameCounter}";
             computeScalar.Columns[alias] = expression;
@@ -3178,7 +3178,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 // Validate the join condition
                 var joinSchema = joinNode.GetSchema(DataSources, parameterTypes);
-                join.SearchCondition.GetType(joinSchema, null, parameterTypes);
+                join.SearchCondition.GetType(joinSchema, null, parameterTypes, out _);
 
                 return joinNode;
             }

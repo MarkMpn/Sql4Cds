@@ -55,7 +55,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// The type of value produced by the aggregate function
         /// </summary>
         [Browsable(false)]
-        public Type ReturnType { get; set; }
+        public DataTypeReference ReturnType { get; set; }
     }
 
     /// <summary>
@@ -137,7 +137,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// Returns the type of value that will be produced by this aggregation
         /// </summary>
-        public abstract Type Type { get; }
+        public abstract DataTypeReference Type { get; }
 
         /// <summary>
         /// Resets this aggregation ready for the next group
@@ -163,7 +163,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// Creates a new <see cref="Average"/>
         /// </summary>
         /// <param name="selector">A function that extracts the value to calculate the average from</param>
-        public Average(Func<Entity, object> selector, Type type) : base(selector)
+        public Average(Func<Entity, object> selector, DataTypeReference type) : base(selector)
         {
             Type = type;
 
@@ -200,7 +200,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return _valueSelector(s.Sum / s.Count);
         }
 
-        public override Type Type { get; }
+        public override DataTypeReference Type { get; }
 
         public override object Reset()
         {
@@ -213,6 +213,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// </summary>
     class Count : AggregateFunction
     {
+        private static readonly DataTypeReference _type = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int };
+
         class State
         {
             public SqlInt32 Value { get; set; }
@@ -244,7 +246,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return s.Value;
         }
 
-        public override Type Type => typeof(SqlInt32);
+        public override DataTypeReference Type => _type;
 
         public override object Reset()
         {
@@ -257,6 +259,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// </summary>
     class CountColumn : AggregateFunction
     {
+        private static readonly DataTypeReference _type = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int };
+
         class State
         {
             public SqlInt32 Value { get; set; }
@@ -291,7 +295,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return s.Value;
         }
 
-        public override Type Type => typeof(SqlInt32);
+        public override DataTypeReference Type => _type;
 
         public override object Reset()
         {
@@ -313,7 +317,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// Creates a new <see cref="Max"/>
         /// </summary>
         /// <param name="selector">A function that extracts the value to find the maximum value of</param>
-        public Max(Func<Entity, object> selector, Type type) : base(selector)
+        public Max(Func<Entity, object> selector, DataTypeReference type) : base(selector)
         {
             Type = type;
         }
@@ -342,7 +346,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return s.Value;
         }
 
-        public override Type Type { get; }
+        public override DataTypeReference Type { get; }
 
         public override object Reset()
         {
@@ -364,7 +368,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// Creates a new <see cref="Min"/>
         /// </summary>
         /// <param name="selector">A function that extracts the value to find the minimum value of</param>
-        public Min(Func<Entity, object> selector, Type type) : base(selector)
+        public Min(Func<Entity, object> selector, DataTypeReference type) : base(selector)
         {
             Type = type;
         }
@@ -394,7 +398,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return s.Value;
         }
 
-        public override Type Type { get; }
+        public override DataTypeReference Type { get; }
 
         public override object Reset()
         {
@@ -418,7 +422,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// Creates a new <see cref="Sum"/>
         /// </summary>
         /// <param name="selector">A function that extracts the value to sum</param>
-        public Sum(Func<Entity, object> selector, Type type) : base(selector)
+        public Sum(Func<Entity, object> selector, DataTypeReference type) : base(selector)
         {
             Type = type;
 
@@ -449,7 +453,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return _valueSelector(((State)state).Value);
         }
 
-        public override Type Type { get; }
+        public override DataTypeReference Type { get; }
 
         public override object Reset()
         {
@@ -470,7 +474,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// Creates a new <see cref="Sum"/>
         /// </summary>
         /// <param name="selector">A function that extracts the value to sum</param>
-        public First(Func<Entity, object> selector, Type type) : base(selector)
+        public First(Func<Entity, object> selector, DataTypeReference type) : base(selector)
         {
             Type = type;
         }
@@ -496,7 +500,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return s.Value;
         }
 
-        public override Type Type { get; }
+        public override DataTypeReference Type { get; }
 
         public override object Reset()
         {
@@ -525,7 +529,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             SqlExpression = func.SqlExpression;
         }
 
-        public override Type Type => _func.Type;
+        public override DataTypeReference Type => _func.Type;
 
         public override void NextRecord(Entity entity, object state)
         {
