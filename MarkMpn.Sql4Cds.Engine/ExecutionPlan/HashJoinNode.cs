@@ -32,20 +32,27 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Build the hash table
             var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
             leftSchema.ContainsColumn(LeftAttribute.GetColumnName(), out var leftCol);
-            var leftColType = leftSchema.Schema[leftCol].ToNetType(out _);
+            var leftColType = leftSchema.Schema[leftCol];
             var rightSchema = RightSource.GetSchema(dataSources, parameterTypes);
             rightSchema.ContainsColumn(RightAttribute.GetColumnName(), out var rightCol);
-            var rightColType = rightSchema.Schema[rightCol].ToNetType(out _);
+            var rightColType = rightSchema.Schema[rightCol];
 
             if (!SqlTypeConverter.CanMakeConsistentTypes(leftColType, rightColType, out var keyType))
-                throw new QueryExecutionException($"Cannot match key types {leftColType.Name} and {rightColType.Name}");
+                throw new QueryExecutionException($"Cannot match key types {leftColType.ToSql()} and {rightColType.ToSql()}");
 
-            var leftKeyConverter = SqlTypeConverter.GetConversion(leftColType, keyType);
-            var rightKeyConverter = SqlTypeConverter.GetConversion(rightColType, keyType);
+            var leftKeyAccessor = (ScalarExpression) leftCol.ToColumnReference();
+            if (!leftColType.IsSameAs(keyType))
+                leftKeyAccessor = new ConvertCall { Parameter = leftKeyAccessor, DataType = keyType };
+            var leftKeyConverter = leftKeyAccessor.Compile(leftSchema, parameterTypes);
+
+            var rightKeyAccessor = (ScalarExpression)rightCol.ToColumnReference();
+            if (!rightColType.IsSameAs(keyType))
+                rightKeyAccessor = new ConvertCall { Parameter = rightKeyAccessor, DataType = keyType };
+            var rightKeyConverter = rightKeyAccessor.Compile(rightSchema, parameterTypes);
 
             foreach (var entity in LeftSource.Execute(dataSources, options, parameterTypes, parameterValues))
             {
-                var key = leftKeyConverter(entity[leftCol]);
+                var key = leftKeyConverter(entity, parameterValues, options);
 
                 if (!_hashTable.TryGetValue(key, out var list))
                 {
@@ -59,7 +66,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Probe the hash table using the right source
             foreach (var entity in RightSource.Execute(dataSources, options, parameterTypes, parameterValues))
             {
-                var key = rightKeyConverter(entity[rightCol]);
+                var key = rightKeyConverter(entity, parameterValues, options);
                 var matched = false;
 
                 if (_hashTable.TryGetValue(key, out var list))

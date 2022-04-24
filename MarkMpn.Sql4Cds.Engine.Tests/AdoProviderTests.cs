@@ -546,5 +546,123 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             }
         }
+
+        [TestMethod]
+        public void StringLengthUnion()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+                    DECLARE @short nvarchar(10)
+                    DECLARE @long nvarchar(20)
+
+                    SELECT @short
+                    UNION ALL
+                    SELECT @long";
+
+                using (var reader = cmd.ExecuteReader(CommandBehavior.SchemaOnly))
+                {
+                    var schema = reader.GetSchemaTable();
+                    var size = schema.Rows[0]["ColumnSize"];
+
+                    Assert.AreEqual(20, size);
+                }
+            }
+        }
+
+        [TestMethod]
+        public void DecimalPrecisionScaleUnion()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+                    DECLARE @number decimal(20, 10)
+
+                    SELECT @number, 1.2
+                    UNION ALL
+                    SELECT 123.4, 2.34";
+
+                using (var reader = cmd.ExecuteReader(CommandBehavior.SchemaOnly))
+                {
+                    var schema = reader.GetSchemaTable();
+                    var precision = schema.Rows[0]["NumericPrecision"];
+                    var scale = schema.Rows[0]["NumericScale"];
+
+                    Assert.AreEqual(20, precision);
+                    Assert.AreEqual(10, scale);
+
+                    precision = schema.Rows[1]["NumericPrecision"];
+                    scale = schema.Rows[1]["NumericScale"];
+
+                    Assert.AreEqual(3, precision);
+                    Assert.AreEqual(2, scale);
+                }
+            }
+        }
+
+        [TestMethod]
+        public void DecimalPrecisionScaleCalculations()
+        {
+            // Examples from https://docs.microsoft.com/en-us/sql/t-sql/data-types/precision-scale-and-length-transact-sql?view=sql-server-ver15#examples
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+                    select
+                        cast(0.0000009000 as decimal(30,20)) * cast(1.0000000000 as decimal(30,20)),
+                        CAST(0.0000009000 AS DECIMAL(30,10)) * CAST(1.0000000000 AS DECIMAL(30,10))";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    var schema = reader.GetSchemaTable();
+                    var precision = schema.Rows[0]["NumericPrecision"];
+                    var scale = schema.Rows[0]["NumericScale"];
+
+                    Assert.AreEqual(38, precision);
+                    Assert.AreEqual(17, scale);
+
+                    precision = schema.Rows[1]["NumericPrecision"];
+                    scale = schema.Rows[1]["NumericScale"];
+
+                    Assert.AreEqual(38, precision);
+                    Assert.AreEqual(6, scale);
+
+                    Assert.IsTrue(reader.Read());
+                    var val1 = (SqlDecimal)reader.GetProviderSpecificValue(0);
+                    Assert.AreEqual(0.00000090000000000M, val1.Value);
+                    Assert.AreEqual(38, val1.Precision);
+                    Assert.AreEqual(17, val1.Scale);
+
+                    var val2 = (SqlDecimal)reader.GetProviderSpecificValue(1);
+                    Assert.AreEqual(0.000001M, val2.Value);
+                    Assert.AreEqual(38, val2.Precision);
+                    Assert.AreEqual(6, val2.Scale);
+                }
+            }
+        }
+
+        [TestMethod]
+        public void DefaultStringLengths()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+                    declare @long varchar(100) = 'this is a very long test string that is bigger than thirty characters'
+                    declare @short varchar = 'test'
+                    select convert(varchar, @long), @short";
+
+                using (var reader = cmd.ExecuteReader(CommandBehavior.SchemaOnly))
+                {
+                    var schema = reader.GetSchemaTable();
+                    var length = schema.Rows[0]["ColumnSize"];
+                    Assert.AreEqual(30, length); // Default length of 30 for CAST and CONVERT
+                    length = schema.Rows[1]["ColumnSize"];
+                    Assert.AreEqual(1, length); // Default length of 1 for variable declaration
+                }
+            }
+        }
     }
 }

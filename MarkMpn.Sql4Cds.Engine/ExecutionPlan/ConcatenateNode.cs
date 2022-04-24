@@ -72,7 +72,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Work out the column types
             var sourceColumnTypes = Sources.Select((source, index) => GetColumnTypes(index, dataSources, parameterTypes)).ToArray();
-            var types = (Type[]) sourceColumnTypes[0].Clone();
+            var types = (DataTypeReference[]) sourceColumnTypes[0].Clone();
 
             for (var i = 1; i < Sources.Count; i++)
             {
@@ -95,7 +95,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 for (var col = 0; col < ColumnSet.Count; col++)
                 {
-                    if (types[col] == sourceColumnTypes[i][col])
+                    if (types[col].IsSameAs(sourceColumnTypes[i][col]))
                         continue;
 
                     var sourceCol = ColumnSet[col].SourceColumns[i];
@@ -103,13 +103,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (constant != null)
                     {
                         foreach (var row in constant.Values)
-                            row[sourceCol] = new ConvertCall { Parameter = row[sourceCol], DataType = types[col].ToSqlType() };
+                            row[sourceCol] = new ConvertCall { Parameter = row[sourceCol], DataType = types[col] };
 
-                        constant.Schema[sourceCol] = types[col].ToSqlType();
+                        constant.Schema[sourceCol] = types[col];
                     }
                     else
                     {
-                        conversion.Columns[sourceCol + "_converted"] = new ConvertCall { Parameter = sourceCol.ToColumnReference(), DataType = types[col].ToSqlType() };
+                        conversion.Columns[sourceCol + "_converted"] = new ConvertCall { Parameter = sourceCol.ToColumnReference(), DataType = types[col] };
                         ColumnSet[col].SourceColumns[i] = sourceCol + "_converted";
                     }
                 }
@@ -165,13 +165,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return this;
         }
 
-        private Type[] GetColumnTypes(int sourceIndex, IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
+        private DataTypeReference[] GetColumnTypes(int sourceIndex, IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
             var schema = Sources[sourceIndex].GetSchema(dataSources, parameterTypes);
-            var types = new Type[ColumnSet.Count];
+            var types = new DataTypeReference[ColumnSet.Count];
 
             for (var i = 0; i < ColumnSet.Count; i++)
-                types[i] = schema.Schema[ColumnSet[i].SourceColumns[sourceIndex]].ToNetType(out _);
+                types[i] = schema.Schema[ColumnSet[i].SourceColumns[sourceIndex]];
 
             return types;
         }

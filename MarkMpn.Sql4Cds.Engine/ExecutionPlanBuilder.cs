@@ -785,34 +785,34 @@ namespace MarkMpn.Sql4Cds.Engine
                 for (var i = 0; i < targetColumns.Count; i++)
                 {
                     string targetName;
-                    Type targetType;
+                    DataTypeReference targetType;
 
                     var colName = targetColumns[i].GetColumnName();
                     if (virtualTypeAttributes.Contains(colName))
                     {
                         targetName = colName;
-                        targetType = typeof(SqlString);
+                        targetType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { new IntegerLiteral { Value = MetadataExtensions.EntityLogicalNameMaxLength.ToString(CultureInfo.InvariantCulture) } } };
                     }
                     else
                     {
                         var attr = attributes[colName];
                         targetName = attr.LogicalName;
-                        targetType = attr.GetAttributeSqlType().ToNetType(out _);
+                        targetType = attr.GetAttributeSqlType();
 
                         // If we're inserting into a lookup field, the field type will be a SqlEntityReference. Change this to
                         // a SqlGuid so we can accept any guid values, including from TDS endpoint where SqlEntityReference
                         // values will not be available
-                        if (targetType == typeof(SqlEntityReference))
-                            targetType = typeof(SqlGuid);
+                        if (targetType is UserDataTypeReference userType && userType.Name.BaseIdentifier.Value == typeof(SqlEntityReference).FullName)
+                            targetType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.UniqueIdentifier };
                     }
 
                     if (!schema.ContainsColumn(sourceColumns[i], out var sourceColumn))
                         throw new NotSupportedQueryFragmentException("Invalid source column");
 
-                    var sourceType = schema.Schema[sourceColumn].ToNetType(out _);
+                    var sourceType = schema.Schema[sourceColumn];
 
                     if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, targetType))
-                        throw new NotSupportedQueryFragmentException($"No implicit type conversion from {sourceType} to {targetType}", targetColumns[i]);
+                        throw new NotSupportedQueryFragmentException($"No implicit type conversion from {sourceType.ToSql()} to {targetType.ToSql()}", targetColumns[i]);
 
                     node.ColumnMappings[targetName] = sourceColumn;
                 }
@@ -1233,7 +1233,7 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             var targetMetadata = dataSource.Metadata[targetLogicalName];
             var attributes = targetMetadata.Attributes.ToDictionary(attr => attr.LogicalName, StringComparer.OrdinalIgnoreCase);
-            var sourceTypes = new Dictionary<string, Type>();
+            var sourceTypes = new Dictionary<string, DataTypeReference>();
 
             var update = new UpdateNode
             {
@@ -1254,13 +1254,13 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     // Validate the type conversion
                     var targetAttrName = assignment.Column.MultiPartIdentifier.Identifiers.Last().Value;
-                    Type targetType;
+                    DataTypeReference targetType;
 
                     // Could be a virtual ___type attribute where the "real" virtual attribute uses a different name, e.g.
                     // entityid in listmember has an associated entitytypecode attribute
                     if (virtualTypeAttributes.Contains(targetAttrName))
                     {
-                        targetType = typeof(SqlString);
+                        targetType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { new IntegerLiteral { Value = MetadataExtensions.EntityLogicalNameMaxLength.ToString(CultureInfo.InvariantCulture) } } };
 
                         var targetAttribute = attributes[targetAttrName.Substring(0, targetAttrName.Length - 4)];
                         targetAttrName = targetAttribute.LogicalName + targetAttrName.Substring(targetAttrName.Length - 4, 4).ToLower();
@@ -1268,22 +1268,22 @@ namespace MarkMpn.Sql4Cds.Engine
                     else
                     {
                         var targetAttribute = attributes[targetAttrName];
-                        targetType = targetAttribute.GetAttributeSqlType().ToNetType(out _);
+                        targetType = targetAttribute.GetAttributeSqlType();
                         targetAttrName = targetAttribute.LogicalName;
 
                         // If we're updating a lookup field, the field type will be a SqlEntityReference. Change this to
                         // a SqlGuid so we can accept any guid values, including from TDS endpoint where SqlEntityReference
                         // values will not be available
-                        if (targetType == typeof(SqlEntityReference))
-                            targetType = typeof(SqlGuid);
+                        if (targetType is UserDataTypeReference userType && userType.Name.BaseIdentifier.Value == typeof(SqlEntityReference).FullName)
+                            targetType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.UniqueIdentifier };
                     }
 
                     var sourceColName = select.ColumnSet.Single(col => col.OutputColumn == targetAttrName.ToLower()).SourceColumn;
                     var sourceCol = sourceColName.ToColumnReference();
-                    var sourceType = sourceCol.GetType(schema, null, null, out _);
+                    sourceCol.GetType(schema, null, null, out var sourceType);
 
                     if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, targetType))
-                        throw new NotSupportedQueryFragmentException($"Cannot convert value of type {sourceType} to {targetType}", assignment);
+                        throw new NotSupportedQueryFragmentException($"Cannot convert value of type {sourceType.ToSql()} to {targetType.ToSql()}", assignment);
 
                     if (update.ColumnMappings.ContainsKey(targetAttrName))
                         throw new NotSupportedQueryFragmentException("Duplicate target column", assignment.Column);
@@ -1322,7 +1322,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (targetLookupAttribute.Targets.Length > 1 &&
                         !virtualTypeAttributes.Contains(targetAttrName + "type") &&
                         targetLookupAttribute.AttributeType != AttributeTypeCode.PartyList &&
-                        (!sourceTypes.TryGetValue(targetAttrName, out var sourceType) || sourceType != typeof(SqlEntityReference)))
+                        (!sourceTypes.TryGetValue(targetAttrName, out var sourceType) || !(sourceType is UserDataTypeReference sourceTypeUser) || sourceTypeUser.Name.BaseIdentifier.Value != typeof(SqlEntityReference).FullName))
                     {
                         throw new NotSupportedQueryFragmentException("Updating a polymorphic lookup field requires setting the associated type column as well", assignment.Column)
                         {
@@ -2185,13 +2185,14 @@ namespace MarkMpn.Sql4Cds.Engine
             if (offsetClause == null)
                 return source;
 
-            var offsetType = offsetClause.OffsetExpression.GetType(null, null, parameterTypes, out _);
-            var fetchType = offsetClause.FetchExpression.GetType(null, null, parameterTypes, out _);
+            offsetClause.OffsetExpression.GetType(null, null, parameterTypes, out var offsetType);
+            offsetClause.FetchExpression.GetType(null, null, parameterTypes, out var fetchType);
+            var intType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int };
 
-            if (!SqlTypeConverter.CanChangeTypeImplicit(offsetType, typeof(SqlInt32)))
+            if (!SqlTypeConverter.CanChangeTypeImplicit(offsetType, intType))
                 throw new NotSupportedQueryFragmentException("Unexpected OFFSET type", offsetClause.OffsetExpression);
 
-            if (!SqlTypeConverter.CanChangeTypeImplicit(fetchType, typeof(SqlInt32)))
+            if (!SqlTypeConverter.CanChangeTypeImplicit(fetchType, intType))
                 throw new NotSupportedQueryFragmentException("Unexpected FETCH type", offsetClause.FetchExpression);
 
             return new OffsetFetchNode
@@ -2207,8 +2208,8 @@ namespace MarkMpn.Sql4Cds.Engine
             if (topRowFilter == null)
                 return source;
 
-            var topType = topRowFilter.Expression.GetType(null, null, parameterTypes, out _);
-            var targetType = topRowFilter.Percent ? typeof(SqlSingle) : typeof(SqlInt32);
+            topRowFilter.Expression.GetType(null, null, parameterTypes, out var topType);
+            var targetType = new SqlDataTypeReference { SqlDataTypeOption = topRowFilter.Percent ? SqlDataTypeOption.Float : SqlDataTypeOption.BigInt };
 
             if (!SqlTypeConverter.CanChangeTypeImplicit(topType, targetType))
                 throw new NotSupportedQueryFragmentException("Unexpected TOP type", topRowFilter.Expression);

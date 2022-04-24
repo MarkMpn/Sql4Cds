@@ -49,26 +49,49 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
-            var topCount = Top.Compile(null, parameterTypes)(null, parameterValues, options);
+            int topCount;
+            Top.GetType(null, null, parameterTypes, out var topType);
 
             if (Percent)
             {
-                int count;
+                var top = new ConvertCall { Parameter = Top, DataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Float } };
+                var topPercent = (SqlSingle)top.Compile(null, parameterTypes)(null, parameterValues, options);
 
-                if (Source is TableSpoolNode spool && spool.SpoolType == SpoolType.Eager)
-                    count = spool.GetCount(dataSources, options, parameterTypes, parameterValues);
+                if (topPercent.IsNull)
+                {
+                    topCount = 0;
+                }
                 else
-                    count = Source.Execute(dataSources, options, parameterTypes, parameterValues).Count();
+                {
+                    int count;
 
-                topCount = (int)(count * SqlTypeConverter.ChangeType<float>(topCount) / 100);
+                    if (Source is TableSpoolNode spool && spool.SpoolType == SpoolType.Eager)
+                        count = spool.GetCount(dataSources, options, parameterTypes, parameterValues);
+                    else
+                        count = Source.Execute(dataSources, options, parameterTypes, parameterValues).Count();
+
+                    topCount = (int)(count * topPercent.Value / 100);
+                }
             }
+            else
+            {
+                var top = new ConvertCall { Parameter = Top, DataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.BigInt } };
+                var topValue = (SqlInt64)top.Compile(null, parameterTypes)(null, parameterValues, options);
 
-            var top = SqlTypeConverter.ChangeType<int>(topCount);
+                if (topValue.IsNull)
+                {
+                    topCount = 0;
+                }
+                else
+                {
+                    topCount = (int)topValue.Value;
+                }
+            }
 
             if (!WithTies)
             {
                 return Source.Execute(dataSources, options, parameterTypes, parameterValues)
-                    .Take(top);
+                    .Take(topCount);
             }
 
             Entity lastRow = null;
@@ -77,10 +100,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Source.Execute(dataSources, options, parameterTypes, parameterValues)
                 .TakeWhile((entity, index) =>
                 {
-                    if (index == top - 1)
+                    if (index == topCount - 1)
                         lastRow = entity;
 
-                    if (index < top)
+                    if (index < topCount)
                         return true;
 
                     return tieComparer.Equals(lastRow, entity);

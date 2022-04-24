@@ -398,8 +398,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 if (!entity.Contains(attribute.Key + "type"))
                     entity[attribute.Key + "type"] = ((EntityReference)attribute.Value).LogicalName;
-
-                //entity[attribute.Key] = ((EntityReference)attribute.Value).Id;
             }
 
             // Convert values to SQL types
@@ -408,7 +406,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 object sqlValue;
 
                 if (entity.Attributes.TryGetValue(col.Key, out var value) && value != null)
-                    sqlValue = SqlTypeConverter.NetToSqlType(DataSource, value);
+                    sqlValue = SqlTypeConverter.NetToSqlType(DataSource, value, col.Value);
                 else
                     sqlValue = SqlTypeConverter.GetNullValue(col.Value.ToNetType(out _));
 
@@ -687,7 +685,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     if (attribute.aggregateSpecified && (attribute.aggregate == Engine.FetchXml.AggregateType.count || attribute.aggregate == Engine.FetchXml.AggregateType.countcolumn) ||
                         attribute.dategroupingSpecified)
+                    {
                         attrType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int };
+                    }
+                    else if (attribute.aggregateSpecified && (attribute.aggregate == Engine.FetchXml.AggregateType.sum || attribute.aggregate == Engine.FetchXml.AggregateType.avg))
+                    {
+                        // Return type of SUM and AVG is based on the input type with some modifications
+                        // https://docs.microsoft.com/en-us/sql/t-sql/functions/avg-transact-sql?view=sql-server-ver15#return-types
+                        if (attrType is SqlDataTypeReference sqlRetType)
+                        {
+                            if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.TinyInt || sqlRetType.SqlDataTypeOption == SqlDataTypeOption.SmallInt)
+                                attrType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int };
+                            else if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.Decimal || sqlRetType.SqlDataTypeOption == SqlDataTypeOption.Numeric)
+                                attrType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Decimal, Parameters = { new IntegerLiteral { Value = "38" }, new IntegerLiteral { Value = Math.Max(sqlRetType.GetScale(), 6).ToString(CultureInfo.InvariantCulture) } } };
+                            else if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.SmallMoney)
+                                attrType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Money };
+                            else if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.Real)
+                                attrType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Float };
+                        }
+                    }
 
                     string fullName;
                     string attrAlias;

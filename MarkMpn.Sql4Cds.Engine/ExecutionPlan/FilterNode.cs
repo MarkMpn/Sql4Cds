@@ -955,7 +955,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Convert the value to the expected type
             if (filter.Conditions[0].Value != null)
             {
-                var propertyType = MetadataQueryNode.GetPropertyType(targetValueType);
+                var propertyType = MetadataQueryNode.GetPropertyType(targetValueType).ToNetType(out _);
 
                 if (filter.Conditions[0].ConditionOperator == MetadataConditionOperator.In ||
                     filter.Conditions[0].ConditionOperator == MetadataConditionOperator.NotIn)

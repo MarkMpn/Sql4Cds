@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data.SqlTypes;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.ServiceModel;
@@ -58,21 +59,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             foreach (var aggregate in Aggregates.Where(agg => agg.Value.SqlExpression != null))
             {
-                var sourceExpression = aggregate.Value.SqlExpression;
-
-                // Sum and Average need to have Decimal values as input for their calculations to work correctly
-                if (aggregate.Value.AggregateType == AggregateType.Average || aggregate.Value.AggregateType == AggregateType.Sum)
-                    sourceExpression = new ConvertCall { Parameter = sourceExpression, DataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Decimal } };
-
-                aggregate.Value.Expression = sourceExpression.Compile(schema, parameterTypes);
                 aggregate.Value.SqlExpression.GetType(schema, null, parameterTypes, out var retType);
+                aggregate.Value.SourceType = retType;
                 aggregate.Value.ReturnType = retType;
 
-                if (aggregate.Value.AggregateType == AggregateType.Average &&
-                    aggregate.Value.ReturnType is SqlDataTypeReference sqlRetType &&
-                    (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.TinyInt || sqlRetType.SqlDataTypeOption == SqlDataTypeOption.SmallInt))
+                aggregate.Value.Expression = aggregate.Value.SqlExpression.Compile(schema, parameterTypes);
+
+                // Return type of SUM and AVG is based on the input type with some modifications
+                // https://docs.microsoft.com/en-us/sql/t-sql/functions/avg-transact-sql?view=sql-server-ver15#return-types
+                if ((aggregate.Value.AggregateType == AggregateType.Average || aggregate.Value.AggregateType == AggregateType.Sum) &&
+                    aggregate.Value.ReturnType is SqlDataTypeReference sqlRetType)
                 {
-                    aggregate.Value.ReturnType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int };
+                    if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.TinyInt || sqlRetType.SqlDataTypeOption == SqlDataTypeOption.SmallInt)
+                        aggregate.Value.ReturnType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int };
+                    else if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.Decimal || sqlRetType.SqlDataTypeOption == SqlDataTypeOption.Numeric)
+                        aggregate.Value.ReturnType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Decimal, Parameters = { new IntegerLiteral { Value = "38" }, new IntegerLiteral { Value = Math.Max(sqlRetType.GetScale(), 6).ToString(CultureInfo.InvariantCulture) } } };
+                    else if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.SmallMoney)
+                        aggregate.Value.ReturnType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Money };
+                    else if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.Real)
+                        aggregate.Value.ReturnType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Float };
                 }
             }
         }
@@ -116,7 +121,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 switch (aggregate.Value.AggregateType)
                 {
                     case AggregateType.Average:
-                        values[aggregate.Key] = new Average(selector, aggregate.Value.ReturnType);
+                        values[aggregate.Key] = new Average(selector, aggregate.Value.SourceType, aggregate.Value.ReturnType);
                         break;
 
                     case AggregateType.Count:
@@ -136,7 +141,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         break;
 
                     case AggregateType.Sum:
-                        values[aggregate.Key] = new Sum(selector, aggregate.Value.ReturnType);
+                        values[aggregate.Key] = new Sum(selector, aggregate.Value.SourceType, aggregate.Value.ReturnType);
                         break;
 
                     case AggregateType.First:

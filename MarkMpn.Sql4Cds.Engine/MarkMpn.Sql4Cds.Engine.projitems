@@ -84,7 +84,6 @@
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\SelectDataReader.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\SelectNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\SortNode.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\SqlDataReaderWrapper.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\SqlNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\SqlTypeConverter.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\StreamAggregateNode.cs" />

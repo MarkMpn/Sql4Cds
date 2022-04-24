@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Data.SqlTypes;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -12,6 +13,8 @@ namespace MarkMpn.Sql4Cds.Engine
 {
     static class MetadataExtensions
     {
+        public static int EntityLogicalNameMaxLength { get; } = 50;
+
         public static Type GetAttributeType(this AttributeMetadata attrMetadata)
         {
             if (attrMetadata is MultiSelectPicklistAttributeMetadata)
@@ -96,10 +99,19 @@ namespace MarkMpn.Sql4Cds.Engine
                 return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.DateTime };
 
             if (attrMetadata is DecimalAttributeMetadata || typeCode == AttributeTypeCode.Decimal)
-                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Decimal }; // TODO: Precision/scale
+            {
+                var scale = 2;
+
+                if (attrMetadata is DecimalAttributeMetadata dec && dec.Precision != null)
+                    scale = dec.Precision.Value; // Precision property is actually scale (number of decimal places)
+
+                var precision = 12 + scale; // Max value is 100 Billion, which is 12 digits
+                
+                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Decimal, Parameters = { new IntegerLiteral { Value = precision.ToString(CultureInfo.InvariantCulture) }, new IntegerLiteral { Value = scale.ToString(CultureInfo.InvariantCulture) } } };
+            }
 
             if (attrMetadata is DoubleAttributeMetadata || typeCode == AttributeTypeCode.Double)
-                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Float }; // TODO: Precision/scale
+                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Float };
 
             if (attrMetadata is EntityNameAttributeMetadata || typeCode == AttributeTypeCode.EntityName)
                 return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { new IntegerLiteral { Value = "50" } } };
@@ -120,7 +132,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 return new UserDataTypeReference { Name = new SchemaObjectName { Identifiers = { new Identifier { Value = typeof(SqlEntityReference).FullName } } } };
 
             if (attrMetadata is MemoAttributeMetadata || typeCode == AttributeTypeCode.Memo)
-                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { attrMetadata is MemoAttributeMetadata memo && memo.MaxLength != null ? (Literal) new IntegerLiteral { Value = memo.MaxLength.ToString() } : new MaxLiteral() } };
+                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { attrMetadata is MemoAttributeMetadata memo && memo.MaxLength != null ? (Literal) new IntegerLiteral { Value = memo.MaxLength.Value.ToString(CultureInfo.InvariantCulture) } : new MaxLiteral() } };
 
             if (attrMetadata is MoneyAttributeMetadata || typeCode == AttributeTypeCode.Money)
                 return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Money };
@@ -135,7 +147,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int };
 
             if (attrMetadata is StringAttributeMetadata || typeCode == AttributeTypeCode.String)
-                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { attrMetadata is StringAttributeMetadata str && str.MaxLength != null ? (Literal)new IntegerLiteral { Value = str.MaxLength.ToString() } : new MaxLiteral() } };
+                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { attrMetadata is StringAttributeMetadata str && str.MaxLength != null ? (Literal)new IntegerLiteral { Value = str.MaxLength.Value.ToString(CultureInfo.InvariantCulture) } : new MaxLiteral() } };
 
             if (attrMetadata is UniqueIdentifierAttributeMetadata || typeCode == AttributeTypeCode.Uniqueidentifier)
                 return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.UniqueIdentifier };

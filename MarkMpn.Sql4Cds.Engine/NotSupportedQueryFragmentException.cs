@@ -16,7 +16,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="message">The error message to display</param>
         /// <param name="fragment">The fragment of the query that caused the error</param>
-        public NotSupportedQueryFragmentException(string message, TSqlFragment fragment) : base(message + ": " + fragment.ToSql())
+        public NotSupportedQueryFragmentException(string message, TSqlFragment fragment) : base(fragment == null ? message : (message + ": " + fragment.ToSql()))
         {
             Error = message;
             Fragment = fragment;

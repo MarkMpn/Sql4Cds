@@ -16,21 +16,36 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     class SqlTypeConverter
     {
         // Abbreviated version of data type precedence from https://docs.microsoft.com/en-us/sql/t-sql/data-types/data-type-precedence-transact-sql?view=sql-server-ver15
-        private static readonly Type[] _precendenceOrder = new[]
+        private static readonly SqlDataTypeOption[] _precendenceOrder = new[]
         {
-            typeof(SqlDateTime),
-            typeof(SqlDouble),
-            typeof(SqlSingle),
-            typeof(SqlDecimal),
-            typeof(SqlMoney),
-            typeof(SqlInt64),
-            typeof(SqlInt32),
-            typeof(SqlInt16),
-            typeof(SqlByte),
-            typeof(SqlBoolean),
-            typeof(SqlGuid),
-            typeof(SqlEntityReference),
-            typeof(SqlString),
+            SqlDataTypeOption.Sql_Variant,
+            SqlDataTypeOption.DateTimeOffset,
+            SqlDataTypeOption.DateTime2,
+            SqlDataTypeOption.DateTime,
+            SqlDataTypeOption.SmallDateTime,
+            SqlDataTypeOption.Date,
+            SqlDataTypeOption.Time,
+            SqlDataTypeOption.Float,
+            SqlDataTypeOption.Real,
+            SqlDataTypeOption.Decimal,
+            SqlDataTypeOption.Money,
+            SqlDataTypeOption.SmallMoney,
+            SqlDataTypeOption.BigInt,
+            SqlDataTypeOption.Int,
+            SqlDataTypeOption.SmallInt,
+            SqlDataTypeOption.TinyInt,
+            SqlDataTypeOption.Bit,
+            SqlDataTypeOption.NText,
+            SqlDataTypeOption.Text,
+            SqlDataTypeOption.Image,
+            SqlDataTypeOption.Timestamp,
+            SqlDataTypeOption.UniqueIdentifier,
+            SqlDataTypeOption.NVarChar,
+            SqlDataTypeOption.NChar,
+            SqlDataTypeOption.VarChar,
+            SqlDataTypeOption.Char,
+            SqlDataTypeOption.VarBinary,
+            SqlDataTypeOption.Binary,
         };
 
         private static readonly IDictionary<Type, object> _nullValues;
@@ -71,29 +86,51 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="rhs">The type of the second value</param>
         /// <param name="consistent">The type that both values can be converted to</param>
         /// <returns><c>true</c> if the two values can be converted to a consistent type, or <c>false</c> otherwise</returns>
-        public static bool CanMakeConsistentTypes(Type lhs, Type rhs, out Type consistent)
+        public static bool CanMakeConsistentTypes(DataTypeReference lhs, DataTypeReference rhs, out DataTypeReference consistent)
         {
-            if (lhs == rhs)
+            if (lhs.IsSameAs(rhs))
             {
                 consistent = lhs;
                 return true;
             }
 
-            // Special case for null -> anything
-            if (lhs == null || lhs == typeof(object))
+            var lhsUser = lhs as UserDataTypeReference;
+            var lhsSql = lhs as SqlDataTypeReference;
+            var rhsUser = rhs as UserDataTypeReference;
+            var rhsSql = rhs as SqlDataTypeReference;
+
+            // Check user-defined types are identical
+            if (lhsUser != null && rhsUser != null)
             {
-                consistent = rhs;
-                return true;
+                if (String.Join(".", lhsUser.Name.Identifiers.Select(i => i.Value)).Equals(String.Join(".", rhsUser.Name.Identifiers.Select(i => i.Value)), StringComparison.OrdinalIgnoreCase))
+                {
+                    consistent = lhs;
+                    return true;
+                }
+
+                consistent = null;
+                return false;
             }
 
-            if (rhs == null || rhs == typeof(object))
+            // If one or other type is a user-defined type, check it is a known type (SqlEntityReference)
+            if (lhsUser != null && (lhsUser.Name.Identifiers.Count != 1 || lhsUser.Name.BaseIdentifier.Value != typeof(SqlEntityReference).FullName))
             {
-                consistent = lhs;
-                return true;
+                consistent = null;
+                return false;
             }
 
-            var lhsPrecedence = Array.IndexOf(_precendenceOrder, lhs);
-            var rhsPrecedence = Array.IndexOf(_precendenceOrder, rhs);
+            if (rhsUser != null && (rhsUser.Name.Identifiers.Count != 1 || rhsUser.Name.BaseIdentifier.Value != typeof(SqlEntityReference).FullName))
+            {
+                consistent = null;
+                return false;
+            }
+
+            // Get the basic type. Substitute SqlEntityReference with uniqueidentifier
+            var lhsType = lhsSql?.SqlDataTypeOption ?? SqlDataTypeOption.UniqueIdentifier;
+            var rhsType = rhsSql?.SqlDataTypeOption ?? SqlDataTypeOption.UniqueIdentifier;
+
+            var lhsPrecedence = Array.IndexOf(_precendenceOrder, lhsType);
+            var rhsPrecedence = Array.IndexOf(_precendenceOrder, rhsType);
 
             if (lhsPrecedence == -1 || rhsPrecedence == -1)
             {
@@ -102,13 +139,41 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             var targetType = _precendenceOrder[Math.Min(lhsPrecedence, rhsPrecedence)];
+            var fullTargetType = new SqlDataTypeReference { SqlDataTypeOption = targetType };
 
-            if (targetType == typeof(SqlEntityReference) && (lhs == typeof(SqlString) || rhs == typeof(SqlString)))
-                targetType = typeof(SqlGuid);
-
-            if (CanChangeTypeImplicit(lhs, targetType) && CanChangeTypeImplicit(rhs, targetType))
+            // If we're converting to a type that uses a length, choose the longest length
+            if (targetType == SqlDataTypeOption.Binary || targetType == SqlDataTypeOption.VarBinary ||
+                targetType == SqlDataTypeOption.Image ||
+                targetType == SqlDataTypeOption.Char || targetType == SqlDataTypeOption.VarChar ||
+                targetType == SqlDataTypeOption.NChar || targetType == SqlDataTypeOption.NVarChar)
             {
-                consistent = targetType;
+                Literal length = null;
+
+                if (lhsSql != null && lhsSql.Parameters.Count == 1)
+                    length = lhsSql.Parameters[0];
+
+                if (rhsSql != null && rhsSql.Parameters.Count == 1 && (length == null || rhsSql.Parameters[0].LiteralType == LiteralType.Max || (length.LiteralType == LiteralType.Integer && Int32.TryParse(length.Value, out var lhsLength) && Int32.TryParse(rhsSql.Parameters[0].Value, out var rhsLength) && rhsLength > lhsLength)))
+                    length = rhsSql.Parameters[0];
+
+                if (length != null)
+                    fullTargetType.Parameters.Add(length);
+            }
+
+            // If we're converting to a decimal, check the precision and length
+            if (targetType == SqlDataTypeOption.Decimal || targetType == SqlDataTypeOption.Numeric)
+            {
+                var p1 = lhs.GetPrecision();
+                var s1 = lhs.GetScale();
+                var p2 = rhs.GetPrecision();
+                var s2 = rhs.GetScale();
+
+                fullTargetType.Parameters.Add(new IntegerLiteral { Value = (Math.Max(s1, s2) + Math.Max(p1 - s1, p2 - s2)).ToString(CultureInfo.InvariantCulture) });
+                fullTargetType.Parameters.Add(new IntegerLiteral { Value = Math.Max(s1, s2).ToString(CultureInfo.InvariantCulture) });
+            }
+
+            if (CanChangeTypeImplicit(lhs, fullTargetType) && CanChangeTypeImplicit(rhs, fullTargetType))
+            {
+                consistent = fullTargetType;
                 return true;
             }
 
@@ -122,40 +187,62 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="from">The type to convert from</param>
         /// <param name="to">The type to convert to</param>
         /// <returns><c>true</c> if the types can be converted implicitly, or <c>false</c> otherwise</returns>
-        public static bool CanChangeTypeImplicit(Type from, Type to)
+        public static bool CanChangeTypeImplicit(DataTypeReference from, DataTypeReference to)
         {
-            if (from == to)
+            if (from.IsSameAs(to))
                 return true;
 
-            // Special case for null -> anything
-            if (from == null || from == typeof(object))
-                return true;
+            var fromUser = from as UserDataTypeReference;
+            var fromSql = from as SqlDataTypeReference;
+            var toUser = to as UserDataTypeReference;
+            var toSql = to as SqlDataTypeReference;
 
-            if (Array.IndexOf(_precendenceOrder, from) == -1 ||
-                Array.IndexOf(_precendenceOrder, to) == -1)
+            // Check user-defined types are identical
+            if (fromUser != null && toUser != null)
+                return String.Join(".", fromUser.Name.Identifiers.Select(i => i.Value)).Equals(String.Join(".", toUser.Name.Identifiers.Select(i => i.Value)), StringComparison.OrdinalIgnoreCase);
+
+            // If one or other type is a user-defined type, check it is a known type (SqlEntityReference)
+            if (fromUser != null && (fromUser.Name.Identifiers.Count != 1 || fromUser.Name.BaseIdentifier.Value != typeof(SqlEntityReference).FullName))
+                return false;
+
+            // Nothing can be converted to SqlEntityReference
+            if (toUser != null)
+                return false;
+
+            // Get the basic type. Substitute SqlEntityReference with uniqueidentifier
+            var fromType = fromSql?.SqlDataTypeOption ?? SqlDataTypeOption.UniqueIdentifier;
+            var toType = toSql.SqlDataTypeOption;
+
+            if (Array.IndexOf(_precendenceOrder, fromType) == -1 ||
+                Array.IndexOf(_precendenceOrder, toType) == -1)
                 return false;
 
             // Anything can be converted to/from strings (except converting string -> entity reference)
-            if ((from == typeof(SqlString) && to != typeof(SqlEntityReference)) || to == typeof(SqlString))
+            if (fromType.IsStringType() || toType.IsStringType())
                 return true;
 
-            // Any numeric type can be implicitly converted to any other. SQL requires a cast between decimal/numeric when precision/scale changes
-            // but we don't have precision/scale as part of the data types
-            if ((from == typeof(SqlBoolean) || from == typeof(SqlByte) || from == typeof(SqlInt16) || from == typeof(SqlInt32) || from == typeof(SqlInt64) || from == typeof(SqlMoney) || from == typeof(SqlDecimal) || from == typeof(SqlSingle) || from == typeof(SqlDouble)) &&
-                (to == typeof(SqlBoolean) || to == typeof(SqlByte) || to == typeof(SqlInt16) || to == typeof(SqlInt32) || to == typeof(SqlInt64)|| to == typeof(SqlMoney) || to == typeof(SqlDecimal) || to == typeof(SqlSingle) || to == typeof(SqlDouble)))
+            // Any numeric type can be implicitly converted to any other.
+            if (fromType.IsNumeric() && toType.IsNumeric())
+            {
+                // SQL requires a cast between decimal/numeric when precision/scale is reduced
+                if ((fromType == SqlDataTypeOption.Decimal || fromType == SqlDataTypeOption.Numeric) &&
+                    (toType == SqlDataTypeOption.Decimal || toType == SqlDataTypeOption.Numeric) &&
+                    (from.GetPrecision() > to.GetPrecision() || from.GetScale() > to.GetScale()))
+                    return false;
+
                 return true;
+            }
 
             // Any numeric type can be implicitly converted to datetime
-            if ((from == typeof(SqlInt32) || from == typeof(SqlInt64) || from == typeof(SqlMoney) || from == typeof(SqlDecimal) || from == typeof(SqlSingle) || from == typeof(SqlDouble)) &&
-                to == typeof(SqlDateTime))
+            if (fromType.IsNumeric() && (toType == SqlDataTypeOption.DateTime || toType == SqlDataTypeOption.SmallDateTime))
                 return true;
 
-            // datetime can only be converted implicitly to string
-            if (from == typeof(DateTime) && to == typeof(SqlString))
+            // datetime can be converted implicitly to string and date/time types
+            if (fromType.IsDateTimeType() && (toType.IsStringType() || toType.IsDateTimeType() || toType == SqlDataTypeOption.Date || toType == SqlDataTypeOption.Time))
                 return true;
 
             // Entity reference can be converted to guid
-            if (from == typeof(SqlEntityReference) && to == typeof(SqlGuid))
+            if (fromType == SqlDataTypeOption.UniqueIdentifier && fromUser != null && toType == SqlDataTypeOption.UniqueIdentifier)
                 return true;
 
             return false;
@@ -167,13 +254,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="from">The type to convert from</param>
         /// <param name="to">The type to convert to</param>
         /// <returns><c>true</c> if the types can be converted explicitly, or <c>false</c> otherwise</returns>
-        public static bool CanChangeTypeExplicit(Type from, Type to)
+        public static bool CanChangeTypeExplicit(DataTypeReference from, DataTypeReference to)
         {
             if (CanChangeTypeImplicit(from, to))
                 return true;
 
+            var fromSql = from as SqlDataTypeReference;
+            var toSql = to as SqlDataTypeReference;
+
             // Require explicit conversion from datetime to numeric types
-            if (from == typeof(SqlDateTime) && (to == typeof(SqlBoolean) || to == typeof(SqlByte) || to == typeof(SqlInt16) || to == typeof(SqlInt32) || to == typeof(SqlInt64) || to == typeof(SqlDecimal) || to == typeof(SqlSingle) || to == typeof(SqlDouble)))
+            if ((fromSql?.SqlDataTypeOption == SqlDataTypeOption.DateTime || fromSql?.SqlDataTypeOption == SqlDataTypeOption.SmallDateTime) &&
+                toSql?.SqlDataTypeOption.IsNumeric() == true)
+                return true;
+
+            // Require explicit conversion between numeric types when precision/scale is reduced
+            if (fromSql?.SqlDataTypeOption.IsNumeric() == true && toSql?.SqlDataTypeOption.IsNumeric() == true)
                 return true;
 
             return false;
@@ -253,24 +348,28 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// Produces the required expression to convert values to a specific type
         /// </summary>
         /// <param name="expr">The expression that generates the values to convert</param>
+        /// <param name="from">The type to convert from</param>
         /// <param name="to">The type to convert to</param>
         /// <param name="style">An optional parameter defining the style of the conversion</param>
+        /// <param name="styleType">An optional parameter defining the type of the <paramref name="style"/> expression</param>
         /// <param name="convert">An optional parameter containing the SQL CONVERT() function call to report any errors against</param>
         /// <returns>An expression to generate values of the required type</returns>
-        public static Expression Convert(Expression expr, DataTypeReference to, Expression style = null, ConvertCall convert = null)
+        public static Expression Convert(Expression expr, DataTypeReference from, DataTypeReference to, Expression style = null, DataTypeReference styleType = null, ConvertCall convert = null)
         {
             var targetType = to.ToNetType(out var dataType);
 
             var sourceType = expr.Type;
 
-            if (!CanChangeTypeExplicit(sourceType, targetType))
-                throw new NotSupportedQueryFragmentException($"No type conversion available from {sourceType} to {targetType}", convert);
+            if (!CanChangeTypeExplicit(from, to))
+                throw new NotSupportedQueryFragmentException($"No type conversion available from {from.ToSql()} to {to.ToSql()}", convert);
 
             // Special cases for styles
             if (style != null)
             {
-                if (!CanChangeTypeImplicit(style.Type, typeof(SqlInt32)))
-                    throw new NotSupportedQueryFragmentException($"No type conversion available from {style.Type} to {typeof(SqlInt32)}", convert.Style);
+                var intType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int };
+
+                if (!CanChangeTypeImplicit(styleType, intType))
+                    throw new NotSupportedQueryFragmentException($"No type conversion available from {styleType.ToSql()} to {intType.ToSql()}", convert.Style);
 
                 if (expr.Type == typeof(SqlDateTime) && targetType == typeof(SqlString))
                     expr = Expr.Call(() => Convert(Expr.Arg<SqlDateTime>(), Expr.Arg<SqlInt32>()), expr, style);
@@ -747,8 +846,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         /// <param name="dataSource">The name of the data source the <paramref name="value"/> was obtained from</param>
         /// <param name="value">The value in a standard CLR type</param>
+        /// <param name="dataType">The expected data type</param>
         /// <returns>The value converted to a SQL type</returns>
-        public static object NetToSqlType(string dataSource, object value)
+        public static object NetToSqlType(string dataSource, object value, DataTypeReference dataType)
         {
             if (value != null)
             {
@@ -770,7 +870,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return new SqlDateTime(dt);
 
             if (value is decimal dec)
-                return new SqlDecimal(dec);
+                return SqlDecimal.ConvertToPrecScale(dec, dataType.GetPrecision(), dataType.GetScale());
 
             if (value is double dbl)
                 return new SqlDouble(dbl);

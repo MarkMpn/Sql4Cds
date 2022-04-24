@@ -26,7 +26,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             public string SqlName { get; set; }
             public string PropertyName { get; set; }
             public Func<object,object> Accessor { get; set; }
-            public Type SqlType { get; set; }
+            public DataTypeReference SqlType { get; set; }
             public Type Type { get; set; }
         }
 
@@ -35,7 +35,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             public string SqlName { get; set; }
             public string PropertyName { get; set; }
             public IDictionary<Type, Func<object,object>> Accessors { get; set; }
-            public Type SqlType { get; set; }
+            public DataTypeReference SqlType { get; set; }
+            public Type Type { get; set; }
             public bool IsNullable { get; set; }
         }
 
@@ -71,7 +72,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _entityProps = typeof(EntityMetadata)
                 .GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .Where(p => !excludedEntityProps.Contains(p.Name))
-                .ToDictionary(p => p.Name, p => new MetadataProperty { SqlName = p.Name.ToLowerInvariant(), PropertyName = p.Name, Type = p.PropertyType, SqlType = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType)) }, StringComparer.OrdinalIgnoreCase);
+                .ToDictionary(p => p.Name, p => new MetadataProperty { SqlName = p.Name.ToLowerInvariant(), PropertyName = p.Name, Type = p.PropertyType, SqlType = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType).ToNetType(out _)) }, StringComparer.OrdinalIgnoreCase);
 
             var excludedOneToManyRelationshipProps = new[]
             {
@@ -84,7 +85,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _oneToManyRelationshipProps = typeof(OneToManyRelationshipMetadata)
                 .GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .Where(p => !excludedOneToManyRelationshipProps.Contains(p.Name))
-                .ToDictionary(p => p.Name, p => new MetadataProperty { SqlName = p.Name.ToLowerInvariant(), PropertyName = p.Name, Type = p.PropertyType, SqlType = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType)) }, StringComparer.OrdinalIgnoreCase);
+                .ToDictionary(p => p.Name, p => new MetadataProperty { SqlName = p.Name.ToLowerInvariant(), PropertyName = p.Name, Type = p.PropertyType, SqlType = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType).ToNetType(out _)) }, StringComparer.OrdinalIgnoreCase);
 
             var excludedManyToManyRelationshipProps = new[]
             {
@@ -96,7 +97,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _manyToManyRelationshipProps = typeof(ManyToManyRelationshipMetadata)
                 .GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .Where(p => !excludedManyToManyRelationshipProps.Contains(p.Name))
-                .ToDictionary(p => p.Name, p => new MetadataProperty { SqlName = p.Name.ToLowerInvariant(), PropertyName = p.Name, Type = p.PropertyType, SqlType = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType)) }, StringComparer.OrdinalIgnoreCase);
+                .ToDictionary(p => p.Name, p => new MetadataProperty { SqlName = p.Name.ToLowerInvariant(), PropertyName = p.Name, Type = p.PropertyType, SqlType = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType).ToNetType(out _)) }, StringComparer.OrdinalIgnoreCase);
 
             // Get a list of all attribute types
             _attributeTypes = typeof(AttributeMetadata).Assembly
@@ -112,7 +113,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 .Select(g =>
                 {
                     // Work out the consistent type for each property
-                    Type type = null;
+                    DataTypeReference type = null;
                     var isNullable = false;
 
                     foreach (var prop in g)
@@ -135,12 +136,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (type == null)
                         return null;
 
+                    var netType = type.ToNetType(out _);
+
                     return new AttributeProperty
                     {
                         SqlName = g.Key.ToLowerInvariant(),
                         PropertyName = g.Key,
                         SqlType = type,
-                        Accessors = g.ToDictionary(p => p.Type, p => GetPropertyAccessor(p.Property, type)),
+                        Type = netType,
+                        Accessors = g.ToDictionary(p => p.Type, p => GetPropertyAccessor(p.Property, netType)),
                         IsNullable = isNullable
                     };
                 })
@@ -422,7 +426,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 foreach (var prop in entityProps)
                 {
                     var fullName = $"{EntityAlias}.{prop.SqlName}";
-                    schema.Schema[fullName] = prop.SqlType.ToSqlType();
+                    schema.Schema[fullName] = prop.SqlType;
 
                     if (!schema.Aliases.TryGetValue(prop.SqlName, out var aliases))
                     {
@@ -449,7 +453,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 foreach (var prop in attributeProps)
                 {
                     var fullName = $"{AttributeAlias}.{prop.SqlName}";
-                    schema.Schema[fullName] = prop.SqlType.ToSqlType();
+                    schema.Schema[fullName] = prop.SqlType;
 
                     if (!schema.Aliases.TryGetValue(prop.SqlName, out var aliases))
                     {
@@ -477,7 +481,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 foreach (var prop in relationshipProps)
                 {
                     var fullName = $"{OneToManyRelationshipAlias}.{prop.SqlName}";
-                    schema.Schema[fullName] = prop.SqlType.ToSqlType();
+                    schema.Schema[fullName] = prop.SqlType;
 
                     if (!schema.Aliases.TryGetValue(prop.SqlName, out var aliases))
                     {
@@ -505,7 +509,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 foreach (var prop in relationshipProps)
                 {
                     var fullName = $"{ManyToOneRelationshipAlias}.{prop.SqlName}";
-                    schema.Schema[fullName] = prop.SqlType.ToSqlType();
+                    schema.Schema[fullName] = prop.SqlType;
 
                     if (!schema.Aliases.TryGetValue(prop.SqlName, out var aliases))
                     {
@@ -533,7 +537,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 foreach (var prop in relationshipProps)
                 {
                     var fullName = $"{ManyToManyRelationshipAlias}.{prop.SqlName}";
-                    schema.Schema[fullName] = prop.SqlType.ToSqlType();
+                    schema.Schema[fullName] = prop.SqlType;
 
                     if (!schema.Aliases.TryGetValue(prop.SqlName, out var aliases))
                     {
@@ -589,7 +593,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return false;
         }
 
-        internal static Type GetPropertyType(Type propType)
+        internal static DataTypeReference GetPropertyType(Type propType)
         {
             if (propType == typeof(OptionMetadata))
                 propType = typeof(SqlInt32);
@@ -605,7 +609,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             else if (typeof(MetadataBase).IsAssignableFrom(propType))
                 propType = typeof(Guid);
 
-            return SqlTypeConverter.NetToSqlType(propType);
+            return SqlTypeConverter.NetToSqlType(propType).ToSqlType();
         }
 
         internal static Func<object,object> GetPropertyAccessor(PropertyInfo prop, Type targetType)
@@ -759,7 +763,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         if (!prop.Value.Accessors.TryGetValue(result.Attribute.GetType(), out var accessor))
                         {
-                            converted[prop.Key] = SqlTypeConverter.GetNullValue(prop.Value.SqlType);
+                            converted[prop.Key] = SqlTypeConverter.GetNullValue(prop.Value.Type);
                             continue;
                         }
 

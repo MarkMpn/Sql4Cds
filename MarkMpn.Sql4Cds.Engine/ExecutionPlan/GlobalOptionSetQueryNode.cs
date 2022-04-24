@@ -18,7 +18,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             public string Name { get; set; }
             public IDictionary<Type, Func<object, object>> Accessors { get; set; }
-            public Type Type { get; set; }
+            public DataTypeReference SqlType { get; set; }
+            public Type NetType { get; set; }
         }
 
         private static readonly Type[] _optionsetTypes;
@@ -38,7 +39,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 .Select(g =>
                 {
                     // Work out the consistent type for each property
-                    Type type = null;
+                    DataTypeReference type = null;
 
                     foreach (var prop in g)
                     {
@@ -57,11 +58,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (type == null)
                         return null;
 
+                    var netType = type.ToNetType(out _);
+
                     return new OptionSetProperty
                     {
                         Name = g.Key.ToLowerInvariant(),
-                        Type = type,
-                        Accessors = g.ToDictionary(p => p.Type, p => MetadataQueryNode.GetPropertyAccessor(p.Property, type))
+                        SqlType = type,
+                        NetType = netType,
+                        Accessors = g.ToDictionary(p => p.Type, p => MetadataQueryNode.GetPropertyAccessor(p.Property, netType))
                     };
                 })
                 .Where(p => p != null)
@@ -117,7 +121,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var prop in _optionsetProps.Values)
             {
-                schema.Schema[$"{Alias}.{prop.Name}"] = prop.Type.ToSqlType();
+                schema.Schema[$"{Alias}.{prop.Name}"] = prop.SqlType;
 
                 if (!schema.Aliases.TryGetValue(prop.Name, out var aliases))
                 {
@@ -153,7 +157,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     if (!col.Value.Accessors.TryGetValue(optionset.GetType(), out var optionsetProp))
                     {
-                        converted[col.Key] = SqlTypeConverter.GetNullValue(col.Value.Type);
+                        converted[col.Key] = SqlTypeConverter.GetNullValue(col.Value.NetType);
                         continue;
                     }
 

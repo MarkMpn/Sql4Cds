@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
+using System.Data.Common;
 using System.Data.SqlTypes;
 using System.Linq;
 using System.Text;
@@ -48,7 +49,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override int ExecutionCount => _executionCount;
 
-        public IDataReader Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, CommandBehavior behavior)
+        public DbDataReader Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, CommandBehavior behavior)
         {
             _executionCount++;
 
