@@ -13,7 +13,7 @@ namespace MarkMpn.Sql4Cds.Engine
 {
     static class MetadataExtensions
     {
-        public static int EntityLogicalNameMaxLength { get; } = 50;
+        public static int EntityLogicalNameMaxLength { get; } = 64;
 
         public static Type GetAttributeType(this AttributeMetadata attrMetadata)
         {
@@ -85,7 +85,7 @@ namespace MarkMpn.Sql4Cds.Engine
         public static DataTypeReference GetAttributeSqlType(this AttributeMetadata attrMetadata)
         {
             if (attrMetadata is MultiSelectPicklistAttributeMetadata)
-                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { new MaxLiteral() } };
+                return DataTypeHelpers.NVarChar(Int32.MaxValue);
 
             var typeCode = attrMetadata.AttributeType;
 
@@ -93,10 +93,10 @@ namespace MarkMpn.Sql4Cds.Engine
                 typeCode = managedProp.ValueAttributeTypeCode;
 
             if (attrMetadata is BooleanAttributeMetadata || typeCode == AttributeTypeCode.Boolean)
-                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Bit };
+                return DataTypeHelpers.Bit;
 
             if (attrMetadata is DateTimeAttributeMetadata || typeCode == AttributeTypeCode.DateTime)
-                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.DateTime };
+                return DataTypeHelpers.DateTime;
 
             if (attrMetadata is DecimalAttributeMetadata || typeCode == AttributeTypeCode.Decimal)
             {
@@ -107,56 +107,56 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 var precision = 12 + scale; // Max value is 100 Billion, which is 12 digits
                 
-                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Decimal, Parameters = { new IntegerLiteral { Value = precision.ToString(CultureInfo.InvariantCulture) }, new IntegerLiteral { Value = scale.ToString(CultureInfo.InvariantCulture) } } };
+                return DataTypeHelpers.Decimal(precision, scale);
             }
 
             if (attrMetadata is DoubleAttributeMetadata || typeCode == AttributeTypeCode.Double)
-                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Float };
+                return DataTypeHelpers.Float;
 
             if (attrMetadata is EntityNameAttributeMetadata || typeCode == AttributeTypeCode.EntityName)
-                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { new IntegerLiteral { Value = "50" } } };
+                return DataTypeHelpers.NVarChar(EntityLogicalNameMaxLength);
 
             if (attrMetadata is ImageAttributeMetadata)
-                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.VarBinary, Parameters = { new MaxLiteral() } };
+                return DataTypeHelpers.VarBinary(Int32.MaxValue);
 
             if (attrMetadata is IntegerAttributeMetadata || typeCode == AttributeTypeCode.Integer)
-                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int };
+                return DataTypeHelpers.Int;
 
             if (attrMetadata is BigIntAttributeMetadata || typeCode == AttributeTypeCode.BigInt)
-                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.BigInt };
+                return DataTypeHelpers.BigInt;
 
             if (typeCode == AttributeTypeCode.PartyList)
-                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { new MaxLiteral() } };
+                return DataTypeHelpers.NVarChar(Int32.MaxValue);
 
             if (attrMetadata is LookupAttributeMetadata || attrMetadata.IsPrimaryId == true || typeCode == AttributeTypeCode.Lookup || typeCode == AttributeTypeCode.Customer || typeCode == AttributeTypeCode.Owner)
-                return new UserDataTypeReference { Name = new SchemaObjectName { Identifiers = { new Identifier { Value = typeof(SqlEntityReference).FullName } } } };
+                return DataTypeHelpers.EntityReference;
 
             if (attrMetadata is MemoAttributeMetadata || typeCode == AttributeTypeCode.Memo)
-                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { attrMetadata is MemoAttributeMetadata memo && memo.MaxLength != null ? (Literal) new IntegerLiteral { Value = memo.MaxLength.Value.ToString(CultureInfo.InvariantCulture) } : new MaxLiteral() } };
+                return DataTypeHelpers.NVarChar(attrMetadata is MemoAttributeMetadata memo && memo.MaxLength != null ? memo.MaxLength.Value : Int32.MaxValue);
 
             if (attrMetadata is MoneyAttributeMetadata || typeCode == AttributeTypeCode.Money)
-                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Money };
+                return DataTypeHelpers.Money;
 
             if (attrMetadata is PicklistAttributeMetadata || typeCode == AttributeTypeCode.Picklist)
-                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int };
+                return DataTypeHelpers.Int;
 
             if (attrMetadata is StateAttributeMetadata || typeCode == AttributeTypeCode.State)
-                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int };
+                return DataTypeHelpers.Int;
 
             if (attrMetadata is StatusAttributeMetadata || typeCode == AttributeTypeCode.Status)
-                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int };
+                return DataTypeHelpers.Int;
 
             if (attrMetadata is StringAttributeMetadata || typeCode == AttributeTypeCode.String)
-                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { attrMetadata is StringAttributeMetadata str && str.MaxLength != null ? (Literal)new IntegerLiteral { Value = str.MaxLength.Value.ToString(CultureInfo.InvariantCulture) } : new MaxLiteral() } };
+                return DataTypeHelpers.NVarChar(attrMetadata is StringAttributeMetadata str && str.MaxLength != null ? str.MaxLength.Value : Int32.MaxValue);
 
             if (attrMetadata is UniqueIdentifierAttributeMetadata || typeCode == AttributeTypeCode.Uniqueidentifier)
-                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.UniqueIdentifier };
+                return DataTypeHelpers.UniqueIdentifier;
 
             if (attrMetadata.AttributeTypeName == AttributeTypeDisplayName.FileType)
-                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.UniqueIdentifier };
+                return DataTypeHelpers.UniqueIdentifier;
 
             if (attrMetadata.AttributeType == AttributeTypeCode.Virtual)
-                return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { new MaxLiteral() } };
+                return DataTypeHelpers.NVarChar(Int32.MaxValue);
 
             throw new ApplicationException("Unknown attribute type " + attrMetadata.GetType());
         }

@@ -54,7 +54,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (Percent)
             {
-                var top = new ConvertCall { Parameter = Top, DataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Float } };
+                var top = new ConvertCall { Parameter = Top, DataType = DataTypeHelpers.Float };
                 var topPercent = (SqlSingle)top.Compile(null, parameterTypes)(null, parameterValues, options);
 
                 if (topPercent.IsNull)
@@ -75,7 +75,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
             else
             {
-                var top = new ConvertCall { Parameter = Top, DataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.BigInt } };
+                var top = new ConvertCall { Parameter = Top, DataType = DataTypeHelpers.BigInt };
                 var topValue = (SqlInt64)top.Compile(null, parameterTypes)(null, parameterValues, options);
 
                 if (topValue.IsNull)

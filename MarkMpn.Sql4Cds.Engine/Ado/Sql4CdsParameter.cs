@@ -107,7 +107,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (type == typeof(DateTime) || type == typeof(SqlDateTime))
                 return DbType.DateTime;
 
-            if (type == typeof(decimal) || type == typeof(SqlDecimal) || type == typeof(SqlMoney))
+            if (type == typeof(decimal) || type == typeof(SqlDecimal))
                 return DbType.Decimal;
 
             if (type == typeof(double) || type == typeof(SqlDouble))
@@ -122,6 +122,9 @@ namespace MarkMpn.Sql4Cds.Engine
             if (type == typeof(DateTimeOffset))
                 return DbType.DateTimeOffset;
 
+            if (type == typeof(SqlMoney))
+                return DbType.Currency;
+
             if (type == typeof(EntityReference) || type == typeof(SqlEntityReference))
                 return DbType.Object;
 
@@ -135,111 +138,112 @@ namespace MarkMpn.Sql4Cds.Engine
                 switch (DbType)
                 {
                     case DbType.AnsiString:
-                        _dataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.VarChar };
+                        _dataType = DataTypeHelpers.VarChar(Size);
                         break;
 
                     case DbType.AnsiStringFixedLength:
-                        _dataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Char, Parameters = { new IntegerLiteral { Value = Size.ToString() } } };
+                        _dataType = DataTypeHelpers.Char(Size);
                         break;
 
                     case DbType.Binary:
-                        _dataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.VarBinary };
+                        _dataType = DataTypeHelpers.VarBinary(Size);
                         break;
 
                     case DbType.Boolean:
-                        _dataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Bit };
+                        _dataType = DataTypeHelpers.Bit;
                         break;
 
                     case DbType.Byte:
-                        _dataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.TinyInt };
+                        _dataType = DataTypeHelpers.TinyInt;
                         break;
 
                     case DbType.Currency:
-                        _dataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Money };
+                        _dataType = DataTypeHelpers.Money;
                         break;
 
                     case DbType.Date:
-                        _dataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Date };
+                        _dataType = DataTypeHelpers.Date;
                         break;
 
                     case DbType.DateTime:
-                        _dataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.DateTime };
+                        _dataType = DataTypeHelpers.DateTime;
                         break;
 
                     case DbType.DateTime2:
-                        _dataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.DateTime2 };
+                        _dataType = DataTypeHelpers.DateTime2;
                         break;
 
                     case DbType.DateTimeOffset:
-                        _dataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.DateTimeOffset };
+                        _dataType = DataTypeHelpers.DateTimeOffset;
                         break;
 
                     case DbType.Decimal:
-                        _dataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Decimal };
+                        var value = (SqlDecimal) GetValue();
+                        _dataType = DataTypeHelpers.Decimal(value.Precision, value.Scale);
                         break;
 
                     case DbType.Double:
-                        _dataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Real };
+                        _dataType = DataTypeHelpers.Real;
                         break;
 
                     case DbType.Guid:
-                        _dataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.UniqueIdentifier };
+                        _dataType = DataTypeHelpers.UniqueIdentifier;
                         break;
 
                     case DbType.Int16:
-                        _dataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.SmallInt };
+                        _dataType = DataTypeHelpers.SmallInt;
                         break;
 
                     case DbType.Int32:
-                        _dataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int };
+                        _dataType = DataTypeHelpers.Int;
                         break;
 
                     case DbType.Int64:
-                        _dataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.BigInt };
+                        _dataType = DataTypeHelpers.BigInt;
                         break;
 
                     case DbType.Object:
-                        _dataType = new UserDataTypeReference { Name = new SchemaObjectName { Identifiers = { new Identifier { Value = GetValue().GetType().FullName } } } };
+                        _dataType = DataTypeHelpers.Object(GetValue().GetType());
                         break;
 
                     case DbType.SByte:
-                        _dataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.TinyInt };
+                        _dataType = DataTypeHelpers.TinyInt;
                         break;
 
                     case DbType.Single:
-                        _dataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Float };
+                        _dataType = DataTypeHelpers.Float;
                         break;
 
                     case DbType.String:
-                        _dataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar };
+                        _dataType = DataTypeHelpers.NVarChar(Size);
                         break;
 
                     case DbType.StringFixedLength:
-                        _dataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NChar, Parameters = { new IntegerLiteral { Value = Size.ToString() } } };
+                        _dataType = DataTypeHelpers.NChar(Size);
                         break;
 
                     case DbType.Time:
-                        _dataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Time };
+                        _dataType = DataTypeHelpers.Time;
                         break;
 
                     case DbType.UInt16:
-                        _dataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int };
+                        _dataType = DataTypeHelpers.Int;
                         break;
 
                     case DbType.UInt32:
-                        _dataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.BigInt };
+                        _dataType = DataTypeHelpers.BigInt;
                         break;
 
                     case DbType.UInt64:
-                        _dataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.BigInt };
+                        _dataType = DataTypeHelpers.BigInt;
                         break;
 
                     case DbType.VarNumeric:
-                        _dataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Numeric };
+                        _dataType = DataTypeHelpers.NVarChar(Int32.MaxValue);
                         break;
 
                     case DbType.Xml:
-                        _dataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar };
+                        _dataType = DataTypeHelpers.NVarChar(Int32.MaxValue);
                         break;
                 }
             }

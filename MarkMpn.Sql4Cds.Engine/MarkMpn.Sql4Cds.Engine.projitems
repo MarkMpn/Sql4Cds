@@ -26,6 +26,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)Ado\StatementCompletedEventArgs.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)AttributeMetadataCache.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DataSource.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)DataTypeHelpers.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DisconnectedException.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlanBuilder.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlanNodeTypeDescriptor.cs" />

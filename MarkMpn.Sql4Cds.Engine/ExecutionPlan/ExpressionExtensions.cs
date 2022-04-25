@@ -175,44 +175,44 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private static Expression ToExpression(IdentifierLiteral guid, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
-            sqlType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.UniqueIdentifier };
+            sqlType = DataTypeHelpers.UniqueIdentifier;
             return Expression.Constant(new SqlGuid(guid.Value));
         }
 
         private static Expression ToExpression(IntegerLiteral i, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
-            sqlType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int };
+            sqlType = DataTypeHelpers.Int;
             return Expression.Constant(new SqlInt32(Int32.Parse(i.Value, CultureInfo.InvariantCulture)));
         }
 
         private static Expression ToExpression(MoneyLiteral money, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
-            sqlType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Money };
+            sqlType = DataTypeHelpers.Money;
             return Expression.Constant(new SqlMoney(Decimal.Parse(money.Value, CultureInfo.InvariantCulture)));
         }
 
         private static Expression ToExpression(NullLiteral n, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
-            sqlType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int };
+            sqlType = DataTypeHelpers.Int;
             return Expression.Constant(null);
         }
 
         private static Expression ToExpression(NumericLiteral num, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
             var value = new SqlDecimal(Decimal.Parse(num.Value, CultureInfo.InvariantCulture));
-            sqlType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Decimal, Parameters = { new IntegerLiteral { Value = value.Precision.ToString(CultureInfo.InvariantCulture) }, new IntegerLiteral { Value = value.Scale.ToString(CultureInfo.InvariantCulture) } } };
+            sqlType = DataTypeHelpers.Decimal(value.Precision, value.Scale);
             return Expression.Constant(value);
         }
 
         private static Expression ToExpression(RealLiteral real, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
-            sqlType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Float };
-            return Expression.Constant(new SqlSingle(Single.Parse(real.Value, CultureInfo.InvariantCulture)));
+            sqlType = DataTypeHelpers.Real;
+            return Expression.Constant(new SqlDouble(Double.Parse(real.Value, CultureInfo.InvariantCulture)));
         }
 
         private static Expression ToExpression(StringLiteral str, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
-            sqlType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { new IntegerLiteral { Value = str.Value.Length.ToString(CultureInfo.InvariantCulture) } } };
+            sqlType = str.IsNational ? DataTypeHelpers.NVarChar(str.Value.Length) : DataTypeHelpers.VarChar(str.Value.Length);
             return Expression.Constant(new SqlString(str.Value, CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace));
         }
 
@@ -221,15 +221,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             switch (odbc.OdbcLiteralType)
             {
                 case OdbcLiteralType.Date:
-                    sqlType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Date };
+                    sqlType = DataTypeHelpers.Date;
                     return Expression.Constant(new SqlDateTime(DateTime.ParseExact(odbc.Value, "yyyy'-'MM'-'dd", CultureInfo.CurrentCulture, DateTimeStyles.None)));
 
                 case OdbcLiteralType.Timestamp:
-                    sqlType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.DateTime };
+                    sqlType = DataTypeHelpers.DateTime;
                     return Expression.Constant(new SqlDateTime(DateTime.ParseExact(odbc.Value, "yyyy'-'MM'-'dd HH':'mm':'ss", CultureInfo.CurrentCulture, DateTimeStyles.None)));
 
                 case OdbcLiteralType.Guid:
-                    sqlType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.UniqueIdentifier };
+                    sqlType = DataTypeHelpers.UniqueIdentifier;
                     return Expression.Constant(new SqlGuid(odbc.Value));
 
                 default:
@@ -261,7 +261,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return Expr.Call(fetchXmlComparison, paramExpressions);
             }
 
-            sqlType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Bit };
+            sqlType = DataTypeHelpers.Bit;
 
             var lhs = cmp.FirstExpression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out var lhsType);
             var rhs = cmp.SecondExpression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out var rhsType);
@@ -272,7 +272,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (lhs.Type == typeof(SqlEntityReference) && rhs.Type == typeof(SqlString) ||
                     lhs.Type == typeof(SqlString) && rhs.Type == typeof(SqlEntityReference))
                 {
-                    type = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.UniqueIdentifier };
+                    type = DataTypeHelpers.UniqueIdentifier;
                 }
                 else
                 {
@@ -334,7 +334,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private static Expression ToExpression(BooleanBinaryExpression bin, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
-            sqlType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Bit };
+            sqlType = DataTypeHelpers.Bit;
 
             var lhs = bin.FirstExpression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out _);
             var rhs = bin.SecondExpression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out _);
@@ -411,12 +411,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                 }
 
-                type = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Decimal, Parameters = { new IntegerLiteral { Value = p.ToString(CultureInfo.InvariantCulture) }, new IntegerLiteral { Value = s.ToString(CultureInfo.InvariantCulture) } } };
+                type = DataTypeHelpers.Decimal(p, s);
 
                 if (lhs.Type != typeof(SqlDecimal))
-                    lhs = SqlTypeConverter.Convert(lhs, lhsSqlType, new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Decimal, Parameters = { new IntegerLiteral { Value = lhsSqlType.GetPrecision().ToString(CultureInfo.InvariantCulture) }, new IntegerLiteral { Value = lhsSqlType.GetScale().ToString(CultureInfo.InvariantCulture) } } });
+                    lhs = SqlTypeConverter.Convert(lhs, lhsSqlType, DataTypeHelpers.Decimal(lhsSqlType.GetPrecision(), lhsSqlType.GetScale()));
                 if (rhs.Type != typeof(SqlDecimal))
-                    rhs = SqlTypeConverter.Convert(rhs, rhsSqlType, new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Decimal, Parameters = { new IntegerLiteral { Value = rhsSqlType.GetPrecision().ToString(CultureInfo.InvariantCulture) }, new IntegerLiteral { Value = rhsSqlType.GetScale().ToString(CultureInfo.InvariantCulture) } } });
+                    rhs = SqlTypeConverter.Convert(rhs, rhsSqlType, DataTypeHelpers.Decimal(rhsSqlType.GetPrecision(), rhsSqlType.GetScale()));
             }
             else
             {
@@ -451,7 +451,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         Int32.TryParse(lhsSql.Parameters[0].Value, out var lhsLength) &&
                         Int32.TryParse(rhsSql.Parameters[0].Value, out var rhsLength))
                     {
-                        sqlType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { new IntegerLiteral { Value = (lhsLength + rhsLength).ToString(CultureInfo.InvariantCulture) } } };
+                        sqlType = DataTypeHelpers.NVarChar(lhsLength + rhsLength);
                     }
                     break;
 
@@ -547,7 +547,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 throw new NotSupportedQueryFragmentException("Expected a datepart name", param);
                             }
 
-                            return new KeyValuePair<Expression, DataTypeReference>(Expression.Constant(col.MultiPartIdentifier.Identifiers.Single().Value), new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { new IntegerLiteral { Value = col.MultiPartIdentifier.Identifiers.Single().Value.Length.ToString(CultureInfo.InvariantCulture) } } });
+                            return new KeyValuePair<Expression, DataTypeReference>(Expression.Constant(col.MultiPartIdentifier.Identifiers.Single().Value), DataTypeHelpers.NVarChar(col.MultiPartIdentifier.Identifiers.Single().Value.Length));
                         }
 
                         var paramExpr = param.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out var paramType);
@@ -586,7 +586,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (throwOnMissing)
                     throw new NotSupportedQueryFragmentException("Unknown function", func);
 
-                sqlType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int };
+                sqlType = DataTypeHelpers.Int;
                 return null;
             }
 
@@ -638,7 +638,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (parameters[i].GetCustomAttribute<MaxLengthAttribute>() != null)
                     {
                         if (parameters[i].ParameterType == typeof(SqlInt32) && paramExpressions[i] is ConstantExpression lengthConst && lengthConst.Value is SqlInt32 length && !length.IsNull)
-                            sqlType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { new IntegerLiteral { Value = length.Value.ToString(CultureInfo.InvariantCulture) } } };
+                            sqlType = DataTypeHelpers.NVarChar(length.Value);
                         else if (parameters[i].ParameterType == typeof(SqlString) && paramTypes[i].ToNetType(out var sqlStringType) == typeof(SqlString))
                             sqlType = paramTypes[i];
 
@@ -758,7 +758,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     result = inPred.NotDefined ? Expression.AndAlso(result, comparison) : Expression.OrElse(result, comparison);
             }
 
-            sqlType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Bit };
+            sqlType = DataTypeHelpers.Bit;
             return result;
         }
 
@@ -789,7 +789,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 value = Expression.Not(value);
 
             value = SqlTypeConverter.Convert(value, typeof(SqlBoolean));
-            sqlType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Bit };
+            sqlType = DataTypeHelpers.Bit;
             return value;
         }
 
@@ -801,8 +801,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var pattern = like.SecondExpression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out var patternType);
             var escape = like.EscapeExpression?.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out escapeType);
 
-            sqlType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Bit };
-            var stringType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { new MaxLiteral() } };
+            sqlType = DataTypeHelpers.Bit;
+            var stringType = DataTypeHelpers.NVarChar(Int32.MaxValue);
 
             if (value.Type != typeof(SqlString))
             {
@@ -1091,7 +1091,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 result = Expression.Constant(SqlTypeConverter.GetNullValue(type.ToNetType(out _)));
             }
 
-            var bitType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Bit };
+            var bitType = DataTypeHelpers.Bit;
 
             for (var i = whenClauses.Count - 1; i >= 0; i--)
             {
@@ -1159,7 +1159,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             if (!(type is SqlDataTypeReference dataType))
             {
-                if (type is UserDataTypeReference udt && udt.Name.BaseIdentifier.Value == typeof(SqlEntityReference).FullName)
+                if (type.IsSameAs(DataTypeHelpers.EntityReference))
                 {
                     sqlDataType = null;
                     return typeof(SqlEntityReference);
@@ -1174,270 +1174,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 throw new NotSupportedQueryFragmentException("Unknown type name", type);
 
             return targetType;
-        }
-
-        /// <summary>
-        /// Checks if a type represents an exact numeric type
-        /// </summary>
-        /// <param name="type">The type to check</param>
-        /// <returns><c>true</c> if the <paramref name="type"/> is an exact numeric type, or <c>false</c> otherwise</returns>
-        public static bool IsExactNumeric(this SqlDataTypeOption type)
-        {
-            return type == SqlDataTypeOption.BigInt ||
-                type == SqlDataTypeOption.Bit ||
-                type == SqlDataTypeOption.Decimal ||
-                type == SqlDataTypeOption.Int ||
-                type == SqlDataTypeOption.Money ||
-                type == SqlDataTypeOption.Numeric ||
-                type == SqlDataTypeOption.SmallInt ||
-                type == SqlDataTypeOption.SmallMoney ||
-                type == SqlDataTypeOption.TinyInt;
-        }
-
-        /// <summary>
-        /// Checks if a type represents an approximate numeric type
-        /// </summary>
-        /// <param name="type">The type to check</param>
-        /// <returns><c>true</c> if the <paramref name="type"/> is an approximate numeric type, or <c>false</c> otherwise</returns>
-        public static bool IsApproximateNumeric(this SqlDataTypeOption type)
-        {
-            return type == SqlDataTypeOption.Float ||
-                type == SqlDataTypeOption.Real;
-        }
-
-        /// <summary>
-        /// Checks if a type represents an exact or approximate numeric type
-        /// </summary>
-        /// <param name="type">The type to check</param>
-        /// <returns><c>true</c> if the <paramref name="type"/> is an exact or approximate numeric type, or <c>false</c> otherwise</returns>
-        public static bool IsNumeric(this SqlDataTypeOption type)
-        {
-            return IsExactNumeric(type) || IsApproximateNumeric(type);
-        }
-
-        /// <summary>
-        /// Checks if a type represents a string
-        /// </summary>
-        /// <param name="type">The type to check</param>
-        /// <returns><c>true</c> if the <paramref name="type"/> is a string type, or <c>false</c> otherwise</returns>
-        public static bool IsStringType(this SqlDataTypeOption type)
-        {
-            return type == SqlDataTypeOption.Char ||
-                type == SqlDataTypeOption.VarChar ||
-                type == SqlDataTypeOption.NChar ||
-                type == SqlDataTypeOption.NVarChar ||
-                type == SqlDataTypeOption.Text ||
-                type == SqlDataTypeOption.NText;
-        }
-
-        /// <summary>
-        /// Checks if a type represents a date/time
-        /// </summary>
-        /// <param name="type">The type to check</param>
-        /// <returns><c>true</c> if the <paramref name="type"/> is a date/time type, or <c>false</c> otherwise</returns>
-        /// <remarks>
-        /// This method returns <c>false</c> for the <see cref="SqlDataTypeOption.Date"/> and <see cref="SqlDataTypeOption.Time"/>
-        /// types.
-        /// </remarks>
-        public static bool IsDateTimeType(this SqlDataTypeOption type)
-        {
-            return type == SqlDataTypeOption.DateTime ||
-                type == SqlDataTypeOption.SmallDateTime ||
-                type == SqlDataTypeOption.DateTimeOffset ||
-                type == SqlDataTypeOption.DateTime2;
-        }
-
-        /// <summary>
-        /// Gets the size of the data that can be stored in a SQL <see cref="DataTypeReference"/>
-        /// </summary>
-        /// <param name="type">The data type to get the size of</param>
-        /// <returns>The size of the data type to report in <see cref="System.Data.IDataReader.GetSchemaTable"/></returns>
-        public static int GetSize(this DataTypeReference type)
-        {
-            if (!(type is SqlDataTypeReference dataType))
-            {
-                if (type is UserDataTypeReference udt && udt.Name.BaseIdentifier.Value == typeof(SqlEntityReference).FullName)
-                    dataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.UniqueIdentifier };
-                else
-                    throw new NotSupportedQueryFragmentException("Unsupported data type reference", type);
-            }
-
-            switch (dataType.SqlDataTypeOption)
-            {
-                case SqlDataTypeOption.VarChar:
-                case SqlDataTypeOption.NVarChar:
-                case SqlDataTypeOption.VarBinary:
-                case SqlDataTypeOption.Char:
-                case SqlDataTypeOption.NChar:
-                case SqlDataTypeOption.Binary:
-                    if (dataType.Parameters.Count == 1 && dataType.Parameters[0] is IntegerLiteral length && Int32.TryParse(length.Value, out var lengthValue))
-                        return lengthValue;
-                    else if (dataType.Parameters.Count == 1 && dataType.Parameters[0] is MaxLiteral)
-                        return Int32.MaxValue;
-                    else
-                        return 1;
-
-                case SqlDataTypeOption.Text:
-                case SqlDataTypeOption.NText:
-                case SqlDataTypeOption.Image:
-                    return Int32.MaxValue;
-            }
-
-            var netType = dataType.ToNetType(out _);
-            netType = netType.GetProperty("Value")?.PropertyType ?? netType;
-
-            if (netType == typeof(DateTime))
-                return 8;
-
-            return Marshal.SizeOf(netType);
-        }
-
-        /// <summary>
-        /// Gets the precision of the data that can be stored in a SQL <see cref="DataTypeReference"/>
-        /// </summary>
-        /// <param name="type">The data type to get the size of</param>
-        /// <param name="invalidValue">The precision to return for non-precisioned types</param>
-        /// <returns>The number of digits that can be stored in the type</returns>
-        public static int GetPrecision(this DataTypeReference type, int invalidValue = 0)
-        {
-            if (!(type is SqlDataTypeReference dataType))
-                return invalidValue;
-
-            switch (dataType.SqlDataTypeOption)
-            {
-                case SqlDataTypeOption.Numeric:
-                case SqlDataTypeOption.Decimal:
-                    if (dataType.Parameters.Count == 0 ||
-                        !(dataType.Parameters[0] is IntegerLiteral) ||
-                        !Int32.TryParse(dataType.Parameters[0].Value, out var precision) ||
-                        precision < 1 ||
-                        precision > 38)
-                        return 18;
-
-                    return precision;
-
-                case SqlDataTypeOption.Int:
-                    return 10;
-
-                case SqlDataTypeOption.DateTime:
-                    return 23;
-
-                case SqlDataTypeOption.SmallInt:
-                    return 5;
-
-                case SqlDataTypeOption.Money:
-                    return 19;
-
-                case SqlDataTypeOption.TinyInt:
-                    return 3;
-
-                case SqlDataTypeOption.BigInt:
-                    return 19;
-
-                case SqlDataTypeOption.SmallDateTime:
-                    return 16;
-
-                case SqlDataTypeOption.Float:
-                    return 15;
-
-                case SqlDataTypeOption.Real:
-                    return 7;
-
-                case SqlDataTypeOption.SmallMoney:
-                    return 10;
-            }
-
-            return invalidValue;
-        }
-
-        /// <summary>
-        /// Gets the scale of the data that can be stored in a SQL <see cref="DataTypeReference"/>
-        /// </summary>
-        /// <param name="type">The data type to get the size of</param>
-        /// <param name="invalidValue">The scale to return for non-scaled types</param>
-        /// <returns>The number of digits that can be stored in the type after the decimal point</returns>
-        public static int GetScale(this DataTypeReference type, int invalidValue = 0)
-        {
-            if (!(type is SqlDataTypeReference dataType))
-                return invalidValue;
-
-            switch (dataType.SqlDataTypeOption)
-            {
-                case SqlDataTypeOption.Numeric:
-                case SqlDataTypeOption.Decimal:
-                    if (dataType.Parameters.Count < 2 ||
-                        !(dataType.Parameters[0] is IntegerLiteral) ||
-                        !Int32.TryParse(dataType.Parameters[0].Value, out var precision) ||
-                        precision < 1 ||
-                        precision > 38 ||
-                        !(dataType.Parameters[1] is IntegerLiteral) ||
-                        !Int32.TryParse(dataType.Parameters[1].Value, out var scale) ||
-                        scale < 0 ||
-                        scale > precision)
-                        return 0;
-
-                    return scale;
-
-                case SqlDataTypeOption.DateTime:
-                    return 3;
-
-                case SqlDataTypeOption.DateTimeOffset:
-                    return 7;
-
-                case SqlDataTypeOption.DateTime2:
-                    return 7;
-
-                case SqlDataTypeOption.SmallDateTime:
-                    return 0;
-
-                case SqlDataTypeOption.Time:
-                    return 7;
-            }
-
-            return invalidValue;
-        }
-
-        /// <summary>
-        /// Checks if two data types are the same
-        /// </summary>
-        /// <param name="x">The first data type to compare</param>
-        /// <param name="y">The second data type to compare</param>
-        /// <returns><c>true</c> if <paramref name="x"/> and <paramref name="y"/> are equal, or <c>false</c> otherwise</returns>
-        public static bool IsSameAs(this DataTypeReference x, DataTypeReference y)
-        {
-            var xUser = x as UserDataTypeReference;
-            var xSql = x as SqlDataTypeReference;
-            var yUser = y as UserDataTypeReference;
-            var ySql = y as SqlDataTypeReference;
-
-            if (xUser != null && yUser != null)
-                return String.Join(".", xUser.Name.Identifiers.Select(i => i.Value)).Equals(String.Join(".", yUser.Name.Identifiers.Select(i => i.Value)), StringComparison.OrdinalIgnoreCase);
-
-            if (xSql == null || ySql == null)
-                return false;
-
-            if (xSql.SqlDataTypeOption != ySql.SqlDataTypeOption)
-                return false;
-
-            if (xSql.Parameters.Count != ySql.Parameters.Count)
-                return false;
-
-            for (var i = 0; i < xSql.Parameters.Count; i++)
-            {
-                if (xSql.Parameters[i].LiteralType != ySql.Parameters[i].LiteralType)
-                    return false;
-
-                if (xSql.Parameters[i].Value == ySql.Parameters[i].Value)
-                    continue;
-
-                if (xSql.Parameters[i].Value == null || ySql.Parameters[i].Value == null)
-                    return false;
-
-                if (!xSql.Parameters[i].Value.Equals(ySql.Parameters[i].Value, StringComparison.OrdinalIgnoreCase))
-                    return false;
-            }
-
-            return true;
         }
 
         /// <summary>
@@ -1456,21 +1192,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private static readonly Dictionary<Type, DataTypeReference> _netTypeMapping = new Dictionary<Type, DataTypeReference>
         {
-            [typeof(SqlInt64)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.BigInt },
-            [typeof(SqlBinary)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Binary, Parameters = { new MaxLiteral() } },
-            [typeof(SqlBoolean)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Bit },
-            [typeof(SqlString)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { new MaxLiteral() } },
-            [typeof(SqlDateTime)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.DateTime },
-            [typeof(SqlDecimal)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Decimal, Parameters = { new IntegerLiteral { Value = "38" }, new IntegerLiteral { Value = "10" } } },
-            [typeof(SqlDouble)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Float },
-            [typeof(SqlInt32)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int },
-            [typeof(SqlMoney)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Money },
-            [typeof(SqlSingle)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Real },
-            [typeof(SqlInt16)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.SmallInt },
-            [typeof(SqlByte)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.TinyInt },
-            [typeof(SqlGuid)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.UniqueIdentifier },
-            [typeof(SqlEntityReference)] = new UserDataTypeReference { Name = new SchemaObjectName { Identifiers = { new Identifier { Value = typeof(SqlEntityReference).FullName } } } },
-            [typeof(object)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Sql_Variant }
+            [typeof(SqlInt64)] = DataTypeHelpers.BigInt,
+            [typeof(SqlBinary)] = DataTypeHelpers.VarBinary(Int32.MaxValue),
+            [typeof(SqlBoolean)] = DataTypeHelpers.Bit,
+            [typeof(SqlString)] = DataTypeHelpers.NVarChar(Int32.MaxValue),
+            [typeof(SqlDateTime)] = DataTypeHelpers.DateTime,
+            [typeof(SqlDecimal)] = DataTypeHelpers.Decimal(38, 10),
+            [typeof(SqlDouble)] = DataTypeHelpers.Float,
+            [typeof(SqlInt32)] = DataTypeHelpers.Int,
+            [typeof(SqlMoney)] = DataTypeHelpers.Money,
+            [typeof(SqlSingle)] = DataTypeHelpers.Real,
+            [typeof(SqlInt16)] = DataTypeHelpers.SmallInt,
+            [typeof(SqlByte)] = DataTypeHelpers.TinyInt,
+            [typeof(SqlGuid)] = DataTypeHelpers.UniqueIdentifier,
+            [typeof(SqlEntityReference)] = DataTypeHelpers.EntityReference,
         };
 
         /// <summary>
@@ -1532,13 +1267,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 throw new NotSupportedQueryFragmentException("LANGUAGE is not currently supported", fullText.LanguageTerm);
 
             var col = fullText.Columns[0].ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out var colType);
-            var stringType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { new MaxLiteral() } };
+            var stringType = DataTypeHelpers.NVarChar(Int32.MaxValue);
 
             if (!SqlTypeConverter.CanChangeTypeImplicit(colType, stringType))
                 throw new NotSupportedQueryFragmentException("Only string columns are supported", fullText.Columns[0]);
 
             col = SqlTypeConverter.Convert(col, colType, stringType);
-            sqlType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Bit };
+            sqlType = DataTypeHelpers.Bit;
 
             if (fullText.Value is StringLiteral lit)
             {
@@ -1597,11 +1332,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             switch (parameterless.ParameterlessCallType)
             {
                 case ParameterlessCallType.CurrentTimestamp:
-                    sqlType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.DateTime };
+                    sqlType = DataTypeHelpers.DateTime;
                     return Expr.Call(() => GetCurrentTimestamp(Expr.Arg<IQueryExecutionOptions>()), optionsParam);
 
                 default:
-                    sqlType = new UserDataTypeReference { Name = new SchemaObjectName { Identifiers = { new Identifier { Value = typeof(SqlEntityReference).FullName } } } };
+                    sqlType = DataTypeHelpers.EntityReference;
                     return Expr.Call(() => GetCurrentUser(Expr.Arg<IQueryExecutionOptions>()), optionsParam);
             }
         }

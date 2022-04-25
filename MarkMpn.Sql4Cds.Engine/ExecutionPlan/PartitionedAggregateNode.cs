@@ -92,8 +92,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var partitionParameterTypes = new Dictionary<string, DataTypeReference>
             {
-                ["@PartitionStart"] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.DateTime },
-                ["@PartitionEnd"] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.DateTime }
+                ["@PartitionStart"] = DataTypeHelpers.DateTime,
+                ["@PartitionEnd"] = DataTypeHelpers.DateTime
             };
 
             if (parameterTypes != null)

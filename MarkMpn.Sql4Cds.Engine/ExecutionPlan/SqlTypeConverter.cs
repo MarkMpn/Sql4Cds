@@ -366,7 +366,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Special cases for styles
             if (style != null)
             {
-                var intType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int };
+                var intType = DataTypeHelpers.Int;
 
                 if (!CanChangeTypeImplicit(styleType, intType))
                     throw new NotSupportedQueryFragmentException($"No type conversion available from {styleType.ToSql()} to {intType.ToSql()}", convert.Style);

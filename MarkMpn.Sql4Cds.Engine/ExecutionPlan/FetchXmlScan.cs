@@ -686,7 +686,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (attribute.aggregateSpecified && (attribute.aggregate == Engine.FetchXml.AggregateType.count || attribute.aggregate == Engine.FetchXml.AggregateType.countcolumn) ||
                         attribute.dategroupingSpecified)
                     {
-                        attrType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int };
+                        attrType = DataTypeHelpers.Int;
                     }
                     else if (attribute.aggregateSpecified && (attribute.aggregate == Engine.FetchXml.AggregateType.sum || attribute.aggregate == Engine.FetchXml.AggregateType.avg))
                     {
@@ -695,13 +695,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         if (attrType is SqlDataTypeReference sqlRetType)
                         {
                             if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.TinyInt || sqlRetType.SqlDataTypeOption == SqlDataTypeOption.SmallInt)
-                                attrType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int };
+                                attrType = DataTypeHelpers.Int;
                             else if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.Decimal || sqlRetType.SqlDataTypeOption == SqlDataTypeOption.Numeric)
-                                attrType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Decimal, Parameters = { new IntegerLiteral { Value = "38" }, new IntegerLiteral { Value = Math.Max(sqlRetType.GetScale(), 6).ToString(CultureInfo.InvariantCulture) } } };
+                                attrType = DataTypeHelpers.Decimal(38, Math.Max(sqlRetType.GetScale(), 6));
                             else if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.SmallMoney)
-                                attrType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Money };
+                                attrType = DataTypeHelpers.Money;
                             else if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.Real)
-                                attrType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Float };
+                                attrType = DataTypeHelpers.Float;
                         }
                     }
 
@@ -846,14 +846,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Add standard virtual attributes
             if (attrMetadata is EnumAttributeMetadata || attrMetadata is BooleanAttributeMetadata)
-                AddSchemaAttribute(schema, fullName + "name", attrMetadata.LogicalName + "name", new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { new IntegerLiteral { Value = LabelMaxLength.ToString() } } }, notNull);
+                AddSchemaAttribute(schema, fullName + "name", attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(LabelMaxLength), notNull);
 
             if (attrMetadata is LookupAttributeMetadata lookup)
             {
-                AddSchemaAttribute(schema, fullName + "name", attrMetadata.LogicalName + "name", new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { new IntegerLiteral { Value = lookup.Targets == null ? "100" : lookup.Targets.Select(e => ((StringAttributeMetadata)metadata[e].Attributes.SingleOrDefault(a => a.LogicalName == metadata[e].PrimaryNameAttribute))?.MaxLength ?? 100).Max().ToString() } } }, notNull);
+                AddSchemaAttribute(schema, fullName + "name", attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(lookup.Targets == null ? 100 : lookup.Targets.Select(e => ((StringAttributeMetadata)metadata[e].Attributes.SingleOrDefault(a => a.LogicalName == metadata[e].PrimaryNameAttribute))?.MaxLength ?? 100).Max()), notNull);
 
                 if (lookup.Targets?.Length > 1 && lookup.AttributeType != AttributeTypeCode.PartyList)
-                    AddSchemaAttribute(schema, fullName + "type", attrMetadata.LogicalName + "type", new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { new IntegerLiteral { Value = lookup.Targets.Max(target => target.Length).ToString() } } }, notNull);
+                    AddSchemaAttribute(schema, fullName + "type", attrMetadata.LogicalName + "type", DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength), notNull);
             }
         }
 

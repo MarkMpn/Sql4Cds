@@ -253,9 +253,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var expr = (Expression)Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(sourceColumnName));
                 var originalExpr = expr;
 
-                var intType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int };
-
-                if (sourceSqlType.IsSameAs(intType) && !SqlTypeConverter.CanChangeTypeExplicit(sourceSqlType, destSqlType) && entities.All(e => ((SqlInt32)e[sourceColumnName]).IsNull))
+                if (sourceSqlType.IsSameAs(DataTypeHelpers.Int) && !SqlTypeConverter.CanChangeTypeExplicit(sourceSqlType, destSqlType) && entities.All(e => ((SqlInt32)e[sourceColumnName]).IsNull))
                 {
                     // null literal is typed as int
                     expr = Expression.Constant(null, destType);
@@ -289,7 +287,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 {
                                     var sourceTargetColumnName = mappings[destAttributeName + "type"];
                                     var sourceTargetType = schema.Schema[sourceTargetColumnName];
-                                    var stringType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { new IntegerLiteral { Value = MetadataExtensions.EntityLogicalNameMaxLength.ToString(CultureInfo.InvariantCulture) } } };
+                                    var stringType = DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength);
                                     targetExpr = Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(sourceTargetColumnName));
                                     targetExpr = SqlTypeConverter.Convert(targetExpr, sourceTargetType, stringType);
                                     targetExpr = SqlTypeConverter.Convert(targetExpr, typeof(string));

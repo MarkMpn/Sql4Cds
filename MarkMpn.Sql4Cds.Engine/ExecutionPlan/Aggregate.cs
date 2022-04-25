@@ -234,8 +234,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// </summary>
     class Count : AggregateFunction
     {
-        private static readonly DataTypeReference _type = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int };
-
         class State
         {
             public SqlInt32 Value { get; set; }
@@ -267,7 +265,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return s.Value;
         }
 
-        public override DataTypeReference Type => _type;
+        public override DataTypeReference Type => DataTypeHelpers.Int;
 
         public override object Reset()
         {
@@ -280,8 +278,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// </summary>
     class CountColumn : AggregateFunction
     {
-        private static readonly DataTypeReference _type = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int };
-
         class State
         {
             public SqlInt32 Value { get; set; }
@@ -316,7 +312,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return s.Value;
         }
 
-        public override DataTypeReference Type => _type;
+        public override DataTypeReference Type => DataTypeHelpers.Int;
 
         public override object Reset()
         {
