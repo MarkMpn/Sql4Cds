@@ -191,44 +191,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (!leftFetch.DataSource.Equals(rightFetch.DataSource, StringComparison.OrdinalIgnoreCase))
                         break;
 
-                    // Sorts could be folded into FetchXML or could be in separate node
-                    string attribute;
-
-                    if (rightSort != null)
-                    {
-                        if (rightSort.Sorts.Count != 1)
-                            break;
-
-                        if (!(rightSort.Sorts[0].Expression is ColumnReferenceExpression sortCol))
-                            break;
-
-                        attribute = sortCol.GetColumnName();
-                    }
-                    else
-                    {
-                        var rightSorts = (rightFetch.Entity.Items ?? Array.Empty<object>()).OfType<FetchOrderType>().ToList();
-
-                        if (rightSorts.Count == 0)
-                        {
-                            // Implicit sort on primary key
-                            attribute = rightFetch.GetSchema(dataSources, parameterTypes).PrimaryKey;
-                        }
-                        else
-                        {
-                            if (rightSorts.Count != 1)
-                                break;
-
-                            if (!String.IsNullOrEmpty(rightSorts[0].alias))
-                                break;
-
-                            attribute = $"{rightFetch.Alias}.{rightSorts[0].attribute}";
-                        }
-                    }
-
-                    if (!merge.RightAttribute.GetColumnName().Equals(attribute, StringComparison.OrdinalIgnoreCase))
-                        break;
-
                     var rightSchema = rightFetch.GetSchema(dataSources, parameterTypes);
+
+                    if (!rightSchema.ContainsColumn(merge.RightAttribute.GetColumnName(), out var attribute))
+                        break;
 
                     // Right values need to be distinct - still allowed if it's the primary key
                     if (!rightFetch.FetchXml.distinct && rightSchema.PrimaryKey != attribute)
@@ -249,7 +215,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (leftFetch.Entity.name == rightFetch.Entity.name &&
                         merge.LeftAttribute.GetColumnName() == leftFetch.Alias + "." + dataSources[leftFetch.DataSource].Metadata[leftFetch.Entity.name].PrimaryIdAttribute &&
                         merge.RightAttribute.GetColumnName() == rightFetch.Alias + "." + dataSources[rightFetch.DataSource].Metadata[rightFetch.Entity.name].PrimaryIdAttribute &&
-                        !leftFetch.Entity.GetLinkEntities().Select(l => l.alias).Intersect(rightFetch.Entity.GetLinkEntities().Select(l => l.alias), StringComparer.OrdinalIgnoreCase).Any())
+                        !leftFetch.Entity.GetLinkEntities().Select(l => l.alias).Intersect(rightFetch.Entity.GetLinkEntities().Select(l => l.alias), StringComparer.OrdinalIgnoreCase).Any() &&
+                        (leftFetch.FetchXml.top == null || rightFetch.FetchXml.top == null))
                     {
                         if (rightFetch.Entity.Items != null)
                         {
@@ -268,6 +235,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             foreach (var item in rightFetch.Entity.Items)
                                 leftFetch.Entity.AddItem(item);
                         }
+
+                        if (rightFetch.FetchXml.top != null)
+                            leftFetch.FetchXml.top = rightFetch.FetchXml.top;
 
                         Filter = Filter.RemoveCondition(notNullFilter);
                         foldedFilters = true;

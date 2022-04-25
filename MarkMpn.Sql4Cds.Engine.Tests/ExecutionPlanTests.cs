@@ -4170,6 +4170,30 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void FoldPrimaryIdInQueryWithTop()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"DELETE FROM account WHERE accountid IN (SELECT TOP 10 accountid FROM account ORDER BY createdon DESC)";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var delete = AssertNode<DeleteNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(delete.Source);
+
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS' top='10'>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                        <order attribute='createdon' descending='true' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
         public void InsertParameters()
         {
             var metadata = new AttributeMetadataCache(_service);
