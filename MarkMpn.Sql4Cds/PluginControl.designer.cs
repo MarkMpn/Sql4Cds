@@ -199,8 +199,8 @@
             this.tsbPreviewFetchXml.ImageTransparentColor = System.Drawing.Color.Magenta;
             this.tsbPreviewFetchXml.Name = "tsbPreviewFetchXml";
             this.tsbPreviewFetchXml.Size = new System.Drawing.Size(23, 22);
-            this.tsbPreviewFetchXml.Text = "Preview FetchXML";
-            this.tsbPreviewFetchXml.ToolTipText = "Display FetchXML Without Executing Query (Ctrl+L)";
+            this.tsbPreviewFetchXml.Text = "Display Estimated Execution Plan";
+            this.tsbPreviewFetchXml.ToolTipText = "Display Estimated Execution Plan (Ctrl+L)";
             this.tsbPreviewFetchXml.Click += new System.EventHandler(this.tsbPreviewFetchXml_Click);
             // 
             // tsbFetchXMLBuilder
@@ -257,8 +257,8 @@
             this.tsbIncludeFetchXml.ImageTransparentColor = System.Drawing.Color.Magenta;
             this.tsbIncludeFetchXml.Name = "tsbIncludeFetchXml";
             this.tsbIncludeFetchXml.Size = new System.Drawing.Size(23, 22);
-            this.tsbIncludeFetchXml.Text = "Include FetchXML";
-            this.tsbIncludeFetchXml.ToolTipText = "Display FetchXML when executing query (Ctrl+M)";
+            this.tsbIncludeFetchXml.Text = "Include Actual Execution Plan";
+            this.tsbIncludeFetchXml.ToolTipText = "Display Actual Execution Plan (Ctrl+M)";
             this.tsbIncludeFetchXml.Click += new System.EventHandler(this.tsbIncludeFetchXml_Click);
             // 
             // tssSeparator1
