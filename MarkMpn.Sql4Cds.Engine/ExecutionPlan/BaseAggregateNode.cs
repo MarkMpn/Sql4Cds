@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data.SqlTypes;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.ServiceModel;
@@ -58,20 +59,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             foreach (var aggregate in Aggregates.Where(agg => agg.Value.SqlExpression != null))
             {
-                var sourceExpression = aggregate.Value.SqlExpression;
+                aggregate.Value.SqlExpression.GetType(schema, null, parameterTypes, out var retType);
+                aggregate.Value.SourceType = retType;
+                aggregate.Value.ReturnType = retType;
 
-                // Sum and Average need to have Decimal values as input for their calculations to work correctly
-                if (aggregate.Value.AggregateType == AggregateType.Average || aggregate.Value.AggregateType == AggregateType.Sum)
-                    sourceExpression = new ConvertCall { Parameter = sourceExpression, DataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Decimal } };
+                aggregate.Value.Expression = aggregate.Value.SqlExpression.Compile(schema, parameterTypes);
 
-                aggregate.Value.Expression = sourceExpression.Compile(schema, parameterTypes);
-
-                aggregate.Value.ReturnType = aggregate.Value.SqlExpression.GetType(schema, null, parameterTypes);
-
-                if (aggregate.Value.AggregateType == AggregateType.Average)
+                // Return type of SUM and AVG is based on the input type with some modifications
+                // https://docs.microsoft.com/en-us/sql/t-sql/functions/avg-transact-sql?view=sql-server-ver15#return-types
+                if ((aggregate.Value.AggregateType == AggregateType.Average || aggregate.Value.AggregateType == AggregateType.Sum) &&
+                    aggregate.Value.ReturnType is SqlDataTypeReference sqlRetType)
                 {
-                    if (aggregate.Value.ReturnType == typeof(SqlByte) || aggregate.Value.ReturnType == typeof(SqlInt16))
-                        aggregate.Value.ReturnType = typeof(SqlInt32);
+                    if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.TinyInt || sqlRetType.SqlDataTypeOption == SqlDataTypeOption.SmallInt)
+                        aggregate.Value.ReturnType = DataTypeHelpers.Int;
+                    else if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.Decimal || sqlRetType.SqlDataTypeOption == SqlDataTypeOption.Numeric)
+                        aggregate.Value.ReturnType = DataTypeHelpers.Decimal(38, Math.Max(sqlRetType.GetScale(), 6));
+                    else if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.SmallMoney)
+                        aggregate.Value.ReturnType = DataTypeHelpers.Money;
+                    else if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.Real)
+                        aggregate.Value.ReturnType = DataTypeHelpers.Float;
                 }
             }
         }
@@ -82,7 +88,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 var sourceExpression = aggregate.Key.ToColumnReference();
                 aggregate.Value.Expression = sourceExpression.Compile(schema, parameterTypes);
-                aggregate.Value.ReturnType = sourceExpression.GetType(schema, null, parameterTypes);
+                sourceExpression.GetType(schema, null, parameterTypes, out var retType);
+                aggregate.Value.ReturnType = retType;
             }
         }
 
@@ -114,7 +121,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 switch (aggregate.Value.AggregateType)
                 {
                     case AggregateType.Average:
-                        values[aggregate.Key] = new Average(selector, aggregate.Value.ReturnType);
+                        values[aggregate.Key] = new Average(selector, aggregate.Value.SourceType, aggregate.Value.ReturnType);
                         break;
 
                     case AggregateType.Count:
@@ -134,7 +141,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         break;
 
                     case AggregateType.Sum:
-                        values[aggregate.Key] = new Sum(selector, aggregate.Value.ReturnType);
+                        values[aggregate.Key] = new Sum(selector, aggregate.Value.SourceType, aggregate.Value.ReturnType);
                         break;
 
                     case AggregateType.First:
@@ -192,21 +199,36 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var aggregate in Aggregates)
             {
-                Type aggregateType;
+                DataTypeReference aggregateType;
 
                 switch (aggregate.Value.AggregateType)
                 {
                     case AggregateType.Count:
                     case AggregateType.CountStar:
-                        aggregateType = typeof(SqlInt32);
+                        aggregateType = DataTypeHelpers.Int;
                         break;
 
                     default:
-                        aggregateType = aggregate.Value.SqlExpression.GetType(sourceSchema, null, parameterTypes);
+                        aggregate.Value.SqlExpression.GetType(sourceSchema, null, parameterTypes, out aggregateType);
+
+                        // Return type of SUM and AVG is based on the input type with some modifications
+                        // https://docs.microsoft.com/en-us/sql/t-sql/functions/avg-transact-sql?view=sql-server-ver15#return-types
+                        if ((aggregate.Value.AggregateType == AggregateType.Average || aggregate.Value.AggregateType == AggregateType.Sum) &&
+                            aggregateType is SqlDataTypeReference sqlRetType)
+                        {
+                            if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.TinyInt || sqlRetType.SqlDataTypeOption == SqlDataTypeOption.SmallInt)
+                                aggregateType = DataTypeHelpers.Int;
+                            else if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.Decimal || sqlRetType.SqlDataTypeOption == SqlDataTypeOption.Numeric)
+                                aggregateType = DataTypeHelpers.Decimal(38, Math.Max(sqlRetType.GetScale(), 6));
+                            else if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.SmallMoney)
+                                aggregateType = DataTypeHelpers.Money;
+                            else if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.Real)
+                                aggregateType = DataTypeHelpers.Float;
+                        }
                         break;
                 }
 
-                schema.Schema[aggregate.Key] = aggregateType.ToSqlType();
+                schema.Schema[aggregate.Key] = aggregateType;
             }
 
             return schema;

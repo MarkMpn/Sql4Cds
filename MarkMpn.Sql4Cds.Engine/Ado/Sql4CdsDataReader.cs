@@ -26,7 +26,7 @@ namespace MarkMpn.Sql4Cds.Engine
         private int _recordsAffected;
         private int _instructionPointer;
         private IDataReaderExecutionPlanNode _readerQuery;
-        private IDataReader _reader;
+        private DbDataReader _reader;
         private bool _error;
         private int _rows;
         private int _resultSetsReturned;
@@ -295,6 +295,21 @@ namespace MarkMpn.Sql4Cds.Engine
         public override int GetOrdinal(string name)
         {
             return _reader.GetOrdinal(name);
+        }
+
+        public override Type GetProviderSpecificFieldType(int ordinal)
+        {
+            return _reader.GetProviderSpecificFieldType(ordinal);
+        }
+
+        public override object GetProviderSpecificValue(int ordinal)
+        {
+            return _reader.GetProviderSpecificValue(ordinal);
+        }
+
+        public override int GetProviderSpecificValues(object[] values)
+        {
+            return _reader.GetProviderSpecificValues(values);
         }
 
         public override string GetString(int ordinal)

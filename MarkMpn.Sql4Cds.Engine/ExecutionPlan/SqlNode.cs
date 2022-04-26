@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
+using System.Data.Common;
 using System.Data.SqlClient;
 using System.Data.SqlTypes;
 using System.IO;
@@ -53,7 +54,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
         }
 
-        public IDataReader Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, CommandBehavior behavior)
+        public DbDataReader Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, CommandBehavior behavior)
         {
             _executionCount++;
 
@@ -107,10 +108,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
 
                     options.CancellationToken.Register(() => cmd.Cancel());
-                    var reader = new SqlDataReaderWrapper(cmd.ExecuteReader(behavior), cmd, con, Parent == null ? parameterValues : null);
+                    if (Parent == null)
+                    {
+                        cmd.StatementCompleted += (s, e) =>
+                        {
+                            parameterValues["@@ROWCOUNT"] = (SqlInt32)e.RecordCount;
+                        };
+                    }
 
-                    if (Parent != null)
-                        reader.ConvertToSqlTypes = true;
+                    var reader = cmd.ExecuteReader(behavior | CommandBehavior.CloseConnection);
 
                     return reader;
                 }

@@ -1,6 +1,8 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.Common;
 using System.Data.SqlTypes;
 using System.Linq;
 using System.Text;
@@ -9,7 +11,7 @@ using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    class SelectDataReader : IDataReader
+    class SelectDataReader : DbDataReader
     {
         private readonly List<SelectColumn> _columnSet;
         private readonly IDisposable _timer;
@@ -60,20 +62,30 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _parameterValues = parameterValues;
         }
 
-        public object this[int i] => ToClrType(GetRawValue(i));
-
-        public object this[string name] => this[GetOrdinal(name)];
-
-        public int Depth => 0;
-
-        public bool IsClosed => _closed;
-
-        public int RecordsAffected => -1;
-
-        public int FieldCount => _columnSet.Count;
-
-        public void Close()
+        public override IEnumerator GetEnumerator()
         {
+            while (Read())
+                yield return this;
+        }
+
+        public override bool HasRows => true;
+
+        public override object this[int i] => ToClrType(GetRawValue(i));
+
+        public override object this[string name] => this[GetOrdinal(name)];
+
+        public override int Depth => 0;
+
+        public override bool IsClosed => _closed;
+
+        public override int RecordsAffected => -1;
+
+        public override int FieldCount => _columnSet.Count;
+
+        protected override void Dispose(bool disposing)
+        {
+            base.Dispose(disposing);
+
             if (_source is IDisposable disposable)
                 disposable.Dispose();
 
@@ -81,22 +93,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _closed = true;
         }
 
-        public void Dispose()
-        {
-            Close();
-        }
-
-        public bool GetBoolean(int i)
+        public override bool GetBoolean(int i)
         {
             return (bool)this[i];
         }
 
-        public byte GetByte(int i)
+        public override byte GetByte(int i)
         {
             return (byte)this[i];
         }
 
-        public long GetBytes(int i, long fieldOffset, byte[] buffer, int bufferoffset, int length)
+        public override long GetBytes(int i, long fieldOffset, byte[] buffer, int bufferoffset, int length)
         {
             var bytes = (byte[])this[i];
 
@@ -108,12 +115,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return length;
         }
 
-        public char GetChar(int i)
+        public override char GetChar(int i)
         {
             return (char)this[i];
         }
 
-        public long GetChars(int i, long fieldoffset, char[] buffer, int bufferoffset, int length)
+        public override long GetChars(int i, long fieldoffset, char[] buffer, int bufferoffset, int length)
         {
             var chars = ((string)this[i]).ToCharArray();
 
@@ -125,12 +132,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return length;
         }
 
-        public IDataReader GetData(int i)
-        {
-            throw new NotSupportedException();
-        }
-
-        public string GetDataTypeName(int i)
+        public override string GetDataTypeName(int i)
         {
             // Return T-SQL data type name
             var sqlType = _schema.Schema[_columnSet[i].SourceColumn];
@@ -141,32 +143,37 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return String.Join(".", ((UserDataTypeReference)sqlType).Name.Identifiers.Select(id => id.Value));
         }
 
-        public DateTime GetDateTime(int i)
+        public override DateTime GetDateTime(int i)
         {
             return (DateTime)this[i];
         }
 
-        public decimal GetDecimal(int i)
+        public override decimal GetDecimal(int i)
         {
             return (decimal)this[i];
         }
 
-        public double GetDouble(int i)
+        public override double GetDouble(int i)
         {
             return (double)this[i];
         }
 
-        public Type GetFieldType(int i)
+        public override Type GetFieldType(int i)
         {
             return ToClrType(_schema.Schema[_columnSet[i].SourceColumn].ToNetType(out _));
         }
 
-        public float GetFloat(int i)
+        public override Type GetProviderSpecificFieldType(int ordinal)
+        {
+            return _schema.Schema[_columnSet[ordinal].SourceColumn].ToNetType(out _);
+        }
+
+        public override float GetFloat(int i)
         {
             return (float)this[i];
         }
 
-        public Guid GetGuid(int i)
+        public override Guid GetGuid(int i)
         {
             var value = this[i];
             if (value is SqlEntityReference er)
@@ -175,27 +182,27 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return (Guid)value;
         }
 
-        public short GetInt16(int i)
+        public override short GetInt16(int i)
         {
             return (short)this[i];
         }
 
-        public int GetInt32(int i)
+        public override int GetInt32(int i)
         {
             return (int)this[i];
         }
 
-        public long GetInt64(int i)
+        public override long GetInt64(int i)
         {
             return (long)this[i];
         }
 
-        public string GetName(int i)
+        public override string GetName(int i)
         {
             return _columnSet[i].OutputColumn;
         }
 
-        public int GetOrdinal(string name)
+        public override int GetOrdinal(string name)
         {
             for (var i = 0; i < _columnSet.Count; i++)
             {
@@ -225,7 +232,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return value;
         }
 
-        public DataTable GetSchemaTable()
+        public override DataTable GetSchemaTable()
         {
             var schemaTable = new DataTable();
             schemaTable.Columns.Add("ColumnName", typeof(string));
@@ -263,16 +270,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             for (var i = 0; i < _columnSet.Count; i++)
             {
                 var column = _columnSet[i];
-                var providerType = _schema.Schema[_columnSet[i].SourceColumn].ToNetType(out _);
+                var sqlType = _schema.Schema[_columnSet[i].SourceColumn];
+                var providerType = sqlType.ToNetType(out _);
                 var type = ToClrType(providerType);
+                var size = sqlType.GetSize();
+                var precision = sqlType.GetPrecision(255);
+                var scale = sqlType.GetScale(255);
 
                 schemaTable.Rows.Add(new object[]
                 {
                     column.OutputColumn,  // ColumnName
                     i,                    // ColumnOrdinal
-                    Int32.MaxValue,       // ColumnSize
-                    255,                  // NumericPrecision
-                    255,                  // NumericScale
+                    size,                 // ColumnSize
+                    precision,            // NumericPrecision
+                    scale,                // NumericScale
                     false,                // IsUnique
                     false,                // IsKey
                     DBNull.Value,         // BaseServerName
@@ -291,7 +302,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     false,                // IsHidden
                     false,                // IsLong
                     true,                 // IsReadOnly
-                    type,                 // ProviderSpecificDataType
+                    providerType,         // ProviderSpecificDataType
                     GetDataTypeName(i),   // DataTypeName
                     DBNull.Value,         // XmlSchemaCollectionDatabase
                     DBNull.Value,         // XmlSchemaCollectionOwningSchema
@@ -305,17 +316,30 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return schemaTable;
         }
 
-        public string GetString(int i)
+        public override string GetString(int i)
         {
             return (string)this[i];
         }
 
-        public object GetValue(int i)
+        public override object GetValue(int i)
         {
             return this[i];
         }
 
-        public int GetValues(object[] values)
+        public override object GetProviderSpecificValue(int ordinal)
+        {
+            return _row[_columnSet[ordinal].SourceColumn];
+        }
+
+        public override int GetProviderSpecificValues(object[] values)
+        {
+            for (var i = 0; i < values.Length && i < _columnSet.Count; i++)
+                values[i] = GetProviderSpecificValue(i);
+
+            return Math.Min(values.Length, _columnSet.Count);
+        }
+
+        public override int GetValues(object[] values)
         {
             for (var i = 0; i < values.Length && i < _columnSet.Count; i++)
                 values[i] = this[i];
@@ -323,7 +347,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Math.Min(values.Length, _columnSet.Count);
         }
 
-        public bool IsDBNull(int i)
+        public override bool IsDBNull(int i)
         {
             return GetRawValue(i).IsNull;
         }
@@ -333,13 +357,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return (INullable)_row[_columnSet[i].SourceColumn];
         }
 
-        public bool NextResult()
+        public override bool NextResult()
         {
             Close();
             return false;
         }
 
-        public bool Read()
+        public override bool Read()
         {
             if (IsClosed)
                 return false;

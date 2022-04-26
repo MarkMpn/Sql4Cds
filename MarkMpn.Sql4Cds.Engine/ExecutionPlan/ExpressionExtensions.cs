@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -27,14 +28,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="schema">The schema of the node that the expression will be evaluated in the context of</param>
         /// <param name="nonAggregateSchema">For aggregate queries, the schema of the data prior to applying the aggregation</param>
         /// <param name="parameterTypes">A mapping of parameter names to their types that are available to the expression</param>
+        /// <param name="sqlType">The SQL data type that will be returned</param>
         /// <returns>The type of value that will be returned by the expression</returns>
-        public static Type GetType(this TSqlFragment expr, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes)
+        public static Type GetType(this TSqlFragment expr, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, out DataTypeReference sqlType)
         {
             var entityParam = Expression.Parameter(typeof(Entity));
             var parameterParam = Expression.Parameter(typeof(IDictionary<string, object>));
             var optionsParam = Expression.Parameter(typeof(IQueryExecutionOptions));
 
-            var expression = ToExpression(expr, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+            var expression = ToExpression(expr, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out sqlType);
             return expression.Type;
         }
 
@@ -51,7 +53,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var parameterParam = Expression.Parameter(typeof(IDictionary<string, object>));
             var optionsParam = Expression.Parameter(typeof(IQueryExecutionOptions));
 
-            var expression = ToExpression(expr, schema, null, parameterTypes, entityParam, parameterParam, optionsParam);
+            var expression = ToExpression(expr, schema, null, parameterTypes, entityParam, parameterParam, optionsParam, out _);
             expression = Expr.Box(expression);
 
             return Expression.Lambda<Func<Entity, IDictionary<string, object>, IQueryExecutionOptions, object>>(expression, entityParam, parameterParam, optionsParam).Compile();
@@ -70,74 +72,74 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var parameterParam = Expression.Parameter(typeof(IDictionary<string, object>));
             var optionsParam = Expression.Parameter(typeof(IQueryExecutionOptions));
 
-            var expression = ToExpression(b, schema, null, parameterTypes, entityParam, parameterParam, optionsParam);
+            var expression = ToExpression(b, schema, null, parameterTypes, entityParam, parameterParam, optionsParam, out _);
             expression = Expression.IsTrue(expression);
             return Expression.Lambda<Func<Entity, IDictionary<string, object>, IQueryExecutionOptions, bool>>(expression, entityParam, parameterParam, optionsParam).Compile();
         }
 
-        private static Expression ToExpression(this TSqlFragment expr, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
+        private static Expression ToExpression(this TSqlFragment expr, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
             if (expr is ColumnReferenceExpression col)
-                return ToExpression(col, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+                return ToExpression(col, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out sqlType);
             else if (expr is IdentifierLiteral guid)
-                return ToExpression(guid, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+                return ToExpression(guid, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out sqlType);
             else if (expr is IntegerLiteral i)
-                return ToExpression(i, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+                return ToExpression(i, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out sqlType);
             else if (expr is MoneyLiteral money)
-                return ToExpression(money, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+                return ToExpression(money, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out sqlType);
             else if (expr is NullLiteral n)
-                return ToExpression(n, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+                return ToExpression(n, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out sqlType);
             else if (expr is NumericLiteral num)
-                return ToExpression(num, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+                return ToExpression(num, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out sqlType);
             else if (expr is RealLiteral real)
-                return ToExpression(real, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+                return ToExpression(real, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out sqlType);
             else if (expr is StringLiteral str)
-                return ToExpression(str, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+                return ToExpression(str, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out sqlType);
             else if (expr is OdbcLiteral odbc)
-                return ToExpression(odbc, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+                return ToExpression(odbc, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out sqlType);
             else if (expr is BooleanBinaryExpression boolBin)
-                return ToExpression(boolBin, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+                return ToExpression(boolBin, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out sqlType);
             else if (expr is BooleanComparisonExpression cmp)
-                return ToExpression(cmp, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+                return ToExpression(cmp, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out sqlType);
             else if (expr is BooleanParenthesisExpression boolParen)
-                return ToExpression(boolParen, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+                return ToExpression(boolParen, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out sqlType);
             else if (expr is InPredicate inPred)
-                return ToExpression(inPred, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+                return ToExpression(inPred, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out sqlType);
             else if (expr is BooleanIsNullExpression isNull)
-                return ToExpression(isNull, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+                return ToExpression(isNull, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out sqlType);
             else if (expr is LikePredicate like)
-                return ToExpression(like, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+                return ToExpression(like, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out sqlType);
             else if (expr is BooleanNotExpression not)
-                return ToExpression(not, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+                return ToExpression(not, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out sqlType);
             else if (expr is FullTextPredicate fullText)
-                return ToExpression(fullText, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+                return ToExpression(fullText, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out sqlType);
             else if (expr is Microsoft.SqlServer.TransactSql.ScriptDom.BinaryExpression bin)
-                return ToExpression(bin, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+                return ToExpression(bin, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out sqlType);
             else if (expr is FunctionCall func)
-                return ToExpression(func, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+                return ToExpression(func, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out sqlType);
             else if (expr is ParenthesisExpression paren)
-                return ToExpression(paren, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+                return ToExpression(paren, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out sqlType);
             else if (expr is Microsoft.SqlServer.TransactSql.ScriptDom.UnaryExpression unary)
-                return ToExpression(unary, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+                return ToExpression(unary, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out sqlType);
             else if (expr is VariableReference var)
-                return ToExpression(var, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+                return ToExpression(var, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out sqlType);
             else if (expr is SimpleCaseExpression simpleCase)
-                return ToExpression(simpleCase, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+                return ToExpression(simpleCase, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out sqlType);
             else if (expr is SearchedCaseExpression searchedCase)
-                return ToExpression(searchedCase, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+                return ToExpression(searchedCase, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out sqlType);
             else if (expr is ConvertCall convert)
-                return ToExpression(convert, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+                return ToExpression(convert, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out sqlType);
             else if (expr is CastCall cast)
-                return ToExpression(cast, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+                return ToExpression(cast, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out sqlType);
             else if (expr is ParameterlessCall parameterless)
-                return ToExpression(parameterless, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+                return ToExpression(parameterless, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out sqlType);
             else if (expr is GlobalVariableExpression global)
-                return ToExpression(global, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+                return ToExpression(global, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out sqlType);
             else
                 throw new NotSupportedQueryFragmentException("Unhandled expression type", expr);
         }
 
-        private static Expression ToExpression(ColumnReferenceExpression col, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
+        private static Expression ToExpression(ColumnReferenceExpression col, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
             var name = col.GetColumnName();
 
@@ -166,57 +168,68 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 };
             }
 
-            var type = schema.Schema[normalizedName];
+            sqlType = schema.Schema[normalizedName];
             var expr = Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(normalizedName));
-            return Expression.Convert(expr, type.ToNetType(out _));
+            return Expression.Convert(expr, sqlType.ToNetType(out _));
         }
 
-        private static Expression ToExpression(IdentifierLiteral guid, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
+        private static Expression ToExpression(IdentifierLiteral guid, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
+            sqlType = DataTypeHelpers.UniqueIdentifier;
             return Expression.Constant(new SqlGuid(guid.Value));
         }
 
-        private static Expression ToExpression(IntegerLiteral i, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
+        private static Expression ToExpression(IntegerLiteral i, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
+            sqlType = DataTypeHelpers.Int;
             return Expression.Constant(new SqlInt32(Int32.Parse(i.Value, CultureInfo.InvariantCulture)));
         }
 
-        private static Expression ToExpression(MoneyLiteral money, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
+        private static Expression ToExpression(MoneyLiteral money, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
-            return Expression.Constant(new SqlDecimal(Decimal.Parse(money.Value, CultureInfo.InvariantCulture)));
+            sqlType = DataTypeHelpers.Money;
+            return Expression.Constant(new SqlMoney(Decimal.Parse(money.Value, CultureInfo.InvariantCulture)));
         }
 
-        private static Expression ToExpression(NullLiteral n, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
+        private static Expression ToExpression(NullLiteral n, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
+            sqlType = DataTypeHelpers.Int;
             return Expression.Constant(null);
         }
 
-        private static Expression ToExpression(NumericLiteral num, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
+        private static Expression ToExpression(NumericLiteral num, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
-            return Expression.Constant(new SqlDecimal(Decimal.Parse(num.Value, CultureInfo.InvariantCulture)));
+            var value = new SqlDecimal(Decimal.Parse(num.Value, CultureInfo.InvariantCulture));
+            sqlType = DataTypeHelpers.Decimal(value.Precision, value.Scale);
+            return Expression.Constant(value);
         }
 
-        private static Expression ToExpression(RealLiteral real, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
+        private static Expression ToExpression(RealLiteral real, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
-            return Expression.Constant(new SqlSingle(Single.Parse(real.Value, CultureInfo.InvariantCulture)));
+            sqlType = DataTypeHelpers.Real;
+            return Expression.Constant(new SqlDouble(Double.Parse(real.Value, CultureInfo.InvariantCulture)));
         }
 
-        private static Expression ToExpression(StringLiteral str, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
+        private static Expression ToExpression(StringLiteral str, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
+            sqlType = str.IsNational ? DataTypeHelpers.NVarChar(str.Value.Length) : DataTypeHelpers.VarChar(str.Value.Length);
             return Expression.Constant(new SqlString(str.Value, CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace));
         }
 
-        private static Expression ToExpression(OdbcLiteral odbc, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
+        private static Expression ToExpression(OdbcLiteral odbc, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
             switch (odbc.OdbcLiteralType)
             {
                 case OdbcLiteralType.Date:
+                    sqlType = DataTypeHelpers.Date;
                     return Expression.Constant(new SqlDateTime(DateTime.ParseExact(odbc.Value, "yyyy'-'MM'-'dd", CultureInfo.CurrentCulture, DateTimeStyles.None)));
 
                 case OdbcLiteralType.Timestamp:
+                    sqlType = DataTypeHelpers.DateTime;
                     return Expression.Constant(new SqlDateTime(DateTime.ParseExact(odbc.Value, "yyyy'-'MM'-'dd HH':'mm':'ss", CultureInfo.CurrentCulture, DateTimeStyles.None)));
 
                 case OdbcLiteralType.Guid:
+                    sqlType = DataTypeHelpers.UniqueIdentifier;
                     return Expression.Constant(new SqlGuid(odbc.Value));
 
                 default:
@@ -224,7 +237,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private static Expression ToExpression(BooleanComparisonExpression cmp, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
+        private static Expression ToExpression(BooleanComparisonExpression cmp, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
             // Special case for field = func() where func is defined in FetchXmlConditionMethods
             if (cmp.FirstExpression is ColumnReferenceExpression &&
@@ -232,56 +245,63 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 cmp.SecondExpression is FunctionCall func
                 )
             {
-                var parameters = func.Parameters.Select(p => p.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam)).ToList();
-                parameters.Insert(0, cmp.FirstExpression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam));
-                var paramTypes = parameters.Select(p => p.Type).ToArray();
-                var paramExpressions = parameters.ToArray();
+                var parameters = func.Parameters.Select(p =>
+                {
+                    var paramExpr = p.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out var paramType);
+                    return new KeyValuePair<Expression, DataTypeReference>(paramExpr, paramType);
+                }).ToList();
+                var colExpr = cmp.FirstExpression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out var colType);
+                parameters.Insert(0, new KeyValuePair<Expression, DataTypeReference>(colExpr, colType));
+                var paramTypes = parameters.Select(p => p.Value).ToArray();
+                var paramExpressions = parameters.Select(p => p.Key).ToArray();
 
-                var fetchXmlComparison = GetMethod(typeof(FetchXmlConditionMethods), func, paramTypes, false, optionsParam, ref paramExpressions);
+                var fetchXmlComparison = GetMethod(typeof(FetchXmlConditionMethods), func, paramTypes, false, optionsParam, ref paramExpressions, out sqlType);
 
                 if (fetchXmlComparison != null)
                     return Expr.Call(fetchXmlComparison, paramExpressions);
             }
 
-            var lhs = cmp.FirstExpression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
-            var rhs = cmp.SecondExpression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+            sqlType = DataTypeHelpers.Bit;
 
-            if (!SqlTypeConverter.CanMakeConsistentTypes(lhs.Type, rhs.Type, out var type))
+            var lhs = cmp.FirstExpression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out var lhsType);
+            var rhs = cmp.SecondExpression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out var rhsType);
+
+            if (!SqlTypeConverter.CanMakeConsistentTypes(lhsType, rhsType, out var type))
             {
                 // Special case - we can filter on entity reference types by string
                 if (lhs.Type == typeof(SqlEntityReference) && rhs.Type == typeof(SqlString) ||
                     lhs.Type == typeof(SqlString) && rhs.Type == typeof(SqlEntityReference))
                 {
-                    type = typeof(SqlGuid);
+                    type = DataTypeHelpers.UniqueIdentifier;
                 }
                 else
                 {
-                    throw new NotSupportedQueryFragmentException($"No implicit conversion exists for types {lhs.Type.Name} and {rhs.Type.Name}", cmp);
+                    throw new NotSupportedQueryFragmentException($"No implicit conversion exists for types {lhsType.ToSql()} and {rhsType.ToSql()}", cmp);
                 }
             }
 
-            if (lhs.Type != type)
-                lhs = SqlTypeConverter.Convert(lhs, type);
+            if (!lhsType.IsSameAs(type))
+                lhs = SqlTypeConverter.Convert(lhs, lhsType, type);
 
-            if (rhs.Type != type)
+            if (!rhsType.IsSameAs(type))
             {
                 // Special case to give more helpful & earlier error reporting for common problems
                 if (cmp.FirstExpression is ColumnReferenceExpression col &&
                     cmp.SecondExpression is StringLiteral str &&
                     (
-                        type == typeof(SqlInt32) && !Int32.TryParse(str.Value, out _)
+                        type.IsType(SqlDataTypeOption.Int) && !Int32.TryParse(str.Value, out _)
                         ||
-                        type == typeof(SqlGuid) && !Guid.TryParse(str.Value, out _)
+                        type.IsType(SqlDataTypeOption.UniqueIdentifier) && !Guid.TryParse(str.Value, out _)
                     ) &&
                     schema.ContainsColumn(col.GetColumnName() + "name", out var nameCol))
                 {
-                    throw new NotSupportedQueryFragmentException($"Cannot convert text value to {type.Name}", str)
+                    throw new NotSupportedQueryFragmentException($"Cannot convert text value to {type.ToSql()}", str)
                     {
                         Suggestion = $"Did you mean to filter on the {nameCol} column instead?\r\n" + new string(' ', 26 + nameCol.Length) + "^^^^"
                     };
                 }
 
-                rhs = SqlTypeConverter.Convert(rhs, type);
+                rhs = SqlTypeConverter.Convert(rhs, rhsType, type);
             }
 
             switch (cmp.ComparisonType)
@@ -312,10 +332,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private static Expression ToExpression(BooleanBinaryExpression bin, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
+        private static Expression ToExpression(BooleanBinaryExpression bin, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
-            var lhs = bin.FirstExpression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
-            var rhs = bin.SecondExpression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+            sqlType = DataTypeHelpers.Bit;
+
+            var lhs = bin.FirstExpression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out _);
+            var rhs = bin.SecondExpression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out _);
 
             if (bin.BinaryExpressionType == BooleanBinaryExpressionType.And)
                 return Expression.AndAlso(lhs, rhs);
@@ -323,62 +345,159 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Expression.OrElse(lhs, rhs);
         }
 
-        private static Expression ToExpression(BooleanParenthesisExpression paren, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
+        private static Expression ToExpression(BooleanParenthesisExpression paren, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
-            return paren.Expression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+            return paren.Expression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out sqlType);
         }
 
-        private static Expression ToExpression(Microsoft.SqlServer.TransactSql.ScriptDom.BinaryExpression bin, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
+        private static Expression ToExpression(Microsoft.SqlServer.TransactSql.ScriptDom.BinaryExpression bin, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
-            var lhs = bin.FirstExpression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
-            var rhs = bin.SecondExpression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+            var lhs = bin.FirstExpression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out var lhsSqlType);
+            var rhs = bin.SecondExpression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out var rhsSqlType);
 
-            if (!SqlTypeConverter.CanMakeConsistentTypes(lhs.Type, rhs.Type, out var type))
-                throw new NotSupportedQueryFragmentException($"No implicit conversion exists for types {lhs.Type} and {rhs.Type}", bin);
+            if (!SqlTypeConverter.CanMakeConsistentTypes(lhsSqlType, rhsSqlType, out var type))
+                throw new NotSupportedQueryFragmentException($"No implicit conversion exists for types {lhsSqlType.ToSql()} and {rhsSqlType.ToSql()}", bin);
 
-            if (lhs.Type != type)
-                lhs = SqlTypeConverter.Convert(lhs, type);
+            // For decimal types, need to work out the precision and scale of the result depending on the type of operation
+            if (type is SqlDataTypeReference sqlTargetType && (sqlTargetType.SqlDataTypeOption == SqlDataTypeOption.Numeric || sqlTargetType.SqlDataTypeOption == SqlDataTypeOption.Decimal))
+            {
+                var p1 = lhsSqlType.GetPrecision();
+                var s1 = lhsSqlType.GetScale();
+                var p2 = rhsSqlType.GetPrecision();
+                var s2 = rhsSqlType.GetScale();
 
-            if (rhs.Type != type)
-                rhs = SqlTypeConverter.Convert(rhs, type);
+                var p = type.GetPrecision();
+                var s = type.GetScale();
+
+                switch (bin.BinaryExpressionType)
+                {
+                    case BinaryExpressionType.Add:
+                    case BinaryExpressionType.Subtract:
+                        p = Math.Max(s1, s2) + Math.Max(p1 - s1, p2 - s2) + 1;
+                        s = Math.Max(s1, s2);
+                        break;
+
+                    case BinaryExpressionType.Multiply:
+                        p = p1 + p2 + 1;
+                        s = s1 + s2;
+                        break;
+
+                    case BinaryExpressionType.Divide:
+                        p = p1 - s1 + s2 + Math.Max(6, s1 + p2 + 1);
+                        s = Math.Max(6, s1 + p2 + 1);
+                        break;
+                }
+
+                if (p > 38)
+                {
+                    switch (bin.BinaryExpressionType)
+                    {
+                        case BinaryExpressionType.Add:
+                        case BinaryExpressionType.Subtract:
+                            p = 38;
+                            s = p - Math.Max(p1 - s1, p2 - s2);
+                            break;
+
+                        case BinaryExpressionType.Multiply:
+                        case BinaryExpressionType.Divide:
+                            if ((p - s) < 32)
+                                s = Math.Min(s, 38 - (p - s));
+                            else if (s > 6 && (p - s) > 32)
+                                s = 6;
+
+                            if (p > 38)
+                                p = 38;
+                            break;
+                    }
+                }
+
+                type = DataTypeHelpers.Decimal(p, s);
+
+                if (lhs.Type != typeof(SqlDecimal))
+                    lhs = SqlTypeConverter.Convert(lhs, lhsSqlType, DataTypeHelpers.Decimal(lhsSqlType.GetPrecision(), lhsSqlType.GetScale()));
+                if (rhs.Type != typeof(SqlDecimal))
+                    rhs = SqlTypeConverter.Convert(rhs, rhsSqlType, DataTypeHelpers.Decimal(rhsSqlType.GetPrecision(), rhsSqlType.GetScale()));
+            }
+            else
+            {
+                if (!lhsSqlType.IsSameAs(type))
+                    lhs = SqlTypeConverter.Convert(lhs, lhsSqlType, type);
+
+                if (!rhsSqlType.IsSameAs(type))
+                    rhs = SqlTypeConverter.Convert(rhs, rhsSqlType, type);
+            }
+
+            sqlType = null;
+            Expression expr;
 
             switch (bin.BinaryExpressionType)
             {
                 case BinaryExpressionType.Add:
                     // Special case for SqlDateTime
                     if (lhs.Type == typeof(SqlDateTime) && rhs.Type == typeof(SqlDateTime))
-                        return Expr.Call(() => AddSqlDateTime(Expr.Arg<SqlDateTime>(), Expr.Arg<SqlDateTime>()), lhs, rhs);
+                        expr = Expr.Call(() => AddSqlDateTime(Expr.Arg<SqlDateTime>(), Expr.Arg<SqlDateTime>()), lhs, rhs);
+                    else
+                        expr = Expression.Add(lhs, rhs);
 
-                    return Expression.Add(lhs, rhs);
+                    // Special case for SqlString length calculation
+                    if (lhsSqlType is SqlDataTypeReference lhsSql &&
+                        rhsSqlType is SqlDataTypeReference rhsSql &&
+                        lhs.Type == typeof(SqlString) &&
+                        rhs.Type == typeof(SqlString) &&
+                        lhsSql.Parameters.Count == 1 &&
+                        rhsSql.Parameters.Count == 1 &&
+                        lhsSql.Parameters[0].LiteralType == LiteralType.Integer &&
+                        rhsSql.Parameters[0].LiteralType == LiteralType.Integer &&
+                        Int32.TryParse(lhsSql.Parameters[0].Value, out var lhsLength) &&
+                        Int32.TryParse(rhsSql.Parameters[0].Value, out var rhsLength))
+                    {
+                        sqlType = DataTypeHelpers.NVarChar(lhsLength + rhsLength);
+                    }
+                    break;
 
                 case BinaryExpressionType.Subtract:
                     // Special case for SqlDateTime
                     if (lhs.Type == typeof(SqlDateTime) && rhs.Type == typeof(SqlDateTime))
-                        return Expr.Call(() => SubtractSqlDateTime(Expr.Arg<SqlDateTime>(), Expr.Arg<SqlDateTime>()), lhs, rhs);
-
-                    return Expression.Subtract(lhs, rhs);
+                        expr = Expr.Call(() => SubtractSqlDateTime(Expr.Arg<SqlDateTime>(), Expr.Arg<SqlDateTime>()), lhs, rhs);
+                    else
+                        expr = Expression.Subtract(lhs, rhs);
+                    break;
 
                 case BinaryExpressionType.Multiply:
-                    return Expression.Multiply(lhs, rhs);
+                    expr = Expression.Multiply(lhs, rhs);
+                    break;
 
                 case BinaryExpressionType.Divide:
-                    return Expression.Divide(lhs, rhs);
+                    expr = Expression.Divide(lhs, rhs);
+                    break;
 
                 case BinaryExpressionType.Modulo:
-                    return Expression.Modulo(lhs, rhs);
+                    expr = Expression.Modulo(lhs, rhs);
+                    break;
 
                 case BinaryExpressionType.BitwiseAnd:
-                    return Expression.And(lhs, rhs);
+                    expr = Expression.And(lhs, rhs);
+                    break;
 
                 case BinaryExpressionType.BitwiseOr:
-                    return Expression.Or(lhs, rhs);
+                    expr = Expression.Or(lhs, rhs);
+                    break;
 
                 case BinaryExpressionType.BitwiseXor:
-                    return Expression.ExclusiveOr(lhs, rhs);
+                    expr = Expression.ExclusiveOr(lhs, rhs);
+                    break;
 
                 default:
                     throw new NotSupportedQueryFragmentException("Unknown operator", bin);
             }
+
+            if (sqlType == null && expr.Type == typeof(SqlDecimal))
+                sqlType = type;
+
+            if (sqlType == null)
+                sqlType = expr.Type.ToSqlType();
+
+            return expr;
         }
 
         private static SqlDateTime AddSqlDateTime(SqlDateTime lhs, SqlDateTime rhs)
@@ -401,14 +520,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return lhs - ts;
         }
 
-        private static MethodInfo GetMethod(FunctionCall func, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out Expression[] paramExpressions)
+        private static MethodInfo GetMethod(FunctionCall func, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out Expression[] paramExpressions, out DataTypeReference sqlType)
         {
+            KeyValuePair<Expression, DataTypeReference>[] paramExpressionsWithType;
+
             // Special case for DATEPART / DATEDIFF / DATEADD - first parameter looks like a field but is actually an identifier
             if (func.FunctionName.Value.Equals("DATEPART", StringComparison.OrdinalIgnoreCase) ||
                 func.FunctionName.Value.Equals("DATEDIFF", StringComparison.OrdinalIgnoreCase) ||
                 func.FunctionName.Value.Equals("DATEADD", StringComparison.OrdinalIgnoreCase))
             {
-                paramExpressions = func.Parameters
+                paramExpressionsWithType = func.Parameters
                     .Select((param, index) =>
                     {
                         if (index == 0)
@@ -426,24 +547,33 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 throw new NotSupportedQueryFragmentException("Expected a datepart name", param);
                             }
 
-                            return Expression.Constant(col.MultiPartIdentifier.Identifiers.Single().Value);
+                            return new KeyValuePair<Expression, DataTypeReference>(Expression.Constant(col.MultiPartIdentifier.Identifiers.Single().Value), DataTypeHelpers.NVarChar(col.MultiPartIdentifier.Identifiers.Single().Value.Length));
                         }
 
-                        return param.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+                        var paramExpr = param.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out var paramType);
+                        return new KeyValuePair<Expression, DataTypeReference>(paramExpr, paramType);
                     })
                     .ToArray();
             }
             else
             {
-                paramExpressions = func.Parameters
-                    .Select(param => param.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam))
+                paramExpressionsWithType = func.Parameters
+                    .Select(param =>
+                    {
+                        var paramExpr = param.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out var paramType);
+                        return new KeyValuePair<Expression, DataTypeReference>(paramExpr, paramType);
+                    })
                     .ToArray();
             }
 
-            return GetMethod(typeof(ExpressionFunctions), func, paramExpressions.Select(expr => expr.Type).ToArray(), true, optionsParam, ref paramExpressions);
+            paramExpressions = paramExpressionsWithType
+                .Select(kvp => kvp.Key)
+                .ToArray();
+
+            return GetMethod(typeof(ExpressionFunctions), func, paramExpressionsWithType.Select(kvp => kvp.Value).ToArray(), true, optionsParam, ref paramExpressions, out sqlType);
         }
 
-        private static MethodInfo GetMethod(Type targetType, FunctionCall func, Type[] paramTypes, bool throwOnMissing, Expression optionsParam, ref Expression[] paramExpressions)
+        private static MethodInfo GetMethod(Type targetType, FunctionCall func, DataTypeReference[] paramTypes, bool throwOnMissing, Expression optionsParam, ref Expression[] paramExpressions, out DataTypeReference sqlType)
         {
             // Find a method that implements this function
             var methods = targetType
@@ -456,6 +586,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (throwOnMissing)
                     throw new NotSupportedQueryFragmentException("Unknown function", func);
 
+                sqlType = DataTypeHelpers.Int;
                 return null;
             }
 
@@ -489,12 +620,31 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     for (var i = 0; i < genericArguments.Length; i++)
                     {
                         if (param.ParameterType == genericArguments[i] && genericArgumentValues[i] == null)
-                            genericArgumentValues[i] = paramTypes[i];
+                            genericArgumentValues[i] = paramTypes[i].ToNetType(out _);
                     }
                 }
 
                 method = method.MakeGenericMethod(genericArgumentValues);
                 parameters = method.GetParameters();
+            }
+
+            sqlType = method.ReturnType.ToSqlType();
+
+            if (method.ReturnType == typeof(SqlString))
+            {
+                // Work out precise type from parameter with [MaxLength] attribute where available
+                for (var i = 0; i < parameters.Length; i++)
+                {
+                    if (parameters[i].GetCustomAttribute<MaxLengthAttribute>() != null)
+                    {
+                        if (parameters[i].ParameterType == typeof(SqlInt32) && paramExpressions[i] is ConstantExpression lengthConst && lengthConst.Value is SqlInt32 length && !length.IsNull)
+                            sqlType = DataTypeHelpers.NVarChar(length.Value);
+                        else if (parameters[i].ParameterType == typeof(SqlString) && paramTypes[i].ToNetType(out var sqlStringType) == typeof(SqlString))
+                            sqlType = paramTypes[i];
+
+                        break;
+                    }
+                }
             }
 
             // Check parameter types can be converted
@@ -516,28 +666,28 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     break;
                 }
 
-                if (!SqlTypeConverter.CanChangeTypeImplicit(paramTypes[i], paramType))
-                    throw new NotSupportedQueryFragmentException($"Cannot convert {paramTypes[i]} to {paramType}", i < paramOffset ? func : func.Parameters[i - paramOffset]);
+                if (!SqlTypeConverter.CanChangeTypeImplicit(paramTypes[i], paramType.ToSqlType()))
+                    throw new NotSupportedQueryFragmentException($"Cannot convert {paramTypes[i].ToSql()} to {paramType.ToSqlType().ToSql()}", i < paramOffset ? func : func.Parameters[i - paramOffset]);
             }
 
             for (var i = parameters.Length; i < paramTypes.Length; i++)
             {
                 var paramType = parameters.Last().ParameterType.GetElementType();
 
-                if (!SqlTypeConverter.CanChangeTypeImplicit(paramTypes[i], paramType))
-                    throw new NotSupportedQueryFragmentException($"Cannot convert {paramTypes[i]} to {paramType}", i < paramOffset ? func : func.Parameters[i - paramOffset]);
+                if (!SqlTypeConverter.CanChangeTypeImplicit(paramTypes[i], paramType.ToSqlType()))
+                    throw new NotSupportedQueryFragmentException($"Cannot convert {paramTypes[i].ToSql()} to {paramType.ToSqlType().ToSql()}", i < paramOffset ? func : func.Parameters[i - paramOffset]);
             }
 
             return method;
         }
 
-        private static Expression ToExpression(this FunctionCall func, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
+        private static Expression ToExpression(this FunctionCall func, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
             if (func.OverClause != null)
                 throw new NotSupportedQueryFragmentException("Window functions are not supported", func);
 
             // Find the method to call and get the expressions for the parameter values
-            var method = GetMethod(func, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out var paramValues);
+            var method = GetMethod(func, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out var paramValues, out sqlType);
 
             // Convert the parameters to the expected types
             var parameters = method.GetParameters();
@@ -551,14 +701,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Expression.Call(method, paramValues);
         }
 
-        private static Expression ToExpression(this ParenthesisExpression paren, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
+        private static Expression ToExpression(this ParenthesisExpression paren, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
-            return paren.Expression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+            return paren.Expression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out sqlType);
         }
 
-        private static Expression ToExpression(this Microsoft.SqlServer.TransactSql.ScriptDom.UnaryExpression unary, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
+        private static Expression ToExpression(this Microsoft.SqlServer.TransactSql.ScriptDom.UnaryExpression unary, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
-            var value = unary.Expression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+            var value = unary.Expression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out sqlType);
             
             switch (unary.UnaryExpressionType)
             {
@@ -576,29 +726,29 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private static Expression ToExpression(this InPredicate inPred, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
+        private static Expression ToExpression(this InPredicate inPred, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
             if (inPred.Subquery != null)
                 throw new NotSupportedQueryFragmentException("Subquery should have been eliminated by query plan", inPred);
 
-            var exprValue = inPred.Expression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+            var exprValue = inPred.Expression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out var exprType);
 
             Expression result = null;
 
             foreach (var value in inPred.Values)
             {
-                var comparisonValue = value.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+                var comparisonValue = value.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out var comparisonType);
 
-                if (!SqlTypeConverter.CanMakeConsistentTypes(exprValue.Type, comparisonValue.Type, out var type))
-                    throw new NotSupportedQueryFragmentException($"No implicit conversion exists for types {exprValue.Type} and {comparisonValue.Type}", inPred);
+                if (!SqlTypeConverter.CanMakeConsistentTypes(exprType, comparisonType, out var type))
+                    throw new NotSupportedQueryFragmentException($"No implicit conversion exists for types {exprType.ToSql()} and {comparisonType.ToSql()}", inPred);
 
                 var convertedExprValue = exprValue;
 
-                if (exprValue.Type != type)
-                    convertedExprValue = SqlTypeConverter.Convert(convertedExprValue, type);
+                if (!exprType.IsSameAs(type))
+                    convertedExprValue = SqlTypeConverter.Convert(convertedExprValue, exprType, type);
 
-                if (comparisonValue.Type != type)
-                    comparisonValue = SqlTypeConverter.Convert(comparisonValue, type);
+                if (!comparisonType.IsSameAs(type))
+                    comparisonValue = SqlTypeConverter.Convert(comparisonValue, comparisonType, type);
 
                 var comparison = inPred.NotDefined ? Expression.NotEqual(convertedExprValue, comparisonValue) : Expression.Equal(convertedExprValue, comparisonValue);
 
@@ -608,67 +758,74 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     result = inPred.NotDefined ? Expression.AndAlso(result, comparison) : Expression.OrElse(result, comparison);
             }
 
+            sqlType = DataTypeHelpers.Bit;
             return result;
         }
 
-        private static Expression ToExpression(this VariableReference var, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
+        private static Expression ToExpression(this VariableReference var, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
-            if (parameterTypes == null || !parameterTypes.TryGetValue(var.Name, out var type))
+            if (parameterTypes == null || !parameterTypes.TryGetValue(var.Name, out sqlType))
                 throw new NotSupportedQueryFragmentException("Undefined variable", var);
 
             var expr = Expression.Property(parameterParam, typeof(IDictionary<string, object>).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(var.Name));
-            return Expression.Convert(expr, type.ToNetType(out _));
+            return Expression.Convert(expr, sqlType.ToNetType(out _));
         }
 
-        private static Expression ToExpression(this GlobalVariableExpression var, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
+        private static Expression ToExpression(this GlobalVariableExpression var, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
-            if (parameterTypes == null || !parameterTypes.TryGetValue(var.Name, out var type))
+            if (parameterTypes == null || !parameterTypes.TryGetValue(var.Name, out sqlType))
                 throw new NotSupportedQueryFragmentException("Undefined variable", var);
 
             var expr = Expression.Property(parameterParam, typeof(IDictionary<string, object>).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(var.Name));
-            return Expression.Convert(expr, type.ToNetType(out _));
+            return Expression.Convert(expr, sqlType.ToNetType(out _));
         }
 
-        private static Expression ToExpression(this BooleanIsNullExpression isNull, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
+        private static Expression ToExpression(this BooleanIsNullExpression isNull, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
-            var value = isNull.Expression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+            var value = isNull.Expression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out _);
             value = SqlTypeConverter.NullCheck(value);
 
             if (isNull.IsNot)
                 value = Expression.Not(value);
 
             value = SqlTypeConverter.Convert(value, typeof(SqlBoolean));
+            sqlType = DataTypeHelpers.Bit;
             return value;
         }
 
-        private static Expression ToExpression(this LikePredicate like, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
+        private static Expression ToExpression(this LikePredicate like, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
-            var value = like.FirstExpression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
-            var pattern = like.SecondExpression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
-            var escape = like.EscapeExpression?.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+            DataTypeReference escapeType = null;
+
+            var value = like.FirstExpression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out var valueType);
+            var pattern = like.SecondExpression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out var patternType);
+            var escape = like.EscapeExpression?.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out escapeType);
+
+            sqlType = DataTypeHelpers.Bit;
+            var stringType = DataTypeHelpers.NVarChar(Int32.MaxValue);
 
             if (value.Type != typeof(SqlString))
             {
-                if (!SqlTypeConverter.CanChangeTypeImplicit(value.Type, typeof(SqlString)))
-                    throw new NotSupportedQueryFragmentException("Cannot convert value to string", like.FirstExpression);
+                if (!SqlTypeConverter.CanChangeTypeImplicit(valueType, stringType))
+                    throw new NotSupportedQueryFragmentException($"No implicit conversion exists for types {valueType.ToSql()} and {stringType.ToSql()}", like.FirstExpression);
 
-                value = SqlTypeConverter.Convert(value, typeof(SqlString));
+                value = SqlTypeConverter.Convert(value, valueType, stringType);
             }
 
             if (pattern.Type != typeof(SqlString))
             {
-                if (!SqlTypeConverter.CanChangeTypeImplicit(pattern.Type, typeof(SqlString)))
-                    throw new NotSupportedQueryFragmentException("Cannot convert pattern to string", like.SecondExpression);
+                if (!SqlTypeConverter.CanChangeTypeImplicit(patternType, stringType))
+                    throw new NotSupportedQueryFragmentException($"No implicit conversion exists for types {patternType.ToSql()} and {stringType.ToSql()}", like.SecondExpression);
 
-                pattern = SqlTypeConverter.Convert(pattern, typeof(SqlString));
+                pattern = SqlTypeConverter.Convert(pattern, patternType, stringType);
             }
 
             if (escape != null && escape.Type != typeof(SqlString))
             {
-                if (!SqlTypeConverter.CanChangeTypeImplicit(escape.Type, typeof(SqlString)))
-                    throw new NotSupportedQueryFragmentException("Cannot convert escape sequence to string", like.EscapeExpression);
+                if (!SqlTypeConverter.CanChangeTypeImplicit(escapeType, stringType))
+                    throw new NotSupportedQueryFragmentException($"No implicit conversion exists for types {escapeType.ToSql()} and {stringType.ToSql()}", like.EscapeExpression);
 
-                escape = SqlTypeConverter.Convert(escape, typeof(SqlString));
+                escape = SqlTypeConverter.Convert(escape, escapeType, stringType);
             }
 
             if (escape == null)
@@ -792,23 +949,32 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return result;
         }
 
-        private static Expression ToExpression(this SimpleCaseExpression simpleCase, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
+        private static Expression ToExpression(this SimpleCaseExpression simpleCase, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
             // Convert all the different elements to expressions
-            var value = simpleCase.InputExpression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
-            var whenClauses = simpleCase.WhenClauses.Select(when => when.WhenExpression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam)).ToList();
-            var caseTypes = new Type[whenClauses.Count];
-            var thenClauses = simpleCase.WhenClauses.Select(when => when.ThenExpression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam)).ToList();
-            var elseValue = simpleCase.ElseExpression?.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+            var value = simpleCase.InputExpression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out var valueType);
+            var whenClauses = simpleCase.WhenClauses.Select(when =>
+            {
+                var whenExpr = when.WhenExpression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out var whenType);
+                return new { Expression = whenExpr, Type = whenType };
+            }).ToList();
+            var caseTypes = new DataTypeReference[whenClauses.Count];
+            var thenClauses = simpleCase.WhenClauses.Select(when =>
+            {
+                var thenExpr = when.ThenExpression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out var thenType);
+                return new { Expression = thenExpr, Type = thenType };
+            }).ToList();
+            DataTypeReference elseType = null;
+            var elseValue = simpleCase.ElseExpression?.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out elseType);
 
             // First pass to determine final return type
-            Type type = null;
+            DataTypeReference type = null;
 
             for (var i = 0; i < simpleCase.WhenClauses.Count; i++)
             {
                 var whenType = whenClauses[i].Type;
 
-                if (!SqlTypeConverter.CanMakeConsistentTypes(value.Type, whenType, out var caseType))
+                if (!SqlTypeConverter.CanMakeConsistentTypes(valueType, whenType, out var caseType))
                     throw new NotSupportedQueryFragmentException($"Cannot compare values of type {value.Type} and {whenType}", simpleCase.WhenClauses[i].WhenExpression);
 
                 caseTypes[i] = caseType;
@@ -823,8 +989,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (elseValue != null)
             {
-                var elseType = elseValue.Type;
-
                 if (type == null)
                     type = elseType;
                 else if (!SqlTypeConverter.CanMakeConsistentTypes(type, elseType, out type))
@@ -837,49 +1001,61 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (elseValue != null)
             {
-                if (elseValue.Type != type)
-                    elseValue = SqlTypeConverter.Convert(elseValue, type);
+                if (!elseType.IsSameAs(type))
+                    elseValue = SqlTypeConverter.Convert(elseValue, elseType, type);
 
                 result = elseValue;
             }
             else
             {
-                result = Expression.Constant(SqlTypeConverter.GetNullValue(type));
+                result = Expression.Constant(SqlTypeConverter.GetNullValue(type.ToNetType(out _)));
             }
 
             for (var i = simpleCase.WhenClauses.Count - 1; i >= 0; i--)
             {
                 var valueCopy = value;
-                var whenValue = whenClauses[i];
+                var whenValue = whenClauses[i].Expression;
+                var whenType = whenClauses[i].Type;
                 var caseType = caseTypes[i];
 
-                if (value.Type != caseType)
-                    valueCopy = SqlTypeConverter.Convert(valueCopy, caseType);
+                if (!valueType.IsSameAs(caseType))
+                    valueCopy = SqlTypeConverter.Convert(valueCopy, valueType, caseType);
 
-                if (whenValue.Type != caseType)
-                    whenValue = SqlTypeConverter.Convert(whenValue, type);
+                if (!whenType.IsSameAs(caseType))
+                    whenValue = SqlTypeConverter.Convert(whenValue, whenType, type);
 
                 var comparison = Expression.Equal(valueCopy, whenValue);
-                var returnValue = thenClauses[i];
+                var returnValue = thenClauses[i].Expression;
+                var returnType = thenClauses[i].Type;
 
-                if (returnValue.Type != type)
-                    returnValue = SqlTypeConverter.Convert(returnValue, type);
+                if (!returnType.IsSameAs(type))
+                    returnValue = SqlTypeConverter.Convert(returnValue, returnType, type);
 
                 result = Expression.Condition(Expression.IsTrue(comparison), returnValue, result);
             }
 
+            sqlType = type;
             return result;
         }
 
-        private static Expression ToExpression(this SearchedCaseExpression searchedCase, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
+        private static Expression ToExpression(this SearchedCaseExpression searchedCase, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
             // Convert all the different elements to expressions
-            var whenClauses = searchedCase.WhenClauses.Select(when => when.WhenExpression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam)).ToList();
-            var thenClauses = searchedCase.WhenClauses.Select(when => when.ThenExpression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam)).ToList();
-            var elseValue = searchedCase.ElseExpression?.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+            var whenClauses = searchedCase.WhenClauses.Select(when =>
+            {
+                var whenExpr = when.WhenExpression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out var whenType);
+                return new { Expression = whenExpr, Type = whenType };
+            }).ToList();
+            var thenClauses = searchedCase.WhenClauses.Select(when =>
+            {
+                var thenExpr = when.ThenExpression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out var thenType);
+                return new { Expression = thenExpr, Type = thenType };
+            }).ToList();
+            DataTypeReference elseType = null;
+            var elseValue = searchedCase.ElseExpression?.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out elseType);
 
             // First pass to determine final return type
-            Type type = null;
+            DataTypeReference type = null;
 
             for (var i = 0; i < thenClauses.Count; i++)
             {
@@ -893,8 +1069,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (elseValue != null)
             {
-                var elseType = elseValue.Type;
-
                 if (type == null)
                     type = elseType;
                 else if (!SqlTypeConverter.CanMakeConsistentTypes(type, elseType, out type))
@@ -907,35 +1081,40 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (elseValue != null)
             {
-                if (elseValue.Type != type)
-                    elseValue = SqlTypeConverter.Convert(elseValue, type);
+                if (!elseType.IsSameAs(type))
+                    elseValue = SqlTypeConverter.Convert(elseValue, elseType, type);
 
                 result = elseValue;
             }
             else
             {
-                result = Expression.Constant(SqlTypeConverter.GetNullValue(type));
+                result = Expression.Constant(SqlTypeConverter.GetNullValue(type.ToNetType(out _)));
             }
+
+            var bitType = DataTypeHelpers.Bit;
 
             for (var i = whenClauses.Count - 1; i >= 0; i--)
             {
-                var whenValue = whenClauses[i];
-                var returnValue = thenClauses[i];
+                var whenValue = whenClauses[i].Expression;
+                var whenType = whenClauses[i].Type;
+                var returnValue = thenClauses[i].Expression;
+                var returnType = thenClauses[i].Type;
 
-                whenValue = SqlTypeConverter.Convert(whenValue, typeof(SqlBoolean));
+                whenValue = SqlTypeConverter.Convert(whenValue, whenType, bitType);
                 whenValue = Expression.IsTrue(whenValue);
 
-                returnValue = SqlTypeConverter.Convert(returnValue, type);
+                returnValue = SqlTypeConverter.Convert(returnValue, returnType, type);
 
                 result = Expression.Condition(whenValue, returnValue, result);
             }
 
+            sqlType = type;
             return result;
         }
 
-        private static Expression ToExpression(this BooleanNotExpression not, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
+        private static Expression ToExpression(this BooleanNotExpression not, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
-            var value = not.Expression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+            var value = not.Expression.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out sqlType);
             return Expression.Not(value);
         }
 
@@ -980,7 +1159,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             if (!(type is SqlDataTypeReference dataType))
             {
-                if (type is UserDataTypeReference udt && udt.Name.BaseIdentifier.Value == typeof(SqlEntityReference).FullName)
+                if (type.IsSameAs(DataTypeHelpers.EntityReference))
                 {
                     sqlDataType = null;
                     return typeof(SqlEntityReference);
@@ -997,23 +1176,36 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return targetType;
         }
 
+        /// <summary>
+        /// Checks if a data type is a specific SQL data type
+        /// </summary>
+        /// <param name="type">The data type to check</param>
+        /// <param name="sqlType">The required SQL data type</param>
+        /// <returns><c>true</c> if the <paramref name="type"/> is the expected <paramref name="sqlType"/>, or <c>false</c> otherwise</returns>
+        public static bool IsType(this DataTypeReference type, SqlDataTypeOption sqlType)
+        {
+            if (!(type is SqlDataTypeReference sql))
+                return false;
+
+            return sql.SqlDataTypeOption == sqlType;
+        }
+
         private static readonly Dictionary<Type, DataTypeReference> _netTypeMapping = new Dictionary<Type, DataTypeReference>
         {
-            [typeof(SqlInt64)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.BigInt },
-            [typeof(SqlBinary)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Binary },
-            [typeof(SqlBoolean)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Bit },
-            [typeof(SqlString)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar },
-            [typeof(SqlDateTime)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.DateTime },
-            [typeof(SqlDecimal)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Decimal },
-            [typeof(SqlDouble)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Float },
-            [typeof(SqlInt32)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int },
-            [typeof(SqlMoney)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Money },
-            [typeof(SqlSingle)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Real },
-            [typeof(SqlInt16)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.SmallInt },
-            [typeof(SqlByte)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.TinyInt },
-            [typeof(SqlGuid)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.UniqueIdentifier },
-            [typeof(SqlEntityReference)] = new UserDataTypeReference { Name = new SchemaObjectName { Identifiers = { new Identifier { Value = typeof(SqlEntityReference).FullName } } } },
-            [typeof(object)] = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Sql_Variant }
+            [typeof(SqlInt64)] = DataTypeHelpers.BigInt,
+            [typeof(SqlBinary)] = DataTypeHelpers.VarBinary(Int32.MaxValue),
+            [typeof(SqlBoolean)] = DataTypeHelpers.Bit,
+            [typeof(SqlString)] = DataTypeHelpers.NVarChar(Int32.MaxValue),
+            [typeof(SqlDateTime)] = DataTypeHelpers.DateTime,
+            [typeof(SqlDecimal)] = DataTypeHelpers.Decimal(38, 10),
+            [typeof(SqlDouble)] = DataTypeHelpers.Float,
+            [typeof(SqlInt32)] = DataTypeHelpers.Int,
+            [typeof(SqlMoney)] = DataTypeHelpers.Money,
+            [typeof(SqlSingle)] = DataTypeHelpers.Real,
+            [typeof(SqlInt16)] = DataTypeHelpers.SmallInt,
+            [typeof(SqlByte)] = DataTypeHelpers.TinyInt,
+            [typeof(SqlGuid)] = DataTypeHelpers.UniqueIdentifier,
+            [typeof(SqlEntityReference)] = DataTypeHelpers.EntityReference,
         };
 
         /// <summary>
@@ -1026,22 +1218,37 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return _netTypeMapping[type];
         }
 
-        private static Expression ToExpression(this ConvertCall convert, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
+        private static Expression ToExpression(this ConvertCall convert, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
-            var value = convert.Parameter.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
-            var style = convert.Style?.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+            var value = convert.Parameter.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out var valueType);
+            DataTypeReference styleType = null;
+            var style = convert.Style?.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out styleType);
 
-            return SqlTypeConverter.Convert(value, convert.DataType, style, convert);
+            sqlType = convert.DataType;
+
+            // Set default length to 30
+            if (sqlType is SqlDataTypeReference sqlTargetType &&
+                sqlTargetType.SqlDataTypeOption.IsStringType() &&
+                sqlTargetType.Parameters.Count == 0)
+            {
+                sqlType = new SqlDataTypeReference
+                {
+                    SqlDataTypeOption = sqlTargetType.SqlDataTypeOption,
+                    Parameters = { new IntegerLiteral { Value = "30" } }
+                };
+            }
+
+            return SqlTypeConverter.Convert(value, valueType, sqlType, style, styleType, convert);
         }
 
-        private static Expression ToExpression(this CastCall cast, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
+        private static Expression ToExpression(this CastCall cast, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
-            return ToExpression(new ConvertCall { Parameter = cast.Parameter, DataType = cast.DataType }, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+            return ToExpression(new ConvertCall { Parameter = cast.Parameter, DataType = cast.DataType }, schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out sqlType);
         }
 
         private static readonly Regex _containsParser = new Regex("^\\S+( OR \\S+)*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-        private static Expression ToExpression(this FullTextPredicate fullText, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
+        private static Expression ToExpression(this FullTextPredicate fullText, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
             // Only support simple CONTAINS calls to handle multi-select optionsets for now
             if (fullText.FullTextFunctionType != FullTextFunctionType.Contains)
@@ -1059,12 +1266,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (fullText.LanguageTerm != null)
                 throw new NotSupportedQueryFragmentException("LANGUAGE is not currently supported", fullText.LanguageTerm);
 
-            var col = fullText.Columns[0].ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+            var col = fullText.Columns[0].ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out var colType);
+            var stringType = DataTypeHelpers.NVarChar(Int32.MaxValue);
 
-            if (!SqlTypeConverter.CanChangeTypeImplicit(col.Type, typeof(SqlString)))
+            if (!SqlTypeConverter.CanChangeTypeImplicit(colType, stringType))
                 throw new NotSupportedQueryFragmentException("Only string columns are supported", fullText.Columns[0]);
 
-            col = SqlTypeConverter.Convert(col, typeof(SqlString));
+            col = SqlTypeConverter.Convert(col, colType, stringType);
+            sqlType = DataTypeHelpers.Bit;
 
             if (fullText.Value is StringLiteral lit)
             {
@@ -1075,12 +1284,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return Expr.Call(() => Contains(Expr.Arg<SqlString>(), Expr.Arg<Regex[]>()), col, Expression.Constant(words));
             }
 
-            var value = fullText.Value.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam);
+            var value = fullText.Value.ToExpression(schema, nonAggregateSchema, parameterTypes, entityParam, parameterParam, optionsParam, out var valueType);
 
-            if (!SqlTypeConverter.CanChangeTypeImplicit(value.Type, typeof(SqlString)))
+            if (!SqlTypeConverter.CanChangeTypeImplicit(valueType, stringType))
                 throw new NotSupportedQueryFragmentException($"Expected string value to match, got {value.Type}", fullText.Value);
 
-            value = SqlTypeConverter.Convert(value, typeof(SqlString));
+            value = SqlTypeConverter.Convert(value, valueType, stringType);
 
             return Expr.Call(() => Contains(Expr.Arg<SqlString>(), Expr.Arg<SqlString>()), col, value);
         }
@@ -1118,14 +1327,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 .ToArray();
         }
 
-        private static Expression ToExpression(this ParameterlessCall parameterless, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam)
+        private static Expression ToExpression(this ParameterlessCall parameterless, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
             switch (parameterless.ParameterlessCallType)
             {
                 case ParameterlessCallType.CurrentTimestamp:
+                    sqlType = DataTypeHelpers.DateTime;
                     return Expr.Call(() => GetCurrentTimestamp(Expr.Arg<IQueryExecutionOptions>()), optionsParam);
 
                 default:
+                    sqlType = DataTypeHelpers.EntityReference;
                     return Expr.Call(() => GetCurrentUser(Expr.Arg<IQueryExecutionOptions>()), optionsParam);
             }
         }

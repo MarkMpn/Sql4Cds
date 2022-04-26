@@ -52,12 +52,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var calc in Columns)
             {
-                if (calc.Value is ConvertCall convert)
-                    schema.Schema[calc.Key] = convert.DataType;
-                else if (calc.Value is CastCall cast)
-                    schema.Schema[calc.Key] = cast.DataType;
-                else
-                    schema.Schema[calc.Key] = calc.Value.GetType(sourceSchema, null, parameterTypes).ToSqlType();
+                calc.Value.GetType(sourceSchema, null, parameterTypes, out var calcType);
+                schema.Schema[calc.Key] = calcType;
             }
 
             return schema;
@@ -105,11 +101,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         folded.Add(calc.Key);
 
                         if (calc.Value is ConvertCall convert)
+                        {
                             constant.Schema[calc.Key] = convert.DataType;
+                        }
                         else if (calc.Value is CastCall cast)
+                        {
                             constant.Schema[calc.Key] = cast.DataType;
+                        }
                         else
-                            constant.Schema[calc.Key] = calc.Value.GetType(null, null, parameterTypes).ToSqlType();
+                        {
+                            calc.Value.GetType(null, null, parameterTypes, out var calcType);
+                            constant.Schema[calc.Key] = calcType;
+                        }
                     }
                 }
 

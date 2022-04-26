@@ -288,7 +288,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             attribute.dategrouping = dateGrouping.Value;
                             attribute.dategroupingSpecified = true;
                         }
-                        else if (grouping.GetType(schema, null, parameterTypes) == typeof(SqlDateTime))
+                        else if (grouping.GetType(schema, null, parameterTypes, out _) == typeof(SqlDateTime))
                         {
                             // Can't group on datetime columns without a DATEPART specification
                             canUseFetchXmlAggregate = false;

@@ -52,10 +52,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public Func<Entity, IDictionary<string, object>, IQueryExecutionOptions, object> Expression { get; set; }
 
         /// <summary>
+        /// The type of value produced by the <see cref="Expression"/>
+        /// </summary>
+        [Browsable(false)]
+        public DataTypeReference SourceType { get; set; }
+
+        /// <summary>
         /// The type of value produced by the aggregate function
         /// </summary>
         [Browsable(false)]
-        public Type ReturnType { get; set; }
+        public DataTypeReference ReturnType { get; set; }
     }
 
     /// <summary>
@@ -137,7 +143,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// Returns the type of value that will be produced by this aggregation
         /// </summary>
-        public abstract Type Type { get; }
+        public abstract DataTypeReference Type { get; }
 
         /// <summary>
         /// Resets this aggregation ready for the next group
@@ -153,36 +159,36 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     {
         class State
         {
-            public SqlDecimal Sum { get; set; }
-            public int Count { get; set; }
+            public object SumState { get; set; }
+            public object CountState { get; set; }
         }
 
-        private readonly Func<SqlDecimal, object> _valueSelector;
+        private readonly Sum _sum;
+        private readonly CountColumn _count;
 
         /// <summary>
         /// Creates a new <see cref="Average"/>
         /// </summary>
         /// <param name="selector">A function that extracts the value to calculate the average from</param>
-        public Average(Func<Entity, object> selector, Type type) : base(selector)
+        public Average(Func<Entity, object> selector, DataTypeReference sourceType, DataTypeReference returnType) : base(selector)
         {
-            Type = type;
+            Type = returnType;
 
-            var valueParam = Expression.Parameter(typeof(SqlDecimal));
-            var conversion = SqlTypeConverter.Convert(valueParam, Type);
-            conversion = Expr.Box(conversion);
-            _valueSelector = (Func<SqlDecimal, object>)Expression.Lambda(conversion, valueParam).Compile();
+            _sum = new Sum(selector, sourceType, returnType);
+            _count = new CountColumn(selector);
+        }
+
+        public override void NextRecord(Entity entity, object state)
+        {
+            var s = (State)state;
+
+            _sum.NextRecord(entity, s.SumState);
+            _count.NextRecord(entity, s.CountState);
         }
 
         protected override void Update(object value, object state)
         {
-            var d = (SqlDecimal)value;
-
-            if (d.IsNull)
-                return;
-
-            var s = (State)state;
-            s.Sum += d;
-            s.Count++;
+            throw new NotImplementedException();
         }
 
         protected override void UpdatePartition(object value, object state)
@@ -194,13 +200,28 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var s = (State)state;
 
-            if (s.Count == 0)
-                return _valueSelector(SqlDecimal.Null);
+            var count = (SqlInt32) _count.GetValue(s.CountState);
+            var sum = _sum.GetValue(s.SumState);
 
-            return _valueSelector(s.Sum / s.Count);
+            if (sum is SqlInt32 i32)
+                return i32 / count;
+
+            if (sum is SqlInt64 i64)
+                return i64 / count;
+
+            if (sum is SqlDecimal dec)
+                return dec / count;
+
+            if (sum is SqlMoney money)
+                return money / count;
+
+            if (sum is SqlDouble dbl)
+                return dbl / count;
+
+            throw new InvalidOperationException();
         }
 
-        public override Type Type { get; }
+        public override DataTypeReference Type { get; }
 
         public override object Reset()
         {
@@ -244,7 +265,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return s.Value;
         }
 
-        public override Type Type => typeof(SqlInt32);
+        public override DataTypeReference Type => DataTypeHelpers.Int;
 
         public override object Reset()
         {
@@ -291,7 +312,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return s.Value;
         }
 
-        public override Type Type => typeof(SqlInt32);
+        public override DataTypeReference Type => DataTypeHelpers.Int;
 
         public override object Reset()
         {
@@ -313,7 +334,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// Creates a new <see cref="Max"/>
         /// </summary>
         /// <param name="selector">A function that extracts the value to find the maximum value of</param>
-        public Max(Func<Entity, object> selector, Type type) : base(selector)
+        public Max(Func<Entity, object> selector, DataTypeReference type) : base(selector)
         {
             Type = type;
         }
@@ -342,7 +363,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return s.Value;
         }
 
-        public override Type Type { get; }
+        public override DataTypeReference Type { get; }
 
         public override object Reset()
         {
@@ -364,7 +385,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// Creates a new <see cref="Min"/>
         /// </summary>
         /// <param name="selector">A function that extracts the value to find the minimum value of</param>
-        public Min(Func<Entity, object> selector, Type type) : base(selector)
+        public Min(Func<Entity, object> selector, DataTypeReference type) : base(selector)
         {
             Type = type;
         }
@@ -394,7 +415,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return s.Value;
         }
 
-        public override Type Type { get; }
+        public override DataTypeReference Type { get; }
 
         public override object Reset()
         {
@@ -409,34 +430,67 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     {
         class State
         {
-            public SqlDecimal Value { get; set; }
+            public SqlInt32 Int32Value { get; set; }
+            public SqlInt64 Int64Value { get; set; }
+            public SqlDecimal DecimalValue { get; set; }
+            public SqlMoney MoneyValue { get; set; }
+            public SqlDouble FloatValue { get; set; }
         }
 
-        private Func<SqlDecimal, object> _valueSelector;
+        private readonly SqlDataTypeOption _type;
+        private readonly Func<object, object> _valueSelector;
 
         /// <summary>
         /// Creates a new <see cref="Sum"/>
         /// </summary>
         /// <param name="selector">A function that extracts the value to sum</param>
-        public Sum(Func<Entity, object> selector, Type type) : base(selector)
+        public Sum(Func<Entity, object> selector, DataTypeReference sourceType, DataTypeReference returnType) : base(selector)
         {
-            Type = type;
+            Type = returnType;
 
-            var valueParam = Expression.Parameter(typeof(SqlDecimal));
-            var conversion = SqlTypeConverter.Convert(valueParam, Type);
+            _type = ((SqlDataTypeReference)returnType).SqlDataTypeOption;
+
+            var valueParam = Expression.Parameter(typeof(object));
+            var unboxed = Expression.Unbox(valueParam, sourceType.ToNetType(out _));
+            var conversion = SqlTypeConverter.Convert(unboxed, sourceType, returnType);
             conversion = Expr.Box(conversion);
-            _valueSelector = (Func<SqlDecimal, object>) Expression.Lambda(conversion, valueParam).Compile();
+            _valueSelector = (Func<object, object>) Expression.Lambda(conversion, valueParam).Compile();
         }
 
         protected override void Update(object value, object state)
         {
-            var d = (SqlDecimal)value;
+            var d = (INullable)_valueSelector(value);
 
             if (d.IsNull)
                 return;
 
             var s = (State)state;
-            s.Value += d;
+
+            switch (_type)
+            {
+                case SqlDataTypeOption.Int:
+                    s.Int32Value += (SqlInt32)d;
+                    break;
+
+                case SqlDataTypeOption.BigInt:
+                    s.Int64Value += (SqlInt64)d;
+                    break;
+
+                case SqlDataTypeOption.Decimal:
+                    s.DecimalValue += (SqlDecimal)d;
+                    break;
+
+                case SqlDataTypeOption.Money:
+                    s.MoneyValue += (SqlMoney)d;
+                    break;
+
+                case SqlDataTypeOption.Float:
+                    s.FloatValue += (SqlDouble)d;
+                    break;
+
+                default:
+                    throw new InvalidOperationException();
+            }
         }
 
         protected override void UpdatePartition(object value, object state)
@@ -446,14 +500,40 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override object GetValue(object state)
         {
-            return _valueSelector(((State)state).Value);
+            switch (_type)
+            {
+                case SqlDataTypeOption.Int:
+                    return ((State)state).Int32Value;
+
+                case SqlDataTypeOption.BigInt:
+                    return ((State)state).Int64Value;
+
+                case SqlDataTypeOption.Decimal:
+                    return ((State)state).DecimalValue;
+
+                case SqlDataTypeOption.Money:
+                    return ((State)state).MoneyValue;
+
+                case SqlDataTypeOption.Float:
+                    return ((State)state).FloatValue;
+
+                default:
+                    throw new InvalidOperationException();
+            }
         }
 
-        public override Type Type { get; }
+        public override DataTypeReference Type { get; }
 
         public override object Reset()
         {
-            return new State { Value = 0 };
+            return new State
+            {
+                Int32Value = 0,
+                Int64Value = 0,
+                DecimalValue = 0,
+                MoneyValue = 0,
+                FloatValue = 0
+            };
         }
     }
 
@@ -470,7 +550,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// Creates a new <see cref="Sum"/>
         /// </summary>
         /// <param name="selector">A function that extracts the value to sum</param>
-        public First(Func<Entity, object> selector, Type type) : base(selector)
+        public First(Func<Entity, object> selector, DataTypeReference type) : base(selector)
         {
             Type = type;
         }
@@ -496,7 +576,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return s.Value;
         }
 
-        public override Type Type { get; }
+        public override DataTypeReference Type { get; }
 
         public override object Reset()
         {
@@ -525,7 +605,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             SqlExpression = func.SqlExpression;
         }
 
-        public override Type Type => _func.Type;
+        public override DataTypeReference Type => _func.Type;
 
         public override void NextRecord(Entity entity, object state)
         {

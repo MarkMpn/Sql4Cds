@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
 using System.Data.SqlTypes;
+using System.Globalization;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -180,15 +181,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 // Store the values under the column index as well as name for compatibility with INSERT ... SELECT ...
                 var dataTable = new DataTable();
-                dataTable.Load(dataReader);
+                var schemaTable = dataReader.GetSchemaTable();
                 schema = new NodeSchema();
 
-                for (var i = 0; i < dataTable.Columns.Count; i++)
+                for (var i = 0; i < schemaTable.Rows.Count; i++)
                 {
-                    var col = dataTable.Columns[i];
-                    ((NodeSchema)schema).Schema[col.ColumnName] = col.DataType.ToSqlType();
-                    ((NodeSchema)schema).Schema[i.ToString()] = col.DataType.ToSqlType();
+                    var colSchema = schemaTable.Rows[i];
+                    var colName = (string)colSchema["ColumnName"];
+                    var colType = (Type)colSchema["ProviderSpecificDataType"];
+                    dataTable.Columns.Add(colName, colType);
+                    ((NodeSchema)schema).Schema[colName] = colType.ToSqlType();
+                    ((NodeSchema)schema).Schema[i.ToString()] = colType.ToSqlType();
                 }
+                
+                dataTable.Load(dataReader);
 
                 entities = dataTable.Rows
                     .Cast<DataRow>()
@@ -240,30 +246,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!attributes.TryGetValue(destAttributeName, out var attr) || attr.AttributeOf != null)
                     continue;
 
-                var sourceType = schema.Schema[sourceColumnName];
-                var sourceNetType = sourceType.ToNetType(out _);
+                var sourceSqlType = schema.Schema[sourceColumnName];
                 var destType = attr.GetAttributeType();
-                var destSqlType = SqlTypeConverter.NetToSqlType(destType);
+                var destSqlType = attr.GetAttributeSqlType();
 
                 var expr = (Expression)Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(sourceColumnName));
                 var originalExpr = expr;
 
-                if (sourceNetType == typeof(object))
+                if (sourceSqlType.IsSameAs(DataTypeHelpers.Int) && !SqlTypeConverter.CanChangeTypeExplicit(sourceSqlType, destSqlType) && entities.All(e => ((SqlInt32)e[sourceColumnName]).IsNull))
                 {
-                    // null literal
-                    expr = Expression.Constant(null, destType);
-                    expr = Expr.Box(expr);
-                }
-                else if (sourceNetType == typeof(SqlInt32) && !SqlTypeConverter.CanChangeTypeExplicit(sourceNetType, destSqlType) && entities.All(e => ((SqlInt32)e[sourceColumnName]).IsNull))
-                {
-                    // null literal from TDS endpoint is typed as SqlInt32
+                    // null literal is typed as int
                     expr = Expression.Constant(null, destType);
                     expr = Expr.Box(expr);
                 }
                 else
                 {
-                    expr = SqlTypeConverter.Convert(expr, sourceType);
-                    expr = SqlTypeConverter.Convert(expr, destSqlType);
+                    expr = SqlTypeConverter.Convert(expr, sourceSqlType, destSqlType);
                     var convertedExpr = SqlTypeConverter.Convert(expr, destType);
 
                     if (attr is LookupAttributeMetadata lookupAttr && lookupAttr.AttributeType != AttributeTypeCode.PartyList)
@@ -271,10 +269,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         // Special case: intersect attributes can be simple guids
                         if (metadata.IsIntersect != true)
                         {
-                            if (sourceType.Name?.BaseIdentifier.Value == typeof(SqlEntityReference).FullName)
+                            if (sourceSqlType.Name?.BaseIdentifier.Value == typeof(SqlEntityReference).FullName)
                             {
-                                expr = SqlTypeConverter.Convert(originalExpr, sourceType);
-                                convertedExpr = SqlTypeConverter.Convert(expr, typeof(EntityReference));
+                                expr = originalExpr;
+                                convertedExpr = SqlTypeConverter.Convert(expr, sourceSqlType, sourceSqlType);
+                                convertedExpr = SqlTypeConverter.Convert(convertedExpr, typeof(EntityReference));
                             }
                             else
                             {
@@ -288,9 +287,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 {
                                     var sourceTargetColumnName = mappings[destAttributeName + "type"];
                                     var sourceTargetType = schema.Schema[sourceTargetColumnName];
+                                    var stringType = DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength);
                                     targetExpr = Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(sourceTargetColumnName));
-                                    targetExpr = SqlTypeConverter.Convert(targetExpr, sourceTargetType);
-                                    targetExpr = SqlTypeConverter.Convert(targetExpr, typeof(SqlString));
+                                    targetExpr = SqlTypeConverter.Convert(targetExpr, sourceTargetType, stringType);
                                     targetExpr = SqlTypeConverter.Convert(targetExpr, typeof(string));
                                 }
 
