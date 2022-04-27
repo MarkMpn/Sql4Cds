@@ -24,8 +24,6 @@ namespace MarkMpn.Sql4Cds.Engine
         private Sql4CdsConnection _connection;
         private ExecutionPlanBuilder _planBuilder;
         private string _commandText;
-        private bool _useTDSEndpointDirectly;
-        private IRootExecutionPlanNode[] _plan;
         private CancellationTokenSource _cts;
 
         public Sql4CdsCommand(Sql4CdsConnection connection) : this(connection, string.Empty)
@@ -42,7 +40,23 @@ namespace MarkMpn.Sql4Cds.Engine
             _planBuilder = new ExecutionPlanBuilder(_connection.DataSources.Values, _connection.Options);
         }
 
-        public IRootExecutionPlanNode[] Plan => _plan;
+        /// <summary>
+        /// Returns the details of the execution plan of the current command
+        /// </summary>
+        /// <remarks>
+        /// This property returns a value based on the state of the command when it was executed or
+        /// when <see cref="Prepare"/> was called.
+        /// </remarks>
+        public IRootExecutionPlanNode[] Plan { get; private set; }
+
+        /// <summary>
+        /// Indicates if this command can be executed directly against the TDS Endpoint
+        /// </summary>
+        /// <remarks>
+        /// This property returns a value based on the state of the command when it was executed or
+        /// when <see cref="Prepare"/> was called.
+        /// </remarks>
+        public bool UseTDSEndpointDirectly { get; private set; }
 
         public override string CommandText
         {
@@ -50,8 +64,8 @@ namespace MarkMpn.Sql4Cds.Engine
             set
             {
                 _commandText = value;
-                _plan = null;
-                _useTDSEndpointDirectly = false;
+                Plan = null;
+                UseTDSEndpointDirectly = false;
             }
         }
 
@@ -66,7 +80,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     throw new ArgumentOutOfRangeException("Only CommandType.Text is supported");
             }
         }
-        
+
         public override bool DesignTimeVisible { get; set; }
         
         public override UpdateRowSource UpdatedRowSource { get; set; }
@@ -96,8 +110,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 _connection = con;
                 _planBuilder = new ExecutionPlanBuilder(_connection.DataSources.Values, _connection.Options);
-                _plan = null;
-                _useTDSEndpointDirectly = false;
+                Plan = null;
+                UseTDSEndpointDirectly = false;
             }
         }
 
@@ -139,7 +153,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public override void Prepare()
         {
-            if (_useTDSEndpointDirectly || _plan != null)
+            if (UseTDSEndpointDirectly || Plan != null)
                 return;
 
             GeneratePlan(true);
@@ -155,11 +169,12 @@ namespace MarkMpn.Sql4Cds.Engine
             try
             {
                 _planBuilder.EstimatedPlanOnly = !compileForExecution;
-                var plan = _planBuilder.Build(CommandText, ((Sql4CdsParameterCollection)Parameters).GetParameterTypes(), out _useTDSEndpointDirectly);
+                var plan = _planBuilder.Build(CommandText, ((Sql4CdsParameterCollection)Parameters).GetParameterTypes(), out var useTDSEndpointDirectly);
+                UseTDSEndpointDirectly = useTDSEndpointDirectly;
 
                 if (compileForExecution)
                 {
-                    _plan = plan;
+                    Plan = plan;
                 }
                 else
                 {
@@ -192,7 +207,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             try
             {
-                if (_useTDSEndpointDirectly)
+                if (UseTDSEndpointDirectly)
                 {
 #if NETCOREAPP
                 var svc = (ServiceClient)_connection.DataSources[_connection.Database].Connection;

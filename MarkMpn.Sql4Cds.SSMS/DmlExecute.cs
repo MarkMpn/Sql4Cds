@@ -105,7 +105,7 @@ namespace MarkMpn.Sql4Cds.SSMS
                         return;
                     }
 
-                    if (cmd.Plan == null)
+                    if (cmd.UseTDSEndpointDirectly)
                         return;
 
                     // We need to execute the DML statements directly
