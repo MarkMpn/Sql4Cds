@@ -90,6 +90,7 @@ namespace MarkMpn.Sql4Cds.SSMS
                 using (var cmd = con.CreateCommand())
                 {
                     con.ApplicationName = "SSMS";
+                    cmd.CommandTimeout = 0;
                     var options = new QueryExecutionOptions(sqlScriptEditorControl, Package.Settings, true, cmd);
                     options.ApplySettings(con);
                     cmd.CommandText = sql;
