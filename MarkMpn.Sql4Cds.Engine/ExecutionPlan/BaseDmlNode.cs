@@ -248,7 +248,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var sourceSqlType = schema.Schema[sourceColumnName];
                 var destType = attr.GetAttributeType();
-                var destSqlType = attr.GetAttributeSqlType();
+                var destSqlType = attr.IsPrimaryId == true ? DataTypeHelpers.UniqueIdentifier : attr.GetAttributeSqlType();
 
                 var expr = (Expression)Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(sourceColumnName));
                 var originalExpr = expr;
@@ -261,7 +261,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
                 else
                 {
+                    // Unbox value as source SQL type
+                    expr = Expression.Convert(expr, sourceSqlType.ToNetType(out _));
+
+                    // Convert to destination SQL type
                     expr = SqlTypeConverter.Convert(expr, sourceSqlType, destSqlType);
+
+                    // Convert to final .NET SDK type
                     var convertedExpr = SqlTypeConverter.Convert(expr, destType);
 
                     if (attr is LookupAttributeMetadata lookupAttr && lookupAttr.AttributeType != AttributeTypeCode.PartyList)
