@@ -515,17 +515,6 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// Applies the required conversion process to return a value of an expected type from an expression
         /// </summary>
-        /// <typeparam name="T">The type of value required from an expression</typeparam>
-        /// <param name="expr">The expression that is generating a value</param>
-        /// <returns>An expression that converts the generated value to the required type</returns>
-        public static Expression Convert<T>(Expression expr)
-        {
-            return Convert(expr, typeof(T));
-        }
-
-        /// <summary>
-        /// Applies the required conversion process to return a value of an expected type from an expression
-        /// </summary>
         /// <param name="expr">The expression that is generating a value</param>
         /// <param name="type">The type of value required from an expression</param>
         /// <returns>An expression that converts the generated value to the required type</returns>

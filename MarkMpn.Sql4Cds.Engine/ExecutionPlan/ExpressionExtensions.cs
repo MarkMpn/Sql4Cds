@@ -373,18 +373,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     case BinaryExpressionType.Add:
                     case BinaryExpressionType.Subtract:
-                        p = Math.Max(s1, s2) + Math.Max(p1 - s1, p2 - s2) + 1;
+                        p = (short)(Math.Max(s1, s2) + Math.Max(p1 - s1, p2 - s2) + 1);
                         s = Math.Max(s1, s2);
                         break;
 
                     case BinaryExpressionType.Multiply:
-                        p = p1 + p2 + 1;
-                        s = s1 + s2;
+                        p = (short)(p1 + p2 + 1);
+                        s = (short)(s1 + s2);
                         break;
 
                     case BinaryExpressionType.Divide:
-                        p = p1 - s1 + s2 + Math.Max(6, s1 + p2 + 1);
-                        s = Math.Max(6, s1 + p2 + 1);
+                        p = (short)(p1 - s1 + s2 + Math.Max(6, s1 + p2 + 1));
+                        s = (short)(Math.Max(6, s1 + p2 + 1));
                         break;
                 }
 
@@ -395,13 +395,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         case BinaryExpressionType.Add:
                         case BinaryExpressionType.Subtract:
                             p = 38;
-                            s = p - Math.Max(p1 - s1, p2 - s2);
+                            s = (short)(p - Math.Max(p1 - s1, p2 - s2));
                             break;
 
                         case BinaryExpressionType.Multiply:
                         case BinaryExpressionType.Divide:
                             if ((p - s) < 32)
-                                s = Math.Min(s, 38 - (p - s));
+                                s = (short)(Math.Min(s, 38 - (p - s)));
                             else if (s > 6 && (p - s) > 32)
                                 s = 6;
 
@@ -1124,10 +1124,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             [SqlDataTypeOption.Binary] = typeof(SqlBinary),
             [SqlDataTypeOption.Bit] = typeof(SqlBoolean),
             [SqlDataTypeOption.Char] = typeof(SqlString),
-            [SqlDataTypeOption.Date] = typeof(SqlDateTime),
+            [SqlDataTypeOption.Date] = typeof(SqlDate),
             [SqlDataTypeOption.DateTime] = typeof(SqlDateTime),
-            [SqlDataTypeOption.DateTime2] = typeof(SqlDateTime),
-            [SqlDataTypeOption.DateTimeOffset] = typeof(SqlDateTime),
+            [SqlDataTypeOption.DateTime2] = typeof(SqlDateTime2),
+            [SqlDataTypeOption.DateTimeOffset] = typeof(SqlDateTimeOffset),
             [SqlDataTypeOption.Decimal] = typeof(SqlDecimal),
             [SqlDataTypeOption.Float] = typeof(SqlDouble),
             [SqlDataTypeOption.Image] = typeof(SqlBinary),
@@ -1142,6 +1142,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             [SqlDataTypeOption.SmallInt] = typeof(SqlInt16),
             [SqlDataTypeOption.SmallMoney] = typeof(SqlMoney),
             [SqlDataTypeOption.Text] = typeof(SqlString),
+            [SqlDataTypeOption.Time] = typeof(SqlTime),
             [SqlDataTypeOption.TinyInt] = typeof(SqlByte),
             [SqlDataTypeOption.UniqueIdentifier] = typeof(SqlGuid),
             [SqlDataTypeOption.VarBinary] = typeof(SqlBinary),
@@ -1206,6 +1207,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             [typeof(SqlByte)] = DataTypeHelpers.TinyInt,
             [typeof(SqlGuid)] = DataTypeHelpers.UniqueIdentifier,
             [typeof(SqlEntityReference)] = DataTypeHelpers.EntityReference,
+            [typeof(SqlDateTime2)] = DataTypeHelpers.DateTime2(7),
+            [typeof(SqlDateTimeOffset)] = DataTypeHelpers.DateTimeOffset,
+            [typeof(SqlDate)] = DataTypeHelpers.Date,
+            [typeof(SqlTime)] = DataTypeHelpers.Time(7),
         };
 
         /// <summary>

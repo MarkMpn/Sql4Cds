@@ -3,9 +3,12 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data.SqlTypes;
 using System.Linq;
+using System.Linq.Expressions;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
+using Microsoft.Xrm.Sdk;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -39,10 +42,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 var count = 0;
 
-                foreach (var entity in GetDmlSourceEntities(dataSources, options, parameterTypes, parameterValues, out _))
+                var entities = GetDmlSourceEntities(dataSources, options, parameterTypes, parameterValues, out var schema);
+                var valueAccessors = CompileValueAccessors(schema, entities, parameterTypes);
+
+                foreach (var entity in entities)
                 {
                     foreach (var variable in Variables)
-                        parameterValues[variable.VariableName] = entity[variable.SourceColumn];
+                        parameterValues[variable.VariableName] = valueAccessors[variable.VariableName](entity);
 
                     count++;
                 }
@@ -52,6 +58,59 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             recordsAffected = -1;
             return null;
+        }
+
+        /// <summary>
+        /// Compiles methods to access the data required for the DML operation
+        /// </summary>
+        /// <param name="mappings">The mappings of attribute name to source column</param>
+        /// <param name="schema">The schema of data source</param>
+        /// <param name="attributes">The attributes in the target metadata</param>
+        /// <param name="dateTimeKind">The time zone that datetime values are supplied in</param>
+        /// <returns></returns>
+        protected Dictionary<string, Func<Entity, object>> CompileValueAccessors(INodeSchema schema, List<Entity> entities, IDictionary<string, DataTypeReference> variableTypes)
+        {
+            var valueAccessors = new Dictionary<string, Func<Entity, object>>();
+            var entityParam = Expression.Parameter(typeof(Entity));
+
+            foreach (var mapping in Variables)
+            {
+                var sourceColumnName = mapping.SourceColumn;
+                var destVariableName = mapping.VariableName;
+
+                if (!schema.ContainsColumn(sourceColumnName, out sourceColumnName))
+                    throw new QueryExecutionException($"Missing source column {mapping.SourceColumn}") { Node = this };
+
+                var sourceSqlType = schema.Schema[sourceColumnName];
+
+                if (!variableTypes.TryGetValue(destVariableName, out var destSqlType))
+                    throw new QueryExecutionException($"Unknown variable {mapping.VariableName}") { Node = this };
+
+                var destNetType = destSqlType.ToNetType(out _);
+
+                var expr = (Expression)Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(sourceColumnName));
+                var originalExpr = expr;
+
+                if (sourceSqlType.IsSameAs(DataTypeHelpers.Int) && !SqlTypeConverter.CanChangeTypeExplicit(sourceSqlType, destSqlType) && entities.All(e => ((SqlInt32)e[sourceColumnName]).IsNull))
+                {
+                    // null literal is typed as int
+                    expr = Expression.Constant(SqlTypeConverter.GetNullValue(destNetType));
+                }
+                else
+                {
+                    // Unbox value as source SQL type
+                    expr = Expression.Convert(expr, sourceSqlType.ToNetType(out _));
+
+                    // Convert to destination SQL type
+                    expr = SqlTypeConverter.Convert(expr, sourceSqlType, destSqlType);
+                }
+
+                expr = Expr.Box(expr);
+
+                valueAccessors[destVariableName] = Expression.Lambda<Func<Entity, object>>(expr, entityParam).Compile();
+            }
+
+            return valueAccessors;
         }
 
         public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)

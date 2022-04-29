@@ -2524,7 +2524,7 @@ namespace MarkMpn.Sql4Cds.Engine
             expression.GetType(computeScalarSchema, nonAggregateSchema, parameterTypes, out _);
 
             var alias = $"Expr{++_colNameCounter}";
-            computeScalar.Columns[alias] = expression;
+            computeScalar.Columns[alias] = expression.Clone();
             return alias;
         }
 

@@ -590,14 +590,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     var precision = schema.Rows[0]["NumericPrecision"];
                     var scale = schema.Rows[0]["NumericScale"];
 
-                    Assert.AreEqual(20, precision);
-                    Assert.AreEqual(10, scale);
+                    Assert.AreEqual((short)20, precision);
+                    Assert.AreEqual((short)10, scale);
 
                     precision = schema.Rows[1]["NumericPrecision"];
                     scale = schema.Rows[1]["NumericScale"];
 
-                    Assert.AreEqual(3, precision);
-                    Assert.AreEqual(2, scale);
+                    Assert.AreEqual((short)3, precision);
+                    Assert.AreEqual((short)2, scale);
                 }
             }
         }
@@ -620,25 +620,25 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     var precision = schema.Rows[0]["NumericPrecision"];
                     var scale = schema.Rows[0]["NumericScale"];
 
-                    Assert.AreEqual(38, precision);
-                    Assert.AreEqual(17, scale);
+                    Assert.AreEqual((short)38, precision);
+                    Assert.AreEqual((short)17, scale);
 
                     precision = schema.Rows[1]["NumericPrecision"];
                     scale = schema.Rows[1]["NumericScale"];
 
-                    Assert.AreEqual(38, precision);
-                    Assert.AreEqual(6, scale);
+                    Assert.AreEqual((short)38, precision);
+                    Assert.AreEqual((short)6, scale);
 
                     Assert.IsTrue(reader.Read());
                     var val1 = (SqlDecimal)reader.GetProviderSpecificValue(0);
                     Assert.AreEqual(0.00000090000000000M, val1.Value);
-                    Assert.AreEqual(38, val1.Precision);
-                    Assert.AreEqual(17, val1.Scale);
+                    Assert.AreEqual((short)38, val1.Precision);
+                    Assert.AreEqual((short)17, val1.Scale);
 
                     var val2 = (SqlDecimal)reader.GetProviderSpecificValue(1);
                     Assert.AreEqual(0.000001M, val2.Value);
-                    Assert.AreEqual(38, val2.Precision);
-                    Assert.AreEqual(6, val2.Scale);
+                    Assert.AreEqual((short)38, val2.Precision);
+                    Assert.AreEqual((short)6, val2.Scale);
                 }
             }
         }
@@ -661,6 +661,56 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     Assert.AreEqual(30, length); // Default length of 30 for CAST and CONVERT
                     length = schema.Rows[1]["ColumnSize"];
                     Assert.AreEqual(1, length); // Default length of 1 for variable declaration
+                }
+            }
+        }
+
+        [TestMethod]
+        public void DateTypeConversions()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+                    select current_timestamp, convert(date, current_timestamp), convert(time, current_timestamp), convert(datetime, convert(date, current_timestamp)), convert(datetime, convert(time, current_timestamp))";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    var schema = reader.GetSchemaTable();
+
+                    Assert.AreEqual(typeof(DateTime), schema.Rows[0]["DataType"]);
+                    Assert.AreEqual("datetime", schema.Rows[0]["DataTypeName"]);
+                    Assert.AreEqual(typeof(SqlDateTime), schema.Rows[0]["ProviderSpecificDataType"]);
+
+                    Assert.AreEqual(typeof(DateTime), schema.Rows[1]["DataType"]);
+                    Assert.AreEqual("date", schema.Rows[1]["DataTypeName"]);
+                    Assert.AreEqual(typeof(SqlDate), schema.Rows[1]["ProviderSpecificDataType"]);
+
+                    Assert.AreEqual(typeof(TimeSpan), schema.Rows[2]["DataType"]);
+                    Assert.AreEqual("time", schema.Rows[2]["DataTypeName"]);
+                    Assert.AreEqual(typeof(SqlTime), schema.Rows[2]["ProviderSpecificDataType"]);
+
+                    Assert.AreEqual(typeof(DateTime), schema.Rows[3]["DataType"]);
+                    Assert.AreEqual("datetime", schema.Rows[3]["DataTypeName"]);
+                    Assert.AreEqual(typeof(SqlDateTime), schema.Rows[3]["ProviderSpecificDataType"]);
+
+                    Assert.AreEqual(typeof(DateTime), schema.Rows[4]["DataType"]);
+                    Assert.AreEqual("datetime", schema.Rows[4]["DataTypeName"]);
+                    Assert.AreEqual(typeof(SqlDateTime), schema.Rows[4]["ProviderSpecificDataType"]);
+
+                    reader.Read();
+                    var values = new object[5];
+                    reader.GetValues(values);
+
+                    Assert.IsInstanceOfType(values[0], typeof(DateTime));
+                    Assert.IsInstanceOfType(values[1], typeof(DateTime));
+                    Assert.IsInstanceOfType(values[2], typeof(TimeSpan));
+                    Assert.IsInstanceOfType(values[3], typeof(DateTime));
+                    Assert.IsInstanceOfType(values[4], typeof(DateTime));
+
+                    Assert.AreEqual(TimeSpan.Zero, ((DateTime)values[1]).TimeOfDay);
+                    Assert.AreEqual(TimeSpan.Zero, ((DateTime)values[3]).TimeOfDay);
+                    Assert.AreEqual(new DateTime(1900, 1, 1), ((DateTime)values[4]).Date);
                 }
             }
         }

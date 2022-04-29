@@ -697,7 +697,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.TinyInt || sqlRetType.SqlDataTypeOption == SqlDataTypeOption.SmallInt)
                                 attrType = DataTypeHelpers.Int;
                             else if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.Decimal || sqlRetType.SqlDataTypeOption == SqlDataTypeOption.Numeric)
-                                attrType = DataTypeHelpers.Decimal(38, Math.Max(sqlRetType.GetScale(), 6));
+                                attrType = DataTypeHelpers.Decimal(38, Math.Max(sqlRetType.GetScale(), (short)6));
                             else if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.SmallMoney)
                                 attrType = DataTypeHelpers.Money;
                             else if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.Real)

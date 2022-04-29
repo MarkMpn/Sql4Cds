@@ -1,11 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Linq;
-using System.Runtime.InteropServices;
-using System.Text;
-using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 
 namespace MarkMpn.Sql4Cds.Engine
@@ -30,21 +26,33 @@ namespace MarkMpn.Sql4Cds.Engine
             return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.VarBinary, Parameters = { length <= 8000 ? (Literal)new IntegerLiteral { Value = length.ToString(CultureInfo.InvariantCulture) } : new MaxLiteral() } };
         }
 
+        public static SqlDataTypeReference Binary(int length)
+        {
+            return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Binary, Parameters = { length <= 8000 ? (Literal)new IntegerLiteral { Value = length.ToString(CultureInfo.InvariantCulture) } : new MaxLiteral() } };
+        }
+
         public static SqlDataTypeReference Bit { get; } = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Bit };
 
         public static SqlDataTypeReference TinyInt { get; } = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.TinyInt };
 
         public static SqlDataTypeReference Money { get; } = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Money };
 
+        public static SqlDataTypeReference SmallMoney { get; } = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.SmallMoney };
+
         public static SqlDataTypeReference Date { get; } = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Date };
 
         public static SqlDataTypeReference DateTime { get; } = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.DateTime };
 
-        public static SqlDataTypeReference DateTime2 { get; } = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.DateTime2 };
+        public static SqlDataTypeReference SmallDateTime { get; } = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.SmallDateTime };
+
+        public static SqlDataTypeReference DateTime2(short scale)
+        {
+            return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.DateTime2, Parameters = { new IntegerLiteral { Value = scale.ToString(CultureInfo.InvariantCulture) } } };
+        }
 
         public static SqlDataTypeReference DateTimeOffset { get; } = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.DateTimeOffset };
 
-        public static SqlDataTypeReference Decimal(int precision, int scale)
+        public static SqlDataTypeReference Decimal(short precision, short scale)
         {
             return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Decimal, Parameters = { new IntegerLiteral { Value = precision.ToString(CultureInfo.InvariantCulture) }, new IntegerLiteral { Value = scale.ToString(CultureInfo.InvariantCulture) } } };
         }
@@ -76,7 +84,10 @@ namespace MarkMpn.Sql4Cds.Engine
             return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NChar, Parameters = { new IntegerLiteral { Value = length.ToString(CultureInfo.InvariantCulture) } } };
         }
 
-        public static SqlDataTypeReference Time { get; } = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Time };
+        public static SqlDataTypeReference Time(short scale)
+        {
+            return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Time, Parameters = { new IntegerLiteral { Value = scale.ToString(CultureInfo.InvariantCulture) } } };
+        }
 
         public static UserDataTypeReference EntityReference { get; } = Object(typeof(SqlEntityReference));
 
@@ -185,15 +196,60 @@ namespace MarkMpn.Sql4Cds.Engine
                 case SqlDataTypeOption.NText:
                 case SqlDataTypeOption.Image:
                     return Int32.MaxValue;
+
+                case SqlDataTypeOption.Int:
+                    return 4;
+
+                case SqlDataTypeOption.UniqueIdentifier:
+                    return 16;
+
+                case SqlDataTypeOption.DateTime:
+                    return 8;
+
+                case SqlDataTypeOption.SmallInt:
+                    return 2;
+
+                case SqlDataTypeOption.Decimal:
+                    return 17;
+
+                case SqlDataTypeOption.Money:
+                    return 8;
+
+                case SqlDataTypeOption.TinyInt:
+                    return 1;
+
+                case SqlDataTypeOption.BigInt:
+                    return 8;
+
+                case SqlDataTypeOption.DateTimeOffset:
+                    return 10;
+
+                case SqlDataTypeOption.DateTime2:
+                    return 8;
+
+                case SqlDataTypeOption.SmallDateTime:
+                    return 4;
+
+                case SqlDataTypeOption.Date:
+                    return 3;
+
+                case SqlDataTypeOption.Time:
+                    return 5;
+
+                case SqlDataTypeOption.Float:
+                    return 8;
+
+                case SqlDataTypeOption.Real:
+                    return 4;
+
+                case SqlDataTypeOption.SmallMoney:
+                    return 4;
+
+                case SqlDataTypeOption.Bit:
+                    return 1;
             }
 
-            var netType = dataType.ToNetType(out _);
-            netType = netType.GetProperty("Value")?.PropertyType ?? netType;
-
-            if (netType == typeof(DateTime))
-                return 8;
-
-            return Marshal.SizeOf(netType);
+            return 0;
         }
 
         /// <summary>
@@ -202,7 +258,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="type">The data type to get the size of</param>
         /// <param name="invalidValue">The precision to return for non-precisioned types</param>
         /// <returns>The number of digits that can be stored in the type</returns>
-        public static int GetPrecision(this DataTypeReference type, int invalidValue = 0)
+        public static short GetPrecision(this DataTypeReference type, short invalidValue = 0)
         {
             if (!(type is SqlDataTypeReference dataType))
                 return invalidValue;
@@ -213,7 +269,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 case SqlDataTypeOption.Decimal:
                     if (dataType.Parameters.Count == 0 ||
                         !(dataType.Parameters[0] is IntegerLiteral) ||
-                        !Int32.TryParse(dataType.Parameters[0].Value, out var precision) ||
+                        !Int16.TryParse(dataType.Parameters[0].Value, out var precision) ||
                         precision < 1 ||
                         precision > 38)
                         return 18;
@@ -260,7 +316,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="type">The data type to get the size of</param>
         /// <param name="invalidValue">The scale to return for non-scaled types</param>
         /// <returns>The number of digits that can be stored in the type after the decimal point</returns>
-        public static int GetScale(this DataTypeReference type, int invalidValue = 0)
+        public static short GetScale(this DataTypeReference type, short invalidValue = 0)
         {
             if (!(type is SqlDataTypeReference dataType))
                 return invalidValue;
@@ -271,11 +327,11 @@ namespace MarkMpn.Sql4Cds.Engine
                 case SqlDataTypeOption.Decimal:
                     if (dataType.Parameters.Count < 2 ||
                         !(dataType.Parameters[0] is IntegerLiteral) ||
-                        !Int32.TryParse(dataType.Parameters[0].Value, out var precision) ||
+                        !Int16.TryParse(dataType.Parameters[0].Value, out var precision) ||
                         precision < 1 ||
                         precision > 38 ||
                         !(dataType.Parameters[1] is IntegerLiteral) ||
-                        !Int32.TryParse(dataType.Parameters[1].Value, out var scale) ||
+                        !Int16.TryParse(dataType.Parameters[1].Value, out var scale) ||
                         scale < 0 ||
                         scale > precision)
                         return 0;
@@ -288,14 +344,19 @@ namespace MarkMpn.Sql4Cds.Engine
                 case SqlDataTypeOption.DateTimeOffset:
                     return 7;
 
-                case SqlDataTypeOption.DateTime2:
-                    return 7;
-
                 case SqlDataTypeOption.SmallDateTime:
                     return 0;
 
+                case SqlDataTypeOption.DateTime2:
                 case SqlDataTypeOption.Time:
-                    return 7;
+                    if (dataType.Parameters.Count == 0 ||
+                        !(dataType.Parameters[0] is IntegerLiteral) ||
+                        !Int16.TryParse(dataType.Parameters[0].Value, out var timeScale) ||
+                        timeScale < 0 ||
+                        timeScale > 7)
+                        return 7;
+
+                    return timeScale;
             }
 
             return invalidValue;

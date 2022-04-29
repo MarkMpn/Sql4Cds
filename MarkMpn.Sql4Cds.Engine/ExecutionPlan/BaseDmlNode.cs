@@ -189,9 +189,47 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var colSchema = schemaTable.Rows[i];
                     var colName = (string)colSchema["ColumnName"];
                     var colType = (Type)colSchema["ProviderSpecificDataType"];
+                    var colTypeName = (string)colSchema["DataTypeName"];
+                    var colSize = (int)colSchema["ColumnSize"];
+                    var precision = (short)colSchema["NumericPrecision"];
+                    var scale = (short)colSchema["NumericScale"];
+
                     dataTable.Columns.Add(colName, colType);
-                    ((NodeSchema)schema).Schema[colName] = colType.ToSqlType();
-                    ((NodeSchema)schema).Schema[i.ToString()] = colType.ToSqlType();
+
+                    DataTypeReference colSqlType;
+
+                    switch (colTypeName)
+                    {
+                        case "binary": colSqlType = DataTypeHelpers.Binary(colSize); break;
+                        case "varbinary": colSqlType = DataTypeHelpers.VarBinary(colSize); break;
+                        case "char": colSqlType = DataTypeHelpers.Char(colSize); break;
+                        case "varchar": colSqlType = DataTypeHelpers.VarChar(colSize); break;
+                        case "nchar": colSqlType = DataTypeHelpers.NChar(colSize); break;
+                        case "nvarchar": colSqlType = DataTypeHelpers.NVarChar(colSize); break;
+                        case "datetime": colSqlType = DataTypeHelpers.DateTime; break;
+                        case "smalldatetime": colSqlType = DataTypeHelpers.SmallDateTime; break;
+                        case "date": colSqlType = DataTypeHelpers.Date; break;
+                        case "time": colSqlType = DataTypeHelpers.Time(scale); break;
+                        case "datetimeoffset": colSqlType = DataTypeHelpers.DateTimeOffset; break;
+                        case "datetime2": colSqlType = DataTypeHelpers.DateTime2(scale); break;
+                        case "decimal": colSqlType = DataTypeHelpers.Decimal(precision, scale); break;
+                        case "numeric": colSqlType = DataTypeHelpers.Decimal(precision, scale); break;
+                        case "float": colSqlType = DataTypeHelpers.Float; break;
+                        case "real": colSqlType = DataTypeHelpers.Real; break;
+                        case "bigint": colSqlType = DataTypeHelpers.BigInt; break;
+                        case "int": colSqlType = DataTypeHelpers.Int; break;
+                        case "smallint": colSqlType = DataTypeHelpers.SmallInt; break;
+                        case "tinyint": colSqlType = DataTypeHelpers.TinyInt; break;
+                        case "money": colSqlType = DataTypeHelpers.Money; break;
+                        case "smallmoney": colSqlType = DataTypeHelpers.SmallMoney; break;
+                        case "bit": colSqlType = DataTypeHelpers.Bit; break;
+                        case "uniqueidentifier": colSqlType = DataTypeHelpers.UniqueIdentifier; break;
+                        default: throw new NotSupportedException("Unhandled column type " + colTypeName);
+                    }
+
+                    ((NodeSchema)schema).Schema[colName] = colSqlType;
+                    ((NodeSchema)schema).Schema[i.ToString()] = colSqlType;
+                    dataTable.Columns[i].ExtendedProperties["SqlType"] = colSqlType;
                 }
                 
                 dataTable.Load(dataReader);
@@ -204,8 +242,27 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                         for (var i = 0; i < dataTable.Columns.Count; i++)
                         {
-                            entity[dataTable.Columns[i].ColumnName] = row[i];
-                            entity[i.ToString()] = row[i];
+                            var value = row[i];
+
+                            if (value is DateTime dt)
+                            {
+                                var sqlType = (DataTypeReference) dataTable.Columns[i].ExtendedProperties["SqlType"];
+                                if (sqlType.IsSameAs(DataTypeHelpers.Date))
+                                    value = new SqlDate(dt);
+                                else
+                                    value = new SqlDateTime2(dt);
+                            }
+                            else if (value is DateTimeOffset dto)
+                            {
+                                value = new SqlDateTimeOffset(dto);
+                            }
+                            else if (value is TimeSpan ts)
+                            {
+                                value = new SqlTime(ts);
+                            }
+
+                            entity[dataTable.Columns[i].ColumnName] = value;
+                            entity[i.ToString()] = value;
                         }
 
                         return entity;

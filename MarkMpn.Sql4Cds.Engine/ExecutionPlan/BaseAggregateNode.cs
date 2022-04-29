@@ -73,7 +73,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.TinyInt || sqlRetType.SqlDataTypeOption == SqlDataTypeOption.SmallInt)
                         aggregate.Value.ReturnType = DataTypeHelpers.Int;
                     else if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.Decimal || sqlRetType.SqlDataTypeOption == SqlDataTypeOption.Numeric)
-                        aggregate.Value.ReturnType = DataTypeHelpers.Decimal(38, Math.Max(sqlRetType.GetScale(), 6));
+                        aggregate.Value.ReturnType = DataTypeHelpers.Decimal(38, Math.Max(sqlRetType.GetScale(), (short) 6));
                     else if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.SmallMoney)
                         aggregate.Value.ReturnType = DataTypeHelpers.Money;
                     else if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.Real)
@@ -219,7 +219,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.TinyInt || sqlRetType.SqlDataTypeOption == SqlDataTypeOption.SmallInt)
                                 aggregateType = DataTypeHelpers.Int;
                             else if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.Decimal || sqlRetType.SqlDataTypeOption == SqlDataTypeOption.Numeric)
-                                aggregateType = DataTypeHelpers.Decimal(38, Math.Max(sqlRetType.GetScale(), 6));
+                                aggregateType = DataTypeHelpers.Decimal(38, Math.Max(sqlRetType.GetScale(), (short)6));
                             else if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.SmallMoney)
                                 aggregateType = DataTypeHelpers.Money;
                             else if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.Real)

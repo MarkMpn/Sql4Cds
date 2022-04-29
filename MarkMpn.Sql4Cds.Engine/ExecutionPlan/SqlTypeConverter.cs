@@ -70,6 +70,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 [typeof(SqlMoney)] = SqlMoney.Null,
                 [typeof(SqlSingle)] = SqlSingle.Null,
                 [typeof(SqlString)] = SqlString.Null,
+                [typeof(SqlDate)] = SqlDate.Null,
+                [typeof(SqlDateTime2)] = SqlDateTime2.Null,
+                [typeof(SqlDateTimeOffset)] = SqlDateTimeOffset.Null,
+                [typeof(SqlTime)] = SqlTime.Null,
                 [typeof(object)] = null
             };
 
@@ -237,8 +241,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (fromType.IsNumeric() && (toType == SqlDataTypeOption.DateTime || toType == SqlDataTypeOption.SmallDateTime))
                 return true;
 
-            // datetime can be converted implicitly to string and date/time types
-            if (fromType.IsDateTimeType() && (toType.IsStringType() || toType.IsDateTimeType() || toType == SqlDataTypeOption.Date || toType == SqlDataTypeOption.Time))
+            // datetime can be converted implicitly to other datetime and date/time types
+            if (fromType.IsDateTimeType() && (toType.IsDateTimeType() || toType == SqlDataTypeOption.Date || toType == SqlDataTypeOption.Time))
+                return true;
+
+            // date/time can be converted to datetime
+            if ((fromType == SqlDataTypeOption.Date || fromType == SqlDataTypeOption.Time) && toType.IsDateTimeType())
                 return true;
 
             // Entity reference can be converted to guid
@@ -384,12 +392,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (dataType == null)
                 return expr;
-
-            if (dataType.SqlDataTypeOption == SqlDataTypeOption.Date)
-            {
-                // Remove the time part of the DateTime value
-                expr = Expression.Condition(NullCheck(expr), Expression.Constant(SqlDateTime.Null), Expression.Convert(Expression.Property(Expression.Convert(expr, typeof(DateTime)), nameof(DateTime.Date)), typeof(SqlDateTime)));
-            }
 
             // Truncate results for [n][var]char
             // https://docs.microsoft.com/en-us/sql/t-sql/functions/cast-and-convert-transact-sql?view=sql-server-ver15#truncating-and-rounding-results

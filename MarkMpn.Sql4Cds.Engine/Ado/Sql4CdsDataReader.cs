@@ -147,7 +147,12 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (_reader == null)
                     throw new InvalidOperationException();
 
-                return _reader[ordinal];
+                var value = _reader[ordinal];
+
+                if (_connection.ReturnEntityReferenceAsGuid && value is SqlEntityReference er)
+                    value = er.Id;
+
+                return value;
             }
         }
 
@@ -158,7 +163,12 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (_reader == null)
                     throw new InvalidOperationException();
 
-                return _reader[name];
+                var value = _reader[name];
+
+                if (_connection.ReturnEntityReferenceAsGuid && value is SqlEntityReference er)
+                    value = er.Id;
+
+                return value;
             }
         }
 
@@ -384,9 +394,6 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             var schemaTable = _reader.GetSchemaTable();
 
-            if (!_connection.ReturnEntityReferenceAsGuid)
-                return schemaTable;
-            
             var clone = schemaTable.Clone();
 
             foreach (DataRow row in schemaTable.Rows)
@@ -394,11 +401,32 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var dataTypeCol = clone.Columns.IndexOf("DataType");
             var dataTypeNameCol = clone.Columns.IndexOf("DataTypeName");
+            var providerSpecificDataTypeCol = clone.Columns.IndexOf("ProviderSpecificDataType");
 
             foreach (DataRow cloneRow in clone.Rows)
             {
-                if (dataTypeCol != -1 && cloneRow[dataTypeCol] is Type t && t == typeof(SqlEntityReference))
-                    cloneRow[dataTypeCol] = typeof(Guid);
+                if (dataTypeCol != -1 && cloneRow[dataTypeCol] is Type t)
+                {
+                    if (t == typeof(SqlEntityReference) && !_connection.ReturnEntityReferenceAsGuid)
+                    {
+                        cloneRow[dataTypeCol] = typeof(Guid);
+                    }
+                    else if (t == typeof(SqlDateTime2) || t == typeof(SqlDate))
+                    {
+                        cloneRow[dataTypeCol] = typeof(DateTime);
+                        cloneRow[providerSpecificDataTypeCol] = typeof(DateTime);
+                    }
+                    else if (t == typeof(SqlDateTimeOffset))
+                    {
+                        cloneRow[dataTypeCol] = typeof(DateTimeOffset);
+                        cloneRow[providerSpecificDataTypeCol] = typeof(DateTimeOffset);
+                    }
+                    else if (t == typeof(SqlTime))
+                    {
+                        cloneRow[dataTypeCol] = typeof(TimeSpan);
+                        cloneRow[providerSpecificDataTypeCol] = typeof(TimeSpan);
+                    }
+                }
 
                 if (dataTypeNameCol != -1 && cloneRow[dataTypeNameCol] is string s && s == typeof(SqlEntityReference).FullName)
                     cloneRow[dataTypeNameCol] = "uniqueidentifier";
