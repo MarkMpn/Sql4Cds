@@ -281,6 +281,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return false;
         }
 
+        protected bool IsCompositeAddressPluginBug(OrganizationServiceFault fault)
+        {
+            if (fault.Message.StartsWith(typeof(InvalidCastException).FullName))
+                return true;
+
+            return false;
+        }
+
         protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
             if (GroupBy.Count == 0)
