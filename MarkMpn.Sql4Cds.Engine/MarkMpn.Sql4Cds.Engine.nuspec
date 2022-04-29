@@ -24,7 +24,7 @@ Improved handling string length and decimal precision options</releaseNotes>
         <dependency id="Microsoft.ApplicationInsights" version="2.20.0" />
       </group>
       <group targetFramework=".NETCoreApp3.1">
-        <dependency id="Microsoft.PowerPlatform.Dataverse.Client" version="0.5.10" />
+        <dependency id="Microsoft.PowerPlatform.Dataverse.Client" version="0.6.6" />
         <dependency id="Microsoft.SqlServer.TransactSql.ScriptDom" version="150.4897.1" />
         <dependency id="System.Data.SqlClient" version="4.8.3" />
         <dependency id="Microsoft.ApplicationInsights" version="2.20.0" />
