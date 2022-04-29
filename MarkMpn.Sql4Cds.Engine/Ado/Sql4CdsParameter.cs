@@ -170,7 +170,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         break;
 
                     case DbType.DateTime2:
-                        _dataType = DataTypeHelpers.DateTime2;
+                        _dataType = DataTypeHelpers.DateTime2(7);
                         break;
 
                     case DbType.DateTimeOffset:
@@ -223,7 +223,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         break;
 
                     case DbType.Time:
-                        _dataType = DataTypeHelpers.Time;
+                        _dataType = DataTypeHelpers.Time(7);
                         break;
 
                     case DbType.UInt16:

@@ -12,7 +12,10 @@
     <description>Convert SQL queries to FetchXml and execute them against Dataverse / D365</description>
     <summary>Convert SQL queries to FetchXml and execute them against Dataverse / D365</summary>
     <releaseNotes>Use query hints to control bypassing plugins, parallelism, count(*) optimization &amp; more
-Improved handling string length and decimal precision options</releaseNotes>
+Improved handling string length and decimal precision options
+Improved data type conversion handling for datetime/datetime2/date/time/datetimeoffset values
+Fixed use of REVERT
+Handle Dataverse bug with aggregates on address fields</releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>
     <tags>SQL CDS</tags>
@@ -24,7 +27,7 @@ Improved handling string length and decimal precision options</releaseNotes>
         <dependency id="Microsoft.ApplicationInsights" version="2.20.0" />
       </group>
       <group targetFramework=".NETCoreApp3.1">
-        <dependency id="Microsoft.PowerPlatform.Dataverse.Client" version="0.5.10" />
+        <dependency id="Microsoft.PowerPlatform.Dataverse.Client" version="0.6.6" />
         <dependency id="Microsoft.SqlServer.TransactSql.ScriptDom" version="150.4897.1" />
         <dependency id="System.Data.SqlClient" version="4.8.3" />
         <dependency id="Microsoft.ApplicationInsights" version="2.20.0" />

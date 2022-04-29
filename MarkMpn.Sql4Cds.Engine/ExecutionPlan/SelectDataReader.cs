@@ -45,6 +45,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             AddTypeConversion<SqlInt16, short>(v => v.Value);
             AddTypeConversion<SqlByte, byte>(v => v.Value);
             AddTypeConversion<SqlGuid, Guid>(v => v.Value);
+            AddTypeConversion<SqlDate, DateTime>(v => v.Value);
+            AddTypeConversion<SqlDateTime2, DateTime>(v => v.Value);
+            AddTypeConversion<SqlDateTimeOffset, DateTimeOffset>(v => v.Value);
+            AddTypeConversion<SqlTime, TimeSpan>(v => v.Value);
         }
 
         private static void AddTypeConversion<TSql, TClr>(Func<TSql, TClr> func)
@@ -238,8 +242,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             schemaTable.Columns.Add("ColumnName", typeof(string));
             schemaTable.Columns.Add("ColumnOrdinal", typeof(int));
             schemaTable.Columns.Add("ColumnSize", typeof(int));
-            schemaTable.Columns.Add("NumericPrecision", typeof(int));
-            schemaTable.Columns.Add("NumericScale", typeof(int));
+            schemaTable.Columns.Add("NumericPrecision", typeof(short));
+            schemaTable.Columns.Add("NumericScale", typeof(short));
             schemaTable.Columns.Add("IsUnique", typeof(bool));
             schemaTable.Columns.Add("IsKey", typeof(bool));
             schemaTable.Columns.Add("BaseServerName", typeof(string));

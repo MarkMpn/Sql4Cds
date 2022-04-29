@@ -946,7 +946,11 @@ namespace MarkMpn.Sql4Cds
                                 columnNames.Add(reader.GetName(i));
 
                             var dataTable = new DataTable();
+                            var schemaTable = reader.GetSchemaTable();
                             dataTable.Load(reader);
+
+                            for (var i = 0; i < schemaTable.Rows.Count; i++)
+                                dataTable.Columns[i].ExtendedProperties["Schema"] = schemaTable.Rows[i];
 
                             for (var i = 0; i < columnNames.Count; i++)
                                 dataTable.Columns[i].Caption = columnNames[i];
@@ -1020,9 +1024,42 @@ namespace MarkMpn.Sql4Cds
                     {
                         e.Value = b ? "1" : "0";
                     }
-                    else if (!Settings.Instance.LocalFormatDates && e.Value is DateTime dt)
+                    else if (e.Value is DateTime dt)
                     {
-                        e.Value = dt.ToString("yyyy-MM-dd HH:mm:ss.fff");
+                        var schema = (DataRow)results.Columns[e.ColumnIndex].ExtendedProperties["Schema"];
+                        var type = (string)schema["DataTypeName"];
+
+                        if (type == "date")
+                        {
+                            if (Settings.Instance.LocalFormatDates)
+                                e.Value = dt.ToShortDateString();
+                            else
+                                e.Value = dt.ToString("yyyy-MM-dd");
+                        }
+                        else if (type == "smalldatetime")
+                        {
+                            if (Settings.Instance.LocalFormatDates)
+                                e.Value = dt.ToShortDateString() + " " + dt.ToString("HH:mm");
+                            else
+                                e.Value = dt.ToString("yyyy-MM-dd HH:mm");
+                        }
+                        else if (!Settings.Instance.LocalFormatDates)
+                        {
+                            var scale = (int)schema["NumericScale"];
+                            e.Value = dt.ToString("yyyy-MM-dd HH:mm:ss" + (scale == 0 ? "" : ("." + new string('f', (int)schema["NumericScale"]))));
+                        }
+                    }
+                    else if (e.Value is TimeSpan ts && !Settings.Instance.LocalFormatDates)
+                    {
+                        var schema = (DataRow)results.Columns[e.ColumnIndex].ExtendedProperties["Schema"];
+                        var scale = (int)schema["NumericScale"];
+                        e.Value = ts.ToString("hh\\:mm\\:ss" + (scale == 0 ? "" : ("\\." + new string('f', scale))));
+                    }
+                    else if (e.Value is decimal dec)
+                    {
+                        var schema = (DataRow)results.Columns[e.ColumnIndex].ExtendedProperties["Schema"];
+                        var scale = (int)schema["NumericScale"];
+                        e.Value = dec.ToString("0" + (scale == 0 ? "" : ("." + new string('0', scale))));
                     }
                     else if (e.Value is SqlEntityReference)
                     {

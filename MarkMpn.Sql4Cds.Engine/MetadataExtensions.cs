@@ -100,12 +100,12 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (attrMetadata is DecimalAttributeMetadata || typeCode == AttributeTypeCode.Decimal)
             {
-                var scale = 2;
+                short scale = 2;
 
                 if (attrMetadata is DecimalAttributeMetadata dec && dec.Precision != null)
-                    scale = dec.Precision.Value; // Precision property is actually scale (number of decimal places)
+                    scale = (short)dec.Precision.Value; // Precision property is actually scale (number of decimal places)
 
-                var precision = 12 + scale; // Max value is 100 Billion, which is 12 digits
+                var precision = (short)(12 + scale); // Max value is 100 Billion, which is 12 digits
                 
                 return DataTypeHelpers.Decimal(precision, scale);
             }
