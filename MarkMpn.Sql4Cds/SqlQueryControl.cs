@@ -1181,7 +1181,7 @@ namespace MarkMpn.Sql4Cds
                 return;
 
             var url = ((XtbDataSource) dataSource).ConnectionDetail.GetEntityReferenceUrl(entityReference);
-            Process.Start(url);
+            ((XtbDataSource)dataSource).ConnectionDetail.OpenUrlWithBrowserProfile(new Uri(url));
         }
 
         private void backgroundWorker_ProgressChanged(object sender, ProgressChangedEventArgs e)
