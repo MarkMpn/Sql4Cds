@@ -407,7 +407,7 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 if (dataTypeCol != -1 && cloneRow[dataTypeCol] is Type t)
                 {
-                    if (t == typeof(SqlEntityReference) && !_connection.ReturnEntityReferenceAsGuid)
+                    if (t == typeof(SqlEntityReference) && _connection.ReturnEntityReferenceAsGuid)
                     {
                         cloneRow[dataTypeCol] = typeof(Guid);
                     }

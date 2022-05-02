@@ -364,7 +364,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <returns>An expression to generate values of the required type</returns>
         public static Expression Convert(Expression expr, DataTypeReference from, DataTypeReference to, Expression style = null, DataTypeReference styleType = null, ConvertCall convert = null)
         {
-            var targetType = to.ToNetType(out var dataType);
+            from.ToNetType(out var fromSqlType);
+            var targetType = to.ToNetType(out var toSqlType);
 
             var sourceType = expr.Type;
 
@@ -372,40 +373,45 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 throw new NotSupportedQueryFragmentException($"No type conversion available from {from.ToSql()} to {to.ToSql()}", convert);
 
             // Special cases for styles
-            if (style != null)
+            if (style == null)
             {
-                var intType = DataTypeHelpers.Int;
+                if (fromSqlType != null && (fromSqlType.SqlDataTypeOption == SqlDataTypeOption.Date || fromSqlType.SqlDataTypeOption == SqlDataTypeOption.Time || fromSqlType.SqlDataTypeOption == SqlDataTypeOption.DateTime2 || fromSqlType.SqlDataTypeOption == SqlDataTypeOption.DateTimeOffset))
+                    style = Expression.Constant((SqlInt32)21);
+                else
+                    style = Expression.Constant((SqlInt32)0);
 
-                if (!CanChangeTypeImplicit(styleType, intType))
-                    throw new NotSupportedQueryFragmentException($"No type conversion available from {styleType.ToSql()} to {intType.ToSql()}", convert.Style);
-
-                if (expr.Type == typeof(SqlDateTime) && targetType == typeof(SqlString))
-                    expr = Expr.Call(() => Convert(Expr.Arg<SqlDateTime>(), Expr.Arg<SqlInt32>()), expr, style);
-                else if ((expr.Type == typeof(SqlDouble) || expr.Type == typeof(SqlSingle)) && targetType == typeof(SqlString))
-                    expr = Expr.Call(() => Convert(Expr.Arg<SqlDouble>(), Expr.Arg<SqlInt32>()), expr, style);
-                else if (expr.Type == typeof(SqlMoney) && targetType == typeof(SqlString))
-                    expr = Expr.Call(() => Convert(Expr.Arg<SqlMoney>(), Expr.Arg<SqlInt32>()), expr, style);
+                styleType = DataTypeHelpers.Int;
             }
+
+            if (!CanChangeTypeImplicit(styleType, DataTypeHelpers.Int))
+                throw new NotSupportedQueryFragmentException($"No type conversion available from {styleType.ToSql()} to {DataTypeHelpers.Int.ToSql()}", convert.Style);
+
+            if (fromSqlType != null && (fromSqlType.SqlDataTypeOption.IsDateTimeType() || fromSqlType.SqlDataTypeOption == SqlDataTypeOption.Date || fromSqlType.SqlDataTypeOption == SqlDataTypeOption.Time) && targetType == typeof(SqlString))
+                expr = Expr.Call(() => Convert(Expr.Arg<SqlDateTime>(), Expr.Arg<bool>(), Expr.Arg<bool>(), Expr.Arg<int>(), Expr.Arg<DataTypeReference>(), Expr.Arg<DataTypeReference>(), Expr.Arg<SqlInt32>()), Convert(expr, typeof(SqlDateTime)), Expression.Constant(fromSqlType.SqlDataTypeOption != SqlDataTypeOption.Time), Expression.Constant(fromSqlType.SqlDataTypeOption != SqlDataTypeOption.Date), Expression.Constant(from.GetScale()), Expression.Constant(from), Expression.Constant(to), style);
+            else if ((expr.Type == typeof(SqlDouble) || expr.Type == typeof(SqlSingle)) && targetType == typeof(SqlString))
+                expr = Expr.Call(() => Convert(Expr.Arg<SqlDouble>(), Expr.Arg<SqlInt32>()), expr, style);
+            else if (expr.Type == typeof(SqlMoney) && targetType == typeof(SqlString))
+                expr = Expr.Call(() => Convert(Expr.Arg<SqlMoney>(), Expr.Arg<SqlInt32>()), expr, style);
 
             if (expr.Type != targetType)
                 expr = Convert(expr, targetType);
 
-            if (dataType == null)
+            if (toSqlType == null)
                 return expr;
 
             // Truncate results for [n][var]char
             // https://docs.microsoft.com/en-us/sql/t-sql/functions/cast-and-convert-transact-sql?view=sql-server-ver15#truncating-and-rounding-results
-            if (dataType.SqlDataTypeOption == SqlDataTypeOption.Char ||
-                dataType.SqlDataTypeOption == SqlDataTypeOption.NChar ||
-                dataType.SqlDataTypeOption == SqlDataTypeOption.VarChar ||
-                dataType.SqlDataTypeOption == SqlDataTypeOption.NVarChar)
+            if (toSqlType.SqlDataTypeOption == SqlDataTypeOption.Char ||
+                toSqlType.SqlDataTypeOption == SqlDataTypeOption.NChar ||
+                toSqlType.SqlDataTypeOption == SqlDataTypeOption.VarChar ||
+                toSqlType.SqlDataTypeOption == SqlDataTypeOption.NVarChar)
             {
-                if (dataType.Parameters.Count == 1)
+                if (toSqlType.Parameters.Count == 1)
                 {
-                    if (dataType.Parameters[0].LiteralType == LiteralType.Integer && Int32.TryParse(dataType.Parameters[0].Value, out var maxLength))
+                    if (toSqlType.Parameters[0].LiteralType == LiteralType.Integer && Int32.TryParse(toSqlType.Parameters[0].Value, out var maxLength))
                     {
                         if (maxLength < 1)
-                            throw new NotSupportedQueryFragmentException("Length or precision specification 0 is invalid.", dataType);
+                            throw new NotSupportedQueryFragmentException("Length or precision specification 0 is invalid.", toSqlType);
 
                         // Truncate the value to the specified length, but some special cases
                         string valueOnTruncate = null;
@@ -413,15 +419,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                         if (sourceType == typeof(SqlInt32) || sourceType == typeof(SqlInt16) || sourceType == typeof(SqlByte))
                         {
-                            if (dataType.SqlDataTypeOption == SqlDataTypeOption.Char || dataType.SqlDataTypeOption == SqlDataTypeOption.VarChar)
+                            if (toSqlType.SqlDataTypeOption == SqlDataTypeOption.Char || toSqlType.SqlDataTypeOption == SqlDataTypeOption.VarChar)
                                 valueOnTruncate = "*";
-                            else if (dataType.SqlDataTypeOption == SqlDataTypeOption.NChar || dataType.SqlDataTypeOption == SqlDataTypeOption.NVarChar)
-                                exceptionOnTruncate = new QueryExecutionException("Arithmetic overflow error converting expression to data type " + dataType.SqlDataTypeOption);
+                            else if (toSqlType.SqlDataTypeOption == SqlDataTypeOption.NChar || toSqlType.SqlDataTypeOption == SqlDataTypeOption.NVarChar)
+                                exceptionOnTruncate = new QueryExecutionException("Arithmetic overflow error converting expression to data type " + toSqlType.SqlDataTypeOption);
                         }
                         else if ((sourceType == typeof(SqlMoney) || sourceType == typeof(SqlDecimal) || sourceType == typeof(SqlSingle)) &&
-                            (dataType.SqlDataTypeOption == SqlDataTypeOption.Char || dataType.SqlDataTypeOption == SqlDataTypeOption.VarChar || dataType.SqlDataTypeOption == SqlDataTypeOption.NChar || dataType.SqlDataTypeOption == SqlDataTypeOption.NVarChar))
+                            (toSqlType.SqlDataTypeOption == SqlDataTypeOption.Char || toSqlType.SqlDataTypeOption == SqlDataTypeOption.VarChar || toSqlType.SqlDataTypeOption == SqlDataTypeOption.NChar || toSqlType.SqlDataTypeOption == SqlDataTypeOption.NVarChar))
                         {
-                            exceptionOnTruncate = new QueryExecutionException("Arithmetic overflow error converting expression to data type " + dataType.SqlDataTypeOption);
+                            exceptionOnTruncate = new QueryExecutionException("Arithmetic overflow error converting expression to data type " + toSqlType.SqlDataTypeOption);
                         }
 
                         expr = Expr.Call(() => Truncate(Expr.Arg<SqlString>(), Expr.Arg<int>(), Expr.Arg<string>(), Expr.Arg<Exception>()),
@@ -430,38 +436,38 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             Expression.Constant(valueOnTruncate, typeof(string)),
                             Expression.Constant(exceptionOnTruncate, typeof(Exception)));
                     }
-                    else if (dataType.Parameters[0].LiteralType != LiteralType.Max)
+                    else if (toSqlType.Parameters[0].LiteralType != LiteralType.Max)
                     {
-                        throw new NotSupportedQueryFragmentException("Invalid attributes specified for type " + dataType.SqlDataTypeOption, dataType);
+                        throw new NotSupportedQueryFragmentException("Invalid attributes specified for type " + toSqlType.SqlDataTypeOption, toSqlType);
                     }
                 }
-                else if (dataType.Parameters.Count > 1)
+                else if (toSqlType.Parameters.Count > 1)
                 {
-                    throw new NotSupportedQueryFragmentException("Invalid attributes specified for type " + dataType.SqlDataTypeOption, dataType);
+                    throw new NotSupportedQueryFragmentException("Invalid attributes specified for type " + toSqlType.SqlDataTypeOption, toSqlType);
                 }
             }
 
             // Apply changes to precision & scale
             if (expr.Type == typeof(SqlDecimal))
             {
-                if (dataType.Parameters.Count > 0)
+                if (toSqlType.Parameters.Count > 0)
                 {
-                    if (!Int32.TryParse(dataType.Parameters[0].Value, out var precision))
-                        throw new NotSupportedQueryFragmentException("Invalid attributes specified for type " + dataType.SqlDataTypeOption, dataType);
+                    if (!Int32.TryParse(toSqlType.Parameters[0].Value, out var precision))
+                        throw new NotSupportedQueryFragmentException("Invalid attributes specified for type " + toSqlType.SqlDataTypeOption, toSqlType);
 
                     if (precision < 1)
-                        throw new NotSupportedQueryFragmentException("Length or precision specification 0 is invalid.", dataType);
+                        throw new NotSupportedQueryFragmentException("Length or precision specification 0 is invalid.", toSqlType);
 
                     var scale = 0;
 
-                    if (dataType.Parameters.Count > 1)
+                    if (toSqlType.Parameters.Count > 1)
                     {
-                        if (!Int32.TryParse(dataType.Parameters[1].Value, out scale))
-                            throw new NotSupportedQueryFragmentException("Invalid attributes specified for type " + dataType.SqlDataTypeOption, dataType);
+                        if (!Int32.TryParse(toSqlType.Parameters[1].Value, out scale))
+                            throw new NotSupportedQueryFragmentException("Invalid attributes specified for type " + toSqlType.SqlDataTypeOption, toSqlType);
                     }
 
-                    if (dataType.Parameters.Count > 2)
-                        throw new NotSupportedQueryFragmentException("Invalid attributes specified for type " + dataType.SqlDataTypeOption, dataType);
+                    if (toSqlType.Parameters.Count > 2)
+                        throw new NotSupportedQueryFragmentException("Invalid attributes specified for type " + toSqlType.SqlDataTypeOption, toSqlType);
 
                     expr = Expr.Call(() => SqlDecimal.ConvertToPrecScale(Expr.Arg<SqlDecimal>(), Expr.Arg<int>(), Expr.Arg<int>()),
                         expr,
@@ -542,164 +548,197 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// Specialized type conversion from DateTime to String using a style
         /// </summary>
         /// <param name="value">The value to convert</param>
+        /// <param name="date">Indicates if the date part should be included</param>
+        /// <param name="time">Indicates if the time part should be included</param>
+        /// <param name="timeScale">The scale of the fractional seconds part</param>
         /// <param name="style">The style to apply</param>
         /// <returns>The converted string</returns>
-        public static SqlString Convert(SqlDateTime value, SqlInt32 style)
+        private static SqlString Convert(SqlDateTime value, bool date, bool time, int timeScale, DataTypeReference fromType, DataTypeReference toType, SqlInt32 style)
         {
             if (value.IsNull || style.IsNull)
                 return SqlString.Null;
 
-            string formatString;
+            var dateFormatString = "";
+            var timeFormatString = "";
+            var dateTimeSeparator = " ";
             var cultureInfo = CultureInfo.InvariantCulture;
 
             switch (style.Value)
             {
                 case 0:
                 case 100:
-                    formatString = "MMM dd yyyy hh:mmtt";
+                    dateFormatString = "MMM dd yyyy";
+                    timeFormatString = "hh:mmtt";
                     break;
 
                 case 1:
-                    formatString = "MM/dd/yy";
+                    dateFormatString = "MM/dd/yy";
                     break;
 
                 case 101:
-                    formatString = "MM/dd/yyyy";
+                    dateFormatString = "MM/dd/yyyy";
                     break;
 
                 case 2:
-                    formatString = "yy.MM.dd";
+                    dateFormatString = "yy.MM.dd";
                     break;
 
                 case 102:
-                    formatString = "yyyy.MM.dd";
+                    dateFormatString = "yyyy.MM.dd";
                     break;
 
                 case 3:
-                    formatString = "dd/MM/yy";
+                    dateFormatString = "dd/MM/yy";
                     break;
 
                 case 103:
-                    formatString = "dd/MM/yyyy";
+                    dateFormatString = "dd/MM/yyyy";
                     break;
 
                 case 4:
-                    formatString = "dd.MM.yy";
+                    dateFormatString = "dd.MM.yy";
                     break;
 
                 case 104:
-                    formatString = "dd.MM.yyyy";
+                    dateFormatString = "dd.MM.yyyy";
                     break;
 
                 case 5:
-                    formatString = "dd-MM-yy";
+                    dateFormatString = "dd-MM-yy";
                     break;
 
                 case 105:
-                    formatString = "dd-MM-yyyy";
+                    dateFormatString = "dd-MM-yyyy";
                     break;
 
                 case 6:
-                    formatString = "dd MMM yy";
+                    dateFormatString = "dd MMM yy";
                     break;
 
                 case 106:
-                    formatString = "dd MMM yyyy";
+                    dateFormatString = "dd MMM yyyy";
                     break;
 
                 case 7:
-                    formatString = "MMM dd, yy";
+                    dateFormatString = "MMM dd, yy";
                     break;
 
                 case 107:
-                    formatString = "MMM dd, yyyy";
+                    dateFormatString = "MMM dd, yyyy";
                     break;
 
                 case 8:
                 case 24:
                 case 108:
-                    formatString = "HH:mm:ss";
+                    timeFormatString = "HH:mm:ss";
                     break;
 
                 case 9:
                 case 109:
-                    formatString = "MMM dd yyyy hh:mm:ss:ffftt";
+                    dateFormatString = "MMM dd yyyy";
+                    timeFormatString = "hh:mm:ss:" + new string('f', timeScale) + "tt";
                     break;
 
                 case 10:
-                    formatString = "MM-dd-yy";
+                    dateFormatString = "MM-dd-yy";
                     break;
 
                 case 110:
-                    formatString = "MM-dd-yyyy";
+                    dateFormatString = "MM-dd-yyyy";
                     break;
 
                 case 11:
-                    formatString = "yy/MM/dd";
+                    dateFormatString = "yy/MM/dd";
                     break;
 
                 case 111:
-                    formatString = "yyyy/MM/dd";
+                    dateFormatString = "yyyy/MM/dd";
                     break;
 
                 case 12:
-                    formatString = "yyMMdd";
+                    dateFormatString = "yyMMdd";
                     break;
 
                 case 112:
-                    formatString = "yyyyMMdd";
+                    dateFormatString = "yyyyMMdd";
                     break;
 
                 case 13:
                 case 113:
-                    formatString = "dd MMM yyyy HH:mm:ss:fff";
+                    dateFormatString = "dd MMM yyyy";
+                    timeFormatString = "HH:mm:ss:" + new string('f', timeScale);
                     break;
 
                 case 14:
                 case 114:
-                    formatString = "HH:mm:ss:fff";
+                    timeFormatString = "HH:mm:ss:" + new string('f', timeScale);
                     break;
 
                 case 20:
                 case 120:
-                    formatString = "yyyy-MM-dd HH:mm:ss";
+                    dateFormatString = "yyyy-MM-dd";
+                    timeFormatString = "HH:mm:ss";
                     break;
 
                 case 21:
                 case 25:
                 case 121:
-                    formatString = "yyyy-MM-dd HH:mm:ss.fff";
+                    dateFormatString = "yyyy-MM-dd";
+                    timeFormatString = "HH:mm:ss." + new string('f', timeScale);
                     break;
 
                 case 22:
-                    formatString = "MM/dd/yy hh:mm:ss tt";
+                    dateFormatString = "MM/dd/yy";
+                    timeFormatString = "hh:mm:ss tt";
                     break;
 
                 case 23:
-                    formatString = "yyyy-MM-dd";
+                    dateFormatString = "yyyy-MM-dd";
                     break;
 
                 case 126:
-                    formatString = "yyyy-MM-ddTHH:mm:ss.FFF";
+                    dateFormatString = "yyyy-MM-dd";
+                    dateTimeSeparator = "T";
+                    timeFormatString = "HH:mm:ss." + new string('F', timeScale);
                     break;
 
                 case 127:
-                    formatString = "yyyy-MM-ddTHH:mm:ss.FFF\\Z";
+                    dateFormatString = "yyyy-MM-dd";
+                    dateTimeSeparator = "T";
+                    timeFormatString = "HH:mm:ss." + new string('F', timeScale) + "\\Z";
                     break;
 
                 case 130:
-                    formatString = "dd MMMM yyyy hh:mm:ss:ffftt";
+                    dateFormatString = "dd MMMM yyyy";
+                    timeFormatString = "hh:mm:ss:" + new string('f', timeScale) + "tt";
                     cultureInfo = _hijriCulture;
                     break;
 
                 case 131:
-                    formatString = "dd/MM/yyyy HH:mm:ss:ffftt";
+                    dateFormatString = "dd/MM/yyyy";
+                    timeFormatString = "HH:mm:ss:" + new string('f', timeScale) + "tt";
                     cultureInfo = _hijriCulture;
                     break;
 
                 default:
                     throw new QueryExecutionException($"{style.Value} is not a valid style number when converting from datetime to a character string");
             }
+
+            if (!date && String.IsNullOrEmpty(timeFormatString) ||
+                !time && String.IsNullOrEmpty(dateFormatString))
+                    throw new QueryExecutionException($"Error converting data type {fromType.ToSql()} to {toType.ToSql()}");
+
+            var formatString = "";
+            if (date && !String.IsNullOrEmpty(dateFormatString))
+            {
+                formatString += dateFormatString;
+
+                if (time && !String.IsNullOrEmpty(timeFormatString))
+                    formatString += dateTimeSeparator;
+            }
+
+            if (time && !String.IsNullOrEmpty(timeFormatString))
+                formatString += timeFormatString;
 
             var formatted = value.Value.ToString(formatString, cultureInfo);
             return UseDefaultCollation(formatted);

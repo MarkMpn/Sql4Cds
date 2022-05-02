@@ -321,76 +321,79 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     // Unbox value as source SQL type
                     expr = Expression.Convert(expr, sourceSqlType.ToNetType(out _));
 
-                    // Convert to destination SQL type
-                    expr = SqlTypeConverter.Convert(expr, sourceSqlType, destSqlType);
+                    Expression convertedExpr;
 
-                    // Convert to final .NET SDK type
-                    var convertedExpr = SqlTypeConverter.Convert(expr, destType);
-
-                    if (attr is LookupAttributeMetadata lookupAttr && lookupAttr.AttributeType != AttributeTypeCode.PartyList)
+                    if (attr is LookupAttributeMetadata lookupAttr && lookupAttr.AttributeType != AttributeTypeCode.PartyList && metadata.IsIntersect != true)
                     {
-                        // Special case: intersect attributes can be simple guids
-                        if (metadata.IsIntersect != true)
+                        if (sourceSqlType.IsSameAs(DataTypeHelpers.EntityReference))
                         {
-                            if (sourceSqlType.Name?.BaseIdentifier.Value == typeof(SqlEntityReference).FullName)
+                            expr = originalExpr;
+                            convertedExpr = SqlTypeConverter.Convert(expr, sourceSqlType, sourceSqlType);
+                            convertedExpr = SqlTypeConverter.Convert(convertedExpr, typeof(EntityReference));
+                        }
+                        else
+                        {
+                            Expression targetExpr;
+
+                            if (lookupAttr.Targets.Length == 1)
                             {
-                                expr = originalExpr;
-                                convertedExpr = SqlTypeConverter.Convert(expr, sourceSqlType, sourceSqlType);
-                                convertedExpr = SqlTypeConverter.Convert(convertedExpr, typeof(EntityReference));
+                                targetExpr = Expression.Constant(lookupAttr.Targets[0]);
                             }
                             else
                             {
-                                Expression targetExpr;
-
-                                if (lookupAttr.Targets.Length == 1)
-                                {
-                                    targetExpr = Expression.Constant(lookupAttr.Targets[0]);
-                                }
-                                else
-                                {
-                                    var sourceTargetColumnName = mappings[destAttributeName + "type"];
-                                    var sourceTargetType = schema.Schema[sourceTargetColumnName];
-                                    var stringType = DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength);
-                                    targetExpr = Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(sourceTargetColumnName));
-                                    targetExpr = SqlTypeConverter.Convert(targetExpr, sourceTargetType, stringType);
-                                    targetExpr = SqlTypeConverter.Convert(targetExpr, typeof(string));
-                                }
-
-                                convertedExpr = Expression.New(
-                                    typeof(EntityReference).GetConstructor(new[] { typeof(string), typeof(Guid) }),
-                                    targetExpr,
-                                    Expression.Convert(convertedExpr, typeof(Guid))
-                                );
+                                var sourceTargetColumnName = mappings[destAttributeName + "type"];
+                                var sourceTargetType = schema.Schema[sourceTargetColumnName];
+                                var stringType = DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength);
+                                targetExpr = Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(sourceTargetColumnName));
+                                targetExpr = SqlTypeConverter.Convert(targetExpr, sourceTargetType, stringType);
+                                targetExpr = SqlTypeConverter.Convert(targetExpr, typeof(string));
                             }
 
-                            destType = typeof(EntityReference);
+                            convertedExpr = SqlTypeConverter.Convert(expr, sourceSqlType, DataTypeHelpers.UniqueIdentifier);
+                            convertedExpr = SqlTypeConverter.Convert(convertedExpr, typeof(Guid));
+                            convertedExpr = Expression.New(
+                                typeof(EntityReference).GetConstructor(new[] { typeof(string), typeof(Guid) }),
+                                targetExpr,
+                                convertedExpr
+                            );
                         }
+
+                        destType = typeof(EntityReference);
                     }
-                    else if (attr is EnumAttributeMetadata && !(attr is MultiSelectPicklistAttributeMetadata))
+                    else
                     {
-                        convertedExpr = Expression.New(
-                            typeof(OptionSetValue).GetConstructor(new[] { typeof(int) }),
-                            Expression.Convert(convertedExpr, typeof(int))
-                        );
-                        destType = typeof(OptionSetValue);
-                    }
-                    else if (attr is MoneyAttributeMetadata)
-                    {
-                        convertedExpr = Expression.New(
-                            typeof(Money).GetConstructor(new[] { typeof(decimal) }),
-                            Expression.Convert(expr, typeof(decimal))
-                        );
-                        destType = typeof(Money);
-                    }
-                    else if (attr is DateTimeAttributeMetadata)
-                    {
-                        convertedExpr = Expression.Convert(
-                            Expr.Call(() => DateTime.SpecifyKind(Expr.Arg<DateTime>(), Expr.Arg<DateTimeKind>()),
-                                expr,
-                                Expression.Constant(dateTimeKind)
-                            ),
-                            typeof(DateTime?)
-                        );
+                        // Convert to destination SQL type
+                        expr = SqlTypeConverter.Convert(expr, sourceSqlType, destSqlType);
+
+                        // Convert to final .NET SDK type
+                        convertedExpr = SqlTypeConverter.Convert(expr, destType);
+                        
+                        if (attr is EnumAttributeMetadata && !(attr is MultiSelectPicklistAttributeMetadata))
+                        {
+                            convertedExpr = Expression.New(
+                                typeof(OptionSetValue).GetConstructor(new[] { typeof(int) }),
+                                Expression.Convert(convertedExpr, typeof(int))
+                            );
+                            destType = typeof(OptionSetValue);
+                        }
+                        else if (attr is MoneyAttributeMetadata)
+                        {
+                            convertedExpr = Expression.New(
+                                typeof(Money).GetConstructor(new[] { typeof(decimal) }),
+                                Expression.Convert(expr, typeof(decimal))
+                            );
+                            destType = typeof(Money);
+                        }
+                        else if (attr is DateTimeAttributeMetadata)
+                        {
+                            convertedExpr = Expression.Convert(
+                                Expr.Call(() => DateTime.SpecifyKind(Expr.Arg<DateTime>(), Expr.Arg<DateTimeKind>()),
+                                    expr,
+                                    Expression.Constant(dateTimeKind)
+                                ),
+                                typeof(DateTime?)
+                            );
+                        }
                     }
 
                     // Check for null on the value BEFORE converting from the SQL to BCL type to avoid e.g. SqlDateTime.Null being converted to 1900-01-01
