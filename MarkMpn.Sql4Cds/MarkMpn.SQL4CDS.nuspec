@@ -26,12 +26,13 @@ Using the preview TDS Endpoint, SELECT queries can also be run that aren't conve
 Improved handling string length and decimal precision options
 Improved data type conversion handling for datetime/datetime2/date/time/datetimeoffset values
 Fixed use of REVERT
-Handle Dataverse bug with aggregates on address fields</releaseNotes>
+Handle Dataverse bug with aggregates on address fields
+Open records in appropriate browser profile</releaseNotes>
     <copyright>Copyright © 2019 Mark Carrington</copyright>
     <language>en-GB</language>
     <tags>XrmToolBox SQL CDS</tags>
     <dependencies>
-      <dependency id="XrmToolBox" version="1.2021.6.51" />
+      <dependency id="XrmToolBox" version="1.2022.4.55" />
     </dependencies>
   </metadata>
   <files>

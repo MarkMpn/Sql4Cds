@@ -1045,20 +1045,20 @@ namespace MarkMpn.Sql4Cds
                         }
                         else if (!Settings.Instance.LocalFormatDates)
                         {
-                            var scale = (int)schema["NumericScale"];
-                            e.Value = dt.ToString("yyyy-MM-dd HH:mm:ss" + (scale == 0 ? "" : ("." + new string('f', (int)schema["NumericScale"]))));
+                            var scale = (short)schema["NumericScale"];
+                            e.Value = dt.ToString("yyyy-MM-dd HH:mm:ss" + (scale == 0 ? "" : ("." + new string('f', scale))));
                         }
                     }
                     else if (e.Value is TimeSpan ts && !Settings.Instance.LocalFormatDates)
                     {
                         var schema = (DataRow)results.Columns[e.ColumnIndex].ExtendedProperties["Schema"];
-                        var scale = (int)schema["NumericScale"];
+                        var scale = (short)schema["NumericScale"];
                         e.Value = ts.ToString("hh\\:mm\\:ss" + (scale == 0 ? "" : ("\\." + new string('f', scale))));
                     }
                     else if (e.Value is decimal dec)
                     {
                         var schema = (DataRow)results.Columns[e.ColumnIndex].ExtendedProperties["Schema"];
-                        var scale = (int)schema["NumericScale"];
+                        var scale = (short)schema["NumericScale"];
                         e.Value = dec.ToString("0" + (scale == 0 ? "" : ("." + new string('0', scale))));
                     }
                     else if (e.Value is SqlEntityReference)
@@ -1181,7 +1181,7 @@ namespace MarkMpn.Sql4Cds
                 return;
 
             var url = ((XtbDataSource) dataSource).ConnectionDetail.GetEntityReferenceUrl(entityReference);
-            Process.Start(url);
+            ((XtbDataSource)dataSource).ConnectionDetail.OpenUrlWithBrowserProfile(new Uri(url));
         }
 
         private void backgroundWorker_ProgressChanged(object sender, ProgressChangedEventArgs e)
