@@ -82,7 +82,7 @@ namespace MarkMpn.Sql4Cds.Engine
             throw new ApplicationException("Unknown attribute type " + attrMetadata.GetType());
         }
 
-        public static DataTypeReference GetAttributeSqlType(this AttributeMetadata attrMetadata)
+        public static DataTypeReference GetAttributeSqlType(this AttributeMetadata attrMetadata, IAttributeMetadataCache cache, bool write)
         {
             if (attrMetadata is MultiSelectPicklistAttributeMetadata)
                 return DataTypeHelpers.NVarChar(Int32.MaxValue);
@@ -132,8 +132,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 return DataTypeHelpers.EntityReference;
 
             if (attrMetadata is MemoAttributeMetadata || typeCode == AttributeTypeCode.Memo)
-                return DataTypeHelpers.NVarChar(attrMetadata is MemoAttributeMetadata memo && memo.MaxLength != null ? memo.MaxLength.Value : Int32.MaxValue);
-
+                return DataTypeHelpers.NVarChar(write && attrMetadata is MemoAttributeMetadata memo && memo.MaxLength != null ? memo.MaxLength.Value : Int32.MaxValue);
+            
             if (attrMetadata is MoneyAttributeMetadata || typeCode == AttributeTypeCode.Money)
                 return DataTypeHelpers.Money;
 
@@ -147,7 +147,31 @@ namespace MarkMpn.Sql4Cds.Engine
                 return DataTypeHelpers.Int;
 
             if (attrMetadata is StringAttributeMetadata || typeCode == AttributeTypeCode.String)
-                return DataTypeHelpers.NVarChar(attrMetadata is StringAttributeMetadata str && str.MaxLength != null ? str.MaxLength.Value : Int32.MaxValue);
+            {
+                if (attrMetadata.LogicalName.StartsWith("address"))
+                {
+                    var parts = attrMetadata.LogicalName.Split('_');
+                    if (parts.Length == 2 && Int32.TryParse(parts[0].Substring(7), out _) && cache.TryGetValue("customeraddress", out var addressMetadata))
+                    {
+                        // Attribute is e.g. address1_postalcode. Get the equivalent attribute from the customeraddress
+                        // entity as it can have very different max length
+                        attrMetadata = addressMetadata.Attributes.SingleOrDefault(a => a.LogicalName == parts[1]) as StringAttributeMetadata ?? attrMetadata;
+                    }
+                }
+
+                var maxLength = Int32.MaxValue;
+
+                if (attrMetadata is StringAttributeMetadata str)
+                {
+                    // MaxLength validation is applied on write, but existing values could be up to DatabaseLength
+                    var maxLengthSetting = write ? str.MaxLength : str.DatabaseLength;
+
+                    if (maxLengthSetting != null)
+                        maxLength = maxLengthSetting.Value;
+                }
+
+                return DataTypeHelpers.NVarChar(maxLength);
+            }
 
             if (attrMetadata is UniqueIdentifierAttributeMetadata || typeCode == AttributeTypeCode.Uniqueidentifier)
                 return DataTypeHelpers.UniqueIdentifier;

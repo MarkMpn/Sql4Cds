@@ -280,13 +280,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// Compiles methods to access the data required for the DML operation
         /// </summary>
+        /// <param name="cache">The metadata cache</param>
+        /// <param name="logicalName">The logical name of the entity that will be affected</param>
         /// <param name="mappings">The mappings of attribute name to source column</param>
         /// <param name="schema">The schema of data source</param>
-        /// <param name="attributes">The attributes in the target metadata</param>
         /// <param name="dateTimeKind">The time zone that datetime values are supplied in</param>
+        /// <param name="entities">The records that are being mapped</param>
         /// <returns></returns>
-        protected Dictionary<string, Func<Entity, object>> CompileColumnMappings(EntityMetadata metadata, IDictionary<string,string> mappings, INodeSchema schema, IDictionary<string, AttributeMetadata> attributes, DateTimeKind dateTimeKind, List<Entity> entities)
+        protected Dictionary<string, Func<Entity, object>> CompileColumnMappings(IAttributeMetadataCache cache, string logicalName, IDictionary<string,string> mappings, INodeSchema schema, DateTimeKind dateTimeKind, List<Entity> entities)
         {
+            var metadata = cache[logicalName];
+            var attributes = metadata.Attributes.ToDictionary(a => a.LogicalName, StringComparer.OrdinalIgnoreCase);
+
             var attributeAccessors = new Dictionary<string, Func<Entity, object>>();
             var entityParam = Expression.Parameter(typeof(Entity));
 
@@ -305,7 +310,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var sourceSqlType = schema.Schema[sourceColumnName];
                 var destType = attr.GetAttributeType();
-                var destSqlType = attr.IsPrimaryId == true ? DataTypeHelpers.UniqueIdentifier : attr.GetAttributeSqlType();
+                var destSqlType = attr.IsPrimaryId == true ? DataTypeHelpers.UniqueIdentifier : attr.GetAttributeSqlType(cache, true);
 
                 var expr = (Expression)Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(sourceColumnName));
                 var originalExpr = expr;
