@@ -275,7 +275,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         continue;
                     }
 
-                    foreach (var src in schema.Schema.Keys.Where(k => col.SourceColumn == null || k.StartsWith(col.SourceColumn.Replace("*", ""), StringComparison.OrdinalIgnoreCase)).OrderBy(k => k, StringComparer.OrdinalIgnoreCase))
+                    foreach (var src in schema.Schema.Keys.Where(k => col.SourceColumn == null || k.StartsWith(col.SourceColumn + ".", StringComparison.OrdinalIgnoreCase)).OrderBy(k => k, StringComparer.OrdinalIgnoreCase))
                     {
                         expanded.Add(new SelectColumn
                         {
