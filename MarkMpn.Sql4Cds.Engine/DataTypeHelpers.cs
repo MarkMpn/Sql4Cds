@@ -357,6 +357,10 @@ namespace MarkMpn.Sql4Cds.Engine
                         return 7;
 
                     return timeScale;
+
+                case SqlDataTypeOption.Money:
+                case SqlDataTypeOption.SmallMoney:
+                    return 4;
             }
 
             return invalidValue;
