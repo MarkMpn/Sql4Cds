@@ -21,5 +21,15 @@ namespace MarkMpn.Sql4Cds
 
             cancelButton.Enabled = cancelable;
         }
+
+        protected override void OnKeyDown(KeyEventArgs e)
+        {
+            base.OnKeyDown(e);
+
+            if (e.KeyCode == Keys.Y)
+                DialogResult = DialogResult.Yes;
+            else if (e.KeyCode == Keys.N)
+                DialogResult = DialogResult.No;
+        }
     }
 }
