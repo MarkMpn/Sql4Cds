@@ -947,7 +947,21 @@ namespace MarkMpn.Sql4Cds
 
                             var dataTable = new DataTable();
                             var schemaTable = reader.GetSchemaTable();
-                            dataTable.Load(reader);
+
+                            try
+                            {
+                                dataTable.Load(reader);
+                            }
+                            catch (ConstraintException ex)
+                            {
+                                foreach (DataRow row in dataTable.Rows)
+                                {
+                                    if (row.RowError != null)
+                                        throw new ConstraintException(row.RowError, ex);
+                                }
+
+                                throw;
+                            }
 
                             for (var i = 0; i < schemaTable.Rows.Count; i++)
                                 dataTable.Columns[i].ExtendedProperties["Schema"] = schemaTable.Rows[i];

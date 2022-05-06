@@ -116,7 +116,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     // Precompile mappings with type conversions
                     meta = dataSource.Metadata[LogicalName];
-                    var attributes = meta.Attributes.ToDictionary(a => a.LogicalName, StringComparer.OrdinalIgnoreCase);
                     var dateTimeKind = options.UseLocalTimeZone ? DateTimeKind.Local : DateTimeKind.Utc;
                     var primaryKey = meta.PrimaryIdAttribute;
                     string secondaryKey = null;
@@ -142,7 +141,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (secondaryKey != null)
                         fullMappings[secondaryKey] = SecondaryIdSource;
 
-                    var attributeAccessors = CompileColumnMappings(meta, fullMappings, schema, attributes, dateTimeKind, entities);
+                    var attributeAccessors = CompileColumnMappings(dataSource.Metadata, LogicalName, fullMappings, schema, dateTimeKind, entities);
                     primaryIdAccessor = attributeAccessors[primaryKey];
 
                     if (SecondaryIdSource != null)

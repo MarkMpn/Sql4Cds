@@ -91,7 +91,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var dateTimeKind = options.UseLocalTimeZone ? DateTimeKind.Local : DateTimeKind.Utc;
                     var fullMappings = new Dictionary<string, string>(ColumnMappings);
                     fullMappings[meta.PrimaryIdAttribute] = PrimaryIdSource;
-                    attributeAccessors = CompileColumnMappings(meta, fullMappings, schema, attributes, dateTimeKind, entities);
+                    attributeAccessors = CompileColumnMappings(dataSource.Metadata, LogicalName, fullMappings, schema, dateTimeKind, entities);
                     primaryIdAccessor = attributeAccessors[meta.PrimaryIdAttribute];
                 }
 

@@ -76,12 +76,12 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public static SqlDataTypeReference NVarChar(int length)
         {
-            return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { new IntegerLiteral { Value = length.ToString(CultureInfo.InvariantCulture) } } };
+            return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { length <= 8000 ? (Literal) new IntegerLiteral { Value = length.ToString(CultureInfo.InvariantCulture) } : new MaxLiteral() } };
         }
 
         public static SqlDataTypeReference NChar(int length)
         {
-            return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NChar, Parameters = { new IntegerLiteral { Value = length.ToString(CultureInfo.InvariantCulture) } } };
+            return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NChar, Parameters = { length <= 8000 ? (Literal)new IntegerLiteral { Value = length.ToString(CultureInfo.InvariantCulture) } : new MaxLiteral() } };
         }
 
         public static SqlDataTypeReference Time(short scale)
@@ -357,6 +357,10 @@ namespace MarkMpn.Sql4Cds.Engine
                         return 7;
 
                     return timeScale;
+
+                case SqlDataTypeOption.Money:
+                case SqlDataTypeOption.SmallMoney:
+                    return 4;
             }
 
             return invalidValue;

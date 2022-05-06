@@ -75,8 +75,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     var resp = (BulkDeleteResponse)dataSource.Connection.Execute(req);
 
-                    recordsAffected = -1;
-                    return $"Bulk delete job started: {resp.JobId}";
+                    recordsAffected = 1;
+                    parameterValues["@@IDENTITY"] = new SqlEntityReference(DataSource, "asyncoperation", resp.JobId);
+                    return $"Bulk delete job started";
                 }
             }
             catch (QueryExecutionException ex)
@@ -114,7 +115,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 DataSource = DataSource,
                 Sql = Sql,
                 Index = Index,
-                Length = Length
+                Length = Length,
+                FetchXmlString = FetchXmlString
             };
         }
     }

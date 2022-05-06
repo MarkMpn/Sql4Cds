@@ -671,7 +671,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         continue;
 
                     var fullName = $"{alias}.{attrMetadata.LogicalName}";
-                    var attrType = attrMetadata.GetAttributeSqlType();
+                    var attrType = attrMetadata.GetAttributeSqlType(metadata, false);
                     AddSchemaAttribute(schema, metadata, fullName, attrMetadata.LogicalName, attrType, attrMetadata, innerJoin);
                 }
             }
@@ -681,7 +681,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 foreach (var attribute in items.OfType<FetchAttributeType>())
                 {
                     var attrMetadata = meta.Attributes.Single(a => a.LogicalName == attribute.name);
-                    var attrType = attrMetadata.GetAttributeSqlType();
+                    var attrType = attrMetadata.GetAttributeSqlType(metadata, false);
 
                     if (attribute.aggregateSpecified && (attribute.aggregate == Engine.FetchXml.AggregateType.count || attribute.aggregate == Engine.FetchXml.AggregateType.countcolumn) ||
                         attribute.dategroupingSpecified)
@@ -740,7 +740,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         if (attrMetadata.AttributeOf != null)
                             continue;
 
-                        var attrType = attrMetadata.GetAttributeSqlType();
+                        var attrType = attrMetadata.GetAttributeSqlType(metadata, false);
                         var attrName = attrMetadata.LogicalName;
                         var fullName = $"{alias}.{attrName}";
 

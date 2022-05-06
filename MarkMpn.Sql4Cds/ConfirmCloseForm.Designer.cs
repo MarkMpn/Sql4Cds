@@ -65,7 +65,7 @@ namespace MarkMpn.Sql4Cds
             this.yesButton.Name = "yesButton";
             this.yesButton.Size = new System.Drawing.Size(75, 23);
             this.yesButton.TabIndex = 2;
-            this.yesButton.Text = "Yes";
+            this.yesButton.Text = "&Yes";
             this.yesButton.UseVisualStyleBackColor = true;
             // 
             // noButton
@@ -76,7 +76,7 @@ namespace MarkMpn.Sql4Cds
             this.noButton.Name = "noButton";
             this.noButton.Size = new System.Drawing.Size(75, 23);
             this.noButton.TabIndex = 3;
-            this.noButton.Text = "No";
+            this.noButton.Text = "&No";
             this.noButton.UseVisualStyleBackColor = true;
             // 
             // cancelButton
@@ -103,6 +103,7 @@ namespace MarkMpn.Sql4Cds
             this.Controls.Add(this.listBox);
             this.Controls.Add(this.label1);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
+            this.KeyPreview = true;
             this.MaximizeBox = false;
             this.MinimizeBox = false;
             this.Name = "ConfirmCloseForm";

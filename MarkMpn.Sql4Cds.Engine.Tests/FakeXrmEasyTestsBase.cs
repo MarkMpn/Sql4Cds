@@ -119,7 +119,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             foreach (var entity in context.CreateMetadataQuery())
             {
                 foreach (var attr in entity.Attributes.OfType<StringAttributeMetadata>())
+                {
                     attr.MaxLength = 100;
+                    typeof(StringAttributeMetadata).GetProperty(nameof(StringAttributeMetadata.DatabaseLength)).SetValue(attr, 100);
+                }
 
                 context.SetEntityMetadata(entity);
             }
