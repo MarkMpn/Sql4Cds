@@ -2731,15 +2731,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             AssertFetchXml(accountFetch, @"
                 <fetch>
                     <entity name='account'>
-                        <attribute name='accountid' />
-                        <attribute name='createdon' />
-                        <attribute name='employees' />
-                        <attribute name='name' />
-                        <attribute name='ownerid' />
-                        <attribute name='owneridname' />
-                        <attribute name='primarycontactid' />
-                        <attribute name='primarycontactidname' />
-                        <attribute name='turnover' />
+                        <all-attributes />
                         <order attribute='accountid' />
                     </entity>
                 </fetch>");
@@ -4499,6 +4491,29 @@ UPDATE account SET employees = @employees WHERE name = @name";
 
             AssertFetchXml(fetch, @"
                 <fetch xmlns:generator='MarkMpn.SQL4CDS' top='10'>
+                    <entity name='account'>
+                        <all-attributes />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void OrderByStar()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT * FROM account ORDER BY primarycontactid";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var sort = AssertNode<SortNode>(select.Source);
+            var fetch = AssertNode<FetchXmlScan>(sort.Source);
+
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
                     <entity name='account'>
                         <all-attributes />
                     </entity>

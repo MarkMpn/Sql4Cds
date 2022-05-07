@@ -1103,6 +1103,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var metadata = dataSource.Metadata[Entity.name];
                 Entity.AddItem(new FetchAttributeType { name = metadata.PrimaryIdAttribute });
             }
+
+            NormalizeAttributes(dataSources);
         }
 
         private bool HasAttribute(object[] items)
@@ -1111,6 +1113,44 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return false;
 
             return items.OfType<FetchAttributeType>().Any() || items.OfType<allattributes>().Any();
+        }
+
+        private void NormalizeAttributes(IDictionary<string, DataSource> dataSources)
+        {
+            Entity.Items = NormalizeAttributes(dataSources, Entity.name, Entity.Items);
+        }
+
+        private object[] NormalizeAttributes(IDictionary<string, DataSource> dataSources, string entityName, object[] items)
+        {
+            if (items == null)
+                return null;
+
+            foreach (var linkEntity in items.OfType<FetchLinkEntityType>())
+                linkEntity.Items = NormalizeAttributes(dataSources, linkEntity.name, linkEntity.Items);
+
+            if (items.OfType<allattributes>().Any())
+                return items;
+
+            var attributes = items.OfType<FetchAttributeType>().ToList();
+
+            if (attributes.Any(a => !String.IsNullOrEmpty(a.alias)))
+                return items;
+
+            var metadata = dataSources[DataSource].Metadata[entityName];
+
+            var allAttributes = metadata.Attributes
+                .Where(a => a.IsValidForRead != false && a.AttributeOf == null)
+                .Select(a => a.LogicalName);
+
+            var missingAttributes = allAttributes.Except(attributes.Select(a => a.name)).Any();
+
+            if (missingAttributes)
+                return items;
+
+            return items
+                .Where(obj => !(obj is FetchAttributeType))
+                .Concat(new[] { new allattributes() })
+                .ToArray();
         }
 
         protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
