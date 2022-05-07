@@ -15,6 +15,9 @@ namespace MarkMpn.Sql4Cds
     {
         private readonly ConnectionDetail _connection;
         private readonly AttributeMetadataCache _innerCache;
+        private MetadataCache _lastCache;
+        private IDictionary<string, EntityMetadata> _entitiesByName;
+        private IDictionary<int, EntityMetadata> _entitiesByOtc;
 
         // Metadata cache updating was broken in first release, make sure we're only using it on later versions
         private static readonly bool _metadataCacheSupported = typeof(ConnectionDetail).Assembly.GetName().Version >= new Version("1.2021.6.44");
@@ -29,12 +32,12 @@ namespace MarkMpn.Sql4Cds
         {
             get
             {
-                if (!_metadataCacheSupported || _connection.MetadataCache == null)
+                if (!_metadataCacheSupported || _connection.MetadataCacheLoader == null || _connection.MetadataCacheLoader.Status != TaskStatus.RanToCompletion)
                     return _innerCache[name];
 
-                var meta = _connection.MetadataCache.SingleOrDefault(e => e.LogicalName == name.ToLowerInvariant());
+                LoadCache();
 
-                if (meta == null)
+                if (!_entitiesByName.TryGetValue(name, out var meta))
                     throw new FaultException($"Unknown table {name}");
 
                 return meta;
@@ -45,12 +48,12 @@ namespace MarkMpn.Sql4Cds
         {
             get
             {
-                if (!_metadataCacheSupported || _connection.MetadataCache == null)
+                if (!_metadataCacheSupported || _connection.MetadataCacheLoader == null || _connection.MetadataCacheLoader.Status != TaskStatus.RanToCompletion)
                     return _innerCache[otc];
 
-                var meta = _connection.MetadataCache.SingleOrDefault(e => e.ObjectTypeCode == otc);
+                LoadCache();
 
-                if (meta == null)
+                if (!_entitiesByOtc.TryGetValue(otc, out var meta))
                     throw new FaultException($"Unknown table {otc}");
 
                 return meta;
@@ -59,20 +62,34 @@ namespace MarkMpn.Sql4Cds
 
         public bool TryGetMinimalData(string logicalName, out EntityMetadata metadata)
         {
-            if (!_metadataCacheSupported || _connection.MetadataCache == null)
+            if (!_metadataCacheSupported || _connection.MetadataCacheLoader == null || _connection.MetadataCacheLoader.Status != TaskStatus.RanToCompletion)
                 return _innerCache.TryGetMinimalData(logicalName, out metadata);
 
-            metadata = _connection.MetadataCache.SingleOrDefault(e => e.LogicalName == logicalName.ToLowerInvariant());
-            return metadata != null;
+            LoadCache();
+
+            return _entitiesByName.TryGetValue(logicalName, out metadata);
         }
 
         public bool TryGetValue(string logicalName, out EntityMetadata metadata)
         {
-            if (!_metadataCacheSupported || _connection.MetadataCache == null)
+            if (!_metadataCacheSupported || _connection.MetadataCacheLoader == null || _connection.MetadataCacheLoader.Status != TaskStatus.RanToCompletion)
                 return _innerCache.TryGetValue(logicalName, out metadata);
 
-            metadata = _connection.MetadataCache.SingleOrDefault(e => e.LogicalName == logicalName.ToLowerInvariant());
-            return metadata != null;
+            LoadCache();
+
+            return _entitiesByName.TryGetValue(logicalName, out metadata);
+        }
+
+        private void LoadCache()
+        {
+            var cache = _connection.MetadataCacheLoader.Result;
+
+            if (_lastCache == cache)
+                return;
+
+            _entitiesByName = cache.EntityMetadata.ToDictionary(e => e.LogicalName, StringComparer.OrdinalIgnoreCase);
+            _entitiesByOtc = cache.EntityMetadata.ToDictionary(e => e.ObjectTypeCode.Value);
+            _lastCache = cache;
         }
 
         public event EventHandler<MetadataLoadingEventArgs> MetadataLoading
