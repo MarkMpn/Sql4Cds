@@ -348,6 +348,29 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     _manyToManyRelationshipCols[col] = prop;
                 }
             }
+
+            NormalizeProperties();
+        }
+
+        private void NormalizeProperties()
+        {
+            NormalizeProperties(Query, _entityProps.Values.Select(p => p.PropertyName));
+            NormalizeProperties(Query.AttributeQuery, _attributeProps.Values.Select(p => p.PropertyName));
+            NormalizeProperties(Query.RelationshipQuery, _oneToManyRelationshipProps.Values.Select(p => p.PropertyName).Union(_manyToManyRelationshipProps.Values.Select(p => p.PropertyName)));
+        }
+
+        private void NormalizeProperties(MetadataQueryExpression query, IEnumerable<string> allProperties)
+        {
+            if (query == null || query.Properties == null || query.Properties.AllProperties)
+                return;
+
+            var missingProperties = allProperties.Except(query.Properties.PropertyNames).Any();
+
+            if (!missingProperties)
+            {
+                query.Properties.PropertyNames.Clear();
+                query.Properties.AllProperties = true;
+            }
         }
 
         protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)

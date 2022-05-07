@@ -685,8 +685,6 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 DataSource = dataSource.Name,
                 LogicalName = target.SchemaObject.BaseIdentifier.Value,
-                MaxDOP = GetMaxDOP(queryHints),
-                BypassCustomPluginExecution = GetBypassPluginExecution(queryHints),
                 Source = source
             };
 
@@ -862,34 +860,6 @@ namespace MarkMpn.Sql4Cds.Engine
             return node;
         }
 
-        private int GetMaxDOP(IList<OptimizerHint> queryHints)
-        {
-            var maxDopHint = queryHints
-                .OfType<LiteralOptimizerHint>()
-                .Where(hint => hint.HintKind == OptimizerHintKind.MaxDop)
-                .FirstOrDefault();
-
-            if (maxDopHint != null)
-            {
-                if (!(maxDopHint.Value is IntegerLiteral maxDop) || !Int32.TryParse(maxDop.Value, out var value) || value < 1)
-                    throw new NotSupportedQueryFragmentException("MAXDOP requires a positive integer value");
-
-                return value;
-            }
-
-            return Options.MaxDegreeOfParallelism;
-        }
-
-        private bool GetBypassPluginExecution(IList<OptimizerHint> queryHints)
-        {
-            var bypassPluginExecution = queryHints
-                .OfType<UseHintList>()
-                .Where(hint => hint.Hints.Any(s => s.Value.Equals("BYPASS_CUSTOM_PLUGIN_EXECUTION", StringComparison.OrdinalIgnoreCase)))
-                .Any();
-
-            return bypassPluginExecution || Options.BypassCustomPlugins;
-        }
-
         private DeleteNode ConvertDeleteStatement(DeleteStatement delete)
         {
             if (delete.WithCtesAndXmlNamespaces != null)
@@ -1024,8 +994,6 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 LogicalName = targetMetadata.LogicalName,
                 DataSource = dataSource.Name,
-                MaxDOP = GetMaxDOP(hints),
-                BypassCustomPluginExecution = GetBypassPluginExecution(hints),
             };
 
             if (source is SelectNode select)
@@ -1239,8 +1207,6 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 LogicalName = targetMetadata.LogicalName,
                 DataSource = dataSource.Name,
-                MaxDOP = GetMaxDOP(queryHints),
-                BypassCustomPluginExecution = GetBypassPluginExecution(queryHints),
             };
 
             if (node is SelectNode select)
@@ -3051,8 +3017,7 @@ namespace MarkMpn.Sql4Cds.Engine
                             {
                                 name = meta.LogicalName
                             }
-                        },
-                        options = ConvertQueryHints(hints)
+                        }
                     },
                     Alias = table.Alias?.Value ?? entityName,
                     ReturnFullSchema = true
@@ -3328,68 +3293,6 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             return querySpec;
-        }
-
-        private string ConvertQueryHints(IList<OptimizerHint> hints)
-        {
-            if (hints.Count == 0)
-                return null;
-
-            return String.Join(",", hints.Select(hint =>
-                {
-                    switch (hint.HintKind)
-                    {
-                        case OptimizerHintKind.OptimizeFor:
-                            if (!((OptimizeForOptimizerHint)hint).IsForUnknown)
-                                return null;
-
-                            return "OptimizeForUnknown";
-
-                        case OptimizerHintKind.ForceOrder:
-                            return "ForceOrder";
-
-                        case OptimizerHintKind.Recompile:
-                            return "Recompile";
-
-                        case OptimizerHintKind.Unspecified:
-                            if (!(hint is UseHintList useHint))
-                                return null;
-
-                            return String.Join(",", useHint.Hints.Select(hintLiteral =>
-                            {
-                                switch (hintLiteral.Value.ToUpperInvariant())
-                                {
-                                    case "DISABLE_OPTIMIZER_ROWGOAL":
-                                        return "DisableRowGoal";
-
-                                    case "ENABLE_QUERY_OPTIMIZER_HOTFIXES":
-                                        return "EnableOptimizerHotfixes";
-
-                                    default:
-                                        return null;
-                                }
-                            }));
-
-                        case OptimizerHintKind.LoopJoin:
-                            return "LoopJoin";
-
-                        case OptimizerHintKind.MergeJoin:
-                            return "MergeJoin";
-
-                        case OptimizerHintKind.HashJoin:
-                            return "HashJoin";
-
-                        case OptimizerHintKind.NoPerformanceSpool:
-                            return "NO_PERFORMANCE_SPOOL";
-
-                        case OptimizerHintKind.MaxRecursion:
-                            return $"MaxRecursion={((LiteralOptimizerHint)hint).Value.Value}";
-
-                        default:
-                            return null;
-                    }
-                })
-                .Where(hint => hint != null));
         }
     }
 }

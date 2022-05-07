@@ -521,6 +521,20 @@ namespace MarkMpn.Sql4Cds
 
         public override void ClosingPlugin(PluginCloseInfo info)
         {
+            if (!info.Silent)
+            {
+                var busy = dockPanel.Documents
+                    .OfType<SqlQueryControl>()
+                    .Any(query => query.Busy);
+
+                if (busy)
+                {
+                    MessageBox.Show(this, "Query is still executing. Please wait for the query to finish before closing this tab.", "Query Running", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    info.Cancel = true;
+                    return;
+                }
+            }
+
             var unsavedDocuments = dockPanel.Documents
                 .OfType<SqlQueryControl>()
                 .Where(query => query.Modified)

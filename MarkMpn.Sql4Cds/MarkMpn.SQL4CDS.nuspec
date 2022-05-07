@@ -27,7 +27,11 @@ Improved handling string length and decimal precision options
 Improved data type conversion handling for datetime/datetime2/date/time/datetimeoffset values
 Fixed use of REVERT
 Handle Dataverse bug with aggregates on address fields
-Open records in appropriate browser profile</releaseNotes>
+Open records in appropriate browser profile
+Prevent query tab being closed while it is still running
+Improved metadata cache performance
+Simplify long list of attributes to &lt;all-attributes /&gt;
+Auto-adapt page size based on number of columns</releaseNotes>
     <copyright>Copyright © 2019 Mark Carrington</copyright>
     <language>en-GB</language>
     <tags>XrmToolBox SQL CDS</tags>

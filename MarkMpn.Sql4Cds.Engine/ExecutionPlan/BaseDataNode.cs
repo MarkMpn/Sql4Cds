@@ -62,12 +62,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <returns>A stream of <see cref="Entity"/> records</returns>
         public IEnumerable<Entity> Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
+            if (options.CancellationToken.IsCancellationRequested)
+                yield break;
+
             // Track execution times roughly using Environment.TickCount. Stopwatch provides more accurate results
             // but gives a large performance penalty.
             IEnumerator<Entity> enumerator;
 
             using (_timer.Run())
-            { 
+            {
                 try
                 {
                     _executionCount++;
