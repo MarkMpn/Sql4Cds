@@ -15,7 +15,9 @@
 Improved handling string length and decimal precision options
 Improved data type conversion handling for datetime/datetime2/date/time/datetimeoffset values
 Fixed use of REVERT
-Handle Dataverse bug with aggregates on address fields</releaseNotes>
+Handle Dataverse bug with aggregates on address fields
+Simplify long list of attributes to &lt;all-attributes /&gt;
+Auto-adapt page size based on number of columns</releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>
     <tags>SQL CDS</tags>

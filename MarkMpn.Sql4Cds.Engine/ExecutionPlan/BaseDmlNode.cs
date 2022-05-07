@@ -142,7 +142,44 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 RenameSourceColumns(alias.ColumnSet.ToDictionary(col => alias.Alias + "." + col.OutputColumn, col => col.SourceColumn, StringComparer.OrdinalIgnoreCase));
             }
 
+            MaxDOP = GetMaxDOP(hints, options);
+            BypassCustomPluginExecution = GetBypassPluginExecution(hints, options);
+
             return new[] { this };
+        }
+
+        private int GetMaxDOP(IList<OptimizerHint> queryHints, IQueryExecutionOptions options)
+        {
+            if (queryHints == null)
+                return options.MaxDegreeOfParallelism;
+
+            var maxDopHint = queryHints
+                .OfType<LiteralOptimizerHint>()
+                .Where(hint => hint.HintKind == OptimizerHintKind.MaxDop)
+                .FirstOrDefault();
+
+            if (maxDopHint != null)
+            {
+                if (!(maxDopHint.Value is IntegerLiteral maxDop) || !Int32.TryParse(maxDop.Value, out var value) || value < 1)
+                    throw new NotSupportedQueryFragmentException("MAXDOP requires a positive integer value");
+
+                return value;
+            }
+
+            return options.MaxDegreeOfParallelism;
+        }
+
+        private bool GetBypassPluginExecution(IList<OptimizerHint> queryHints, IQueryExecutionOptions options)
+        {
+            if (queryHints == null)
+                return options.BypassCustomPlugins;
+
+            var bypassPluginExecution = queryHints
+                .OfType<UseHintList>()
+                .Where(hint => hint.Hints.Any(s => s.Value.Equals("BYPASS_CUSTOM_PLUGIN_EXECUTION", StringComparison.OrdinalIgnoreCase)))
+                .Any();
+
+            return bypassPluginExecution || options.BypassCustomPlugins;
         }
 
         /// <summary>

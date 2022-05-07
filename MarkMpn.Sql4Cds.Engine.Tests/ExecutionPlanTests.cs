@@ -4427,6 +4427,29 @@ UPDATE account SET employees = @employees WHERE name = @name";
         }
 
         [TestMethod]
+        public void PageSizeUsesHint()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"SELECT name FROM account OPTION (USE HINT ('FETCHXML_PAGE_SIZE_100'))";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS' count='100'>
+                    <entity name='account'>
+                        <attribute name='name' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
         public void DistinctOrderByOptionSet()
         {
             var metadata = new AttributeMetadataCache(_service);

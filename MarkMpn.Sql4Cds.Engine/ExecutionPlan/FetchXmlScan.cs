@@ -880,7 +880,95 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<Microsoft.SqlServer.TransactSql.ScriptDom.OptimizerHint> hints)
         {
             NormalizeFilters();
+            ConvertQueryHints(hints);
+            ApplyPageSizeHint(hints);
             return this;
+        }
+
+        private void ConvertQueryHints(IList<OptimizerHint> hints)
+        {
+            var options = String.Join(",", hints.Select(hint =>
+            {
+                switch (hint.HintKind)
+                {
+                    case OptimizerHintKind.OptimizeFor:
+                        if (!((OptimizeForOptimizerHint)hint).IsForUnknown)
+                            return null;
+
+                        return "OptimizeForUnknown";
+
+                    case OptimizerHintKind.ForceOrder:
+                        return "ForceOrder";
+
+                    case OptimizerHintKind.Recompile:
+                        return "Recompile";
+
+                    case OptimizerHintKind.Unspecified:
+                        if (!(hint is UseHintList useHint))
+                            return null;
+
+                        return String.Join(",", useHint.Hints.Select(hintLiteral =>
+                        {
+                            switch (hintLiteral.Value.ToUpperInvariant())
+                            {
+                                case "DISABLE_OPTIMIZER_ROWGOAL":
+                                    return "DisableRowGoal";
+
+                                case "ENABLE_QUERY_OPTIMIZER_HOTFIXES":
+                                    return "EnableOptimizerHotfixes";
+
+                                default:
+                                    return null;
+                            }
+                        }));
+
+                    case OptimizerHintKind.LoopJoin:
+                        return "LoopJoin";
+
+                    case OptimizerHintKind.MergeJoin:
+                        return "MergeJoin";
+
+                    case OptimizerHintKind.HashJoin:
+                        return "HashJoin";
+
+                    case OptimizerHintKind.NoPerformanceSpool:
+                        return "NO_PERFORMANCE_SPOOL";
+
+                    case OptimizerHintKind.MaxRecursion:
+                        return $"MaxRecursion={((LiteralOptimizerHint)hint).Value.Value}";
+
+                    default:
+                        return null;
+                }
+            })
+                .Where(hint => hint != null));
+
+            if (!String.IsNullOrEmpty(options))
+                FetchXml.options = options;
+        }
+
+        private void ApplyPageSizeHint(IList<OptimizerHint> hints)
+        {
+            if (!String.IsNullOrEmpty(FetchXml.count) || !String.IsNullOrEmpty(FetchXml.top))
+                return;
+
+            const string pageSizePrefix = "FETCHXML_PAGE_SIZE_";
+
+            var pageSizeHints = hints
+                .OfType<UseHintList>()
+                .SelectMany(hint => hint.Hints.Where(s => s.Value.StartsWith(pageSizePrefix, StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+
+            if (pageSizeHints.Count == 0)
+                return;
+
+            if (pageSizeHints.Count > 1)
+                throw new NotSupportedQueryFragmentException("Duplicate page size hint", pageSizeHints[1]);
+
+            if (!Int32.TryParse(pageSizeHints[0].Value.Substring(pageSizePrefix.Length), out var pageSize))
+                throw new NotSupportedQueryFragmentException("Invalid page size, must be a whole number", pageSizeHints[0]);
+
+            FetchXml.count = pageSize.ToString(CultureInfo.InvariantCulture);
         }
 
         private void NormalizeFilters()
@@ -1105,6 +1193,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             NormalizeAttributes(dataSources);
+            SetDefaultPageSize(dataSources, parameterTypes);
         }
 
         private bool HasAttribute(object[] items)
@@ -1151,6 +1240,27 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 .Where(obj => !(obj is FetchAttributeType))
                 .Concat(new[] { new allattributes() })
                 .ToArray();
+        }
+
+        private void SetDefaultPageSize(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
+        {
+            if (!String.IsNullOrEmpty(FetchXml.count) || !String.IsNullOrEmpty(FetchXml.top))
+                return;
+
+            // Reduce the page size from the default 5000 if there will be lots of columns returned. This helps keep memory
+            // usage down as well as reducing the time to retrieve each page and so makes it easier to cancel a bad query.
+            var fullSchema = ReturnFullSchema;
+            ReturnFullSchema = false;
+
+            var schema = GetSchema(dataSources, parameterTypes);
+
+            if (schema.Schema.Count > 100)
+                FetchXml.count = "1000";
+
+            if (schema.Schema.Count > 500)
+                FetchXml.count = "500";
+
+            ReturnFullSchema = fullSchema;
         }
 
         protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
