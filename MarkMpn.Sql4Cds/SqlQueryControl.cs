@@ -161,6 +161,13 @@ namespace MarkMpn.Sql4Cds
         {
             base.OnClosing(e);
 
+            if (Busy)
+            {
+                MessageBox.Show(this, "Query is still executing. Please wait for the query to finish before closing this tab.", "Query Running", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                e.Cancel = true;
+                return;
+            }
+
             if (_modified)
             {
                 using (var form = new ConfirmCloseForm(new[] { DisplayName }, true))
