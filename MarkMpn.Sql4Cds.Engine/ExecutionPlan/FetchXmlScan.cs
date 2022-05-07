@@ -880,8 +880,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<Microsoft.SqlServer.TransactSql.ScriptDom.OptimizerHint> hints)
         {
             NormalizeFilters();
-            ConvertQueryHints(hints);
-            ApplyPageSizeHint(hints);
+
+            if (hints != null)
+            {
+                ConvertQueryHints(hints);
+                ApplyPageSizeHint(hints);
+            }
+
             return this;
         }
 
