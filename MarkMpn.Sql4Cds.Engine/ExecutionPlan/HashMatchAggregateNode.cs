@@ -67,7 +67,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.Parent = this;
 
             // Special case for using RetrieveTotalRecordCount instead of FetchXML
-            var retrieveTotalRecordCount = hints
+            var retrieveTotalRecordCount = hints != null && hints
                 .OfType<UseHintList>()
                 .Where(useHint => useHint.Hints.Any(hint => hint.Value.Equals("RETRIEVE_TOTAL_RECORD_COUNT", StringComparison.OrdinalIgnoreCase)))
                 .Any();
