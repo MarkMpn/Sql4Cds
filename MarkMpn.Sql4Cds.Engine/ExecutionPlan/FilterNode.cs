@@ -919,6 +919,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 targetValueType != typeof(Guid))
                 return false;
 
+            // String comparisons will be executed case-sensitively, but all other comparisons are case-insensitive. For consistency, don't allow
+            // comparisons on string properties except those where we know the expected case.
+            Func<object, object> valueConverter = (o) => o;
+
+            if (targetValueType == typeof(string))
+            {
+                if (prop.DeclaringType == typeof(EntityMetadata) && (prop.Name == nameof(EntityMetadata.LogicalName) || prop.Name == nameof(EntityMetadata.LogicalCollectionName)) ||
+                    prop.DeclaringType == typeof(AttributeMetadata) && (prop.Name == nameof(AttributeMetadata.LogicalName) || prop.Name == nameof(AttributeMetadata.EntityLogicalName)))
+                {
+                    valueConverter = (o) => ((string)o)?.ToLowerInvariant();
+                }
+                else
+                {
+                    return false;
+                }
+            }
+
             // Convert the property name to the correct case
             filter.Conditions[0].PropertyName = prop.Name;
 
@@ -934,13 +951,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var targetArray = Array.CreateInstance(targetValueType, array.Length);
 
                     for (var i = 0; i < array.Length; i++)
-                        targetArray.SetValue(SqlTypeConverter.ChangeType(SqlTypeConverter.ChangeType(array.GetValue(i), propertyType), targetValueType), i);
+                        targetArray.SetValue(valueConverter(SqlTypeConverter.ChangeType(SqlTypeConverter.ChangeType(array.GetValue(i), propertyType), targetValueType)), i);
 
                     filter.Conditions[0].Value = targetArray;
                 }
                 else
                 {
-                    filter.Conditions[0].Value = SqlTypeConverter.ChangeType(SqlTypeConverter.ChangeType(filter.Conditions[0].Value, propertyType), targetValueType);
+                    filter.Conditions[0].Value = valueConverter(SqlTypeConverter.ChangeType(SqlTypeConverter.ChangeType(filter.Conditions[0].Value, propertyType), targetValueType));
                 }
             }
 
