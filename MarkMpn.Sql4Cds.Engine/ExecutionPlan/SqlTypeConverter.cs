@@ -98,6 +98,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return true;
             }
 
+            if (lhs == DataTypeHelpers.ImplicitIntForNullLiteral)
+            {
+                consistent = rhs;
+                return true;
+            }
+
+            if (rhs == DataTypeHelpers.ImplicitIntForNullLiteral)
+            {
+                consistent = lhs;
+                return true;
+            }
+
             var lhsUser = lhs as UserDataTypeReference;
             var lhsSql = lhs as SqlDataTypeReference;
             var rhsUser = rhs as UserDataTypeReference;
@@ -194,6 +206,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public static bool CanChangeTypeImplicit(DataTypeReference from, DataTypeReference to)
         {
             if (from.IsSameAs(to))
+                return true;
+
+            if (from == DataTypeHelpers.ImplicitIntForNullLiteral)
                 return true;
 
             var fromUser = from as UserDataTypeReference;
@@ -366,6 +381,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             from.ToNetType(out var fromSqlType);
             var targetType = to.ToNetType(out var toSqlType);
+
+            if (from == DataTypeHelpers.ImplicitIntForNullLiteral)
+                return Expression.Constant(_nullValues[targetType]);
 
             var sourceType = expr.Type;
 

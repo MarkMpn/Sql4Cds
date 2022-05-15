@@ -193,7 +193,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private static Expression ToExpression(NullLiteral n, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)
         {
-            sqlType = DataTypeHelpers.Int;
+            sqlType = DataTypeHelpers.ImplicitIntForNullLiteral;
             return Expression.Constant(null);
         }
 

@@ -714,5 +714,61 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             }
         }
+
+        [TestMethod]
+        public void InsertNull()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "INSERT INTO contact (firstname, lastname) VALUES (NULL, NULL)";
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = "SELECT firstname, lastname FROM contact WHERE contactid = @@IDENTITY";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.IsTrue(reader.IsDBNull(0));
+                    Assert.IsTrue(reader.IsDBNull(1));
+                }
+            }
+        }
+
+        [TestMethod]
+        public void UpdateNull()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "INSERT INTO contact (firstname, lastname) VALUES ('Mark', 'Carrington'); SELECT @@IDENTITY";
+                var contactId = cmd.ExecuteScalar();
+
+                cmd.CommandText = "SELECT firstname, lastname FROM contact WHERE contactid = @contactId";
+                var param = cmd.CreateParameter();
+                param.ParameterName = "@contactId";
+                param.Value = contactId;
+                cmd.Parameters.Add(param);
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("Mark", reader.GetValue(0));
+                    Assert.AreEqual("Carrington", reader.GetValue(1));
+                }
+
+                cmd.CommandText = "UPDATE contact SET firstname = NULL, lastname = NULL WHERE contactid = @contactId";
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = "SELECT firstname, lastname FROM contact WHERE contactid = @contactId";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.IsTrue(reader.IsDBNull(0));
+                    Assert.IsTrue(reader.IsDBNull(1));
+                }
+            }
+        }
     }
 }
