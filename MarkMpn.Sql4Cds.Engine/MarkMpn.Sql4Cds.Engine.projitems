@@ -93,6 +93,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\TopNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\TryCatchNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\UpdateNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\WaitForNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExpressionFunctions.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)FetchXml.cs">
       <DependentUpon>FetchXml.xsd</DependentUpon>

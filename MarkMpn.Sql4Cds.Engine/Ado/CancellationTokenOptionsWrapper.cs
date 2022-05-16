@@ -7,7 +7,7 @@ using Microsoft.Xrm.Sdk.Query;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
-    class CancellationTokenOptionsWrapper : IQueryExecutionOptions
+    class CancellationTokenOptionsWrapper : IQueryExecutionOptions, IDisposable
     {
         private readonly IQueryExecutionOptions _options;
 
@@ -70,6 +70,11 @@ namespace MarkMpn.Sql4Cds.Engine
         public void Progress(double? progress, string message)
         {
             _options.Progress(progress, message);
+        }
+
+        void IDisposable.Dispose()
+        {
+            CancellationTokenSource.Dispose();
         }
     }
 }

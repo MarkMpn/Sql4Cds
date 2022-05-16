@@ -770,5 +770,30 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             }
         }
+
+        [TestMethod]
+        public void WaitFor()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "INSERT INTO contact (firstname, lastname) VALUES ('Mark', 'Carrington');";
+                cmd.ExecuteNonQuery();
+
+                var stopwatch = new Stopwatch();
+                stopwatch.Start();
+                cmd.ExecuteNonQuery();
+                stopwatch.Stop();
+                Assert.IsTrue(stopwatch.ElapsedMilliseconds < 100);
+
+                cmd.CommandText = "WAITFOR DELAY '00:00:02'; INSERT INTO contact (firstname, lastname) VALUES ('Mark', 'Carrington');";
+                cmd.ExecuteNonQuery();
+
+                stopwatch.Restart();
+                cmd.ExecuteNonQuery();
+                stopwatch.Stop();
+                Assert.IsTrue(stopwatch.ElapsedMilliseconds > 2000 && stopwatch.ElapsedMilliseconds < 2100);
+            }
+        }
     }
 }

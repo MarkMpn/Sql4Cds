@@ -192,6 +192,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 plans = new[] { ConvertBreakStatement(breakStmt) };
             else if (statement is ContinueStatement continueStmt)
                 plans = new[] { ConvertContinueStatement(continueStmt) };
+            else if (statement is WaitForStatement waitFor)
+                plans = new[] { ConvertWaitForStatement(waitFor) };
             else
                 throw new NotSupportedQueryFragmentException("Unsupported statement", statement);
 
@@ -212,6 +214,24 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 queries.AddRange(optimized);
             }
+        }
+
+        private IRootExecutionPlanNodeInternal ConvertWaitForStatement(WaitForStatement waitFor)
+        {
+            if (waitFor.WaitForOption == WaitForOption.Statement)
+                throw new NotSupportedQueryFragmentException("WAITFOR <statement> is not supported", waitFor);
+
+            waitFor.Parameter.GetType(null, null, _parameterTypes, out var paramSqlType);
+            var timeType = DataTypeHelpers.Time(3);
+
+            if (!SqlTypeConverter.CanChangeTypeImplicit(paramSqlType, timeType))
+                throw new NotSupportedQueryFragmentException($"Cannot convert value of type {paramSqlType.ToSql()} to {timeType.ToSql()}", waitFor.Parameter);
+
+            return new WaitForNode
+            {
+                Time = new ConvertCall { Parameter = waitFor.Parameter, DataType = timeType },
+                WaitType = waitFor.WaitForOption
+            };
         }
 
         private IRootExecutionPlanNodeInternal ConvertContinueStatement(ContinueStatement continueStmt)

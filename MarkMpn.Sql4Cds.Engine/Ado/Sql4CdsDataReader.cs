@@ -466,6 +466,9 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public override void Close()
         {
+            if (_closed)
+                return;
+
             if (!_error)
             {
                 while (_reader != null && Read())
@@ -477,6 +480,9 @@ namespace MarkMpn.Sql4Cds.Engine
                         ;
                 }
             }
+
+            if (_options is IDisposable disposableOptions)
+                disposableOptions.Dispose();
 
             _closed = true;
             base.Close();
