@@ -123,6 +123,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 "name",
                 "ownerid",
                 "owneridname",
+                "owneridtype",
                 "primarycontactid",
                 "primarycontactidname",
                 "turnover"

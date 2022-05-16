@@ -157,6 +157,7 @@
     <Compile Include="Metadata\New_CustomEntity.cs" />
     <Compile Include="Metadata\Contact.cs" />
     <Compile Include="Metadata\Account.cs" />
+    <Compile Include="Metadata\Team.cs" />
     <Compile Include="Metadata\SystemUser.cs" />
     <Compile Include="OptionsWrapper.cs" />
     <Compile Include="PropertyEqualityComparer.cs" />

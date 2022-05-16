@@ -851,7 +851,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (targetLookupAttribute.Targets.Length > 1 &&
                         !virtualTypeAttributes.Contains(targetAttrName + "type") &&
                         targetLookupAttribute.AttributeType != AttributeTypeCode.PartyList &&
-                        (schema == null || node.ColumnMappings[targetAttrName].ToColumnReference().GetType(schema, null, null, out _) != typeof(SqlEntityReference)))
+                        (schema == null || (node.ColumnMappings[targetAttrName].ToColumnReference().GetType(schema, null, null, out var lookupType) != typeof(SqlEntityReference) && lookupType != DataTypeHelpers.ImplicitIntForNullLiteral)))
                     {
                         // Special case: not required for listmember.entityid
                         if (metadata.LogicalName == "listmember" && targetLookupAttribute.LogicalName == "entityid")
@@ -1308,7 +1308,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (targetLookupAttribute.Targets.Length > 1 &&
                         !virtualTypeAttributes.Contains(targetAttrName + "type") &&
                         targetLookupAttribute.AttributeType != AttributeTypeCode.PartyList &&
-                        (!sourceTypes.TryGetValue(targetAttrName, out var sourceType) || !sourceType.IsSameAs(DataTypeHelpers.EntityReference)))
+                        (!sourceTypes.TryGetValue(targetAttrName, out var sourceType) || (!sourceType.IsSameAs(DataTypeHelpers.EntityReference) && sourceType != DataTypeHelpers.ImplicitIntForNullLiteral)))
                     {
                         throw new NotSupportedQueryFragmentException("Updating a polymorphic lookup field requires setting the associated type column as well", assignment.Column)
                         {
