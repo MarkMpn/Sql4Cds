@@ -77,6 +77,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Use bulk delete if requested & possible
             if (options.UseBulkDelete &&
                 Source is FetchXmlScan fetch &&
+                !fetch.Entity.GetConditions().Any(c => c.IsVariable) &&
                 LogicalName == fetch.Entity.name &&
                 PrimaryIdSource.Equals($"{fetch.Alias}.{dataSource.Metadata[LogicalName].PrimaryIdAttribute}") &&
                 String.IsNullOrEmpty(SecondaryIdSource))
