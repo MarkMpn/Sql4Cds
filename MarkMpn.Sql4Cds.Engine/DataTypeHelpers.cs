@@ -65,7 +65,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public static SqlDataTypeReference Int { get; } = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int };
 
-        public static NullLiteralDataTypeReference ImplicitIntForNullLiteral { get; } = new NullLiteralDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int };
+        public static SqlDataTypeReference ImplicitIntForNullLiteral { get; } = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int };
 
         public static SqlDataTypeReference BigInt { get; } = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.BigInt };
 
@@ -447,9 +447,5 @@ namespace MarkMpn.Sql4Cds.Engine
 
             throw new NotSupportedException();
         }
-    }
-
-    class NullLiteralDataTypeReference : SqlDataTypeReference
-    {
     }
 }
