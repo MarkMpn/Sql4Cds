@@ -57,10 +57,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _typeConversionFuncs[typeof(TSql)] = v => func((TSql)v);
         }
 
-        public SelectDataReader(List<SelectColumn> columnSet, Timer timer, INodeSchema schema, IEnumerable<Entity> source, IDictionary<string, object> parameterValues)
+        public SelectDataReader(List<SelectColumn> columnSet, IDisposable timer, INodeSchema schema, IEnumerable<Entity> source, IDictionary<string, object> parameterValues)
         {
             _columnSet = columnSet;
-            _timer = timer.Run();
+            _timer = timer;
             _schema = schema;
             _source = source.GetEnumerator();
             _parameterValues = parameterValues;
@@ -86,9 +86,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override int FieldCount => _columnSet.Count;
 
-        protected override void Dispose(bool disposing)
+        public override void Close()
         {
-            base.Dispose(disposing);
+            if (_closed)
+                return;
+
+            base.Close();
 
             if (_source is IDisposable disposable)
                 disposable.Dispose();

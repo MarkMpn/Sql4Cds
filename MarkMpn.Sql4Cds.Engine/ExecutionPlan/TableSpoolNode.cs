@@ -136,7 +136,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
 
-            if (hints.Any(hint => hint.HintKind == OptimizerHintKind.NoPerformanceSpool))
+            if (hints != null && hints.Any(hint => hint.HintKind == OptimizerHintKind.NoPerformanceSpool))
                 return Source;
 
             Source.Parent = this;

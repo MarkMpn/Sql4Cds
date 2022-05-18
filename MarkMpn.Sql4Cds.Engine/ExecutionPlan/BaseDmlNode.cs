@@ -373,6 +373,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             convertedExpr = SqlTypeConverter.Convert(expr, sourceSqlType, sourceSqlType);
                             convertedExpr = SqlTypeConverter.Convert(convertedExpr, typeof(EntityReference));
                         }
+                        else if (sourceSqlType == DataTypeHelpers.ImplicitIntForNullLiteral)
+                        {
+                            expr = originalExpr;
+                            convertedExpr = Expression.Constant(null, typeof(EntityReference));
+                        }
                         else
                         {
                             Expression targetExpr;

@@ -123,6 +123,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 "name",
                 "ownerid",
                 "owneridname",
+                "owneridtype",
                 "primarycontactid",
                 "primarycontactidname",
                 "turnover"
@@ -2159,6 +2160,38 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual("ObjectTypeCode", meta.Query.Criteria.Conditions[0].PropertyName);
             Assert.AreEqual(MetadataConditionOperator.Equals, meta.Query.Criteria.Conditions[0].ConditionOperator);
             Assert.AreEqual(1, meta.Query.Criteria.Conditions[0].Value);
+        }
+
+        [TestMethod]
+        public void CaseSensitiveMetadataWhere()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                SELECT logicalname
+                FROM   metadata.entity
+                WHERE  logicalname = 'Account' AND schemaname = 'Account'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var filter = AssertNode<FilterNode>(select.Source);
+            var meta = AssertNode<MetadataQueryNode>(filter.Source);
+
+            // We don't know the case of the schema name, so need to do this condition in a filter node to do it case insensitively
+            Assert.AreEqual("schemaname = 'Account'", filter.Filter.ToSql());
+
+            // We know logical names are lower case so we can fold this part of the filter into the data source.
+            Assert.AreEqual(MetadataSource.Entity, meta.MetadataSource);
+            Assert.AreEqual("entity", meta.EntityAlias);
+            CollectionAssert.AreEqual(new[] { "LogicalName", "SchemaName" }, meta.Query.Properties.PropertyNames);
+            Assert.AreEqual(1, meta.Query.Criteria.Conditions.Count);
+            Assert.AreEqual("LogicalName", meta.Query.Criteria.Conditions[0].PropertyName);
+            Assert.AreEqual(MetadataConditionOperator.Equals, meta.Query.Criteria.Conditions[0].ConditionOperator);
+            Assert.AreEqual("account", meta.Query.Criteria.Conditions[0].Value);
         }
 
         [TestMethod]

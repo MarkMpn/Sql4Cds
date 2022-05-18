@@ -174,7 +174,16 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public override int Depth => 0;
 
-        public override int FieldCount => _reader.FieldCount;
+        public override int FieldCount
+        {
+            get
+            {
+                if (_reader == null)
+                    throw new InvalidOperationException();
+
+                return _reader.FieldCount;
+            }
+        }
 
         public override bool HasRows => _reader != null;
 
@@ -299,26 +308,41 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public override string GetName(int ordinal)
         {
+            if (_reader == null)
+                throw new InvalidOperationException();
+
             return _reader.GetName(ordinal);
         }
 
         public override int GetOrdinal(string name)
         {
+            if (_reader == null)
+                throw new InvalidOperationException();
+
             return _reader.GetOrdinal(name);
         }
 
         public override Type GetProviderSpecificFieldType(int ordinal)
         {
+            if (_reader == null)
+                throw new InvalidOperationException();
+
             return _reader.GetProviderSpecificFieldType(ordinal);
         }
 
         public override object GetProviderSpecificValue(int ordinal)
         {
+            if (_reader == null)
+                throw new InvalidOperationException();
+
             return _reader.GetProviderSpecificValue(ordinal);
         }
 
         public override int GetProviderSpecificValues(object[] values)
         {
+            if (_reader == null)
+                throw new InvalidOperationException();
+
             return _reader.GetProviderSpecificValues(values);
         }
 
@@ -369,6 +393,7 @@ namespace MarkMpn.Sql4Cds.Engine
             catch
             {
                 _error = true;
+                _reader.Close();
                 _reader = null;
                 _readerQuery = null;
                 throw;
@@ -383,6 +408,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 _connection.OnInfoMessage(_readerQuery, $"({_rows} row{(_rows == 1 ? "" : "s")} affected)");
                 _command.OnStatementCompleted(_readerQuery, -1);
 
+                _reader.Close();
                 _reader = null;
                 _readerQuery = null;
             }
@@ -392,6 +418,9 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public override DataTable GetSchemaTable()
         {
+            if (_reader == null)
+                throw new InvalidOperationException();
+
             var schemaTable = _reader.GetSchemaTable();
 
             var clone = schemaTable.Clone();
@@ -437,6 +466,9 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public override void Close()
         {
+            if (_closed)
+                return;
+
             if (!_error)
             {
                 while (_reader != null && Read())
@@ -448,6 +480,9 @@ namespace MarkMpn.Sql4Cds.Engine
                         ;
                 }
             }
+
+            if (_options is IDisposable disposableOptions)
+                disposableOptions.Dispose();
 
             _closed = true;
             base.Close();

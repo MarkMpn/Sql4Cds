@@ -53,13 +53,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             _executionCount++;
 
+            var timer = _timer.Run();
             var schema = Source.GetSchema(dataSources, parameterTypes);
             var source = behavior.HasFlag(CommandBehavior.SchemaOnly) ? Array.Empty<Entity>() : Source.Execute(dataSources, options, parameterTypes, parameterValues);
 
             if (behavior.HasFlag(CommandBehavior.SingleRow))
                 source = source.Take(1);
 
-            return new SelectDataReader(ColumnSet, _timer, schema, source, parameterValues);
+            return new SelectDataReader(ColumnSet, timer, schema, source, parameterValues);
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()

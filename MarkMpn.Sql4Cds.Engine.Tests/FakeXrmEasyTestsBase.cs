@@ -74,6 +74,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             foreach (var entity in context.CreateMetadataQuery())
             {
+                var ownerAttr = (LookupAttributeMetadata)entity.Attributes.SingleOrDefault(a => a.LogicalName == "ownerid");
+                if (ownerAttr != null)
+                {
+                    ownerAttr.Targets = new[] { "systemuser", "team" };
+                    context.SetEntityMetadata(entity);
+                }
+
                 if (entity.LogicalName == "account")
                 {
                     typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.ObjectTypeCode)).SetValue(entity, 1);

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlTypes;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -712,6 +713,87 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     Assert.AreEqual(TimeSpan.Zero, ((DateTime)values[3]).TimeOfDay);
                     Assert.AreEqual(new DateTime(1900, 1, 1), ((DateTime)values[4]).Date);
                 }
+            }
+        }
+
+        [TestMethod]
+        public void InsertNull()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "INSERT INTO contact (firstname, lastname, parentcustomerid) VALUES (NULL, NULL, NULL)";
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = "SELECT firstname, lastname FROM contact WHERE contactid = @@IDENTITY";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.IsTrue(reader.IsDBNull(0));
+                    Assert.IsTrue(reader.IsDBNull(1));
+                }
+            }
+        }
+
+        [TestMethod]
+        public void UpdateNull()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "INSERT INTO account (name, employees) VALUES ('Data8', 100); SELECT @@IDENTITY";
+                var accountId = cmd.ExecuteScalar();
+
+                cmd.CommandText = "SELECT name, employees FROM account WHERE accountid = @accountId";
+                var param = cmd.CreateParameter();
+                param.ParameterName = "@accountId";
+                param.Value = accountId;
+                cmd.Parameters.Add(param);
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("Data8", reader.GetValue(0));
+                    Assert.AreEqual(100, reader.GetValue(1));
+                }
+
+                cmd.CommandText = "UPDATE account SET name = NULL, employees = NULL, ownerid = NULL WHERE accountid = @accountId";
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = "SELECT name, employees FROM account WHERE accountid = @accountId";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.IsTrue(reader.IsDBNull(0));
+                    Assert.IsTrue(reader.IsDBNull(1));
+                }
+            }
+        }
+
+        [TestMethod]
+        public void WaitFor()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "INSERT INTO contact (firstname, lastname) VALUES ('Mark', 'Carrington');";
+                cmd.ExecuteNonQuery();
+
+                var stopwatch = new Stopwatch();
+                stopwatch.Start();
+                cmd.ExecuteNonQuery();
+                stopwatch.Stop();
+                Assert.IsTrue(stopwatch.ElapsedMilliseconds < 100);
+
+                cmd.CommandText = "WAITFOR DELAY '00:00:02'; INSERT INTO contact (firstname, lastname) VALUES ('Mark', 'Carrington');";
+                cmd.ExecuteNonQuery();
+
+                stopwatch.Restart();
+                cmd.ExecuteNonQuery();
+                stopwatch.Stop();
+                Assert.IsTrue(stopwatch.ElapsedMilliseconds > 2000 && stopwatch.ElapsedMilliseconds < 2100);
             }
         }
     }

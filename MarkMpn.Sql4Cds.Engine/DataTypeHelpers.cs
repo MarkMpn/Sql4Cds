@@ -65,6 +65,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public static SqlDataTypeReference Int { get; } = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int };
 
+        public static SqlDataTypeReference ImplicitIntForNullLiteral { get; } = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Int };
+
         public static SqlDataTypeReference BigInt { get; } = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.BigInt };
 
         public static UserDataTypeReference Object(Type type)

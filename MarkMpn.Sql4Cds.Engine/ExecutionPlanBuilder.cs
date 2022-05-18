@@ -192,6 +192,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 plans = new[] { ConvertBreakStatement(breakStmt) };
             else if (statement is ContinueStatement continueStmt)
                 plans = new[] { ConvertContinueStatement(continueStmt) };
+            else if (statement is WaitForStatement waitFor)
+                plans = new[] { ConvertWaitForStatement(waitFor) };
             else
                 throw new NotSupportedQueryFragmentException("Unsupported statement", statement);
 
@@ -212,6 +214,24 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 queries.AddRange(optimized);
             }
+        }
+
+        private IRootExecutionPlanNodeInternal ConvertWaitForStatement(WaitForStatement waitFor)
+        {
+            if (waitFor.WaitForOption == WaitForOption.Statement)
+                throw new NotSupportedQueryFragmentException("WAITFOR <statement> is not supported", waitFor);
+
+            waitFor.Parameter.GetType(null, null, _parameterTypes, out var paramSqlType);
+            var timeType = DataTypeHelpers.Time(3);
+
+            if (!SqlTypeConverter.CanChangeTypeImplicit(paramSqlType, timeType))
+                throw new NotSupportedQueryFragmentException($"Cannot convert value of type {paramSqlType.ToSql()} to {timeType.ToSql()}", waitFor.Parameter);
+
+            return new WaitForNode
+            {
+                Time = new ConvertCall { Parameter = waitFor.Parameter, DataType = timeType },
+                WaitType = waitFor.WaitForOption
+            };
         }
 
         private IRootExecutionPlanNodeInternal ConvertContinueStatement(ContinueStatement continueStmt)
@@ -831,7 +851,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (targetLookupAttribute.Targets.Length > 1 &&
                         !virtualTypeAttributes.Contains(targetAttrName + "type") &&
                         targetLookupAttribute.AttributeType != AttributeTypeCode.PartyList &&
-                        (schema == null || node.ColumnMappings[targetAttrName].ToColumnReference().GetType(schema, null, null, out _) != typeof(SqlEntityReference)))
+                        (schema == null || (node.ColumnMappings[targetAttrName].ToColumnReference().GetType(schema, null, null, out var lookupType) != typeof(SqlEntityReference) && lookupType != DataTypeHelpers.ImplicitIntForNullLiteral)))
                     {
                         // Special case: not required for listmember.entityid
                         if (metadata.LogicalName == "listmember" && targetLookupAttribute.LogicalName == "entityid")
@@ -1288,7 +1308,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (targetLookupAttribute.Targets.Length > 1 &&
                         !virtualTypeAttributes.Contains(targetAttrName + "type") &&
                         targetLookupAttribute.AttributeType != AttributeTypeCode.PartyList &&
-                        (!sourceTypes.TryGetValue(targetAttrName, out var sourceType) || !sourceType.IsSameAs(DataTypeHelpers.EntityReference)))
+                        (!sourceTypes.TryGetValue(targetAttrName, out var sourceType) || (!sourceType.IsSameAs(DataTypeHelpers.EntityReference) && sourceType != DataTypeHelpers.ImplicitIntForNullLiteral)))
                     {
                         throw new NotSupportedQueryFragmentException("Updating a polymorphic lookup field requires setting the associated type column as well", assignment.Column)
                         {
