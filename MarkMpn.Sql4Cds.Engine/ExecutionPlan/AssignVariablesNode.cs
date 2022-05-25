@@ -137,9 +137,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var clone = new AssignVariablesNode
             {
+                BypassCustomPluginExecution = BypassCustomPluginExecution,
                 DataSource = DataSource,
                 Index = Index,
                 Length = Length,
+                MaxDOP = MaxDOP,
                 Source = (IExecutionPlanNodeInternal)Source.Clone(),
                 Sql = Sql
             };

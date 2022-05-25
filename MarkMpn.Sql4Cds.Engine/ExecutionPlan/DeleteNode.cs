@@ -235,10 +235,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var clone = new DeleteNode
             {
+                BypassCustomPluginExecution = BypassCustomPluginExecution,
                 DataSource = DataSource,
                 Index = Index,
                 Length = Length,
                 LogicalName = LogicalName,
+                MaxDOP = MaxDOP,
                 PrimaryIdSource = PrimaryIdSource,
                 SecondaryIdSource = SecondaryIdSource,
                 Source = (IExecutionPlanNodeInternal)Source.Clone(),
