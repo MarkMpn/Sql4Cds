@@ -11,13 +11,7 @@
     <iconUrl>https://markcarrington.dev/sql4cds-icon/</iconUrl>
     <description>Convert SQL queries to FetchXml and execute them against Dataverse / D365</description>
     <summary>Convert SQL queries to FetchXml and execute them against Dataverse / D365</summary>
-    <releaseNotes>Fixed use of aggregates in SET statement
-Fixed cost display in execution plan for SELECT queries
-Metadata filter case sensitivity fix
-Improved null literal handling
-Implemented WAITFOR statement
-Fixed use of bulk delete with parameterized queries
-Fixed error querying tables with lookup columns with no targets</releaseNotes>
+    <releaseNotes>Fixed bypassing plugins and parallelism on UPDATE/INSERT/DELETE</releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>
     <tags>SQL CDS</tags>

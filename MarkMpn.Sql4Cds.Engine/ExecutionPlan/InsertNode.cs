@@ -219,10 +219,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var clone = new InsertNode
             {
+                BypassCustomPluginExecution = BypassCustomPluginExecution,
                 DataSource = DataSource,
                 Index = Index,
                 Length = Length,
                 LogicalName = LogicalName,
+                MaxDOP = MaxDOP,
                 Source = (IExecutionPlanNodeInternal)Source.Clone(),
                 Sql = Sql
             };

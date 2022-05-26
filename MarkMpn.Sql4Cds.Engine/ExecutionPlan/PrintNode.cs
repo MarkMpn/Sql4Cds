@@ -40,7 +40,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return new PrintNode
             {
                 Expression = Expression,
-                _expression = _expression
+                _expression = _expression,
+                Index = Index,
+                Length = Length,
+                Sql = Sql
             };
         }
 
