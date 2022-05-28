@@ -982,6 +982,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             RemoveEmptyFilters();
             MergeRootFilters();
             MergeSingleConditionFilters();
+            MergeNestedFilters();
         }
 
         private void MoveFiltersToLinkEntities()
@@ -1114,6 +1115,51 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var subFilter in filter.Items.OfType<filter>())
                 MergeSingleConditionFilters(subFilter);
+        }
+
+        private void MergeNestedFilters()
+        {
+            MergeNestedFilters(Entity.Items);
+
+            foreach (var linkEntity in Entity.GetLinkEntities())
+                MergeNestedFilters(linkEntity.Items);
+        }
+
+        private void MergeNestedFilters(object[] items)
+        {
+            if (items == null)
+                return;
+
+            var filter = items.OfType<filter>().SingleOrDefault();
+
+            if (filter == null)
+                return;
+
+            MergeNestedFilters(filter);
+        }
+
+        private void MergeNestedFilters(filter filter)
+        {
+            var items = new List<object>();
+
+            foreach (var item in filter.Items)
+            {
+                if (item is filter f)
+                {
+                    MergeNestedFilters(f);
+
+                    if (f.type == filter.type)
+                        items.AddRange(f.Items);
+                    else
+                        items.Add(item);
+                }
+                else
+                {
+                    items.Add(item);
+                }
+            }
+
+            filter.Items = items.ToArray();
         }
 
         public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)

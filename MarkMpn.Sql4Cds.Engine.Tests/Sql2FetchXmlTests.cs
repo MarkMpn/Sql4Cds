@@ -201,10 +201,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                         <attribute name='accountid' />
                         <attribute name='name' />
                         <filter>
-                            <filter>
-                                <condition attribute='employees' operator='ge' value='1' />
-                                <condition attribute='employees' operator='le' value='10' />
-                            </filter>
+                            <condition attribute='employees' operator='ge' value='1' />
+                            <condition attribute='employees' operator='le' value='10' />
                             <filter type='or'>
                                 <condition attribute='turnover' operator='lt' value='2' />
                                 <condition attribute='turnover' operator='gt' value='20' />

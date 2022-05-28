@@ -4606,5 +4606,33 @@ UPDATE account SET employees = @employees WHERE name = @name";
                     </entity>
                 </fetch>");
         }
+
+        [TestMethod]
+        public void NestedOrFilters()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT * FROM account WHERE name = '1' OR name = '2' OR name = '3' OR name = '4'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <all-attributes />
+                        <filter type='or'>
+                            <condition attribute='name' operator='eq' value='1' />
+                            <condition attribute='name' operator='eq' value='2' />
+                            <condition attribute='name' operator='eq' value='3' />
+                            <condition attribute='name' operator='eq' value='4' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
     }
 }
