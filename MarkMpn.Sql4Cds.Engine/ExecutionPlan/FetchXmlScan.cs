@@ -91,6 +91,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private string _lastSchemaFetchXml;
         private string _lastSchemaAlias;
         private NodeSchema _lastSchema;
+        private bool _lastFullSchema;
         private bool _resetPage;
         private string _startingPage;
 
@@ -555,7 +556,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
 
             var fetchXmlString = FetchXmlString;
-            if (_lastSchema != null && Alias == _lastSchemaAlias && fetchXmlString == _lastSchemaFetchXml)
+            if (_lastSchema != null && Alias == _lastSchemaAlias && fetchXmlString == _lastSchemaFetchXml && ReturnFullSchema == _lastFullSchema)
                 return _lastSchema;
 
             _primaryKeyColumns = new Dictionary<string, string>();
@@ -573,6 +574,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _lastSchema = schema;
             _lastSchemaFetchXml = fetchXmlString;
             _lastSchemaAlias = Alias;
+            _lastFullSchema = ReturnFullSchema;
             return schema;
         }
 
