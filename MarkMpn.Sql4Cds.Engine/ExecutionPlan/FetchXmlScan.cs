@@ -972,8 +972,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (pageSizeHints.Count > 1)
                 throw new NotSupportedQueryFragmentException("Duplicate page size hint", pageSizeHints[1]);
 
-            if (!Int32.TryParse(pageSizeHints[0].Value.Substring(pageSizePrefix.Length), out var pageSize))
-                throw new NotSupportedQueryFragmentException("Invalid page size, must be a whole number", pageSizeHints[0]);
+            var pageSize = Int32.Parse(pageSizeHints[0].Value.Substring(pageSizePrefix.Length));
+
+            if (pageSize < 1 || pageSize > 5000)
+                throw new NotSupportedQueryFragmentException("Invalid page size, must be between 1 and 5000", pageSizeHints[0]);
 
             FetchXml.count = pageSize.ToString(CultureInfo.InvariantCulture);
         }

@@ -4634,5 +4634,17 @@ UPDATE account SET employees = @employees WHERE name = @name";
                     </entity>
                 </fetch>");
         }
+
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        [TestMethod]
+        public void UnknownHint()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT * FROM account OPTION(USE HINT('invalid'))";
+
+            planBuilder.Build(query, null, out _);
+        }
     }
 }

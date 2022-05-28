@@ -85,7 +85,11 @@ namespace MarkMpn.Sql4Cds.Engine
             if (errors.Count > 0)
                 throw new QueryParseException(errors[0]);
 
-            if (TDSEndpoint.CanUseTDSEndpoint(Options, DataSources[Options.PrimaryDataSource].Connection))
+            // Validate any query hints
+            var hintValidator = new OptimizerHintValidatingVisitor();
+            fragment.Accept(hintValidator);
+
+            if (hintValidator.TdsCompatible && TDSEndpoint.CanUseTDSEndpoint(Options, DataSources[Options.PrimaryDataSource].Connection))
             {
                 using (var con = DataSources[Options.PrimaryDataSource].Connection == null ? null : TDSEndpoint.Connect(DataSources[Options.PrimaryDataSource].Connection))
                 {
