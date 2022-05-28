@@ -229,7 +229,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             return new WaitForNode
             {
-                Time = new ConvertCall { Parameter = waitFor.Parameter, DataType = timeType },
+                Time = new ConvertCall { Parameter = waitFor.Parameter.Clone(), DataType = timeType },
                 WaitType = waitFor.WaitForOption
             };
         }
@@ -274,14 +274,14 @@ namespace MarkMpn.Sql4Cds.Engine
                 throw new NotSupportedQueryFragmentException("Subqueries are not allowed in this context. Only scalar expressions are allowed.", print.Expression);
 
             // Check the expression for errors. Ensure it can be converted to a string
-            var expr = print.Expression;
+            var expr = print.Expression.Clone();
 
-            if (print.Expression.GetType(null, null, _parameterTypes, out _) != typeof(string))
+            if (expr.GetType(null, null, _parameterTypes, out _) != typeof(SqlString))
             {
                 expr = new ConvertCall
                 {
                     DataType = typeof(SqlString).ToSqlType(),
-                    Parameter = print.Expression
+                    Parameter = expr
                 };
 
                 expr.GetType(null, null, _parameterTypes, out _);
@@ -350,7 +350,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             return new ConditionalNode
             {
-                Condition = subqueryVisitor.Subqueries.Count == 0 ? predicate : null,
+                Condition = subqueryVisitor.Subqueries.Count == 0 ? predicate.Clone() : null,
                 Source = predicateSource,
                 SourceColumn = sourceCol,
                 TrueStatements = trueQueries.ToArray(),
@@ -1656,7 +1656,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     }
 
                     var alias = $"Expr{++_colNameCounter}";
-                    computeScalar.Columns[alias] = inSubquery.Expression;
+                    computeScalar.Columns[alias] = inSubquery.Expression.Clone();
                     lhsCol = alias.ToColumnReference();
                 }
                 else
@@ -1706,7 +1706,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         join = new HashJoinNode
                         {
                             LeftSource = source,
-                            LeftAttribute = lhsCol,
+                            LeftAttribute = lhsCol.Clone(),
                             RightSource = alias,
                             RightAttribute = new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = alias.Alias }, new Identifier { Value = alias.ColumnSet[0].OutputColumn } } } }
                         };
@@ -1921,7 +1921,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             return new FilterNode
             {
-                Filter = havingClause.SearchCondition,
+                Filter = havingClause.SearchCondition.Clone(),
                 Source = source
             };
         }
@@ -2058,7 +2058,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 foreach (var calc in groupings.Where(kvp => kvp.Key != kvp.Value))
                 {
                     rewrites[calc.Key] = calc.Value.GetColumnName();
-                    computeScalar.Columns[calc.Value.GetColumnName()] = calc.Key;
+                    computeScalar.Columns[calc.Value.GetColumnName()] = calc.Key.Clone();
                 }
 
                 source = computeScalar;
@@ -2072,7 +2072,7 @@ namespace MarkMpn.Sql4Cds.Engine
             };
 
             foreach (var grouping in groupings)
-                hashMatch.GroupBy.Add(grouping.Value);
+                hashMatch.GroupBy.Add(grouping.Value.Clone());
 
             // Create the aggregate functions
             var aggregateCollector = new AggregateCollectingVisitor();
@@ -2088,7 +2088,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     Distinct = aggregate.Expression.UniqueRowFilter == UniqueRowFilter.Distinct
                 };
 
-                converted.SqlExpression = aggregate.Expression.Parameters[0];
+                converted.SqlExpression = aggregate.Expression.Parameters[0].Clone();
 
                 switch (aggregate.Expression.FunctionName.Value.ToUpper())
                 {
@@ -2184,8 +2184,8 @@ namespace MarkMpn.Sql4Cds.Engine
             return new OffsetFetchNode
             {
                 Source = source,
-                Offset = offsetClause.OffsetExpression,
-                Fetch = offsetClause.FetchExpression
+                Offset = offsetClause.OffsetExpression.Clone(),
+                Fetch = offsetClause.FetchExpression.Clone()
             };
         }
 
@@ -2224,7 +2224,10 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (!schema.IsSortedBy(tieColumns))
                 {
                     var sort = new SortNode { Source = source };
-                    sort.Sorts.AddRange(orderByClause.OrderByElements);
+
+                    foreach (var orderBy in orderByClause.OrderByElements)
+                        sort.Sorts.Add(orderBy.Clone());
+
                     source = sort;
                 }
             }
@@ -2237,7 +2240,7 @@ namespace MarkMpn.Sql4Cds.Engine
             return new TopNode
             {
                 Source = source,
-                Top = topRowFilter.Expression,
+                Top = topRowFilter.Expression.Clone(),
                 Percent = topRowFilter.Percent,
                 WithTies = topRowFilter.WithTies,
                 TieColumns = topRowFilter.WithTies ? tieColumns.ToList() : null
@@ -2311,7 +2314,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 // Validate the expression
                 orderBy.Expression.GetType(schema, nonAggregateSchema, parameterTypes, out _);
 
-                sort.Sorts.Add(orderBy);
+                sort.Sorts.Add(orderBy.Clone());
             }
 
             // Use the calculated expressions in the sort and anywhere else that uses the same expression
@@ -2342,7 +2345,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             return new FilterNode
             {
-                Filter = whereClause.SearchCondition,
+                Filter = whereClause.SearchCondition.Clone(),
                 Source = source
             };
         }
@@ -2737,7 +2740,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 LeftSource = node,
                 LeftAttribute = outerKey.ToColumnReference(),
                 RightSource = inPredicateCol != null ? (IDataExecutionPlanNodeInternal) filter ?? fetch : fetch,
-                RightAttribute = rightAttribute,
+                RightAttribute = rightAttribute.Clone(),
                 JoinType = QualifiedJoinType.LeftOuter
             };
 
@@ -2806,10 +2809,10 @@ namespace MarkMpn.Sql4Cds.Engine
                 // that could be folded into the data source first
                 if (SplitCorrelatedCriteria(filter.Filter, out var correlatedFilter, out var nonCorrelatedFilter))
                 {
-                    filter.Filter = correlatedFilter;
+                    filter.Filter = correlatedFilter.Clone();
                     filter.Source = new FilterNode
                     {
-                        Filter = nonCorrelatedFilter,
+                        Filter = nonCorrelatedFilter.Clone(),
                         Source = filter.Source
                     };
                 }
@@ -3102,11 +3105,11 @@ namespace MarkMpn.Sql4Cds.Engine
                     joinNode = new MergeJoinNode
                     {
                         LeftSource = lhs,
-                        LeftAttribute = joinConditionVisitor.LhsKey,
+                        LeftAttribute = joinConditionVisitor.LhsKey.Clone(),
                         RightSource = rhs,
-                        RightAttribute = joinConditionVisitor.RhsKey,
+                        RightAttribute = joinConditionVisitor.RhsKey.Clone(),
                         JoinType = join.QualifiedJoinType,
-                        AdditionalJoinCriteria = join.SearchCondition.RemoveCondition(joinConditionVisitor.JoinCondition)
+                        AdditionalJoinCriteria = join.SearchCondition.RemoveCondition(joinConditionVisitor.JoinCondition).Clone()
                     };
                 }
                 else if (joinConditionVisitor.LhsKey != null && joinConditionVisitor.RhsKey != null && joinConditionVisitor.RhsKey.GetColumnName() == rhsSchema.PrimaryKey)
@@ -3114,10 +3117,10 @@ namespace MarkMpn.Sql4Cds.Engine
                     joinNode = new MergeJoinNode
                     {
                         LeftSource = rhs,
-                        LeftAttribute = joinConditionVisitor.RhsKey,
+                        LeftAttribute = joinConditionVisitor.RhsKey.Clone(),
                         RightSource = lhs,
-                        RightAttribute = joinConditionVisitor.LhsKey,
-                        AdditionalJoinCriteria = join.SearchCondition.RemoveCondition(joinConditionVisitor.JoinCondition)
+                        RightAttribute = joinConditionVisitor.LhsKey.Clone(),
+                        AdditionalJoinCriteria = join.SearchCondition.RemoveCondition(joinConditionVisitor.JoinCondition).Clone()
                     };
 
                     switch (join.QualifiedJoinType)
@@ -3144,11 +3147,11 @@ namespace MarkMpn.Sql4Cds.Engine
                     joinNode = new HashJoinNode
                     {
                         LeftSource = lhs,
-                        LeftAttribute = joinConditionVisitor.LhsKey,
+                        LeftAttribute = joinConditionVisitor.LhsKey.Clone(),
                         RightSource = rhs,
-                        RightAttribute = joinConditionVisitor.RhsKey,
+                        RightAttribute = joinConditionVisitor.RhsKey.Clone(),
                         JoinType = join.QualifiedJoinType,
-                        AdditionalJoinCriteria = join.SearchCondition.RemoveCondition(joinConditionVisitor.JoinCondition)
+                        AdditionalJoinCriteria = join.SearchCondition.RemoveCondition(joinConditionVisitor.JoinCondition).Clone()
                     };
                 }
                 else
@@ -3158,7 +3161,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         LeftSource = lhs,
                         RightSource = rhs,
                         JoinType = join.QualifiedJoinType,
-                        JoinCondition = join.SearchCondition
+                        JoinCondition = join.SearchCondition.Clone()
                     };
                 }
 

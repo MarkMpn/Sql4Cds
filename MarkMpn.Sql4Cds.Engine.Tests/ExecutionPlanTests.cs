@@ -3202,7 +3202,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual("MONTH(a.createdon)", calc.Columns["Expr2"].ToSql());
             Assert.AreEqual("YEAR(a.createdon)", calc.Columns["Expr3"].ToSql());
             var filter = AssertNode<FilterNode>(calc.Source);
-            Assert.AreEqual("YEAR(a.createdon) = 2021 AND MONTH(a.createdon) = 11", filter.Filter.ToSql());
+            Assert.AreEqual("YEAR(a.createdon) = 2021 AND MONTH(a.createdon) = 11", filter.Filter.ToSql().Replace("\r\n", " "));
             var fetch = AssertNode<FetchXmlScan>(filter.Source);
             AssertFetchXml(fetch, @"
                 <fetch>
@@ -3335,7 +3335,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     </entity>
                 </fetch>");
             var sort = AssertNode<SortNode>(merge.RightSource);
-            Assert.AreEqual("entity.metadataid", sort.Sorts[0].ToSql());
+            Assert.AreEqual("entity.metadataid ASC", sort.Sorts[0].ToSql());
             var meta = AssertNode<MetadataQueryNode>(sort.Source);
         }
 
@@ -4572,6 +4572,37 @@ UPDATE account SET employees = @employees WHERE name = @name";
                 <fetch xmlns:generator='MarkMpn.SQL4CDS'>
                     <entity name='account'>
                         <all-attributes />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void UpdateColumnInWhereClause()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "UPDATE account SET name = '1' WHERE name <> '1'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var update = AssertNode<UpdateNode>(plans[0]);
+            Assert.AreEqual("Expr1", update.ColumnMappings["name"]);
+
+            var compute = AssertNode<ComputeScalarNode>(update.Source);
+            Assert.AreEqual("'1'", compute.Columns["Expr1"].ToSql());
+
+            var fetch = AssertNode<FetchXmlScan>(compute.Source);
+
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                        <filter>
+                            <condition attribute='name' operator='ne' value='1' />
+                            <condition attribute='name' operator='not-null' />
+                        </filter>
                     </entity>
                 </fetch>");
         }

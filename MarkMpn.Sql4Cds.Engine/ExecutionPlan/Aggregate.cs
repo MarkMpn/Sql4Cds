@@ -131,11 +131,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public string OutputName { get; set; }
 
         /// <summary>
-        /// Returns the SQL fragment that this aggregate was converted from
-        /// </summary>
-        public ScalarExpression SqlExpression { get; set; }
-
-        /// <summary>
         /// Returns the <see cref="SqlExpression"/> being aggregated converted to a <see cref="System.Linq.Expressions.Expression"/>
         /// </summary>
         public Expression Expression { get; set; }
@@ -602,7 +597,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             Expression = func.Expression;
             OutputName = func.OutputName;
-            SqlExpression = func.SqlExpression;
         }
 
         public override DataTypeReference Type => _func.Type;
