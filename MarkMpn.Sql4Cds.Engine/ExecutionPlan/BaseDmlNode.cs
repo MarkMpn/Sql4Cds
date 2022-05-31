@@ -500,7 +500,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 #if NETCOREAPP
             var svc = org as ServiceClient;
 
-            if (maxDop <= 1 || svc == null || svc.ActiveAuthenticationType != Microsoft.PowerPlatform.Dataverse.Client.AuthenticationType.OAuth)
+            if (maxDop <= 1 || svc == null || (svc.ActiveAuthenticationType != Microsoft.PowerPlatform.Dataverse.Client.AuthenticationType.OAuth && svc.ActiveAuthenticationType != Microsoft.PowerPlatform.Dataverse.Client.AuthenticationType.Certificate && svc.ActiveAuthenticationType != Microsoft.PowerPlatform.Dataverse.Client.AuthenticationType.ExternalTokenManagement && svc.ActiveAuthenticationType != Microsoft.PowerPlatform.Dataverse.Client.AuthenticationType.ClientSecret))
             {
                 maxDop = 1;
                 svc = null;
@@ -508,7 +508,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 #else
             var svc = org as CrmServiceClient;
 
-            if (maxDop <= 1 || svc == null || svc.ActiveAuthenticationType != Microsoft.Xrm.Tooling.Connector.AuthenticationType.OAuth)
+            if (maxDop <= 1 || svc == null || (svc.ActiveAuthenticationType != Microsoft.Xrm.Tooling.Connector.AuthenticationType.OAuth && svc.ActiveAuthenticationType != Microsoft.Xrm.Tooling.Connector.AuthenticationType.Certificate && svc.ActiveAuthenticationType != Microsoft.Xrm.Tooling.Connector.AuthenticationType.ExternalTokenManagement && svc.ActiveAuthenticationType != Microsoft.Xrm.Tooling.Connector.AuthenticationType.ClientSecret))
             {
                 maxDop = 1;
                 svc = null;
