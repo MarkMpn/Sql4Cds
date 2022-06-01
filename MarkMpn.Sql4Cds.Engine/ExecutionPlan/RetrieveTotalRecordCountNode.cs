@@ -72,9 +72,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
         }
 
-        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
-            return 1;
+            return RowCountEstimateDefiniteRange.ExactlyOne;
         }
 
         public override object Clone()

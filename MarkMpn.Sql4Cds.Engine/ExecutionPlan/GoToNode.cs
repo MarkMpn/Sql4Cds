@@ -78,8 +78,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                     else if (Source != null)
                     {
-                        var source = (IDataExecutionPlanNodeInternal)Source.Clone();
-                        var record = source.Execute(dataSources, options, parameterTypes, parameterValues).First();
+                        var record = Source.Execute(dataSources, options, parameterTypes, parameterValues).First();
                         result = ((SqlInt32)record[SourceColumn]).Value == 1;
                     }
                     else
@@ -118,12 +117,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
         {
-            return Array.Empty<IExecutionPlanNode>();
+            if (Source == null)
+                return Array.Empty<IExecutionPlanNode>();
+
+            return new[] { Source };
         }
 
         public override string ToString()
         {
-            return "GOTO" + ((Source != null || Condition != null) ? " (Conditional)" : "") + "\r\n" + Label;
+            return "GOTO" + ((Source != null || Condition != null) ? " (Conditional)" : "");
         }
     }
 }

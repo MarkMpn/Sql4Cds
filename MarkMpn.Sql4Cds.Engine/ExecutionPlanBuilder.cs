@@ -2562,7 +2562,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     // Unless the subquery has got an explicit TOP 1 clause, insert an aggregate and assertion nodes
                     // to check for one row
-                    if (!(subqueryPlan.Source is TopNode top) || !(top.Top is IntegerLiteral topValue) || topValue.Value != "1")
+                    if (!(subqueryPlan.Source.EstimateRowsOut(DataSources, Options, parameterTypes) is RowCountEstimateDefiniteRange range) || range.Maximum > 1)
                     {
                         subqueryCol = $"Expr{++_colNameCounter}";
                         var rowCountCol = $"Expr{++_colNameCounter}";

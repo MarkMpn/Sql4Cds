@@ -29,7 +29,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// Populates <see cref="IDataExecutionPlanNode.EstimatedRowsOut"/> with an estimate of the number of rows that will be returned by this node
         /// </summary>
-        void EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes);
+        RowCountEstimate EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes);
 
         /// <summary>
         /// Executes the execution plan

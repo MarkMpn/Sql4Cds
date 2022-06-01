@@ -42,9 +42,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
-            return Source.EstimatedRowsOut / 100;
+            var rows = Source.EstimateRowsOut(dataSources, options, parameterTypes);
+
+            if (rows is RowCountEstimateDefiniteRange range && range.Maximum == 1)
+                return range;
+
+            return new RowCountEstimate(Source.EstimatedRowsOut / 100);
         }
 
         public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)

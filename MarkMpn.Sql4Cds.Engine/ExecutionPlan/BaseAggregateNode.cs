@@ -289,12 +289,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return false;
         }
 
-        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
             if (GroupBy.Count == 0)
-                return 1;
+                return RowCountEstimateDefiniteRange.ExactlyOne;
 
-            return Source.EstimatedRowsOut * 4 / 10;
+            var rows = Source.EstimateRowsOut(dataSources, options, parameterTypes).Value * 4 / 10;
+
+            return new RowCountEstimate(rows);
         }
 
         public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)

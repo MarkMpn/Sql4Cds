@@ -189,9 +189,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
-            return Sources.Sum(s => s.EstimatedRowsOut);
+            return new RowCountEstimate(Sources.Sum(s => s.EstimateRowsOut(dataSources, options, parameterTypes).Value));
         }
 
         public override object Clone()

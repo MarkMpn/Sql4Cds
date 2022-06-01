@@ -77,9 +77,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
         }
 
-        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
-            return Values.Count;
+            return new RowCountEstimateDefiniteRange(Values.Count, Values.Count);
         }
 
         protected override IEnumerable<string> GetVariablesInternal()

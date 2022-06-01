@@ -1318,19 +1318,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             ReturnFullSchema = fullSchema;
         }
 
-        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
             if (FetchXml.aggregateSpecified && FetchXml.aggregate)
             {
                 var hasGroups = HasGroups(Entity.Items);
 
                 if (!hasGroups)
-                    return 1;
+                    return RowCountEstimateDefiniteRange.ExactlyOne;
 
-                return EstimateRowsOut(Entity.name, Entity.Items, dataSources) * 4 / 10;
+                return EstimateRowsOut(Entity.name, Entity.Items, dataSources, 0.4);
             }
 
-            return EstimateRowsOut(Entity.name, Entity.Items, dataSources);
+            return EstimateRowsOut(Entity.name, Entity.Items, dataSources, 1.0);
         }
 
         private bool HasGroups(object[] items)
@@ -1344,20 +1344,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return items.OfType<FetchLinkEntityType>().Any(link => HasGroups(link.Items));
         }
 
-        private int EstimateRowsOut(string name, object[] items, IDictionary<string, DataSource> dataSources)
+        private RowCountEstimate EstimateRowsOut(string name, object[] items, IDictionary<string, DataSource> dataSources, double multiplier)
         {
             if (!String.IsNullOrEmpty(FetchXml.top))
-                return Int32.Parse(FetchXml.top, CultureInfo.InvariantCulture);
+                return new RowCountEstimateDefiniteRange(0, Int32.Parse(FetchXml.top, CultureInfo.InvariantCulture));
 
             if (!dataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
 
             // Start with the total number of records
-            var rowCount = dataSource.TableSizeCache[name];
+            var rowCount = (int)(dataSource.TableSizeCache[name] * multiplier);
+
+            if (items == null)
+                return new RowCountEstimate(rowCount);
 
             // If there's any 1:N joins, use the larger number
-            if (items == null)
-                return rowCount;
 
             var entityMetadata = dataSource.Metadata[name];
             var joins = items.OfType<FetchLinkEntityType>();
@@ -1367,7 +1368,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (join.to != entityMetadata.PrimaryIdAttribute)
                     continue;
 
-                var childCount = EstimateRowsOut(join.name, join.Items, dataSources);
+                var childCount = EstimateRowsOut(join.name, join.Items, dataSources, 1.0).Value;
 
                 if (join.linktype == "outer")
                     rowCount = Math.Max(rowCount, childCount);
@@ -1384,7 +1385,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 filterMultiple *= EstimateFilterRate(entityMetadata, filter, dataSource.TableSizeCache, out var singleRow);
 
                 if (singleRow)
-                    return 1;
+                    return RowCountEstimateDefiniteRange.ZeroOrOne;
             }
 
             var estimate = (int) (rowCount * filterMultiple);
@@ -1394,7 +1395,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (estimate <= 1 && rowCount > 1)
                 estimate = 2;
 
-            return estimate;
+            return new RowCountEstimate(estimate);
         }
 
         private double EstimateFilterRate(EntityMetadata metadata, filter filter, ITableSizeCache tableSize, out bool singleRow)

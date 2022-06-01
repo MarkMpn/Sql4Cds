@@ -82,6 +82,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\QueryExecutionException.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\RetrieveTotalRecordCountNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\RevertNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\RowCountEstimate.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\SelectDataReader.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\SelectNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\SortNode.cs" />

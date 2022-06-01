@@ -543,15 +543,40 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             RightSource.AddRequiredColumns(dataSources, parameterTypes, rightColumns);
         }
 
-        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
-            var leftEstimate = LeftSource.EstimatedRowsOut;
-            var rightEstimate = RightSource.EstimatedRowsOut;
+            var leftEstimate = LeftSource.EstimateRowsOut(dataSources, options, parameterTypes);
+            ParseEstimate(leftEstimate, out var leftMin, out var leftMax, out var leftIsRange);
+            var rightEstimate = RightSource.EstimateRowsOut(dataSources, options, parameterTypes);
+            ParseEstimate(rightEstimate, out var rightMin, out var rightMax, out var rightIsRange);
 
-            if (JoinType == QualifiedJoinType.Inner)
-                return Math.Min(leftEstimate, rightEstimate);
+            if (JoinType == QualifiedJoinType.LeftOuter && SemiJoin)
+                return leftEstimate;
+
+            if (JoinType == QualifiedJoinType.RightOuter && SemiJoin)
+                return rightEstimate;
+
+            int estimate;
+
+            var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
+            var rightSchema = GetRightSchema(dataSources, parameterTypes);
+
+            if (LeftAttribute.GetColumnName() == leftSchema.PrimaryKey || RightAttribute.GetColumnName() == rightSchema.PrimaryKey)
+            {
+                if (JoinType == QualifiedJoinType.Inner)
+                    estimate = Math.Min(leftMax, rightMax);
+                else
+                    estimate = Math.Max(leftMax, rightMax);
+            }
             else
-                return Math.Max(leftEstimate, rightEstimate);
+            {
+                estimate = leftMax * rightMax;
+            }
+
+            if (leftIsRange && rightIsRange)
+                return new RowCountEstimateDefiniteRange(0, estimate);
+            else
+                return new RowCountEstimate(estimate);
         }
 
         protected override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, bool includeSemiJoin)

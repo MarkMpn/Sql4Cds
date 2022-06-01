@@ -373,7 +373,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
             var entityCount = 100;
             var attributesPerEntity = 1;
@@ -406,7 +406,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
-            return entityCount * attributesPerEntity * relationshipsPerEntity;
+            var count = entityCount * attributesPerEntity * relationshipsPerEntity;
+
+            if (count == 1)
+                return RowCountEstimateDefiniteRange.ZeroOrOne;
+
+            return new RowCountEstimate(count);
         }
 
         private bool HasEqualityFilter(MetadataFilterExpression filter, string propName)
