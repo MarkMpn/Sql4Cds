@@ -244,5 +244,25 @@ namespace MarkMpn.Sql4Cds.Tests
             CollectionAssert.DoesNotContain(suggestions, "today()");
             CollectionAssert.Contains(suggestions, "under(value)");
         }
+
+        [TestMethod]
+        public void MultipleTablesTableName()
+        {
+            var sql = "SELECT * FROM account, cont";
+
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1).Select(s => s.Text).ToList();
+
+            CollectionAssert.AreEqual(new[] { "contact" }, suggestions);
+        }
+
+        [TestMethod]
+        public void MultipleTablesColumnName()
+        {
+            var sql = "SELECT * FROM account, contact WHERE fi";
+
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1).Select(s => s.Text).ToList();
+
+            CollectionAssert.AreEqual(new[] { "firstname" }, suggestions);
+        }
     }
 }
