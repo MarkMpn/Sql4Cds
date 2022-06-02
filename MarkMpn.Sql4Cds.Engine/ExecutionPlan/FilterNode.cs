@@ -127,6 +127,29 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var foldedFilters = false;
 
+            foldedFilters |= FoldInExistsToFetchXml(dataSources, options, parameterTypes, hints, out var addedLinks);
+            foldedFilters |= FoldTableSpoolToIndexSpool(dataSources, options, parameterTypes, hints);
+            foldedFilters |= FoldFiltersToDataSources(dataSources, options, parameterTypes);
+
+            foreach (var addedLink in addedLinks)
+                addedLink.SemiJoin = true;
+
+            // Some of the filters have been folded into the source. Fold the sources again as the filter can have changed estimated row
+            // counts and lead to a better execution plan.
+            if (foldedFilters)
+                Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
+
+            // All the filters have been folded into the source. 
+            if (Filter == null)
+                return Source;
+
+            return this;
+        }
+
+        private bool FoldInExistsToFetchXml(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints, out List<FetchLinkEntityType> addedLinks)
+        {
+            var foldedFilters = false;
+
             // Foldable correlated IN queries "lefttable.column IN (SELECT righttable.column FROM righttable WHERE ...) are created as:
             // Filter: Expr2 is not null
             // -> FoldableJoin (LeftOuter SemiJoin) Expr2 = righttable.column in DefinedValues; righttable.column in RightAttribute
@@ -152,7 +175,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     join = join.LeftSource as BaseJoinNode;
             }
 
-            var addedLinks = new List<FetchLinkEntityType>();
+            addedLinks = new List<FetchLinkEntityType>();
             FetchXmlScan leftFetch;
 
             if (joins.Count == 0)
@@ -366,6 +389,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     else
                         leftFetch.Entity.FindLinkEntity(leftAlias).AddItem(linkToAdd);
 
+                    // Join needs to be a semi-join, but don't set it yet as the columns won't be visible in the schema to allow
+                    // the filter to be folded into it later. Keep track of which links we've added now so we can set the semi-join
+                    // flag on them later.
                     addedLinks.Add(linkToAdd);
                 }
 
@@ -393,40 +419,50 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
+            return foldedFilters;
+        }
+
+        private bool FoldTableSpoolToIndexSpool(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        {
             // If we've got a filter matching a column and a variable (key lookup in a nested loop) from a table spool, replace it with a index spool
-            if (Source is TableSpoolNode tableSpool)
+            if (!(Source is TableSpoolNode tableSpool))
+                return false;
+
+            var schema = Source.GetSchema(dataSources, parameterTypes);
+
+            if (!ExtractKeyLookupFilter(Filter, out var filter, out var indexColumn, out var seekVariable) || !schema.ContainsColumn(indexColumn, out indexColumn))
+                return false;
+
+            var spoolSource = tableSpool.Source;
+
+            // Index spool requires non-null key values
+            if (indexColumn != schema.PrimaryKey)
             {
-                var schema = Source.GetSchema(dataSources, parameterTypes);
-
-                if (ExtractKeyLookupFilter(Filter, out var filter, out var indexColumn, out var seekVariable) && schema.ContainsColumn(indexColumn, out indexColumn))
+                spoolSource = new FilterNode
                 {
-                    var spoolSource = tableSpool.Source;
-
-                    // Index spool requires non-null key values
-                    if (indexColumn != schema.PrimaryKey)
+                    Source = tableSpool.Source,
+                    Filter = new BooleanIsNullExpression
                     {
-                        spoolSource = new FilterNode
-                        {
-                            Source = tableSpool.Source,
-                            Filter = new BooleanIsNullExpression
-                            {
-                                Expression = indexColumn.ToColumnReference(),
-                                IsNot = true
-                            }
-                        }.FoldQuery(dataSources, options, parameterTypes, hints);
+                        Expression = indexColumn.ToColumnReference(),
+                        IsNot = true
                     }
-
-                    Source = new IndexSpoolNode
-                    {
-                        Source = spoolSource,
-                        KeyColumn = indexColumn,
-                        SeekValue = seekVariable
-                    };
-
-                    Filter = filter;
-                    foldedFilters = true;
-                }
+                }.FoldQuery(dataSources, options, parameterTypes, hints);
             }
+
+            Source = new IndexSpoolNode
+            {
+                Source = spoolSource,
+                KeyColumn = indexColumn,
+                SeekValue = seekVariable
+            };
+
+            Filter = filter;
+            return true;
+        }
+
+        private bool FoldFiltersToDataSources(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        {
+            var foldedFilters = false;
 
             // Find all the data source nodes we could fold this into. Include direct data sources, those from either side of an inner join, or the main side of an outer join
             foreach (var source in GetFoldableSources(Source))
@@ -483,19 +519,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
-            foreach (var addedLink in addedLinks)
-                addedLink.SemiJoin = true;
-
-            // Some of the filters have been folded into the source. Fold the sources again as the filter can have changed estimated row
-            // counts and lead to a better execution plan.
-            if (foldedFilters)
-                Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
-
-            // All the filters have been folded into the source. 
-            if (Filter == null)
-                return Source;
-
-            return this;
+            return foldedFilters;
         }
 
         private BooleanIsNullExpression FindNotNullFilter(BooleanExpression filter, string attribute)
