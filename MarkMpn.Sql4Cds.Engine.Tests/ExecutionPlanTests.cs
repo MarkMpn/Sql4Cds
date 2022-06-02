@@ -4646,5 +4646,96 @@ UPDATE account SET employees = @employees WHERE name = @name";
 
             planBuilder.Build(query, null, out _);
         }
+
+        [TestMethod]
+        public void MultipleTablesJoinFromWhereClause()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT firstname FROM account, contact WHERE accountid = parentcustomerid AND lastname = 'Carrington' AND name = 'Data8'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <link-entity name='account' from='accountid' to='parentcustomerid' alias='account' link-type='inner'>
+                            <filter>
+                                <condition attribute='name' operator='eq' value='Data8' />
+                            </filter>
+                        </link-entity>
+                        <filter>
+                            <condition attribute='lastname' operator='eq' value='Carrington' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void MultipleTablesJoinFromWhereClauseReversed()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT firstname FROM account, contact WHERE lastname = 'Carrington' AND name = 'Data8' AND parentcustomerid = accountid";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <link-entity name='account' from='accountid' to='parentcustomerid' alias='account' link-type='inner'>
+                            <filter>
+                                <condition attribute='name' operator='eq' value='Data8' />
+                            </filter>
+                        </link-entity>
+                        <filter>
+                            <condition attribute='lastname' operator='eq' value='Carrington' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void MultipleTablesJoinFromWhereClause3()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT firstname FROM account, contact, systemuser WHERE accountid = parentcustomerid AND lastname = 'Carrington' AND name = 'Data8' AND account.ownerid = systemuserid";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <link-entity name='account' from='accountid' to='parentcustomerid' alias='account' link-type='inner'>
+                            <link-entity name='systemuser' from='systemuserid' to='ownerid' alias='systemuser' link-type='inner' />
+                            <filter>
+                                <condition attribute='name' operator='eq' value='Data8' />
+                            </filter>
+                        </link-entity>
+                        <filter>
+                            <condition attribute='lastname' operator='eq' value='Carrington' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
     }
 }

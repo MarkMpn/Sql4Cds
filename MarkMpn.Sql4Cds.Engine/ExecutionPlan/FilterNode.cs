@@ -127,6 +127,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var foldedFilters = false;
 
+            foldedFilters |= FoldNestedLoopFiltersToJoins(dataSources, options, parameterTypes, hints);
             foldedFilters |= FoldInExistsToFetchXml(dataSources, options, parameterTypes, hints, out var addedLinks);
             foldedFilters |= FoldTableSpoolToIndexSpool(dataSources, options, parameterTypes, hints);
             foldedFilters |= FoldFiltersToDataSources(dataSources, options, parameterTypes);
@@ -144,6 +145,136 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return Source;
 
             return this;
+        }
+
+        private bool FoldNestedLoopFiltersToJoins(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        {
+            // Queries like "FROM table1, table2 WHERE table1.col = table2.col" are created as:
+            // Filter: table1.col = table2.col
+            // -> NestedLoop (Inner), null join condition, no defined values
+            //    -> FetchXml
+            //    -> Table Spool
+            //       -> FetchXml
+            if (FoldNestedLoopFiltersToJoins(Source as BaseJoinNode, dataSources, options, parameterTypes, hints, out var foldedJoin))
+            {
+                Source = foldedJoin;
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool FoldNestedLoopFiltersToJoins(BaseJoinNode join, IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints, out FoldableJoinNode foldedJoin)
+        {
+            foldedJoin = null;
+
+            if (join == null)
+                return false;
+
+            var foldedFilters = false;
+
+            if (join.JoinType == QualifiedJoinType.Inner &&
+                !join.SemiJoin &&
+                join.DefinedValues.Count == 0 &&
+                join is NestedLoopNode loop &&
+                (loop.OuterReferences == null || loop.OuterReferences.Count == 0))
+            {
+                var leftSchema = join.LeftSource.GetSchema(dataSources, parameterTypes);
+                var rightSchema = join.RightSource.GetSchema(dataSources, parameterTypes);
+
+                if (ExtractJoinCondition(Filter, loop, leftSchema, rightSchema, out foldedJoin, out var removedCondition))
+                {
+                    Filter = Filter.RemoveCondition(removedCondition);
+                    foldedFilters = true;
+                    join = foldedJoin;
+                }
+            }
+
+            if (FoldNestedLoopFiltersToJoins(join.LeftSource as BaseJoinNode, dataSources, options, parameterTypes, hints, out var foldedLeftSource))
+            {
+                join.LeftSource = foldedLeftSource;
+                foldedFilters = true;
+            }
+
+            if (FoldNestedLoopFiltersToJoins(join.RightSource as BaseJoinNode, dataSources, options, parameterTypes, hints, out var foldedRightSource))
+            {
+                join.RightSource = foldedRightSource;
+                foldedFilters = true;
+            }
+
+            return foldedFilters;
+        }
+
+        private bool ExtractJoinCondition(BooleanExpression filter, NestedLoopNode join, INodeSchema leftSchema, INodeSchema rightSchema, out FoldableJoinNode foldedJoin, out BooleanExpression removedCondition)
+        {
+            if (filter is BooleanComparisonExpression cmp &&
+                cmp.ComparisonType == BooleanComparisonType.Equals &&
+                cmp.FirstExpression is ColumnReferenceExpression col1 &&
+                cmp.SecondExpression is ColumnReferenceExpression col2)
+            {
+                var leftSource = join.LeftSource;
+                var rightSource = join.RightSource;
+
+                // Equality expression may be written in the opposite order to the join - swap the tables if necessary
+                if (rightSchema.ContainsColumn(col1.GetColumnName(), out _) &&
+                    leftSchema.ContainsColumn(col2.GetColumnName(), out _))
+                {
+                    (leftSource, leftSchema, rightSource, rightSchema) = (rightSource, rightSchema, leftSource, leftSchema);
+                }
+
+                if (leftSchema.ContainsColumn(col1.GetColumnName(), out var leftCol) &&
+                    rightSchema.ContainsColumn(col2.GetColumnName(), out var rightCol))
+                {
+                    if (leftSource is TableSpoolNode leftSpool)
+                    {
+                        leftSpool.Source.Parent = leftSource.Parent;
+                        leftSource = leftSpool.Source;
+                    }
+
+                    if (rightSource is TableSpoolNode rightSpool)
+                    {
+                        rightSpool.Source.Parent = rightSource.Parent;
+                        rightSource = rightSpool.Source;
+                    }
+
+                    // Prefer to use a merge join if either of the join keys are the primary key.
+                    // Swap the tables if necessary to use the primary key from the right source.
+                    if (leftSchema.PrimaryKey != leftCol && rightSchema.PrimaryKey == rightCol)
+                        (leftSource, leftSchema, leftCol, rightSource, rightSchema, rightCol) = (rightSource, rightSchema, rightCol, leftSource, leftSchema, leftCol);
+
+                    if (leftSchema.PrimaryKey == leftCol)
+                        foldedJoin = new MergeJoinNode();
+                    else
+                        foldedJoin = new HashJoinNode();
+
+                    foldedJoin.LeftSource = leftSource;
+                    foldedJoin.LeftAttribute = leftCol.ToColumnReference();
+                    foldedJoin.RightSource = rightSource;
+                    foldedJoin.RightAttribute = rightCol.ToColumnReference();
+                    foldedJoin.JoinType = QualifiedJoinType.Inner;
+                    foldedJoin.Parent = join.Parent;
+
+                    leftSource.Parent = foldedJoin;
+                    rightSource.Parent = foldedJoin;
+
+                    removedCondition = filter;
+                    return true;
+                }
+            }
+            else if (filter is BooleanBinaryExpression bin &&
+                bin.BinaryExpressionType == BooleanBinaryExpressionType.And)
+            {
+                // Recurse into ANDs but not into ORs
+                if (ExtractJoinCondition(bin.FirstExpression, join, leftSchema, rightSchema, out foldedJoin, out removedCondition) ||
+                    ExtractJoinCondition(bin.SecondExpression, join, leftSchema, rightSchema, out foldedJoin, out removedCondition))
+                {
+                    return true;
+                }
+            }
+
+            foldedJoin = null;
+            removedCondition = null;
+            return false;
         }
 
         private bool FoldInExistsToFetchXml(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints, out List<FetchLinkEntityType> addedLinks)

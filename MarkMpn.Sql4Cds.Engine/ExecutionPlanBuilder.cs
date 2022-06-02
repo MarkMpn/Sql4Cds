@@ -2925,7 +2925,8 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 var nextTable = ConvertTableReference(tables[i], hints, query, outerSchema, outerReferences, parameterTypes);
 
-                // TODO: See if we can lift a join predicate from the WHERE clause
+                // Join predicates will be lifted from the WHERE clause during folding later. For now, just add a table spool
+                // to cache the results of the second table and use a nested loop to join them.
                 nextTable = new TableSpoolNode { Source = nextTable, SpoolType = SpoolType.Lazy };
 
                 node = new NestedLoopNode { LeftSource = node, RightSource = nextTable };
