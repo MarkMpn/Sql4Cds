@@ -48,15 +48,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             // Copy the source schema and add in the additional computed columns
             var sourceSchema = Source.GetSchema(dataSources, parameterTypes);
-            var schema = new NodeSchema(sourceSchema);
+            var schema = new Dictionary<string, DataTypeReference>(sourceSchema.Schema.Count, StringComparer.OrdinalIgnoreCase);
+
+            foreach (var col in sourceSchema.Schema)
+                schema[col.Key] = col.Value;
 
             foreach (var calc in Columns)
             {
                 calc.Value.GetType(sourceSchema, null, parameterTypes, out var calcType);
-                schema.Schema[calc.Key] = calcType;
+                schema[calc.Key] = calcType;
             }
 
-            return schema;
+            return new NodeSchema(
+                primaryKey: sourceSchema.PrimaryKey,
+                schema: schema,
+                aliases: sourceSchema.Aliases,
+                notNullColumns: sourceSchema.NotNullColumns,
+                sortOrder: sourceSchema.SortOrder);
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()

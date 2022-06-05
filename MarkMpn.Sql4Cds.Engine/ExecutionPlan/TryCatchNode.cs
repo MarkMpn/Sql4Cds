@@ -98,7 +98,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 .TakeWhile((sort, index) => index < catchSchema.SortOrder.Count && sort.Equals(catchSchema.SortOrder[index], StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
-            return new NodeSchema(trySchema) { SortOrder = consistentSorts };
+            return new NodeSchema(
+                primaryKey: trySchema.PrimaryKey,
+                schema: trySchema.Schema,
+                aliases: trySchema.Aliases,
+                notNullColumns: trySchema.NotNullColumns,
+                sortOrder: consistentSorts);
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()

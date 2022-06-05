@@ -149,24 +149,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return this;
         }
 
-        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override IReadOnlyList<string> GetSortOrder(INodeSchema outerSchema, INodeSchema innerSchema)
         {
-            var schema = base.GetSchema(dataSources, parameterTypes);
-            schema.ContainsColumn(LeftAttribute.GetColumnName(), out var left);
-            schema.ContainsColumn(RightAttribute.GetColumnName(), out var right);
+            outerSchema.ContainsColumn(LeftAttribute.GetColumnName(), out var left);
+            innerSchema.ContainsColumn(RightAttribute.GetColumnName(), out var right);
 
             if (JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.LeftOuter)
-            {
-                ((NodeSchema)schema).SortOrder.Add(left);
-                ((NodeSchema)schema).SortOrder.Add(right);
-            }
+                return new[] { left, right };
             else if (JoinType == QualifiedJoinType.RightOuter)
-            {
-                ((NodeSchema)schema).SortOrder.Add(right);
-                ((NodeSchema)schema).SortOrder.Add(left);
-            }
-
-            return schema;
+                return new[] { right, left };
+            else
+                return null;
         }
 
         public override object Clone()

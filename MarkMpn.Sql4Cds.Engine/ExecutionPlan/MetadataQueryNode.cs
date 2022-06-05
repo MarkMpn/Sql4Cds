@@ -441,7 +441,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
-            var schema = new NodeSchema();
+            var schema = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
+            var aliases = new Dictionary<string, IReadOnlyList<string>>();
+            var primaryKey = (string)null;
+            var notNullColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var sortOrder = new List<string>();
+
             var childCount = 0;
 
             if (MetadataSource.HasFlag(MetadataSource.Entity))
@@ -454,21 +459,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 foreach (var prop in entityProps)
                 {
                     var fullName = $"{EntityAlias}.{prop.SqlName}";
-                    schema.Schema[fullName] = prop.SqlType;
+                    schema[fullName] = prop.SqlType;
 
-                    if (!schema.Aliases.TryGetValue(prop.SqlName, out var aliases))
+                    if (!aliases.TryGetValue(prop.SqlName, out var a))
                     {
-                        aliases = new List<string>();
-                        schema.Aliases[prop.SqlName] = aliases;
+                        a = new List<string>();
+                        aliases[prop.SqlName] = a;
                     }
 
-                    aliases.Add(fullName);
+                    ((List<string>)a).Add(fullName);
 
                     if (_entityNotNullProps.Contains(prop.PropertyName) || HasNotNullFilter(Query.Criteria, prop.PropertyName))
-                        schema.NotNullColumns.Add(fullName);
+                        notNullColumns.Add(fullName);
                 }
 
-                schema.PrimaryKey = $"{EntityAlias}.{nameof(EntityMetadata.MetadataId)}";
+                primaryKey = $"{EntityAlias}.{nameof(EntityMetadata.MetadataId)}";
             }
 
             if (MetadataSource.HasFlag(MetadataSource.Attribute))
@@ -481,21 +486,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 foreach (var prop in attributeProps)
                 {
                     var fullName = $"{AttributeAlias}.{prop.SqlName}";
-                    schema.Schema[fullName] = prop.SqlType;
+                    schema[fullName] = prop.SqlType;
 
-                    if (!schema.Aliases.TryGetValue(prop.SqlName, out var aliases))
+                    if (!aliases.TryGetValue(prop.SqlName, out var a))
                     {
-                        aliases = new List<string>();
-                        schema.Aliases[prop.SqlName] = aliases;
+                        a = new List<string>();
+                        aliases[prop.SqlName] = a;
                     }
 
-                    aliases.Add(fullName);
+                    ((List<string>)a).Add(fullName);
 
                     if (_attributeNotNullProps.Contains(prop.PropertyName) || HasNotNullFilter(Query.AttributeQuery?.Criteria, prop.PropertyName))
-                        schema.NotNullColumns.Add(fullName);
+                        notNullColumns.Add(fullName);
                 }
 
-                schema.PrimaryKey = $"{AttributeAlias}.{nameof(AttributeMetadata.MetadataId)}";
+                primaryKey = $"{AttributeAlias}.{nameof(AttributeMetadata.MetadataId)}";
                 childCount++;
             }
 
@@ -509,21 +514,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 foreach (var prop in relationshipProps)
                 {
                     var fullName = $"{OneToManyRelationshipAlias}.{prop.SqlName}";
-                    schema.Schema[fullName] = prop.SqlType;
+                    schema[fullName] = prop.SqlType;
 
-                    if (!schema.Aliases.TryGetValue(prop.SqlName, out var aliases))
+                    if (!aliases.TryGetValue(prop.SqlName, out var a))
                     {
-                        aliases = new List<string>();
-                        schema.Aliases[prop.SqlName] = aliases;
+                        a = new List<string>();
+                        aliases[prop.SqlName] = a;
                     }
 
-                    aliases.Add(fullName);
+                    ((List<string>)a).Add(fullName);
 
                     if (_oneToManyRelationshipNotNullProps.Contains(prop.PropertyName) || HasNotNullFilter(Query.RelationshipQuery?.Criteria, prop.PropertyName))
-                        schema.NotNullColumns.Add(fullName);
+                        notNullColumns.Add(fullName);
                 }
 
-                schema.PrimaryKey = $"{OneToManyRelationshipAlias}.{nameof(RelationshipMetadataBase.MetadataId)}";
+                primaryKey = $"{OneToManyRelationshipAlias}.{nameof(RelationshipMetadataBase.MetadataId)}";
                 childCount++;
             }
 
@@ -537,21 +542,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 foreach (var prop in relationshipProps)
                 {
                     var fullName = $"{ManyToOneRelationshipAlias}.{prop.SqlName}";
-                    schema.Schema[fullName] = prop.SqlType;
+                    schema[fullName] = prop.SqlType;
 
-                    if (!schema.Aliases.TryGetValue(prop.SqlName, out var aliases))
+                    if (!aliases.TryGetValue(prop.SqlName, out var a))
                     {
-                        aliases = new List<string>();
-                        schema.Aliases[prop.SqlName] = aliases;
+                        a = new List<string>();
+                        aliases[prop.SqlName] = a;
                     }
 
-                    aliases.Add(fullName);
+                    ((List<string>)a).Add(fullName);
 
                     if (_oneToManyRelationshipNotNullProps.Contains(prop.PropertyName) || HasNotNullFilter(Query.RelationshipQuery?.Criteria, prop.PropertyName))
-                        schema.NotNullColumns.Add(fullName);
+                        notNullColumns.Add(fullName);
                 }
 
-                schema.PrimaryKey = $"{ManyToOneRelationshipAlias}.{nameof(RelationshipMetadataBase.MetadataId)}";
+                primaryKey = $"{ManyToOneRelationshipAlias}.{nameof(RelationshipMetadataBase.MetadataId)}";
                 childCount++;
             }
 
@@ -565,28 +570,33 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 foreach (var prop in relationshipProps)
                 {
                     var fullName = $"{ManyToManyRelationshipAlias}.{prop.SqlName}";
-                    schema.Schema[fullName] = prop.SqlType;
+                    schema[fullName] = prop.SqlType;
 
-                    if (!schema.Aliases.TryGetValue(prop.SqlName, out var aliases))
+                    if (!aliases.TryGetValue(prop.SqlName, out var a))
                     {
-                        aliases = new List<string>();
-                        schema.Aliases[prop.SqlName] = aliases;
+                        a = new List<string>();
+                        aliases[prop.SqlName] = a;
                     }
 
-                    aliases.Add(fullName);
+                    ((List<string>)a).Add(fullName);
 
                     if (_manyToManyRelationshipNotNullProps.Contains(prop.PropertyName) || HasNotNullFilter(Query.RelationshipQuery?.Criteria, prop.PropertyName))
-                        schema.NotNullColumns.Add(fullName);
+                        notNullColumns.Add(fullName);
                 }
 
-                schema.PrimaryKey = $"{ManyToManyRelationshipAlias}.{nameof(RelationshipMetadataBase.MetadataId)}";
+                primaryKey = $"{ManyToManyRelationshipAlias}.{nameof(RelationshipMetadataBase.MetadataId)}";
                 childCount++;
             }
 
             if (childCount > 1)
-                schema.PrimaryKey = null;
+                primaryKey = null;
 
-            return schema;
+            return new NodeSchema(
+                primaryKey: primaryKey,
+                schema: schema,
+                aliases: aliases,
+                notNullColumns: notNullColumns.ToList(),
+                sortOrder: sortOrder);
         }
 
         private bool HasNotNullFilter(MetadataFilterExpression filter, string prop)

@@ -53,11 +53,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
-            return new NodeSchema
-            {
-                Schema = Schema.ToDictionary(kvp => PrefixWithAlias(kvp.Key), kvp => kvp.Value),
-                Aliases = Schema.ToDictionary(kvp => kvp.Key, kvp => new List<string> { PrefixWithAlias(kvp.Key) })
-            };
+            return new NodeSchema(
+                primaryKey: null,
+                schema: Schema.ToDictionary(kvp => PrefixWithAlias(kvp.Key), kvp => kvp.Value, StringComparer.OrdinalIgnoreCase),
+                aliases: Schema.ToDictionary(kvp => kvp.Key, kvp => (IReadOnlyList<string>) new List<string> { PrefixWithAlias(kvp.Key) }, StringComparer.OrdinalIgnoreCase),
+                notNullColumns: null,
+                sortOrder: null);
         }
 
         private string PrefixWithAlias(string columnName)

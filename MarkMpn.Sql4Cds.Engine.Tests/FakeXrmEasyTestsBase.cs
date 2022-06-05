@@ -7,6 +7,8 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using FakeXrmEasy;
+using FakeXrmEasy.FakeMessageExecutors;
+using Microsoft.Crm.Sdk.Messages;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
 
@@ -28,6 +30,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             _context = new XrmFakedContext();
             _context.InitializeMetadata(Assembly.GetExecutingAssembly());
             _context.CallerId = new EntityReference("systemuser", Guid.NewGuid());
+            _context.AddFakeMessageExecutor<RetrieveVersionRequest>(new RetrieveVersionRequestExecutor());
 
             _service = _context.GetOrganizationService();
             _dataSource = new DataSource { Name = "uat", Connection = _service, Metadata = new AttributeMetadataCache(_service), TableSizeCache = new StubTableSizeCache() };
@@ -35,6 +38,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             _context2 = new XrmFakedContext();
             _context2.InitializeMetadata(Assembly.GetExecutingAssembly());
             _context2.CallerId = _context.CallerId;
+            _context.AddFakeMessageExecutor<RetrieveVersionRequest>(new RetrieveVersionRequestExecutor());
 
             _service2 = _context2.GetOrganizationService();
             _dataSource2 = new DataSource { Name = "prod", Connection = _service2, Metadata = new AttributeMetadataCache(_service2), TableSizeCache = new StubTableSizeCache() };

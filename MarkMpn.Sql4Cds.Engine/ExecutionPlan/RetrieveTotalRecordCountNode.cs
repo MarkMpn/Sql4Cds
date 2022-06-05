@@ -50,17 +50,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
-            return new NodeSchema
-            {
-                Schema =
+            return new NodeSchema(
+                primaryKey: null,
+                schema: new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase)
                 {
-                    [$"{EntityName}_count"] = typeof(SqlInt64).ToSqlType()
+                    [$"{EntityName}_count"] = DataTypeHelpers.BigInt
                 },
-                Aliases =
+                aliases: new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
                 {
                     [$"{EntityName}_count"] = new List<string> { $"{EntityName}_count" }
-                }
-            };
+                },
+                notNullColumns: new List<string> { $"{EntityName}_count" },
+                sortOrder: null);
         }
 
         public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)

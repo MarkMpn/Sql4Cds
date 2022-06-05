@@ -22,9 +22,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var schema = base.GetSchema(dataSources, parameterTypes);
             var groupByCols = GetGroupingColumns(schema);
-            ((NodeSchema)schema).SortOrder.AddRange(groupByCols);
-            
-            return schema;
+
+            return new NodeSchema(
+                primaryKey: schema.PrimaryKey,
+                schema: schema.Schema,
+                aliases: schema.Aliases,
+                notNullColumns: schema.NotNullColumns,
+                sortOrder: groupByCols);
         }
 
         protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)

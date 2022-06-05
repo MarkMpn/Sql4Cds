@@ -219,7 +219,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // Store the values under the column index as well as name for compatibility with INSERT ... SELECT ...
                 var dataTable = new DataTable();
                 var schemaTable = dataReader.GetSchemaTable();
-                schema = new NodeSchema();
+                var columnTypes = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
 
                 for (var i = 0; i < schemaTable.Rows.Count; i++)
                 {
@@ -264,12 +264,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         default: throw new NotSupportedException("Unhandled column type " + colTypeName);
                     }
 
-                    ((NodeSchema)schema).Schema[colName] = colSqlType;
-                    ((NodeSchema)schema).Schema[i.ToString()] = colSqlType;
+                    columnTypes[colName] = colSqlType;
+                    columnTypes[i.ToString()] = colSqlType;
                     dataTable.Columns[i].ExtendedProperties["SqlType"] = colSqlType;
                 }
                 
                 dataTable.Load(dataReader);
+                schema = new NodeSchema(
+                    primaryKey: null,
+                    schema: columnTypes,
+                    aliases: null,
+                    notNullColumns: null,
+                    sortOrder: null);
 
                 entities = dataTable.Rows
                     .Cast<DataRow>()

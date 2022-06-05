@@ -51,65 +51,70 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
-            var schema = new NodeSchema(Source.GetSchema(dataSources, parameterTypes));
+            var schema = Source.GetSchema(dataSources, parameterTypes);
+            var notNullColumns = new HashSet<string>(schema.NotNullColumns, StringComparer.OrdinalIgnoreCase);
+            AddNotNullColumns(schema, notNullColumns, Filter, false);
 
-            AddNotNullColumns(schema, Filter, false);
-
-            return schema;
+            return new NodeSchema(
+                primaryKey: schema.PrimaryKey,
+                schema: schema.Schema,
+                aliases: schema.Aliases,
+                notNullColumns: notNullColumns.ToList(),
+                sortOrder: schema.SortOrder);
         }
 
-        private void AddNotNullColumns(NodeSchema schema, BooleanExpression filter, bool not)
+        private void AddNotNullColumns(INodeSchema schema, HashSet<string> notNullColumns, BooleanExpression filter, bool not)
         {
             if (filter is BooleanBinaryExpression binary)
             {
                 if (binary.BinaryExpressionType == BooleanBinaryExpressionType.Or)
                     return;
 
-                AddNotNullColumns(schema, binary.FirstExpression, not);
-                AddNotNullColumns(schema, binary.SecondExpression, not);
+                AddNotNullColumns(schema, notNullColumns, binary.FirstExpression, not);
+                AddNotNullColumns(schema, notNullColumns, binary.SecondExpression, not);
             }
 
             if (filter is BooleanIsNullExpression isNull)
             {
                 if (not ^ isNull.IsNot)
-                    AddNotNullColumn(schema, isNull.Expression);
+                    AddNotNullColumn(schema, notNullColumns, isNull.Expression);
             }
 
             if (!not && filter is BooleanComparisonExpression cmp)
             {
-                AddNotNullColumn(schema, cmp.FirstExpression);
-                AddNotNullColumn(schema, cmp.SecondExpression);
+                AddNotNullColumn(schema, notNullColumns, cmp.FirstExpression);
+                AddNotNullColumn(schema, notNullColumns, cmp.SecondExpression);
             }
 
             if (filter is BooleanParenthesisExpression paren)
             {
-                AddNotNullColumns(schema, paren.Expression, not);
+                AddNotNullColumns(schema, notNullColumns, paren.Expression, not);
             }
 
             if (filter is BooleanNotExpression n)
             {
-                AddNotNullColumns(schema, n.Expression, !not);
+                AddNotNullColumns(schema, notNullColumns, n.Expression, !not);
             }
 
             if (!not && filter is InPredicate inPred)
             {
-                AddNotNullColumn(schema, inPred.Expression);
+                AddNotNullColumn(schema, notNullColumns, inPred.Expression);
             }
 
             if (!not && filter is LikePredicate like)
             {
-                AddNotNullColumn(schema, like.FirstExpression);
-                AddNotNullColumn(schema, like.SecondExpression);
+                AddNotNullColumn(schema, notNullColumns, like.FirstExpression);
+                AddNotNullColumn(schema, notNullColumns, like.SecondExpression);
             }
 
             if (!not && filter is FullTextPredicate fullText)
             {
                 foreach (var col in fullText.Columns)
-                    AddNotNullColumn(schema, col);
+                    AddNotNullColumn(schema, notNullColumns, col);
             }
         }
 
-        private void AddNotNullColumn(NodeSchema schema, ScalarExpression expr)
+        private void AddNotNullColumn(INodeSchema schema, HashSet<string> notNullColumns, ScalarExpression expr)
         {
             if (!(expr is ColumnReferenceExpression col))
                 return;
@@ -117,7 +122,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!schema.ContainsColumn(col.GetColumnName(), out var colName))
                 return;
 
-            schema.NotNullColumns.Add(colName);
+            notNullColumns.Add(colName);
         }
 
         public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)

@@ -174,27 +174,30 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
             var sourceSchema = Source.GetSchema(dataSources, parameterTypes);
-            var schema = new NodeSchema();
+            var schema = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
+            var aliases = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+            var primaryKey = (string)null;
+            var notNullColumns = new List<string>();
 
             foreach (var group in GroupBy)
             {
                 var colName = group.GetColumnName();
                 sourceSchema.ContainsColumn(colName, out var normalized);
-                schema.Schema[normalized] = sourceSchema.Schema[normalized];
+                schema[normalized] = sourceSchema.Schema[normalized];
 
                 foreach (var alias in sourceSchema.Aliases.Where(a => a.Value.Contains(normalized)))
                 {
-                    if (!schema.Aliases.TryGetValue(alias.Key, out var aliases))
+                    if (!aliases.TryGetValue(alias.Key, out var a))
                     {
-                        aliases = new List<string>();
-                        schema.Aliases[alias.Key] = aliases;
+                        a = new List<string>();
+                        aliases[alias.Key] = a;
                     }
 
-                    aliases.Add(normalized);
+                    ((List<string>)a).Add(normalized);
                 }
 
                 if (GroupBy.Count == 1)
-                    schema.PrimaryKey = normalized;
+                    primaryKey = normalized;
             }
 
             foreach (var aggregate in Aggregates)
@@ -228,10 +231,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         break;
                 }
 
-                schema.Schema[aggregate.Key] = aggregateType;
+                schema[aggregate.Key] = aggregateType;
+
+                switch (aggregate.Value.AggregateType)
+                {
+                    case AggregateType.Count:
+                    case AggregateType.CountStar:
+                    case AggregateType.Sum:
+                        notNullColumns.Add(aggregate.Key);
+                        break;
+                }
             }
 
-            return schema;
+            return new NodeSchema(
+                primaryKey: primaryKey,
+                schema: schema,
+                aliases: aliases,
+                notNullColumns: notNullColumns,
+                sortOrder: null);
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
