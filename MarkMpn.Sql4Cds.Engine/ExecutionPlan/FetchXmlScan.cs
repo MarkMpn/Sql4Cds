@@ -167,18 +167,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             ReturnFullSchema = false;
             var schema = GetSchema(dataSources, parameterTypes);
 
-            // Apply any variable conditions
-            if (parameterValues != null)
-            {
-                if (_parameterizedConditions == null)
-                    _parameterizedConditions = FindParameterizedConditions();
-
-                foreach (var param in parameterValues)
-                {
-                    if (_parameterizedConditions.TryGetValue(param.Key, out var condition))
-                        condition.SetValue(param.Value, options);
-                }
-            }
+            ApplyParameterValues(options, parameterValues);
 
             FindEntityNameGroupings(dataSource.Metadata);
 
@@ -250,6 +239,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 count += nextPage.Entities.Count;
                 res = nextPage;
+            }
+        }
+
+        /// <summary>
+        /// Updates the <see cref="FetchXml"/> with current parameter values
+        /// </summary>
+        /// <param name="options">The options to control how the query is executed</param>
+        /// <param name="parameterValues">The parameter values to apply</param>
+        public void ApplyParameterValues(IQueryExecutionOptions options, IDictionary<string, object> parameterValues)
+        {
+            if (parameterValues == null)
+                return;
+            
+            if (_parameterizedConditions == null)
+                _parameterizedConditions = FindParameterizedConditions();
+
+            foreach (var param in parameterValues)
+            {
+                if (_parameterizedConditions.TryGetValue(param.Key, out var condition))
+                    condition.SetValue(param.Value, options);
             }
         }
 

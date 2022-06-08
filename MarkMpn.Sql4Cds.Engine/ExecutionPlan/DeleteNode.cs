@@ -75,14 +75,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
 
             // Use bulk delete if requested & possible
-            if (options.UseBulkDelete &&
+            if ((options.UseBulkDelete || LogicalName == "audit") &&
                 Source is FetchXmlScan fetch &&
-                !fetch.Entity.GetConditions().Any(c => c.IsVariable) &&
                 LogicalName == fetch.Entity.name &&
                 PrimaryIdSource.Equals($"{fetch.Alias}.{dataSource.Metadata[LogicalName].PrimaryIdAttribute}") &&
                 String.IsNullOrEmpty(SecondaryIdSource))
             {
-                return new[] { new BulkDeleteJobNode { DataSource = DataSource, FetchXmlString = fetch.FetchXmlString } };
+                return new[] { new BulkDeleteJobNode { DataSource = DataSource, Source = fetch } };
             }
 
             return new[] { this };
