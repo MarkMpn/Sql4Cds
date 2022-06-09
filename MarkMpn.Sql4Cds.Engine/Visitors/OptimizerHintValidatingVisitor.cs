@@ -47,6 +47,12 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             "RETRIEVE_TOTAL_RECORD_COUNT",
         };
 
+        private static readonly HashSet<string> _removableSql4CdsQueryHints = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            // DML-related hint can be removed from the SELECT statement sent to the TDS Endpoint
+            "BYPASS_CUSTOM_PLUGIN_EXECUTION",
+        };
+
         private static readonly string[] _tsqlQueryHintPrefixes = new[]
         {
             "QUERY_OPTIMIZER_COMPATIBILITY_LEVEL_",
@@ -58,11 +64,20 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             "FETCHXML_PAGE_SIZE_",
         };
 
+        private readonly bool _removeSql4CdsHints;
+
+        public OptimizerHintValidatingVisitor(bool removeSql4CdsHints)
+        {
+            _removeSql4CdsHints = removeSql4CdsHints;
+        }
+
         public bool TdsCompatible { get; private set; } = true;
 
         public override void ExplicitVisit(UseHintList node)
         {
             base.ExplicitVisit(node);
+
+            var toRemove = new List<StringLiteral>();
 
             foreach (var hint in node.Hints)
             {
@@ -71,7 +86,11 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
                 if (_sql4cdsQueryHints.Contains(hint.Value))
                 {
-                    TdsCompatible = false;
+                    if (_removeSql4CdsHints && _removableSql4CdsQueryHints.Contains(hint.Value))
+                        toRemove.Add(hint);
+                    else
+                        TdsCompatible = false;
+
                     continue;
                 }
 
@@ -81,11 +100,29 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
                 if (ValidatePrefixHint(hint, _sql4cdsQueryHintPrefixes))
                 {
-                    TdsCompatible = false;
+                    if (_removeSql4CdsHints)
+                        toRemove.Add(hint);
+                    else
+                        TdsCompatible = false;
+
                     continue;
                 }
 
                 throw new NotSupportedQueryFragmentException("Unknown hint", hint);
+            }
+
+            foreach (var hint in toRemove)
+                node.Hints.Remove(hint);
+        }
+
+        public override void ExplicitVisit(SelectStatement node)
+        {
+            base.ExplicitVisit(node);
+
+            if (_removeSql4CdsHints && node.OptimizerHints != null)
+            {
+                foreach (var emptyHintList in node.OptimizerHints.OfType<UseHintList>().Where(list => list.Hints.Count == 0).ToList())
+                    node.OptimizerHints.Remove(emptyHintList);
             }
         }
 

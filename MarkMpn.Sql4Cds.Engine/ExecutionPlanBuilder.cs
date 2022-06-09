@@ -86,7 +86,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 throw new QueryParseException(errors[0]);
 
             // Validate any query hints
-            var hintValidator = new OptimizerHintValidatingVisitor();
+            var hintValidator = new OptimizerHintValidatingVisitor(false);
             fragment.Accept(hintValidator);
 
             if (hintValidator.TdsCompatible && TDSEndpoint.CanUseTDSEndpoint(Options, DataSources[Options.PrimaryDataSource].Connection))
@@ -674,6 +674,8 @@ namespace MarkMpn.Sql4Cds.Engine
         private IExecutionPlanNodeInternal ConvertInsertSelectSource(SelectInsertSource selectSource, IList<OptimizerHint> hints, out string[] columns)
         {
             var selectStatement = new SelectStatement { QueryExpression = selectSource.Select };
+            CopyDmlHintsToSelectStatement(hints, selectStatement);
+
             var select = ConvertSelectStatement(selectStatement);
 
             if (select is SelectNode selectNode)
@@ -1007,9 +1009,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
             
             var selectStatement = new SelectStatement { QueryExpression = queryExpression };
-
-            foreach (var hint in hints)
-                selectStatement.OptimizerHints.Add(hint);
+            CopyDmlHintsToSelectStatement(hints, selectStatement);
 
             var source = ConvertSelectStatement(selectStatement);
 
@@ -1209,9 +1209,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             var selectStatement = new SelectStatement { QueryExpression = queryExpression };
-
-            foreach (var hint in hints)
-                selectStatement.OptimizerHints.Add(hint);
+            CopyDmlHintsToSelectStatement(hints, selectStatement);
 
             var source = ConvertSelectStatement(selectStatement);
 
@@ -1219,6 +1217,28 @@ namespace MarkMpn.Sql4Cds.Engine
             var updateNode = ConvertSetClause(update.SetClauses, dataSource, source, targetLogicalName, targetAlias, attributeNames, virtualTypeAttributes, hints);
 
             return updateNode;
+        }
+
+        private void CopyDmlHintsToSelectStatement(IList<OptimizerHint> hints, SelectStatement selectStatement)
+        {
+            foreach (var hint in hints)
+            {
+                if (hint is UseHintList list)
+                {
+                    // Clone the list of hints so it can be modified later without affecting the original - we may need to
+                    // adjust the hints to make them compatible with TDS Endpoint
+                    var clone = new UseHintList();
+
+                    foreach (var name in list.Hints)
+                        clone.Hints.Add(name);
+
+                    selectStatement.OptimizerHints.Add(clone);
+                }
+                else
+                {
+                    selectStatement.OptimizerHints.Add(hint);
+                }
+            }
         }
 
         private UpdateNode ConvertSetClause(IList<SetClause> setClauses, DataSource dataSource, IExecutionPlanNodeInternal node, string targetLogicalName, string targetAlias, HashSet<string> attributeNames, HashSet<string> virtualTypeAttributes, IList<OptimizerHint> queryHints)
@@ -1346,7 +1366,11 @@ namespace MarkMpn.Sql4Cds.Engine
                     var tdsEndpointCompatibilityVisitor = new TDSEndpointCompatibilityVisitor(con, DataSources[Options.PrimaryDataSource].Metadata, false);
                     select.Accept(tdsEndpointCompatibilityVisitor);
 
-                    if (tdsEndpointCompatibilityVisitor.IsCompatible)
+                    // Remove any custom optimizer hints
+                    var hintCompatibilityVisitor = new OptimizerHintValidatingVisitor(true);
+                    select.Accept(hintCompatibilityVisitor);
+
+                    if (tdsEndpointCompatibilityVisitor.IsCompatible && hintCompatibilityVisitor.TdsCompatible)
                     {
                         select.ScriptTokenStream = null;
                         var sql = new SqlNode
