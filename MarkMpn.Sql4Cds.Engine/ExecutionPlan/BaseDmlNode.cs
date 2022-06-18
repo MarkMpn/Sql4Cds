@@ -355,6 +355,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var destType = attr.GetAttributeType();
                 var destSqlType = attr.IsPrimaryId == true ? DataTypeHelpers.UniqueIdentifier : attr.GetAttributeSqlType(cache, true);
 
+                if (attr is LookupAttributeMetadata && metadata.IsIntersect == true)
+                {
+                    destType = typeof(Guid?);
+                    destSqlType = DataTypeHelpers.UniqueIdentifier;
+                }
+
                 var expr = (Expression)Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(sourceColumnName));
                 var originalExpr = expr;
 
