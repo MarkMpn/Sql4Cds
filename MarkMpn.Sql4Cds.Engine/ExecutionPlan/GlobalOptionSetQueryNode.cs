@@ -105,9 +105,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
-            return 100;
+            return new RowCountEstimate(100);
         }
 
         public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
@@ -117,24 +117,29 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
-            var schema = new NodeSchema();
+            var schema = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
+            var aliases = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var prop in _optionsetProps.Values)
             {
-                schema.Schema[$"{Alias}.{prop.Name}"] = prop.SqlType;
+                schema[$"{Alias}.{prop.Name}"] = prop.SqlType;
 
-                if (!schema.Aliases.TryGetValue(prop.Name, out var aliases))
+                if (!aliases.TryGetValue(prop.Name, out var a))
                 {
-                    aliases = new List<string>();
-                    schema.Aliases[prop.Name] = aliases;
+                    a = new List<string>();
+                    aliases[prop.Name] = a;
                 }
 
-                aliases.Add($"{Alias}.{prop.Name}");
+                ((List<string>)a).Add($"{Alias}.{prop.Name}");
             }
 
-            schema.PrimaryKey = $"{Alias}.{nameof(OptionSetMetadataBase.MetadataId)}";
-
-            return schema;
+            return new NodeSchema(
+                primaryKey: $"{Alias}.{nameof(OptionSetMetadataBase.MetadataId)}",
+                schema: schema,
+                aliases: aliases,
+                notNullColumns: Array.Empty<string>(),
+                sortOrder: Array.Empty<string>()
+                );
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()

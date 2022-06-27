@@ -46,7 +46,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // If this is a distinct list of one column we know the values in that column will be unique
             if (Columns.Count == 1)
-                schema = new NodeSchema(schema) { PrimaryKey = Columns[0] };
+                schema = new NodeSchema(
+                    primaryKey: Columns[0],
+                    schema: schema.Schema,
+                    aliases: schema.Aliases,
+                    notNullColumns: schema.NotNullColumns,
+                    sortOrder: schema.SortOrder);
 
             return schema;
         }
@@ -151,13 +156,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
             // TODO: Is there any metadata available that could help give a better estimate for this?
             // Maybe get the schema and check if any of the columns included in the DISTINCT list are the
             // primary key and if so return the entire count, if some are optionset then there's a known list
-            var totalCount = Source.EstimatedRowsOut;
-            return totalCount * 8 / 10;
+            var totalCount = Source.EstimateRowsOut(dataSources, options, parameterTypes);
+
+            if (totalCount is RowCountEstimateDefiniteRange range && range.Maximum == 1)
+                return totalCount;
+
+            return new RowCountEstimate(totalCount.Value * 8 / 10);
         }
 
         public override object Clone()

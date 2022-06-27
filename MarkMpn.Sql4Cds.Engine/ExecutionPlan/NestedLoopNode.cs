@@ -115,14 +115,38 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             RightSource = RightSource.FoldQuery(dataSources, options, innerParameterTypes, hints);
             RightSource.Parent = this;
 
-            if (RightSource is TableSpoolNode spool)
+            if (LeftSource is ConstantScanNode constant &&
+                constant.Schema.Count == 0 &&
+                constant.Values.Count == 1 &&
+                JoinType == QualifiedJoinType.LeftOuter &&
+                SemiJoin &&
+                JoinCondition == null &&
+                RightSource.EstimateRowsOut(dataSources, options, parameterTypes) is RowCountEstimateDefiniteRange range &&
+                range.Minimum == 1 &&
+                range.Maximum == 1)
             {
-                LeftSource.EstimateRowsOut(dataSources, options, parameterTypes);
-                if (LeftSource.EstimatedRowsOut <= 1)
+                // Subquery that will always produce one value - no need for the join at all, replace with a Compute Scalar
+                // to produce the same effect as the Defined Values
+                if (RightSource is TableSpoolNode subquerySpool)
+                    RightSource = subquerySpool.Source;
+
+                var compute = new ComputeScalarNode
                 {
-                    RightSource = spool.Source;
-                    RightSource.Parent = this;
-                }
+                    Source = RightSource
+                };
+
+                foreach (var value in DefinedValues)
+                    compute.Columns[value.Key] = value.Value.ToColumnReference();
+
+                RightSource.Parent = compute;
+
+                return compute;
+            }
+
+            if (RightSource is TableSpoolNode spool && LeftSource.EstimateRowsOut(dataSources, options, parameterTypes).Value <= 1)
+            {
+                RightSource = spool.Source;
+                RightSource.Parent = this;
             }
             else if (JoinType == QualifiedJoinType.LeftOuter &&
                 SemiJoin &&
@@ -132,28 +156,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 aggregate.Aggregates.Count == 2 &&
                 aggregate.Aggregates[DefinedValues.Single().Value].AggregateType == AggregateType.First &&
                 aggregate.Source is IndexSpoolNode indexSpool &&
-                indexSpool.Source is FetchXmlScan fetch)
+                indexSpool.Source is FetchXmlScan fetch &&
+                LeftSource.EstimateRowsOut(dataSources, options, parameterTypes).Value < 100 &&
+                fetch.EstimateRowsOut(dataSources, options, innerParameterTypes).Value > 5000)
             {
-                LeftSource.EstimateRowsOut(dataSources, options, parameterTypes);
-                fetch.EstimateRowsOut(dataSources, options, innerParameterTypes);
-                if (LeftSource.EstimatedRowsOut < 100 && fetch.EstimatedRowsOut > 5000)
+                // Scalar subquery was folded to use an index spool due to an expected large number of outer records,
+                // but the estimate has now changed (e.g. due to a TopNode being folded). Remove the index spool and replace
+                // with filter
+                var filter = new FilterNode
                 {
-                    // Scalar subquery was folded to use an index spool due to an expected large number of outer records,
-                    // but the estimate has now changed (e.g. due to a TopNode being folded). Remove the index spool and replace
-                    // with filter
-                    var filter = new FilterNode
+                    Source = fetch,
+                    Filter = new BooleanComparisonExpression
                     {
-                        Source = fetch,
-                        Filter = new BooleanComparisonExpression
-                        {
-                            FirstExpression = indexSpool.KeyColumn.ToColumnReference(),
-                            ComparisonType = BooleanComparisonType.Equals,
-                            SecondExpression = new VariableReference { Name = indexSpool.SeekValue }
-                        },
-                        Parent = aggregate
-                    };
-                    aggregate.Source = filter.FoldQuery(dataSources, options, innerParameterTypes, hints);
-                }
+                        FirstExpression = indexSpool.KeyColumn.ToColumnReference(),
+                        ComparisonType = BooleanComparisonType.Equals,
+                        SecondExpression = new VariableReference { Name = indexSpool.SeekValue }
+                    },
+                    Parent = aggregate
+                };
+                aggregate.Source = filter.FoldQuery(dataSources, options, innerParameterTypes, hints);
             }
 
             return this;
@@ -195,34 +216,52 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return RightSource.GetSchema(dataSources, innerParameterTypes);
         }
 
-        public override void EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
-            LeftSource.EstimateRowsOut(dataSources, options, parameterTypes);
-
+            var leftEstimate = LeftSource.EstimateRowsOut(dataSources, options, parameterTypes);
+            ParseEstimate(leftEstimate, out var leftMin, out var leftMax, out var leftIsRange);
             var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
             var innerParameterTypes = GetInnerParameterTypes(leftSchema, parameterTypes);
 
-            RightSource.EstimateRowsOut(dataSources, options, innerParameterTypes);
+            var rightEstimate = RightSource.EstimateRowsOut(dataSources, options, innerParameterTypes);
+            ParseEstimate(rightEstimate, out var rightMin, out var rightMax, out var rightIsRange);
 
-            EstimatedRowsOut = EstimateRowsOutInternal(dataSources, options, parameterTypes);
-        }
-
-        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
-        {
-            var leftEstimate = LeftSource.EstimatedRowsOut;
-
-            // We tend to use a nested loop with an assert node for scalar subqueries - we'll return one record for each record in the outer loop
-            if (RightSource is AssertNode)
+            if (JoinType == QualifiedJoinType.LeftOuter && SemiJoin)
                 return leftEstimate;
 
-            var rightEstimate = RightSource.EstimatedRowsOut;
+            if (JoinType == QualifiedJoinType.RightOuter && SemiJoin)
+                return rightEstimate;
+
+            int min;
+            int max;
 
             if (OuterReferences != null && OuterReferences.Count > 0)
-                return leftEstimate * rightEstimate;
+            {
+                min = leftMin * rightMin;
+                max = leftMax * rightMax;
+            }
             else if (JoinType == QualifiedJoinType.Inner)
-                return Math.Min(leftEstimate, rightEstimate);
+            {
+                min = Math.Min(leftMin, rightMin);
+                max = Math.Max(leftMax, rightMax);
+            }
             else
-                return Math.Max(leftEstimate, rightEstimate);
+            {
+                min = Math.Max(leftMin, rightMin);
+                max = Math.Max(leftMax, rightMax);
+            }
+
+            if (JoinCondition != null)
+                min = 0;
+
+            RowCountEstimate estimate;
+
+            if (leftIsRange && rightIsRange)
+                estimate = new RowCountEstimateDefiniteRange(min, max);
+            else
+                estimate = new RowCountEstimate(max);
+
+            return estimate;
         }
 
         protected override IEnumerable<string> GetVariablesInternal()

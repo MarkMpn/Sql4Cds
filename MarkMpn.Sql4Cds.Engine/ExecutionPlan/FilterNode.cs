@@ -51,65 +51,70 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
-            var schema = new NodeSchema(Source.GetSchema(dataSources, parameterTypes));
+            var schema = Source.GetSchema(dataSources, parameterTypes);
+            var notNullColumns = new HashSet<string>(schema.NotNullColumns, StringComparer.OrdinalIgnoreCase);
+            AddNotNullColumns(schema, notNullColumns, Filter, false);
 
-            AddNotNullColumns(schema, Filter, false);
-
-            return schema;
+            return new NodeSchema(
+                primaryKey: schema.PrimaryKey,
+                schema: schema.Schema,
+                aliases: schema.Aliases,
+                notNullColumns: notNullColumns.ToList(),
+                sortOrder: schema.SortOrder);
         }
 
-        private void AddNotNullColumns(NodeSchema schema, BooleanExpression filter, bool not)
+        private void AddNotNullColumns(INodeSchema schema, HashSet<string> notNullColumns, BooleanExpression filter, bool not)
         {
             if (filter is BooleanBinaryExpression binary)
             {
                 if (binary.BinaryExpressionType == BooleanBinaryExpressionType.Or)
                     return;
 
-                AddNotNullColumns(schema, binary.FirstExpression, not);
-                AddNotNullColumns(schema, binary.SecondExpression, not);
+                AddNotNullColumns(schema, notNullColumns, binary.FirstExpression, not);
+                AddNotNullColumns(schema, notNullColumns, binary.SecondExpression, not);
             }
 
             if (filter is BooleanIsNullExpression isNull)
             {
                 if (not ^ isNull.IsNot)
-                    AddNotNullColumn(schema, isNull.Expression);
+                    AddNotNullColumn(schema, notNullColumns, isNull.Expression);
             }
 
             if (!not && filter is BooleanComparisonExpression cmp)
             {
-                AddNotNullColumn(schema, cmp.FirstExpression);
-                AddNotNullColumn(schema, cmp.SecondExpression);
+                AddNotNullColumn(schema, notNullColumns, cmp.FirstExpression);
+                AddNotNullColumn(schema, notNullColumns, cmp.SecondExpression);
             }
 
             if (filter is BooleanParenthesisExpression paren)
             {
-                AddNotNullColumns(schema, paren.Expression, not);
+                AddNotNullColumns(schema, notNullColumns, paren.Expression, not);
             }
 
             if (filter is BooleanNotExpression n)
             {
-                AddNotNullColumns(schema, n.Expression, !not);
+                AddNotNullColumns(schema, notNullColumns, n.Expression, !not);
             }
 
             if (!not && filter is InPredicate inPred)
             {
-                AddNotNullColumn(schema, inPred.Expression);
+                AddNotNullColumn(schema, notNullColumns, inPred.Expression);
             }
 
             if (!not && filter is LikePredicate like)
             {
-                AddNotNullColumn(schema, like.FirstExpression);
-                AddNotNullColumn(schema, like.SecondExpression);
+                AddNotNullColumn(schema, notNullColumns, like.FirstExpression);
+                AddNotNullColumn(schema, notNullColumns, like.SecondExpression);
             }
 
             if (!not && filter is FullTextPredicate fullText)
             {
                 foreach (var col in fullText.Columns)
-                    AddNotNullColumn(schema, col);
+                    AddNotNullColumn(schema, notNullColumns, col);
             }
         }
 
-        private void AddNotNullColumn(NodeSchema schema, ScalarExpression expr)
+        private void AddNotNullColumn(INodeSchema schema, HashSet<string> notNullColumns, ScalarExpression expr)
         {
             if (!(expr is ColumnReferenceExpression col))
                 return;
@@ -117,7 +122,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!schema.ContainsColumn(col.GetColumnName(), out var colName))
                 return;
 
-            schema.NotNullColumns.Add(colName);
+            notNullColumns.Add(colName);
         }
 
         public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
@@ -125,6 +130,160 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
             Source.Parent = this;
 
+            var foldedFilters = false;
+
+            foldedFilters |= FoldNestedLoopFiltersToJoins(dataSources, options, parameterTypes, hints);
+            foldedFilters |= FoldInExistsToFetchXml(dataSources, options, parameterTypes, hints, out var addedLinks);
+            foldedFilters |= FoldTableSpoolToIndexSpool(dataSources, options, parameterTypes, hints);
+            foldedFilters |= FoldFiltersToDataSources(dataSources, options, parameterTypes);
+
+            foreach (var addedLink in addedLinks)
+                addedLink.SemiJoin = true;
+
+            // Some of the filters have been folded into the source. Fold the sources again as the filter can have changed estimated row
+            // counts and lead to a better execution plan.
+            if (foldedFilters)
+                Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
+
+            // All the filters have been folded into the source. 
+            if (Filter == null)
+                return Source;
+
+            return this;
+        }
+
+        private bool FoldNestedLoopFiltersToJoins(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        {
+            // Queries like "FROM table1, table2 WHERE table1.col = table2.col" are created as:
+            // Filter: table1.col = table2.col
+            // -> NestedLoop (Inner), null join condition, no defined values
+            //    -> FetchXml
+            //    -> Table Spool
+            //       -> FetchXml
+            if (FoldNestedLoopFiltersToJoins(Source as BaseJoinNode, dataSources, options, parameterTypes, hints, out var foldedJoin))
+            {
+                Source = foldedJoin;
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool FoldNestedLoopFiltersToJoins(BaseJoinNode join, IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints, out FoldableJoinNode foldedJoin)
+        {
+            foldedJoin = null;
+
+            if (join == null)
+                return false;
+
+            var foldedFilters = false;
+
+            if (join.JoinType == QualifiedJoinType.Inner &&
+                !join.SemiJoin &&
+                join.DefinedValues.Count == 0 &&
+                join is NestedLoopNode loop &&
+                (loop.OuterReferences == null || loop.OuterReferences.Count == 0))
+            {
+                var leftSchema = join.LeftSource.GetSchema(dataSources, parameterTypes);
+                var rightSchema = join.RightSource.GetSchema(dataSources, parameterTypes);
+
+                if (ExtractJoinCondition(Filter, loop, leftSchema, rightSchema, out foldedJoin, out var removedCondition))
+                {
+                    Filter = Filter.RemoveCondition(removedCondition);
+                    foldedFilters = true;
+                    join = foldedJoin;
+                }
+            }
+
+            if (FoldNestedLoopFiltersToJoins(join.LeftSource as BaseJoinNode, dataSources, options, parameterTypes, hints, out var foldedLeftSource))
+            {
+                join.LeftSource = foldedLeftSource;
+                foldedFilters = true;
+            }
+
+            if (FoldNestedLoopFiltersToJoins(join.RightSource as BaseJoinNode, dataSources, options, parameterTypes, hints, out var foldedRightSource))
+            {
+                join.RightSource = foldedRightSource;
+                foldedFilters = true;
+            }
+
+            return foldedFilters;
+        }
+
+        private bool ExtractJoinCondition(BooleanExpression filter, NestedLoopNode join, INodeSchema leftSchema, INodeSchema rightSchema, out FoldableJoinNode foldedJoin, out BooleanExpression removedCondition)
+        {
+            if (filter is BooleanComparisonExpression cmp &&
+                cmp.ComparisonType == BooleanComparisonType.Equals &&
+                cmp.FirstExpression is ColumnReferenceExpression col1 &&
+                cmp.SecondExpression is ColumnReferenceExpression col2)
+            {
+                var leftSource = join.LeftSource;
+                var rightSource = join.RightSource;
+
+                // Equality expression may be written in the opposite order to the join - swap the tables if necessary
+                if (rightSchema.ContainsColumn(col1.GetColumnName(), out _) &&
+                    leftSchema.ContainsColumn(col2.GetColumnName(), out _))
+                {
+                    (leftSource, leftSchema, rightSource, rightSchema) = (rightSource, rightSchema, leftSource, leftSchema);
+                }
+
+                if (leftSchema.ContainsColumn(col1.GetColumnName(), out var leftCol) &&
+                    rightSchema.ContainsColumn(col2.GetColumnName(), out var rightCol))
+                {
+                    if (leftSource is TableSpoolNode leftSpool)
+                    {
+                        leftSpool.Source.Parent = leftSource.Parent;
+                        leftSource = leftSpool.Source;
+                    }
+
+                    if (rightSource is TableSpoolNode rightSpool)
+                    {
+                        rightSpool.Source.Parent = rightSource.Parent;
+                        rightSource = rightSpool.Source;
+                    }
+
+                    // Prefer to use a merge join if either of the join keys are the primary key.
+                    // Swap the tables if necessary to use the primary key from the right source.
+                    if (leftSchema.PrimaryKey != leftCol && rightSchema.PrimaryKey == rightCol)
+                        (leftSource, leftSchema, leftCol, rightSource, rightSchema, rightCol) = (rightSource, rightSchema, rightCol, leftSource, leftSchema, leftCol);
+
+                    if (leftSchema.PrimaryKey == leftCol)
+                        foldedJoin = new MergeJoinNode();
+                    else
+                        foldedJoin = new HashJoinNode();
+
+                    foldedJoin.LeftSource = leftSource;
+                    foldedJoin.LeftAttribute = leftCol.ToColumnReference();
+                    foldedJoin.RightSource = rightSource;
+                    foldedJoin.RightAttribute = rightCol.ToColumnReference();
+                    foldedJoin.JoinType = QualifiedJoinType.Inner;
+                    foldedJoin.Parent = join.Parent;
+
+                    leftSource.Parent = foldedJoin;
+                    rightSource.Parent = foldedJoin;
+
+                    removedCondition = filter;
+                    return true;
+                }
+            }
+            else if (filter is BooleanBinaryExpression bin &&
+                bin.BinaryExpressionType == BooleanBinaryExpressionType.And)
+            {
+                // Recurse into ANDs but not into ORs
+                if (ExtractJoinCondition(bin.FirstExpression, join, leftSchema, rightSchema, out foldedJoin, out removedCondition) ||
+                    ExtractJoinCondition(bin.SecondExpression, join, leftSchema, rightSchema, out foldedJoin, out removedCondition))
+                {
+                    return true;
+                }
+            }
+
+            foldedJoin = null;
+            removedCondition = null;
+            return false;
+        }
+
+        private bool FoldInExistsToFetchXml(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints, out List<FetchLinkEntityType> addedLinks)
+        {
             var foldedFilters = false;
 
             // Foldable correlated IN queries "lefttable.column IN (SELECT righttable.column FROM righttable WHERE ...) are created as:
@@ -152,7 +311,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     join = join.LeftSource as BaseJoinNode;
             }
 
-            var addedLinks = new List<FetchLinkEntityType>();
+            addedLinks = new List<FetchLinkEntityType>();
             FetchXmlScan leftFetch;
 
             if (joins.Count == 0)
@@ -366,6 +525,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     else
                         leftFetch.Entity.FindLinkEntity(leftAlias).AddItem(linkToAdd);
 
+                    // Join needs to be a semi-join, but don't set it yet as the columns won't be visible in the schema to allow
+                    // the filter to be folded into it later. Keep track of which links we've added now so we can set the semi-join
+                    // flag on them later.
                     addedLinks.Add(linkToAdd);
                 }
 
@@ -393,40 +555,50 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
+            return foldedFilters;
+        }
+
+        private bool FoldTableSpoolToIndexSpool(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        {
             // If we've got a filter matching a column and a variable (key lookup in a nested loop) from a table spool, replace it with a index spool
-            if (Source is TableSpoolNode tableSpool)
+            if (!(Source is TableSpoolNode tableSpool))
+                return false;
+
+            var schema = Source.GetSchema(dataSources, parameterTypes);
+
+            if (!ExtractKeyLookupFilter(Filter, out var filter, out var indexColumn, out var seekVariable) || !schema.ContainsColumn(indexColumn, out indexColumn))
+                return false;
+
+            var spoolSource = tableSpool.Source;
+
+            // Index spool requires non-null key values
+            if (indexColumn != schema.PrimaryKey)
             {
-                var schema = Source.GetSchema(dataSources, parameterTypes);
-
-                if (ExtractKeyLookupFilter(Filter, out var filter, out var indexColumn, out var seekVariable) && schema.ContainsColumn(indexColumn, out indexColumn))
+                spoolSource = new FilterNode
                 {
-                    var spoolSource = tableSpool.Source;
-
-                    // Index spool requires non-null key values
-                    if (indexColumn != schema.PrimaryKey)
+                    Source = tableSpool.Source,
+                    Filter = new BooleanIsNullExpression
                     {
-                        spoolSource = new FilterNode
-                        {
-                            Source = tableSpool.Source,
-                            Filter = new BooleanIsNullExpression
-                            {
-                                Expression = indexColumn.ToColumnReference(),
-                                IsNot = true
-                            }
-                        }.FoldQuery(dataSources, options, parameterTypes, hints);
+                        Expression = indexColumn.ToColumnReference(),
+                        IsNot = true
                     }
-
-                    Source = new IndexSpoolNode
-                    {
-                        Source = spoolSource,
-                        KeyColumn = indexColumn,
-                        SeekValue = seekVariable
-                    };
-
-                    Filter = filter;
-                    foldedFilters = true;
-                }
+                }.FoldQuery(dataSources, options, parameterTypes, hints);
             }
+
+            Source = new IndexSpoolNode
+            {
+                Source = spoolSource,
+                KeyColumn = indexColumn,
+                SeekValue = seekVariable
+            };
+
+            Filter = filter;
+            return true;
+        }
+
+        private bool FoldFiltersToDataSources(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        {
+            var foldedFilters = false;
 
             // Find all the data source nodes we could fold this into. Include direct data sources, those from either side of an inner join, or the main side of an outer join
             foreach (var source in GetFoldableSources(Source))
@@ -483,19 +655,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
-            foreach (var addedLink in addedLinks)
-                addedLink.SemiJoin = true;
-
-            // Some of the filters have been folded into the source. Fold the sources again as the filter can have changed estimated row
-            // counts and lead to a better execution plan.
-            if (foldedFilters)
-                Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
-
-            // All the filters have been folded into the source. 
-            if (Filter == null)
-                return Source;
-
-            return this;
+            return foldedFilters;
         }
 
         private BooleanIsNullExpression FindNotNullFilter(BooleanExpression filter, string attribute)
@@ -982,9 +1142,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return false;
         }
 
-        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
-            return Source.EstimatedRowsOut * 8 / 10;
+            return new RowCountEstimate(Source.EstimateRowsOut(dataSources, options, parameterTypes).Value * 8 / 10);
         }
 
         protected override IEnumerable<string> GetVariablesInternal()

@@ -167,16 +167,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
-            var sourceCount = Source.EstimatedRowsOut;
+            var sourceCount = Source.EstimateRowsOut(dataSources, options, parameterTypes);
 
             if (!Top.IsConstantValueExpression(null, options, out var topLiteral))
                 return sourceCount;
 
             var top = Int32.Parse(topLiteral.Value, CultureInfo.InvariantCulture);
 
-            return Math.Max(0, Math.Min(top, sourceCount));
+            return new RowCountEstimateDefiniteRange(0, Math.Max(0, Math.Min(top, sourceCount.Value)));
         }
 
         protected override IEnumerable<string> GetVariablesInternal()

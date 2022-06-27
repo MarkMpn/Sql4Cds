@@ -106,6 +106,9 @@ namespace MarkMpn.Sql4Cds.Engine
                         cond = (IGoToNode)cond.Clone();
                         var label = cond.Execute(_connection.DataSources, _options, parameterTypes, parameterValues);
 
+                        if (cond.GetSources().Any())
+                            _command.OnStatementCompleted(cond, -1);
+
                         if (label != null)
                             _instructionPointer = _labelIndexes[label];
                     }

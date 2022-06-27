@@ -98,7 +98,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 .TakeWhile((sort, index) => index < catchSchema.SortOrder.Count && sort.Equals(catchSchema.SortOrder[index], StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
-            return new NodeSchema(trySchema) { SortOrder = consistentSorts };
+            return new NodeSchema(
+                primaryKey: trySchema.PrimaryKey,
+                schema: trySchema.Schema,
+                aliases: trySchema.Aliases,
+                notNullColumns: trySchema.NotNullColumns,
+                sortOrder: consistentSorts);
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
@@ -122,9 +127,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             CatchSource.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
-            return TrySource.EstimatedRowsOut;
+            return TrySource.EstimateRowsOut(dataSources, options, parameterTypes);
         }
 
         public override object Clone()

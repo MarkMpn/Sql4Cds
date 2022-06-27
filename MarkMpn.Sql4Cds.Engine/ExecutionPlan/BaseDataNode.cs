@@ -128,15 +128,30 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
         /// <param name="tableSize">A cache of the number of records in each table</param>
         /// <returns>The number of rows the node is estimated to return</returns>
-        public virtual void EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        public RowCountEstimate EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
-            foreach (var child in GetSources().OfType<IDataExecutionPlanNodeInternal>())
-                child.EstimateRowsOut(dataSources, options, parameterTypes);
-
-            EstimatedRowsOut = EstimateRowsOutInternal(dataSources, options, parameterTypes);
+            var estimate = EstimateRowsOutInternal(dataSources, options, parameterTypes);
+            EstimatedRowsOut = estimate.Value;
+            return estimate;
         }
 
-        protected abstract int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes);
+        protected abstract RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes);
+
+        protected void ParseEstimate(RowCountEstimate estimate, out int min, out int max, out bool isRange)
+        {
+            if (estimate is RowCountEstimateDefiniteRange range)
+            {
+                isRange = true;
+                min = range.Minimum;
+                max = range.Maximum;
+            }
+            else
+            {
+                isRange = false;
+                min = estimate.Value;
+                max = estimate.Value;
+            }
+        }
 
         /// <summary>
         /// Adds the execution statistics from another node into the summary for this node

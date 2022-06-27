@@ -9,6 +9,12 @@ using MarkMpn.Sql4Cds.Engine.Visitors;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
+using Microsoft.Crm.Sdk.Messages;
+#if NETCOREAPP
+using Microsoft.PowerPlatform.Dataverse.Client;
+#else
+using Microsoft.Xrm.Tooling.Connector;
+#endif
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -267,7 +273,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var leftLinkCount = leftFetch.Entity.GetLinkEntities().Count();
             var rightLinkCount = rightFetch.Entity.GetLinkEntities().Count() + 1;
 
-            if (leftLinkCount + rightLinkCount > 10)
+            // Max limit of 10 joins, raised to 15 in 9.2.22043
+            if (leftLinkCount + rightLinkCount > 10 && (leftLinkCount + rightLinkCount > 15 || dataSource.Connection == null || GetVersion(dataSource.Connection) < new Version("9.2.22043")))
                 return false;
 
             // If we're doing a right outer join, switch everything round to do a left outer join
@@ -339,6 +346,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             folded = leftFetch;
             return true;
+        }
+
+        private Version GetVersion(IOrganizationService org)
+        {
+#if NETCOREAPP
+            if (org is ServiceClient svc)
+                return svc.ConnectedOrgVersion;
+#else
+            if (org is CrmServiceClient svc)
+                return svc.ConnectedOrgVersion;
+#endif
+
+            var resp = (RetrieveVersionResponse)org.Execute(new RetrieveVersionRequest());
+            return new Version(resp.Version);
         }
 
         private bool FoldMetadataJoin(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints, MetadataQueryNode leftMeta, INodeSchema leftSchema, MetadataQueryNode rightMeta, INodeSchema rightSchema, out IDataExecutionPlanNodeInternal folded)
@@ -543,33 +564,53 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             RightSource.AddRequiredColumns(dataSources, parameterTypes, rightColumns);
         }
 
-        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
-            var leftEstimate = LeftSource.EstimatedRowsOut;
-            var rightEstimate = RightSource.EstimatedRowsOut;
+            var leftEstimate = LeftSource.EstimateRowsOut(dataSources, options, parameterTypes);
+            ParseEstimate(leftEstimate, out var leftMin, out var leftMax, out var leftIsRange);
+            var rightEstimate = RightSource.EstimateRowsOut(dataSources, options, parameterTypes);
+            ParseEstimate(rightEstimate, out var rightMin, out var rightMax, out var rightIsRange);
 
-            if (JoinType == QualifiedJoinType.Inner)
-                return Math.Min(leftEstimate, rightEstimate);
-            else
-                return Math.Max(leftEstimate, rightEstimate);
-        }
+            if (JoinType == QualifiedJoinType.LeftOuter && SemiJoin)
+                return leftEstimate;
 
-        protected override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, bool includeSemiJoin)
-        {
-            var schema = base.GetSchema(dataSources, parameterTypes, includeSemiJoin);
+            if (JoinType == QualifiedJoinType.RightOuter && SemiJoin)
+                return rightEstimate;
 
-            if (schema.PrimaryKey == null && JoinType == QualifiedJoinType.Inner)
+            int estimate;
+
+            var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
+            var rightSchema = GetRightSchema(dataSources, parameterTypes);
+
+            if (LeftAttribute.GetColumnName() == leftSchema.PrimaryKey || RightAttribute.GetColumnName() == rightSchema.PrimaryKey)
             {
-                var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
-                var rightSchema = GetRightSchema(dataSources, parameterTypes);
-
-                if (LeftAttribute.GetColumnName() == leftSchema.PrimaryKey)
-                    ((NodeSchema)schema).PrimaryKey = rightSchema.PrimaryKey;
-                else if (RightAttribute.GetColumnName() == rightSchema.PrimaryKey)
-                    ((NodeSchema)schema).PrimaryKey = leftSchema.PrimaryKey;
+                if (JoinType == QualifiedJoinType.Inner)
+                    estimate = Math.Min(leftMax, rightMax);
+                else
+                    estimate = Math.Max(leftMax, rightMax);
+            }
+            else
+            {
+                estimate = leftMax * rightMax;
             }
 
-            return schema;
+            if (leftIsRange && rightIsRange)
+                return new RowCountEstimateDefiniteRange(0, estimate);
+            else
+                return new RowCountEstimate(estimate);
+        }
+
+        protected override string GetPrimaryKey(INodeSchema outerSchema, INodeSchema innerSchema)
+        {
+            if (JoinType == QualifiedJoinType.Inner)
+            {
+                if (LeftAttribute.GetColumnName() == outerSchema.PrimaryKey)
+                    return innerSchema.PrimaryKey;
+                else if (RightAttribute.GetColumnName() == innerSchema.PrimaryKey)
+                    return outerSchema.PrimaryKey;
+            }
+
+            return base.GetPrimaryKey(outerSchema, innerSchema);
         }
 
         protected override IEnumerable<string> GetVariablesInternal()

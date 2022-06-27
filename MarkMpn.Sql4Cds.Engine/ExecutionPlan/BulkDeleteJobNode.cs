@@ -14,7 +14,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// <summary>
     /// Starts a bulk delete job
     /// </summary>
-    class BulkDeleteJobNode : BaseNode, IDmlQueryExecutionPlanNode, IFetchXmlExecutionPlanNode
+    class BulkDeleteJobNode : BaseNode, IDmlQueryExecutionPlanNode
     {
         private int _executionCount;
         private readonly Timer _timer = new Timer();
@@ -36,13 +36,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override TimeSpan Duration => _timer.Duration;
 
-        /// <summary>
-        /// The query that identifies the records to delete
-        /// </summary>
-        [Category("Bulk Delete")]
-        [Description("The FetchXML query that identifies the records to delete")]
-        [DisplayName("FetchXML")]
-        public string FetchXmlString { get; set; }
+        [Browsable(false)]
+        public FetchXmlScan Source { get; set; }
 
         public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
         {
@@ -59,7 +54,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 using (_timer.Run())
                 {
-                    var query = ((FetchXmlToQueryExpressionResponse)dataSource.Connection.Execute(new FetchXmlToQueryExpressionRequest { FetchXml = FetchXmlString })).Query;
+                    Source.ApplyParameterValues(options, parameterValues);
+                    var query = ((FetchXmlToQueryExpressionResponse)dataSource.Connection.Execute(new FetchXmlToQueryExpressionRequest { FetchXml = Source.FetchXmlString })).Query;
                     var meta = dataSource.Metadata[query.EntityName];
 
                     var req = new BulkDeleteRequest
@@ -100,7 +96,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
         {
-            return Array.Empty<IExecutionPlanNode>();
+            return new[] { Source };
         }
 
         public override string ToString()
@@ -116,7 +112,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Sql = Sql,
                 Index = Index,
                 Length = Length,
-                FetchXmlString = FetchXmlString
+                Source = Source,
             };
         }
     }

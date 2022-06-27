@@ -90,9 +90,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
-            var sourceCount = Source.EstimatedRowsOut;
+            var sourceCount = Source.EstimateRowsOut(dataSources, options, parameterTypes);
 
             if (!Offset.IsConstantValueExpression(null, options, out var offsetLiteral) ||
                 !Fetch.IsConstantValueExpression(null, options, out var fetchLiteral))
@@ -101,7 +101,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var offset = Int32.Parse(offsetLiteral.Value, CultureInfo.InvariantCulture);
             var fetch = Int32.Parse(fetchLiteral.Value, CultureInfo.InvariantCulture);
 
-            return Math.Max(0, Math.Min(fetch, sourceCount - offset));
+            return new RowCountEstimateDefiniteRange(0, Math.Max(0, Math.Min(fetch, sourceCount.Value - offset)));
         }
 
         public override string ToString()

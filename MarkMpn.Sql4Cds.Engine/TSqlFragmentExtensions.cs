@@ -409,6 +409,15 @@ namespace MarkMpn.Sql4Cds.Engine
                 };
             }
 
+            if (fragment is ExpressionWithSortOrder sort)
+            {
+                return (T)(object)new ExpressionWithSortOrder
+                {
+                    Expression = sort.Expression.Clone(),
+                    SortOrder = sort.SortOrder,
+                };
+            }
+
             throw new NotSupportedQueryFragmentException("Unhandled expression type", fragment);
         }
     }

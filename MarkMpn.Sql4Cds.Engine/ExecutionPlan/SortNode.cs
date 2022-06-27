@@ -156,7 +156,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
             var schema = new NodeSchema(Source.GetSchema(dataSources, parameterTypes));
-            schema.SortOrder.Clear();
+            var sortOrder = new List<string>();
 
             foreach (var sort in Sorts)
             {
@@ -166,10 +166,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!schema.ContainsColumn(col.GetColumnName(), out var colName))
                     return schema;
 
-                schema.SortOrder.Add(colName);
+                sortOrder.Add(colName);
             }
 
-            return schema;
+            return new NodeSchema(
+                primaryKey: schema.PrimaryKey,
+                schema: schema.Schema,
+                aliases: schema.Aliases,
+                notNullColumns: schema.NotNullColumns,
+                sortOrder: sortOrder);
         }
 
         public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
@@ -449,9 +454,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
-            return Source.EstimatedRowsOut;
+            return Source.EstimateRowsOut(dataSources, options, parameterTypes);
         }
 
         protected override IEnumerable<string> GetVariablesInternal()

@@ -82,6 +82,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\QueryExecutionException.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\RetrieveTotalRecordCountNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\RevertNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\RowCountEstimate.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\SelectDataReader.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\SelectNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\SortNode.cs" />
@@ -122,6 +123,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\ExistsSubqueryVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\GroupValidationVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\InSubqueryVisitor.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Visitors\OptimizerHintValidatingVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\ParameterlessCollectingVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\ReplacePrimaryFunctionsVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\RewriteVisitor.cs" />

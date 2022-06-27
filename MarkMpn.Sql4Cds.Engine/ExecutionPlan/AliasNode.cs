@@ -148,7 +148,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             // Map the base names to the alias names
             var sourceSchema = Source.GetSchema(dataSources, parameterTypes);
-            var schema = new NodeSchema();
+            var schema = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
+            var aliases = new Dictionary<string, IReadOnlyList<string>>();
+            var primaryKey = (string)null;
+            var mappings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var col in ColumnSet)
             {
@@ -162,41 +165,71 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         var simpleName = sourceCol.Key.Split('.').Last();
                         var outputName = $"{Alias}.{simpleName}";
 
-                        AddSchemaColumn(simpleName, sourceCol.Key, schema, sourceSchema);
+                        AddSchemaColumn(simpleName, sourceCol.Key, schema, aliases, ref primaryKey, mappings, sourceSchema);
                     }
                 }
                 else
                 {
-                    AddSchemaColumn(col.OutputColumn, col.SourceColumn, schema, sourceSchema);
+                    AddSchemaColumn(col.OutputColumn, col.SourceColumn, schema, aliases, ref primaryKey, mappings, sourceSchema);
                 }
             }
 
-            return schema;
+            var notNullColumns = sourceSchema.NotNullColumns
+                .Select(col =>
+                {
+                    sourceSchema.ContainsColumn(col, out col);
+                    return col;
+                })
+                .Where(col => col != null)
+                .Select(col =>
+                {
+                    mappings.TryGetValue(col, out col);
+                    return col;
+                })
+                .Where(col => col != null)
+                .ToArray();
+            var sortOrder = sourceSchema.SortOrder
+                .Select(col =>
+                {
+                    sourceSchema.ContainsColumn(col, out col);
+                    return col;
+                })
+                .Where(col => col != null)
+                .Select(col =>
+                {
+                    mappings.TryGetValue(col, out col);
+                    return col;
+                })
+                .Where(col => col != null)
+                .ToArray();
+
+            return new NodeSchema(
+                primaryKey: primaryKey,
+                schema: schema,
+                aliases: aliases,
+                notNullColumns: notNullColumns,
+                sortOrder: sortOrder);
         }
 
-        private void AddSchemaColumn(string outputColumn, string sourceColumn, NodeSchema schema, INodeSchema sourceSchema)
+        private void AddSchemaColumn(string outputColumn, string sourceColumn, Dictionary<string, DataTypeReference> schema, Dictionary<string, IReadOnlyList<string>> aliases, ref string primaryKey, Dictionary<string, string> mappings, INodeSchema sourceSchema)
         {
             if (!sourceSchema.ContainsColumn(sourceColumn, out var normalized))
                 return;
 
             var mapped = $"{Alias}.{outputColumn}";
-            schema.Schema[mapped] = sourceSchema.Schema[normalized];
+            schema[mapped] = sourceSchema.Schema[normalized];
+            mappings[normalized] = mapped;
 
             if (normalized == sourceSchema.PrimaryKey)
-                schema.PrimaryKey = mapped;
+                primaryKey = mapped;
 
-            if (!schema.Aliases.TryGetValue(outputColumn, out var aliases))
+            if (!aliases.TryGetValue(outputColumn, out var a))
             {
-                aliases = new List<string>();
-                schema.Aliases[outputColumn] = aliases;
+                a = new List<string>();
+                aliases[outputColumn] = a;
             }
 
-            aliases.Add(mapped);
-
-            var sorted = sourceSchema.SortOrder.Contains(sourceColumn, StringComparer.OrdinalIgnoreCase);
-
-            if (sorted)
-                schema.SortOrder.Add(outputColumn);
+            ((List<string>)a).Add(mapped);
         }
 
         protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
@@ -218,9 +251,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return "Subquery Alias";
         }
 
-        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
-            return Source.EstimatedRowsOut;
+            return Source.EstimateRowsOut(dataSources, options, parameterTypes);
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()

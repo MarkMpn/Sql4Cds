@@ -210,7 +210,7 @@ namespace MarkMpn.Sql4Cds
                                     alias = words[i + 2];
                                     i += 2;
                                 }
-                                else if (words[i + 1].ToLower() != "on" && words[i + 1].ToLower() != "left" && words[i + 1].ToLower() != "inner" && words[i + 1].ToLower() != "right" && words[i + 1].ToLower() != "join" && words[i + 1].ToLower() != "full")
+                                else if (words[i + 1].ToLower() != "on" && words[i + 1].ToLower() != "left" && words[i + 1].ToLower() != "inner" && words[i + 1].ToLower() != "right" && words[i + 1].ToLower() != "join" && words[i + 1].ToLower() != "full" && words[i + 1] != ",")
                                 {
                                     alias = words[i + 1];
                                     i++;
@@ -219,7 +219,7 @@ namespace MarkMpn.Sql4Cds
 
                             tables[alias] = tableName;
 
-                            while (i < words.Count && words[i].ToLower() != "join")
+                            while (i < words.Count && words[i].ToLower() != "join" && words[i] != ",")
                                 i++;
                         }
 
@@ -329,6 +329,9 @@ namespace MarkMpn.Sql4Cds
 
                             return AutocompleteTableName(currentWord);
                         }
+
+                        if (clause == "from" && prevWord == ",")
+                            return AutocompleteTableName(currentWord);
 
                         if (clause == "set" && (prevWord.Equals("set", StringComparison.OrdinalIgnoreCase) || prevWord == ","))
                         {

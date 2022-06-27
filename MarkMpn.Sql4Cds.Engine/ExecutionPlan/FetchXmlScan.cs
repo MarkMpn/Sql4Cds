@@ -84,6 +84,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         }
 
         public const int LabelMaxLength = 200;
+        private static readonly XmlSerializer _serializer = new XmlSerializer(typeof(FetchXml.FetchType));
 
         private Dictionary<string, ParameterizedCondition> _parameterizedConditions;
         private HashSet<string> _entityNameGroupings;
@@ -91,6 +92,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private string _lastSchemaFetchXml;
         private string _lastSchemaAlias;
         private NodeSchema _lastSchema;
+        private bool _lastFullSchema;
         private bool _resetPage;
         private string _startingPage;
 
@@ -165,18 +167,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             ReturnFullSchema = false;
             var schema = GetSchema(dataSources, parameterTypes);
 
-            // Apply any variable conditions
-            if (parameterValues != null)
-            {
-                if (_parameterizedConditions == null)
-                    _parameterizedConditions = FindParameterizedConditions();
-
-                foreach (var param in parameterValues)
-                {
-                    if (_parameterizedConditions.TryGetValue(param.Key, out var condition))
-                        condition.SetValue(param.Value, options);
-                }
-            }
+            ApplyParameterValues(options, parameterValues);
 
             FindEntityNameGroupings(dataSource.Metadata);
 
@@ -248,6 +239,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 count += nextPage.Entities.Count;
                 res = nextPage;
+            }
+        }
+
+        /// <summary>
+        /// Updates the <see cref="FetchXml"/> with current parameter values
+        /// </summary>
+        /// <param name="options">The options to control how the query is executed</param>
+        /// <param name="parameterValues">The parameter values to apply</param>
+        public void ApplyParameterValues(IQueryExecutionOptions options, IDictionary<string, object> parameterValues)
+        {
+            if (parameterValues == null)
+                return;
+            
+            if (_parameterizedConditions == null)
+                _parameterizedConditions = FindParameterizedConditions();
+
+            foreach (var param in parameterValues)
+            {
+                if (_parameterizedConditions.TryGetValue(param.Key, out var condition))
+                    condition.SetValue(param.Value, options);
             }
         }
 
@@ -511,8 +522,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <returns>The string representation of the query</returns>
         internal static string Serialize(FetchXml.FetchType fetch)
         {
-            var serializer = new XmlSerializer(typeof(FetchXml.FetchType));
-
             using (var writer = new StringWriter())
             using (var xmlWriter = System.Xml.XmlWriter.Create(writer, new System.Xml.XmlWriterSettings
             {
@@ -524,7 +533,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var xsn = new XmlSerializerNamespaces();
                 xsn.Add("generator", "MarkMpn.SQL4CDS");
 
-                serializer.Serialize(xmlWriter, fetch, xsn);
+                _serializer.Serialize(xmlWriter, fetch, xsn);
                 return writer.ToString();
             }
         }
@@ -555,25 +564,35 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
 
             var fetchXmlString = FetchXmlString;
-            if (_lastSchema != null && Alias == _lastSchemaAlias && fetchXmlString == _lastSchemaFetchXml)
+            if (_lastSchema != null && Alias == _lastSchemaAlias && fetchXmlString == _lastSchemaFetchXml && ReturnFullSchema == _lastFullSchema)
                 return _lastSchema;
 
             _primaryKeyColumns = new Dictionary<string, string>();
-            var schema = new NodeSchema();
-
+            
             // Add each attribute from the main entity and recurse into link entities
             var entity = FetchXml.Items.OfType<FetchEntityType>().Single();
             var meta = dataSource.Metadata[entity.name];
 
-            if (!FetchXml.aggregate)
-                schema.PrimaryKey = $"{Alias}.{meta.PrimaryIdAttribute}";
+            var schema = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
+            var aliases = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+            var primaryKey = FetchXml.aggregate ? null : $"{Alias}.{meta.PrimaryIdAttribute}";
+            var notNullColumns = new HashSet<string>();
+            var sortOrder = new List<string>();
 
-            AddSchemaAttributes(schema, dataSource.Metadata, entity.name, Alias, entity.Items, true);
+            AddSchemaAttributes(schema, aliases, ref primaryKey, notNullColumns, sortOrder, dataSource.Metadata, entity.name, Alias, entity.Items, true);
 
-            _lastSchema = schema;
+            _lastSchema = new NodeSchema(
+                primaryKey: primaryKey,
+                schema: schema,
+                aliases: aliases,
+                notNullColumns: notNullColumns.ToList(),
+                sortOrder: sortOrder
+                ); ;
             _lastSchemaFetchXml = fetchXmlString;
             _lastSchemaAlias = Alias;
-            return schema;
+            _lastFullSchema = ReturnFullSchema;
+
+            return _lastSchema;
         }
 
         internal FetchAttributeType AddAttribute(string colName, Func<FetchAttributeType, bool> predicate, IAttributeMetadataCache metadata, out bool added, out FetchLinkEntityType linkEntity)
@@ -653,7 +672,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Regex.IsMatch(alias, "^[A-Za-z_][A-Za-z0-9_]*$");
         }
 
-        private void AddSchemaAttributes(NodeSchema schema, IAttributeMetadataCache metadata, string entityName, string alias, object[] items, bool innerJoin)
+        private void AddSchemaAttributes(Dictionary<string, DataTypeReference> schema, Dictionary<string, IReadOnlyList<string>> aliases, ref string primaryKey, HashSet<string> notNullColumns, List<string> sortOrder, IAttributeMetadataCache metadata, string entityName, string alias, object[] items, bool innerJoin)
         {
             if (items == null && !ReturnFullSchema)
                 return;
@@ -672,7 +691,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     var fullName = $"{alias}.{attrMetadata.LogicalName}";
                     var attrType = attrMetadata.GetAttributeSqlType(metadata, false);
-                    AddSchemaAttribute(schema, metadata, fullName, attrMetadata.LogicalName, attrType, attrMetadata, innerJoin);
+                    AddSchemaAttribute(schema, aliases, notNullColumns, metadata, fullName, attrMetadata.LogicalName, attrType, attrMetadata, innerJoin);
                 }
             }
 
@@ -727,7 +746,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         attrAlias = attribute.name;
                     }
 
-                    AddSchemaAttribute(schema, metadata, fullName, attrAlias, attrType, attrMetadata, innerJoin);
+                    AddSchemaAttribute(schema, aliases, notNullColumns, metadata, fullName, attrAlias, attrType, attrMetadata, innerJoin);
                 }
 
                 if (items.OfType<allattributes>().Any())
@@ -744,7 +763,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         var attrName = attrMetadata.LogicalName;
                         var fullName = $"{alias}.{attrName}";
 
-                        AddSchemaAttribute(schema, metadata, fullName, attrName, attrType, attrMetadata, innerJoin);
+                        AddSchemaAttribute(schema, aliases, notNullColumns, metadata, fullName, attrName, attrType, attrMetadata, innerJoin);
                     }
                 }
 
@@ -776,7 +795,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (attrMeta is LookupAttributeMetadata || attrMeta is EnumAttributeMetadata || attrMeta is BooleanAttributeMetadata)
                         fullName += "name";
 
-                    schema.SortOrder.Add(fullName);
+                    sortOrder.Add(fullName);
                 }
 
                 foreach (var linkEntity in items.OfType<FetchLinkEntityType>())
@@ -784,31 +803,31 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (linkEntity.SemiJoin)
                         continue;
 
-                    if (schema.PrimaryKey != null)
+                    if (primaryKey != null)
                     {
                         var childMeta = metadata[linkEntity.name];
 
                         if (linkEntity.from != childMeta.PrimaryIdAttribute)
                         {
                             if (linkEntity.linktype == "inner")
-                                schema.PrimaryKey = $"{linkEntity.alias}.{childMeta.PrimaryIdAttribute}";
+                                primaryKey = $"{linkEntity.alias}.{childMeta.PrimaryIdAttribute}";
                             else
-                                schema.PrimaryKey = null;
+                                primaryKey = null;
                         }
                     }
 
-                    AddSchemaAttributes(schema, metadata, linkEntity.name, linkEntity.alias, linkEntity.Items, innerJoin && linkEntity.linktype == "inner");
+                    AddSchemaAttributes(schema, aliases, ref primaryKey, notNullColumns, sortOrder, metadata, linkEntity.name, linkEntity.alias, linkEntity.Items, innerJoin && linkEntity.linktype == "inner");
                 }
 
                 if (innerJoin)
                 {
                     foreach (var filter in items.OfType<filter>())
-                        AddNotNullFilters(schema, alias, filter);
+                        AddNotNullFilters(schema, aliases, notNullColumns, alias, filter);
                 }
             }
         }
 
-        private void AddNotNullFilters(NodeSchema schema, string alias, filter filter)
+        private void AddNotNullFilters(Dictionary<string, DataTypeReference> schema, Dictionary<string, IReadOnlyList<string>> aliases, HashSet<string> notNullColumns, string alias, filter filter)
         {
             if (filter.Items == null)
                 return;
@@ -823,20 +842,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var fullname = (cond.entityname ?? alias) + "." + (cond.alias ?? cond.attribute);
 
-                if (schema.ContainsColumn(fullname, out fullname))
-                    schema.NotNullColumns.Add(fullname);
+                if (new NodeSchema(primaryKey: null, schema: schema, aliases: aliases, notNullColumns: null, sortOrder: null).ContainsColumn(fullname, out fullname))
+                    notNullColumns.Add(fullname);
             }
 
             foreach (var subFilter in filter.Items.OfType<filter>())
-                AddNotNullFilters(schema, alias, subFilter);
+                AddNotNullFilters(schema, aliases, notNullColumns, alias, subFilter);
         }
 
-        private void AddSchemaAttribute(NodeSchema schema, IAttributeMetadataCache metadata, string fullName, string simpleName, DataTypeReference type, AttributeMetadata attrMetadata, bool innerJoin)
+        private void AddSchemaAttribute(Dictionary<string, DataTypeReference> schema, Dictionary<string, IReadOnlyList<string>> aliases, HashSet<string> notNullColumns, IAttributeMetadataCache metadata, string fullName, string simpleName, DataTypeReference type, AttributeMetadata attrMetadata, bool innerJoin)
         {
             var notNull = innerJoin && (attrMetadata.RequiredLevel?.Value == AttributeRequiredLevel.SystemRequired || attrMetadata.LogicalName == "createdon" || attrMetadata.LogicalName == "createdby" || attrMetadata.AttributeOf == "createdby");
 
             // Add the logical attribute
-            AddSchemaAttribute(schema, fullName, simpleName, type, notNull);
+            AddSchemaAttribute(schema, aliases, notNullColumns, fullName, simpleName, type, notNull);
 
             if (attrMetadata.IsPrimaryId == true)
                 _primaryKeyColumns[fullName] = attrMetadata.EntityLogicalName;
@@ -846,35 +865,35 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Add standard virtual attributes
             if (attrMetadata is EnumAttributeMetadata || attrMetadata is BooleanAttributeMetadata)
-                AddSchemaAttribute(schema, fullName + "name", attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(LabelMaxLength), notNull);
+                AddSchemaAttribute(schema, aliases, notNullColumns, fullName + "name", attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(LabelMaxLength), notNull);
 
             if (attrMetadata is LookupAttributeMetadata lookup)
             {
-                AddSchemaAttribute(schema, fullName + "name", attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(lookup.Targets == null || lookup.Targets.Length == 0 ? 100 : lookup.Targets.Select(e => ((StringAttributeMetadata)metadata[e].Attributes.SingleOrDefault(a => a.LogicalName == metadata[e].PrimaryNameAttribute))?.MaxLength ?? 100).Max()), notNull);
+                AddSchemaAttribute(schema, aliases, notNullColumns, fullName + "name", attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(lookup.Targets == null || lookup.Targets.Length == 0 ? 100 : lookup.Targets.Select(e => ((StringAttributeMetadata)metadata[e].Attributes.SingleOrDefault(a => a.LogicalName == metadata[e].PrimaryNameAttribute))?.MaxLength ?? 100).Max()), notNull);
 
                 if (lookup.Targets?.Length > 1 && lookup.AttributeType != AttributeTypeCode.PartyList)
-                    AddSchemaAttribute(schema, fullName + "type", attrMetadata.LogicalName + "type", DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength), notNull);
+                    AddSchemaAttribute(schema, aliases, notNullColumns, fullName + "type", attrMetadata.LogicalName + "type", DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength), notNull);
             }
         }
 
-        private void AddSchemaAttribute(NodeSchema schema, string fullName, string simpleName, DataTypeReference type, bool notNull)
+        private void AddSchemaAttribute(Dictionary<string, DataTypeReference> schema, Dictionary<string, IReadOnlyList<string>> aliases, HashSet<string> notNullColumns, string fullName, string simpleName, DataTypeReference type, bool notNull)
         {
-            schema.Schema[fullName] = type;
+            schema[fullName] = type;
 
             if (notNull)
-                schema.NotNullColumns.Add(fullName);
+                notNullColumns.Add(fullName);
 
             if (simpleName == null)
                 return;
 
-            if (!schema.Aliases.TryGetValue(simpleName, out var simpleColumnNameAliases))
+            if (!aliases.TryGetValue(simpleName, out var simpleColumnNameAliases))
             {
                 simpleColumnNameAliases = new List<string>();
-                schema.Aliases[simpleName] = simpleColumnNameAliases;
+                aliases[simpleName] = simpleColumnNameAliases;
             }
 
             if (!simpleColumnNameAliases.Contains(fullName))
-                simpleColumnNameAliases.Add(fullName);
+                ((List<string>)simpleColumnNameAliases).Add(fullName);
         }
 
         public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<Microsoft.SqlServer.TransactSql.ScriptDom.OptimizerHint> hints)
@@ -970,8 +989,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (pageSizeHints.Count > 1)
                 throw new NotSupportedQueryFragmentException("Duplicate page size hint", pageSizeHints[1]);
 
-            if (!Int32.TryParse(pageSizeHints[0].Value.Substring(pageSizePrefix.Length), out var pageSize))
-                throw new NotSupportedQueryFragmentException("Invalid page size, must be a whole number", pageSizeHints[0]);
+            var pageSize = Int32.Parse(pageSizeHints[0].Value.Substring(pageSizePrefix.Length));
+
+            if (pageSize < 1 || pageSize > 5000)
+                throw new NotSupportedQueryFragmentException("Invalid page size, must be between 1 and 5000", pageSizeHints[0]);
 
             FetchXml.count = pageSize.ToString(CultureInfo.InvariantCulture);
         }
@@ -982,6 +1003,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             RemoveEmptyFilters();
             MergeRootFilters();
             MergeSingleConditionFilters();
+            MergeNestedFilters();
         }
 
         private void MoveFiltersToLinkEntities()
@@ -1114,6 +1136,51 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var subFilter in filter.Items.OfType<filter>())
                 MergeSingleConditionFilters(subFilter);
+        }
+
+        private void MergeNestedFilters()
+        {
+            MergeNestedFilters(Entity.Items);
+
+            foreach (var linkEntity in Entity.GetLinkEntities())
+                MergeNestedFilters(linkEntity.Items);
+        }
+
+        private void MergeNestedFilters(object[] items)
+        {
+            if (items == null)
+                return;
+
+            var filter = items.OfType<filter>().SingleOrDefault();
+
+            if (filter == null)
+                return;
+
+            MergeNestedFilters(filter);
+        }
+
+        private void MergeNestedFilters(filter filter)
+        {
+            var items = new List<object>();
+
+            foreach (var item in filter.Items)
+            {
+                if (item is filter f)
+                {
+                    MergeNestedFilters(f);
+
+                    if (f.type == filter.type)
+                        items.AddRange(f.Items);
+                    else
+                        items.Add(item);
+                }
+                else
+                {
+                    items.Add(item);
+                }
+            }
+
+            filter.Items = items.ToArray();
         }
 
         public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
@@ -1268,19 +1335,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             ReturnFullSchema = fullSchema;
         }
 
-        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
             if (FetchXml.aggregateSpecified && FetchXml.aggregate)
             {
                 var hasGroups = HasGroups(Entity.Items);
 
                 if (!hasGroups)
-                    return 1;
+                    return RowCountEstimateDefiniteRange.ExactlyOne;
 
-                return EstimateRowsOut(Entity.name, Entity.Items, dataSources) * 4 / 10;
+                return EstimateRowsOut(Entity.name, Entity.Items, dataSources, 0.4);
             }
 
-            return EstimateRowsOut(Entity.name, Entity.Items, dataSources);
+            return EstimateRowsOut(Entity.name, Entity.Items, dataSources, 1.0);
         }
 
         private bool HasGroups(object[] items)
@@ -1294,20 +1361,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return items.OfType<FetchLinkEntityType>().Any(link => HasGroups(link.Items));
         }
 
-        private int EstimateRowsOut(string name, object[] items, IDictionary<string, DataSource> dataSources)
+        private RowCountEstimate EstimateRowsOut(string name, object[] items, IDictionary<string, DataSource> dataSources, double multiplier)
         {
             if (!String.IsNullOrEmpty(FetchXml.top))
-                return Int32.Parse(FetchXml.top, CultureInfo.InvariantCulture);
+                return new RowCountEstimateDefiniteRange(0, Int32.Parse(FetchXml.top, CultureInfo.InvariantCulture));
 
             if (!dataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
 
             // Start with the total number of records
-            var rowCount = dataSource.TableSizeCache[name];
+            var rowCount = (int)(dataSource.TableSizeCache[name] * multiplier);
+
+            if (items == null)
+                return new RowCountEstimate(rowCount);
 
             // If there's any 1:N joins, use the larger number
-            if (items == null)
-                return rowCount;
 
             var entityMetadata = dataSource.Metadata[name];
             var joins = items.OfType<FetchLinkEntityType>();
@@ -1317,7 +1385,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (join.to != entityMetadata.PrimaryIdAttribute)
                     continue;
 
-                var childCount = EstimateRowsOut(join.name, join.Items, dataSources);
+                var childCount = EstimateRowsOut(join.name, join.Items, dataSources, 1.0).Value;
 
                 if (join.linktype == "outer")
                     rowCount = Math.Max(rowCount, childCount);
@@ -1334,7 +1402,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 filterMultiple *= EstimateFilterRate(entityMetadata, filter, dataSource.TableSizeCache, out var singleRow);
 
                 if (singleRow)
-                    return 1;
+                    return RowCountEstimateDefiniteRange.ZeroOrOne;
             }
 
             var estimate = (int) (rowCount * filterMultiple);
@@ -1344,7 +1412,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (estimate <= 1 && rowCount > 1)
                 estimate = 2;
 
-            return estimate;
+            return new RowCountEstimate(estimate);
         }
 
         private double EstimateFilterRate(EntityMetadata metadata, filter filter, ITableSizeCache tableSize, out bool singleRow)

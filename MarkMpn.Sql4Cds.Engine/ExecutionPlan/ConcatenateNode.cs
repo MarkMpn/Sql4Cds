@@ -48,13 +48,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
         {
-            var schema = new NodeSchema();
+            var schema = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
+
             var sourceSchema = Sources[0].GetSchema(dataSources, parameterTypes);
 
             foreach (var col in ColumnSet)
-                schema.Schema[col.OutputColumn] = sourceSchema.Schema[col.SourceColumns[0]];
+                schema[col.OutputColumn] = sourceSchema.Schema[col.SourceColumns[0]];
 
-            return schema;
+            return new NodeSchema(
+                primaryKey: null,
+                schema: schema,
+                aliases: null,
+                notNullColumns: null,
+                sortOrder: null);
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
@@ -189,9 +195,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        protected override int EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
         {
-            return Sources.Sum(s => s.EstimatedRowsOut);
+            return new RowCountEstimate(Sources.Sum(s => s.EstimateRowsOut(dataSources, options, parameterTypes).Value));
         }
 
         public override object Clone()

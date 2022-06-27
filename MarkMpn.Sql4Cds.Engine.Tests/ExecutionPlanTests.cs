@@ -3202,7 +3202,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual("MONTH(a.createdon)", calc.Columns["Expr2"].ToSql());
             Assert.AreEqual("YEAR(a.createdon)", calc.Columns["Expr3"].ToSql());
             var filter = AssertNode<FilterNode>(calc.Source);
-            Assert.AreEqual("YEAR(a.createdon) = 2021 AND MONTH(a.createdon) = 11", filter.Filter.ToSql());
+            Assert.AreEqual("YEAR(a.createdon) = 2021 AND MONTH(a.createdon) = 11", filter.Filter.ToSql().Replace("\r\n", " "));
             var fetch = AssertNode<FetchXmlScan>(filter.Source);
             AssertFetchXml(fetch, @"
                 <fetch>
@@ -3335,7 +3335,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     </entity>
                 </fetch>");
             var sort = AssertNode<SortNode>(merge.RightSource);
-            Assert.AreEqual("entity.metadataid", sort.Sorts[0].ToSql());
+            Assert.AreEqual("entity.metadataid ASC", sort.Sorts[0].ToSql());
             var meta = AssertNode<MetadataQueryNode>(sort.Source);
         }
 
@@ -4572,6 +4572,168 @@ UPDATE account SET employees = @employees WHERE name = @name";
                 <fetch xmlns:generator='MarkMpn.SQL4CDS'>
                     <entity name='account'>
                         <all-attributes />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void UpdateColumnInWhereClause()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "UPDATE account SET name = '1' WHERE name <> '1'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var update = AssertNode<UpdateNode>(plans[0]);
+            Assert.AreEqual("Expr1", update.ColumnMappings["name"]);
+
+            var compute = AssertNode<ComputeScalarNode>(update.Source);
+            Assert.AreEqual("'1'", compute.Columns["Expr1"].ToSql());
+
+            var fetch = AssertNode<FetchXmlScan>(compute.Source);
+
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                        <filter>
+                            <condition attribute='name' operator='ne' value='1' />
+                            <condition attribute='name' operator='not-null' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void NestedOrFilters()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT * FROM account WHERE name = '1' OR name = '2' OR name = '3' OR name = '4'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <all-attributes />
+                        <filter type='or'>
+                            <condition attribute='name' operator='eq' value='1' />
+                            <condition attribute='name' operator='eq' value='2' />
+                            <condition attribute='name' operator='eq' value='3' />
+                            <condition attribute='name' operator='eq' value='4' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        [TestMethod]
+        public void UnknownHint()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT * FROM account OPTION(USE HINT('invalid'))";
+
+            planBuilder.Build(query, null, out _);
+        }
+
+        [TestMethod]
+        public void MultipleTablesJoinFromWhereClause()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT firstname FROM account, contact WHERE accountid = parentcustomerid AND lastname = 'Carrington' AND name = 'Data8'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <link-entity name='account' from='accountid' to='parentcustomerid' alias='account' link-type='inner'>
+                            <filter>
+                                <condition attribute='name' operator='eq' value='Data8' />
+                            </filter>
+                        </link-entity>
+                        <filter>
+                            <condition attribute='lastname' operator='eq' value='Carrington' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void MultipleTablesJoinFromWhereClauseReversed()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT firstname FROM account, contact WHERE lastname = 'Carrington' AND name = 'Data8' AND parentcustomerid = accountid";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <link-entity name='account' from='accountid' to='parentcustomerid' alias='account' link-type='inner'>
+                            <filter>
+                                <condition attribute='name' operator='eq' value='Data8' />
+                            </filter>
+                        </link-entity>
+                        <filter>
+                            <condition attribute='lastname' operator='eq' value='Carrington' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void MultipleTablesJoinFromWhereClause3()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT firstname FROM account, contact, systemuser WHERE accountid = parentcustomerid AND lastname = 'Carrington' AND name = 'Data8' AND account.ownerid = systemuserid";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <link-entity name='account' from='accountid' to='parentcustomerid' alias='account' link-type='inner'>
+                            <link-entity name='systemuser' from='systemuserid' to='ownerid' alias='systemuser' link-type='inner' />
+                            <filter>
+                                <condition attribute='name' operator='eq' value='Data8' />
+                            </filter>
+                        </link-entity>
+                        <filter>
+                            <condition attribute='lastname' operator='eq' value='Carrington' />
+                        </filter>
                     </entity>
                 </fetch>");
         }

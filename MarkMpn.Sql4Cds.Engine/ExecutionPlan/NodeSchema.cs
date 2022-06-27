@@ -15,8 +15,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// Creates a new <see cref="NodeSchema"/>
         /// </summary>
-        public NodeSchema()
+        public NodeSchema(IReadOnlyDictionary<string, DataTypeReference> schema, IReadOnlyDictionary<string, IReadOnlyList<string>> aliases, string primaryKey, IReadOnlyList<string> notNullColumns, IReadOnlyList<string> sortOrder)
         {
+            PrimaryKey = primaryKey;
+            Schema = schema ?? new Dictionary<string, DataTypeReference>();
+            Aliases = aliases ?? new Dictionary<string, IReadOnlyList<string>>();
+            SortOrder = sortOrder ?? Array.Empty<string>();
+            NotNullColumns = notNullColumns ?? Array.Empty<string>();
         }
 
         /// <summary>
@@ -27,44 +32,52 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             PrimaryKey = copy.PrimaryKey;
 
-            foreach (var kvp in copy.Schema)
-                Schema[kvp.Key] = kvp.Value;
+            if (copy.Schema is Dictionary<string, DataTypeReference> schema)
+            {
+                Schema = new Dictionary<string, DataTypeReference>(schema, StringComparer.OrdinalIgnoreCase);
+            }
+            else
+            {
+                schema = new Dictionary<string, DataTypeReference>(copy.Schema.Count, StringComparer.OrdinalIgnoreCase);
 
-            foreach (var kvp in copy.Aliases)
-                Aliases[kvp.Key] = new List<string>(kvp.Value);
+                foreach (var kvp in copy.Schema)
+                    schema[kvp.Key] = kvp.Value;
 
-            SortOrder.AddRange(copy.SortOrder);
+                Schema = schema;
+            }
 
-            foreach (var col in copy.NotNullColumns)
-                NotNullColumns.Add(col);
+            if (copy.Aliases is Dictionary<string, IReadOnlyList<string>> aliases)
+            {
+                Aliases = new Dictionary<string, IReadOnlyList<string>>(aliases, StringComparer.OrdinalIgnoreCase);
+            }
+            else
+            {
+                aliases = new Dictionary<string, IReadOnlyList<string>>(copy.Aliases.Count, StringComparer.OrdinalIgnoreCase);
+
+                foreach (var kvp in copy.Aliases)
+                    aliases[kvp.Key] = new List<string>(kvp.Value);
+
+                Aliases = aliases;
+            }
+
+            SortOrder = new List<string>(copy.SortOrder);
+            NotNullColumns = new List<string>(copy.NotNullColumns);
         }
 
-        /// <summary>
-        /// The name of the column that forms the primary key
-        /// </summary>
-        public string PrimaryKey { get; set; }
+        /// <inheritdoc cref="INodeSchema.PrimaryKey"/>
+        public string PrimaryKey { get; }
 
-        /// <summary>
-        /// A mapping of column names to the types of data stored in them
-        /// </summary>
-        public Dictionary<string, DataTypeReference> Schema { get; set; } = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
+        /// <inheritdoc cref="INodeSchema.Schema"/>
+        public IReadOnlyDictionary<string, DataTypeReference> Schema { get; }
 
-        IReadOnlyDictionary<string, DataTypeReference> INodeSchema.Schema => Schema;
+        /// <inheritdoc cref="INodeSchema.Aliases"/>
+        public IReadOnlyDictionary<string, IReadOnlyList<string>> Aliases { get; }
 
-        /// <summary>
-        /// A mapping of names that can be used as column aliases to the list of columns the name could refer to
-        /// </summary>
-        public Dictionary<string, List<string>> Aliases { get; set; } = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        /// <inheritdoc cref="INodeSchema.NotNullColumns"/>
+        public IReadOnlyList<string> NotNullColumns { get; }
 
-        IReadOnlyDictionary<string, IReadOnlyList<string>> INodeSchema.Aliases => Aliases.ToDictionary(kvp => kvp.Key, kvp => (IReadOnlyList<string>) kvp.Value);
-
-        public HashSet<string> NotNullColumns { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        IReadOnlyList<string> INodeSchema.NotNullColumns => NotNullColumns.ToList().AsReadOnly();
-
-        public List<string> SortOrder { get; set; } = new List<string>();
-
-        IReadOnlyList<string> INodeSchema.SortOrder => SortOrder;
+        /// <inheritdoc cref="INodeSchema.SortOrder"/>
+        public IReadOnlyList<string> SortOrder { get; }
 
         /// <summary>
         /// Checks if a column exists in the schema

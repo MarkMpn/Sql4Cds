@@ -14,6 +14,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// </summary>
     abstract class BaseJoinNode : BaseDataNode
     {
+        private INodeSchema _lastLeftSchema;
+        private INodeSchema _lastRightSchema;
+        private INodeSchema _lastSchema;
+
         /// <summary>
         /// The first data source to merge
         /// </summary>
@@ -111,10 +115,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var outerSchema = LeftSource.GetSchema(dataSources, parameterTypes);
             var innerSchema = GetRightSchema(dataSources, parameterTypes);
 
-            var schema = new NodeSchema();
+            if (outerSchema == _lastLeftSchema && innerSchema == _lastRightSchema)
+                return _lastSchema;
 
-            if (JoinType == QualifiedJoinType.LeftOuter && SemiJoin)
-                schema.PrimaryKey = outerSchema.PrimaryKey;
+            var schema = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
+            var aliases = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+            var primaryKey = GetPrimaryKey(outerSchema, innerSchema);
+            var notNullColumns = new List<string>();
 
             foreach (var subSchema in new[] { outerSchema, innerSchema })
             {
@@ -123,31 +130,52 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     continue;
 
                 foreach (var column in subSchema.Schema)
-                    schema.Schema[column.Key] = column.Value;
+                    schema[column.Key] = column.Value;
 
                 foreach (var alias in subSchema.Aliases)
                 {
-                    if (!schema.Aliases.TryGetValue(alias.Key, out var aliasDetails))
+                    if (!aliases.TryGetValue(alias.Key, out var aliasDetails))
                     {
                         aliasDetails = new List<string>();
-                        schema.Aliases[alias.Key] = aliasDetails;
+                        aliases[alias.Key] = aliasDetails;
                     }
 
-                    schema.Aliases[alias.Key].AddRange(alias.Value);
+                    ((List<string>)aliasDetails).AddRange(alias.Value);
                 }
 
                 if (((JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.LeftOuter) && subSchema == outerSchema) ||
                     ((JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.RightOuter) && subSchema == innerSchema))
                 {
                     foreach (var col in subSchema.NotNullColumns)
-                        schema.NotNullColumns.Add(col);
+                        notNullColumns.Add(col);
                 }
             }
 
             foreach (var definedValue in DefinedValues)
-                schema.Schema[definedValue.Key] = innerSchema.Schema[definedValue.Value];
+                schema[definedValue.Key] = innerSchema.Schema[definedValue.Value];
 
-            return schema;
+            _lastLeftSchema = outerSchema;
+            _lastRightSchema = innerSchema;
+            _lastSchema = new NodeSchema(
+                primaryKey: primaryKey,
+                schema: schema,
+                aliases: aliases,
+                notNullColumns: notNullColumns,
+                sortOrder: GetSortOrder(outerSchema, innerSchema));
+            return _lastSchema;
+        }
+
+        protected virtual string GetPrimaryKey(INodeSchema outerSchema, INodeSchema innerSchema)
+        {
+            if (JoinType == QualifiedJoinType.LeftOuter && SemiJoin)
+                return outerSchema.PrimaryKey;
+
+            return null;
+        }
+
+        protected virtual IReadOnlyList<string> GetSortOrder(INodeSchema outerSchema, INodeSchema innerSchema)
+        {
+            return null;
         }
 
         protected virtual INodeSchema GetRightSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
