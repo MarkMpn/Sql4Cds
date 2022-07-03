@@ -11,10 +11,8 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
     {
         public List<InPredicate> InSubqueries { get; } = new List<InPredicate>();
 
-        public override void Visit(InPredicate node)
+        public override void ExplicitVisit(InPredicate node)
         {
-            base.Visit(node);
-
             if (node.Subquery != null)
                 InSubqueries.Add(node);
         }
