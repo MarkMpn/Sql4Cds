@@ -1504,14 +1504,11 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     <entity name='account'>
                         <attribute name='accountid' />
                         <attribute name='name' />
-                        <link-entity name='contact' alias='Expr1' from='contactid' to='primarycontactid' link-type='outer'>
+                        <link-entity name='contact' alias='Expr1' from='contactid' to='primarycontactid' link-type='inner'>
                             <filter>
                                 <condition attribute='firstname' operator='eq' value='Mark' />
                             </filter>
                         </link-entity>
-                        <filter>
-                            <condition entityname='Expr1' attribute='contactid' operator='not-null' />
-                        </filter>
                     </entity>
                 </fetch>
             ");
@@ -1681,10 +1678,45 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     <entity name='account'>
                         <attribute name='accountid' />
                         <attribute name='name' />
+                        <link-entity name='contact' alias='Expr2' from='contactid' to='primarycontactid' link-type='inner'>
+                        </link-entity>
+                    </entity>
+                </fetch>
+            ");
+        }
+
+        [TestMethod]
+        public void ExistsFilterCorrelatedPrimaryKeyOr()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                SELECT
+                    accountid,
+                    name
+                FROM
+                    account
+                WHERE
+                    EXISTS (SELECT * FROM contact WHERE contactid = primarycontactid)
+                    OR name = 'Data8'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                        <attribute name='name' />
                         <link-entity name='contact' alias='Expr2' from='contactid' to='primarycontactid' link-type='outer'>
                         </link-entity>
-                        <filter>
+                        <filter type='or'>
                             <condition entityname='Expr2' attribute='contactid' operator='not-null' />
+                            <condition attribute='name' operator='eq' value='Data8' />
                         </filter>
                     </entity>
                 </fetch>
@@ -2389,12 +2421,42 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 <fetch>
                     <entity name='account'>
                         <attribute name='name' />
-                        <link-entity name='contact' alias='Expr1' from='contactid' to='primarycontactid' link-type='outer'>
+                        <link-entity name='contact' alias='Expr1' from='contactid' to='primarycontactid' link-type='inner'>
                             <filter>
                                 <condition attribute='firstname' operator='eq' value='Mark' />
                             </filter>
                         </link-entity>
                         <filter>
+                            <condition attribute='name' operator='like' value='Data8%' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void FoldFilterWithInClauseOr()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT name from account where name like 'Data8%' or primarycontactid in (select contactid from contact where firstname = 'Mark')";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <link-entity name='contact' alias='Expr1' from='contactid' to='primarycontactid' link-type='outer'>
+                            <filter>
+                                <condition attribute='firstname' operator='eq' value='Mark' />
+                            </filter>
+                        </link-entity>
+                        <filter type='or'>
                             <condition attribute='name' operator='like' value='Data8%' />
                             <condition entityname='Expr1' attribute='contactid' operator='not-null' />
                         </filter>
@@ -4734,6 +4796,35 @@ UPDATE account SET employees = @employees WHERE name = @name";
                         <filter>
                             <condition attribute='lastname' operator='eq' value='Carrington' />
                         </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void NestedInSubqueries()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT firstname FROM contact WHERE parentcustomerid IN (SELECT accountid FROM account WHERE primarycontactid IN (SELECT contactid FROM contact WHERE lastname = 'Carrington'))";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <link-entity name='account' from='accountid' to='parentcustomerid' alias='Expr3' link-type='inner'>
+                            <link-entity name='contact' from='contactid' to='primarycontactid' alias='Expr1' link-type='inner'>
+                                <filter>
+                                    <condition attribute='lastname' operator='eq' value='Carrington' />
+                                </filter>
+                            </link-entity>
+                        </link-entity>
                     </entity>
                 </fetch>");
         }

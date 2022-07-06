@@ -42,6 +42,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 if (prop.DeclaringType == typeof(FetchLinkEntityType) && prop.Name == nameof(FetchLinkEntityType.SemiJoin))
                     continue;
 
+                if (prop.DeclaringType == typeof(FetchLinkEntityType) && prop.Name == nameof(FetchLinkEntityType.RequireTablePrefix))
+                    continue;
+
                 var propRoute = route + "." + prop.Name;
 
                 var valueX = prop.GetValue(x);

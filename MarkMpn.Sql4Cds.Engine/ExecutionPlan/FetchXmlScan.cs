@@ -579,7 +579,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var notNullColumns = new HashSet<string>();
             var sortOrder = new List<string>();
 
-            AddSchemaAttributes(schema, aliases, ref primaryKey, notNullColumns, sortOrder, dataSource.Metadata, entity.name, Alias, entity.Items, true);
+            AddSchemaAttributes(schema, aliases, ref primaryKey, notNullColumns, sortOrder, dataSource.Metadata, entity.name, Alias, entity.Items, true, false);
 
             _lastSchema = new NodeSchema(
                 primaryKey: primaryKey,
@@ -593,6 +593,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _lastFullSchema = ReturnFullSchema;
 
             return _lastSchema;
+        }
+
+        internal void ResetSchemaCache()
+        {
+            _lastSchema = null;
         }
 
         internal FetchAttributeType AddAttribute(string colName, Func<FetchAttributeType, bool> predicate, IAttributeMetadataCache metadata, out bool added, out FetchLinkEntityType linkEntity)
@@ -672,7 +677,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Regex.IsMatch(alias, "^[A-Za-z_][A-Za-z0-9_]*$");
         }
 
-        private void AddSchemaAttributes(Dictionary<string, DataTypeReference> schema, Dictionary<string, IReadOnlyList<string>> aliases, ref string primaryKey, HashSet<string> notNullColumns, List<string> sortOrder, IAttributeMetadataCache metadata, string entityName, string alias, object[] items, bool innerJoin)
+        private void AddSchemaAttributes(Dictionary<string, DataTypeReference> schema, Dictionary<string, IReadOnlyList<string>> aliases, ref string primaryKey, HashSet<string> notNullColumns, List<string> sortOrder, IAttributeMetadataCache metadata, string entityName, string alias, object[] items, bool innerJoin, bool requireTablePrefix)
         {
             if (items == null && !ReturnFullSchema)
                 return;
@@ -690,8 +695,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         continue;
 
                     var fullName = $"{alias}.{attrMetadata.LogicalName}";
+                    var simpleName = requireTablePrefix ? null : attrMetadata.LogicalName;
                     var attrType = attrMetadata.GetAttributeSqlType(metadata, false);
-                    AddSchemaAttribute(schema, aliases, notNullColumns, metadata, fullName, attrMetadata.LogicalName, attrType, attrMetadata, innerJoin);
+                    AddSchemaAttribute(schema, aliases, notNullColumns, metadata, fullName, simpleName, attrType, attrMetadata, innerJoin);
                 }
             }
 
@@ -746,6 +752,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         attrAlias = attribute.name;
                     }
 
+                    if (requireTablePrefix)
+                        attrAlias = null;
+
                     AddSchemaAttribute(schema, aliases, notNullColumns, metadata, fullName, attrAlias, attrType, attrMetadata, innerJoin);
                 }
 
@@ -760,7 +769,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             continue;
 
                         var attrType = attrMetadata.GetAttributeSqlType(metadata, false);
-                        var attrName = attrMetadata.LogicalName;
+                        var attrName = requireTablePrefix ? null : attrMetadata.LogicalName;
                         var fullName = $"{alias}.{attrName}";
 
                         AddSchemaAttribute(schema, aliases, notNullColumns, metadata, fullName, attrName, attrType, attrMetadata, innerJoin);
@@ -816,7 +825,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         }
                     }
 
-                    AddSchemaAttributes(schema, aliases, ref primaryKey, notNullColumns, sortOrder, metadata, linkEntity.name, linkEntity.alias, linkEntity.Items, innerJoin && linkEntity.linktype == "inner");
+                    AddSchemaAttributes(schema, aliases, ref primaryKey, notNullColumns, sortOrder, metadata, linkEntity.name, linkEntity.alias, linkEntity.Items, innerJoin && linkEntity.linktype == "inner", requireTablePrefix || linkEntity.RequireTablePrefix);
                 }
 
                 if (innerJoin)
@@ -1547,7 +1556,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override object Clone()
         {
-            return new FetchXmlScan
+            var clone = new FetchXmlScan
             {
                 Alias = Alias,
                 AllPages = AllPages,
@@ -1560,6 +1569,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 _lastSchemaFetchXml = _lastSchemaFetchXml,
                 _primaryKeyColumns = _primaryKeyColumns,
             };
+
+            // Custom properties are not serialized, so need to copy them manually
+            foreach (var link in Entity.GetLinkEntities())
+            {
+                var cloneLink = clone.Entity.GetLinkEntities().Single(l => l.alias == link.alias);
+                cloneLink.SemiJoin = link.SemiJoin;
+                cloneLink.RequireTablePrefix = link.RequireTablePrefix;
+            }
+
+            return clone;
         }
     }
 }

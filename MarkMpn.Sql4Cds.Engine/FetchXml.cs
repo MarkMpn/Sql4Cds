@@ -591,6 +591,9 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml {
 
         [XmlIgnore]
         public bool SemiJoin { get; set; }
+
+        [XmlIgnore]
+        public bool RequireTablePrefix { get; set; }
     }
     
     /// <remarks/>

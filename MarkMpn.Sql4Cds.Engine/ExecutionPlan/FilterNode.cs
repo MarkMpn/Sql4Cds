@@ -138,7 +138,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             foldedFilters |= FoldFiltersToDataSources(dataSources, options, parameterTypes);
 
             foreach (var addedLink in addedLinks)
-                addedLink.SemiJoin = true;
+            {
+                addedLink.Key.SemiJoin = true;
+                addedLink.Value.ResetSchemaCache();
+            }
 
             // Some of the filters have been folded into the source. Fold the sources again as the filter can have changed estimated row
             // counts and lead to a better execution plan.
@@ -282,7 +285,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return false;
         }
 
-        private bool FoldInExistsToFetchXml(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints, out List<FetchLinkEntityType> addedLinks)
+        private bool FoldInExistsToFetchXml(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints, out Dictionary<FetchLinkEntityType, FetchXmlScan> addedLinks)
         {
             var foldedFilters = false;
 
@@ -311,7 +314,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     join = join.LeftSource as BaseJoinNode;
             }
 
-            addedLinks = new List<FetchLinkEntityType>();
+            addedLinks = new Dictionary<FetchLinkEntityType, FetchXmlScan>();
             FetchXmlScan leftFetch;
 
             if (joins.Count == 0)
@@ -336,6 +339,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     break;
 
                 FetchLinkEntityType linkToAdd;
+                bool semiJoin;
                 string leftAlias;
 
                 if (join is FoldableJoinNode merge)
@@ -364,14 +368,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (definedValueName == null)
                         break;
 
-                    var notNullFilter = FindNotNullFilter(Filter, definedValueName);
+                    var notNullFilter = FindNotNullFilter(Filter, definedValueName, out var notNullFilterRemovable);
                     if (notNullFilter == null)
                         break;
 
                     // If IN query is on matching primary keys (SELECT name FROM account WHERE accountid IN (SELECT accountid FROM account WHERE ...))
                     // we can eliminate the left join and rewrite as SELECT name FROM account WHERE ....
                     // Can't do this if there is any conflict in join aliases
-                    if (leftFetch.Entity.name == rightFetch.Entity.name &&
+                    if (notNullFilterRemovable &&
+                        leftFetch.Entity.name == rightFetch.Entity.name &&
                         merge.LeftAttribute.GetColumnName() == leftFetch.Alias + "." + dataSources[leftFetch.DataSource].Metadata[leftFetch.Entity.name].PrimaryIdAttribute &&
                         merge.RightAttribute.GetColumnName() == rightFetch.Alias + "." + dataSources[rightFetch.DataSource].Metadata[rightFetch.Entity.name].PrimaryIdAttribute &&
                         !leftFetch.Entity.GetLinkEntities().Select(l => l.alias).Intersect(rightFetch.Entity.GetLinkEntities().Select(l => l.alias), StringComparer.OrdinalIgnoreCase).Any() &&
@@ -402,10 +407,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         foldedFilters = true;
 
                         linkToAdd = null;
+                        semiJoin = false;
                     }
-                    // We can fold IN to a simple left outer join where the attribute is the primary key. Can't do this
-                    // if there are any inner joins though.
-                    else if (!rightFetch.FetchXml.distinct && rightSchema.PrimaryKey == attribute && !rightFetch.Entity.GetLinkEntities().Any(link => link.linktype == "inner"))
+                    // We can fold IN to a simple join where the attribute is the primary key. Can't do this
+                    // if there are any inner joins though, unless the new join will itself be an inner join.
+                    else if (!rightFetch.FetchXml.distinct &&
+                        rightSchema.PrimaryKey == attribute &&
+                        (notNullFilterRemovable || !rightFetch.Entity.GetLinkEntities().Any(link => link.linktype == "inner")))
                     {
                         // Replace the filter on the defined value name with a filter on the primary key column
                         notNullFilter.Expression = attribute.ToColumnReference();
@@ -416,16 +424,36 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             alias = rightFetch.Alias,
                             from = merge.RightAttribute.MultiPartIdentifier.Identifiers.Last().Value,
                             to = merge.LeftAttribute.MultiPartIdentifier.Identifiers.Last().Value,
-                            linktype = "outer",
                             Items = rightFetch.Entity.Items.Where(i => !(i is FetchOrderType)).ToArray()
                         };
-                    }
-                    else
-                    {
-                        // We need to use an "in" join type - check that's supported
-                        if (!options.JoinOperatorsAvailable.Contains(JoinOperator.Any))
-                            break;
 
+                        if (notNullFilterRemovable)
+                        {
+                            // IN filter is combined with AND, so all matching records must satisfy the filter
+                            // We can use an inner join to simplify the FetchXML, and mark it as a semi join so
+                            // none of the attributes in the joined table are exposed in the schema
+                            linkToAdd.linktype = "inner";
+                            semiJoin = true;
+
+                            // The inner join is now doing the job of the filter, so we can remove the filter
+                            Filter = Filter.RemoveCondition(notNullFilter);
+                            foldedFilters = true;
+                        }
+                        else
+                        {
+                            // IN filter is combined with OR, so we may get matching records that don't satisfy
+                            // this join. We need to use an outer join and return some attributes in the schema
+                            // for the filter to be able to work, but require them to be fully qualified so we
+                            // don't cause conflicts.
+                            linkToAdd.linktype = "outer";
+                            linkToAdd.RequireTablePrefix = true;
+                            semiJoin = false;
+                        }
+                    }
+                    // We need to use an "in" join type - check that's supported
+                    else if (notNullFilterRemovable &&
+                        options.JoinOperatorsAvailable.Contains(JoinOperator.Any))
+                    {
                         // Remove the filter and replace with an "in" link-entity
                         Filter = Filter.RemoveCondition(notNullFilter);
                         foldedFilters = true;
@@ -439,6 +467,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             linktype = "in",
                             Items = rightFetch.Entity.Items.Where(i => !(i is FetchOrderType)).ToArray()
                         };
+                        semiJoin = true;
+                    }
+                    else
+                    {
+                        break;
                     }
 
                     leftAlias = merge.LeftAttribute.MultiPartIdentifier.Identifiers.Reverse().Skip(1).First().Value;
@@ -454,7 +487,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
                 else if (join is NestedLoopNode loop)
                 {
-                    // Check we meet all the criteria for a foldable correlated IN query
+                    // Check we meet all the criteria for a foldable correlated EXISTS query
                     if (!options.JoinOperatorsAvailable.Contains(JoinOperator.Exists))
                         break;
 
@@ -483,8 +516,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         !indexSpool.KeyColumn.Split('.')[0].Equals(rightFetch.Alias, StringComparison.OrdinalIgnoreCase))
                         break;
 
-                    var notNullFilter = FindNotNullFilter(Filter, loop.DefinedValues.Single().Key);
-                    if (notNullFilter == null)
+                    var notNullFilter = FindNotNullFilter(Filter, loop.DefinedValues.Single().Key, out var notNullFilterRemovable);
+                    if (notNullFilter == null || !notNullFilterRemovable)
                         break;
 
                     // Remove the filter and replace with an "exists" link-entity
@@ -500,6 +533,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         linktype = "exists",
                         Items = rightFetch.Entity.Items
                     };
+                    semiJoin = true;
                     leftAlias = loop.OuterReferences.Single().Key.Split('.')[0];
                 }
                 else
@@ -525,10 +559,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     else
                         leftFetch.Entity.FindLinkEntity(leftAlias).AddItem(linkToAdd);
 
-                    // Join needs to be a semi-join, but don't set it yet as the columns won't be visible in the schema to allow
-                    // the filter to be folded into it later. Keep track of which links we've added now so we can set the semi-join
-                    // flag on them later.
-                    addedLinks.Add(linkToAdd);
+                    if (semiJoin)
+                    {
+                        // Join needs to be a semi-join, but don't set it yet as the columns won't be visible in the schema to allow
+                        // the filter to be folded into it later. Keep track of which links we've added now so we can set the semi-join
+                        // flag on them later.
+                        addedLinks.Add(linkToAdd, leftFetch);
+                    }
                 }
 
                 joins.Remove(join);
@@ -658,20 +695,32 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return foldedFilters;
         }
 
-        private BooleanIsNullExpression FindNotNullFilter(BooleanExpression filter, string attribute)
+        private BooleanIsNullExpression FindNotNullFilter(BooleanExpression filter, string attribute, out bool and)
         {
             if (filter is BooleanIsNullExpression isNull &&
                 isNull.IsNot &&
                 isNull.Expression is ColumnReferenceExpression col &&
                 col.GetColumnName().Equals(attribute, StringComparison.OrdinalIgnoreCase))
+            {
+                and = true;
                 return isNull;
+            }
 
             if (filter is BooleanParenthesisExpression paren)
-                return FindNotNullFilter(paren.Expression, attribute);
+                return FindNotNullFilter(paren.Expression, attribute, out and);
 
-            if (filter is BooleanBinaryExpression bin && bin.BinaryExpressionType == BooleanBinaryExpressionType.And)
-                return FindNotNullFilter(bin.FirstExpression, attribute) ?? FindNotNullFilter(bin.SecondExpression, attribute);
+            if (filter is BooleanBinaryExpression bin)
+            {
+                var notNull = FindNotNullFilter(bin.FirstExpression, attribute, out and) ?? FindNotNullFilter(bin.SecondExpression, attribute, out and);
 
+                if (notNull != null)
+                {
+                    and &= bin.BinaryExpressionType == BooleanBinaryExpressionType.And;
+                    return notNull;
+                }
+            }
+
+            and = false;
             return null;
         }
 
