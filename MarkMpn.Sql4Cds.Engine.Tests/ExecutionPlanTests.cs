@@ -997,6 +997,53 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         }
 
         [TestMethod]
+        public void SelectSubqueryWithChildRecordUsesNestedLoop()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = @"
+                SELECT name, (SELECT TOP 1 fullname FROM contact WHERE parentcustomerid = account.accountid) FROM account WHERE name = 'Data8'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var computeScalar = AssertNode<ComputeScalarNode>(select.Source);
+            Assert.AreEqual(1, computeScalar.Columns.Count);
+            Assert.AreEqual("Expr2", computeScalar.Columns[select.ColumnSet[1].SourceColumn].ToSql());
+            var nestedLoop = AssertNode<NestedLoopNode>(computeScalar.Source);
+            Assert.AreEqual("@Expr1", nestedLoop.OuterReferences["account.accountid"]);
+            var fetch = AssertNode<FetchXmlScan>(nestedLoop.LeftSource);
+            AssertFetchXml(fetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <attribute name='accountid' />
+                        <filter>
+                            <condition attribute='name' operator='eq' value='Data8' />
+                        </filter>
+                    </entity>
+                </fetch>");
+            var subTop = AssertNode<TopNode>(nestedLoop.RightSource);
+            var subIndexSpool = AssertNode<IndexSpoolNode>(subTop.Source);
+            Assert.AreEqual("contact.parentcustomerid", subIndexSpool.KeyColumn);
+            Assert.AreEqual("@Expr1", subIndexSpool.SeekValue);
+            var subAggregateFetch = AssertNode<FetchXmlScan>(subIndexSpool.Source);
+            AssertFetchXml(subAggregateFetch, @"
+                <fetch>
+                    <entity name='contact'>
+                        <attribute name='fullname' />
+                        <attribute name='parentcustomerid' />
+                        <filter>
+                            <condition attribute='parentcustomerid' operator='not-null' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
         public void SelectSubqueryWithSmallNestedLoop()
         {
             var metadata = new AttributeMetadataCache(_service);
@@ -1440,13 +1487,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var select = AssertNode<SelectNode>(plans[0]);
             var filter = AssertNode<FilterNode>(select.Source);
-            var hashJoin = AssertNode<HashJoinNode>(filter.Source);
+            var hashJoin = AssertNode<MergeJoinNode>(filter.Source);
             var fetch = AssertNode<FetchXmlScan>(hashJoin.LeftSource);
             AssertFetchXml(fetch, @"
                 <fetch>
                     <entity name='account'>
                         <attribute name='accountid' />
                         <attribute name='name' />
+                        <order attribute='name' />
                     </entity>
                 </fetch>");
             var subFetch = AssertNode<FetchXmlScan>(hashJoin.RightSource);
