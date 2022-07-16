@@ -3184,6 +3184,9 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
                 else
                 {
+                    // Spool the inner table so the results can be reused by the nested loop
+                    rhs = new TableSpoolNode { Source = rhs, SpoolType = SpoolType.Eager };
+
                     joinNode = new NestedLoopNode
                     {
                         LeftSource = lhs,

@@ -4876,5 +4876,41 @@ UPDATE account SET employees = @employees WHERE name = @name";
                     </entity>
                 </fetch>");
         }
+
+        [TestMethod]
+        public void SpoolNestedLoop()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+
+            var query = "SELECT account.name, contact.fullname FROM account INNER JOIN contact ON account.accountid = contact.parentcustomerid OR account.createdon < contact.createdon";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var loop = AssertNode<NestedLoopNode>(select.Source);
+            var fetchAccounts = AssertNode<FetchXmlScan>(loop.LeftSource);
+            var spoolContacts = AssertNode<TableSpoolNode>(loop.RightSource);
+            var fetchContacts = AssertNode<FetchXmlScan>(spoolContacts.Source);
+
+            AssertFetchXml(fetchAccounts, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <attribute name='accountid' />
+                        <attribute name='createdon' />
+                    </entity>
+                </fetch>");
+
+            AssertFetchXml(fetchContacts, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='contact'>
+                        <attribute name='fullname' />
+                        <attribute name='parentcustomerid' />
+                        <attribute name='createdon' />
+                    </entity>
+                </fetch>");
+        }
     }
 }
