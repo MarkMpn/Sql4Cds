@@ -32,7 +32,7 @@ namespace MarkMpn.Sql4Cds
         {
             get
             {
-                if (!_metadataCacheSupported || _connection.MetadataCacheLoader == null || _connection.MetadataCacheLoader.Status != TaskStatus.RanToCompletion)
+                if (!CacheReady)
                     return _innerCache[name];
 
                 LoadCache();
@@ -48,7 +48,7 @@ namespace MarkMpn.Sql4Cds
         {
             get
             {
-                if (!_metadataCacheSupported || _connection.MetadataCacheLoader == null || _connection.MetadataCacheLoader.Status != TaskStatus.RanToCompletion)
+                if (!CacheReady)
                     return _innerCache[otc];
 
                 LoadCache();
@@ -62,7 +62,7 @@ namespace MarkMpn.Sql4Cds
 
         public bool TryGetMinimalData(string logicalName, out EntityMetadata metadata)
         {
-            if (!_metadataCacheSupported || _connection.MetadataCacheLoader == null || _connection.MetadataCacheLoader.Status != TaskStatus.RanToCompletion)
+            if (!CacheReady)
                 return _innerCache.TryGetMinimalData(logicalName, out metadata);
 
             LoadCache();
@@ -72,12 +72,32 @@ namespace MarkMpn.Sql4Cds
 
         public bool TryGetValue(string logicalName, out EntityMetadata metadata)
         {
-            if (!_metadataCacheSupported || _connection.MetadataCacheLoader == null || _connection.MetadataCacheLoader.Status != TaskStatus.RanToCompletion)
+            if (!CacheReady)
                 return _innerCache.TryGetValue(logicalName, out metadata);
 
             LoadCache();
 
             return _entitiesByName.TryGetValue(logicalName, out metadata);
+        }
+
+        private  bool CacheReady
+        {
+            get
+            {
+                if (!_metadataCacheSupported)
+                    return false;
+
+                if (_connection.MetadataCacheLoader == null)
+                    return false;
+
+                if (_connection.MetadataCacheLoader.Status != TaskStatus.RanToCompletion)
+                    return false;
+
+                if (_connection.MetadataCacheLoader.Result == null)
+                    return false;
+
+                return true;
+            }
         }
 
         private void LoadCache()

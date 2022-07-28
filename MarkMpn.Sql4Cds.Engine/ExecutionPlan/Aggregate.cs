@@ -154,6 +154,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     {
         class State
         {
+            public State(object sumState, object countState)
+            {
+                SumState = sumState;
+                CountState = countState;
+            }
+
             public object SumState { get; set; }
             public object CountState { get; set; }
         }
@@ -220,7 +226,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override object Reset()
         {
-            return new State();
+            return new State(_sum.Reset(), _count.Reset());
         }
     }
 
@@ -231,7 +237,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     {
         class State
         {
-            public SqlInt32 Value { get; set; }
+            public SqlInt32 Value { get; set; } = 0;
         }
 
         /// <summary>
@@ -264,7 +270,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override object Reset()
         {
-            return new State { Value = 0 };
+            return new State();
         }
     }
 
@@ -275,7 +281,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     {
         class State
         {
-            public SqlInt32 Value { get; set; }
+            public SqlInt32 Value { get; set; } = 0;
         }
 
         /// <summary>
@@ -311,7 +317,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override object Reset()
         {
-            return new State { Value = 0 };
+            return new State();
         }
     }
 
@@ -322,6 +328,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     {
         class State
         {
+            public State(IComparable value)
+            {
+                Value = value;
+            }
+
             public IComparable Value { get; set; }
         }
 
@@ -362,7 +373,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override object Reset()
         {
-            return new State();
+            return new State((IComparable)SqlTypeConverter.GetNullValue(Type.ToNetType(out _)));
         }
     }
 
@@ -373,6 +384,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     {
         class State
         {
+            public State(IComparable value)
+            {
+                Value = value;
+            }
+
             public IComparable Value { get; set; }
         }
 
@@ -414,7 +430,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override object Reset()
         {
-            return new State();
+            return new State((IComparable)SqlTypeConverter.GetNullValue(Type.ToNetType(out _)));
         }
     }
 
@@ -425,11 +441,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     {
         class State
         {
-            public SqlInt32 Int32Value { get; set; }
-            public SqlInt64 Int64Value { get; set; }
-            public SqlDecimal DecimalValue { get; set; }
-            public SqlMoney MoneyValue { get; set; }
-            public SqlDouble FloatValue { get; set; }
+            public SqlInt32 Int32Value { get; set; } = 0;
+            public SqlInt64 Int64Value { get; set; } = 0;
+            public SqlDecimal DecimalValue { get; set; } = 0;
+            public SqlMoney MoneyValue { get; set; } = 0;
+            public SqlDouble FloatValue { get; set; } = 0;
         }
 
         private readonly SqlDataTypeOption _type;
@@ -521,14 +537,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override object Reset()
         {
-            return new State
-            {
-                Int32Value = 0,
-                Int64Value = 0,
-                DecimalValue = 0,
-                MoneyValue = 0,
-                FloatValue = 0
-            };
+            return new State();
         }
     }
 
@@ -536,6 +545,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     {
         class State
         {
+            public State(object value)
+            {
+                Value = value;
+            }
+
             public bool Done { get; set; }
 
             public object Value { get; set; }
@@ -575,7 +589,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override object Reset()
         {
-            return new State();
+            return new State(SqlTypeConverter.GetNullValue(Type.ToNetType(out _)));
         }
     }
 

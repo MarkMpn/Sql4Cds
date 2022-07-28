@@ -45,6 +45,9 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
             // Custom hint to use cached record count for simple count(*) queries
             "RETRIEVE_TOTAL_RECORD_COUNT",
+
+            // Custom hint to get query plan without any optimization
+            "DEBUG_BYPASS_OPTIMIZATION",
         };
 
         private static readonly HashSet<string> _removableSql4CdsQueryHints = new HashSet<string>(StringComparer.OrdinalIgnoreCase)

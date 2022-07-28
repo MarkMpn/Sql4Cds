@@ -50,7 +50,10 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             // Move any additional operators down to the FetchXml
-            var nodes = node.FoldQuery(DataSources, Options, ParameterTypes, hints);
+            var nodes =
+                hints != null && hints.OfType<UseHintList>().Any(list => list.Hints.Any(h => h.Value.Equals("DEBUG_BYPASS_OPTIMIZATION", StringComparison.OrdinalIgnoreCase)))
+                ? new[] { node }
+                : node.FoldQuery(DataSources, Options, ParameterTypes, hints);
 
             foreach (var n in nodes)
             {

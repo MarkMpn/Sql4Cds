@@ -1022,7 +1022,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     valueCopy = SqlTypeConverter.Convert(valueCopy, valueType, caseType);
 
                 if (!whenType.IsSameAs(caseType))
-                    whenValue = SqlTypeConverter.Convert(whenValue, whenType, type);
+                    whenValue = SqlTypeConverter.Convert(whenValue, whenType, caseType);
 
                 var comparison = Expression.Equal(valueCopy, whenValue);
                 var returnValue = thenClauses[i].Expression;

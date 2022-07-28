@@ -11,15 +11,14 @@
     <iconUrl>https://markcarrington.dev/sql4cds-icon/</iconUrl>
     <description>Convert SQL queries to FetchXml and execute them against Dataverse / D365</description>
     <summary>Convert SQL queries to FetchXml and execute them against Dataverse / D365</summary>
-    <releaseNotes>Fixed UPDATE queries where column to be updated is also in the WHERE clause
-Simplified the filters in the generated FetchXML to make them easier to read
-Improved automatic FetchXML page size calculations
-Validate query hints and remove SQL 4 CDS-specific hints from TDS Endpoint queries
-Allow parallel DML queries for Client Secret and Certificate authenticated connections
-Improved support for multi-table queries in intellisense and query folding
-Improved performance folding queries with many joins
-Automatically use bulk delete to delete audit records
-Fixed inserting records in many-to-many intersect tables</releaseNotes>
+    <releaseNotes>Fixed evaluation of expressions CASE value WHEN x THEN y ...
+Fixed converting queries with nested IN subqueries
+Prevent ambiguous column errors with IN or EXISTS subqueries
+Simplified FetchXML generated for IN subqueries
+Fixed scalar subqueries without additional filter criteria
+Use merge join instead of hash join for more join types
+Spool inner source of nested loop joins for improved performance
+Fixed null values for aggregates</releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>
     <tags>SQL CDS</tags>

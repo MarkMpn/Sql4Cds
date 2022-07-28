@@ -2741,8 +2741,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 !innerSchema.ContainsColumn(innerKey, out innerKey))
                 return false;
 
-            if (outerSchema.PrimaryKey != outerKey &&
-                innerSchema.PrimaryKey != innerKey)
+            if (!semiJoin && innerSchema.PrimaryKey != innerKey)
                 return false;
 
             // Give the inner fetch a unique alias and update the name of the inner key
@@ -3185,6 +3184,9 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
                 else
                 {
+                    // Spool the inner table so the results can be reused by the nested loop
+                    rhs = new TableSpoolNode { Source = rhs, SpoolType = SpoolType.Eager };
+
                     joinNode = new NestedLoopNode
                     {
                         LeftSource = lhs,
