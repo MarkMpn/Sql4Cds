@@ -1,6 +1,8 @@
 ﻿using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.VisualBasic;
 using Microsoft.Xrm.Sdk;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Data.SqlTypes;
@@ -16,6 +18,51 @@ namespace MarkMpn.Sql4Cds.Engine
     /// </summary>
     class ExpressionFunctions
     {
+        /// <summary>
+        /// Creates a SqlEntityReference value
+        /// </summary>
+        /// <param name="logicalName">The logical name of the entity type being referred to</param>
+        /// <param name="id">The unique identifier of the record</param>
+        /// <returns>A <see cref="SqlEntityReference"/> value combining the <paramref name="logicalName"/> and <paramref name="id"/></returns>
+        public static SqlEntityReference CreateLookup(SqlString logicalName, SqlGuid id)
+        {
+            if (logicalName.IsNull || id.IsNull)
+                return SqlEntityReference.Null;
+
+            return new SqlEntityReference(null, logicalName.Value, id);
+        }
+
+        /// <summary>
+        /// Gets a value from a JSON document
+        /// </summary>
+        /// <param name="json">The JSON string to extract a value from</param>
+        /// <param name="jpath">The JPath to extract the value at</param>
+        /// <param name="sqlType">The expected type of the value to extract</param>
+        /// <returns></returns>
+        public static object GetJsonValue(SqlString json, SqlString jpath, [TargetType] DataTypeReference sqlType)
+        {
+            var targetType = sqlType.ToNetType(out _);
+
+            if (json.IsNull || jpath.IsNull)
+                return SqlTypeConverter.GetNullValue(targetType);
+
+            var jsonDoc = Newtonsoft.Json.Linq.JToken.Parse(json.Value);
+            var jtoken = jsonDoc.SelectToken(jpath.Value);
+
+            if (jtoken == null)
+                return SqlTypeConverter.GetNullValue(targetType);
+
+            if (!(jtoken is JValue jvalue))
+                throw new QueryExecutionException("JPath does not result in a value");
+
+            if (jvalue.Value == null)
+                return SqlTypeConverter.GetNullValue(targetType);
+
+            var conversion = SqlTypeConverter.GetConversion(jvalue.Value.GetType(), targetType);
+            var sqlValue = conversion(jvalue.Value);
+            return sqlValue;
+        }
+
         /// <summary>
         /// Implements the DATEADD function
         /// </summary>
@@ -641,5 +688,14 @@ namespace MarkMpn.Sql4Cds.Engine
     [AttributeUsage(AttributeTargets.Parameter)]
     class MaxLengthAttribute : Attribute
     {
+    }
+
+    /// <summary>
+    /// Indicates that the parameter gives the type of the returned value
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Parameter)]
+    class TargetTypeAttribute : Attribute
+    {
+
     }
 }

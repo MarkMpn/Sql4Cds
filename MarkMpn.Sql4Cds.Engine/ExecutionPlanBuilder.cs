@@ -3270,6 +3270,12 @@ namespace MarkMpn.Sql4Cds.Engine
                 };
             }
 
+            if (reference is SchemaObjectFunctionTableReference tvf)
+            {
+                var dataSource = SelectDataSource(tvf.SchemaObject);
+                return ExecuteMessageNode.FromMessage(tvf, dataSource, parameterTypes);
+            }
+
             throw new NotSupportedQueryFragmentException("Unhandled table reference", reference);
         }
 

@@ -628,7 +628,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 parameters = method.GetParameters();
             }
 
-            sqlType = method.ReturnType.ToSqlType();
+            sqlType = null;
 
             if (method.ReturnType == typeof(SqlString))
             {
@@ -666,6 +666,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     break;
                 }
 
+                if (paramType == typeof(DataTypeReference))
+                {
+                    // Expect only a literal string
+                    if (!(func.Parameters[i] is StringLiteral typeLiteral))
+                        throw new NotSupportedQueryFragmentException($"Only string literals are supported for type parameters", func.Parameters[i]);
+
+                    if (!DataTypeHelpers.TryParse(typeLiteral.Value, out var parsedType))
+                        throw new NotSupportedQueryFragmentException("Unknown type name", typeLiteral);
+
+                    paramExpressions[i] = Expression.Constant(parsedType);
+
+                    if (parameters[i].GetCustomAttribute<TargetTypeAttribute>() != null)
+                        sqlType = parsedType;
+
+                    continue;
+                }
+
                 if (!SqlTypeConverter.CanChangeTypeImplicit(paramTypes[i], paramType.ToSqlType()))
                     throw new NotSupportedQueryFragmentException($"Cannot convert {paramTypes[i].ToSql()} to {paramType.ToSqlType().ToSql()}", i < paramOffset ? func : func.Parameters[i - paramOffset]);
             }
@@ -677,6 +694,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!SqlTypeConverter.CanChangeTypeImplicit(paramTypes[i], paramType.ToSqlType()))
                     throw new NotSupportedQueryFragmentException($"Cannot convert {paramTypes[i].ToSql()} to {paramType.ToSqlType().ToSql()}", i < paramOffset ? func : func.Parameters[i - paramOffset]);
             }
+
+            if (sqlType == null)
+                sqlType = method.ReturnType.ToSqlType();
 
             return method;
         }
@@ -698,7 +718,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     paramValues[i] = SqlTypeConverter.Convert(paramValues[i], parameters[i].ParameterType);
             }
 
-            return Expression.Call(method, paramValues);
+            var expr = (Expression) Expression.Call(method, paramValues);
+
+            if (expr.Type == typeof(object) && parameters.Any(p => p.GetCustomAttribute<TargetTypeAttribute>() != null))
+                expr = Expression.Convert(expr, sqlType.ToNetType(out _));
+
+            return expr;
         }
 
         private static Expression ToExpression(this ParenthesisExpression paren, INodeSchema schema, INodeSchema nonAggregateSchema, IDictionary<string, DataTypeReference> parameterTypes, ParameterExpression entityParam, ParameterExpression parameterParam, ParameterExpression optionsParam, out DataTypeReference sqlType)

@@ -42,11 +42,17 @@ namespace MarkMpn.Sql4Cds
             [Description("Finds the number of non-null values")]
             public abstract int count(object value);
 
+            [Description("Creates a lookup value to reference a record")]
+            public abstract EntityReference createlookup(string logicalName, Guid id);
+
             [Description("Finds the difference between two date values")]
             public abstract int datediff(string datepart, DateTime startdate, DateTime enddate);
 
             [Description("Adds a number value to a date value")]
             public abstract DateTime dateadd(string datepart, int number, DateTime date);
+
+            [Description("Gets a value from a JSON document")]
+            public abstract object getjsonvalue(string json, string jpath, string type);
 
             [Description("Replaces one string value with another")]
             public abstract string replace(string input, string find, string replace);

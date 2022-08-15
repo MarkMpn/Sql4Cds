@@ -896,6 +896,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (type == typeof(string))
                 return typeof(SqlString);
 
+            if (type == typeof(EntityReference))
+                return typeof(SqlEntityReference);
+
+            if (type == typeof(Money))
+                return typeof(SqlMoney);
+
+            if (type == typeof(OptionSetValue))
+                return typeof(SqlInt32);
+
             // Convert any other complex types (e.g. from metadata queries) to strings
             return typeof(SqlString);
         }
