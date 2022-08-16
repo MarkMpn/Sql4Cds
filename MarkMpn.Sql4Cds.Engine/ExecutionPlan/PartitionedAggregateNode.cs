@@ -153,7 +153,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             Connection = svc?.Clone() ?? org,
                             Metadata = dataSources[fetchXmlNode.DataSource].Metadata,
                             Name = fetchXmlNode.DataSource,
-                            TableSizeCache = dataSources[fetchXmlNode.DataSource].TableSizeCache
+                            TableSizeCache = dataSources[fetchXmlNode.DataSource].TableSizeCache,
+                            MessageCache = dataSources[fetchXmlNode.DataSource].MessageCache
                         }
                     };
 

@@ -83,7 +83,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SimpleSelect()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT accountid, name FROM account";
 
@@ -106,7 +106,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SimpleSelectStar()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT * FROM account";
 
@@ -141,7 +141,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void Join()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT accountid, name FROM account INNER JOIN contact ON account.accountid = contact.parentcustomerid";
 
@@ -166,7 +166,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void JoinWithExtraCondition()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT
@@ -200,7 +200,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void NonUniqueJoin()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT accountid, name FROM account INNER JOIN contact ON account.name = contact.fullname";
 
@@ -225,7 +225,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void NonUniqueJoinExpression()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT accountid, name FROM account INNER JOIN contact ON account.name = (contact.firstname + ' ' + contact.lastname)";
 
@@ -261,7 +261,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SimpleWhere()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT
@@ -294,7 +294,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SimpleSort()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT
@@ -325,7 +325,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SimpleSortIndex()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT
@@ -356,7 +356,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SimpleDistinct()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT DISTINCT
@@ -383,7 +383,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SimpleTop()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT TOP 10
@@ -411,7 +411,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SimpleOffset()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT
@@ -442,7 +442,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SimpleGroupAggregate()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT
@@ -493,7 +493,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void AliasedAggregate()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT
@@ -544,7 +544,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void AliasedGroupingAggregate()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT
@@ -595,7 +595,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SimpleAlias()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT accountid, name AS test FROM account";
 
@@ -618,7 +618,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SimpleHaving()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT
@@ -685,7 +685,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void GroupByDatePart()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT
@@ -744,7 +744,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void PartialOrdering()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT
@@ -782,7 +782,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void PartialOrderingAvoidingLegacyPagingWithTop()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT TOP 100
@@ -822,7 +822,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void PartialWhere()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT
@@ -859,7 +859,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void ComputeScalarSelect()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname FROM contact WHERE firstname = 'Mark'";
@@ -889,7 +889,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void ComputeScalarFilter()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT contactid FROM contact WHERE firstname + ' ' + lastname = 'Mark Carrington'";
@@ -916,7 +916,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SelectSubqueryWithMergeJoin()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT name FROM account WHERE accountid = parentcustomerid) AS accountname FROM contact WHERE firstname = 'Mark'";
@@ -950,7 +950,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SelectSubqueryWithNestedLoop()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT name FROM account WHERE createdon = contact.createdon) AS accountname FROM contact WHERE firstname = 'Mark'";
@@ -1000,7 +1000,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SelectSubqueryWithChildRecordUsesNestedLoop()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT name, (SELECT TOP 1 fullname FROM contact WHERE parentcustomerid = account.accountid) FROM account WHERE name = 'Data8'";
@@ -1047,7 +1047,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SelectSubqueryWithSmallNestedLoop()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT TOP 10 firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT name FROM account WHERE createdon = contact.createdon) AS accountname FROM contact WHERE firstname = 'Mark'";
@@ -1093,7 +1093,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SelectSubqueryWithNonCorrelatedNestedLoop()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT TOP 1 name FROM account) AS accountname FROM contact WHERE firstname = 'Mark'";
@@ -1136,7 +1136,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SelectSubqueryWithCorrelatedSpooledNestedLoop()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT name FROM account WHERE createdon = contact.createdon) AS accountname FROM contact WHERE firstname = 'Mark'";
@@ -1187,7 +1187,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SelectSubqueryWithPartiallyCorrelatedSpooledNestedLoop()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT name FROM account WHERE createdon = contact.createdon AND employees > 10) AS accountname FROM contact WHERE firstname = 'Mark'";
@@ -1240,7 +1240,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             var metadata = new AttributeMetadataCache(_service);
             var tableSize = new StubTableSizeCache();
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname, 'Account: ' + (SELECT firstname + ' ' + name FROM account WHERE accountid = parentcustomerid) AS accountname FROM contact WHERE firstname = 'Mark'";
@@ -1289,7 +1289,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SelectSubqueryUsingOuterReferenceInOrderByClause()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT firstname FROM contact ORDER BY (SELECT TOP 1 name FROM account WHERE accountid = parentcustomerid ORDER BY firstname)";
@@ -1330,7 +1330,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void WhereSubquery()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT firstname + ' ' + lastname AS fullname FROM contact WHERE (SELECT name FROM account WHERE accountid = parentcustomerid) = 'Data8'";
@@ -1363,7 +1363,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void ComputeScalarDistinct()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT DISTINCT TOP 10
@@ -1394,7 +1394,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void UnionAll()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT name FROM account
@@ -1434,7 +1434,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SimpleInFilter()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT
@@ -1470,7 +1470,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SubqueryInFilterUncorrelated()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT
@@ -1512,7 +1512,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SubqueryInFilterMultipleColumnsError()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT
@@ -1530,7 +1530,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SubqueryInFilterUncorrelatedPrimaryKey()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT
@@ -1566,7 +1566,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SubqueryInFilterCorrelated()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT
@@ -1615,7 +1615,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SubqueryNotInFilterCorrelated()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT
@@ -1664,7 +1664,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void ExistsFilterUncorrelated()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT
@@ -1704,7 +1704,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void ExistsFilterCorrelatedPrimaryKey()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT
@@ -1737,7 +1737,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void ExistsFilterCorrelatedPrimaryKeyOr()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT
@@ -1775,7 +1775,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void ExistsFilterCorrelated()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT
@@ -1820,7 +1820,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void NotExistsFilterCorrelated()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT
@@ -1866,7 +1866,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void QueryDerivedTableSimple()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT TOP 10
@@ -1898,7 +1898,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void QueryDerivedTableAlias()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT TOP 10
@@ -1930,7 +1930,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void QueryDerivedTableValues()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT TOP 10
@@ -1958,7 +1958,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void NoLockTableHint()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT TOP 10
@@ -1989,7 +1989,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void CrossJoin()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT
@@ -2029,7 +2029,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void CrossApply()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT
@@ -2067,7 +2067,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void OuterApply()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT
@@ -2105,7 +2105,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void OuterApplyNestedLoop()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT
@@ -2164,7 +2164,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void FetchXmlNativeWhere()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT
@@ -2197,7 +2197,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SimpleMetadataSelect()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT logicalname
@@ -2219,7 +2219,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SimpleMetadataWhere()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT logicalname
@@ -2246,7 +2246,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void CaseSensitiveMetadataWhere()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT logicalname
@@ -2278,7 +2278,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SimpleUpdate()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "UPDATE account SET name = 'foo' WHERE name = 'bar'";
 
@@ -2308,7 +2308,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void UpdateFromJoin()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "UPDATE a SET name = 'foo' FROM account a INNER JOIN contact c ON a.accountid = c.parentcustomerid WHERE name = 'bar'";
 
@@ -2341,7 +2341,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void QueryHints()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT accountid, name FROM account OPTION (OPTIMIZE FOR UNKNOWN, FORCE ORDER, RECOMPILE, USE HINT('DISABLE_OPTIMIZER_ROWGOAL'), USE HINT('ENABLE_QUERY_OPTIMIZER_HOTFIXES'), LOOP JOIN, MERGE JOIN, HASH JOIN, NO_PERFORMANCE_SPOOL, MAXRECURSION 2)";
 
@@ -2364,7 +2364,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void AggregateSort()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT name, count(*) from account group by name order by 2 desc";
 
@@ -2417,7 +2417,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void FoldFilterWithNonFoldedJoin()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT name from account INNER JOIN contact ON left(name, 4) = left(firstname, 4) where name like 'Data8%' and firstname like 'Mark%'";
 
@@ -2455,7 +2455,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void FoldFilterWithInClause()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT name from account where name like 'Data8%' and primarycontactid in (select contactid from contact where firstname = 'Mark')";
 
@@ -2485,7 +2485,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void FoldFilterWithInClauseOr()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT name from account where name like 'Data8%' or primarycontactid in (select contactid from contact where firstname = 'Mark')";
 
@@ -2520,7 +2520,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             try
             {
                 var metadata = new AttributeMetadataCache(_service);
-                var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+                var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
                 var query = "SELECT name from account where name like 'Data8%' and createdon in (select createdon from contact where firstname = 'Mark')";
 
@@ -2559,7 +2559,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             try
             {
                 var metadata = new AttributeMetadataCache(_service);
-                var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+                var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
                 var query = "SELECT name from account inner join contact on account.accountid = contact.parentcustomerid where name like 'Data8%' and contact.createdon in (select createdon from contact where firstname = 'Mark')";
 
@@ -2600,7 +2600,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             try
             {
                 var metadata = new AttributeMetadataCache(_service);
-                var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+                var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
                 var query = "SELECT name from account where name like 'Data8%' and exists (select * from contact where firstname = 'Mark' and createdon = account.createdon)";
 
@@ -2636,7 +2636,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void DistinctNotRequiredWithPrimaryKey()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT DISTINCT accountid, name from account";
 
@@ -2659,7 +2659,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void DistinctRequiredWithoutPrimaryKey()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT DISTINCT accountid, name from account INNER JOIN contact ON account.accountid = contact.parentcustomerid";
 
@@ -2686,7 +2686,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SimpleDelete()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "DELETE FROM account WHERE name = 'bar'";
 
@@ -2713,7 +2713,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SimpleInsertSelect()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "INSERT INTO account (name) SELECT fullname FROM contact WHERE firstname = 'Mark'";
 
@@ -2740,7 +2740,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SelectDuplicateColumnNames()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT fullname, lastname + ', ' + firstname as fullname FROM contact WHERE firstname = 'Mark'";
 
@@ -2774,7 +2774,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SubQueryDuplicateColumnNamesError()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT * FROM (SELECT fullname, lastname + ', ' + firstname as fullname FROM contact WHERE firstname = 'Mark') a";
 
@@ -2785,7 +2785,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void UnionDuplicateColumnNames()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"SELECT fullname, lastname + ', ' + firstname as fullname FROM contact WHERE firstname = 'Mark'
                           UNION
@@ -2817,7 +2817,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SubQueryUnionDuplicateColumnNamesError()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
             var query = @"SELECT * FROM (
                             SELECT fullname, lastname + ', ' + firstname as fullname FROM contact WHERE firstname = 'Mark'
                             UNION
@@ -2854,7 +2854,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SelectStarInSubquery()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"SELECT * FROM account WHERE accountid IN (SELECT parentcustomerid FROM contact)";
 
@@ -2895,7 +2895,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void CannotSelectColumnsFromSemiJoin()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"SELECT contact.* FROM account WHERE accountid IN (SELECT parentcustomerid FROM contact)";
 
@@ -2906,7 +2906,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void MinAggregateNotFoldedToFetchXmlForOptionset()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"SELECT new_name, min(new_optionsetvalue) FROM new_customentity GROUP BY new_name";
 
@@ -2932,7 +2932,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void HelpfulErrorMessageOnMissingGroupBy()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"SELECT new_name, min(new_optionsetvalue) FROM new_customentity";
 
@@ -2951,7 +2951,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void AggregateInSubquery()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"SELECT firstname
                           FROM   contact
@@ -3057,7 +3057,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SelectVirtualNameAttributeFromLinkEntity()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT parentcustomeridname FROM account INNER JOIN contact ON account.accountid = contact.parentcustomerid";
 
@@ -3081,7 +3081,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void DuplicatedDistinctColumns()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT DISTINCT name AS n1, name AS n2 FROM account";
 
@@ -3104,7 +3104,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void GroupByDatetimeWithoutDatePart()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT createdon, COUNT(*) FROM account GROUP BY createdon";
 
@@ -3128,7 +3128,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void MetadataExpressions()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT collectionschemaname + '.' + entitysetname FROM metadata.entity WHERE description LIKE '%test%'";
 
@@ -3154,7 +3154,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void AliasedAttribute()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT name AS n1 FROM account WHERE name = 'test'";
 
@@ -3182,7 +3182,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void MultipleAliases()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT name AS n1, name AS n2 FROM account WHERE name = 'test'";
 
@@ -3220,14 +3220,16 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     Name = "uat",
                     Connection = _context.GetOrganizationService(),
                     Metadata = metadata1,
-                    TableSizeCache = new StubTableSizeCache()
+                    TableSizeCache = new StubTableSizeCache(),
+                    MessageCache = new StubMessageCache()
                 },
                 new DataSource
                 {
                     Name = "prod",
                     Connection = _context2.GetOrganizationService(),
                     Metadata = metadata2,
-                    TableSizeCache = new StubTableSizeCache()
+                    TableSizeCache = new StubTableSizeCache(),
+                    MessageCache = new StubMessageCache()
                 },
                 new DataSource
                 {
@@ -3281,7 +3283,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void FilterOnGroupByExpression()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
             SELECT
@@ -3326,7 +3328,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SystemFunctions()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT CURRENT_TIMESTAMP, CURRENT_USER, GETDATE(), USER_NAME()";
 
@@ -3343,7 +3345,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void FoldEqualsCurrentUser()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT name FROM account WHERE ownerid = CURRENT_USER";
 
@@ -3368,7 +3370,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void EntityReferenceInQuery()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT name FROM account WHERE accountid IN ('0000000000000000-0000-0000-000000000000', '0000000000000000-0000-0000-000000000001')";
 
@@ -3396,7 +3398,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void OrderBySelectExpression()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT name + 'foo' FROM account ORDER BY 1";
 
@@ -3423,7 +3425,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void DistinctOrderByUsesScalarAggregate()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT DISTINCT account.accountid FROM metadata.entity INNER JOIN account ON entity.metadataid = account.accountid";
 
@@ -3454,7 +3456,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void WindowFunctionsNotSupported()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT COUNT(accountid) OVER(PARTITION BY accountid) AS test FROM account";
 
@@ -3465,7 +3467,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void DeclareVariableSetLiteralSelect()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 DECLARE @test int
@@ -3521,7 +3523,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SetVariableInDeclaration()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 DECLARE @test int = 1
@@ -3577,7 +3579,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void UnknownVariable()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SET @test = 1";
 
@@ -3589,7 +3591,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void DuplicateVariable()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 DECLARE @test INT
@@ -3602,7 +3604,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void VariableTypeConversionIntToString()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 DECLARE @test varchar(3)
@@ -3637,7 +3639,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void VariableTypeConversionStringTruncation()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 DECLARE @test varchar(3)
@@ -3673,7 +3675,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void CannotCombineSetVariableAndDataRetrievalInSelect()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             // A SELECT statement that assigns a value to a variable must not be combined with data-retrieval operations
             var query = @"
@@ -3687,7 +3689,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SetVariableWithSelectUsesFinalValue()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 DECLARE @test varchar(3)
@@ -3766,7 +3768,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void VarCharLengthDefaultsTo1()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 DECLARE @test varchar
@@ -3802,7 +3804,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void CursorVariableNotSupported()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 DECLARE @test CURSOR";
@@ -3815,7 +3817,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void TableVariableNotSupported()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 DECLARE @test TABLE (ID INT)";
@@ -3827,7 +3829,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void IfStatement()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this) { EstimatedPlanOnly = true };
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this) { EstimatedPlanOnly = true };
 
             var query = @"
                 IF @param1 = 1
@@ -3862,7 +3864,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void WhileStatement()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this) { EstimatedPlanOnly = true };
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this) { EstimatedPlanOnly = true };
 
             var query = @"
                 WHILE @param1 < 10
@@ -3892,7 +3894,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void IfNotExists()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this) { EstimatedPlanOnly = true };
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this) { EstimatedPlanOnly = true };
 
             var query = @"
                 IF NOT EXISTS(SELECT * FROM account WHERE name = @param1)
@@ -3918,7 +3920,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void DuplicatedAliases()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT name, createdon AS name FROM account";
 
@@ -3941,7 +3943,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void MetadataLeftJoinData()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT entity.logicalname, account.name, contact.firstname 
@@ -3981,7 +3983,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void NotEqualExcludesNull()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 SELECT name FROM account WHERE name <> 'Data8'";
@@ -4008,7 +4010,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void DoNotFoldFilterOnNameVirtualAttributeWithTooManyJoins()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"
                 select top 10 a.name
@@ -4071,7 +4073,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void FilterOnVirtualTypeAttributeEquals()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"SELECT firstname FROM contact WHERE parentcustomeridtype = 'contact'";
 
@@ -4096,7 +4098,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void FilterOnVirtualTypeAttributeEqualsImpossible()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"SELECT firstname FROM contact WHERE parentcustomeridtype = 'non-existent-entity'";
 
@@ -4121,7 +4123,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void FilterOnVirtualTypeAttributeNotEquals()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"SELECT firstname FROM contact WHERE parentcustomeridtype <> 'contact'";
 
@@ -4147,7 +4149,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void FilterOnVirtualTypeAttributeNotInImpossible()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"SELECT firstname FROM contact WHERE parentcustomeridtype NOT IN ('account', 'contact')";
 
@@ -4175,7 +4177,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void FilterOnVirtualTypeAttributeNull()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"SELECT firstname FROM contact WHERE parentcustomeridtype IS NULL";
 
@@ -4200,7 +4202,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void FilterOnVirtualTypeAttributeNotNull()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"SELECT firstname FROM contact WHERE parentcustomeridtype IS NOT NULL";
 
@@ -4225,7 +4227,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void SubqueriesInValueList()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"SELECT a FROM (VALUES ('a'), ((SELECT TOP 1 firstname FROM contact)), ('b'), (1)) AS MyTable (a)";
 
@@ -4255,7 +4257,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void FoldFilterOnIdentity()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"SELECT name FROM account WHERE accountid = @@IDENTITY";
 
@@ -4281,7 +4283,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void FoldPrimaryIdInQuery()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"SELECT name FROM account WHERE accountid IN (SELECT accountid FROM account INNER JOIN contact ON account.primarycontactid = contact.contactid WHERE name = 'Data8')";
 
@@ -4308,7 +4310,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void FoldPrimaryIdInQueryWithTop()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"DELETE FROM account WHERE accountid IN (SELECT TOP 10 accountid FROM account ORDER BY createdon DESC)";
 
@@ -4332,7 +4334,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void InsertParameters()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"DECLARE @name varchar(100) = 'test'; INSERT INTO account (name) VALUES (@name)";
 
@@ -4351,7 +4353,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void NotExistsParameters()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"DECLARE @firstname AS VARCHAR (100) = 'Mark', @lastname AS VARCHAR (100) = 'Carrington';
 
@@ -4393,7 +4395,7 @@ END";
         public void UpdateParameters()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"declare @name varchar(100) = 'Data8', @employees int = 10
 UPDATE account SET employees = @employees WHERE name = @name";
@@ -4425,7 +4427,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         public void CountUsesAggregateByDefault()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"SELECT count(*) FROM account";
 
@@ -4450,7 +4452,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         public void CountUsesRetrieveTotalRecordCountWithHint()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"SELECT count(*) FROM account OPTION (USE HINT ('RETRIEVE_TOTAL_RECORD_COUNT'))";
 
@@ -4470,7 +4472,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         public void MaxDOPUsesDefault()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"UPDATE account SET name = 'test'";
 
@@ -4486,7 +4488,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         public void MaxDOPUsesHint()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"UPDATE account SET name = 'test' OPTION (MAXDOP 7)";
 
@@ -4502,7 +4504,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         public void SubqueryUsesSpoolByDefault()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"SELECT accountid, (SELECT TOP 1 fullname FROM contact) FROM account";
 
@@ -4522,7 +4524,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         public void SubqueryDoesntUseSpoolWithHint()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"SELECT accountid, (SELECT TOP 1 fullname FROM contact) FROM account OPTION (NO_PERFORMANCE_SPOOL)";
 
@@ -4541,7 +4543,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         public void BypassPluginExecutionUsesDefault()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"UPDATE account SET name = 'test'";
 
@@ -4557,7 +4559,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         public void BypassPluginExecutionUsesHint()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"UPDATE account SET name = 'test' OPTION (USE HINT ('BYPASS_CUSTOM_PLUGIN_EXECUTION'))";
 
@@ -4573,7 +4575,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         public void PageSizeUsesHint()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = @"SELECT name FROM account OPTION (USE HINT ('FETCHXML_PAGE_SIZE_100'))";
 
@@ -4596,7 +4598,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         public void DistinctOrderByOptionSet()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT DISTINCT new_optionsetvalue FROM new_customentity ORDER BY new_optionsetvalue";
 
@@ -4619,7 +4621,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         public void DistinctVirtualAttribute()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT DISTINCT new_optionsetvaluename FROM new_customentity";
 
@@ -4645,7 +4647,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         public void TopAliasStar()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT TOP 10 A.* FROM account A";
 
@@ -4667,7 +4669,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         public void OrderByStar()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT * FROM account ORDER BY primarycontactid";
 
@@ -4690,7 +4692,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         public void UpdateColumnInWhereClause()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "UPDATE account SET name = '1' WHERE name <> '1'";
 
@@ -4721,7 +4723,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         public void NestedOrFilters()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT * FROM account WHERE name = '1' OR name = '2' OR name = '3' OR name = '4'";
 
@@ -4750,7 +4752,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         public void UnknownHint()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT * FROM account OPTION(USE HINT('invalid'))";
 
@@ -4761,7 +4763,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         public void MultipleTablesJoinFromWhereClause()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT firstname FROM account, contact WHERE accountid = parentcustomerid AND lastname = 'Carrington' AND name = 'Data8'";
 
@@ -4791,7 +4793,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         public void MultipleTablesJoinFromWhereClauseReversed()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT firstname FROM account, contact WHERE lastname = 'Carrington' AND name = 'Data8' AND parentcustomerid = accountid";
 
@@ -4821,7 +4823,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         public void MultipleTablesJoinFromWhereClause3()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT firstname FROM account, contact, systemuser WHERE accountid = parentcustomerid AND lastname = 'Carrington' AND name = 'Data8' AND account.ownerid = systemuserid";
 
@@ -4852,7 +4854,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         public void NestedInSubqueries()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT firstname FROM contact WHERE parentcustomerid IN (SELECT accountid FROM account WHERE primarycontactid IN (SELECT contactid FROM contact WHERE lastname = 'Carrington'))";
 
@@ -4881,7 +4883,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         public void SpoolNestedLoop()
         {
             var metadata = new AttributeMetadataCache(_service);
-            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), this);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
 
             var query = "SELECT account.name, contact.fullname FROM account INNER JOIN contact ON account.accountid = contact.parentcustomerid OR account.createdon < contact.createdon";
 

@@ -21,8 +21,8 @@ namespace MarkMpn.Sql4Cds.Engine
         private int _colNameCounter;
         private IDictionary<string, DataTypeReference> _parameterTypes;
 
-        public ExecutionPlanBuilder(IAttributeMetadataCache metadata, ITableSizeCache tableSize, IQueryExecutionOptions options)
-            : this(new[] { new DataSource { Name = "local", Metadata = metadata, TableSizeCache = tableSize } }, options)
+        public ExecutionPlanBuilder(IAttributeMetadataCache metadata, ITableSizeCache tableSize, IMessageCache messageCache, IQueryExecutionOptions options)
+            : this(new[] { new DataSource { Name = "local", Metadata = metadata, TableSizeCache = tableSize, MessageCache = messageCache } }, options)
         {
         }
 

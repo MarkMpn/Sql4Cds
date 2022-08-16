@@ -33,7 +33,8 @@ namespace MarkMpn.Sql4Cds.Tests
                 {
                     Name = "local",
                     Entities = new[] { a, c, n },
-                    Metadata = metadata
+                    Metadata = metadata,
+                    Messages = new StubMessageCache()
                 }
             };
             _autocomplete = new Autocomplete(dataSources, "local");

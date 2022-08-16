@@ -521,9 +521,16 @@ namespace MarkMpn.Sql4Cds
                 if (_dataSources.Count > 1)
                     list.AddRange(_dataSources.Values.Select(x => new InstanceAutocompleteItem(x, currentLength)));
 
-                // Show table list
-                if (_dataSources.TryGetValue(_primaryDataSource, out var ds) && ds.Entities != null)
-                    list.AddRange(ds.Entities.Select(x => new EntityAutocompleteItem(x, ds.Metadata, currentLength, false)));
+                if (_dataSources.TryGetValue(_primaryDataSource, out var ds))
+                {
+                    // Show table list
+                    if (ds.Entities != null)
+                        list.AddRange(ds.Entities.Select(x => new EntityAutocompleteItem(x, ds.Metadata, currentLength, false)));
+
+                    // Show TVF list
+                    if (ds.Messages != null)
+                        list.AddRange(ds.Messages.GetAllMessages().Where(x => x.IsValidAsTableValuedFunction()).Select(x => new TVFAutocompleteItem(x, currentLength)));
+                }
             }
             else if (TryParseTableName(currentWord, out var instanceName, out var schemaName, out var tableName, out var parts, out var lastPartLength))
             {
@@ -549,6 +556,7 @@ namespace MarkMpn.Sql4Cds
                 if (_dataSources.TryGetValue(instanceName, out var instance) && instance.Entities != null)
                 {
                     IEnumerable<EntityMetadata> entities;
+                    IEnumerable<Message> messages = Array.Empty<Message>();
 
                     if (schemaName.Equals("metadata", StringComparison.OrdinalIgnoreCase))
                     {
@@ -559,6 +567,9 @@ namespace MarkMpn.Sql4Cds
                     {
                         // Suggest entity tables
                         entities = instance.Entities.Where(e => e.DataProviderId != MetaMetadataCache.ProviderId);
+
+                        // Suggest TVFs
+                        messages = instance.Messages.GetAllMessages();
                     }
                     else
                     {
@@ -566,8 +577,10 @@ namespace MarkMpn.Sql4Cds
                     }
 
                     entities = entities.Where(e => e.LogicalName.StartsWith(lastPart, StringComparison.OrdinalIgnoreCase));
-
                     list.AddRange(entities.Select(e => new EntityAutocompleteItem(e, instance.Metadata, lastPartLength, true)));
+
+                    messages = messages.Where(e => e.IsValidAsTableValuedFunction() && e.Name.StartsWith(lastPart, StringComparison.OrdinalIgnoreCase));
+                    list.AddRange(messages.Select(e => new TVFAutocompleteItem(e, lastPartLength)));
                 }
             }
 
@@ -1148,6 +1161,28 @@ namespace MarkMpn.Sql4Cds
             }
         }
 
+        class TVFAutocompleteItem : SqlAutocompleteItem
+        {
+            private readonly Message _message;
+
+            public TVFAutocompleteItem(Message message, int replaceLength) : base(message.Name, replaceLength, 4)
+            {
+                _message = message;
+            }
+
+            public override string ToolTipTitle
+            {
+                get => _message.Name + " SDK Message";
+                set => base.ToolTipTitle = value;
+            }
+
+            public override string ToolTipText
+            {
+                get => _message.Name + "(" + String.Join(", ", _message.InputParameters.Select(p => p.Name + " " + p.Type.Name)) + ")";
+                set => base.ToolTipText = value;
+            }
+        }
+
         class JoinAutocompleteItem : SqlAutocompleteItem
         {
             private readonly EntityMetadata _rhs;
@@ -1339,5 +1374,6 @@ namespace MarkMpn.Sql4Cds
         public string Name { get; set; }
         public EntityMetadata[] Entities { get; set; }
         public IAttributeMetadataCache Metadata { get; set; }
+        public IMessageCache Messages { get; set; }
     }
 }

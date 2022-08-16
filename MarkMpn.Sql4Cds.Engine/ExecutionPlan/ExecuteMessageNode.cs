@@ -377,115 +377,50 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // All messages are in the "dbo" schema
             if (tvf.SchemaObject.SchemaIdentifier != null && !String.IsNullOrEmpty(tvf.SchemaObject.SchemaIdentifier.Value) &&
                 !tvf.SchemaObject.SchemaIdentifier.Value.Equals("dbo", StringComparison.OrdinalIgnoreCase))
-                throw new NotSupportedQueryFragmentException("Invalid function name", tvf);
+                throw new NotSupportedQueryFragmentException("Invalid function name", tvf.SchemaObject);
 
-            var functionName = tvf.SchemaObject.BaseIdentifier.Value;
+            if (!dataSource.MessageCache.TryGetValue(tvf.SchemaObject.BaseIdentifier.Value, out var message))
+                throw new NotSupportedQueryFragmentException("Invalid function name", tvf.SchemaObject);
 
-            // We'll be dynamically putting the value into a FetchXML string, so validate against injection attacks
-            if (!System.Text.RegularExpressions.Regex.IsMatch(functionName, "^[A-Z_0-9]+$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
-                throw new NotSupportedQueryFragmentException("Invalid function name", tvf);
-
-            // Allow calling arbitrary SDK messages using TVF syntax. Requirements for an SDK message to be called
-            // as a TVF:
-            // 1. Any request fields must be scalar values
-            // 2. The supplied parameters must match the expected request fields
-            // 3. The response fields must be EITHER:
-            //    a. A single field of an entity-derived type, OR
-            //    a. A single field of an entity collection, OR
-            //    b. one or more fields of a scalar type
-            var messageQry = $@"
-<fetch xmlns:generator='MarkMpn.SQL4CDS'>
-  <entity name='sdkmessage'>
-    <attribute name='name' />
-    <link-entity name='sdkmessagepair' to='sdkmessageid' from='sdkmessageid' alias='sdkmessagepair' link-type='outer'>
-      <link-entity name='sdkmessagerequest' to='sdkmessagepairid' from='sdkmessagepairid' alias='sdkmessagerequest' link-type='outer'>
-        <link-entity name='sdkmessagerequestfield' to='sdkmessagerequestid' from='sdkmessagerequestid' alias='sdkmessagerequestfield' link-type='outer'>
-          <attribute name='name' />
-          <attribute name='clrparser' />
-          <attribute name='position' />
-        </link-entity>
-        <link-entity name='sdkmessageresponse' to='sdkmessagerequestid' from='sdkmessagerequestid' alias='sdkmessageresponse' link-type='outer'>
-          <link-entity name='sdkmessageresponsefield' to='sdkmessageresponseid' from='sdkmessageresponseid' alias='sdkmessageresponsefield' link-type='outer'>
-            <attribute name='name' />
-            <attribute name='clrformatter' />
-            <attribute name='position' />
-            <attribute name='parameterbindinginformation' />
-          </link-entity>
-        </link-entity>
-      </link-entity>
-    </link-entity>
-    <filter>
-      <condition attribute='name' operator='eq' value='{functionName}' />
-    </filter>
-  </entity>
-</fetch>";
-            var messageDetails = dataSource.Connection.RetrieveMultiple(new Microsoft.Xrm.Sdk.Query.FetchExpression(messageQry));
-
-            if (messageDetails.Entities.Count == 0)
-                throw new NotSupportedQueryFragmentException("Invalid function name", tvf);
-
-            // Name might have been given in the wrong case - correct it now
-            functionName = messageDetails.Entities[0].GetAttributeValue<string>("name");
+            if (!message.IsValidAsTableValuedFunction())
+                throw new NotSupportedQueryFragmentException("Message is not valid to be called as a table valued function", tvf.SchemaObject)
+                {
+                    Suggestion = "Messages must only have scalar type inputs and must produce either one or more scalar type outputs or a single Entity or EntityCollection output"
+                };
 
             var node = new ExecuteMessageNode
             {
                 Alias = tvf.Alias?.Value,
                 DataSource = dataSource.Name,
-                MessageName = functionName,
+                MessageName = message.Name,
             };
 
-            // Build the list of request fields. Details might be duplicated
-            var requestFields = new Dictionary<string, TVFField>(StringComparer.OrdinalIgnoreCase);
+            // Check the number and type of input parameters matches
+            var expectedInputParameters = new List<MessageParameter>();
             var pagingInfoPosition = -1;
 
-            foreach (var entity in messageDetails.Entities)
+            for (var i = 0; i < message.InputParameters.Count; i++)
             {
-                var requestFieldName = entity.GetAttributeValue<AliasedValue>("sdkmessagerequestfield.name");
-                if (requestFieldName == null)
-                    continue;
-
-                if (!requestFields.ContainsKey((string)requestFieldName.Value))
+                if (message.InputParameters[i].Type == typeof(PagingInfo))
                 {
-                    var typeName = entity.GetAttributeValue<AliasedValue>("sdkmessagerequestfield.clrparser");
-                    if (typeName == null)
-                        throw new NotSupportedQueryFragmentException("Unknown type for parameter " + requestFieldName.Value);
-
-                    var type = Type.GetType((string)typeName.Value);
-                    if (type == null)
-                        throw new NotSupportedQueryFragmentException("Unknown type for parameter " + requestFieldName.Value);
-
-                    var requestField = new TVFField
-                    {
-                        Name = (string)requestFieldName.Value,
-                        Type = type,
-                        Position = (int)entity.GetAttributeValue<AliasedValue>("sdkmessagerequestfield.position").Value
-                    };
-
-                    if (type == typeof(PagingInfo))
-                    {
-                        node.PagingParameter = requestField.Name;
-                        pagingInfoPosition = requestField.Position;
-                        continue;
-                    }
-
-                    if (!requestField.IsScalarType())
-                        throw new NotSupportedQueryFragmentException($"Parameter '{requestFieldName.Value}' is of type '{type.Name}', which is not supported", tvf);
-
-                    requestFields[requestField.Name] = requestField;
+                    pagingInfoPosition = i;
+                    node.PagingParameter = message.InputParameters[i].Name;
+                }
+                else
+                {
+                    expectedInputParameters.Add(message.InputParameters[i]);
                 }
             }
 
-            var sortedRequestFields = requestFields.Values.OrderBy(f => f.Position).ToList();
-
             // Check we have the right number of parameters
-            if (requestFields.Count > tvf.Parameters.Count)
-                throw new NotSupportedQueryFragmentException($"Missing parameter '{sortedRequestFields[tvf.Parameters.Count].Name}'", tvf);
+            if (expectedInputParameters.Count > tvf.Parameters.Count)
+                throw new NotSupportedQueryFragmentException($"Missing parameter '{expectedInputParameters[tvf.Parameters.Count].Name}'", tvf);
 
-            if (requestFields.Count < tvf.Parameters.Count)
-                throw new NotSupportedQueryFragmentException("Unexpected parameter", tvf.Parameters[requestFields.Count]);
+            if (expectedInputParameters.Count < tvf.Parameters.Count)
+                throw new NotSupportedQueryFragmentException("Unexpected parameter", tvf.Parameters[expectedInputParameters.Count]);
 
             // Add the parameter values to the node, including any required type conversions
-            foreach (var f in sortedRequestFields)
+            foreach (var f in expectedInputParameters)
             {
                 if (pagingInfoPosition != -1 && f.Position > pagingInfoPosition)
                     f.Position--;
@@ -513,94 +448,38 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 node.ValueTypes[f.Name] = f.Type;
             }
 
-            // Same again for the response fields
-            var responseFields = new Dictionary<string, TVFField>(StringComparer.OrdinalIgnoreCase);
-
-            foreach (var entity in messageDetails.Entities)
-            {
-                var responseFieldName = entity.GetAttributeValue<AliasedValue>("sdkmessageresponsefield.name");
-                if (responseFieldName == null)
-                    continue;
-
-                if (!requestFields.ContainsKey((string)responseFieldName.Value))
-                {
-                    var typeName = entity.GetAttributeValue<AliasedValue>("sdkmessageresponsefield.clrformatter");
-                    if (typeName == null)
-                        throw new NotSupportedQueryFragmentException("Unknown type for response field " + responseFieldName.Value);
-
-                    var type = Type.GetType((string)typeName.Value);
-                    if (type == null)
-                        throw new NotSupportedQueryFragmentException("Unknown type for response field " + responseFieldName.Value);
-
-                    var responseField = new TVFField
-                    {
-                        Name = (string)responseFieldName.Value,
-                        Type = type,
-                        Position = (int)entity.GetAttributeValue<AliasedValue>("sdkmessageresponsefield.position").Value
-                    };
-
-                    var parameterBindingInformation = (string)entity.GetAttributeValue<AliasedValue>("sdkmessageresponsefield.parameterbindinginformation")?.Value;
-
-                    if (parameterBindingInformation != null && parameterBindingInformation.StartsWith("OTC:"))
-                        responseField.OTC = Int32.Parse(parameterBindingInformation.Substring(4));
-
-                    responseFields[responseField.Name] = responseField;
-                }
-            }
-
-            if (responseFields.Count == 0)
-                throw new NotSupportedQueryFragmentException("Message does not produce any response values", tvf.SchemaObject);
-
-            if (responseFields.Count > 1)
-            {
-                var firstNonScalarValue = responseFields.Values.First(f => !f.IsScalarType());
-
-                if (firstNonScalarValue != null)
-                    throw new NotSupportedQueryFragmentException($"Response parameter '{firstNonScalarValue.Name}' is of type '{firstNonScalarValue.Type.Name}', which is not supported", tvf);
-            }
-
-            if (responseFields.Count == 1)
-            {
-                var firstValue = responseFields.Values.Single();
-
-                if (!firstValue.IsScalarType() &&
-                    firstValue.Type != typeof(Microsoft.Crm.Sdk.Messages.AuditDetail) &&
-                    firstValue.Type != typeof(Microsoft.Crm.Sdk.Messages.AuditDetailCollection) &&
-                    (firstValue.Type != typeof(Entity) || firstValue.Type == typeof(Entity) && firstValue.OTC == null) &&
-                    (firstValue.Type != typeof(EntityCollection) || firstValue.Type == typeof(EntityCollection) && firstValue.OTC == null))
-                    throw new NotSupportedQueryFragmentException($"Response parameter '{firstValue.Name}' is of type '{firstValue.Type.Name}', which is not supported", tvf);
-            }
-
             // Add the response fields to the node schema
-            if (responseFields.Values.All(f => f.IsScalarType()))
+            if (message.OutputParameters.All(f => f.IsScalarType()))
             {
-                foreach (var value in responseFields)
-                    node.AddSchemaColumn(value.Value.Name, SqlTypeConverter.NetToSqlType(value.Value.Type).ToSqlType()); // TODO: How are OSV and ER fields represented?
+                foreach (var value in message.OutputParameters)
+                    node.AddSchemaColumn(value.Name, SqlTypeConverter.NetToSqlType(value.Type).ToSqlType()); // TODO: How are OSV and ER fields represented?
             }
             else
             {
-                var firstValue = responseFields.Values.Single();
+                var firstValue = message.OutputParameters.Single();
                 var audit = false;
+                var type = firstValue.Type;
+                var otc = firstValue.OTC;
 
-                if (firstValue.Type == typeof(AuditDetail))
+                if (type == typeof(AuditDetail))
                 {
-                    firstValue.Type = typeof(Entity);
-                    firstValue.OTC = dataSource.Metadata["audit"].ObjectTypeCode;
+                    type = typeof(Entity);
+                    otc = dataSource.Metadata["audit"].ObjectTypeCode;
                     audit = true;
                 }
                 else if (firstValue.Type == typeof(AuditDetailCollection))
                 {
-                    firstValue.Type = typeof(EntityCollection);
-                    firstValue.OTC = dataSource.Metadata["audit"].ObjectTypeCode;
+                    type = typeof(EntityCollection);
+                    otc = dataSource.Metadata["audit"].ObjectTypeCode;
                     audit = true;
                 }
 
-                if (firstValue.Type == typeof(Entity))
+                if (type == typeof(Entity))
                     node.EntityResponseParameter = firstValue.Name;
                 else
                     node.EntityCollectionResponseParameter = firstValue.Name;
 
-                foreach (var attrMetadata in dataSource.Metadata[firstValue.OTC.Value].Attributes.Where(a => a.AttributeOf == null))
+                foreach (var attrMetadata in dataSource.Metadata[otc.Value].Attributes.Where(a => a.AttributeOf == null))
                 {
                     node.AddSchemaColumn(attrMetadata.LogicalName, attrMetadata.GetAttributeSqlType(dataSource.Metadata, false));
 
@@ -623,35 +502,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     node.AddSchemaColumn("oldvalues", DataTypeHelpers.NVarChar(Int32.MaxValue));
                 }
 
-                node._primaryKeyColumn = node.PrefixWithAlias(dataSource.Metadata[firstValue.OTC.Value].PrimaryIdAttribute);
+                node._primaryKeyColumn = node.PrefixWithAlias(dataSource.Metadata[otc.Value].PrimaryIdAttribute);
             }
 
             if (!String.IsNullOrEmpty(node.PagingParameter) && node.EntityCollectionResponseParameter == null)
                 throw new NotSupportedQueryFragmentException($"Paging request parameter found but no collection response parameter", tvf.SchemaObject);
 
             return node;
-        }
-
-        class TVFField
-        {
-            public string Name { get; set; }
-            public Type Type { get; set; }
-            public int Position { get; set; }
-            public int? OTC { get; set; }
-
-            public bool IsScalarType()
-            {
-                var type = Type;
-
-                if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
-                    type = type.GetGenericArguments()[0];
-
-                if (type == typeof(string) || type == typeof(Guid) || type == typeof(bool) || type == typeof(int) ||
-                    type == typeof(EntityReference) || type == typeof(DateTime) || type == typeof(long) || type == typeof(OptionSetValue))
-                    return true;
-
-                return false;
-            }
         }
     }
 }
