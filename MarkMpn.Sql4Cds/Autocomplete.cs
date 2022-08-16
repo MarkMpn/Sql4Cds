@@ -1165,7 +1165,7 @@ namespace MarkMpn.Sql4Cds
         {
             private readonly Message _message;
 
-            public TVFAutocompleteItem(Message message, int replaceLength) : base(message.Name, replaceLength, 4)
+            public TVFAutocompleteItem(Message message, int replaceLength) : base(message.Name, replaceLength, 25)
             {
                 _message = message;
             }
@@ -1180,6 +1180,11 @@ namespace MarkMpn.Sql4Cds
             {
                 get => _message.Name + "(" + String.Join(", ", _message.InputParameters.Select(p => p.Name + " " + p.Type.Name)) + ")";
                 set => base.ToolTipText = value;
+            }
+
+            public override string GetTextForReplace()
+            {
+                return _message.Name + "(" + (_message.InputParameters.Count == 0 ? ")" : "");
             }
         }
 

@@ -93,6 +93,7 @@
             this.imageList.Images.SetKeyName(22, "DatabaseWarning_16x.png");
             this.imageList.Images.SetKeyName(23, "Method_16x.png");
             this.imageList.Images.SetKeyName(24, "Aggregate_16x.png");
+            this.imageList.Images.SetKeyName(25, "TableFunction_16x.png");
             // 
             // tsqlContextMenuStrip
             // 
