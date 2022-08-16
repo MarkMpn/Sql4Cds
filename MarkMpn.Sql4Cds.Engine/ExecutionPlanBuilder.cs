@@ -2386,7 +2386,7 @@ namespace MarkMpn.Sql4Cds.Engine
             // We're in a subquery. Check if any columns in the WHERE clause are from the outer query
             // so we know which columns to pass through and rewrite the filter to use parameters
             var rewrites = new Dictionary<ScalarExpression, ScalarExpression>();
-            var innerSchema = source.GetSchema(DataSources, parameterTypes);
+            var innerSchema = source?.GetSchema(DataSources, parameterTypes);
             var columns = query.GetColumns();
 
             foreach (var column in columns)
@@ -2394,7 +2394,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 // Column names could be ambiguous between the inner and outer data sources. The inner
                 // data source is used in preference.
                 // Ref: https://docs.microsoft.com/en-us/sql/relational-databases/performance/subqueries?view=sql-server-ver15#qualifying
-                var fromInner = innerSchema.ContainsColumn(column, out _);
+                var fromInner = innerSchema?.ContainsColumn(column, out _) == true;
 
                 if (fromInner)
                     continue;
@@ -3272,6 +3272,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (reference is SchemaObjectFunctionTableReference tvf)
             {
+                CaptureOuterReferences(outerSchema, null, tvf, parameterTypes, outerReferences);
                 var dataSource = SelectDataSource(tvf.SchemaObject);
                 return ExecuteMessageNode.FromMessage(tvf, dataSource, parameterTypes);
             }

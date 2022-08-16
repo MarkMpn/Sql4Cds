@@ -153,6 +153,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return new RowCountEstimate(10);
         }
 
+        protected override IEnumerable<string> GetVariablesInternal()
+        {
+            return Values.Values.SelectMany(v => v.GetVariables());
+        }
+
         protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
             var request = new OrganizationRequest(MessageName);

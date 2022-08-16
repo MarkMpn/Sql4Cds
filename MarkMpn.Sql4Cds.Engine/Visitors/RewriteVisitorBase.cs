@@ -200,5 +200,21 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             base.ExplicitVisit(node);
             ReplaceExpression(node, n => n.Expression);
         }
+
+        public override void ExplicitVisit(SchemaObjectFunctionTableReference node)
+        {
+            base.ExplicitVisit(node);
+
+            for (var i = 0; i < node.Parameters.Count; i++)
+            {
+                var replaced = ReplaceExpression(node.Parameters[i], out _);
+
+                if (node.Parameters[i] != replaced)
+                {
+                    node.Parameters[i] = replaced;
+                    node.ScriptTokenStream = null;
+                }
+            }
+        }
     }
 }
