@@ -88,6 +88,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 if (entity.LogicalName == "account")
                 {
                     typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.ObjectTypeCode)).SetValue(entity, 1);
+                    var primaryContactId = (LookupAttributeMetadata)entity.Attributes.Single(a => a.LogicalName == "primarycontactid");
+                    primaryContactId.Targets = new[] { "contact" };
                     context.SetEntityMetadata(entity);
                 }
 
