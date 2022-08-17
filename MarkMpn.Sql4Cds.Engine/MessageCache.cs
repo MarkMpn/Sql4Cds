@@ -56,7 +56,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     requestFields.Add(new MessageParameter
                     {
                         Name = (string)fieldName.Value,
-                        Type = fieldType == null ? null : Type.GetType((string)fieldType.Value),
+                        Type = fieldType == null ? null : GetType((string)fieldType.Value),
                         Position = (int)fieldPosition.Value
                     });
                 }
@@ -93,7 +93,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 responseFields.Add(new MessageParameter
                 {
                     Name = (string)fieldName.Value,
-                    Type = fieldType == null ? null : Type.GetType((string)fieldType.Value),
+                    Type = fieldType == null ? null : GetType((string)fieldType.Value),
                     Position = (int)fieldPosition.Value,
                     OTC = fieldBindingInfo == null ? null : ExtractOTC((string)fieldBindingInfo.Value)
                 });
@@ -137,6 +137,21 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 foreach (var entity in results.Entities)
                     yield return entity;
+            }
+        }
+
+        private Type GetType(string typeName)
+        {
+            if (String.IsNullOrEmpty(typeName))
+                return null;
+
+            try
+            {
+                return Type.GetType(typeName);
+            }
+            catch (Exception ex)
+            {
+                throw new ApplicationException("Error retrieving type " + typeName + ":" + ex.Message, ex);
             }
         }
 
