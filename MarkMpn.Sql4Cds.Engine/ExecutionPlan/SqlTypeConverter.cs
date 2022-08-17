@@ -1074,6 +1074,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 expression = Expression.Convert(expression, destType);
             }
 
+            if (destType == typeof(SqlString))
+                expression = Expr.Call(() => UseDefaultCollation(Expr.Arg<SqlString>()), expression);
+
             expression = Expression.Convert(expression, typeof(object));
             return Expression.Lambda<Func<object,object>>(expression, param).Compile();
         }
