@@ -15,6 +15,34 @@ namespace MarkMpn.Sql4Cds.Tests
         public StubMessageCache()
         {
             _cache = new Dictionary<string, Message>(StringComparer.OrdinalIgnoreCase);
+            _cache["SampleMessage"] = new Message
+            {
+                Name = "SampleMessage",
+                InputParameters = new List<MessageParameter>
+                {
+                    new MessageParameter
+                    {
+                        Name = "StringParam",
+                        Position = 0,
+                        Type = typeof(string)
+                    }
+                }.AsReadOnly(),
+                OutputParameters = new List<MessageParameter>
+                {
+                    new MessageParameter
+                    {
+                        Name = "OutputParam1",
+                        Position = 0,
+                        Type = typeof(string)
+                    },
+                    new MessageParameter
+                    {
+                        Name = "OutputParam2",
+                        Position = 1,
+                        Type = typeof(int)
+                    }
+                }.AsReadOnly()
+            };
         }
 
         public Message this[string name] => _cache[name];

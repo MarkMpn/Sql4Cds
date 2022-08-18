@@ -105,7 +105,7 @@ namespace MarkMpn.Sql4Cds.Tests
             var sql = "SELECT * FROM account a left outer join contact c on a.accountid = c.p";
             var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1).Select(s => s.Text).ToList();
 
-            CollectionAssert.AreEqual(new[] { "parentcustomerid", "parentcustomeridname" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "parentcustomerid", "parentcustomeridname", "parentcustomeridtype" }, suggestions);
         }
 
         [TestMethod]
@@ -114,7 +114,7 @@ namespace MarkMpn.Sql4Cds.Tests
             var sql = "SELECT * FROM account a left outer join contact c on a.accountid = c.parentcustomerid where ";
             var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1).Where(s => s.GetType().Name != "FunctionAutocompleteItem").Select(s => s.Text).ToList();
 
-            CollectionAssert.AreEqual(new[] { "a", "accountid", "c", "contactid", "employees", "firstname", "fullname", "lastname", "name", "parentcustomerid", "parentcustomeridname", "primarycontactid", "primarycontactidname", "turnover" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "a", "accountid", "c", "contactid", "employees", "firstname", "fullname", "lastname", "name", "parentcustomerid", "parentcustomeridname", "parentcustomeridtype", "primarycontactid", "primarycontactidname", "turnover" }, suggestions);
         }
 
         [TestMethod]
@@ -143,7 +143,7 @@ namespace MarkMpn.Sql4Cds.Tests
             var sql = sql1 + "\r\n" + sql2;
             var suggestions = _autocomplete.GetSuggestions(sql, sql1.Length + 2 + sql2.IndexOf(" ") + 1).Where(s => s.GetType().Name != "FunctionAutocompleteItem").Select(s => s.Text).ToList();
 
-            CollectionAssert.AreEqual(new[] { "account", "accountid", "contact", "contactid", "employees", "firstname", "fullname", "lastname", "name", "parentcustomerid", "parentcustomeridname", "primarycontactid", "primarycontactidname", "turnover" }, suggestions);
+            CollectionAssert.AreEqual(new[] { "account", "accountid", "contact", "contactid", "employees", "firstname", "fullname", "lastname", "name", "parentcustomerid", "parentcustomeridname", "parentcustomeridtype", "primarycontactid", "primarycontactidname", "turnover" }, suggestions);
         }
 
         [TestMethod]
@@ -264,6 +264,46 @@ namespace MarkMpn.Sql4Cds.Tests
             var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1).Select(s => s.Text).ToList();
 
             CollectionAssert.AreEqual(new[] { "firstname" }, suggestions);
+        }
+
+        [TestMethod]
+        public void FromClauseSuggestsTVFs()
+        {
+            var sql = "SELECT * FROM sam";
+
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1).Select(s => s.Text).ToList();
+
+            CollectionAssert.AreEqual(new[] { "SampleMessage" }, suggestions);
+        }
+
+        [TestMethod]
+        public void SuggestOutputParametersFromTVF()
+        {
+            var sql = "SELECT * FROM SampleMessage('test') WHERE outp";
+
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1).Select(s => s.Text).ToList();
+
+            CollectionAssert.AreEqual(new[] { "OutputParam1", "OutputParam2" }, suggestions);
+        }
+
+        [TestMethod]
+        public void SuggestOutputParametersFromTVFWithAlias()
+        {
+            var sql = "SELECT * FROM SampleMessage('test') AS a WHERE a.";
+
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1).Select(s => s.Text).ToList();
+
+            CollectionAssert.AreEqual(new[] { "OutputParam1", "OutputParam2" }, suggestions);
+        }
+
+        [TestMethod]
+        public void SuggestOutputParametersFromTVFInSelect()
+        {
+            var sql = "SELECT outp FROM SampleMessage('test')";
+
+            var suggestions = _autocomplete.GetSuggestions(sql, 10).Select(s => s.Text).ToList();
+
+            CollectionAssert.AreEqual(new[] { "OutputParam1", "OutputParam2" }, suggestions);
         }
     }
 }

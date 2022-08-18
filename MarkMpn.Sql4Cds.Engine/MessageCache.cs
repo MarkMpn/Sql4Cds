@@ -190,11 +190,11 @@ namespace MarkMpn.Sql4Cds.Engine
 
     public class Message
     {
-        public string Name { get; internal set; }
+        public string Name { get; set; }
 
-        public IReadOnlyList<MessageParameter> InputParameters { get; internal set; }
+        public IReadOnlyList<MessageParameter> InputParameters { get; set; }
 
-        public IReadOnlyList<MessageParameter> OutputParameters { get; internal set; }
+        public IReadOnlyList<MessageParameter> OutputParameters { get; set; }
 
         public bool IsValidAsTableValuedFunction()
         {
@@ -247,12 +247,12 @@ namespace MarkMpn.Sql4Cds.Engine
 
     public class MessageParameter
     {
-        public string Name { get; internal set; }
-        public Type Type { get; internal set; }
-        public int Position { get; internal set; }
-        public int? OTC { get; internal set; }
+        public string Name { get; set; }
+        public Type Type { get; set; }
+        public int Position { get; set; }
+        public int? OTC { get; set; }
 
-        internal bool IsScalarType()
+        public bool IsScalarType()
         {
             var type = Type;
 
