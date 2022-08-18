@@ -79,9 +79,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// Indicates if custom plugins should be skipped
         /// </summary>
+        [Category("Execute Message")]
         [DisplayName("Bypass Plugin Execution")]
         [Description("Indicates if custom plugins should be skipped")]
         public bool BypassCustomPluginExecution { get; set; }
+
+        /// <summary>
+        /// Shows the number of pages that were retrieved in the last execution of this node
+        /// </summary>
+        [Category("Execute Message")]
+        [Description("Shows the number of pages that were retrieved in the last execution of this node")]
+        [DisplayName("Pages Retrieved")]
+        public int PagesRetrieved { get; set; }
 
         public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
         {
@@ -160,6 +169,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
+            PagesRetrieved = 0;
+
+            if (!dataSources.TryGetValue(DataSource, out var dataSource))
+                throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
+
+            options.Progress(0, $"Executing {MessageName}...");
+
+            // Get the first page of results
+            if (!options.ContinueRetrieve(0))
+                yield break;
+
             var request = new OrganizationRequest(MessageName);
             var pageNumber = 1;
 
@@ -169,8 +189,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (BypassCustomPluginExecution)
                 request.Parameters["BypassCustomPluginExecution"] = true;
 
-            var response = dataSources[DataSource].Connection.Execute(request);
+            var response = dataSource.Connection.Execute(request);
             var entities = GetEntityCollection(response);
+            PagesRetrieved++;
+
+            var count = entities.Entities.Count;
 
             foreach (var entity in entities.Entities)
             {
@@ -178,7 +201,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 yield return entity;
             }
 
-            while (PagingParameter != null && entities.MoreRecords)
+            while (PagingParameter != null && entities.MoreRecords && options.ContinueRetrieve(count))
             {
                 pageNumber++;
                 request[PagingParameter] = new PagingInfo
@@ -189,14 +212,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 };
 
 
-                response = dataSources[DataSource].Connection.Execute(request);
+                response = dataSource.Connection.Execute(request);
                 entities = GetEntityCollection(response);
+                PagesRetrieved++;
 
                 foreach (var entity in entities.Entities)
                 {
                     OnRetrievedEntity(entity, options);
                     yield return entity;
                 }
+
+                count += entities.Entities.Count;
             }
         }
 
