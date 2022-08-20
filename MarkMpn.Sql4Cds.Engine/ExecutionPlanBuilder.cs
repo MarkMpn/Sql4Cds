@@ -3277,9 +3277,43 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (reference is SchemaObjectFunctionTableReference tvf)
             {
+                // Capture any references to data from an outer query
                 CaptureOuterReferences(outerSchema, null, tvf, parameterTypes, outerReferences);
+
+                // Convert any scalar subqueries in the parameters to its own execution plan, and capture the references from those plans
+                // as parameters to be passed to the function
+                IDataExecutionPlanNodeInternal source = new ConstantScanNode { Values = { new Dictionary<string, ScalarExpression>() } };
+                var computeScalar = new ComputeScalarNode { Source = source };
+
+                foreach (var param in tvf.Parameters.ToList())
+                    ConvertScalarSubqueries(param, hints, ref source, computeScalar, parameterTypes, tvf);
+
+                if (source is ConstantScanNode)
+                    source = null;
+                else if (computeScalar.Columns.Count > 0)
+                    source = computeScalar;
+
+                var scalarSubquerySchema = source?.GetSchema(DataSources, parameterTypes);
+                var scalarSubqueryReferences = new Dictionary<string, string>();
+                CaptureOuterReferences(scalarSubquerySchema, null, tvf, parameterTypes, scalarSubqueryReferences);
+
                 var dataSource = SelectDataSource(tvf.SchemaObject);
-                return ExecuteMessageNode.FromMessage(tvf, dataSource, parameterTypes);
+                var execute = ExecuteMessageNode.FromMessage(tvf, dataSource, parameterTypes);
+
+                if (source == null)
+                    return execute;
+
+                // If we've got any subquery parameters we need to use a loop to pass them to the function
+                var loop = new NestedLoopNode
+                {
+                    LeftSource = source,
+                    RightSource = execute,
+                    JoinType = QualifiedJoinType.RightOuter,
+                    SemiJoin = true,
+                    OuterReferences = scalarSubqueryReferences
+                };
+
+                return loop;
             }
 
             throw new NotSupportedQueryFragmentException("Unhandled table reference", reference);

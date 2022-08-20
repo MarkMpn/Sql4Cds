@@ -4990,5 +4990,48 @@ UPDATE account SET employees = @employees WHERE name = @name";
             Assert.AreEqual(1, execute.Values.Count);
             Assert.AreEqual("'test'", execute.Values["StringParam"].ToSql());
         }
+
+        [TestMethod]
+        public void TVFScalarSubqueryParameter()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
+
+            var query = "SELECT * FROM SampleMessage((SELECT TOP 1 name FROM account))";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var loop1 = AssertNode<NestedLoopNode>(select.Source);
+            var loop2 = AssertNode<NestedLoopNode>(loop1.LeftSource);
+            var constant = AssertNode<ConstantScanNode>(loop2.LeftSource);
+            var fetch = AssertNode<FetchXmlScan>(loop2.RightSource);
+            var execute = AssertNode<ExecuteMessageNode>(loop1.RightSource);
+
+            CollectionAssert.AreEqual(new[] { "OutputParam1", "OutputParam2" }, select.ColumnSet.Select(c => c.SourceColumn).ToArray());
+            Assert.AreEqual(QualifiedJoinType.RightOuter, loop1.JoinType);
+            Assert.IsTrue(loop1.SemiJoin);
+            Assert.IsNull(loop1.JoinCondition);
+            Assert.AreEqual(1, loop1.OuterReferences.Count);
+            Assert.AreEqual("@Expr2", loop1.OuterReferences["Expr1"]);
+            Assert.AreEqual(QualifiedJoinType.LeftOuter, loop2.JoinType);
+            Assert.IsNull(loop2.JoinCondition);
+            Assert.IsTrue(loop2.SemiJoin);
+            Assert.AreEqual(1, loop2.DefinedValues.Count);
+            Assert.AreEqual("account.name", loop2.DefinedValues["Expr1"]);
+            Assert.AreEqual(0, constant.Schema.Count);
+            Assert.AreEqual(1, constant.Values.Count);
+            Assert.AreEqual("SampleMessage", execute.MessageName);
+            Assert.AreEqual(1, execute.Values.Count);
+            Assert.AreEqual("CONVERT (NVARCHAR (MAX), @Expr2)", execute.Values["StringParam"].ToSql());
+
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS' top='1'>
+                    <entity name='account'>
+                        <attribute name='name' />
+                    </entity>
+                </fetch>");
+        }
     }
 }

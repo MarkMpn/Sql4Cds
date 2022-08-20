@@ -125,8 +125,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var subSchema in new[] { outerSchema, innerSchema })
             {
-                // Semi-join does not include data from the right source
-                if (SemiJoin && subSchema == innerSchema && !includeSemiJoin)
+                // Semi-join does not include data from the outer source
+                if (SemiJoin && (JoinType == QualifiedJoinType.RightOuter && subSchema == outerSchema || JoinType != QualifiedJoinType.RightOuter && subSchema == innerSchema) && !includeSemiJoin)
                     continue;
 
                 foreach (var column in subSchema.Schema)

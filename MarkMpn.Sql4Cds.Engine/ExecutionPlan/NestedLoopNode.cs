@@ -78,7 +78,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     hasRight = true;
 
-                    if (SemiJoin)
+                    if (SemiJoin && JoinType != QualifiedJoinType.RightOuter)
                         break;
                 }
 
