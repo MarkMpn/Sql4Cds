@@ -4914,5 +4914,81 @@ UPDATE account SET employees = @employees WHERE name = @name";
                     </entity>
                 </fetch>");
         }
+
+        [TestMethod]
+        public void SelectFromTVF()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
+
+            var query = "SELECT * FROM SampleMessage('test')";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var execute = AssertNode<ExecuteMessageNode>(select.Source);
+
+            CollectionAssert.AreEqual(new[] { "OutputParam1", "OutputParam2" }, select.ColumnSet.Select(c => c.SourceColumn).ToArray());
+            Assert.AreEqual("SampleMessage", execute.MessageName);
+            Assert.AreEqual(1, execute.Values.Count);
+            Assert.AreEqual("'test'", execute.Values["StringParam"].ToSql());
+        }
+
+        [TestMethod]
+        public void OuterApplyCorrelatedTVF()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
+
+            var query = "SELECT account.name, msg.OutputParam1 FROM account OUTER APPLY (SELECT * FROM SampleMessage(account.name)) AS msg WHERE account.name = 'Data8'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var loop = AssertNode<NestedLoopNode>(select.Source);
+            var fetch = AssertNode<FetchXmlScan>(loop.LeftSource);
+            var alias = AssertNode<AliasNode>(loop.RightSource);
+            var execute = AssertNode<ExecuteMessageNode>(alias.Source);
+
+            CollectionAssert.AreEqual(new[] { "account.name", "msg.OutputParam1" }, select.ColumnSet.Select(c => c.SourceColumn).ToArray());
+            Assert.AreEqual(QualifiedJoinType.LeftOuter, loop.JoinType);
+            Assert.IsNull(loop.JoinCondition);
+            Assert.AreEqual(1, loop.OuterReferences.Count);
+            Assert.AreEqual("@Expr1", loop.OuterReferences["account.name"]);
+            Assert.AreEqual("msg", alias.Alias);
+            Assert.AreEqual("SampleMessage", execute.MessageName);
+            Assert.AreEqual(1, execute.Values.Count);
+            Assert.AreEqual("CONVERT (NVARCHAR (MAX), @Expr1)", execute.Values["StringParam"].ToSql());
+        }
+
+        [TestMethod]
+        public void OuterApplyUncorrelatedTVF()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
+
+            var query = "SELECT account.name, msg.OutputParam1 FROM account OUTER APPLY (SELECT * FROM SampleMessage('test')) AS msg WHERE account.name = 'Data8'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var loop = AssertNode<NestedLoopNode>(select.Source);
+            var fetch = AssertNode<FetchXmlScan>(loop.LeftSource);
+            var spool = AssertNode<TableSpoolNode>(loop.RightSource);
+            var alias = AssertNode<AliasNode>(spool.Source);
+            var execute = AssertNode<ExecuteMessageNode>(alias.Source);
+
+            CollectionAssert.AreEqual(new[] { "account.name", "msg.OutputParam1" }, select.ColumnSet.Select(c => c.SourceColumn).ToArray());
+            Assert.AreEqual(QualifiedJoinType.LeftOuter, loop.JoinType);
+            Assert.IsNull(loop.JoinCondition);
+            Assert.AreEqual(0, loop.OuterReferences.Count);
+            Assert.AreEqual("msg", alias.Alias);
+            Assert.AreEqual("SampleMessage", execute.MessageName);
+            Assert.AreEqual(1, execute.Values.Count);
+            Assert.AreEqual("'test'", execute.Values["StringParam"].ToSql());
+        }
     }
 }

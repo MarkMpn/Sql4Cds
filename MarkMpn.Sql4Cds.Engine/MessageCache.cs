@@ -8,12 +8,23 @@ using Microsoft.Xrm.Sdk.Query;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
+    /// <summary>
+    /// Provides access to Dataverse messages and their input and output parameters
+    /// </summary>
     public interface IMessageCache
     {
-        Message this[string name] { get; }
-
+        /// <summary>
+        /// Gets a message with a specific name
+        /// </summary>
+        /// <param name="name">The name of the message to get the details of</param>
+        /// <param name="message">The details of the message with the requested <paramref name="name"/></param>
+        /// <returns><c>true</c> if the message is found in the cache, or <c>false</c> otherwise</returns>
         bool TryGetValue(string name, out Message message);
 
+        /// <summary>
+        /// Gets a list of all messages in the instance
+        /// </summary>
+        /// <returns>A list of all messages in the instance</returns>
         IEnumerable<Message> GetAllMessages();
     }
 
@@ -24,6 +35,10 @@ namespace MarkMpn.Sql4Cds.Engine
     {
         private readonly Dictionary<string, Message> _cache;
 
+        /// <summary>
+        /// Loads a list of messages from a specific instance
+        /// </summary>
+        /// <param name="org">A connection to the instance to load the messages from</param>
         public MessageCache(IOrganizationService org)
         {
             // Load the requests and input parameters
@@ -169,14 +184,6 @@ namespace MarkMpn.Sql4Cds.Engine
             return otc;
         }
 
-        public Message this[string name]
-        {
-            get
-            {
-                return _cache[name];
-            }
-        }
-
         public bool TryGetValue(string name, out Message message)
         {
             return _cache.TryGetValue(name, out message);
@@ -188,14 +195,30 @@ namespace MarkMpn.Sql4Cds.Engine
         }
     }
 
+    /// <summary>
+    /// Describes the metadata for a message
+    /// </summary>
     public class Message
     {
+        /// <summary>
+        /// Returns or sets the name of the message
+        /// </summary>
         public string Name { get; set; }
 
+        /// <summary>
+        /// Returns or sets the list of input parameters for the message
+        /// </summary>
         public IReadOnlyList<MessageParameter> InputParameters { get; set; }
 
+        /// <summary>
+        /// Returns or sets the list of output parameters for the message
+        /// </summary>
         public IReadOnlyList<MessageParameter> OutputParameters { get; set; }
 
+        /// <summary>
+        /// Checks if the message can be called as a table valued function in SQL queries
+        /// </summary>
+        /// <returns><c>true</c> if the message is allowed to be called as a table valued function, or <c>false</c> otherwise</returns>
         public bool IsValidAsTableValuedFunction()
         {
             // 1. Any request fields must be scalar values (except for a single PagingInfo parameter if the output is an entity collection)
@@ -245,13 +268,35 @@ namespace MarkMpn.Sql4Cds.Engine
         }
     }
 
+    /// <summary>
+    /// Describes an input or output parameter of a <see cref="Message"/>
+    /// </summary>
     public class MessageParameter
     {
+        /// <summary>
+        /// Returns or sets the name of the parameter
+        /// </summary>
         public string Name { get; set; }
+
+        /// <summary>
+        /// Returns or sets the type of the parameter
+        /// </summary>
         public Type Type { get; set; }
+
+        /// <summary>
+        /// Returns or sets the ordinal position of the parameter
+        /// </summary>
         public int Position { get; set; }
+
+        /// <summary>
+        /// Returns or sets the object type code of the entity or entity collection used by the parameter
+        /// </summary>
         public int? OTC { get; set; }
 
+        /// <summary>
+        /// Checks if the parameter is a scalar type
+        /// </summary>
+        /// <returns><c>true</c> if the <see cref="Type"/> is a scalar type</returns>
         public bool IsScalarType()
         {
             var type = Type;

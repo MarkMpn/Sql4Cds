@@ -45,8 +45,6 @@ namespace MarkMpn.Sql4Cds.Tests
             };
         }
 
-        public Message this[string name] => _cache[name];
-
         public IEnumerable<Message> GetAllMessages()
         {
             return _cache.Values;
