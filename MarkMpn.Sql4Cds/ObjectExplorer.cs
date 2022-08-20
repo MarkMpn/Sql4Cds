@@ -139,7 +139,19 @@ namespace MarkMpn.Sql4Cds
             var metadataNode = conNode.Nodes.Add("Metadata");
             SetIcon(metadataNode, "Folder");
             AddVirtualChildNodes(metadataNode, LoadMetadata);
+            var programmabilityNode = conNode.Nodes.Add("Programmability");
+            SetIcon(programmabilityNode, "Folder");
+            var tvfNode = programmabilityNode.Nodes.Add("Table-valued Functions");
+            SetIcon(tvfNode, "Folder");
             treeView.SelectedNode = conNode;
+
+            foreach (var tvf in _dataSources[con.ConnectionName].MessageCache.GetAllMessages().Where(msg => msg.IsValidAsTableValuedFunction()).OrderBy(tvf => tvf.Name))
+            {
+                var n = tvfNode.Nodes.Add(tvf.Name);
+                n.Tag = tvf;
+                n.ImageIndex = 25;
+                n.SelectedImageIndex = 25;
+            }
 
             if (new Uri(con.OrganizationServiceUrl).Host.EndsWith(".dynamics.com") &&
                 new Version(con.OrganizationVersion) >= new Version("9.1.0.17437"))
