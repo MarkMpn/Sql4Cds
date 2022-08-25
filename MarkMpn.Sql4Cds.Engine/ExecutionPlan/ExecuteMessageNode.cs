@@ -532,14 +532,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 throw new NotSupportedQueryFragmentException("Unexpected parameter", tvf.Parameters[expectedInputParameters.Count]);
 
             // Add the parameter values to the node, including any required type conversions
-            foreach (var f in expectedInputParameters)
+            for (var i = 0; i < expectedInputParameters.Count; i++)
             {
-                var paramIndex = f.Position;
-
-                if (pagingInfoPosition != -1 && paramIndex > pagingInfoPosition)
-                    paramIndex--;
-
-                var sourceExpression = tvf.Parameters[paramIndex];
+                var f = expectedInputParameters[i];
+                var sourceExpression = tvf.Parameters[i];
                 sourceExpression.GetType(null, null, parameterTypes, out var sourceType);
                 var expectedType = SqlTypeConverter.NetToSqlType(f.Type).ToSqlType();
 
@@ -688,7 +684,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected)
         {
             recordsAffected = Execute(dataSources, options, parameterTypes, parameterValues).Count();
-            return null;
+            return "Executed " + MessageName;
         }
 
         IRootExecutionPlanNodeInternal[] IRootExecutionPlanNodeInternal.FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
