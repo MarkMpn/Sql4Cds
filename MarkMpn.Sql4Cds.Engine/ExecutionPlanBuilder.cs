@@ -198,6 +198,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 plans = new[] { ConvertContinueStatement(continueStmt) };
             else if (statement is WaitForStatement waitFor)
                 plans = new[] { ConvertWaitForStatement(waitFor) };
+            else if (statement is ExecuteStatement execute)
+                plans = ConvertExecuteStatement(execute);
             else
                 throw new NotSupportedQueryFragmentException("Unsupported statement", statement);
 
@@ -218,6 +220,132 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 queries.AddRange(optimized);
             }
+        }
+
+        private IRootExecutionPlanNodeInternal[] ConvertExecuteStatement(ExecuteStatement execute)
+        {
+            var nodes = new List<IRootExecutionPlanNodeInternal>();
+
+            if (execute.Options != null && execute.Options.Count > 0)
+                throw new NotSupportedQueryFragmentException("EXECUTE option is not supported", execute.Options[0]);
+
+            if (execute.ExecuteSpecification.ExecuteContext != null)
+                throw new NotSupportedQueryFragmentException("EXECUTE option is not supported", execute.ExecuteSpecification.ExecuteContext);
+
+            if (!(execute.ExecuteSpecification.ExecutableEntity is ExecutableProcedureReference sproc))
+                throw new NotSupportedQueryFragmentException("EXECUTE can only be used to execute messages as stored procedures", execute.ExecuteSpecification.ExecutableEntity);
+
+            if (sproc.AdHocDataSource != null)
+                throw new NotSupportedQueryFragmentException("Ad-hoc data sources are not supported", sproc.AdHocDataSource);
+
+            if (sproc.ProcedureReference.ProcedureVariable != null)
+                throw new NotSupportedQueryFragmentException("Variable stored procedure names are not supported", sproc.ProcedureReference.ProcedureVariable);
+
+            var dataSource = SelectDataSource(sproc.ProcedureReference.ProcedureReference.Name);
+
+            var node = ExecuteMessageNode.FromMessage(sproc, dataSource, _parameterTypes);
+            var schema = node.GetSchema(DataSources, _parameterTypes);
+
+            dataSource.MessageCache.TryGetValue(node.MessageName, out var message);
+
+            var outputParams = sproc.Parameters.Where(p => p.IsOutput).ToList();
+
+            foreach (var outputParam in outputParams)
+            {
+                if (!message.OutputParameters.Any(p => p.IsScalarType() && p.Name.Equals(outputParam.Variable.Name.Substring(1), StringComparison.OrdinalIgnoreCase)))
+                    throw new NotSupportedQueryFragmentException("Unknown parameter", outputParam.Variable);
+            }
+
+            if (message.OutputParameters.Count == 0 || outputParams.Count == 0)
+            {
+                if (message.OutputParameters.Any(p => !p.IsScalarType()))
+                {
+                    // Expose the produced data set
+                    var select = new SelectNode { Source = node };
+
+                    foreach (var col in schema.Schema.Keys.OrderBy(col => col))
+                        select.ColumnSet.Add(new SelectColumn { SourceColumn = col, OutputColumn = col });
+
+                    nodes.Add(select);
+                }
+                else
+                {
+                    nodes.Add(node);
+                }
+            }
+            else
+            {
+                // Capture scalar output variables
+                var assignVariablesNode = new AssignVariablesNode { Source = node };
+
+                foreach (var outputParam in outputParams)
+                {
+                    var sourceCol = outputParam.Variable.Name.Substring(1);
+
+                    if (!schema.ContainsColumn(sourceCol, out sourceCol))
+                        throw new NotSupportedQueryFragmentException("Unknown parameter", outputParam);
+
+                    if (!(outputParam.ParameterValue is VariableReference targetVariable))
+                        throw new NotSupportedQueryFragmentException("Value must be a variable", outputParam.ParameterValue);
+
+                    if (!_parameterTypes.TryGetValue(targetVariable.Name, out var targetVariableType))
+                        throw new NotSupportedQueryFragmentException("Undeclared variable", targetVariable);
+
+                    var sourceType = schema.Schema[sourceCol];
+
+                    if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, targetVariableType))
+                        throw new NotSupportedQueryFragmentException($"Cannot convert value of type '{sourceType.ToSql()}' to '{targetVariableType.ToSql()}'", outputParam);
+
+                    assignVariablesNode.Variables.Add(new VariableAssignment
+                    {
+                        SourceColumn = sourceCol,
+                        VariableName = targetVariable.Name
+                    });
+                }
+
+                nodes.Add(assignVariablesNode);
+            }
+
+            // Capture single return values in execute.ExecuteSpecification.Variable
+            if (execute.ExecuteSpecification.Variable != null)
+            {
+                // Variable should be set to 1 when sproc executes successfully.
+                if (!_parameterTypes.TryGetValue(execute.ExecuteSpecification.Variable.Name, out var returnStatusType))
+                    throw new NotSupportedQueryFragmentException("Undeclared variable", execute.ExecuteSpecification.Variable);
+
+                if (!SqlTypeConverter.CanChangeTypeImplicit(DataTypeHelpers.Int, returnStatusType))
+                    throw new NotSupportedQueryFragmentException($"Cannot assign int value to {returnStatusType.ToSql()} variable", execute.ExecuteSpecification.Variable);
+
+                var constName = $"Expr{_colNameCounter++}";
+
+                nodes.Add(new AssignVariablesNode
+                {
+                    Variables =
+                    {
+                        new VariableAssignment
+                        {
+                            VariableName = execute.ExecuteSpecification.Variable.Name,
+                            SourceColumn = constName
+                        }
+                    },
+                    Source = new ConstantScanNode
+                    {
+                        Schema =
+                        {
+                            [constName] = DataTypeHelpers.Int
+                        },
+                        Values =
+                        {
+                            new Dictionary<string, ScalarExpression>
+                            {
+                                [constName] = new IntegerLiteral { Value = "1" }
+                            }
+                        }
+                    }
+                });
+            }
+
+            return nodes.ToArray();
         }
 
         private IRootExecutionPlanNodeInternal ConvertWaitForStatement(WaitForStatement waitFor)

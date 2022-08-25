@@ -5033,5 +5033,42 @@ UPDATE account SET employees = @employees WHERE name = @name";
                     </entity>
                 </fetch>");
         }
+
+        [TestMethod]
+        public void ExecuteSproc()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
+
+            var query = "EXEC SampleMessage 'test'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var execute = AssertNode<ExecuteMessageNode>(plans[0]);
+
+            Assert.AreEqual("SampleMessage", execute.MessageName);
+            Assert.AreEqual(1, execute.Values.Count);
+            Assert.AreEqual("'test'", execute.Values["StringParam"].ToSql());
+        }
+
+        [TestMethod]
+        public void ExecuteSprocNamedParameters()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
+
+            var query = @"DECLARE @i int
+                EXEC SampleMessage @StringParam = 'test', @OutputParam2 = @i OUTPUT
+                SELECT @i";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(3, plans.Length);
+            var declare = AssertNode<DeclareVariablesNode>(plans[0]);
+            var assign = AssertNode<AssignVariablesNode>(plans[1]);
+            var execute = AssertNode<ExecuteMessageNode>(assign.Source);
+            var select = AssertNode<SelectNode>(plans[2]);
+        }
     }
 }

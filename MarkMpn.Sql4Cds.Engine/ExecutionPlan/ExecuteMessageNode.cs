@@ -13,10 +13,28 @@ using Newtonsoft.Json;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
-    class ExecuteMessageNode : BaseDataNode
+    class ExecuteMessageNode : BaseDataNode, IDmlQueryExecutionPlanNode
     {
         private Dictionary<string, Func<IDictionary<string, object>, IQueryExecutionOptions, object>> _inputParameters;
         private string _primaryKeyColumn;
+
+        /// <summary>
+        /// The SQL string that the query was converted from
+        /// </summary>
+        [Browsable(false)]
+        public string Sql { get; set; }
+
+        /// <summary>
+        /// The position of the SQL query within the entire query text
+        /// </summary>
+        [Browsable(false)]
+        public int Index { get; set; }
+
+        /// <summary>
+        /// The length of the SQL query within the entire query text
+        /// </summary>
+        [Browsable(false)]
+        public int Length { get; set; }
 
         /// <summary>
         /// The instance that this node will be executed against
@@ -134,6 +152,69 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 aliases: Schema.ToDictionary(kvp => kvp.Key, kvp => (IReadOnlyList<string>)new List<string> { PrefixWithAlias(kvp.Key) }, StringComparer.OrdinalIgnoreCase),
                 notNullColumns: null,
                 sortOrder: null);
+        }
+
+        private void SetOutputSchema(IAttributeMetadataCache metadata, Message message, TSqlFragment source)
+        {
+            // Add the response fields to the node schema
+            if (message.OutputParameters.All(f => f.IsScalarType()))
+            {
+                foreach (var value in message.OutputParameters)
+                    AddSchemaColumn(value.Name, SqlTypeConverter.NetToSqlType(value.Type).ToSqlType()); // TODO: How are OSV and ER fields represented?
+            }
+            else
+            {
+                var firstValue = message.OutputParameters.Single();
+                var audit = false;
+                var type = firstValue.Type;
+                var otc = firstValue.OTC;
+
+                if (type == typeof(AuditDetail))
+                {
+                    type = typeof(Entity);
+                    otc = metadata["audit"].ObjectTypeCode;
+                    audit = true;
+                }
+                else if (firstValue.Type == typeof(AuditDetailCollection))
+                {
+                    type = typeof(EntityCollection);
+                    otc = metadata["audit"].ObjectTypeCode;
+                    audit = true;
+                }
+
+                if (type == typeof(Entity))
+                    EntityResponseParameter = firstValue.Name;
+                else
+                    EntityCollectionResponseParameter = firstValue.Name;
+
+                foreach (var attrMetadata in metadata[otc.Value].Attributes.Where(a => a.AttributeOf == null))
+                {
+                    AddSchemaColumn(attrMetadata.LogicalName, attrMetadata.GetAttributeSqlType(metadata, false));
+
+                    // Add standard virtual attributes
+                    if (attrMetadata is EnumAttributeMetadata || attrMetadata is BooleanAttributeMetadata)
+                        AddSchemaColumn(attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(FetchXmlScan.LabelMaxLength));
+
+                    if (attrMetadata is LookupAttributeMetadata lookup)
+                    {
+                        AddSchemaColumn(attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(lookup.Targets == null || lookup.Targets.Length == 0 ? 100 : lookup.Targets.Select(e => ((StringAttributeMetadata)metadata[e].Attributes.SingleOrDefault(a => a.LogicalName == metadata[e].PrimaryNameAttribute))?.MaxLength ?? 100).Max()));
+
+                        if (lookup.Targets?.Length != 1 && lookup.AttributeType != AttributeTypeCode.PartyList)
+                            AddSchemaColumn(attrMetadata.LogicalName + "type", DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength));
+                    }
+                }
+
+                if (audit)
+                {
+                    AddSchemaColumn("newvalues", DataTypeHelpers.NVarChar(Int32.MaxValue));
+                    AddSchemaColumn("oldvalues", DataTypeHelpers.NVarChar(Int32.MaxValue));
+                }
+
+                _primaryKeyColumn = PrefixWithAlias(metadata[otc.Value].PrimaryIdAttribute);
+            }
+
+            if (!String.IsNullOrEmpty(PagingParameter) && EntityCollectionResponseParameter == null)
+                throw new NotSupportedQueryFragmentException($"Paging request parameter found but no collection response parameter", source);
         }
 
         private void AddSchemaColumn(string name, DataTypeReference type)
@@ -453,10 +534,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Add the parameter values to the node, including any required type conversions
             foreach (var f in expectedInputParameters)
             {
-                if (pagingInfoPosition != -1 && f.Position > pagingInfoPosition)
-                    f.Position--;
+                var paramIndex = f.Position;
 
-                var sourceExpression = tvf.Parameters[f.Position];
+                if (pagingInfoPosition != -1 && paramIndex > pagingInfoPosition)
+                    paramIndex--;
+
+                var sourceExpression = tvf.Parameters[paramIndex];
                 sourceExpression.GetType(null, null, parameterTypes, out var sourceType);
                 var expectedType = SqlTypeConverter.NetToSqlType(f.Type).ToSqlType();
 
@@ -479,67 +562,139 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 node.ValueTypes[f.Name] = f.Type;
             }
 
-            // Add the response fields to the node schema
-            if (message.OutputParameters.All(f => f.IsScalarType()))
-            {
-                foreach (var value in message.OutputParameters)
-                    node.AddSchemaColumn(value.Name, SqlTypeConverter.NetToSqlType(value.Type).ToSqlType()); // TODO: How are OSV and ER fields represented?
-            }
-            else
-            {
-                var firstValue = message.OutputParameters.Single();
-                var audit = false;
-                var type = firstValue.Type;
-                var otc = firstValue.OTC;
-
-                if (type == typeof(AuditDetail))
-                {
-                    type = typeof(Entity);
-                    otc = dataSource.Metadata["audit"].ObjectTypeCode;
-                    audit = true;
-                }
-                else if (firstValue.Type == typeof(AuditDetailCollection))
-                {
-                    type = typeof(EntityCollection);
-                    otc = dataSource.Metadata["audit"].ObjectTypeCode;
-                    audit = true;
-                }
-
-                if (type == typeof(Entity))
-                    node.EntityResponseParameter = firstValue.Name;
-                else
-                    node.EntityCollectionResponseParameter = firstValue.Name;
-
-                foreach (var attrMetadata in dataSource.Metadata[otc.Value].Attributes.Where(a => a.AttributeOf == null))
-                {
-                    node.AddSchemaColumn(attrMetadata.LogicalName, attrMetadata.GetAttributeSqlType(dataSource.Metadata, false));
-
-                    // Add standard virtual attributes
-                    if (attrMetadata is EnumAttributeMetadata || attrMetadata is BooleanAttributeMetadata)
-                        node.AddSchemaColumn(attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(FetchXmlScan.LabelMaxLength));
-
-                    if (attrMetadata is LookupAttributeMetadata lookup)
-                    {
-                        node.AddSchemaColumn(attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(lookup.Targets == null || lookup.Targets.Length == 0 ? 100 : lookup.Targets.Select(e => ((StringAttributeMetadata)dataSource.Metadata[e].Attributes.SingleOrDefault(a => a.LogicalName == dataSource.Metadata[e].PrimaryNameAttribute))?.MaxLength ?? 100).Max()));
-
-                        if (lookup.Targets?.Length != 1 && lookup.AttributeType != AttributeTypeCode.PartyList)
-                            node.AddSchemaColumn(attrMetadata.LogicalName + "type", DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength));
-                    }
-                }
-
-                if (audit)
-                {
-                    node.AddSchemaColumn("newvalues", DataTypeHelpers.NVarChar(Int32.MaxValue));
-                    node.AddSchemaColumn("oldvalues", DataTypeHelpers.NVarChar(Int32.MaxValue));
-                }
-
-                node._primaryKeyColumn = node.PrefixWithAlias(dataSource.Metadata[otc.Value].PrimaryIdAttribute);
-            }
-
-            if (!String.IsNullOrEmpty(node.PagingParameter) && node.EntityCollectionResponseParameter == null)
-                throw new NotSupportedQueryFragmentException($"Paging request parameter found but no collection response parameter", tvf.SchemaObject);
+            node.SetOutputSchema(dataSource.Metadata, message, tvf.SchemaObject);
 
             return node;
+        }
+
+        public static ExecuteMessageNode FromMessage(ExecutableProcedureReference sproc, DataSource dataSource, IDictionary<string, DataTypeReference> parameterTypes)
+        {
+            // All messages are in the "dbo" schema
+            if (sproc.ProcedureReference.ProcedureReference.Name.SchemaIdentifier != null && !String.IsNullOrEmpty(sproc.ProcedureReference.ProcedureReference.Name.SchemaIdentifier.Value) &&
+                !sproc.ProcedureReference.ProcedureReference.Name.SchemaIdentifier.Value.Equals("dbo", StringComparison.OrdinalIgnoreCase))
+                throw new NotSupportedQueryFragmentException("Invalid function name", sproc.ProcedureReference.ProcedureReference.Name);
+
+            if (!dataSource.MessageCache.TryGetValue(sproc.ProcedureReference.ProcedureReference.Name.BaseIdentifier.Value, out var message))
+                throw new NotSupportedQueryFragmentException("Invalid function name", sproc.ProcedureReference.ProcedureReference.Name);
+
+            if (!message.IsValidAsStoredProcedure())
+                throw new NotSupportedQueryFragmentException("Message is not valid to be called as a stored procedure", sproc.ProcedureReference.ProcedureReference.Name)
+                {
+                    Suggestion = "Messages must only have scalar type inputs and must produce no more than one Entity or EntityCollection output or any number of scalar type outputs"
+                };
+
+            var node = new ExecuteMessageNode
+            {
+                DataSource = dataSource.Name,
+                MessageName = message.Name
+            };
+
+            // Check the number and type of input parameters matches
+            var expectedInputParameters = new List<MessageParameter>();
+            var pagingInfoPosition = -1;
+
+            for (var i = 0; i < message.InputParameters.Count; i++)
+            {
+                if (message.InputParameters[i].Type == typeof(PagingInfo))
+                {
+                    pagingInfoPosition = i;
+                    node.PagingParameter = message.InputParameters[i].Name;
+                }
+                else
+                {
+                    expectedInputParameters.Add(message.InputParameters[i]);
+                }
+            }
+
+            // Add the parameter values to the node, including any required type conversions
+            var usedParamName = false;
+
+            for (var i = 0; i < sproc.Parameters.Count; i++)
+            {
+                if (sproc.Parameters[i].Variable != null)
+                    usedParamName = true;
+
+                if (usedParamName && sproc.Parameters[i].Variable == null)
+                    throw new NotSupportedQueryFragmentException("Parameter names must be used for all parameters after the first named parameter", sproc.Parameters[i]);
+
+                if (sproc.Parameters[i].IsOutput && sproc.Parameters[i].Variable == null)
+                    throw new NotSupportedQueryFragmentException("Output parameters must be named", sproc.Parameters[i].Variable);
+
+                if (sproc.Parameters[i].IsOutput)
+                    continue;
+
+                string targetParamName;
+
+                if (sproc.Parameters[i].Variable == null)
+                {
+                    var paramIndex = i;
+
+                    if (pagingInfoPosition != -1 && i >= pagingInfoPosition)
+                        paramIndex++;
+
+                    if (paramIndex >= message.InputParameters.Count)
+                        throw new NotSupportedQueryFragmentException("Unexpected parameter", sproc.Parameters[i]);
+
+                    targetParamName = message.InputParameters[paramIndex].Name;
+                }
+                else
+                {
+                    targetParamName = sproc.Parameters[i].Variable.Name.Substring(1);
+                }
+
+                var targetParam = message.InputParameters.SingleOrDefault(p => p.Name.Equals(targetParamName, StringComparison.OrdinalIgnoreCase));
+
+                if (targetParam == null)
+                    throw new NotSupportedQueryFragmentException("Unknown parameter", sproc.Parameters[i]);
+
+                var sourceExpression = sproc.Parameters[i].ParameterValue;
+                sourceExpression.GetType(null, null, parameterTypes, out var sourceType);
+                var expectedType = SqlTypeConverter.NetToSqlType(targetParam.Type).ToSqlType();
+
+                if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, expectedType))
+                    throw new NotSupportedQueryFragmentException($"Cannot convert value of type {sourceType.ToSql()} to {expectedType.ToSql()}", sproc.Parameters[i].ParameterValue);
+
+                if (sourceType.IsSameAs(expectedType))
+                {
+                    node.Values[targetParam.Name] = sproc.Parameters[i].ParameterValue;
+                }
+                else
+                {
+                    node.Values[targetParam.Name] = new ConvertCall
+                    {
+                        Parameter = sproc.Parameters[i].ParameterValue,
+                        DataType = expectedType
+                    };
+                }
+
+                node.ValueTypes[targetParam.Name] = targetParam.Type;
+            }
+
+            // Check if we are missing any parameters
+            foreach (var inputParameter in message.InputParameters)
+            {
+                if (node.Values.ContainsKey(inputParameter.Name))
+                    continue;
+
+                if (!inputParameter.Optional)
+                    throw new NotSupportedQueryFragmentException($"Missing parameter '{inputParameter.Name}'", sproc);
+            }
+
+            node.SetOutputSchema(dataSource.Metadata, message, sproc.ProcedureReference);
+
+            return node;
+        }
+
+        public string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected)
+        {
+            recordsAffected = Execute(dataSources, options, parameterTypes, parameterValues).Count();
+            return null;
+        }
+
+        IRootExecutionPlanNodeInternal[] IRootExecutionPlanNodeInternal.FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        {
+            FoldQuery(dataSources, options, parameterTypes, hints);
+            return new[] { this };
         }
     }
 }

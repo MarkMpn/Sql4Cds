@@ -130,6 +130,13 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
         {
             base.ExplicitVisit(node);
             ReplaceExpression(node, n => n.InputExpression);
+            ReplaceExpression(node, n => n.ElseExpression);
+        }
+
+        public override void ExplicitVisit(SearchedCaseExpression node)
+        {
+            base.ExplicitVisit(node);
+            ReplaceExpression(node, n => n.ElseExpression);
         }
 
         public override void ExplicitVisit(WhenClause node)
@@ -142,6 +149,14 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
         {
             base.ExplicitVisit(node);
             ReplaceExpression(node, n => n.WhenExpression);
+            ReplaceExpression(node, n => n.ThenExpression);
+        }
+
+        public override void ExplicitVisit(SearchedWhenClause node)
+        {
+            base.ExplicitVisit(node);
+            ReplaceExpression(node, n => n.WhenExpression);
+            ReplaceExpression(node, n => n.ThenExpression);
         }
 
         public override void ExplicitVisit(AssignmentSetClause node)

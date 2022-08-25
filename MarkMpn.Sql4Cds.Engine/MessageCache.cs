@@ -48,7 +48,7 @@ namespace MarkMpn.Sql4Cds.Engine
             messagePairLink.LinkCriteria.AddCondition("endpoint", ConditionOperator.Equal, "2011/Organization.svc");
             var fieldLink = requestQry.AddLink("sdkmessagerequestfield", "sdkmessagerequestid", "sdkmessagerequestid", JoinOperator.LeftOuter);
             fieldLink.EntityAlias = "sdkmessagerequestfield";
-            fieldLink.Columns = new ColumnSet("name", "clrparser", "position");
+            fieldLink.Columns = new ColumnSet("name", "clrparser", "position", "optional");
 
             var messageRequestFields = new Dictionary<string, List<MessageParameter>>();
 
@@ -65,6 +65,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 var fieldName = entity.GetAttributeValue<AliasedValue>("sdkmessagerequestfield.name");
                 var fieldType = entity.GetAttributeValue<AliasedValue>("sdkmessagerequestfield.clrparser");
                 var fieldPosition = entity.GetAttributeValue<AliasedValue>("sdkmessagerequestfield.position");
+                var fieldOptional = entity.GetAttributeValue<AliasedValue>("sdkmessagerequestfield.optional");
 
                 if (fieldName != null)
                 {
@@ -72,7 +73,8 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         Name = (string)fieldName.Value,
                         Type = fieldType == null ? null : GetType((string)fieldType.Value),
-                        Position = (int)fieldPosition.Value
+                        Position = (int)fieldPosition.Value,
+                        Optional = (bool)(fieldOptional?.Value ?? false)
                     });
                 }
             }
@@ -221,11 +223,25 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <returns><c>true</c> if the message is allowed to be called as a table valued function, or <c>false</c> otherwise</returns>
         public bool IsValidAsTableValuedFunction()
         {
+            return IsValid(true);
+        }
+
+        /// <summary>
+        /// Checks if the message can be called as a stored procedure in SQL queries
+        /// </summary>
+        /// <returns><c>true</c> if the message is allowed to be called as a stored procedure, or <c>false</c> otherwise</returns>
+        public bool IsValidAsStoredProcedure()
+        {
+            return IsValid(false);
+        }
+
+        private bool IsValid(bool requireOutput)
+        {
             // 1. Any request fields must be scalar values (except for a single PagingInfo parameter if the output is an entity collection)
             // 2. The response fields must be EITHER:
             //    a. A single field of an entity-derived type, OR
-            //    a. A single field of an entity collection, OR
-            //    b. one or more fields of a scalar type
+            //    b. A single field of an entity collection, OR
+            //    c. one or more fields of a scalar type
 
             if (InputParameters.Any(p => p.Type == null))
                 return false;
@@ -250,7 +266,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             if (OutputParameters.Count == 0)
-                return false;
+                return !requireOutput;
 
             if (OutputParameters.All(p => p.IsScalarType()))
                 return true;
@@ -292,6 +308,11 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Returns or sets the object type code of the entity or entity collection used by the parameter
         /// </summary>
         public int? OTC { get; set; }
+
+        /// <summary>
+        /// Indicates whether the input parameter is optional
+        /// </summary>
+        public bool Optional { get; set; }
 
         /// <summary>
         /// Checks if the parameter is a scalar type
