@@ -177,6 +177,18 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             IsCompatible = false;
         }
 
+        public override void Visit(ExecuteStatement node)
+        {
+            // Can't use stored procedures
+            IsCompatible = false;
+        }
+
+        public override void Visit(SchemaObjectFunctionTableReference node)
+        {
+            // Can't use messages as TVFs
+            IsCompatible = false;
+        }
+
         public override void Visit(IfStatement node)
         {
             // Can't use IF statement
