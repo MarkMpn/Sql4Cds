@@ -22,41 +22,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private bool _closed;
         private int _rowCount;
 
-        private static readonly Dictionary<Type, Type> _typeConversions;
-        private static readonly Dictionary<Type, Func<object, object>> _typeConversionFuncs;
-
-        static SelectDataReader()
-        {
-            _typeConversions = new Dictionary<Type, Type>();
-            _typeConversionFuncs = new Dictionary<Type, Func<object, object>>();
-
-            // https://docs.microsoft.com/en-us/dotnet/framework/data/adonet/sql-server-data-type-mappings
-            AddTypeConversion<SqlInt64, long>(v => v.Value);
-            AddTypeConversion<SqlBinary, byte[]>(v => v.Value);
-            AddTypeConversion<SqlBoolean, bool>(v => v.Value);
-            AddTypeConversion<SqlString, string>(v => v.Value);
-            AddTypeConversion<SqlDateTime, DateTime>(v => v.Value);
-            AddTypeConversion<SqlDecimal, decimal>(v => v.Value);
-            AddTypeConversion<SqlBytes, byte[]>(v => v.Value);
-            AddTypeConversion<SqlDouble, double>(v => v.Value);
-            AddTypeConversion<SqlInt32, int>(v => v.Value);
-            AddTypeConversion<SqlMoney, decimal>(v => v.Value);
-            AddTypeConversion<SqlSingle, float>(v => v.Value);
-            AddTypeConversion<SqlInt16, short>(v => v.Value);
-            AddTypeConversion<SqlByte, byte>(v => v.Value);
-            AddTypeConversion<SqlGuid, Guid>(v => v.Value);
-            AddTypeConversion<SqlDate, DateTime>(v => v.Value);
-            AddTypeConversion<SqlDateTime2, DateTime>(v => v.Value);
-            AddTypeConversion<SqlDateTimeOffset, DateTimeOffset>(v => v.Value);
-            AddTypeConversion<SqlTime, TimeSpan>(v => v.Value);
-        }
-
-        private static void AddTypeConversion<TSql, TClr>(Func<TSql, TClr> func)
-        {
-            _typeConversions[typeof(TSql)] = typeof(TClr);
-            _typeConversionFuncs[typeof(TSql)] = v => func((TSql)v);
-        }
-
         public SelectDataReader(List<SelectColumn> columnSet, IDisposable timer, INodeSchema schema, IEnumerable<Entity> source, IDictionary<string, object> parameterValues)
         {
             _columnSet = columnSet;
@@ -74,7 +39,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override bool HasRows => true;
 
-        public override object this[int i] => ToClrType(GetRawValue(i));
+        public override object this[int i]
+        {
+            get
+            {
+                var value = GetRawValue(i);
+
+                if (value.IsNull)
+                    return DBNull.Value;
+
+                if (value is SqlEntityReference)
+                    return value;
+
+                return SqlTypeConverter.SqlToNetType(value);
+            }
+        }
 
         public override object this[string name] => this[GetOrdinal(name)];
 
@@ -167,7 +146,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override Type GetFieldType(int i)
         {
-            return ToClrType(_schema.Schema[_columnSet[i].SourceColumn].ToNetType(out _));
+            var providerType = GetProviderSpecificFieldType(i);
+
+            if (providerType == typeof(SqlEntityReference))
+                return providerType;
+
+            return SqlTypeConverter.SqlToNetType(providerType);
         }
 
         public override Type GetProviderSpecificFieldType(int ordinal)
@@ -220,25 +204,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return -1;
         }
 
-        private Type ToClrType(Type type)
-        {
-            if (_typeConversions.TryGetValue(type, out var clr))
-                return clr;
-
-            return type;
-        }
-
-        private object ToClrType(INullable value)
-        {
-            if (value.IsNull)
-                return DBNull.Value;
-
-            if (_typeConversionFuncs.TryGetValue(value.GetType(), out var func))
-                return func(value);
-
-            return value;
-        }
-
         public override DataTable GetSchemaTable()
         {
             var schemaTable = new DataTable();
@@ -279,7 +244,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var column = _columnSet[i];
                 var sqlType = _schema.Schema[_columnSet[i].SourceColumn];
                 var providerType = sqlType.ToNetType(out _);
-                var type = ToClrType(providerType);
+                var type = providerType == typeof(SqlEntityReference) ? providerType : SqlTypeConverter.SqlToNetType(providerType);
                 var size = sqlType.GetSize();
                 var precision = sqlType.GetPrecision(255);
                 var scale = sqlType.GetScale(255);

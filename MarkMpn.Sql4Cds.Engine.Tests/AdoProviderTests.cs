@@ -796,5 +796,39 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 Assert.IsTrue(stopwatch.ElapsedMilliseconds > 2000 && stopwatch.ElapsedMilliseconds < 2100);
             }
         }
+
+        [TestMethod]
+        public void StoredProcedureCommandType()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "SampleMessage";
+                cmd.CommandType = CommandType.StoredProcedure;
+
+                var param = cmd.CreateParameter();
+                param.ParameterName = "@StringParam";
+                param.Value = "1";
+                cmd.Parameters.Add(param);
+
+                var outputParam1 = cmd.CreateParameter();
+                outputParam1.ParameterName = "@OutputParam1";
+                outputParam1.DbType = DbType.String;
+                outputParam1.Size = 100;
+                outputParam1.Direction = ParameterDirection.Output;
+                cmd.Parameters.Add(outputParam1);
+
+                var outputParam2 = cmd.CreateParameter();
+                outputParam2.ParameterName = "@OutputParam2";
+                outputParam2.DbType = DbType.Int32;
+                outputParam2.Direction = ParameterDirection.Output;
+                cmd.Parameters.Add(outputParam2);
+
+                cmd.ExecuteNonQuery();
+
+                Assert.AreEqual("1", outputParam1.Value);
+                Assert.AreEqual(1, outputParam2.Value);
+            }
+        }
     }
 }

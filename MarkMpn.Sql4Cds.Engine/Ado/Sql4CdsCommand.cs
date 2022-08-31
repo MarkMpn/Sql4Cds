@@ -24,6 +24,7 @@ namespace MarkMpn.Sql4Cds.Engine
         private Sql4CdsConnection _connection;
         private ExecutionPlanBuilder _planBuilder;
         private string _commandText;
+        private CommandType _commandType;
         private CancellationTokenSource _cts;
 
         public Sql4CdsCommand(Sql4CdsConnection connection) : this(connection, string.Empty)
@@ -34,6 +35,7 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             _connection = connection;
             CommandText = commandText;
+            CommandType = CommandType.Text;
             CommandTimeout = 30;
             DbParameterCollection = new Sql4CdsParameterCollection();
 
@@ -73,11 +75,13 @@ namespace MarkMpn.Sql4Cds.Engine
         
         public override CommandType CommandType
         {
-            get { return CommandType.Text; }
+            get { return _commandType; }
             set
             {
-                if (value != CommandType.Text)
-                    throw new ArgumentOutOfRangeException("Only CommandType.Text is supported");
+                if (value != CommandType.Text && value != CommandType.StoredProcedure)
+                    throw new ArgumentOutOfRangeException("Only CommandType.Text and CommandType.StoredProcedure are supported");
+
+                _commandType = value;
             }
         }
 
@@ -169,7 +173,27 @@ namespace MarkMpn.Sql4Cds.Engine
             try
             {
                 _planBuilder.EstimatedPlanOnly = !compileForExecution;
-                var plan = _planBuilder.Build(CommandText, ((Sql4CdsParameterCollection)Parameters).GetParameterTypes(), out var useTDSEndpointDirectly);
+
+                var commandText = CommandText;
+
+                if (CommandType == CommandType.StoredProcedure)
+                {
+                    commandText = $"EXECUTE [{CommandText}]";
+
+                    for (var i = 0; i < Parameters.Count; i++)
+                    {
+                        if (i > 0)
+                            commandText += ", ";
+
+                        var param = Parameters[i];
+                        commandText += $" {param.ParameterName} = {param.ParameterName}";
+
+                        if (param.Direction == ParameterDirection.Output)
+                            commandText += " OUTPUT";
+                    }
+                }
+
+                var plan = _planBuilder.Build(commandText, ((Sql4CdsParameterCollection)Parameters).GetParameterTypes(), out var useTDSEndpointDirectly);
                 UseTDSEndpointDirectly = useTDSEndpointDirectly;
 
                 if (compileForExecution)
@@ -255,7 +279,16 @@ namespace MarkMpn.Sql4Cds.Engine
                 _cts = CommandTimeout == 0 ? new CancellationTokenSource() : new CancellationTokenSource(TimeSpan.FromSeconds(CommandTimeout));
                 var options = new CancellationTokenOptionsWrapper(_connection.Options, _cts);
 
-                return new Sql4CdsDataReader(this, options, behavior);
+                var reader = new Sql4CdsDataReader(this, options, behavior);
+
+                if (CommandType == CommandType.StoredProcedure)
+                {
+                    // Capture the values of output parameters
+                    foreach (var param in Parameters.Cast<Sql4CdsParameter>().Where(p => p.Direction == ParameterDirection.Output))
+                        param.SetOutputValue((INullable)reader.ParameterValues[param.ParameterName]);
+                }
+
+                return reader;
             }
             catch (Exception ex)
             {
