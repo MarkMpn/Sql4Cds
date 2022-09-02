@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Data.SqlTypes;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -14,7 +15,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// </summary>
     class IndexSpoolNode : BaseDataNode, ISingleSourceExecutionPlanNode
     {
-        private IDictionary<object, List<Entity>> _hashTable;
+        private IDictionary<INullable, List<Entity>> _hashTable;
+        private Func<INullable, INullable> _keySelector;
+        private Func<INullable, INullable> _seekSelector;
+
+        public IndexSpoolNode() { }
 
         [Browsable(false)]
         public IDataExecutionPlanNodeInternal Source { get; set; }
@@ -55,6 +60,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
             Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
+
+            // Index and seek values must be the same type
+            var indexType = Source.GetSchema(dataSources, parameterTypes).Schema[KeyColumn];
+            var seekType = parameterTypes[SeekValue];
+
+            if (!SqlTypeConverter.CanMakeConsistentTypes(indexType, seekType, out var consistentType))
+                throw new QueryExecutionException($"No type conversion available for {indexType.ToSql()} and {seekType.ToSql()}");
+
+            _keySelector = SqlTypeConverter.GetConversion(indexType, consistentType);
+            _seekSelector = SqlTypeConverter.GetConversion(seekType, consistentType);
+
             return this;
         }
 
@@ -74,11 +90,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (_hashTable == null)
             {
                 _hashTable = Source.Execute(dataSources, options, parameterTypes, parameterValues)
-                    .GroupBy(e => e[KeyColumn])
+                    .GroupBy(e => _keySelector((INullable)e[KeyColumn]))
                     .ToDictionary(g => g.Key, g => g.ToList());
             }
 
-            var keyValue = parameterValues[SeekValue];
+            var keyValue = _seekSelector((INullable)parameterValues[SeekValue]);
 
             if (!_hashTable.TryGetValue(keyValue, out var matches))
                 return Array.Empty<Entity>();
@@ -97,7 +113,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 Source = (IDataExecutionPlanNodeInternal)Source.Clone(),
                 KeyColumn = KeyColumn,
-                SeekValue = SeekValue
+                SeekValue = SeekValue,
+                _keySelector = _keySelector,
+                _seekSelector = _seekSelector
             };
 
             clone.Source.Parent = clone;

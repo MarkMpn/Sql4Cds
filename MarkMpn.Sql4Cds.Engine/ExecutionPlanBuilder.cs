@@ -2029,7 +2029,7 @@ namespace MarkMpn.Sql4Cds.Engine
                             innerQuery.Source = computeScalar;
                         }
 
-                        computeScalar.Columns[innerSchema.PrimaryKey] = new IntegerLiteral { Value = "1" };
+                        computeScalar.Columns[innerSchemaPrimaryKey] = new IntegerLiteral { Value = "1" };
                     }
 
                     var definedValue = $"Expr{++_colNameCounter}";

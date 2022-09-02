@@ -619,7 +619,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         Expression = indexColumn.ToColumnReference(),
                         IsNot = true
                     }
-                }.FoldQuery(dataSources, options, parameterTypes, hints);
+                };
             }
 
             Source = new IndexSpoolNode
@@ -627,7 +627,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Source = spoolSource,
                 KeyColumn = indexColumn,
                 SeekValue = seekVariable
-            };
+            }.FoldQuery(dataSources, options, parameterTypes, hints);
 
             Filter = filter;
             return true;
