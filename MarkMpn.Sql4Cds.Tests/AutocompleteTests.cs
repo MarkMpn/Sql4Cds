@@ -305,5 +305,25 @@ namespace MarkMpn.Sql4Cds.Tests
 
             CollectionAssert.AreEqual(new[] { "OutputParam1", "OutputParam2" }, suggestions);
         }
+
+        [TestMethod]
+        public void SuggestSprocNames()
+        {
+            var sql = "EXEC sam";
+
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1).Select(s => s.Text).ToList();
+
+            CollectionAssert.AreEqual(new[] { "SampleMessage" }, suggestions);
+        }
+
+        [TestMethod]
+        public void SuggestSprocParameters()
+        {
+            var sql = "SampleMessage @";
+
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1).Select(s => s.Text).ToList();
+
+            CollectionAssert.AreEqual(new[] { "@OutputParam1", "@OutputParam2", "@StringParam" }, suggestions);
+        }
     }
 }

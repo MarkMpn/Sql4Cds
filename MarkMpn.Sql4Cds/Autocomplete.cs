@@ -83,6 +83,10 @@ namespace MarkMpn.Sql4Cds
                 case "into":
                     return AutocompleteTableName(currentWord, prevWord.Equals("from", StringComparison.OrdinalIgnoreCase));
 
+                case "exec":
+                case "execute":
+                    return AutocompleteSprocName(currentWord);
+
                 default:
                     // Find the FROM clause
                     var words = new List<string>();
@@ -108,6 +112,7 @@ namespace MarkMpn.Sql4Cds
                             case "delete":
                                 foundPossibleFrom = true;
                                 foundQueryStart = true;
+                                clause = clause ?? word.ToLower();
                                 break;
 
                             case "join":
@@ -143,6 +148,12 @@ namespace MarkMpn.Sql4Cds
                                 clause = clause ?? "insert";
                                 foundQueryStart = true;
                                 foundFrom = true;
+                                break;
+
+                            case "exec":
+                            case "execute":
+                                clause = clause ?? "exec";
+                                foundQueryStart = true;
                                 break;
 
                             default:
@@ -272,6 +283,26 @@ namespace MarkMpn.Sql4Cds
                         {
                             if (TryParseTableName(table, out var instanceName, out _, out var tableName) && _dataSources.TryGetValue(instanceName, out var instance) && instance.Entities.Any(e => e.LogicalName.Equals(tableName, StringComparison.OrdinalIgnoreCase) && e.DataProviderId != MetaMetadataCache.ProviderId))
                                 instance.Metadata.TryGetMinimalData(table, out _);
+                        }
+                    }
+
+                    if ((clause == "exec" || clause == null) && (words.Count == 2 || words[words.Count - 1].EndsWith(",")))
+                    {
+                        // Suggest parameter names
+                        var sprocName = words[0];
+
+                        if (TryParseTableName(sprocName, out var instanceName, out var schemaName, out sprocName) &&
+                            _dataSources.TryGetValue(instanceName, out var instance) &&
+                            schemaName.Equals("dbo", StringComparison.OrdinalIgnoreCase) &&
+                            instance.Messages.TryGetValue(sprocName, out var message) &&
+                            message.IsValidAsStoredProcedure())
+                        {
+                            var availableParameters = message.InputParameters
+                                .Concat(message.OutputParameters)
+                                .OrderBy(p => p.Name)
+                                .Select(p => new SprocParameterAutocompleteItem(message, p, currentLength));
+
+                            return FilterList(availableParameters, currentWord);
                         }
                     }
 
@@ -741,6 +772,49 @@ namespace MarkMpn.Sql4Cds
             return list;
         }
 
+        private IEnumerable<SqlAutocompleteItem> AutocompleteSprocName(string currentWord)
+        {
+            var currentLength = currentWord.Length;
+            var list = new List<SqlAutocompleteItem>();
+
+            if (String.IsNullOrEmpty(currentWord))
+            {
+                // If there's multiple instances, show them
+                if (_dataSources.Count > 1)
+                    list.AddRange(_dataSources.Values.Select(x => new InstanceAutocompleteItem(x, currentLength)));
+
+                if (_dataSources.TryGetValue(_primaryDataSource, out var ds) && ds.Messages != null)
+                    list.AddRange(ds.Messages.GetAllMessages().Where(x => x.IsValidAsStoredProcedure()).Select(x => new TVFAutocompleteItem(x, currentLength)));
+            }
+            else if (TryParseTableName(currentWord, out var instanceName, out var schemaName, out var tableName, out var parts, out var lastPartLength))
+            {
+                var lastPart = tableName;
+
+                if (parts == 1)
+                {
+                    // Could be an instance name
+                    list.AddRange(_dataSources.Values.Where(x => x.Name.StartsWith(lastPart, StringComparison.OrdinalIgnoreCase)).Select(x => new InstanceAutocompleteItem(x, lastPartLength)));
+                }
+
+                if (parts == 1 || parts == 2)
+                {
+                    // Could be a schema name
+                    if ("dbo".StartsWith(lastPart, StringComparison.OrdinalIgnoreCase))
+                        list.Add(new SchemaAutocompleteItem("dbo", lastPartLength));
+
+                    if ("metadata".StartsWith(lastPart, StringComparison.OrdinalIgnoreCase))
+                        list.Add(new SchemaAutocompleteItem("metadata", lastPartLength));
+                }
+
+                // Could be a sproc name
+                if (schemaName.Equals("dbo", StringComparison.OrdinalIgnoreCase) && _dataSources.TryGetValue(instanceName, out var instance) && instance.Messages != null)
+                    list.AddRange(instance.Messages.GetAllMessages().Where(x => x.IsValidAsStoredProcedure()).Select(e => new TVFAutocompleteItem(e, lastPartLength)));
+            }
+
+            list.Sort();
+            return list;
+        }
+
         private bool TryParseTableName(string input, out string instanceName, out string schemaName, out string tableName)
         {
             return TryParseTableName(input, out instanceName, out schemaName, out tableName, out _, out _);
@@ -862,7 +936,7 @@ namespace MarkMpn.Sql4Cds
 
             for (var i = start; i < text.Length; i++)
             {
-                if (!inQuote && (Char.IsWhiteSpace(text[i]) || (Char.IsPunctuation(text[i]) && text[i] != '.' && text[i] != '_' && text[i] != '[' && text[i] != ']')))
+                if (!inQuote && (Char.IsWhiteSpace(text[i]) || (Char.IsPunctuation(text[i]) && text[i] != '.' && text[i] != '_' && text[i] != '[' && text[i] != ']' && text[i] != '@')))
                 {
                     if (inWord)
                     {
@@ -906,7 +980,7 @@ namespace MarkMpn.Sql4Cds
 
             for (var i = end; i >= 0; i--)
             {
-                if (!inQuote && (Char.IsWhiteSpace(text[i]) || (Char.IsPunctuation(text[i]) && text[i] != '.' && text[i] != '_' && text[i] != '[' && text[i] != ']')))
+                if (!inQuote && (Char.IsWhiteSpace(text[i]) || (Char.IsPunctuation(text[i]) && text[i] != '.' && text[i] != '_' && text[i] != '[' && text[i] != ']' && text[i] != '@')))
                 {
                     if (inWord)
                     {
@@ -1349,6 +1423,52 @@ namespace MarkMpn.Sql4Cds
             public override string GetTextForReplace()
             {
                 return _message.Name + "(" + (_message.InputParameters.Count == 0 ? ")" : "");
+            }
+        }
+
+        class SprocAutocompleteItem : SqlAutocompleteItem
+        {
+            private readonly Message _message;
+
+            public SprocAutocompleteItem(Message message, int replaceLength) : base(message.Name, replaceLength, 26)
+            {
+                _message = message;
+            }
+
+            public override string ToolTipTitle
+            {
+                get => _message.Name + " SDK Message";
+                set => base.ToolTipTitle = value;
+            }
+
+            public override string ToolTipText
+            {
+                get => _message.Name + " " + String.Join(", ", _message.InputParameters.Select(p => (p.Optional ? "[" : "") + "@" + p.Name + " = " + p.Type.Name + (p.Optional ? "]" : "")));
+                set => base.ToolTipText = value;
+            }
+        }
+
+        class SprocParameterAutocompleteItem : SqlAutocompleteItem
+        {
+            private readonly Message _message;
+            private readonly MessageParameter _parameter;
+
+            public SprocParameterAutocompleteItem(Message message, MessageParameter parameter, int replaceLength) : base("@" + parameter.Name, replaceLength, 26)
+            {
+                _message = message;
+                _parameter = parameter;
+            }
+
+            public override string ToolTipTitle
+            {
+                get => _parameter.Name + (_message.OutputParameters.Contains(_parameter) ? " output" : " input") + " parameter (" + _parameter.Type.Name + ")";
+                set => base.ToolTipTitle = value;
+            }
+
+            public override string ToolTipText
+            {
+                get => _message.Name + " " + String.Join(", ", _message.InputParameters.Select(p => (p.Optional ? "[" : "") + "@" + p.Name + " = " + p.Type.Name + (p.Optional ? "]" : "")));
+                set => base.ToolTipText = value;
             }
         }
 

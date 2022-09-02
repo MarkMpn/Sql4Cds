@@ -60,7 +60,7 @@ namespace AutocompleteMenuNS
             MaximumSize = new Size(180, 200);
             AutoPopup = true;
 
-            SearchPattern = @"[\w\.]";
+            SearchPattern = @"[\w\.\@]";
             MinFragmentLength = 2;
         }
 
@@ -524,7 +524,8 @@ namespace AutocompleteMenuNS
                     (e.KeyCode < Keys.D0 || e.KeyCode > Keys.D9) &&
                     (e.KeyCode < Keys.NumPad0 || e.KeyCode > Keys.NumPad9) &&
                     e.KeyCode != Keys.OemMinus &&
-                    e.KeyCode != Keys.OemPeriod)
+                    e.KeyCode != Keys.OemPeriod &&
+                    e.KeyCode != Keys.Oem3)
                 {
                     timer.Stop();
                     return;
