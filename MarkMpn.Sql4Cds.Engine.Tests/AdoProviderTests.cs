@@ -785,7 +785,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 stopwatch.Start();
                 cmd.ExecuteNonQuery();
                 stopwatch.Stop();
-                Assert.IsTrue(stopwatch.ElapsedMilliseconds < 100);
+                Assert.IsTrue(stopwatch.ElapsedMilliseconds < 100, "Inserting record expected to take <100ms, actually took " + stopwatch.Elapsed);
 
                 cmd.CommandText = "WAITFOR DELAY '00:00:02'; INSERT INTO contact (firstname, lastname) VALUES ('Mark', 'Carrington');";
                 cmd.ExecuteNonQuery();
@@ -793,7 +793,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 stopwatch.Restart();
                 cmd.ExecuteNonQuery();
                 stopwatch.Stop();
-                Assert.IsTrue(stopwatch.ElapsedMilliseconds > 2000 && stopwatch.ElapsedMilliseconds < 2100);
+                Assert.IsTrue(stopwatch.ElapsedMilliseconds > 2000 && stopwatch.ElapsedMilliseconds < 2100, "WAITFOR + INSERT expected to take 2.0s - 2.1s, actually took " + stopwatch.Elapsed);
             }
         }
 
