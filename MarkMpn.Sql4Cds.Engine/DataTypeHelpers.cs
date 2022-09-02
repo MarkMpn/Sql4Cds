@@ -378,6 +378,48 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             return DataTypeComparer.Instance.Equals(x, y);
         }
+
+        /// <summary>
+        /// Parses a data type from a string
+        /// </summary>
+        /// <param name="value">The string representation of the data type to parse</param>
+        /// <param name="parsedType">The data type that has been parsed from the <paramref name="value"/></param>
+        /// <returns><c>true</c> if the <paramref name="value"/> could be successfully parsed, or <c>false</c> otherwise</returns>
+        public static bool TryParse(string value, out DataTypeReference parsedType)
+        {
+            parsedType = null;
+
+            var name = value;
+            var parameters = new List<Literal>();
+            var parenStart = value.IndexOf('(');
+            if (parenStart != -1)
+            {
+                name = value.Substring(0, parenStart).Trim();
+
+                if (!value.EndsWith(")"))
+                    return false;
+
+                var parts = value.Substring(parenStart + 1, value.Length - parenStart - 2).Split(',');
+
+                foreach (var part in parts)
+                {
+                    if (!Int32.TryParse(part, out var paramValue))
+                        return false;
+
+                    parameters.Add(new IntegerLiteral { Value = part });
+                }
+            }
+
+            if (!Enum.TryParse<SqlDataTypeOption>(name, true, out var sqlType))
+                return false;
+
+            parsedType = new SqlDataTypeReference { SqlDataTypeOption = sqlType };
+
+            foreach (var param in parameters)
+                ((SqlDataTypeReference)parsedType).Parameters.Add(param);
+
+            return true;
+        }
     }
 
     /// <summary>

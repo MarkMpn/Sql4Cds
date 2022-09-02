@@ -64,6 +64,11 @@ namespace MarkMpn.Sql4Cds.Engine
             }
         }
 
+        internal void SetOutputValue(INullable value)
+        {
+            _value = SqlTypeConverter.SqlToNetType(value);
+        }
+
         public override void ResetDbType()
         {
             _type = null;
@@ -254,6 +259,9 @@ namespace MarkMpn.Sql4Cds.Engine
         internal INullable GetValue()
         {
             var value = Value;
+
+            if (value == null)
+                return SqlTypeConverter.GetNullValue(GetDataType().ToNetType(out _));
 
             if (value is char ch)
                 value = new string(ch, 1);

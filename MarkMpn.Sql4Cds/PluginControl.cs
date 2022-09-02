@@ -112,7 +112,8 @@ namespace MarkMpn.Sql4Cds
                     Connection = GetNewServiceClient(con),
                     Metadata = metadata,
                     TableSizeCache = new TableSizeCache(GetNewServiceClient(con), metadata),
-                    Name = con.ConnectionName
+                    Name = con.ConnectionName,
+                    MessageCache = new MessageCache(GetNewServiceClient(con))
                 };
             }
 
@@ -423,7 +424,7 @@ namespace MarkMpn.Sql4Cds
             }
         }
 
-        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        protected override bool ProcessCmdKey(ref System.Windows.Forms.Message msg, Keys keyData)
         {
             if (keyData == (Keys.Control | Keys.S))
                 tsbSave.PerformClick();

@@ -48,13 +48,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             SqlDataTypeOption.Binary,
         };
 
-        private static readonly IDictionary<Type, object> _nullValues;
+        private static readonly IDictionary<Type, INullable> _nullValues;
         private static readonly CultureInfo _hijriCulture;
         private static ConcurrentDictionary<string, Func<object, object>> _conversions;
+        private static Dictionary<Type, Type> _netToSqlTypeConversions;
+        private static Dictionary<Type, Func<string, object, DataTypeReference, INullable>> _netToSqlTypeConversionFuncs;
+        private static Dictionary<Type, Type> _sqlToNetTypeConversions;
+        private static Dictionary<Type, Func<INullable, object>> _sqlToNetTypeConversionFuncs;
 
         static SqlTypeConverter()
         {
-            _nullValues = new Dictionary<Type, object>
+            _nullValues = new Dictionary<Type, INullable>
             {
                 [typeof(SqlBinary)] = SqlBinary.Null,
                 [typeof(SqlBoolean)] = SqlBoolean.Null,
@@ -81,6 +85,97 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _hijriCulture.DateTimeFormat.Calendar = new HijriCalendar();
 
             _conversions = new ConcurrentDictionary<string, Func<object, object>>();
+
+            _netToSqlTypeConversions = new Dictionary<Type, Type>();
+            _netToSqlTypeConversionFuncs = new Dictionary<Type, Func<string, object, DataTypeReference, INullable>>();
+            _sqlToNetTypeConversions = new Dictionary<Type, Type>();
+            _sqlToNetTypeConversionFuncs = new Dictionary<Type, Func<INullable, object>>();
+
+            // https://docs.microsoft.com/en-us/dotnet/framework/data/adonet/sql-server-data-type-mappings
+            AddNullableTypeConversion<SqlBinary, byte[]>((ds, v, dt) => v, v => v.Value);
+            AddTypeConversion<SqlBoolean, bool>((ds, v, dt) => v, v => v.Value);
+            AddTypeConversion<SqlByte, byte>((ds, v, dt) => v, v => v.Value);
+            AddTypeConversion<SqlDateTime, DateTime>((ds, v, dt) => v, v => v.Value);
+            AddTypeConversion<SqlDecimal, decimal>((ds, v, dt) => SqlDecimal.ConvertToPrecScale(v, dt.GetPrecision(), dt.GetScale()), v => v.Value);
+            AddTypeConversion<SqlDouble, double>((ds, v, dt) => v, v => v.Value);
+            AddTypeConversion<SqlGuid, Guid>((ds, v, dt) => v, v => v.Value);
+            AddTypeConversion<SqlInt16, short>((ds, v, dt) => v, v => v.Value);
+            AddTypeConversion<SqlInt32, int>((ds, v, dt) => v, v => v.Value);
+            AddTypeConversion<SqlInt64, long>((ds, v, dt) => v, v => v.Value);
+            AddTypeConversion<SqlSingle, float>((ds, v, dt) => v, v => v.Value);
+            AddNullableTypeConversion<SqlString, string>((ds, v, dt) => UseDefaultCollation(v), v => v.Value);
+            AddTypeConversion<SqlMoney, decimal>((ds, v, dt) => v, v => v.Value);
+            AddTypeConversion<SqlDate, DateTime>((ds, v, dt) => (SqlDateTime)v, v => v.Value);
+            AddTypeConversion<SqlDateTime2, DateTime>((ds, v, dt) => (SqlDateTime)v, v => v.Value);
+            AddTypeConversion<SqlDateTimeOffset, DateTimeOffset>((ds, v, dt) => new SqlDateTimeOffset(v), v => v.Value);
+            AddTypeConversion<SqlTime, TimeSpan>((ds, v, dt) => new SqlTime(v), v => v.Value);
+
+            AddNullableTypeConversion<SqlMoney, Money>((ds, v, dt) => v.Value, null);
+            AddNullableTypeConversion<SqlInt32, OptionSetValue>((ds, v, dt) => v.Value, null);
+            AddNullableTypeConversion<SqlString, OptionSetValueCollection>((ds, v, dt) => UseDefaultCollation(String.Join(",", v.Select(osv => osv.Value))), null);
+            AddNullableTypeConversion<SqlString, EntityCollection>((ds, v, dt) => UseDefaultCollation(String.Join(",", v.Entities.Select(e => FormatEntityCollectionEntry(e)))), null);
+            AddNullableTypeConversion<SqlEntityReference, EntityReference>((ds, v, dt) => new SqlEntityReference(ds, v), v => v);
+        }
+
+        private static void AddTypeConversion<TSql, TNet>(Func<string, TNet, DataTypeReference, TSql> netToSql, Func<TSql, TNet> sqlToNet)
+            where TSql: INullable
+            where TNet: struct
+        {
+            if (netToSql != null)
+            {
+                if (!_netToSqlTypeConversions.ContainsKey(typeof(TNet)))
+                {
+                    _netToSqlTypeConversions[typeof(TNet)] = typeof(TSql);
+                    _netToSqlTypeConversionFuncs[typeof(TNet)] = (ds, v, dt) => netToSql(ds, (TNet)v, dt);
+                }
+
+                var nullValue = _nullValues[typeof(TSql)];
+
+                if (!_netToSqlTypeConversions.ContainsKey(typeof(TNet?)))
+                {
+                    _netToSqlTypeConversions[typeof(TNet?)] = typeof(TSql);
+                    _netToSqlTypeConversionFuncs[typeof(TNet?)] = (ds, v, dt) => v == null ? nullValue : netToSql(ds, (TNet)v, dt);
+                }
+
+                if (!_netToSqlTypeConversions.ContainsKey(typeof(ManagedProperty<TNet>)))
+                {
+                    _netToSqlTypeConversions[typeof(ManagedProperty<TNet>)] = typeof(TSql);
+                    _netToSqlTypeConversionFuncs[typeof(ManagedProperty<TNet>)] = (ds, v, dt) => v == null ? nullValue : netToSql(ds, ((ManagedProperty<TNet>)v).Value, dt);
+                }
+            }
+
+            if (sqlToNet != null && !_sqlToNetTypeConversions.ContainsKey(typeof(TSql)))
+            {
+                _sqlToNetTypeConversions[typeof(TSql)] = typeof(TNet);
+                _sqlToNetTypeConversionFuncs[typeof(TSql)] = v => sqlToNet((TSql)v);
+            }
+        }
+
+        private static void AddNullableTypeConversion<TSql, TNet>(Func<string, TNet, DataTypeReference, TSql> netToSql, Func<TSql, TNet> sqlToNet)
+            where TSql : INullable
+        {
+            if (netToSql != null)
+            {
+                if (!_netToSqlTypeConversions.ContainsKey(typeof(TNet)))
+                {
+                    _netToSqlTypeConversions[typeof(TNet)] = typeof(TSql);
+                    _netToSqlTypeConversionFuncs[typeof(TNet)] = (ds, v, dt) => netToSql(ds, (TNet)v, dt);
+                }
+
+                var nullValue = _nullValues[typeof(TSql)];
+
+                if (!_netToSqlTypeConversions.ContainsKey(typeof(ManagedProperty<TNet>)))
+                {
+                    _netToSqlTypeConversions[typeof(ManagedProperty<TNet>)] = typeof(TSql);
+                    _netToSqlTypeConversionFuncs[typeof(ManagedProperty<TNet>)] = (ds, v, dt) => v == null ? nullValue : netToSql(ds, ((ManagedProperty<TNet>)v).Value, dt);
+                }
+            }
+
+            if (sqlToNet != null && !_sqlToNetTypeConversions.ContainsKey(typeof(TSql)))
+            {
+                _sqlToNetTypeConversions[typeof(TSql)] = typeof(TNet);
+                _sqlToNetTypeConversionFuncs[typeof(TSql)] = v => sqlToNet((TSql)v);
+            }
         }
 
         /// <summary>
@@ -854,47 +949,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <returns>The equivalent SQL type</returns>
         public static Type NetToSqlType(Type type)
         {
-            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
-                type = type.GetGenericArguments()[0];
-
-            if (type.BaseType != null && type.BaseType.IsGenericType && type.BaseType.GetGenericTypeDefinition() == typeof(ManagedProperty<>))
-                type = type.BaseType.GetGenericArguments()[0];
-
-            if (type == typeof(byte[]))
-                return typeof(SqlBinary);
-
-            if (type == typeof(bool))
-                return typeof(SqlBoolean);
-
-            if (type == typeof(byte))
-                return typeof(SqlByte);
-
-            if (type == typeof(DateTime))
-                return typeof(SqlDateTime);
-
-            if (type == typeof(decimal))
-                return typeof(SqlDecimal);
-
-            if (type == typeof(double))
-                return typeof(SqlDouble);
-
-            if (type == typeof(Guid))
-                return typeof(SqlGuid);
-
-            if (type == typeof(short))
-                return typeof(SqlInt16);
-
-            if (type == typeof(int))
-                return typeof(SqlInt32);
-
-            if (type == typeof(long))
-                return typeof(SqlInt64);
-
-            if (type == typeof(float))
-                return typeof(SqlSingle);
-
-            if (type == typeof(string))
-                return typeof(SqlString);
+            if (_netToSqlTypeConversions.TryGetValue(type, out var sqlType))
+                return sqlType;
 
             // Convert any other complex types (e.g. from metadata queries) to strings
             return typeof(SqlString);
@@ -907,68 +963,39 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="value">The value in a standard CLR type</param>
         /// <param name="dataType">The expected data type</param>
         /// <returns>The value converted to a SQL type</returns>
-        public static object NetToSqlType(string dataSource, object value, DataTypeReference dataType)
+        public static INullable NetToSqlType(string dataSource, object value, DataTypeReference dataType)
         {
-            if (value != null)
-            {
-                var type = value.GetType();
-                if (type.BaseType != null && type.BaseType.IsGenericType && type.BaseType.GetGenericTypeDefinition() == typeof(ManagedProperty<>))
-                    value = type.GetProperty("Value").GetValue(value);
-            }
-
-            if (value is byte[] bin)
-                return new SqlBinary(bin);
-
-            if (value is bool b)
-                return new SqlBoolean(b);
-
-            if (value is byte by)
-                return new SqlByte(by);
-
-            if (value is DateTime dt)
-                return new SqlDateTime(dt);
-
-            if (value is decimal dec)
-                return SqlDecimal.ConvertToPrecScale(dec, dataType.GetPrecision(), dataType.GetScale());
-
-            if (value is double dbl)
-                return new SqlDouble(dbl);
-
-            if (value is Guid g)
-                return new SqlGuid(g);
-
-            if (value is short s)
-                return new SqlInt16(s);
-
-            if (value is int i)
-                return new SqlInt32(i);
-
-            if (value is long l)
-                return new SqlInt64(l);
-
-            if (value is float f)
-                return new SqlSingle(f);
-
-            if (value is string str)
-                return new SqlString(str, CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace);
-
-            if (value is Money m)
-                return new SqlMoney(m.Value);
-
-            if (value is OptionSetValue osv)
-                return new SqlInt32(osv.Value);
-
-            if (value is OptionSetValueCollection osvc)
-                return new SqlString(String.Join(",", osvc.Select(v => v.Value)), CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace);
-
-            if (value is EntityCollection coll)
-                return new SqlString(String.Join(",", coll.Entities.Select(e => FormatEntityCollectionEntry(e))), CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace);
-
-            if (value is EntityReference er)
-                return new SqlEntityReference(dataSource, er);
+            if (_netToSqlTypeConversionFuncs.TryGetValue(value.GetType(), out var func))
+                return func(dataSource, value, dataType);
 
             // Convert any other complex types (e.g. from metadata queries) to strings
             return new SqlString(value.ToString(), CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace);
+        }
+
+        /// <summary>
+        /// Converts a SQL type to the equivalent standard CLR type
+        /// </summary>
+        /// <param name="type">The SQL type to convert from</param>
+        /// <returns>The equivalent CLR type</returns>
+        public static Type SqlToNetType(Type type)
+        {
+            if (_sqlToNetTypeConversions.TryGetValue(type, out var netType))
+                return netType;
+
+            throw new ArgumentOutOfRangeException("Unsupported type " + type.FullName);
+        }
+
+        /// <summary>
+        /// Converts a value from a SQL type to the equivalent CLR type
+        /// </summary>
+        /// <param name="value">The value in a SQL type</param>
+        /// <returns>The value converted to a CLR type</returns>
+        public static object SqlToNetType(INullable value)
+        {
+            if (_sqlToNetTypeConversionFuncs.TryGetValue(value.GetType(), out var func))
+                return func(value);
+
+            throw new ArgumentOutOfRangeException("Unsupported type " + value.GetType().FullName);
         }
 
         private static string FormatEntityCollectionEntry(Entity e)
@@ -992,7 +1019,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         /// <param name="sqlType">The SQL type to get the null value for</param>
         /// <returns>The null value for the requested SQL type</returns>
-        public static object GetNullValue(Type sqlType)
+        public static INullable GetNullValue(Type sqlType)
         {
             return _nullValues[sqlType];
         }
@@ -1064,6 +1091,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 expression = Expression.Convert(expression, destType);
             }
+
+            if (destType == typeof(SqlString))
+                expression = Expr.Call(() => UseDefaultCollation(Expr.Arg<SqlString>()), expression);
 
             expression = Expression.Convert(expression, typeof(object));
             return Expression.Lambda<Func<object,object>>(expression, param).Compile();

@@ -58,6 +58,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 Close();
         }
 
+        internal Dictionary<string, object> ParameterValues => _parameterValues;
+
         private bool Execute(Dictionary<string, DataTypeReference> parameterTypes, Dictionary<string, object> parameterValues)
         {
             try

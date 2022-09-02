@@ -9,6 +9,7 @@
     <Import_RootNamespace>MarkMpn.Sql4Cds.Engine.FetchXml</Import_RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)DatabaseIdentifiers.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ScriptDom.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)AttributeMetadataCache.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DisconnectedException.cs" />

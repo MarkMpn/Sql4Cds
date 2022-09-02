@@ -44,6 +44,7 @@ namespace MarkMpn.Sql4Cds.Engine
             Metadata = new AttributeMetadataCache(org);
             Name = name;
             TableSizeCache = new TableSizeCache(org, Metadata);
+            MessageCache = new MessageCache(org);
         }
 
         /// <summary>
@@ -72,5 +73,10 @@ namespace MarkMpn.Sql4Cds.Engine
         /// A cache of the number of records in each table in the instance
         /// </summary>
         public ITableSizeCache TableSizeCache { get; set; }
+
+        /// <summary>
+        /// A cache of the messages that the instance supports
+        /// </summary>
+        public IMessageCache MessageCache { get; set; }
     }
 }

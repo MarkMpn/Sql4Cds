@@ -133,6 +133,15 @@ namespace MarkMpn.Sql4Cds.Engine
                 };
             }
 
+            if (fragment is MaxLiteral max)
+            {
+                return (T)(object)new MaxLiteral
+                {
+                    Collation = max.Collation.Clone(),
+                    Value = max.Value
+                };
+            }
+
             if (fragment is BooleanBinaryExpression boolBin)
             {
                 return (T)(object)new BooleanBinaryExpression

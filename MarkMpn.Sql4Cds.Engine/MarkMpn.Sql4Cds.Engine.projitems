@@ -25,6 +25,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)Ado\SqlDataReaderWrapper.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Ado\StatementCompletedEventArgs.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)AttributeMetadataCache.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)DatabaseIdentifiers.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DataSource.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DataTypeHelpers.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DisconnectedException.cs" />
@@ -51,6 +52,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\DistinctEqualityComparer.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\DistinctNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ExecuteAsNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ExecuteMessageNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ExpressionExtensions.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\FetchXmlScan.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\FilterNode.cs" />
@@ -105,6 +107,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)FetchXmlExtensions.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)IAttributeMetadataCache.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)IQueryExecutionOptions.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)MessageCache.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)SqlDateTypes.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\JoinConditionVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)MetadataExtensions.cs" />

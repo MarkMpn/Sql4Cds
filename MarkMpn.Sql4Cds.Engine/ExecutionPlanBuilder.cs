@@ -21,8 +21,8 @@ namespace MarkMpn.Sql4Cds.Engine
         private int _colNameCounter;
         private IDictionary<string, DataTypeReference> _parameterTypes;
 
-        public ExecutionPlanBuilder(IAttributeMetadataCache metadata, ITableSizeCache tableSize, IQueryExecutionOptions options)
-            : this(new[] { new DataSource { Name = "local", Metadata = metadata, TableSizeCache = tableSize } }, options)
+        public ExecutionPlanBuilder(IAttributeMetadataCache metadata, ITableSizeCache tableSize, IMessageCache messageCache, IQueryExecutionOptions options)
+            : this(new[] { new DataSource { Name = "local", Metadata = metadata, TableSizeCache = tableSize, MessageCache = messageCache } }, options)
         {
         }
 
@@ -198,6 +198,8 @@ namespace MarkMpn.Sql4Cds.Engine
                 plans = new[] { ConvertContinueStatement(continueStmt) };
             else if (statement is WaitForStatement waitFor)
                 plans = new[] { ConvertWaitForStatement(waitFor) };
+            else if (statement is ExecuteStatement execute)
+                plans = ConvertExecuteStatement(execute);
             else
                 throw new NotSupportedQueryFragmentException("Unsupported statement", statement);
 
@@ -218,6 +220,132 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 queries.AddRange(optimized);
             }
+        }
+
+        private IRootExecutionPlanNodeInternal[] ConvertExecuteStatement(ExecuteStatement execute)
+        {
+            var nodes = new List<IRootExecutionPlanNodeInternal>();
+
+            if (execute.Options != null && execute.Options.Count > 0)
+                throw new NotSupportedQueryFragmentException("EXECUTE option is not supported", execute.Options[0]);
+
+            if (execute.ExecuteSpecification.ExecuteContext != null)
+                throw new NotSupportedQueryFragmentException("EXECUTE option is not supported", execute.ExecuteSpecification.ExecuteContext);
+
+            if (!(execute.ExecuteSpecification.ExecutableEntity is ExecutableProcedureReference sproc))
+                throw new NotSupportedQueryFragmentException("EXECUTE can only be used to execute messages as stored procedures", execute.ExecuteSpecification.ExecutableEntity);
+
+            if (sproc.AdHocDataSource != null)
+                throw new NotSupportedQueryFragmentException("Ad-hoc data sources are not supported", sproc.AdHocDataSource);
+
+            if (sproc.ProcedureReference.ProcedureVariable != null)
+                throw new NotSupportedQueryFragmentException("Variable stored procedure names are not supported", sproc.ProcedureReference.ProcedureVariable);
+
+            var dataSource = SelectDataSource(sproc.ProcedureReference.ProcedureReference.Name);
+
+            var node = ExecuteMessageNode.FromMessage(sproc, dataSource, _parameterTypes);
+            var schema = node.GetSchema(DataSources, _parameterTypes);
+
+            dataSource.MessageCache.TryGetValue(node.MessageName, out var message);
+
+            var outputParams = sproc.Parameters.Where(p => p.IsOutput).ToList();
+
+            foreach (var outputParam in outputParams)
+            {
+                if (!message.OutputParameters.Any(p => p.IsScalarType() && p.Name.Equals(outputParam.Variable.Name.Substring(1), StringComparison.OrdinalIgnoreCase)))
+                    throw new NotSupportedQueryFragmentException("Unknown parameter", outputParam.Variable);
+            }
+
+            if (message.OutputParameters.Count == 0 || outputParams.Count == 0)
+            {
+                if (message.OutputParameters.Any(p => !p.IsScalarType()))
+                {
+                    // Expose the produced data set
+                    var select = new SelectNode { Source = node };
+
+                    foreach (var col in schema.Schema.Keys.OrderBy(col => col))
+                        select.ColumnSet.Add(new SelectColumn { SourceColumn = col, OutputColumn = col });
+
+                    nodes.Add(select);
+                }
+                else
+                {
+                    nodes.Add(node);
+                }
+            }
+            else
+            {
+                // Capture scalar output variables
+                var assignVariablesNode = new AssignVariablesNode { Source = node };
+
+                foreach (var outputParam in outputParams)
+                {
+                    var sourceCol = outputParam.Variable.Name.Substring(1);
+
+                    if (!schema.ContainsColumn(sourceCol, out sourceCol))
+                        throw new NotSupportedQueryFragmentException("Unknown parameter", outputParam);
+
+                    if (!(outputParam.ParameterValue is VariableReference targetVariable))
+                        throw new NotSupportedQueryFragmentException("Value must be a variable", outputParam.ParameterValue);
+
+                    if (!_parameterTypes.TryGetValue(targetVariable.Name, out var targetVariableType))
+                        throw new NotSupportedQueryFragmentException("Undeclared variable", targetVariable);
+
+                    var sourceType = schema.Schema[sourceCol];
+
+                    if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, targetVariableType))
+                        throw new NotSupportedQueryFragmentException($"Cannot convert value of type '{sourceType.ToSql()}' to '{targetVariableType.ToSql()}'", outputParam);
+
+                    assignVariablesNode.Variables.Add(new VariableAssignment
+                    {
+                        SourceColumn = sourceCol,
+                        VariableName = targetVariable.Name
+                    });
+                }
+
+                nodes.Add(assignVariablesNode);
+            }
+
+            // Capture single return values in execute.ExecuteSpecification.Variable
+            if (execute.ExecuteSpecification.Variable != null)
+            {
+                // Variable should be set to 1 when sproc executes successfully.
+                if (!_parameterTypes.TryGetValue(execute.ExecuteSpecification.Variable.Name, out var returnStatusType))
+                    throw new NotSupportedQueryFragmentException("Undeclared variable", execute.ExecuteSpecification.Variable);
+
+                if (!SqlTypeConverter.CanChangeTypeImplicit(DataTypeHelpers.Int, returnStatusType))
+                    throw new NotSupportedQueryFragmentException($"Cannot assign int value to {returnStatusType.ToSql()} variable", execute.ExecuteSpecification.Variable);
+
+                var constName = $"Expr{_colNameCounter++}";
+
+                nodes.Add(new AssignVariablesNode
+                {
+                    Variables =
+                    {
+                        new VariableAssignment
+                        {
+                            VariableName = execute.ExecuteSpecification.Variable.Name,
+                            SourceColumn = constName
+                        }
+                    },
+                    Source = new ConstantScanNode
+                    {
+                        Schema =
+                        {
+                            [constName] = DataTypeHelpers.Int
+                        },
+                        Values =
+                        {
+                            new Dictionary<string, ScalarExpression>
+                            {
+                                [constName] = new IntegerLiteral { Value = "1" }
+                            }
+                        }
+                    }
+                });
+            }
+
+            return nodes.ToArray();
         }
 
         private IRootExecutionPlanNodeInternal ConvertWaitForStatement(WaitForStatement waitFor)
@@ -2386,7 +2514,7 @@ namespace MarkMpn.Sql4Cds.Engine
             // We're in a subquery. Check if any columns in the WHERE clause are from the outer query
             // so we know which columns to pass through and rewrite the filter to use parameters
             var rewrites = new Dictionary<ScalarExpression, ScalarExpression>();
-            var innerSchema = source.GetSchema(DataSources, parameterTypes);
+            var innerSchema = source?.GetSchema(DataSources, parameterTypes);
             var columns = query.GetColumns();
 
             foreach (var column in columns)
@@ -2394,7 +2522,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 // Column names could be ambiguous between the inner and outer data sources. The inner
                 // data source is used in preference.
                 // Ref: https://docs.microsoft.com/en-us/sql/relational-databases/performance/subqueries?view=sql-server-ver15#qualifying
-                var fromInner = innerSchema.ContainsColumn(column, out _);
+                var fromInner = innerSchema?.ContainsColumn(column, out _) == true;
 
                 if (fromInner)
                     continue;
@@ -2847,7 +2975,12 @@ namespace MarkMpn.Sql4Cds.Engine
                 lastCorrelatedStep = filter;
             }
 
-            if (lastCorrelatedStep == null)
+            if (lastCorrelatedStep?.Source == null)
+                return;
+
+            // If the last correlated step has a source which we couldn't step into because it's not an ISingleSourceExecutionPlanNode
+            // but it uses an outer reference we can't spool it
+            if (lastCorrelatedStep.Source.GetVariables(false).Intersect(outerReferences).Any())
                 return;
 
             // Check the estimated counts for the outer loop and the source at the point we'd insert the spool
@@ -3268,6 +3401,47 @@ namespace MarkMpn.Sql4Cds.Engine
                     JoinType = unqualifiedJoin.UnqualifiedJoinType == UnqualifiedJoinType.OuterApply ? QualifiedJoinType.LeftOuter : QualifiedJoinType.Inner,
                     OuterReferences = lhsReferences
                 };
+            }
+
+            if (reference is SchemaObjectFunctionTableReference tvf)
+            {
+                // Capture any references to data from an outer query
+                CaptureOuterReferences(outerSchema, null, tvf, parameterTypes, outerReferences);
+
+                // Convert any scalar subqueries in the parameters to its own execution plan, and capture the references from those plans
+                // as parameters to be passed to the function
+                IDataExecutionPlanNodeInternal source = new ConstantScanNode { Values = { new Dictionary<string, ScalarExpression>() } };
+                var computeScalar = new ComputeScalarNode { Source = source };
+
+                foreach (var param in tvf.Parameters.ToList())
+                    ConvertScalarSubqueries(param, hints, ref source, computeScalar, parameterTypes, tvf);
+
+                if (source is ConstantScanNode)
+                    source = null;
+                else if (computeScalar.Columns.Count > 0)
+                    source = computeScalar;
+
+                var scalarSubquerySchema = source?.GetSchema(DataSources, parameterTypes);
+                var scalarSubqueryReferences = new Dictionary<string, string>();
+                CaptureOuterReferences(scalarSubquerySchema, null, tvf, parameterTypes, scalarSubqueryReferences);
+
+                var dataSource = SelectDataSource(tvf.SchemaObject);
+                var execute = ExecuteMessageNode.FromMessage(tvf, dataSource, parameterTypes);
+
+                if (source == null)
+                    return execute;
+
+                // If we've got any subquery parameters we need to use a loop to pass them to the function
+                var loop = new NestedLoopNode
+                {
+                    LeftSource = source,
+                    RightSource = execute,
+                    JoinType = QualifiedJoinType.RightOuter,
+                    SemiJoin = true,
+                    OuterReferences = scalarSubqueryReferences
+                };
+
+                return loop;
             }
 
             throw new NotSupportedQueryFragmentException("Unhandled table reference", reference);

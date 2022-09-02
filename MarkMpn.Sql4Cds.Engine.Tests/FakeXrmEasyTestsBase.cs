@@ -31,22 +31,24 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             _context.InitializeMetadata(Assembly.GetExecutingAssembly());
             _context.CallerId = new EntityReference("systemuser", Guid.NewGuid());
             _context.AddFakeMessageExecutor<RetrieveVersionRequest>(new RetrieveVersionRequestExecutor());
+            _context.AddGenericFakeMessageExecutor(SampleMessageExecutor.MessageName, new SampleMessageExecutor());
 
             _service = _context.GetOrganizationService();
-            _dataSource = new DataSource { Name = "uat", Connection = _service, Metadata = new AttributeMetadataCache(_service), TableSizeCache = new StubTableSizeCache() };
+            _dataSource = new DataSource { Name = "uat", Connection = _service, Metadata = new AttributeMetadataCache(_service), TableSizeCache = new StubTableSizeCache(), MessageCache = new StubMessageCache() };
 
             _context2 = new XrmFakedContext();
             _context2.InitializeMetadata(Assembly.GetExecutingAssembly());
             _context2.CallerId = _context.CallerId;
             _context.AddFakeMessageExecutor<RetrieveVersionRequest>(new RetrieveVersionRequestExecutor());
+            _context.AddGenericFakeMessageExecutor(SampleMessageExecutor.MessageName, new SampleMessageExecutor());
 
             _service2 = _context2.GetOrganizationService();
-            _dataSource2 = new DataSource { Name = "prod", Connection = _service2, Metadata = new AttributeMetadataCache(_service2), TableSizeCache = new StubTableSizeCache() };
+            _dataSource2 = new DataSource { Name = "prod", Connection = _service2, Metadata = new AttributeMetadataCache(_service2), TableSizeCache = new StubTableSizeCache(), MessageCache = new StubMessageCache() };
 
             _dataSources = new[] { _dataSource, _dataSource2 }.ToDictionary(ds => ds.Name);
             _localDataSource = new Dictionary<string, DataSource>
             {
-                ["local"] = new DataSource { Name = "local", Connection = _service, Metadata = _dataSource.Metadata, TableSizeCache = _dataSource.TableSizeCache }
+                ["local"] = new DataSource { Name = "local", Connection = _service, Metadata = _dataSource.Metadata, TableSizeCache = _dataSource.TableSizeCache, MessageCache = _dataSource.MessageCache }
             };
 
             SetPrimaryIdAttributes(_context);
@@ -88,6 +90,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 if (entity.LogicalName == "account")
                 {
                     typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.ObjectTypeCode)).SetValue(entity, 1);
+                    var primaryContactId = (LookupAttributeMetadata)entity.Attributes.Single(a => a.LogicalName == "primarycontactid");
+                    primaryContactId.Targets = new[] { "contact" };
                     context.SetEntityMetadata(entity);
                 }
 
