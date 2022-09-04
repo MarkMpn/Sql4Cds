@@ -166,9 +166,9 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 return Type.GetType(typeName);
             }
-            catch (Exception ex)
+            catch
             {
-                throw new ApplicationException("Error retrieving type " + typeName + ":" + ex.Message, ex);
+                return null;
             }
         }
 
