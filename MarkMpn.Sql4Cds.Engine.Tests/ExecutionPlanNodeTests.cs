@@ -744,5 +744,159 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             Assert.AreEqual("SELECT name FROM account; DECLARE @id AS UNIQUEIDENTIFIER;", transformed);
         }
+
+        [TestMethod]
+        public void AggregateInitialTest()
+        {
+            var aggregate = CreateAggregateTest();
+            var result = aggregate.Execute(_dataSources, new StubOptions(), null, null).Single();
+
+            Assert.AreEqual(SqlInt32.Null, result["min"]);
+            Assert.AreEqual(SqlInt32.Null, result["max"]);
+            Assert.AreEqual((SqlInt32)0, result["sum"]);
+            Assert.AreEqual((SqlInt32)0, result["sum_distinct"]);
+            Assert.AreEqual((SqlInt32)0, result["count"]);
+            Assert.AreEqual((SqlInt32)0, result["count_distinct"]);
+            Assert.AreEqual((SqlInt32)0, result["countstar"]);
+            Assert.AreEqual(SqlInt32.Null, result["avg"]);
+            Assert.AreEqual(SqlInt32.Null, result["avg_distinct"]);
+            Assert.AreEqual(SqlInt32.Null, result["first"]);
+        }
+
+        [TestMethod]
+        public void AggregateSingleValueTest()
+        {
+            var aggregate = CreateAggregateTest(1);
+            var result = aggregate.Execute(_dataSources, new StubOptions(), null, null).Single();
+
+            Assert.AreEqual((SqlInt32)1, result["min"]);
+            Assert.AreEqual((SqlInt32)1, result["max"]);
+            Assert.AreEqual((SqlInt32)1, result["sum"]);
+            Assert.AreEqual((SqlInt32)1, result["sum_distinct"]);
+            Assert.AreEqual((SqlInt32)1, result["count"]);
+            Assert.AreEqual((SqlInt32)1, result["count_distinct"]);
+            Assert.AreEqual((SqlInt32)1, result["countstar"]);
+            Assert.AreEqual((SqlInt32)1, result["avg"]);
+            Assert.AreEqual((SqlInt32)1, result["avg_distinct"]);
+            Assert.AreEqual((SqlInt32)1, result["first"]);
+        }
+
+        [TestMethod]
+        public void AggregateTwoEqualValuesTest()
+        {
+            var aggregate = CreateAggregateTest(1, 1);
+            var result = aggregate.Execute(_dataSources, new StubOptions(), null, null).Single();
+
+            Assert.AreEqual((SqlInt32)1, result["min"]);
+            Assert.AreEqual((SqlInt32)1, result["max"]);
+            Assert.AreEqual((SqlInt32)2, result["sum"]);
+            Assert.AreEqual((SqlInt32)1, result["sum_distinct"]);
+            Assert.AreEqual((SqlInt32)2, result["count"]);
+            Assert.AreEqual((SqlInt32)1, result["count_distinct"]);
+            Assert.AreEqual((SqlInt32)2, result["countstar"]);
+            Assert.AreEqual((SqlInt32)1, result["avg"]);
+            Assert.AreEqual((SqlInt32)1, result["avg_distinct"]);
+            Assert.AreEqual((SqlInt32)1, result["first"]);
+        }
+
+        [TestMethod]
+        public void AggregateMultipleValuesTest()
+        {
+            var aggregate = CreateAggregateTest(1, 3, 1, 1);
+            var result = aggregate.Execute(_dataSources, new StubOptions(), null, null).Single();
+
+            Assert.AreEqual((SqlInt32)1, result["min"]);
+            Assert.AreEqual((SqlInt32)3, result["max"]);
+            Assert.AreEqual((SqlInt32)6, result["sum"]);
+            Assert.AreEqual((SqlInt32)4, result["sum_distinct"]);
+            Assert.AreEqual((SqlInt32)4, result["count"]);
+            Assert.AreEqual((SqlInt32)2, result["count_distinct"]);
+            Assert.AreEqual((SqlInt32)4, result["countstar"]);
+            Assert.AreEqual((SqlInt32)1, result["avg"]);
+            Assert.AreEqual((SqlInt32)2, result["avg_distinct"]);
+            Assert.AreEqual((SqlInt32)1, result["first"]);
+        }
+
+        private HashMatchAggregateNode CreateAggregateTest(params int[] values)
+        {
+            var source = new ConstantScanNode
+            {
+                Schema =
+                {
+                    ["i"] = typeof(SqlInt32).ToSqlType()
+                },
+                Alias = "l"
+            };
+
+            foreach (var value in values)
+            {
+                source.Values.Add(new Dictionary<string, ScalarExpression>
+                {
+                    ["i"] = new IntegerLiteral { Value = value.ToString() }
+                });
+            }
+
+            var aggregate = new HashMatchAggregateNode
+            {
+                Aggregates =
+                {
+                    ["min"] = new Aggregate
+                    {
+                        AggregateType = AggregateType.Min,
+                        SqlExpression = "l.i".ToColumnReference()
+                    },
+                    ["max"] = new Aggregate
+                    {
+                        AggregateType = AggregateType.Max,
+                        SqlExpression = "l.i".ToColumnReference()
+                    },
+                    ["sum"] = new Aggregate
+                    {
+                        AggregateType = AggregateType.Sum,
+                        SqlExpression = "l.i".ToColumnReference()
+                    },
+                    ["sum_distinct"] = new Aggregate
+                    {
+                        AggregateType = AggregateType.Sum,
+                        Distinct = true,
+                        SqlExpression = "l.i".ToColumnReference()
+                    },
+                    ["count"] = new Aggregate
+                    {
+                        AggregateType = AggregateType.Count,
+                        SqlExpression = "l.i".ToColumnReference()
+                    },
+                    ["count_distinct"] = new Aggregate
+                    {
+                        AggregateType = AggregateType.Count,
+                        Distinct = true,
+                        SqlExpression = "l.i".ToColumnReference()
+                    },
+                    ["countstar"] = new Aggregate
+                    {
+                        AggregateType = AggregateType.CountStar
+                    },
+                    ["avg"] = new Aggregate
+                    {
+                        AggregateType = AggregateType.Average,
+                        SqlExpression = "l.i".ToColumnReference()
+                    },
+                    ["avg_distinct"] = new Aggregate
+                    {
+                        AggregateType = AggregateType.Average,
+                        Distinct = true,
+                        SqlExpression = "l.i".ToColumnReference()
+                    },
+                    ["first"] = new Aggregate
+                    {
+                        AggregateType = AggregateType.First,
+                        SqlExpression = "l.i".ToColumnReference()
+                    }
+                },
+                Source = source
+            };
+
+            return aggregate;
+        }
     }
 }

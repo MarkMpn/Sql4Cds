@@ -32,6 +32,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             InitializeAggregates(schema, parameterTypes);
             var aggregates = CreateAggregateFunctions(parameterValues, options, false);
 
+            if (IsScalarAggregate)
+            {
+                // Initialize the single group
+                var values = ResetAggregates(aggregates);
+                groups[new Entity()] = values;
+            }
+
             foreach (var entity in Source.Execute(dataSources, options, parameterTypes, parameterValues))
             {
                 if (!groups.TryGetValue(entity, out var values))

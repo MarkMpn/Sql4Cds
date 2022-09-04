@@ -205,19 +205,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var sum = _sum.GetValue(s.SumState);
 
             if (sum is SqlInt32 i32)
-                return i32 / count;
+                return count == 0 ? SqlInt32.Null : i32 / count;
 
             if (sum is SqlInt64 i64)
-                return i64 / count;
+                return count == 0 ? SqlInt64.Null : i64 / count;
 
             if (sum is SqlDecimal dec)
-                return dec / count;
+                return count == 0 ? SqlDecimal.Null : dec / count;
 
             if (sum is SqlMoney money)
-                return money / count;
+                return count == 0 ? SqlMoney.Null : money / count;
 
             if (sum is SqlDouble dbl)
-                return dbl / count;
+                return count == 0 ? SqlDouble.Null : dbl / count;
 
             throw new InvalidOperationException();
         }
@@ -354,7 +354,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 throw new InvalidOperationException("MAX is not valid for values of type " + value.GetType().Name);
 
             var s = (State)state;
-            if (s.Value == null || s.Value.CompareTo(cmp) < 0)
+            if (((INullable)s.Value).IsNull || s.Value.CompareTo(cmp) < 0)
                 s.Value = cmp;
         }
 
@@ -411,7 +411,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var s = (State)state;
 
-            if (s.Value == null || s.Value.CompareTo(cmp) > 0)
+            if (((INullable)s.Value).IsNull || s.Value.CompareTo(cmp) > 0)
                 s.Value = cmp;
         }
 
