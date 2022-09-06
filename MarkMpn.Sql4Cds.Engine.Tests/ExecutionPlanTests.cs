@@ -210,13 +210,17 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var select = AssertNode<SelectNode>(plans[0]);
             var fetch = AssertNode<FetchXmlScan>(select.Source);
+            Assert.IsTrue(fetch.UsingCustomPaging);
             AssertFetchXml(fetch, @"
                 <fetch>
                     <entity name='account'>
                         <attribute name='accountid' />
                         <attribute name='name' />
                         <link-entity name='contact' alias='contact' from='fullname' to='name' link-type='inner'>
+                            <attribute name='contactid' />
+                            <order attribute='contactid' />
                         </link-entity>
+                        <order attribute='accountid' />
                     </entity>
                 </fetch>");
         }
@@ -4046,25 +4050,56 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     </entity>
                 </fetch>");
             var fetch2 = AssertNode<FetchXmlScan>(join.RightSource);
+            Assert.IsTrue(fetch2.UsingCustomPaging);
             AssertFetchXml(fetch2, @"
                 <fetch>
                     <entity name='contact'>
+                        <attribute name='contactid' />
                         <link-entity name='account' alias='a' from='accountid' to='parentcustomerid' link-type='inner'>
                             <attribute name='name' />
                             <attribute name='accountid' />
-                            <link-entity name='contact' alias='c2' from='parentcustomerid' to='accountid' link-type='inner' />
-                            <link-entity name='contact' alias='c3' from='parentcustomerid' to='accountid' link-type='inner' />
-                            <link-entity name='contact' alias='c4' from='parentcustomerid' to='accountid' link-type='inner' />
-                            <link-entity name='contact' alias='c5' from='parentcustomerid' to='accountid' link-type='inner' />
-                            <link-entity name='contact' alias='c6' from='parentcustomerid' to='accountid' link-type='inner' />
-                            <link-entity name='contact' alias='c7' from='parentcustomerid' to='accountid' link-type='inner' />
-                            <link-entity name='contact' alias='c8' from='parentcustomerid' to='accountid' link-type='inner' />
-                            <link-entity name='contact' alias='c9' from='parentcustomerid' to='accountid' link-type='inner' />
-                            <link-entity name='contact' alias='c10' from='parentcustomerid' to='accountid' link-type='inner' />
+                            <link-entity name='contact' alias='c2' from='parentcustomerid' to='accountid' link-type='inner'>
+                                <attribute name='contactid' />
+                                <order attribute='contactid' />
+                            </link-entity>
+                            <link-entity name='contact' alias='c3' from='parentcustomerid' to='accountid' link-type='inner'>
+                                <attribute name='contactid' />
+                                <order attribute='contactid' />
+                            </link-entity>
+                            <link-entity name='contact' alias='c4' from='parentcustomerid' to='accountid' link-type='inner'>
+                                <attribute name='contactid' />
+                                <order attribute='contactid' />
+                            </link-entity>
+                            <link-entity name='contact' alias='c5' from='parentcustomerid' to='accountid' link-type='inner'>
+                                <attribute name='contactid' />
+                                <order attribute='contactid' />
+                            </link-entity>
+                            <link-entity name='contact' alias='c6' from='parentcustomerid' to='accountid' link-type='inner'>
+                                <attribute name='contactid' />
+                                <order attribute='contactid' />
+                            </link-entity>
+                            <link-entity name='contact' alias='c7' from='parentcustomerid' to='accountid' link-type='inner'>
+                                <attribute name='contactid' />
+                                <order attribute='contactid' />
+                            </link-entity>
+                            <link-entity name='contact' alias='c8' from='parentcustomerid' to='accountid' link-type='inner'>
+                                <attribute name='contactid' />
+                                <order attribute='contactid' />
+                            </link-entity>
+                            <link-entity name='contact' alias='c9' from='parentcustomerid' to='accountid' link-type='inner'>
+                                <attribute name='contactid' />
+                                <order attribute='contactid' />
+                            </link-entity>
+                            <link-entity name='contact' alias='c10' from='parentcustomerid' to='accountid' link-type='inner'>
+                                <attribute name='contactid' />
+                                <order attribute='contactid' />
+                            </link-entity>
                             <filter>
                                 <condition attribute='primarycontactidname' operator='eq' value='Test' />
                             </filter>
+                            <order attribute='accountid' />
                         </link-entity>
+                        <order attribute='contactid' />
                     </entity>
                 </fetch>");
         }

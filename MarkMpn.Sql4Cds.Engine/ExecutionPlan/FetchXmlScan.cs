@@ -174,6 +174,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var linkEntity in Entity.GetLinkEntities())
             {
+                if (linkEntity.linktype == "exists" || linkEntity.linktype == "in")
+                    continue;
+
                 if (linkEntity.from != dataSource.Metadata[linkEntity.name].PrimaryIdAttribute)
                     return true;
             }

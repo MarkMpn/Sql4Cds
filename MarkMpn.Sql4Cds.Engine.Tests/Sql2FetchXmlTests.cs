@@ -1765,10 +1765,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 <fetch>
                     <entity name='contact'>
                         <attribute name='createdon' />
+                        <attribute name='contactid' />
                         <link-entity name='contact' to='parentcustomerid' from='parentcustomerid' alias='c2' link-type='inner'>
                             <attribute name='contactid' />
                             <attribute name='createdon' />
+                            <order attribute='contactid' />
                         </link-entity>
+                        <order attribute='contactid' />
                     </entity>
                 </fetch>");
 
@@ -2373,12 +2376,17 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 <fetch>
                     <entity name='account'>
                         <attribute name='employees' />
+                        <attribute name='accountid' />
                         <link-entity name='contact' from='contactid' to='primarycontactid' alias='contact' link-type='inner'>
                             <attribute name='fullname' />
+                            <attribute name='contactid' />
                             <link-entity name='new_customentity' from='new_parentid' to='parentcustomerid' alias='new_customentity' link-type='inner'>
+                                <attribute name='new_customentityid' />
+                                <order attribute='new_customentityid' />
                             </link-entity>
+                            <order attribute='contactid' />
                         </link-entity>
-                        <order attribute='employees' />
+                        <order attribute='accountid' />
                     </entity>
                 </fetch>");
 
