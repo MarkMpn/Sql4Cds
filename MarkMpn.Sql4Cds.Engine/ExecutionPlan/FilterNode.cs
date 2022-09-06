@@ -132,6 +132,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var foldedFilters = false;
 
+            foldedFilters |= FoldConsecutiveFilters();
             foldedFilters |= FoldNestedLoopFiltersToJoins(dataSources, options, parameterTypes, hints);
             foldedFilters |= FoldInExistsToFetchXml(dataSources, options, parameterTypes, hints, out var addedLinks);
             foldedFilters |= FoldTableSpoolToIndexSpool(dataSources, options, parameterTypes, hints);
@@ -153,6 +154,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return Source;
 
             return this;
+        }
+
+        private bool FoldConsecutiveFilters()
+        {
+            if (Source is FilterNode filter)
+            {
+                filter.Filter = new BooleanBinaryExpression
+                {
+                    FirstExpression = filter.Filter,
+                    BinaryExpressionType = BooleanBinaryExpressionType.And,
+                    SecondExpression = Filter
+                };
+                Filter = null;
+                return true;
+            }
+
+            return false;
         }
 
         private bool FoldNestedLoopFiltersToJoins(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
