@@ -246,7 +246,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 fetchXml = source as FetchXmlScan;
             }
 
-            if (fetchXml != null)
+            if (fetchXml != null && !fetchXml.RequiresCustomPaging(dataSources))
             {
                 if (!dataSources.TryGetValue(fetchXml.DataSource, out var dataSource))
                     throw new QueryExecutionException("Missing datasource " + fetchXml.DataSource);
