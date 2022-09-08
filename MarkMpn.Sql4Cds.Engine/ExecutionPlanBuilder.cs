@@ -3216,8 +3216,9 @@ namespace MarkMpn.Sql4Cds.Engine
                 var rhs = ConvertTableReference(join.SecondTableReference, hints, query, outerSchema, outerReferences, parameterTypes);
                 var lhsSchema = lhs.GetSchema(DataSources, parameterTypes);
                 var rhsSchema = rhs.GetSchema(DataSources, parameterTypes);
+                var fixedValueColumns = GetFixedValueColumnsFromWhereClause(query, lhsSchema, rhsSchema);
 
-                var joinConditionVisitor = new JoinConditionVisitor(lhsSchema, rhsSchema);
+                var joinConditionVisitor = new JoinConditionVisitor(lhsSchema, rhsSchema, fixedValueColumns);
                 join.SearchCondition.Accept(joinConditionVisitor);
 
                 // If we didn't find any join criteria equating two columns in the table, try again
@@ -3225,7 +3226,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 // by pre-computing the values of the expressions to use as the join keys
                 if (joinConditionVisitor.LhsKey == null || joinConditionVisitor.RhsKey == null)
                 {
-                    joinConditionVisitor = new JoinConditionVisitor(lhsSchema, rhsSchema);
+                    joinConditionVisitor = new JoinConditionVisitor(lhsSchema, rhsSchema, fixedValueColumns);
                     joinConditionVisitor.AllowExpressions = true;
 
                     join.SearchCondition.Accept(joinConditionVisitor);
@@ -3445,6 +3446,51 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             throw new NotSupportedQueryFragmentException("Unhandled table reference", reference);
+        }
+
+        private HashSet<string> GetFixedValueColumnsFromWhereClause(TSqlFragment query, params INodeSchema[] schemas)
+        {
+            var columns = new HashSet<string>();
+
+            if (query is QuerySpecification select && select.WhereClause != null)
+                GetFixedValueColumnsFromWhereClause(columns, select.WhereClause.SearchCondition, schemas);
+
+            return columns;
+        }
+
+        private void GetFixedValueColumnsFromWhereClause(HashSet<string> columns, BooleanExpression searchCondition, INodeSchema[] schemas)
+        {
+            if (searchCondition is BooleanComparisonExpression cmp &&
+                cmp.ComparisonType == BooleanComparisonType.Equals)
+            {
+                var col = cmp.FirstExpression as ColumnReferenceExpression;
+                var lit = cmp.SecondExpression as Literal;
+
+                if (col == null && lit == null)
+                {
+                    col = cmp.SecondExpression as ColumnReferenceExpression;
+                    lit = cmp.FirstExpression as Literal;
+                }
+
+                if (col != null && lit != null)
+                {
+                    foreach (var schema in schemas)
+                    {
+                        if (schema.ContainsColumn(col.GetColumnName(), out var colName))
+                        {
+                            columns.Add(colName);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (searchCondition is BooleanBinaryExpression bin &&
+                bin.BinaryExpressionType == BooleanBinaryExpressionType.And)
+            {
+                GetFixedValueColumnsFromWhereClause(columns, bin.FirstExpression, schemas);
+                GetFixedValueColumnsFromWhereClause(columns, bin.SecondExpression, schemas);
+            }
         }
 
         private IDataExecutionPlanNodeInternal ConvertInlineDerivedTable(InlineDerivedTable inlineDerivedTable, IList<OptimizerHint> hints, INodeSchema outerSchema, Dictionary<string, string> outerReferences, IDictionary<string, DataTypeReference> parameterTypes)

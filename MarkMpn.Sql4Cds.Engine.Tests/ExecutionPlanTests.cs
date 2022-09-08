@@ -5105,5 +5105,35 @@ UPDATE account SET employees = @employees WHERE name = @name";
             var execute = AssertNode<ExecuteMessageNode>(assign.Source);
             var select = AssertNode<SelectNode>(plans[2]);
         }
+
+        [TestMethod]
+        public void FoldMultipleJoinConditionsWithKnownValue()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
+
+            var query = @"SELECT a.name, c.fullname FROM account a INNER JOIN contact c ON a.accountid = c.parentcustomerid AND a.name = c.fullname WHERE a.name = 'Data8'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='contact'>
+                        <attribute name='fullname' />
+                        <link-entity name='account' alias='a' from='accountid' to='parentcustomerid' link-type='inner'>
+                            <attribute name='name' />
+                            <filter>
+                                <condition attribute='name' operator='eq' value='Data8' />
+                            </filter>
+                        </link-entity>
+                        <filter>
+                            <condition attribute='fullname' operator='eq' value='Data8' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
     }
 }
