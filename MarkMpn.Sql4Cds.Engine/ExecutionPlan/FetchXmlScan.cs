@@ -448,28 +448,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
-            // Copy any grouped values to their full names
-            if (FetchXml.aggregateSpecified && FetchXml.aggregate)
-            {
-                if (Entity.Items != null)
-                {
-                    foreach (var attr in Entity.Items.OfType<FetchAttributeType>().Where(a => a.groupbySpecified && a.groupby == FetchBoolType.@true))
-                    {
-                        if (entity.Attributes.TryGetValue(attr.alias, out var value))
-                            entity[$"{Alias}.{attr.alias}"] = value;
-                    }
-                }
-
-                foreach (var linkEntity in Entity.GetLinkEntities().Where(le => le.Items != null))
-                {
-                    foreach (var attr in linkEntity.Items.OfType<FetchAttributeType>().Where(a => a.groupbySpecified && a.groupby == FetchBoolType.@true))
-                    {
-                        if (entity.Attributes.TryGetValue(attr.alias, out var value))
-                            entity[$"{linkEntity.alias}.{attr.alias}"] = value;
-                    }
-                }
-            }
-
             // Expose the type of lookup values
             foreach (var attribute in entity.Attributes.Where(attr => attr.Value is EntityReference).ToList())
             {
@@ -507,7 +485,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (items == null)
                 return;
 
-            foreach (var attr in items.OfType<FetchAttributeType>().Where(a => !String.IsNullOrEmpty(a.alias) && a.aggregateSpecified == false))
+            foreach (var attr in items.OfType<FetchAttributeType>().Where(a => !String.IsNullOrEmpty(a.alias) && a.aggregateSpecified == false && a.dategroupingSpecified == false))
             {
                 var value = entity.GetAttributeValue<AliasedValue>(attr.alias);
 
@@ -758,7 +736,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var meta = metadata[entityName];
 
-            if (ReturnFullSchema)
+            if (ReturnFullSchema && !FetchXml.aggregate)
             {
                 foreach (var attrMetadata in meta.Attributes)
                 {
@@ -809,7 +787,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     if (!String.IsNullOrEmpty(attribute.alias))
                     {
-                        if (!FetchXml.aggregate || attribute.groupbySpecified && attribute.groupby == FetchBoolType.@true)
+                        if (!FetchXml.aggregate || attribute.groupbySpecified && attribute.groupby == FetchBoolType.@true && !attribute.dategroupingSpecified)
                         {
                             fullName = $"{alias}.{attribute.alias}";
                             attrAlias = attribute.alias;
