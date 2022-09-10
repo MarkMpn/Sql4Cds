@@ -36,15 +36,27 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (_tableSize.TryGetValue(logicalName, out var count))
                     return count;
 
+                var useFetch = true;
+
                 if (_metadata[logicalName].DataProviderId != null)
                 {
                     count = 1000;
+                    useFetch = false;
                 }
                 else if (UseRetrieveTotalRecordCountRequest)
                 {
-                    count = (int) ((RetrieveTotalRecordCountResponse)_org.Execute(new RetrieveTotalRecordCountRequest { EntityNames = new[] { logicalName } })).EntityRecordCountCollection[logicalName];
+                    try
+                    {
+                        count = (int)((RetrieveTotalRecordCountResponse)_org.Execute(new RetrieveTotalRecordCountRequest { EntityNames = new[] { logicalName } })).EntityRecordCountCollection[logicalName];
+                        useFetch = false;
+                    }
+                    catch
+                    {
+                        // Some entities trigger errors with RetrieveTotalRecordCountRequest - try again using a fetch query
+                    }
                 }
-                else
+                
+                if (useFetch)
                 {
                     var fetch = $@"
                         <fetch aggregate='true'>

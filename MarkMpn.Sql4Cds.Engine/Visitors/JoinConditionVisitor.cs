@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
@@ -9,11 +10,15 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
     {
         private readonly INodeSchema _lhs;
         private readonly INodeSchema _rhs;
+        private readonly HashSet<string> _fixedValueColumns;
+        private string _lhsColName;
+        private string _rhsColName;
 
-        public JoinConditionVisitor(INodeSchema lhs, INodeSchema rhs)
+        public JoinConditionVisitor(INodeSchema lhs, INodeSchema rhs, HashSet<string> fixedValueColumns)
         {
             _lhs = lhs;
             _rhs = rhs;
+            _fixedValueColumns = fixedValueColumns;
         }
 
         public bool AllowExpressions { get; set; }
@@ -39,18 +44,35 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                 var lhsName = lhsCol.GetColumnName();
                 var rhsName = rhsCol.GetColumnName();
 
-                if (_lhs.ContainsColumn(lhsName, out _) && _rhs.ContainsColumn(rhsName, out _))
+                if (_lhs.ContainsColumn(lhsName, out var lhsColName) && _rhs.ContainsColumn(rhsName, out var rhsColName))
+                {
+                }
+                else if (_lhs.ContainsColumn(rhsName, out rhsColName) && _rhs.ContainsColumn(lhsName, out lhsColName))
+                {
+                    (lhsCol, rhsCol) = (rhsCol, lhsCol);
+                    (lhsColName, rhsName) = (rhsName, lhsColName);
+                }
+                else
+                {
+                    return;
+                }
+
+                // Use this join key if we don't already have one or this is better (prefer joining on primary/foreign key vs. other fields,
+                // and prefer using columns that aren't being filtered on separately - we can apply them as secondary filters on the joined
+                // table as well rather than using them as the join key).
+                if (JoinCondition == null ||
+                    _lhs.PrimaryKey == lhsColName ||
+                    _rhs.PrimaryKey == rhsColName ||
+                    _fixedValueColumns.Contains(_lhsColName) ||
+                    _fixedValueColumns.Contains(_rhsColName))
                 {
                     LhsKey = lhsCol;
                     RhsKey = rhsCol;
-                }
-                else if (_lhs.ContainsColumn(rhsName, out _) && _rhs.ContainsColumn(lhsName, out _))
-                {
-                    LhsKey = rhsCol;
-                    RhsKey = lhsCol;
+                    _lhsColName = lhsColName;
+                    _rhsColName = rhsColName;
+                    JoinCondition = node;
                 }
 
-                JoinCondition = node;
                 return;
             }
 
@@ -91,7 +113,7 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
         public override void ExplicitVisit(BooleanBinaryExpression node)
         {
-            if (node.BinaryExpressionType == BooleanBinaryExpressionType.And && JoinCondition == null)
+            if (node.BinaryExpressionType == BooleanBinaryExpressionType.And)
                 base.ExplicitVisit(node);
         }
     }

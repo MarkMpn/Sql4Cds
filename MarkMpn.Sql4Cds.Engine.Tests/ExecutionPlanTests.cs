@@ -210,13 +210,17 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var select = AssertNode<SelectNode>(plans[0]);
             var fetch = AssertNode<FetchXmlScan>(select.Source);
+            Assert.IsTrue(fetch.UsingCustomPaging);
             AssertFetchXml(fetch, @"
                 <fetch>
                     <entity name='account'>
                         <attribute name='accountid' />
                         <attribute name='name' />
                         <link-entity name='contact' alias='contact' from='fullname' to='name' link-type='inner'>
+                            <attribute name='contactid' />
+                            <order attribute='contactid' />
                         </link-entity>
+                        <order attribute='accountid' />
                     </entity>
                 </fetch>");
         }
@@ -731,6 +735,86 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var computeScalar = AssertNode<ComputeScalarNode>(aggregate.Source);
             Assert.AreEqual(1, computeScalar.Columns.Count);
             Assert.AreEqual("DATEPART(month, createdon)", computeScalar.Columns["createdon_month"].ToSql());
+            var scalarFetch = AssertNode<FetchXmlScan>(computeScalar.Source);
+            AssertFetchXml(scalarFetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='createdon' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void GroupByDatePartUsingYearMonthDayFunctions()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
+
+            var query = @"
+                SELECT
+                    YEAR(createdon),
+                    MONTH(createdon),
+                    DAY(createdon),
+                    count(*)
+                FROM
+                    account
+                GROUP BY
+                    YEAR(createdOn),
+                    MONTH(createdOn),
+                    DAY(createdOn)";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual("createdon_year", select.ColumnSet[0].SourceColumn);
+            Assert.AreEqual("createdon_month", select.ColumnSet[1].SourceColumn);
+            Assert.AreEqual("createdon_day", select.ColumnSet[2].SourceColumn);
+            Assert.AreEqual("count", select.ColumnSet[3].SourceColumn);
+            var tryCatch1 = AssertNode<TryCatchNode>(select.Source);
+            var tryCatch2 = AssertNode<TryCatchNode>(tryCatch1.TrySource);
+            var aggregateFetch = AssertNode<FetchXmlScan>(tryCatch2.TrySource);
+            AssertFetchXml(aggregateFetch, @"
+                <fetch aggregate='true'>
+                    <entity name='account'>
+                        <attribute name='createdon' groupby='true' alias='createdon_year' dategrouping='year' />
+                        <attribute name='createdon' groupby='true' alias='createdon_month' dategrouping='month' />
+                        <attribute name='createdon' groupby='true' alias='createdon_day' dategrouping='day' />
+                        <attribute name='accountid' aggregate='count' alias='count' />
+                        <order alias='createdon_year' />
+                        <order alias='createdon_month' />
+                        <order alias='createdon_day' />
+                    </entity>
+                </fetch>");
+            var partitionAggregate = AssertNode<PartitionedAggregateNode>(tryCatch2.CatchSource);
+            Assert.AreEqual("createdon_year", partitionAggregate.GroupBy[0].ToSql());
+            Assert.AreEqual("createdon_month", partitionAggregate.GroupBy[1].ToSql());
+            Assert.AreEqual("createdon_day", partitionAggregate.GroupBy[2].ToSql());
+            Assert.AreEqual("count", partitionAggregate.Aggregates.Single().Key);
+            var partitionFetch = AssertNode<FetchXmlScan>(partitionAggregate.Source);
+            AssertFetchXml(partitionFetch, @"
+                <fetch aggregate='true'>
+                    <entity name='account'>
+                        <attribute name='createdon' groupby='true' alias='createdon_year' dategrouping='year' />
+                        <attribute name='createdon' groupby='true' alias='createdon_month' dategrouping='month' />
+                        <attribute name='createdon' groupby='true' alias='createdon_day' dategrouping='day' />
+                        <attribute name='accountid' aggregate='count' alias='count' />
+                        <order alias='createdon_year' />
+                        <order alias='createdon_month' />
+                        <order alias='createdon_day' />
+                    </entity>
+                </fetch>");
+            var aggregate = AssertNode<HashMatchAggregateNode>(tryCatch1.CatchSource);
+            Assert.AreEqual("createdon_year", aggregate.GroupBy[0].ToSql());
+            Assert.AreEqual("createdon_month", aggregate.GroupBy[1].ToSql());
+            Assert.AreEqual("createdon_day", aggregate.GroupBy[2].ToSql());
+            Assert.AreEqual("count", aggregate.Aggregates.Single().Key);
+            var computeScalar = AssertNode<ComputeScalarNode>(aggregate.Source);
+            Assert.AreEqual(3, computeScalar.Columns.Count);
+            Assert.AreEqual("YEAR(createdOn)", computeScalar.Columns["createdon_year"].ToSql());
+            Assert.AreEqual("MONTH(createdOn)", computeScalar.Columns["createdon_month"].ToSql());
+            Assert.AreEqual("DAY(createdOn)", computeScalar.Columns["createdon_day"].ToSql());
             var scalarFetch = AssertNode<FetchXmlScan>(computeScalar.Source);
             AssertFetchXml(scalarFetch, @"
                 <fetch>
@@ -3306,13 +3390,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var select = AssertNode<SelectNode>(plans[0]);
             var grouping = AssertNode<HashMatchAggregateNode>(select.Source);
-            Assert.AreEqual("Expr1", grouping.GroupBy[0].ToSql());
-            Assert.AreEqual("Expr2", grouping.GroupBy[1].ToSql());
-            Assert.AreEqual("Expr3", grouping.GroupBy[2].ToSql());
+            Assert.AreEqual("createdon_day", grouping.GroupBy[0].ToSql());
+            Assert.AreEqual("createdon_month", grouping.GroupBy[1].ToSql());
+            Assert.AreEqual("createdon_year", grouping.GroupBy[2].ToSql());
             var calc = AssertNode<ComputeScalarNode>(grouping.Source);
-            Assert.AreEqual("DAY(a.createdon)", calc.Columns["Expr1"].ToSql());
-            Assert.AreEqual("MONTH(a.createdon)", calc.Columns["Expr2"].ToSql());
-            Assert.AreEqual("YEAR(a.createdon)", calc.Columns["Expr3"].ToSql());
+            Assert.AreEqual("DAY(a.createdon)", calc.Columns["createdon_day"].ToSql());
+            Assert.AreEqual("MONTH(a.createdon)", calc.Columns["createdon_month"].ToSql());
+            Assert.AreEqual("YEAR(a.createdon)", calc.Columns["createdon_year"].ToSql());
             var filter = AssertNode<FilterNode>(calc.Source);
             Assert.AreEqual("YEAR(a.createdon) = 2021 AND MONTH(a.createdon) = 11", filter.Filter.ToSql().Replace("\r\n", " "));
             var fetch = AssertNode<FetchXmlScan>(filter.Source);
@@ -4046,25 +4130,56 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     </entity>
                 </fetch>");
             var fetch2 = AssertNode<FetchXmlScan>(join.RightSource);
+            Assert.IsTrue(fetch2.UsingCustomPaging);
             AssertFetchXml(fetch2, @"
                 <fetch>
                     <entity name='contact'>
+                        <attribute name='contactid' />
                         <link-entity name='account' alias='a' from='accountid' to='parentcustomerid' link-type='inner'>
                             <attribute name='name' />
                             <attribute name='accountid' />
-                            <link-entity name='contact' alias='c2' from='parentcustomerid' to='accountid' link-type='inner' />
-                            <link-entity name='contact' alias='c3' from='parentcustomerid' to='accountid' link-type='inner' />
-                            <link-entity name='contact' alias='c4' from='parentcustomerid' to='accountid' link-type='inner' />
-                            <link-entity name='contact' alias='c5' from='parentcustomerid' to='accountid' link-type='inner' />
-                            <link-entity name='contact' alias='c6' from='parentcustomerid' to='accountid' link-type='inner' />
-                            <link-entity name='contact' alias='c7' from='parentcustomerid' to='accountid' link-type='inner' />
-                            <link-entity name='contact' alias='c8' from='parentcustomerid' to='accountid' link-type='inner' />
-                            <link-entity name='contact' alias='c9' from='parentcustomerid' to='accountid' link-type='inner' />
-                            <link-entity name='contact' alias='c10' from='parentcustomerid' to='accountid' link-type='inner' />
+                            <link-entity name='contact' alias='c2' from='parentcustomerid' to='accountid' link-type='inner'>
+                                <attribute name='contactid' />
+                                <order attribute='contactid' />
+                            </link-entity>
+                            <link-entity name='contact' alias='c3' from='parentcustomerid' to='accountid' link-type='inner'>
+                                <attribute name='contactid' />
+                                <order attribute='contactid' />
+                            </link-entity>
+                            <link-entity name='contact' alias='c4' from='parentcustomerid' to='accountid' link-type='inner'>
+                                <attribute name='contactid' />
+                                <order attribute='contactid' />
+                            </link-entity>
+                            <link-entity name='contact' alias='c5' from='parentcustomerid' to='accountid' link-type='inner'>
+                                <attribute name='contactid' />
+                                <order attribute='contactid' />
+                            </link-entity>
+                            <link-entity name='contact' alias='c6' from='parentcustomerid' to='accountid' link-type='inner'>
+                                <attribute name='contactid' />
+                                <order attribute='contactid' />
+                            </link-entity>
+                            <link-entity name='contact' alias='c7' from='parentcustomerid' to='accountid' link-type='inner'>
+                                <attribute name='contactid' />
+                                <order attribute='contactid' />
+                            </link-entity>
+                            <link-entity name='contact' alias='c8' from='parentcustomerid' to='accountid' link-type='inner'>
+                                <attribute name='contactid' />
+                                <order attribute='contactid' />
+                            </link-entity>
+                            <link-entity name='contact' alias='c9' from='parentcustomerid' to='accountid' link-type='inner'>
+                                <attribute name='contactid' />
+                                <order attribute='contactid' />
+                            </link-entity>
+                            <link-entity name='contact' alias='c10' from='parentcustomerid' to='accountid' link-type='inner'>
+                                <attribute name='contactid' />
+                                <order attribute='contactid' />
+                            </link-entity>
                             <filter>
                                 <condition attribute='primarycontactidname' operator='eq' value='Test' />
                             </filter>
+                            <order attribute='accountid' />
                         </link-entity>
+                        <order attribute='contactid' />
                     </entity>
                 </fetch>");
         }
@@ -5069,6 +5184,36 @@ UPDATE account SET employees = @employees WHERE name = @name";
             var assign = AssertNode<AssignVariablesNode>(plans[1]);
             var execute = AssertNode<ExecuteMessageNode>(assign.Source);
             var select = AssertNode<SelectNode>(plans[2]);
+        }
+
+        [TestMethod]
+        public void FoldMultipleJoinConditionsWithKnownValue()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
+
+            var query = @"SELECT a.name, c.fullname FROM account a INNER JOIN contact c ON a.accountid = c.parentcustomerid AND a.name = c.fullname WHERE a.name = 'Data8'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='contact'>
+                        <attribute name='fullname' />
+                        <link-entity name='account' alias='a' from='accountid' to='parentcustomerid' link-type='inner'>
+                            <attribute name='name' />
+                            <filter>
+                                <condition attribute='name' operator='eq' value='Data8' />
+                            </filter>
+                        </link-entity>
+                        <filter>
+                            <condition attribute='fullname' operator='eq' value='Data8' />
+                        </filter>
+                    </entity>
+                </fetch>");
         }
     }
 }

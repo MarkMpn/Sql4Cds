@@ -830,5 +830,23 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 Assert.AreEqual(1, outputParam2.Value);
             }
         }
+
+        [TestMethod]
+        public void CorrelatedNotExistsTypeConversion()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "SELECT * FROM (VALUES ('1'), ('2')) a (s) WHERE NOT EXISTS (SELECT TOP 1 1 FROM (VALUES (1)) b (i) WHERE a.s = b.i)";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.AreEqual("2", reader.GetString(0));
+
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
     }
 }

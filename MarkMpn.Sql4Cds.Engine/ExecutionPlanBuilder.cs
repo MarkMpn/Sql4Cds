@@ -2029,7 +2029,7 @@ namespace MarkMpn.Sql4Cds.Engine
                             innerQuery.Source = computeScalar;
                         }
 
-                        computeScalar.Columns[innerSchema.PrimaryKey] = new IntegerLiteral { Value = "1" };
+                        computeScalar.Columns[innerSchemaPrimaryKey] = new IntegerLiteral { Value = "1" };
                     }
 
                     var definedValue = $"Expr{++_colNameCounter}";
@@ -2135,14 +2135,8 @@ namespace MarkMpn.Sql4Cds.Engine
                         // could be folded down to FetchXML directly, so make these nicer names
                         string name = null;
 
-                        if (exprGroup.Expression is FunctionCall func &&
-                            func.FunctionName.Value.Equals("DATEPART", StringComparison.OrdinalIgnoreCase) &&
-                            func.Parameters.Count == 2 &&
-                            func.Parameters[0] is ColumnReferenceExpression datepart &&
-                            func.Parameters[1] is ColumnReferenceExpression datepartCol)
+                        if (IsDatePartFunc(exprGroup.Expression, out var partName, out var colName))
                         {
-                            var partName = datepart.GetColumnName();
-
                             // Not all DATEPART part types are supported in FetchXML. The supported ones in FetchXML are:
                             // * day
                             // * week
@@ -2172,11 +2166,8 @@ namespace MarkMpn.Sql4Cds.Engine
                                 ["ww"] = FetchXml.DateGroupingType.week
                             };
 
-                            if (partnames.TryGetValue(partName, out var dateGrouping))
+                            if (partnames.TryGetValue(partName, out var dateGrouping) && schema.ContainsColumn(colName, out colName))
                             {
-                                var colName = datepartCol.GetColumnName();
-                                schema.ContainsColumn(colName, out colName);
-
                                 name = colName.Split('.').Last() + "_" + dateGrouping;
                                 var baseName = name;
 
@@ -2320,6 +2311,40 @@ namespace MarkMpn.Sql4Cds.Engine
             querySpec.OffsetClause?.Accept(visitor);
 
             return hashMatch;
+        }
+
+        private bool IsDatePartFunc(ScalarExpression expression, out string partName, out string colName)
+        {
+            partName = null;
+            colName = null;
+
+            if (!(expression is FunctionCall func))
+                return false;
+
+            if (func.FunctionName.Value.Equals("DATEPART", StringComparison.OrdinalIgnoreCase) &&
+                func.Parameters.Count == 2 &&
+                func.Parameters[0] is ColumnReferenceExpression datepart &&
+                func.Parameters[1] is ColumnReferenceExpression datepartCol)
+            {
+                partName = datepart.GetColumnName();
+                colName = datepartCol.GetColumnName();
+                return true;
+            }
+
+            if ((
+                    func.FunctionName.Value.Equals("YEAR", StringComparison.OrdinalIgnoreCase) ||
+                    func.FunctionName.Value.Equals("MONTH", StringComparison.OrdinalIgnoreCase) ||
+                    func.FunctionName.Value.Equals("DAY", StringComparison.OrdinalIgnoreCase)
+                ) &&
+                func.Parameters.Count == 1 &&
+                func.Parameters[0] is ColumnReferenceExpression col)
+            {
+                partName = func.FunctionName.Value;
+                colName = col.GetColumnName();
+                return true;
+            }
+
+            return false;
         }
 
         private IDataExecutionPlanNodeInternal ConvertOffsetClause(IDataExecutionPlanNodeInternal source, OffsetClause offsetClause, IDictionary<string, DataTypeReference> parameterTypes)
@@ -3216,8 +3241,9 @@ namespace MarkMpn.Sql4Cds.Engine
                 var rhs = ConvertTableReference(join.SecondTableReference, hints, query, outerSchema, outerReferences, parameterTypes);
                 var lhsSchema = lhs.GetSchema(DataSources, parameterTypes);
                 var rhsSchema = rhs.GetSchema(DataSources, parameterTypes);
+                var fixedValueColumns = GetFixedValueColumnsFromWhereClause(query, lhsSchema, rhsSchema);
 
-                var joinConditionVisitor = new JoinConditionVisitor(lhsSchema, rhsSchema);
+                var joinConditionVisitor = new JoinConditionVisitor(lhsSchema, rhsSchema, fixedValueColumns);
                 join.SearchCondition.Accept(joinConditionVisitor);
 
                 // If we didn't find any join criteria equating two columns in the table, try again
@@ -3225,7 +3251,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 // by pre-computing the values of the expressions to use as the join keys
                 if (joinConditionVisitor.LhsKey == null || joinConditionVisitor.RhsKey == null)
                 {
-                    joinConditionVisitor = new JoinConditionVisitor(lhsSchema, rhsSchema);
+                    joinConditionVisitor = new JoinConditionVisitor(lhsSchema, rhsSchema, fixedValueColumns);
                     joinConditionVisitor.AllowExpressions = true;
 
                     join.SearchCondition.Accept(joinConditionVisitor);
@@ -3445,6 +3471,51 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             throw new NotSupportedQueryFragmentException("Unhandled table reference", reference);
+        }
+
+        private HashSet<string> GetFixedValueColumnsFromWhereClause(TSqlFragment query, params INodeSchema[] schemas)
+        {
+            var columns = new HashSet<string>();
+
+            if (query is QuerySpecification select && select.WhereClause != null)
+                GetFixedValueColumnsFromWhereClause(columns, select.WhereClause.SearchCondition, schemas);
+
+            return columns;
+        }
+
+        private void GetFixedValueColumnsFromWhereClause(HashSet<string> columns, BooleanExpression searchCondition, INodeSchema[] schemas)
+        {
+            if (searchCondition is BooleanComparisonExpression cmp &&
+                cmp.ComparisonType == BooleanComparisonType.Equals)
+            {
+                var col = cmp.FirstExpression as ColumnReferenceExpression;
+                var lit = cmp.SecondExpression as Literal;
+
+                if (col == null && lit == null)
+                {
+                    col = cmp.SecondExpression as ColumnReferenceExpression;
+                    lit = cmp.FirstExpression as Literal;
+                }
+
+                if (col != null && lit != null)
+                {
+                    foreach (var schema in schemas)
+                    {
+                        if (schema.ContainsColumn(col.GetColumnName(), out var colName))
+                        {
+                            columns.Add(colName);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (searchCondition is BooleanBinaryExpression bin &&
+                bin.BinaryExpressionType == BooleanBinaryExpressionType.And)
+            {
+                GetFixedValueColumnsFromWhereClause(columns, bin.FirstExpression, schemas);
+                GetFixedValueColumnsFromWhereClause(columns, bin.SecondExpression, schemas);
+            }
         }
 
         private IDataExecutionPlanNodeInternal ConvertInlineDerivedTable(InlineDerivedTable inlineDerivedTable, IList<OptimizerHint> hints, INodeSchema outerSchema, Dictionary<string, string> outerReferences, IDictionary<string, DataTypeReference> parameterTypes)

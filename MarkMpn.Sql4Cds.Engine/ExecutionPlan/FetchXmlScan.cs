@@ -95,6 +95,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private bool _lastFullSchema;
         private bool _resetPage;
         private string _startingPage;
+        private List<string> _pagingFields;
+        private List<SqlEntityReference> _lastPageValues;
 
         public FetchXmlScan()
         {
@@ -157,6 +159,31 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public bool ReturnFullSchema { get; set; }
 
+        [Category("FetchXML Scan")]
+        [Description("Indicates that custom paging will be used to ensure all results are retrieved, instead of the standard FetchXML paging")]
+        [DisplayName("Using Custom Paging")]
+        public bool UsingCustomPaging => _pagingFields != null;
+
+        public bool RequiresCustomPaging(IDictionary<string, DataSource> dataSources)
+        {
+            if (FetchXml.distinct)
+                return false;
+
+            if (!dataSources.TryGetValue(DataSource, out var dataSource))
+                throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
+
+            foreach (var linkEntity in Entity.GetLinkEntities())
+            {
+                if (linkEntity.linktype == "exists" || linkEntity.linktype == "in")
+                    continue;
+
+                if (linkEntity.from != dataSource.Metadata[linkEntity.name].PrimaryIdAttribute)
+                    return true;
+            }
+
+            return false;
+        }
+
         protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
             PagesRetrieved = 0;
@@ -182,16 +209,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!options.ContinueRetrieve(0))
                 yield break;
 
-            // Ensure we reset the page number & cookie for subsequent executions
-            if (_resetPage)
+            if (_pagingFields == null)
             {
-                FetchXml.page = _startingPage;
-                FetchXml.pagingcookie = null;
+                // Ensure we reset the page number & cookie for subsequent executions
+                if (_resetPage)
+                {
+                    FetchXml.page = _startingPage;
+                    FetchXml.pagingcookie = null;
+                }
+                else
+                {
+                    _startingPage = FetchXml.page;
+                    _resetPage = true;
+                }
             }
             else
             {
-                _startingPage = FetchXml.page;
-                _resetPage = true;
+                _lastPageValues = new List<SqlEntityReference>();
             }
 
             var res = dataSource.Connection.RetrieveMultiple(new FetchExpression(Serialize(FetchXml)));
@@ -221,12 +255,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!(Parent is PartitionedAggregateNode))
                     options.Progress(0, $"Retrieved {count:N0} {GetDisplayName(count, meta)}...");
 
-                if (FetchXml.page == null)
-                    FetchXml.page = "2";
-                else
-                    FetchXml.page = (Int32.Parse(FetchXml.page, CultureInfo.InvariantCulture) + 1).ToString();
+                filter pagingFilter = null;
 
-                FetchXml.pagingcookie = res.PagingCookie;
+                if (_pagingFields == null)
+                {
+                    if (FetchXml.page == null)
+                        FetchXml.page = "2";
+                    else
+                        FetchXml.page = (Int32.Parse(FetchXml.page, CultureInfo.InvariantCulture) + 1).ToString();
+
+                    FetchXml.pagingcookie = res.PagingCookie;
+                }
+                else
+                {
+                    pagingFilter = new filter { type = filterType.or };
+                    AddPagingFilters(pagingFilter);
+                    Entity.AddItem(pagingFilter);
+                }
 
                 var nextPage = dataSource.Connection.RetrieveMultiple(new FetchExpression(Serialize(FetchXml)));
                 PagesRetrieved++;
@@ -239,6 +284,27 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 count += nextPage.Entities.Count;
                 res = nextPage;
+
+                if (pagingFilter != null)
+                    Entity.Items = Entity.Items.Except(new[] { pagingFilter }).ToArray();
+            }
+        }
+
+        private void AddPagingFilters(filter filter)
+        {
+            for (var i = 0; i < _pagingFields.Count; i++)
+            {
+                if (_lastPageValues[i].IsNull)
+                    continue;
+
+                var subFilter = new filter();
+
+                for (var j = 0; j < i; j++)
+                    subFilter.AddItem(new condition { entityname = j == 0 ? null : _pagingFields[j].Split('.')[0], attribute = _pagingFields[j].Split('.')[1], @operator = _lastPageValues[j].IsNull ? @operator.@null : @operator.eq, value = _lastPageValues[j].IsNull ? null : _lastPageValues[j].Id.ToString() });
+
+                subFilter.AddItem(new condition { entityname = i == 0 ? null : _pagingFields[i].Split('.')[0], attribute = _pagingFields[i].Split('.')[1], @operator = @operator.gt, value = _lastPageValues[i].Id.ToString() });
+
+                filter.AddItem(subFilter);
             }
         }
 
@@ -382,28 +448,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
-            // Copy any grouped values to their full names
-            if (FetchXml.aggregateSpecified && FetchXml.aggregate)
-            {
-                if (Entity.Items != null)
-                {
-                    foreach (var attr in Entity.Items.OfType<FetchAttributeType>().Where(a => a.groupbySpecified && a.groupby == FetchBoolType.@true))
-                    {
-                        if (entity.Attributes.TryGetValue(attr.alias, out var value))
-                            entity[$"{Alias}.{attr.alias}"] = value;
-                    }
-                }
-
-                foreach (var linkEntity in Entity.GetLinkEntities().Where(le => le.Items != null))
-                {
-                    foreach (var attr in linkEntity.Items.OfType<FetchAttributeType>().Where(a => a.groupbySpecified && a.groupby == FetchBoolType.@true))
-                    {
-                        if (entity.Attributes.TryGetValue(attr.alias, out var value))
-                            entity[$"{linkEntity.alias}.{attr.alias}"] = value;
-                    }
-                }
-            }
-
             // Expose the type of lookup values
             foreach (var attribute in entity.Attributes.Where(attr => attr.Value is EntityReference).ToList())
             {
@@ -426,6 +470,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 entity[col.Key] = sqlValue;
             }
+
+            if (_pagingFields != null)
+            {
+                _lastPageValues.Clear();
+
+                foreach (var pagingField in _pagingFields)
+                    _lastPageValues.Add((SqlEntityReference)entity[pagingField]);
+            }
         }
 
         private void PrefixAliasedScalarAttributes(Entity entity, object[] items, string alias)
@@ -433,7 +485,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (items == null)
                 return;
 
-            foreach (var attr in items.OfType<FetchAttributeType>().Where(a => !String.IsNullOrEmpty(a.alias) && a.aggregateSpecified == false))
+            foreach (var attr in items.OfType<FetchAttributeType>().Where(a => !String.IsNullOrEmpty(a.alias) && a.aggregateSpecified == false && a.dategroupingSpecified == false))
             {
                 var value = entity.GetAttributeValue<AliasedValue>(attr.alias);
 
@@ -684,7 +736,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var meta = metadata[entityName];
 
-            if (ReturnFullSchema)
+            if (ReturnFullSchema && !FetchXml.aggregate)
             {
                 foreach (var attrMetadata in meta.Attributes)
                 {
@@ -735,7 +787,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     if (!String.IsNullOrEmpty(attribute.alias))
                     {
-                        if (!FetchXml.aggregate || attribute.groupbySpecified && attribute.groupby == FetchBoolType.@true)
+                        if (!FetchXml.aggregate || attribute.groupbySpecified && attribute.groupby == FetchBoolType.@true && !attribute.dategroupingSpecified)
                         {
                             fullName = $"{alias}.{attribute.alias}";
                             attrAlias = attribute.alias;
@@ -1273,8 +1325,54 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Entity.AddItem(new FetchAttributeType { name = metadata.PrimaryIdAttribute });
             }
 
+            if (RequiresCustomPaging(dataSources))
+            {
+                RemoveSorts();
+
+                _pagingFields = new List<string>();
+                _lastPageValues = new List<SqlEntityReference>();
+
+                // Ensure the primary key of each entity is included
+                AddPrimaryIdAttribute(Entity, dataSource);
+
+                foreach (var linkEntity in Entity.GetLinkEntities())
+                    AddPrimaryIdAttribute(linkEntity, dataSource);
+            }
+
             NormalizeAttributes(dataSources);
             SetDefaultPageSize(dataSources, parameterTypes);
+        }
+
+        private void AddPrimaryIdAttribute(FetchEntityType entity, DataSource dataSource)
+        {
+            entity.Items = AddPrimaryIdAttribute(entity.Items, Alias, dataSource.Metadata[entity.name]);
+        }
+
+        private void AddPrimaryIdAttribute(FetchLinkEntityType linkEntity, DataSource dataSource)
+        {
+            linkEntity.Items = AddPrimaryIdAttribute(linkEntity.Items, linkEntity.alias, dataSource.Metadata[linkEntity.name]);
+        }
+
+        private object[] AddPrimaryIdAttribute(object[] items, string alias, EntityMetadata metadata)
+        {
+            _pagingFields.Add(alias + "." + metadata.PrimaryIdAttribute);
+
+            if (items == null || items.Length == 0)
+            {
+                return new object[]
+                {
+                    new FetchAttributeType { name = metadata.PrimaryIdAttribute },
+                    new FetchOrderType { attribute = metadata.PrimaryIdAttribute }
+                };
+            }
+
+            if (!items.OfType<allattributes>().Any() && !items.OfType<FetchAttributeType>().Any(a => a.name == metadata.PrimaryIdAttribute))
+                items = items.Concat(new object[] { new FetchAttributeType { name = metadata.PrimaryIdAttribute } }).ToArray();
+
+            if (!items.OfType<FetchOrderType>().Any(a => a.attribute == metadata.PrimaryIdAttribute))
+                items = items.Concat(new object[] { new FetchOrderType { attribute = metadata.PrimaryIdAttribute } }).ToArray();
+
+            return items;
         }
 
         private bool HasAttribute(object[] items)
@@ -1568,6 +1666,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 _lastSchemaAlias = _lastSchemaAlias,
                 _lastSchemaFetchXml = _lastSchemaFetchXml,
                 _primaryKeyColumns = _primaryKeyColumns,
+                _pagingFields = _pagingFields,
             };
 
             // Custom properties are not serialized, so need to copy them manually

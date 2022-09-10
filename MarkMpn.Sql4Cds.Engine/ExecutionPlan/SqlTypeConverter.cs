@@ -51,6 +51,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private static readonly IDictionary<Type, INullable> _nullValues;
         private static readonly CultureInfo _hijriCulture;
         private static ConcurrentDictionary<string, Func<object, object>> _conversions;
+        private static ConcurrentDictionary<string, Func<INullable, INullable>> _sqlConversions;
         private static Dictionary<Type, Type> _netToSqlTypeConversions;
         private static Dictionary<Type, Func<string, object, DataTypeReference, INullable>> _netToSqlTypeConversionFuncs;
         private static Dictionary<Type, Type> _sqlToNetTypeConversions;
@@ -85,6 +86,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _hijriCulture.DateTimeFormat.Calendar = new HijriCalendar();
 
             _conversions = new ConcurrentDictionary<string, Func<object, object>>();
+            _sqlConversions = new ConcurrentDictionary<string, Func<INullable, INullable>>();
 
             _netToSqlTypeConversions = new Dictionary<Type, Type>();
             _netToSqlTypeConversionFuncs = new Dictionary<Type, Func<string, object, DataTypeReference, INullable>>();
@@ -1097,6 +1099,33 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             expression = Expression.Convert(expression, typeof(object));
             return Expression.Lambda<Func<object,object>>(expression, param).Compile();
+        }
+
+        /// <summary>
+        /// Gets a function to convert from one type to another
+        /// </summary>
+        /// <param name="sourceType">The type to convert from</param>
+        /// <param name="destType">The type to convert to</param>
+        /// <returns>A function that converts between the requested types</returns>
+        public static Func<INullable, INullable> GetConversion(DataTypeReference sourceType, DataTypeReference destType)
+        {
+            var key = sourceType.ToSql() + " -> " + destType.ToSql();
+            return _sqlConversions.GetOrAdd(key, _ => CompileConversion(sourceType, destType));
+        }
+
+        private static Func<INullable, INullable> CompileConversion(DataTypeReference sourceType, DataTypeReference destType)
+        {
+            if (sourceType.IsSameAs(destType))
+                return (INullable value) => value;
+
+            var sourceNetType = sourceType.ToNetType(out _);
+            var destNetType = destType.ToNetType(out _);
+
+            var param = Expression.Parameter(typeof(INullable));
+            var expression = (Expression)Expression.Convert(param, sourceNetType);
+            expression = Convert(expression, sourceType, destType);
+            expression = Expression.Convert(expression, typeof(INullable));
+            return Expression.Lambda<Func<INullable, INullable>>(expression, param).Compile();
         }
 
         /// <summary>

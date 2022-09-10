@@ -1,4 +1,6 @@
-﻿using Microsoft.SqlServer.TransactSql.ScriptDom;
+﻿using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -25,15 +27,21 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
         public RewriteVisitor(IDictionary<ScalarExpression,string> rewrites)
         {
             _mappings = rewrites
-                .GroupBy(kvp => kvp.Key.ToSql())
-                .ToDictionary(g => g.Key, g => (ScalarExpression) new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = g.First().Value } } } });
+                .GroupBy(kvp => kvp.Key.ToSql(), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    g => g.Key,
+                    g => (ScalarExpression) g.First().Value.ToColumnReference(),
+                    StringComparer.OrdinalIgnoreCase);
         }
 
         public RewriteVisitor(IDictionary<ScalarExpression,ScalarExpression> rewrites)
         {
             _mappings = rewrites
-                .GroupBy(kvp => kvp.Key.ToSql())
-                .ToDictionary(g => g.Key, g => g.First().Value);
+                .GroupBy(kvp => kvp.Key.ToSql(), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.First().Value,
+                    StringComparer.OrdinalIgnoreCase);
         }
 
         protected override ScalarExpression ReplaceExpression(ScalarExpression expression, out string name)

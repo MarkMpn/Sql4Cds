@@ -122,7 +122,7 @@ namespace MarkMpn.Sql4Cds.SSMS
 
                             if (nodes.Any(node => !(node is IFetchXmlExecutionPlanNode)))
                             {
-                                editPoint.Insert("\r\n‼ WARNING ‼\r\n");
+                                editPoint.Insert("\r\n\r\n‼ WARNING ‼\r\n");
                                 editPoint.Insert("This query requires additional processing. This FetchXML gives the required data, but needs additional processing to format it in the same way as returned by the TDS Endpoint or SQL 4 CDS.\r\n\r\n");
                                 editPoint.Insert("See the estimated execution plan to see what extra processing is performed by SQL 4 CDS");
                             }

@@ -106,16 +106,23 @@ namespace MarkMpn.Sql4Cds
                 // Reformat XML to use single quotes for attributes so it can be copied into C# string literals easily
                 if (!String.IsNullOrEmpty(value))
                 {
-                    var doc = new XmlDocument();
-                    doc.LoadXml(value);
-                    using (var writer = new StringWriter())
-                    using (var xmlWriter = new XmlFragmentWriter(writer))
+                    try
                     {
-                        xmlWriter.QuoteChar = '\'';
-                        xmlWriter.Formatting = Formatting.Indented;
+                        var doc = new XmlDocument();
+                        doc.LoadXml(value);
+                        using (var writer = new StringWriter())
+                        using (var xmlWriter = new XmlFragmentWriter(writer))
+                        {
+                            xmlWriter.QuoteChar = '\'';
+                            xmlWriter.Formatting = Formatting.Indented;
 
-                        doc.Save(xmlWriter);
-                        value = writer.ToString();
+                            doc.Save(xmlWriter);
+                            value = writer.ToString();
+                        }
+                    }
+                    catch (XmlException)
+                    {
+                        // Use the origina value
                     }
                 }
 

@@ -646,9 +646,9 @@ in
                         if (fetchXmlNodes.Count == 0)
                             continue;
 
-                        if (nodes.Count < fetchXmlNodes.Count)
+                        if (nodes.Count > fetchXmlNodes.Count)
                         {
-                            sb.Append("\r\n‼ WARNING ‼\r\n");
+                            sb.Append("\r\n\r\n‼ WARNING ‼\r\n");
                             sb.Append("This query requires additional processing. This FetchXML gives the required data, but needs additional processing to format it in the same way as returned by the TDS Endpoint or SQL 4 CDS.\r\n\r\n");
                             sb.Append("See the estimated execution plan to see what extra processing is performed by SQL 4 CDS");
                         }

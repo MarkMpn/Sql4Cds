@@ -132,10 +132,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var foldedFilters = false;
 
+            foldedFilters |= FoldConsecutiveFilters();
             foldedFilters |= FoldNestedLoopFiltersToJoins(dataSources, options, parameterTypes, hints);
             foldedFilters |= FoldInExistsToFetchXml(dataSources, options, parameterTypes, hints, out var addedLinks);
             foldedFilters |= FoldTableSpoolToIndexSpool(dataSources, options, parameterTypes, hints);
             foldedFilters |= FoldFiltersToDataSources(dataSources, options, parameterTypes);
+
+            if (FoldColumnComparisonsWithKnownValues(dataSources, parameterTypes))
+                foldedFilters |= FoldFiltersToDataSources(dataSources, options, parameterTypes);
 
             foreach (var addedLink in addedLinks)
             {
@@ -153,6 +157,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return Source;
 
             return this;
+        }
+
+        private bool FoldConsecutiveFilters()
+        {
+            if (Source is FilterNode filter)
+            {
+                filter.Filter = new BooleanBinaryExpression
+                {
+                    FirstExpression = filter.Filter,
+                    BinaryExpressionType = BooleanBinaryExpressionType.And,
+                    SecondExpression = Filter
+                };
+                Filter = null;
+                return true;
+            }
+
+            return false;
         }
 
         private bool FoldNestedLoopFiltersToJoins(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
@@ -619,7 +640,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         Expression = indexColumn.ToColumnReference(),
                         IsNot = true
                     }
-                }.FoldQuery(dataSources, options, parameterTypes, hints);
+                };
             }
 
             Source = new IndexSpoolNode
@@ -627,7 +648,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Source = spoolSource,
                 KeyColumn = indexColumn,
                 SeekValue = seekVariable
-            };
+            }.FoldQuery(dataSources, options, parameterTypes, hints);
 
             Filter = filter;
             return true;
@@ -693,6 +714,139 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return foldedFilters;
+        }
+
+        private bool FoldColumnComparisonsWithKnownValues(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
+        {
+            var foldedFilters = false;
+
+            // Find all the data source nodes we could fold this into. Include direct data sources, those from either side of an inner join, or the main side of an outer join
+            foreach (var source in GetFoldableSources(Source))
+            {
+                if (source is FetchXmlScan fetchXml && !fetchXml.FetchXml.aggregate)
+                {
+                    if (!dataSources.TryGetValue(fetchXml.DataSource, out var dataSource))
+                        throw new NotSupportedQueryFragmentException("Missing datasource " + fetchXml.DataSource);
+
+                    var schema = source.GetSchema(dataSources, parameterTypes);
+
+                    var newFilter = FoldColumnComparisonsWithKnownValues(dataSources, parameterTypes, fetchXml, schema, Filter);
+
+                    if (newFilter != Filter)
+                    {
+                        Filter = newFilter;
+                        foldedFilters = true;
+                    }
+                }
+
+                //if (source is MetadataQueryNode meta)
+                //    foldedFilters |= FoldColumnComparisonsWithKnownValues(dataSources, options, parameterTypes, meta, Filter);
+            }
+
+            return foldedFilters;
+        }
+
+        private BooleanExpression FoldColumnComparisonsWithKnownValues(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, FetchXmlScan fetchXml, INodeSchema schema, BooleanExpression filter)
+        {
+            if (filter is BooleanComparisonExpression cmp &&
+                cmp.FirstExpression is ColumnReferenceExpression col1 &&
+                cmp.SecondExpression is ColumnReferenceExpression col2)
+            {
+                if (HasKnownValue(dataSources, parameterTypes, fetchXml, col1, schema, out var value))
+                {
+                    return new BooleanComparisonExpression
+                    {
+                        FirstExpression = value,
+                        ComparisonType = cmp.ComparisonType,
+                        SecondExpression = col2
+                    };
+                }
+                else if (HasKnownValue(dataSources, parameterTypes, fetchXml, col2, schema, out value))
+                {
+                    return new BooleanComparisonExpression
+                    {
+                        FirstExpression = col1,
+                        ComparisonType = cmp.ComparisonType,
+                        SecondExpression = value
+                    };
+                }
+            }
+            else if (filter is BooleanBinaryExpression bin &&
+                bin.BinaryExpressionType == BooleanBinaryExpressionType.And)
+            {
+                var bin1 = FoldColumnComparisonsWithKnownValues(dataSources, parameterTypes, fetchXml, schema, bin.FirstExpression);
+                var bin2 = FoldColumnComparisonsWithKnownValues(dataSources, parameterTypes, fetchXml, schema, bin.SecondExpression);
+
+                if (bin1 != bin.FirstExpression || bin2 != bin.SecondExpression)
+                {
+                    return new BooleanBinaryExpression
+                    {
+                        FirstExpression = bin1,
+                        BinaryExpressionType = bin.BinaryExpressionType,
+                        SecondExpression = bin2
+                    };
+                }
+            }
+
+            return filter;
+        }
+
+        private bool HasKnownValue(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, FetchXmlScan fetchXml, ColumnReferenceExpression col, INodeSchema schema, out Literal value)
+        {
+            value = null;
+
+            if (!schema.ContainsColumn(col.GetColumnName(), out var colName))
+                return false;
+
+            var parts = colName.Split('.');
+            object[] items;
+
+            if (parts[0] == fetchXml.Alias)
+                items = fetchXml.Entity.Items;
+            else
+                items = fetchXml.Entity.GetLinkEntities().SingleOrDefault(le => le.alias == parts[0])?.Items;
+
+            if (items != fetchXml.Entity.Items)
+            {
+                foreach (var filter in fetchXml.Entity.Items.OfType<filter>())
+                {
+                    if (HasKnownValue(parts[0], parts[1], filter, out value))
+                        return true;
+                }
+            }
+
+            if (items == null)
+                return false;
+
+            foreach (var filter in items.OfType<filter>())
+            {
+                if (HasKnownValue(null, parts[1], filter, out value))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private bool HasKnownValue(string table, string column, filter filter, out Literal value)
+        {
+            value = null;
+
+            if (filter.type == filterType.or)
+                return false;
+
+            if (filter.Items == null)
+                return false;
+
+            foreach (var condition in filter.Items.OfType<condition>())
+            {
+                if (condition.entityname == table && condition.attribute == column && condition.@operator == @operator.eq)
+                {
+                    value = new StringLiteral { Value = condition.value };
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private BooleanIsNullExpression FindNotNullFilter(BooleanExpression filter, string attribute, out bool and)

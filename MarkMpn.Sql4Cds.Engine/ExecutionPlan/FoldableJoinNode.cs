@@ -61,20 +61,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
             var rightSchema = RightSource.GetSchema(dataSources, parameterTypes);
-            var leftFetch = LeftSource as FetchXmlScan;
-            var rightFetch = RightSource as FetchXmlScan;
+            var leftFilter = JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.LeftOuter ? LeftSource as FilterNode : null;
+            var rightFilter = JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.RightOuter ? RightSource as FilterNode : null;
+            var leftFetch = (leftFilter?.Source ?? LeftSource) as FetchXmlScan;
+            var rightFetch = (rightFilter?.Source ?? RightSource) as FetchXmlScan;
+            var leftJoin = (leftFilter?.Source ?? LeftSource) as BaseJoinNode;
+            var rightJoin = (rightFilter?.Source ?? RightSource) as BaseJoinNode;
+            var leftMeta = (leftFilter?.Source ?? LeftSource) as MetadataQueryNode;
+            var rightMeta = (rightFilter?.Source ?? RightSource) as MetadataQueryNode;
 
             if (leftFetch != null && rightFetch != null && FoldFetchXmlJoin(dataSources, options, parameterTypes, hints, leftFetch, leftSchema, rightFetch, rightSchema, out var folded))
-                return folded;
+                return PrependFilters(folded, dataSources, options, parameterTypes, hints, leftFilter, rightFilter);
 
-            if (LeftSource is BaseJoinNode leftJoin && rightFetch != null && FoldFetchXmlJoin(dataSources, options, parameterTypes, hints, leftJoin, rightFetch, rightSchema, out folded))
-                return folded;
+            if (leftJoin != null && rightFetch != null && FoldFetchXmlJoin(dataSources, options, parameterTypes, hints, leftJoin, rightFetch, rightSchema, out folded))
+                return PrependFilters(folded, dataSources, options, parameterTypes, hints, leftFilter, rightFilter);
 
-            if (RightSource is BaseJoinNode rightJoin && leftFetch != null && FoldFetchXmlJoin(dataSources, options, parameterTypes, hints, rightJoin, leftFetch, leftSchema, out folded))
-                return folded;
+            if (rightJoin != null && leftFetch != null && FoldFetchXmlJoin(dataSources, options, parameterTypes, hints, rightJoin, leftFetch, leftSchema, out folded))
+                return PrependFilters(folded, dataSources, options, parameterTypes, hints, leftFilter, rightFilter);
 
-            if (LeftSource is MetadataQueryNode leftMeta && RightSource is MetadataQueryNode rightMeta && JoinType == QualifiedJoinType.Inner && FoldMetadataJoin(dataSources, options, parameterTypes, hints, leftMeta, leftSchema, rightMeta, rightSchema, out folded))
-                return folded;
+            if (leftMeta != null && rightMeta != null && JoinType == QualifiedJoinType.Inner && FoldMetadataJoin(dataSources, options, parameterTypes, hints, leftMeta, leftSchema, rightMeta, rightSchema, out folded))
+                return PrependFilters(folded, dataSources, options, parameterTypes, hints, leftFilter, rightFilter);
 
             // Add not-null filter on join keys
             // Inner join - both must be non-null
@@ -90,6 +96,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return folded;
 
             return this;
+        }
+
+        private IDataExecutionPlanNodeInternal PrependFilters(IDataExecutionPlanNodeInternal folded, IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints, params FilterNode[] filters)
+        {
+            foreach (var filter in filters)
+            {
+                if (filter == null)
+                    continue;
+
+                filter.Source = folded;
+                folded = filter.FoldQuery(dataSources, options, parameterTypes, hints);
+            }
+
+            return folded;
         }
 
         private IDataExecutionPlanNodeInternal AddNotNullFilter(IDataExecutionPlanNodeInternal source, ColumnReferenceExpression attribute, IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
