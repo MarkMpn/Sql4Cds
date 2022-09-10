@@ -593,8 +593,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Check parameter count is correct
             var correctParameterCount = methods
                 .Select(m => new { Method = m, Parameters = m.GetParameters() })
-                .Where(m => 
-                    m.Parameters.Length == paramTypes.Length ||
+                .Where(m =>
+                    m.Parameters.Where(p => p.GetCustomAttribute<SourceTypeAttribute>() == null).Count() == paramTypes.Length ||
                     (m.Parameters.Length < paramTypes.Length && m.Parameters.Length > 0 && m.Parameters.Last().ParameterType.IsArray) ||
                     (m.Parameters.Length == paramTypes.Length + 1 && m.Parameters.Last().ParameterType == typeof(IQueryExecutionOptions))
                     )
@@ -668,17 +668,27 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (paramType == typeof(DataTypeReference))
                 {
-                    // Expect only a literal string
-                    if (!(func.Parameters[i] is StringLiteral typeLiteral))
-                        throw new NotSupportedQueryFragmentException($"Only string literals are supported for type parameters", func.Parameters[i]);
+                    if (parameters[i].GetCustomAttribute<SourceTypeAttribute>() != null)
+                    {
+                        var paramsWithType = new Expression[paramExpressions.Length + 1];
+                        paramExpressions.CopyTo(paramsWithType, 0);
+                        paramsWithType[i] = Expression.Constant(paramTypes[i - 1]);
+                        paramExpressions = paramsWithType;
+                    }
+                    else
+                    {
+                        // Expect only a literal string
+                        if (!(func.Parameters[i] is StringLiteral typeLiteral))
+                            throw new NotSupportedQueryFragmentException($"Only string literals are supported for type parameters", func.Parameters[i]);
 
-                    if (!DataTypeHelpers.TryParse(typeLiteral.Value, out var parsedType))
-                        throw new NotSupportedQueryFragmentException("Unknown type name", typeLiteral);
+                        if (!DataTypeHelpers.TryParse(typeLiteral.Value, out var parsedType))
+                            throw new NotSupportedQueryFragmentException("Unknown type name", typeLiteral);
 
-                    paramExpressions[i] = Expression.Constant(parsedType);
+                        paramExpressions[i] = Expression.Constant(parsedType);
 
-                    if (parameters[i].GetCustomAttribute<TargetTypeAttribute>() != null)
-                        sqlType = parsedType;
+                        if (parameters[i].GetCustomAttribute<TargetTypeAttribute>() != null)
+                            sqlType = parsedType;
+                    }
 
                     continue;
                 }

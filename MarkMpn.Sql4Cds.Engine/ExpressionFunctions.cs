@@ -9,6 +9,7 @@ using System.Data.SqlTypes;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace MarkMpn.Sql4Cds.Engine
@@ -328,6 +329,38 @@ namespace MarkMpn.Sql4Cds.Engine
         }
 
         /// <summary>
+        /// Returns the number of bytes used to represent any expression
+        /// </summary>
+        /// <param name="value">Any expression</param>
+        /// <returns></returns>
+        public static SqlInt32 DataLength<T>(T value, [SourceType] DataTypeReference type)
+            where T:INullable
+        {
+            if (value.IsNull)
+                return SqlInt32.Null;
+
+            var sqlType = type as SqlDataTypeReference;
+
+            if (sqlType != null && value is SqlString s && 
+                (sqlType.SqlDataTypeOption == SqlDataTypeOption.VarChar || sqlType.SqlDataTypeOption == SqlDataTypeOption.NVarChar))
+            {
+                var length = s.Value.Length;
+
+                if (sqlType.SqlDataTypeOption == SqlDataTypeOption.NVarChar)
+                    length *= 2;
+
+                return length;
+            }
+
+            var size = type.GetSize();
+
+            if (sqlType != null && sqlType.SqlDataTypeOption == SqlDataTypeOption.NChar)
+                size *= 2;
+
+            return size;
+        }
+
+        /// <summary>
         /// Returns part of a character expression
         /// </summary>
         /// <param name="expression">A character expression</param>
@@ -346,7 +379,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 start = 1;
 
             if (start > expression.Value.Length)
-                start = expression.Value.Length;
+                return SqlTypeConverter.UseDefaultCollation(String.Empty);
 
             start -= 1;
 
@@ -425,6 +458,59 @@ namespace MarkMpn.Sql4Cds.Engine
                 return 0;
 
             return search.Value.IndexOf(find.Value, startLocation.Value - 1, StringComparison.OrdinalIgnoreCase) + 1;
+        }
+
+        /// <summary>
+        /// Returns the single-byte character with the specified integer code
+        /// </summary>
+        /// <param name="value">An integer from 0 through 255</param>
+        /// <returns></returns>
+        public static SqlString Char(SqlInt32 value)
+        {
+            if (value.IsNull || value.Value < 0 || value.Value > 255)
+                return SqlString.Null;
+
+            return SqlTypeConverter.UseDefaultCollation(new string((char)value.Value, 1));
+        }
+
+        /// <summary>
+        /// Returns the Unicode character with the specified integer code
+        /// </summary>
+        /// <param name="value">An integer from 0 through 255</param>
+        /// <returns></returns>
+        public static SqlString NChar(SqlInt32 value)
+        {
+            if (value.IsNull || value.Value < 0 || value.Value > 0x10FFFF)
+                return SqlString.Null;
+
+            return SqlTypeConverter.UseDefaultCollation(new string((char)value.Value, 1));
+        }
+
+        /// <summary>
+        /// Returns the ASCII code value of the leftmost character of a character expression.
+        /// </summary>
+        /// <param name="value">A string to convert</param>
+        /// <returns></returns>
+        public static SqlInt32 Ascii(SqlString value)
+        {
+            if (value.IsNull || value.Value.Length == 0)
+                return SqlInt32.Null;
+
+            var b = Encoding.ASCII.GetBytes(value.Value);
+            return b[0];
+        }
+
+        /// <summary>
+        /// Returns the integer value, as defined by the Unicode standard, for the first character of the input expression.
+        /// </summary>
+        /// <param name="value">A string to convert</param>
+        /// <returns></returns>
+        public static SqlInt32 Unicode(SqlString value)
+        {
+            if (value.IsNull || value.Value.Length == 0)
+                return SqlInt32.Null;
+
+            return value.Value[0];
         }
 
         /// <summary>
@@ -696,6 +782,13 @@ namespace MarkMpn.Sql4Cds.Engine
     [AttributeUsage(AttributeTargets.Parameter)]
     class TargetTypeAttribute : Attribute
     {
+    }
 
+    /// <summary>
+    /// Indicates that the parameter gives the type of the preceding parameter
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Parameter)]
+    class SourceTypeAttribute : Attribute
+    {
     }
 }

@@ -60,6 +60,21 @@ namespace MarkMpn.Sql4Cds
             [Description("Gets the length of the specified string expression")]
             public abstract int len(string value);
 
+            [Description("Gets the number of bytes used to represent any expression")]
+            public abstract int datalength(object value);
+
+            [Description("Returns the character with the specified integer code")]
+            public abstract string @char(int value);
+
+            [Description("Returns the ASCII code value of the leftmost character of a character expression")]
+            public abstract int ascii(string value);
+
+            [Description("Returns the character with the specified integer code")]
+            public abstract string nchar(int value);
+
+            [Description("Returns the integer Unicode value of the first character of the input expression")]
+            public abstract int unicode(string value);
+
             [Description("Extracts a portion of the specified string expression")]
             public abstract string substring(string value, int start, int length);
 
