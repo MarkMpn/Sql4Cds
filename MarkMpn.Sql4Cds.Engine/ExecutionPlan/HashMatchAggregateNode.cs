@@ -176,14 +176,49 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     // being computed are DATEPART functions that can be converted to FetchXML and are used as groupings
                     foreach (var scalar in computeScalar.Columns)
                     {
-                        if (!(scalar.Value is FunctionCall func) ||
-                            !func.FunctionName.Value.Equals("DATEPART", StringComparison.OrdinalIgnoreCase) ||
-                            func.Parameters.Count != 2 ||
-                            !(func.Parameters[0] is ColumnReferenceExpression datePartType) ||
-                            !(func.Parameters[1] is ColumnReferenceExpression datePartCol))
+                        if (!(scalar.Value is FunctionCall func))
                         {
                             canUseFetchXmlAggregate = false;
                             break;
+                        }
+
+                        string datePartType;
+
+                        if (!func.FunctionName.Value.Equals("DATEPART", StringComparison.OrdinalIgnoreCase) &&
+                            !func.FunctionName.Value.Equals("YEAR", StringComparison.OrdinalIgnoreCase) &&
+                            !func.FunctionName.Value.Equals("MONTH", StringComparison.OrdinalIgnoreCase) &&
+                            !func.FunctionName.Value.Equals("DAY", StringComparison.OrdinalIgnoreCase))
+                        {
+                            canUseFetchXmlAggregate = false;
+                            break;
+                        }
+
+                        if (func.FunctionName.Value.Equals("DATEPART", StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (func.Parameters.Count != 2 ||
+                                !(func.Parameters[0] is ColumnReferenceExpression datePartTypeCol) ||
+                                !(func.Parameters[1] is ColumnReferenceExpression))
+                            {
+                                canUseFetchXmlAggregate = false;
+                                break;
+                            }
+                            else
+                            {
+                                datePartType = datePartTypeCol.GetColumnName();
+                            }
+                        }
+                        else
+                        {
+                            if (func.Parameters.Count != 1 ||
+                                !(func.Parameters[0] is ColumnReferenceExpression))
+                            {
+                                canUseFetchXmlAggregate = false;
+                                break;
+                            }
+                            else
+                            {
+                                datePartType = func.FunctionName.Value;
+                            }
                         }
 
                         if (!GroupBy.Any(g => g.MultiPartIdentifier.Identifiers.Count == 1 && g.MultiPartIdentifier.Identifiers[0].Value == scalar.Key))
@@ -192,7 +227,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             break;
                         }
 
-                        if (!partnames.ContainsKey(datePartType.GetColumnName()))
+                        if (!partnames.ContainsKey(datePartType))
                         {
                             canUseFetchXmlAggregate = false;
                             break;
@@ -279,8 +314,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                         if (computeScalar != null && computeScalar.Columns.TryGetValue(colName, out var datePart))
                         {
-                            dateGrouping = partnames[((ColumnReferenceExpression)((FunctionCall)datePart).Parameters[0]).GetColumnName()];
-                            colName = ((ColumnReferenceExpression)((FunctionCall)datePart).Parameters[1]).GetColumnName();
+                            var datePartFunc = (FunctionCall)datePart;
+
+                            if (datePartFunc.FunctionName.Value.Equals("DATEPART", StringComparison.OrdinalIgnoreCase))
+                            {
+                                dateGrouping = partnames[((ColumnReferenceExpression)datePartFunc.Parameters[0]).GetColumnName()];
+                                colName = ((ColumnReferenceExpression)datePartFunc.Parameters[1]).GetColumnName();
+                            }
+                            else
+                            {
+                                dateGrouping = partnames[datePartFunc.FunctionName.Value];
+                                colName = ((ColumnReferenceExpression)datePartFunc.Parameters[0]).GetColumnName();
+                            }
                         }
 
                         schema.ContainsColumn(colName, out colName);

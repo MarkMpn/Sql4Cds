@@ -2135,14 +2135,8 @@ namespace MarkMpn.Sql4Cds.Engine
                         // could be folded down to FetchXML directly, so make these nicer names
                         string name = null;
 
-                        if (exprGroup.Expression is FunctionCall func &&
-                            func.FunctionName.Value.Equals("DATEPART", StringComparison.OrdinalIgnoreCase) &&
-                            func.Parameters.Count == 2 &&
-                            func.Parameters[0] is ColumnReferenceExpression datepart &&
-                            func.Parameters[1] is ColumnReferenceExpression datepartCol)
+                        if (IsDatePartFunc(exprGroup.Expression, out var partName, out var colName))
                         {
-                            var partName = datepart.GetColumnName();
-
                             // Not all DATEPART part types are supported in FetchXML. The supported ones in FetchXML are:
                             // * day
                             // * week
@@ -2172,11 +2166,8 @@ namespace MarkMpn.Sql4Cds.Engine
                                 ["ww"] = FetchXml.DateGroupingType.week
                             };
 
-                            if (partnames.TryGetValue(partName, out var dateGrouping))
+                            if (partnames.TryGetValue(partName, out var dateGrouping) && schema.ContainsColumn(colName, out colName))
                             {
-                                var colName = datepartCol.GetColumnName();
-                                schema.ContainsColumn(colName, out colName);
-
                                 name = colName.Split('.').Last() + "_" + dateGrouping;
                                 var baseName = name;
 
@@ -2320,6 +2311,40 @@ namespace MarkMpn.Sql4Cds.Engine
             querySpec.OffsetClause?.Accept(visitor);
 
             return hashMatch;
+        }
+
+        private bool IsDatePartFunc(ScalarExpression expression, out string partName, out string colName)
+        {
+            partName = null;
+            colName = null;
+
+            if (!(expression is FunctionCall func))
+                return false;
+
+            if (func.FunctionName.Value.Equals("DATEPART", StringComparison.OrdinalIgnoreCase) &&
+                func.Parameters.Count == 2 &&
+                func.Parameters[0] is ColumnReferenceExpression datepart &&
+                func.Parameters[1] is ColumnReferenceExpression datepartCol)
+            {
+                partName = datepart.GetColumnName();
+                colName = datepartCol.GetColumnName();
+                return true;
+            }
+
+            if ((
+                    func.FunctionName.Value.Equals("YEAR", StringComparison.OrdinalIgnoreCase) ||
+                    func.FunctionName.Value.Equals("MONTH", StringComparison.OrdinalIgnoreCase) ||
+                    func.FunctionName.Value.Equals("DAY", StringComparison.OrdinalIgnoreCase)
+                ) &&
+                func.Parameters.Count == 1 &&
+                func.Parameters[0] is ColumnReferenceExpression col)
+            {
+                partName = func.FunctionName.Value;
+                colName = col.GetColumnName();
+                return true;
+            }
+
+            return false;
         }
 
         private IDataExecutionPlanNodeInternal ConvertOffsetClause(IDataExecutionPlanNodeInternal source, OffsetClause offsetClause, IDictionary<string, DataTypeReference> parameterTypes)
