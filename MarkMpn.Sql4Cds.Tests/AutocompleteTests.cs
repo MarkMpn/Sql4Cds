@@ -194,8 +194,8 @@ namespace MarkMpn.Sql4Cds.Tests
         [TestMethod]
         public void Top()
         {
-            var sql = "SELECT TOP 10 n FROM account";
-            var suggestions = _autocomplete.GetSuggestions(sql, sql.IndexOf("n")).Select(s => s.Text).ToList();
+            var sql = "SELECT TOP 10 na FROM account";
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.IndexOf("na") + 1).Select(s => s.Text).ToList();
 
             CollectionAssert.AreEqual(new[] { "name" }, suggestions);
         }

@@ -9,6 +9,7 @@ using System.Data.SqlTypes;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace MarkMpn.Sql4Cds.Engine
@@ -33,34 +34,94 @@ namespace MarkMpn.Sql4Cds.Engine
         }
 
         /// <summary>
-        /// Gets a value from a JSON document
+        /// Extracts a scalar value from a JSON string
         /// </summary>
-        /// <param name="json">The JSON string to extract a value from</param>
-        /// <param name="jpath">The JPath to extract the value at</param>
-        /// <param name="sqlType">The expected type of the value to extract</param>
-        /// <returns></returns>
-        public static object GetJsonValue(SqlString json, SqlString jpath, [TargetType] DataTypeReference sqlType)
+        /// <param name="json">An expression containing the JSON document to parse</param>
+        /// <param name="jpath">A JSON path that specifies the property to extract</param>
+        /// <returns>Returns a single text value of type nvarchar(4000)</returns>
+        [MaxLength(4000)]
+        public static SqlString Json_Value(SqlString json, SqlString jpath)
         {
-            var targetType = sqlType.ToNetType(out _);
-
             if (json.IsNull || jpath.IsNull)
-                return SqlTypeConverter.GetNullValue(targetType);
+                return SqlString.Null;
 
-            var jsonDoc = Newtonsoft.Json.Linq.JToken.Parse(json.Value);
-            var jtoken = jsonDoc.SelectToken(jpath.Value);
+            var path = jpath.Value;
+            var lax = !path.StartsWith("strict ", StringComparison.OrdinalIgnoreCase);
 
-            if (jtoken == null)
-                return SqlTypeConverter.GetNullValue(targetType);
+            if (path.StartsWith("strict ", StringComparison.OrdinalIgnoreCase))
+                path = path.Substring(7);
+            else if (path.StartsWith("lax ", StringComparison.OrdinalIgnoreCase))
+                path = path.Substring(4);
 
-            if (!(jtoken is JValue jvalue))
-                throw new QueryExecutionException("JPath does not result in a value");
+            try
+            {
+                var jsonDoc = JToken.Parse(json.Value);
+                var jtoken = jsonDoc.SelectToken(path);
 
-            if (jvalue.Value == null)
-                return SqlTypeConverter.GetNullValue(targetType);
+                if (jtoken == null)
+                {
+                    if (lax)
+                        return SqlString.Null;
+                    else
+                        throw new QueryExecutionException("Property does not exist");
+                }
 
-            var conversion = SqlTypeConverter.GetConversion(jvalue.Value.GetType(), targetType);
-            var sqlValue = conversion(jvalue.Value);
-            return sqlValue;
+                if (jtoken.Type == JTokenType.Object || jtoken.Type == JTokenType.Array)
+                {
+                    if (lax)
+                        return SqlString.Null;
+                    else
+                        throw new QueryExecutionException("Not a scalar value");
+                }
+
+                var value = jtoken.Value<string>();
+
+                if (value.Length > 4000)
+                {
+                    if (lax)
+                        return SqlString.Null;
+                    else
+                        throw new QueryExecutionException("Value too long");
+                }
+
+                return new SqlString(value, json.LCID, json.SqlCompareOptions);
+            }
+            catch (Newtonsoft.Json.JsonException ex)
+            {
+                throw new QueryExecutionException(ex.Message, ex);
+            }
+        }
+
+        /// <summary>
+        /// Tests whether a specified SQL/JSON path exists in the input JSON string.
+        /// </summary>
+        /// <param name="json">An expression containing the JSON document to parse</param>
+        /// <param name="jpath">A JSON path that specifies the property to extract</param>
+        /// <returns>A value indicating if the path exists in the JSON document</returns>
+        public static SqlBoolean Json_Path_Exists(SqlString json, SqlString jpath)
+        {
+            if (json.IsNull || jpath.IsNull)
+                return SqlBoolean.Null;
+
+            var path = jpath.Value;
+
+            if (path.StartsWith("strict ", StringComparison.OrdinalIgnoreCase))
+                path = path.Substring(7);
+            else if (path.StartsWith("lax ", StringComparison.OrdinalIgnoreCase))
+                path = path.Substring(4);
+
+            try
+            {
+
+                var jsonDoc = JToken.Parse(json.Value);
+                var jtoken = jsonDoc.SelectToken(path);
+
+                return jtoken != null;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         /// <summary>
@@ -328,6 +389,38 @@ namespace MarkMpn.Sql4Cds.Engine
         }
 
         /// <summary>
+        /// Returns the number of bytes used to represent any expression
+        /// </summary>
+        /// <param name="value">Any expression</param>
+        /// <returns></returns>
+        public static SqlInt32 DataLength<T>(T value, [SourceType] DataTypeReference type)
+            where T:INullable
+        {
+            if (value.IsNull)
+                return SqlInt32.Null;
+
+            var sqlType = type as SqlDataTypeReference;
+
+            if (sqlType != null && value is SqlString s && 
+                (sqlType.SqlDataTypeOption == SqlDataTypeOption.VarChar || sqlType.SqlDataTypeOption == SqlDataTypeOption.NVarChar))
+            {
+                var length = s.Value.Length;
+
+                if (sqlType.SqlDataTypeOption == SqlDataTypeOption.NVarChar)
+                    length *= 2;
+
+                return length;
+            }
+
+            var size = type.GetSize();
+
+            if (sqlType != null && sqlType.SqlDataTypeOption == SqlDataTypeOption.NChar)
+                size *= 2;
+
+            return size;
+        }
+
+        /// <summary>
         /// Returns part of a character expression
         /// </summary>
         /// <param name="expression">A character expression</param>
@@ -346,7 +439,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 start = 1;
 
             if (start > expression.Value.Length)
-                start = expression.Value.Length;
+                return SqlTypeConverter.UseDefaultCollation(String.Empty);
 
             start -= 1;
 
@@ -425,6 +518,59 @@ namespace MarkMpn.Sql4Cds.Engine
                 return 0;
 
             return search.Value.IndexOf(find.Value, startLocation.Value - 1, StringComparison.OrdinalIgnoreCase) + 1;
+        }
+
+        /// <summary>
+        /// Returns the single-byte character with the specified integer code
+        /// </summary>
+        /// <param name="value">An integer from 0 through 255</param>
+        /// <returns></returns>
+        public static SqlString Char(SqlInt32 value)
+        {
+            if (value.IsNull || value.Value < 0 || value.Value > 255)
+                return SqlString.Null;
+
+            return SqlTypeConverter.UseDefaultCollation(new string((char)value.Value, 1));
+        }
+
+        /// <summary>
+        /// Returns the Unicode character with the specified integer code
+        /// </summary>
+        /// <param name="value">An integer from 0 through 255</param>
+        /// <returns></returns>
+        public static SqlString NChar(SqlInt32 value)
+        {
+            if (value.IsNull || value.Value < 0 || value.Value > 0x10FFFF)
+                return SqlString.Null;
+
+            return SqlTypeConverter.UseDefaultCollation(new string((char)value.Value, 1));
+        }
+
+        /// <summary>
+        /// Returns the ASCII code value of the leftmost character of a character expression.
+        /// </summary>
+        /// <param name="value">A string to convert</param>
+        /// <returns></returns>
+        public static SqlInt32 Ascii(SqlString value)
+        {
+            if (value.IsNull || value.Value.Length == 0)
+                return SqlInt32.Null;
+
+            var b = Encoding.ASCII.GetBytes(value.Value);
+            return b[0];
+        }
+
+        /// <summary>
+        /// Returns the integer value, as defined by the Unicode standard, for the first character of the input expression.
+        /// </summary>
+        /// <param name="value">A string to convert</param>
+        /// <returns></returns>
+        public static SqlInt32 Unicode(SqlString value)
+        {
+            if (value.IsNull || value.Value.Length == 0)
+                return SqlInt32.Null;
+
+            return value.Value[0];
         }
 
         /// <summary>
@@ -685,9 +831,26 @@ namespace MarkMpn.Sql4Cds.Engine
     /// <summary>
     /// Indicates that the parameter gives the maximum length of the return value
     /// </summary>
-    [AttributeUsage(AttributeTargets.Parameter)]
+    [AttributeUsage(AttributeTargets.Parameter | AttributeTargets.Method)]
     class MaxLengthAttribute : Attribute
     {
+        /// <summary>
+        /// Sets the maximum length of the result as the maximum length of this parameter
+        /// </summary>
+        public MaxLengthAttribute()
+        {
+        }
+
+        /// <summary>
+        /// Sets the maximum length of the result to a fixed value
+        /// </summary>
+        /// <param name="maxLength"></param>
+        public MaxLengthAttribute(int maxLength)
+        {
+            MaxLength = maxLength;
+        }
+
+        public int? MaxLength { get; }
     }
 
     /// <summary>
@@ -696,6 +859,13 @@ namespace MarkMpn.Sql4Cds.Engine
     [AttributeUsage(AttributeTargets.Parameter)]
     class TargetTypeAttribute : Attribute
     {
+    }
 
+    /// <summary>
+    /// Indicates that the parameter gives the type of the preceding parameter
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Parameter)]
+    class SourceTypeAttribute : Attribute
+    {
     }
 }

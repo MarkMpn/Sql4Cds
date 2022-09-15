@@ -848,5 +848,119 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             }
         }
+
+        [TestMethod]
+        public void CharAscii()
+        {
+            // Using example from
+            // https://docs.microsoft.com/en-us/sql/t-sql/functions/char-transact-sql?view=sql-server-ver16#a-using-ascii-and-char-to-print-ascii-values-from-a-string
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+-- Create variables for the character string and for the current   
+-- position in the string.  
+DECLARE @position INT, @string CHAR(8);  
+-- Initialize the current position and the string variables.  
+SET @position = 1;  
+SET @string = 'New Moon';  
+WHILE @position <= DATALENGTH(@string)  
+   BEGIN  
+   SELECT ASCII(SUBSTRING(@string, @position, 1)),   
+      CHAR(ASCII(SUBSTRING(@string, @position, 1)))  
+   SET @position = @position + 1  
+   END;  
+GO";
+
+                var s = "New Moon";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    for (var i = 0; i < s.Length; i++)
+                    {
+                        var ch = s[i];
+
+                        Assert.IsTrue(reader.Read());
+                        Assert.AreEqual((int)ch, reader.GetInt32(0));
+                        Assert.AreEqual(ch.ToString(), reader.GetString(1));
+                        Assert.IsFalse(reader.Read());
+
+                        if (i == s.Length - 1)
+                            Assert.IsFalse(reader.NextResult());
+                        else
+                            Assert.IsTrue(reader.NextResult());
+                    }
+                }
+            }
+        }
+
+        [TestMethod]
+        public void NCharUnicode()
+        {
+            // Using example from
+            // https://docs.microsoft.com/en-us/sql/t-sql/functions/nchar-transact-sql?view=sql-server-ver16#b-using-substring-unicode-convert-and-nchar
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+-- The @position variable holds the position of the character currently  
+-- being processed. The @nstring variable is the Unicode character   
+-- string to process.  
+DECLARE @position INT, @nstring NCHAR(9);  
+-- Initialize the current position variable to the first character in   
+-- the string.  
+SET @position = 1;  
+-- Initialize the character string variable to the string to process.  
+-- Notice that there is an N before the start of the string. This   
+-- indicates that the data following the N is Unicode data.  
+SET @nstring = N'København';  
+-- Print the character number of the position of the string you are at,   
+-- the actual Unicode character you are processing, and the UNICODE   
+-- value for this particular character.  
+PRINT 'Character #' + ' ' + 'Unicode Character' + ' ' + 'UNICODE Value';  
+WHILE @position <= DATALENGTH(@nstring)  
+   BEGIN  
+   SELECT @position,   
+      NCHAR(UNICODE(SUBSTRING(@nstring, @position, 1))),  
+      CONVERT(NCHAR(17), SUBSTRING(@nstring, @position, 1)),  
+      UNICODE(SUBSTRING(@nstring, @position, 1))  
+   SELECT @position = @position + 1  
+   END;  
+GO";
+
+                var s = "København";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    for (var i = 0; i < s.Length * 2; i++)
+                    {
+                        Assert.IsTrue(reader.Read());
+
+                        Assert.AreEqual(i + 1, reader.GetInt32(0));
+
+                        if (i < s.Length)
+                        {
+                            var ch = s[i].ToString();
+                            Assert.AreEqual(ch, reader.GetString(1));
+                            Assert.AreEqual(ch, reader.GetString(2));
+                            Assert.AreEqual((int)s[i], reader.GetInt32(3));
+                        }
+                        else
+                        {
+                            Assert.IsTrue(reader.IsDBNull(1));
+                            Assert.AreEqual("", reader.GetString(2));
+                            Assert.IsTrue(reader.IsDBNull(3));
+                        }
+
+                        Assert.IsFalse(reader.Read());
+
+                        if (i == s.Length * 2 - 1)
+                            Assert.IsFalse(reader.NextResult());
+                        else
+                            Assert.IsTrue(reader.NextResult());
+                    }
+                }
+            }
+        }
     }
 }

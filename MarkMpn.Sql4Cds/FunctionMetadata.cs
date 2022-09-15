@@ -51,14 +51,32 @@ namespace MarkMpn.Sql4Cds
             [Description("Adds a number value to a date value")]
             public abstract DateTime dateadd(string datepart, int number, DateTime date);
 
-            [Description("Gets a value from a JSON document")]
-            public abstract object getjsonvalue(string json, string jpath, string type);
+            [Description("Extracts a scalar value from a JSON string")]
+            public abstract string json_value(string json, string path);
+
+            [Description("Tests whether a specified SQL/JSON path exists in the input JSON string")]
+            public abstract bool json_path_exists(string json, string path);
 
             [Description("Replaces one string value with another")]
             public abstract string replace(string input, string find, string replace);
 
             [Description("Gets the length of the specified string expression")]
             public abstract int len(string value);
+
+            [Description("Gets the number of bytes used to represent any expression")]
+            public abstract int datalength(object value);
+
+            [Description("Returns the character with the specified integer code")]
+            public abstract string @char(int value);
+
+            [Description("Returns the ASCII code value of the leftmost character of a character expression")]
+            public abstract int ascii(string value);
+
+            [Description("Returns the character with the specified integer code")]
+            public abstract string nchar(int value);
+
+            [Description("Returns the integer Unicode value of the first character of the input expression")]
+            public abstract int unicode(string value);
 
             [Description("Extracts a portion of the specified string expression")]
             public abstract string substring(string value, int start, int length);
