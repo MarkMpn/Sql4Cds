@@ -34,34 +34,93 @@ namespace MarkMpn.Sql4Cds.Engine
         }
 
         /// <summary>
-        /// Gets a value from a JSON document
+        /// Extracts a scalar value from a JSON string
         /// </summary>
-        /// <param name="json">The JSON string to extract a value from</param>
-        /// <param name="jpath">The JPath to extract the value at</param>
-        /// <param name="sqlType">The expected type of the value to extract</param>
-        /// <returns></returns>
-        public static object GetJsonValue(SqlString json, SqlString jpath, [TargetType] DataTypeReference sqlType)
+        /// <param name="json">An expression containing the JSON document to parse</param>
+        /// <param name="jpath">A JSON path that specifies the property to extract</param>
+        /// <returns>Returns a single text value of type nvarchar(4000)</returns>
+        public static SqlString Json_Value(SqlString json, SqlString jpath)
         {
-            var targetType = sqlType.ToNetType(out _);
-
             if (json.IsNull || jpath.IsNull)
-                return SqlTypeConverter.GetNullValue(targetType);
+                return SqlString.Null;
 
-            var jsonDoc = Newtonsoft.Json.Linq.JToken.Parse(json.Value);
-            var jtoken = jsonDoc.SelectToken(jpath.Value);
+            var path = jpath.Value;
+            var lax = !path.StartsWith("strict ", StringComparison.OrdinalIgnoreCase);
 
-            if (jtoken == null)
-                return SqlTypeConverter.GetNullValue(targetType);
+            if (path.StartsWith("strict ", StringComparison.OrdinalIgnoreCase))
+                path = path.Substring(7);
+            else if (path.StartsWith("lax ", StringComparison.OrdinalIgnoreCase))
+                path = path.Substring(4);
 
-            if (!(jtoken is JValue jvalue))
-                throw new QueryExecutionException("JPath does not result in a value");
+            try
+            {
+                var jsonDoc = JToken.Parse(json.Value);
+                var jtoken = jsonDoc.SelectToken(path);
 
-            if (jvalue.Value == null)
-                return SqlTypeConverter.GetNullValue(targetType);
+                if (jtoken == null)
+                {
+                    if (lax)
+                        return SqlString.Null;
+                    else
+                        throw new QueryExecutionException("Property does not exist");
+                }
 
-            var conversion = SqlTypeConverter.GetConversion(jvalue.Value.GetType(), targetType);
-            var sqlValue = conversion(jvalue.Value);
-            return sqlValue;
+                if (jtoken.Type == JTokenType.Object || jtoken.Type == JTokenType.Array)
+                {
+                    if (lax)
+                        return SqlString.Null;
+                    else
+                        throw new QueryExecutionException("Not a scalar value");
+                }
+
+                var value = jtoken.Value<string>();
+
+                if (value.Length > 4000)
+                {
+                    if (lax)
+                        return SqlString.Null;
+                    else
+                        throw new QueryExecutionException("Value too long");
+                }
+
+                return new SqlString(value, json.LCID, json.SqlCompareOptions);
+            }
+            catch (Newtonsoft.Json.JsonException ex)
+            {
+                throw new QueryExecutionException(ex.Message, ex);
+            }
+        }
+
+        /// <summary>
+        /// Tests whether a specified SQL/JSON path exists in the input JSON string.
+        /// </summary>
+        /// <param name="json">An expression containing the JSON document to parse</param>
+        /// <param name="jpath">A JSON path that specifies the property to extract</param>
+        /// <returns>A value indicating if the path exists in the JSON document</returns>
+        public static SqlBoolean Json_Path_Exists(SqlString json, SqlString jpath)
+        {
+            if (json.IsNull || jpath.IsNull)
+                return SqlBoolean.Null;
+
+            var path = jpath.Value;
+
+            if (path.StartsWith("strict ", StringComparison.OrdinalIgnoreCase))
+                path = path.Substring(7);
+            else if (path.StartsWith("lax ", StringComparison.OrdinalIgnoreCase))
+                path = path.Substring(4);
+
+            try
+            {
+
+                var jsonDoc = JToken.Parse(json.Value);
+                var jtoken = jsonDoc.SelectToken(path);
+
+                return jtoken != null;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         /// <summary>
