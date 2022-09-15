@@ -632,6 +632,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (method.ReturnType == typeof(SqlString))
             {
+                // Use the [MaxLength(value)] attribute from the method where available
+                var methodMaxLength = method.GetCustomAttribute<MaxLengthAttribute>();
+
+                if (methodMaxLength?.MaxLength != null)
+                    sqlType = DataTypeHelpers.NVarChar(methodMaxLength.MaxLength.Value);
+
                 // Work out precise type from parameter with [MaxLength] attribute where available
                 for (var i = 0; i < parameters.Length; i++)
                 {

@@ -39,6 +39,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="json">An expression containing the JSON document to parse</param>
         /// <param name="jpath">A JSON path that specifies the property to extract</param>
         /// <returns>Returns a single text value of type nvarchar(4000)</returns>
+        [MaxLength(4000)]
         public static SqlString Json_Value(SqlString json, SqlString jpath)
         {
             if (json.IsNull || jpath.IsNull)
@@ -830,9 +831,26 @@ namespace MarkMpn.Sql4Cds.Engine
     /// <summary>
     /// Indicates that the parameter gives the maximum length of the return value
     /// </summary>
-    [AttributeUsage(AttributeTargets.Parameter)]
+    [AttributeUsage(AttributeTargets.Parameter | AttributeTargets.Method)]
     class MaxLengthAttribute : Attribute
     {
+        /// <summary>
+        /// Sets the maximum length of the result as the maximum length of this parameter
+        /// </summary>
+        public MaxLengthAttribute()
+        {
+        }
+
+        /// <summary>
+        /// Sets the maximum length of the result to a fixed value
+        /// </summary>
+        /// <param name="maxLength"></param>
+        public MaxLengthAttribute(int maxLength)
+        {
+            MaxLength = maxLength;
+        }
+
+        public int? MaxLength { get; }
     }
 
     /// <summary>
