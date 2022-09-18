@@ -954,8 +954,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (_netToSqlTypeConversions.TryGetValue(type, out var sqlType))
                 return sqlType;
 
+            var originalType = type;
+            type = type.BaseType;
+
+            while (type != null)
+            {
+                if (_netToSqlTypeConversions.TryGetValue(type, out sqlType))
+                {
+                    _netToSqlTypeConversions[originalType] = sqlType;
+                    return sqlType;
+                }
+
+                type = type.BaseType;
+            }
+
             // Convert any other complex types (e.g. from metadata queries) to strings
-            return typeof(SqlString);
+            sqlType = typeof(SqlString);
+            _netToSqlTypeConversions[originalType] = sqlType;
+            return sqlType;
         }
 
         /// <summary>
@@ -967,11 +983,29 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <returns>The value converted to a SQL type</returns>
         public static INullable NetToSqlType(string dataSource, object value, DataTypeReference dataType)
         {
-            if (_netToSqlTypeConversionFuncs.TryGetValue(value.GetType(), out var func))
+            var type = value.GetType();
+
+            if (_netToSqlTypeConversionFuncs.TryGetValue(type, out var func))
                 return func(dataSource, value, dataType);
 
+            var originalType = type;
+            type = type.BaseType;
+
+            while (type != null)
+            {
+                if (_netToSqlTypeConversionFuncs.TryGetValue(type, out func))
+                {
+                    _netToSqlTypeConversionFuncs[originalType] = func;
+                    return func(dataSource, value, dataType);
+                }
+
+                type = type.BaseType;
+            }
+
             // Convert any other complex types (e.g. from metadata queries) to strings
-            return new SqlString(value.ToString(), CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace);
+            func = (_, v, __) => UseDefaultCollation(v.ToString());
+            _netToSqlTypeConversionFuncs[originalType] = func;
+            return func(dataSource, value, dataType);
         }
 
         /// <summary>

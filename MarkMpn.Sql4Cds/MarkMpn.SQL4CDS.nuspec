@@ -22,15 +22,18 @@ plugins or integrations by writing familiar SQL and converting it.
 
 Using the preview TDS Endpoint, SELECT queries can also be run that aren't convertible to FetchXML.</description>
     <summary>Convert SQL queries to FetchXML and execute them against Dataverse / D365</summary>
-    <releaseNotes>Fixed evaluation of expressions CASE value WHEN x THEN y ...
-Fixed converting queries with nested IN subqueries
-Prevent ambiguous column errors with IN or EXISTS subqueries
-Simplified FetchXML generated for IN subqueries
-Fixed scalar subqueries without additional filter criteria
-Use merge join instead of hash join for more join types
-Spool inner source of nested loop joins for improved performance
-Fixed metadata cache error for CRM versions before 8
-Fixed null values for aggregates</releaseNotes>
+    <releaseNotes>Expose SDK messages as table-valued functions and stored procedures
+Added JSON_VALUE and JSON_PATH_EXISTS functions to work with JSON format data
+Added CHAR, ASCII, NCHAR and UNICODE functions to work with special characters
+Apply custom paging for queries where standard FetchXML paging fails
+Improved filter folding
+Optimize joins on col1 = col2 where there is also a filter on col1 = value
+Optimize groupings on YEAR, MONTH and DAY functions
+Fixed executing queries with date groupings
+Fixed IN, NOT IN and custom joins using implicit type conversions
+Fixed MIN aggregates returning incorrect NULL values
+Fixed queries using tables that aren't supported by RetrieveTotalRecordCount method
+Fixed showing FetchXML conversion for queries that require multiple FetchXML nodes</releaseNotes>
     <copyright>Copyright © 2019 Mark Carrington</copyright>
     <language>en-GB</language>
     <tags>XrmToolBox SQL CDS</tags>
