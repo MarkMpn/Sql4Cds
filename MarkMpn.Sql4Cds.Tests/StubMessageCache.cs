@@ -43,6 +43,20 @@ namespace MarkMpn.Sql4Cds.Tests
                     }
                 }.AsReadOnly()
             };
+            _cache["OtherMessage"] = new Message
+            {
+                Name = "OtherMessage",
+                InputParameters = new List<MessageParameter>
+                {
+                    new MessageParameter
+                    {
+                        Name = "StringParam",
+                        Position = 0,
+                        Type = typeof(string)
+                    }
+                }.AsReadOnly(),
+                OutputParameters = new List<MessageParameter>().AsReadOnly()
+            };
         }
 
         public IEnumerable<Message> GetAllMessages()
