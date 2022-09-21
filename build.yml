@@ -59,6 +59,9 @@ steps:
   inputs:
     platform: '$(buildPlatform)'
     configuration: '$(buildConfiguration)'
+    testAssemblyVer2: |
+      **/MarkMpn.*.Tests.dll
+      !**\obj\**
 
 - task: NuGetToolInstaller@1
   inputs:
