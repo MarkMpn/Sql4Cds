@@ -85,7 +85,7 @@ namespace MarkMpn.Sql4Cds
 
                 case "exec":
                 case "execute":
-                    return AutocompleteSprocName(currentWord);
+                    return FilterList(AutocompleteSprocName(currentWord), currentWord);
 
                 default:
                     // Find the FROM clause
