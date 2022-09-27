@@ -286,7 +286,7 @@ namespace MarkMpn.Sql4Cds
                         }
                     }
 
-                    if ((clause == "exec" || clause == null) && (words.Count == 2 || words[words.Count - 1].EndsWith(",")))
+                    if ((clause == "exec" || clause == null) && (words.Count == 2 || (words.Count > 2 && words[words.Count - 1].EndsWith(","))))
                     {
                         // Suggest parameter names
                         var sprocName = words[0];
