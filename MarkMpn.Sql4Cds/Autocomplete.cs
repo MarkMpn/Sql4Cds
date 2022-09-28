@@ -784,7 +784,7 @@ namespace MarkMpn.Sql4Cds
                     list.AddRange(_dataSources.Values.Select(x => new InstanceAutocompleteItem(x, currentLength)));
 
                 if (_dataSources.TryGetValue(_primaryDataSource, out var ds) && ds.Messages != null)
-                    list.AddRange(ds.Messages.GetAllMessages().Where(x => x.IsValidAsStoredProcedure()).Select(x => new TVFAutocompleteItem(x, currentLength)));
+                    list.AddRange(ds.Messages.GetAllMessages().Where(x => x.IsValidAsStoredProcedure()).Select(x => new SprocAutocompleteItem(x, currentLength)));
             }
             else if (TryParseTableName(currentWord, out var instanceName, out var schemaName, out var tableName, out var parts, out var lastPartLength))
             {
@@ -808,7 +808,7 @@ namespace MarkMpn.Sql4Cds
 
                 // Could be a sproc name
                 if (schemaName.Equals("dbo", StringComparison.OrdinalIgnoreCase) && _dataSources.TryGetValue(instanceName, out var instance) && instance.Messages != null)
-                    list.AddRange(instance.Messages.GetAllMessages().Where(x => x.IsValidAsStoredProcedure()).Select(e => new TVFAutocompleteItem(e, lastPartLength)));
+                    list.AddRange(instance.Messages.GetAllMessages().Where(x => x.IsValidAsStoredProcedure()).Select(e => new SprocAutocompleteItem(e, lastPartLength)));
             }
 
             list.Sort();
@@ -1111,6 +1111,29 @@ namespace MarkMpn.Sql4Cds
                 var other = (SqlAutocompleteItem) obj;
 
                 return CompareText.CompareTo(other.CompareText);
+            }
+
+            public static string GetSqlTypeName(Type type)
+            {
+                if (type == typeof(string))
+                    return "NNVARCHAR(MAX)";
+
+                if (type == typeof(int))
+                    return "INT";
+
+                if (type == typeof(decimal))
+                    return "NUMERIC(10, 4)";
+
+                if (type == typeof(Guid))
+                    return "UNIQUEIDENTIFIER";
+
+                if (type == typeof(DateTime))
+                    return "DATETIME";
+
+                if (type == typeof(bool))
+                    return "BIT";
+
+                return type.Name;
             }
 
             public static string EscapeIdentifier(string identifier)
@@ -1416,7 +1439,7 @@ namespace MarkMpn.Sql4Cds
 
             public override string ToolTipText
             {
-                get => _message.Name + "(" + String.Join(", ", _message.InputParameters.Select(p => p.Name + " " + p.Type.Name)) + ")";
+                get => _message.Name + "(" + String.Join(", ", _message.InputParameters.Select(p => p.Name + " " + GetSqlTypeName(p.Type))) + ")";
                 set => base.ToolTipText = value;
             }
 
@@ -1443,7 +1466,7 @@ namespace MarkMpn.Sql4Cds
 
             public override string ToolTipText
             {
-                get => _message.Name + " " + String.Join(", ", _message.InputParameters.Select(p => (p.Optional ? "[" : "") + "@" + p.Name + " = " + p.Type.Name + (p.Optional ? "]" : "")));
+                get => _message.Name + " " + String.Join(", ", _message.InputParameters.Select(p => (p.Optional ? "[" : "") + "@" + p.Name + " = " + GetSqlTypeName(p.Type) + (p.Optional ? "]" : ""))) + (_message.OutputParameters.Count == 0 ? "" : ((_message.InputParameters.Count == 0 ? "" : ",") + " " + String.Join(", ", _message.OutputParameters.Select(p => "[@" + p.Name + " = " + GetSqlTypeName(p.Type) + " OUTPUT]"))));
                 set => base.ToolTipText = value;
             }
         }
@@ -1461,13 +1484,13 @@ namespace MarkMpn.Sql4Cds
 
             public override string ToolTipTitle
             {
-                get => _parameter.Name + (_message.OutputParameters.Contains(_parameter) ? " output" : " input") + " parameter (" + _parameter.Type.Name + ")";
+                get => _parameter.Name + (_message.OutputParameters.Contains(_parameter) ? " output" : " input") + " parameter (" + GetSqlTypeName(_parameter.Type) + ")";
                 set => base.ToolTipTitle = value;
             }
 
             public override string ToolTipText
             {
-                get => _message.Name + " " + String.Join(", ", _message.InputParameters.Select(p => (p.Optional ? "[" : "") + "@" + p.Name + " = " + p.Type.Name + (p.Optional ? "]" : "")));
+                get => _message.Name + " " + String.Join(", ", _message.InputParameters.Select(p => (p.Optional ? "[" : "") + "@" + p.Name + " = " + GetSqlTypeName(p.Type) + (p.Optional ? "]" : ""))) + (_message.OutputParameters.Count == 0 ? "" : ((_message.InputParameters.Count == 0 ? "" : ",") + " " + String.Join(", ", _message.OutputParameters.Select(p => "[@" + p.Name + " = " + GetSqlTypeName(p.Type) + " OUTPUT]"))));
                 set => base.ToolTipText = value;
             }
         }
