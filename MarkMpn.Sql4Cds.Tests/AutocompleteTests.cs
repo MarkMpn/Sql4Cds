@@ -325,5 +325,15 @@ namespace MarkMpn.Sql4Cds.Tests
 
             CollectionAssert.AreEqual(new[] { "@OutputParam1", "@OutputParam2", "@StringParam" }, suggestions);
         }
+
+        [TestMethod]
+        public void SelectEmptySuggestions()
+        {
+            var sql = "SELECT ";
+
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1).Select(s => s.Text).ToList();
+
+            CollectionAssert.AreEqual(Array.Empty<string>(), suggestions);
+        }
     }
 }
