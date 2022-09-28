@@ -451,7 +451,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var query = @"
                 SELECT
                     name,
-                    count(*)
+                    count(*),
+                    sum(employees)
                 FROM
                     account
                 GROUP BY name";
@@ -469,25 +470,40 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     <entity name='account'>
                         <attribute name='name' groupby='true' alias='name' />
                         <attribute name='accountid' aggregate='count' alias='count' />
+                        <attribute name='employees' aggregate='sum' alias='employees_sum' />
                         <order alias='name' />
                     </entity>
                 </fetch>");
             var partitionAggregate = AssertNode<PartitionedAggregateNode>(tryCatch2.CatchSource);
+            Assert.AreEqual(1, partitionAggregate.GroupBy.Count);
+            Assert.AreEqual("account.name", partitionAggregate.GroupBy[0].GetColumnName());
+            Assert.AreEqual(2, partitionAggregate.Aggregates.Count);
+            Assert.AreEqual(AggregateType.CountStar, partitionAggregate.Aggregates["count"].AggregateType);
+            Assert.AreEqual(AggregateType.Sum, partitionAggregate.Aggregates["employees_sum"].AggregateType);
+            Assert.AreEqual("employees_sum", partitionAggregate.Aggregates["employees_sum"].SqlExpression.ToSql());
             var partitionFetch = AssertNode<FetchXmlScan>(partitionAggregate.Source);
             AssertFetchXml(partitionFetch, @"
                 <fetch aggregate='true'>
                     <entity name='account'>
                         <attribute name='name' groupby='true' alias='name' />
                         <attribute name='accountid' aggregate='count' alias='count' />
+                        <attribute name='employees' aggregate='sum' alias='employees_sum' />
                         <order alias='name' />
                     </entity>
                 </fetch>");
             var aggregate = AssertNode<StreamAggregateNode>(tryCatch1.CatchSource);
+            Assert.AreEqual(1, aggregate.GroupBy.Count);
+            Assert.AreEqual("account.name", aggregate.GroupBy[0].GetColumnName());
+            Assert.AreEqual(2, aggregate.Aggregates.Count);
+            Assert.AreEqual(AggregateType.CountStar, aggregate.Aggregates["count"].AggregateType);
+            Assert.AreEqual(AggregateType.Sum, aggregate.Aggregates["employees_sum"].AggregateType);
+            Assert.AreEqual("employees", aggregate.Aggregates["employees_sum"].SqlExpression.ToSql());
             var scalarFetch = AssertNode<FetchXmlScan>(aggregate.Source);
             AssertFetchXml(scalarFetch, @"
                 <fetch>
                     <entity name='account'>
                         <attribute name='name' />
+                        <attribute name='employees' />
                         <order attribute='name' />
                     </entity>
                 </fetch>");

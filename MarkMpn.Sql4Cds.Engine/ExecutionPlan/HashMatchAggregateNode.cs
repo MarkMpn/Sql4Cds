@@ -472,7 +472,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         if (aggregate.Value.AggregateType != AggregateType.Average)
                         {
-                            partitionedAggregates.Aggregates[aggregate.Key] = aggregate.Value;
+                            partitionedAggregates.Aggregates[aggregate.Key] = new Aggregate
+                            {
+                                AggregateType = aggregate.Value.AggregateType,
+                                Distinct = aggregate.Value.Distinct,
+                                SqlExpression = aggregate.Key.ToColumnReference()
+                            };
                         }
                         else
                         {
@@ -480,12 +485,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             partitionedAggregates.Aggregates[aggregate.Key + "_sum"] = new Aggregate
                             {
                                 AggregateType = AggregateType.Sum,
-                                SqlExpression = aggregate.Value.SqlExpression
+                                SqlExpression = (aggregate.Key + "_sum").ToColumnReference()
                             };
                             partitionedAggregates.Aggregates[aggregate.Key + "_count"] = new Aggregate
                             {
                                 AggregateType = AggregateType.Count,
-                                SqlExpression = aggregate.Value.SqlExpression
+                                SqlExpression = (aggregate.Key + "_count").ToColumnReference()
                             };
 
                             if (partitionedResults == partitionedAggregates)

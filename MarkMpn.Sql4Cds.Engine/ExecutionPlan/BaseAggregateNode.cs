@@ -89,6 +89,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var sourceExpression = aggregate.Key.ToColumnReference();
                 aggregate.Value.Expression = sourceExpression.Compile(schema, parameterTypes);
                 sourceExpression.GetType(schema, null, parameterTypes, out var retType);
+                aggregate.Value.SourceType = retType;
                 aggregate.Value.ReturnType = retType;
             }
         }
