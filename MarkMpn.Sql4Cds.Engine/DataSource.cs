@@ -44,7 +44,7 @@ namespace MarkMpn.Sql4Cds.Engine
             Metadata = new AttributeMetadataCache(org);
             Name = name;
             TableSizeCache = new TableSizeCache(org, Metadata);
-            MessageCache = new MessageCache(org);
+            MessageCache = new MessageCache(org, Metadata);
         }
 
         /// <summary>

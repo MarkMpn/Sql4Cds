@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
 
 namespace MarkMpn.Sql4Cds.Engine
@@ -39,7 +40,8 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Loads a list of messages from a specific instance
         /// </summary>
         /// <param name="org">A connection to the instance to load the messages from</param>
-        public MessageCache(IOrganizationService org)
+        /// <param name="metadata">A cache of metadata for this connection</param>
+        public MessageCache(IOrganizationService org, IAttributeMetadataCache metadata)
         {
             // Load the requests and input parameters
             var requestQry = new QueryExpression("sdkmessagerequest");
@@ -52,7 +54,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var messageRequestFields = new Dictionary<string, List<MessageParameter>>();
 
-            foreach (var entity in RetrieveAll(org, requestQry))
+            foreach (var entity in RetrieveAll(org, requestQry, metadata))
             {
                 var messageName = entity.GetAttributeValue<string>("name");
 
@@ -92,7 +94,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var messageResponseFields = new Dictionary<string, List<MessageParameter>>();
 
-            foreach (var entity in RetrieveAll(org, responseQry))
+            foreach (var entity in RetrieveAll(org, responseQry, metadata))
             {
                 var messageName = (string)entity.GetAttributeValue<AliasedValue>("sdkmessagerequest.name").Value;
 
@@ -131,8 +133,10 @@ namespace MarkMpn.Sql4Cds.Engine
             }, StringComparer.OrdinalIgnoreCase);
         }
 
-        private IEnumerable<Entity> RetrieveAll(IOrganizationService org, QueryExpression qry)
+        private IEnumerable<Entity> RetrieveAll(IOrganizationService org, QueryExpression qry, IAttributeMetadataCache metadata)
         {
+            RemoveMissingAttributes(qry, metadata);
+
             var results = org.RetrieveMultiple(qry);
 
             foreach (var entity in results.Entities)
@@ -154,6 +158,35 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 foreach (var entity in results.Entities)
                     yield return entity;
+            }
+        }
+
+        private void RemoveMissingAttributes(QueryExpression qry, IAttributeMetadataCache metadata)
+        {
+            var logicalName = qry.EntityName;
+            var columnSet = qry.ColumnSet;
+            RemoveMissingAttributes(metadata[logicalName], columnSet);
+
+            foreach (var linkEntity in qry.LinkEntities)
+                RemoveMissingAttributes(linkEntity, metadata);
+        }
+
+        private void RemoveMissingAttributes(LinkEntity linkEntity, IAttributeMetadataCache metadata)
+        {
+            var logicalName = linkEntity.LinkToEntityName;
+            var columnSet = linkEntity.Columns;
+            RemoveMissingAttributes(metadata[logicalName], columnSet);
+
+            foreach (var childLink in linkEntity.LinkEntities)
+                RemoveMissingAttributes(childLink, metadata);
+        }
+
+        private void RemoveMissingAttributes(EntityMetadata metadata, ColumnSet columns)
+        {
+            for (var i = columns.Columns.Count - 1; i >= 0; i--)
+            {
+                if (!metadata.Attributes.Any(a => a.LogicalName == columns.Columns[i]))
+                    columns.Columns.RemoveAt(i);
             }
         }
 
