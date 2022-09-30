@@ -84,6 +84,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 delay = delay + TimeSpan.FromDays(1) - DateTime.Now.TimeOfDay;
                         }
 
+                        options.Progress(null, $"Waiting for {delay}...");
                         options.CancellationToken.WaitHandle.WaitOne(delay);
                     }
 

@@ -962,5 +962,23 @@ GO";
                 }
             }
         }
+
+        [TestMethod]
+        [ExpectedException(typeof(Sql4CdsException))]
+        public void Timeout()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandTimeout = 1;
+                cmd.CommandText = "WAITFOR DELAY '00:00:02'; SELECT 1";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsFalse(reader.Read());
+                    Assert.Fail();
+                }
+            }
+        }
     }
 }

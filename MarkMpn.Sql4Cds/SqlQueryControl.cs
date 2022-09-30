@@ -709,6 +709,8 @@ namespace MarkMpn.Sql4Cds
 
         private void backgroundWorker_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
         {
+            var cancelled = e.Cancelled || (Cancellable && _cancelled && e.Error is Sql4CdsException);
+
             _progressHost.Visible = false;
             _stopwatch.Stop();
             timer.Enabled = false;
@@ -716,7 +718,7 @@ namespace MarkMpn.Sql4Cds
             _cancelled = false;
             _command = null;
 
-            if (e.Cancelled)
+            if (cancelled)
             {
                 toolStripStatusLabel.Image = Properties.Resources.StatusStop_16x;
                 toolStripStatusLabel.Text = "Query cancelled";
@@ -954,6 +956,7 @@ namespace MarkMpn.Sql4Cds
 
                             var dataTable = new DataTable();
                             var schemaTable = reader.GetSchemaTable();
+                            var constraintError = false;
 
                             try
                             {
@@ -961,6 +964,7 @@ namespace MarkMpn.Sql4Cds
                             }
                             catch (ConstraintException ex)
                             {
+                                constraintError = true;
                                 foreach (DataRow row in dataTable.Rows)
                                 {
                                     if (row.RowError != null)
@@ -969,14 +973,19 @@ namespace MarkMpn.Sql4Cds
 
                                 throw;
                             }
+                            finally
+                            {
+                                if (!constraintError)
+                                {
+                                    for (var i = 0; i < schemaTable.Rows.Count; i++)
+                                        dataTable.Columns[i].ExtendedProperties["Schema"] = schemaTable.Rows[i];
 
-                            for (var i = 0; i < schemaTable.Rows.Count; i++)
-                                dataTable.Columns[i].ExtendedProperties["Schema"] = schemaTable.Rows[i];
+                                    for (var i = 0; i < columnNames.Count; i++)
+                                        dataTable.Columns[i].Caption = columnNames[i];
 
-                            for (var i = 0; i < columnNames.Count; i++)
-                                dataTable.Columns[i].Caption = columnNames[i];
-
-                            Execute(() => ShowResult(null, args, dataTable, null, null));
+                                    Execute(() => ShowResult(null, args, dataTable, null, null));
+                                }
+                            }
                         }
                     }
                 }
@@ -987,12 +996,6 @@ namespace MarkMpn.Sql4Cds
                     foreach (var query in plan)
                         Execute(() => ShowResult(query, args, null, null, null));
                 }
-            }
-
-            if (Cancellable && _cancelled)
-            {
-                e.Cancel = true;
-                AddMessage(-1, 0, "Query was cancelled by user", true);
             }
         }
 

@@ -26,6 +26,7 @@ namespace MarkMpn.Sql4Cds.Engine
         private string _commandText;
         private CommandType _commandType;
         private CancellationTokenSource _cts;
+        private bool _cancelledManually;
 
         public Sql4CdsCommand(Sql4CdsConnection connection) : this(connection, string.Empty)
         {
@@ -131,8 +132,11 @@ namespace MarkMpn.Sql4Cds.Engine
             }
         }
 
+        internal bool CancelledManually => _cancelledManually;
+
         public override void Cancel()
         {
+            _cancelledManually = true;
             _cts?.Cancel();
         }
 
@@ -276,6 +280,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     return new SqlDataReaderWrapper(_connection, this, con, cmd, _connection.Database);
                 }
 
+                _cancelledManually = false;
                 _cts = CommandTimeout == 0 ? new CancellationTokenSource() : new CancellationTokenSource(TimeSpan.FromSeconds(CommandTimeout));
                 var options = new CancellationTokenOptionsWrapper(_connection.Options, _cts);
 
