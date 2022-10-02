@@ -126,7 +126,7 @@ namespace MarkMpn.Sql4Cds.SSMS
                 Metadata = metadata,
                 Name = name,
                 TableSizeCache = new TableSizeCache(con, metadata),
-                MessageCache = new MessageCache(con)
+                MessageCache = new MessageCache(con, metadata)
             };
         }
 
