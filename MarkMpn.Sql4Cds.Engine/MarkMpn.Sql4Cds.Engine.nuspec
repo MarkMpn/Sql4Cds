@@ -11,8 +11,8 @@
     <iconUrl>https://markcarrington.dev/sql4cds-icon/</iconUrl>
     <description>Convert SQL queries to FetchXml and execute them against Dataverse / D365</description>
     <summary>Convert SQL queries to FetchXml and execute them against Dataverse / D365</summary>
-    <releaseNotes>Autocomplete improvements and fixes
-Partitioned aggregate query fixes</releaseNotes>
+    <releaseNotes>Fixed aggregate queries with child records
+Earlier on-prem version compatibility fix</releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>
     <tags>SQL CDS</tags>
