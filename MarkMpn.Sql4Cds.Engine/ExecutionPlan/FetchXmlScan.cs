@@ -169,6 +169,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (FetchXml.distinct)
                 return false;
 
+            if (FetchXml.aggregate)
+                return false;
+
             if (!dataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
 

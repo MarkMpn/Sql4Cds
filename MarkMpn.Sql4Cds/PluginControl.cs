@@ -113,7 +113,7 @@ namespace MarkMpn.Sql4Cds
                     Metadata = metadata,
                     TableSizeCache = new TableSizeCache(GetNewServiceClient(con), metadata),
                     Name = con.ConnectionName,
-                    MessageCache = new MessageCache(GetNewServiceClient(con))
+                    MessageCache = new MessageCache(GetNewServiceClient(con), metadata)
                 };
             }
 
