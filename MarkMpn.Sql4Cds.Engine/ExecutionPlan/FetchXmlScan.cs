@@ -56,6 +56,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     var formatted = value.ToString();
 
+                    if (value is SqlDate d)
+                        value = (SqlDateTime)d;
+                    else if (value is SqlDateTime2 dt2)
+                        value = (SqlDateTime)dt2;
+                    else if (value is SqlTime t)
+                        value = (SqlDateTime)t;
+                    else if (value is SqlDateTimeOffset dto)
+                        value = (SqlDateTime)dto;
+
                     if (value is SqlDateTime dt)
                     {
                         DateTimeOffset dto;

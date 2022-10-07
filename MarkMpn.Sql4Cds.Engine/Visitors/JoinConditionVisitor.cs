@@ -49,8 +49,8 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                 }
                 else if (_lhs.ContainsColumn(rhsName, out rhsColName) && _rhs.ContainsColumn(lhsName, out lhsColName))
                 {
-                    (lhsCol, rhsCol) = (rhsCol, lhsCol);
-                    (lhsColName, rhsName) = (rhsName, lhsColName);
+                    Swap(ref lhsCol, ref rhsCol);
+                    Swap(ref lhsColName, ref rhsColName);
                 }
                 else
                 {
@@ -109,6 +109,13 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                 LhsKey = LhsExpression as ColumnReferenceExpression;
                 RhsKey = RhsExpression as ColumnReferenceExpression;
             }
+        }
+
+        private void Swap<T>(ref T first, ref T second)
+        {
+            var temp = first;
+            first = second;
+            second = temp;
         }
 
         public override void ExplicitVisit(BooleanBinaryExpression node)

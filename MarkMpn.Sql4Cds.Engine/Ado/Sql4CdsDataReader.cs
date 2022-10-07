@@ -131,16 +131,24 @@ namespace MarkMpn.Sql4Cds.Engine
                     _instructionPointer++;
                 }
             }
-            catch
+            catch (Sql4CdsException)
             {
                 _error = true;
                 throw;
+            }
+            catch (Exception ex)
+            {
+                _error = true;
+                throw new Sql4CdsException(ex.Message, ex);
             }
             finally
             {
                 foreach (var paramName in _connection.GlobalVariableValues.Keys.ToArray())
                     _connection.GlobalVariableValues[paramName] = parameterValues[paramName];
             }
+
+            if (_options.CancellationToken.IsCancellationRequested)
+                throw new Sql4CdsException(_command.CancelledManually ? "Query was cancelled by user" : "Query timed out");
 
             return false;
         }

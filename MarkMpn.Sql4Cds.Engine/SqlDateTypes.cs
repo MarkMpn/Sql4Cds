@@ -43,7 +43,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public static SqlBoolean operator ==(SqlDate x, SqlDate y) => x._dt == y._dt;
 
-        public static SqlBoolean operator !=(SqlDate x, SqlDate y) => x._dt  != y._dt;
+        public static SqlBoolean operator !=(SqlDate x, SqlDate y) => x._dt != y._dt;
 
         public static SqlBoolean operator <(SqlDate x, SqlDate y) => x._dt < y._dt;
 
@@ -86,6 +86,11 @@ namespace MarkMpn.Sql4Cds.Engine
         public static implicit operator SqlDate(SqlString str)
         {
             return new SqlDate((SqlDateTime)str);
+        }
+
+        public override string ToString()
+        {
+            return _dt.ToString();
         }
     }
 
@@ -175,6 +180,11 @@ namespace MarkMpn.Sql4Cds.Engine
         public static implicit operator SqlTime(SqlString str)
         {
             return new SqlTime((SqlDateTime)str);
+        }
+
+        public override string ToString()
+        {
+            return _dt.ToString();
         }
     }
 
@@ -269,6 +279,11 @@ namespace MarkMpn.Sql4Cds.Engine
         public static implicit operator SqlDateTime2(SqlString str)
         {
             return new SqlDateTime2((SqlDateTime)str);
+        }
+
+        public override string ToString()
+        {
+            return _dt.ToString();
         }
     }
 
@@ -378,6 +393,11 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var dto = DateTimeOffset.Parse(str.Value);
             return new SqlDateTimeOffset(dto);
+        }
+
+        public override string ToString()
+        {
+            return _dt.ToString();
         }
     }
 }

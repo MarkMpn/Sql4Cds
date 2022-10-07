@@ -248,7 +248,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (rightSchema.ContainsColumn(col1.GetColumnName(), out _) &&
                     leftSchema.ContainsColumn(col2.GetColumnName(), out _))
                 {
-                    (leftSource, leftSchema, rightSource, rightSchema) = (rightSource, rightSchema, leftSource, leftSchema);
+                    Swap(ref leftSource, ref rightSource);
+                    Swap(ref leftSchema, ref rightSchema);
                 }
 
                 if (leftSchema.ContainsColumn(col1.GetColumnName(), out var leftCol) &&
@@ -269,7 +270,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     // Prefer to use a merge join if either of the join keys are the primary key.
                     // Swap the tables if necessary to use the primary key from the right source.
                     if (leftSchema.PrimaryKey != leftCol && rightSchema.PrimaryKey == rightCol)
-                        (leftSource, leftSchema, leftCol, rightSource, rightSchema, rightCol) = (rightSource, rightSchema, rightCol, leftSource, leftSchema, leftCol);
+                    {
+                        Swap(ref leftSource, ref rightSource);
+                        Swap(ref leftSchema, ref rightSchema);
+                        Swap(ref leftCol, ref rightCol);
+                    }
 
                     if (leftSchema.PrimaryKey == leftCol)
                         foldedJoin = new MergeJoinNode();
@@ -304,6 +309,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             foldedJoin = null;
             removedCondition = null;
             return false;
+        }
+
+        private void Swap<T>(ref T first, ref T second)
+        {
+            var temp = first;
+            first = second;
+            second = temp;
         }
 
         private bool FoldInExistsToFetchXml(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints, out Dictionary<FetchLinkEntityType, FetchXmlScan> addedLinks)
