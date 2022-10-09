@@ -373,25 +373,28 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var values = new Dictionary<string, object>();
 
-            foreach (var attribute in entity.Attributes)
+            if (entity != null && entity.Attributes != null)
             {
-                if (attribute.Value is OptionSetValue osv)
+                foreach (var attribute in entity.Attributes)
                 {
-                    values[attribute.Key] = osv.Value;
-                }
-                else if (attribute.Value is Money money)
-                {
-                    values[attribute.Key] = money.Value;
-                }
-                else if (attribute.Value is EntityReference er)
-                {
-                    values[attribute.Key] = er.Id;
-                    values[attribute.Key + "name"] = er.Name;
-                    values[attribute.Key + "type"] = er.LogicalName;
-                }
-                else
-                {
-                    values[attribute.Key] = attribute.Value;
+                    if (attribute.Value is OptionSetValue osv)
+                    {
+                        values[attribute.Key] = osv.Value;
+                    }
+                    else if (attribute.Value is Money money)
+                    {
+                        values[attribute.Key] = money.Value;
+                    }
+                    else if (attribute.Value is EntityReference er)
+                    {
+                        values[attribute.Key] = er.Id;
+                        values[attribute.Key + "name"] = er.Name;
+                        values[attribute.Key + "type"] = er.LogicalName;
+                    }
+                    else
+                    {
+                        values[attribute.Key] = attribute.Value;
+                    }
                 }
             }
 
