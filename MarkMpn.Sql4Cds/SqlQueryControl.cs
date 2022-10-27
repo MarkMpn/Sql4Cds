@@ -198,6 +198,9 @@ namespace MarkMpn.Sql4Cds
 
                 toolStripStatusLabel.Text = "Connected";
                 toolStripStatusLabel.Image = Properties.Resources.ConnectFilled_grey_16x;
+
+                statusStrip.BackColor = con.EnvironmentHighlightingInfo?.Color ?? Color.Khaki;
+                statusStrip.ForeColor = con.EnvironmentHighlightingInfo?.TextColor ?? SystemColors.WindowText;
             }
             else
             {
@@ -206,6 +209,9 @@ namespace MarkMpn.Sql4Cds
 
                 toolStripStatusLabel.Text = "Disconnected";
                 toolStripStatusLabel.Image = Properties.Resources.Disconnect_Filled_16x;
+
+                statusStrip.BackColor = Color.Khaki;
+                statusStrip.ForeColor = SystemColors.WindowText;
             }
 
             SyncUsername();
