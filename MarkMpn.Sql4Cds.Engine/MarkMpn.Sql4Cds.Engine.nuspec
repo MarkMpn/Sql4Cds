@@ -13,7 +13,8 @@
     <summary>Convert SQL queries to FetchXml and execute them against Dataverse / D365</summary>
     <releaseNotes>Fixed timeout handling
 Downgraded target framework to 4.6.2
-Handle more date/time types as parameters to FetchXML queries</releaseNotes>
+Handle more date/time types as parameters to FetchXML queries
+Possible fix for audit retrieval bug</releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>
     <tags>SQL CDS</tags>
