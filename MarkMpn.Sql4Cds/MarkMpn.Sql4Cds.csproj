@@ -269,6 +269,12 @@
     </Compile>
     <Compile Include="ConnectionExtensions.cs" />
     <Compile Include="ConnectionPropertiesWrapper.cs" />
+    <Compile Include="FindReplace.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="FindReplace.Designer.cs">
+      <DependentUpon>FindReplace.cs</DependentUpon>
+    </Compile>
     <Compile Include="XtbDataSource.cs" />
     <Compile Include="EntityCache.cs" />
     <Compile Include="MQueryControl.cs">
@@ -336,6 +342,9 @@
   <ItemGroup>
     <EmbeddedResource Include="ConfirmCloseForm.resx">
       <DependentUpon>ConfirmCloseForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="FindReplace.resx">
+      <DependentUpon>FindReplace.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="MQueryControl.resx">
       <DependentUpon>MQueryControl.cs</DependentUpon>

@@ -89,6 +89,7 @@ namespace MarkMpn.Sql4Cds
         private bool _addingResult;
         private IDictionary<int, TextRange> _messageLocations;
         private readonly Sql4CdsConnection _connection;
+        private FindReplace _findReplace;
 
         static SqlQueryControl()
         {
@@ -363,9 +364,38 @@ namespace MarkMpn.Sql4Cds
                         e.Handled = true;
                     }
                 }
-                if (e.KeyCode == Keys.Space && e.Control)
+                else if (e.KeyCode == Keys.Space && e.Control)
                 {
                     _autocomplete.Show(_editor, true);
+                    e.Handled = true;
+                    e.SuppressKeyPress = true;
+                }
+                else if (e.KeyCode == Keys.F && e.Control)
+                {
+                    ShowFindControl();
+                    e.Handled = true;
+                    e.SuppressKeyPress = true;
+                }
+                else if (e.KeyCode == Keys.H && e.Control)
+                {
+                    ShowFindControl();
+                    _findReplace.ShowReplace = true;
+                    e.Handled = true;
+                    e.SuppressKeyPress = true;
+                }
+                else if (e.KeyCode == Keys.Escape && _findReplace != null)
+                {
+                    _findReplace.Hide();
+                    e.Handled = true;
+                    e.SuppressKeyPress = true;
+                }
+                else if (e.KeyCode == Keys.F3 && _findReplace != null)
+                {
+                    if (e.Shift)
+                        _findReplace.FindPrevious();
+                    else
+                        _findReplace.FindNext();
+
                     e.Handled = true;
                     e.SuppressKeyPress = true;
                 }
@@ -471,6 +501,24 @@ namespace MarkMpn.Sql4Cds
             scintilla.MouseDwellTime = (int)TimeSpan.FromSeconds(1).TotalMilliseconds;
 
             return scintilla;
+        }
+
+        private void ShowFindControl()
+        {
+            if (_findReplace != null)
+            {
+                _findReplace.Visible = true;
+                _findReplace.ShowFind();
+                return;
+            }
+
+            _findReplace = new FindReplace(_editor);
+            _findReplace.Left = ClientSize.Width - _findReplace.Width - 2;
+            _findReplace.Top = 2;
+            _findReplace.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            Controls.Add(_findReplace);
+            _findReplace.ShowFind();
+            _findReplace.BringToFront();
         }
 
         TabContent IDocumentWindow.GetSessionDetails()
