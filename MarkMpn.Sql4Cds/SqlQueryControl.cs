@@ -8,14 +8,9 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
-using System.Runtime.Serialization;
 using System.ServiceModel;
-using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading;
 using System.Windows.Forms;
-using System.Xml;
-using System.Xml.Serialization;
 using AutocompleteMenuNS;
 using MarkMpn.Sql4Cds.Controls;
 using MarkMpn.Sql4Cds.Engine;
@@ -27,9 +22,7 @@ using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
 using Microsoft.Xrm.Tooling.Connector;
 using ScintillaNET;
-using xrmtb.XrmToolBox.Controls;
 using xrmtb.XrmToolBox.Controls.Controls;
-using XrmToolBox.Extensibility;
 
 namespace MarkMpn.Sql4Cds
 {
@@ -73,6 +66,7 @@ namespace MarkMpn.Sql4Cds
         private int _maxLineNumberCharLength;
         private string _displayName;
         private string _filename;
+        private DateTime? _lastModified;
         private bool _modified;
         private static int _queryCounter;
         private static ImageList _images;
@@ -146,6 +140,15 @@ namespace MarkMpn.Sql4Cds
                 _filename = value;
                 _displayName = Path.GetFileName(value);
                 _modified = false;
+
+                try
+                {
+                    _lastModified = new FileInfo(value).LastWriteTimeUtc;
+                }
+                catch
+                {
+                }
+
                 SyncTitle();
             }
         }
@@ -157,6 +160,37 @@ namespace MarkMpn.Sql4Cds
         public ConnectionDetail Connection => _con;
         
         public string Sql => String.IsNullOrEmpty(_editor.SelectedText) ? _editor.Text : _editor.SelectedText;
+
+        private void CheckForNewVersion(object sender, EventArgs e)
+        {
+            base.OnActivated(e);
+
+            if (_lastModified != null)
+            {
+                try
+                {
+                    var latestModified = new FileInfo(Filename).LastWriteTimeUtc;
+                    if (latestModified > _lastModified)
+                    {
+                        if (MessageBox.Show(this, "This file has been modified by another program.\r\nDo you want to reload it?" + (_modified ? "\r\n\r\nYour local changes will be lost." : ""), "Reload", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) == DialogResult.Yes)
+                        {
+                            _editor.Text = File.ReadAllText(Filename);
+                            _modified = false;
+                        }
+                        else
+                        {
+                            _modified = true;
+                        }
+
+                        _lastModified = latestModified;
+                        SyncTitle();
+                    }
+                }
+                catch
+                {
+                }
+            }
+        }
 
         protected override void OnClosing(CancelEventArgs e)
         {
@@ -264,6 +298,7 @@ namespace MarkMpn.Sql4Cds
 
             File.WriteAllText(Filename, _editor.Text);
             _modified = false;
+            _lastModified = new FileInfo(Filename).LastWriteTimeUtc;
             SyncTitle();
             return true;
         }
@@ -499,6 +534,8 @@ namespace MarkMpn.Sql4Cds
                 }
             };
             scintilla.MouseDwellTime = (int)TimeSpan.FromSeconds(1).TotalMilliseconds;
+
+            scintilla.GotFocus += CheckForNewVersion;
 
             return scintilla;
         }
