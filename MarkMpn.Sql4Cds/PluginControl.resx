@@ -195,6 +195,16 @@
         81H/fABSBnEPJn8TgPBA92BymgCeYN8fdZgS7Bc7EcIbFPRwMzSLTHoAAAAASUVORK5CYII=
 </value>
   </data>
+  <data name="tsbConvertToFetchXMLSplitButton.Image" type="System.Drawing.Bitmap, System.Drawing" mimetype="application/x-microsoft.net.object.bytearray.base64">
+    <value>
+        iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8
+        YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAD9SURBVDhPpZJNCsIwFIR7BI/iGbovbl16gy69QS8giOCi
+        4F5QuhYFQewpvICQSv+WsV/oi61UDfhg6JuXmUnS1pMqimIM3nunQlxVlQJw6Z1CxOz7vk6SRDPjCXcK
+        EXMURcYgM7iEGOGn+jvg7ytQEiK7Se9klkI8ZGBWluWxCeREBnDn8DzPb9fNRa8nSws481byvdhxN9/q
+        TD0s4MytIE1T89J42oW24PF0rU+LgwW8F4BZMBTQPb6gFyAh0td1PZMeDAVk9+y1EaIgCHQYhuYagJ4Z
+        a+fVqWeG915i81lifh4MchV6Zk3A/udnVEqNCOmKWmHMWisbKM97AgY1yf8cO8p7AAAAAElFTkSuQmCC
+</value>
+  </data>
   <data name="fetchXMLToolStripMenuItem.Image" type="System.Drawing.Bitmap, System.Drawing" mimetype="application/x-microsoft.net.object.bytearray.base64">
     <value>
         iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABGdBTUEAALGPC/xhBQAAAAlwSFlzAAAO
@@ -221,16 +231,6 @@
         MFBB0FxA0JJPoDlKPH8oQn4ByNis2cV0ThIAAAAASUVORK5CYII=
 </value>
   </data>
-  <data name="tsbConvertToFetchXMLSplitButton.Image" type="System.Drawing.Bitmap, System.Drawing" mimetype="application/x-microsoft.net.object.bytearray.base64">
-    <value>
-        iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8
-        YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAD9SURBVDhPpZJNCsIwFIR7BI/iGbovbl16gy69QS8giOCi
-        4F5QuhYFQewpvICQSv+WsV/oi61UDfhg6JuXmUnS1pMqimIM3nunQlxVlQJw6Z1CxOz7vk6SRDPjCXcK
-        EXMURcYgM7iEGOGn+jvg7ytQEiK7Se9klkI8ZGBWluWxCeREBnDn8DzPb9fNRa8nSws481byvdhxN9/q
-        TD0s4MytIE1T89J42oW24PF0rU+LgwW8F4BZMBTQPb6gFyAh0td1PZMeDAVk9+y1EaIgCHQYhuYagJ4Z
-        a+fVqWeG915i81lifh4MchV6Zk3A/udnVEqNCOmKWmHMWisbKM97AgY1yf8cO8p7AAAAAElFTkSuQmCC
-</value>
-  </data>
   <data name="tsbFormat.Image" type="System.Drawing.Bitmap, System.Drawing" mimetype="application/x-microsoft.net.object.bytearray.base64">
     <value>
         iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8
@@ -241,5 +241,8 @@
   </data>
   <metadata name="saveSessionTimer.TrayLocation" type="System.Drawing.Point, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
     <value>147, 17</value>
+  </metadata>
+  <metadata name="tabContextMenuStrip.TrayLocation" type="System.Drawing.Point, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
+    <value>294, 17</value>
   </metadata>
 </root>

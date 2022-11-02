@@ -15,7 +15,7 @@ using ScintillaNET;
 
 namespace MarkMpn.Sql4Cds
 {
-    public partial class MQueryControl : WeifenLuo.WinFormsUI.Docking.DockContent, IDocumentWindow
+    public partial class MQueryControl : DocumentWindowBase, IDocumentWindow
     {
         private static int _queryCounter;
 
@@ -23,7 +23,8 @@ namespace MarkMpn.Sql4Cds
         {
             InitializeComponent();
 
-            Text = $"M Query (Power BI) {++_queryCounter} *";
+            DisplayName = $"M Query (Power BI) {++_queryCounter}";
+            Modified = true;
 
             // Ref: https://github.com/jacobslusser/ScintillaNET/wiki/Automatic-Syntax-Highlighting#complete-recipe
 
@@ -54,7 +55,9 @@ namespace MarkMpn.Sql4Cds
             scintilla.SetKeywords(0, "let in");
         }
 
-        public string M
+        protected override string Type => "M";
+
+        public override string Content
         {
             get { return scintilla.Text; }
             set
@@ -69,32 +72,6 @@ namespace MarkMpn.Sql4Cds
         public void SetFocus()
         {
             scintilla.Focus();
-        }
-
-        void IDocumentWindow.Format()
-        {
-
-        }
-
-        void IDocumentWindow.Save()
-        {
-            throw new NotImplementedException();
-        }
-
-        TabContent IDocumentWindow.GetSessionDetails()
-        {
-            return new TabContent
-            {
-                Type = "M",
-                Query = scintilla.Text
-            };
-        }
-
-        void IDocumentWindow.RestoreSessionDetails(TabContent tab)
-        {
-            scintilla.ReadOnly = false;
-            scintilla.Text = tab.Query;
-            scintilla.ReadOnly = true;
         }
     }
 }

@@ -26,7 +26,7 @@ using xrmtb.XrmToolBox.Controls.Controls;
 
 namespace MarkMpn.Sql4Cds
 {
-    partial class SqlQueryControl : WeifenLuo.WinFormsUI.Docking.DockContent, IDocumentWindow
+    partial class SqlQueryControl : DocumentWindowBase, ISaveableDocumentWindow, IFormatableDocumentWindow
     {
         class ExecuteParams
         {
@@ -64,10 +64,6 @@ namespace MarkMpn.Sql4Cds
         private readonly Action<string> _log;
         private readonly PropertiesWindow _properties;
         private int _maxLineNumberCharLength;
-        private string _displayName;
-        private string _filename;
-        private DateTime? _lastModified;
-        private bool _modified;
         private static int _queryCounter;
         private static ImageList _images;
         private static Icon _sqlIcon;
@@ -96,7 +92,7 @@ namespace MarkMpn.Sql4Cds
         public SqlQueryControl(ConnectionDetail con, IDictionary<string, DataSource> dataSources, TelemetryClient ai, Action<string> showFetchXml, Action<string> log, PropertiesWindow properties)
         {
             InitializeComponent();
-            _displayName = $"SQLQuery{++_queryCounter}.sql";
+            DisplayName = $"SQLQuery{++_queryCounter}.sql";
             ShowFetchXML = showFetchXml;
             DataSources = dataSources;
             _editor = CreateSqlEditor();
@@ -128,74 +124,28 @@ namespace MarkMpn.Sql4Cds
             ChangeConnection(con);
         }
 
-        public IDictionary<string, DataSource> DataSources { get; }
+        protected override string Type => "SQL";
 
-        public Action<string> ShowFetchXML { get; }
-        
-        public string Filename
+        public override string Content
         {
-            get { return _filename; }
+            get => _editor.Text;
             set
             {
-                _filename = value;
-                _displayName = Path.GetFileName(value);
-                _modified = false;
-
-                try
-                {
-                    _lastModified = new FileInfo(value).LastWriteTimeUtc;
-                }
-                catch
-                {
-                }
-
-                SyncTitle();
+                _editor.Text = value;
+                Modified = true;
             }
         }
 
-        public bool Modified => _modified;
+        public IDictionary<string, DataSource> DataSources { get; }
 
-        public string DisplayName => _displayName + (_modified ? " *" : "");
+        public Action<string> ShowFetchXML { get; }
 
         public ConnectionDetail Connection => _con;
         
         public string Sql => String.IsNullOrEmpty(_editor.SelectedText) ? _editor.Text : _editor.SelectedText;
 
-        private void CheckForNewVersion(object sender, EventArgs e)
-        {
-            base.OnActivated(e);
-
-            if (_lastModified != null)
-            {
-                try
-                {
-                    var latestModified = new FileInfo(Filename).LastWriteTimeUtc;
-                    if (latestModified > _lastModified)
-                    {
-                        if (MessageBox.Show(this, "This file has been modified by another program.\r\nDo you want to reload it?" + (_modified ? "\r\n\r\nYour local changes will be lost." : ""), "Reload", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) == DialogResult.Yes)
-                        {
-                            _editor.Text = File.ReadAllText(Filename);
-                            _modified = false;
-                        }
-                        else
-                        {
-                            _modified = true;
-                        }
-
-                        _lastModified = latestModified;
-                        SyncTitle();
-                    }
-                }
-                catch
-                {
-                }
-            }
-        }
-
         protected override void OnClosing(CancelEventArgs e)
         {
-            base.OnClosing(e);
-
             if (Busy)
             {
                 MessageBox.Show(this, "Query is still executing. Please wait for the query to finish before closing this tab.", "Query Running", MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -203,23 +153,7 @@ namespace MarkMpn.Sql4Cds
                 return;
             }
 
-            if (_modified)
-            {
-                using (var form = new ConfirmCloseForm(new[] { DisplayName }, true))
-                {
-                    switch (form.ShowDialog())
-                    {
-                        case DialogResult.Yes:
-                            if (!Save())
-                                e.Cancel = true;
-                            break;
-
-                        case DialogResult.Cancel:
-                            e.Cancel = true;
-                            break;
-                    }
-                }
-            }
+            base.OnClosing(e);
         }
 
         internal void ChangeConnection(ConnectionDetail con)
@@ -253,14 +187,14 @@ namespace MarkMpn.Sql4Cds
             SyncTitle();
         }
 
-        private void SyncTitle()
+        protected override string GetTitle()
         {
-            var text = _displayName;
+            var text = DisplayName;
 
             if (Busy)
                 text += " Executing...";
 
-            if (_modified)
+            if (Modified)
                 text += " *";
 
             if (_con != null)
@@ -268,7 +202,7 @@ namespace MarkMpn.Sql4Cds
             else
                 text += " (Disconnected)";
 
-            Text = text;
+            return text;
         }
 
         public void SetFocus()
@@ -276,32 +210,7 @@ namespace MarkMpn.Sql4Cds
             _editor.Focus();
         }
 
-        void IDocumentWindow.Save()
-        {
-            this.Save();
-        }
-
-        public bool Save()
-        {
-            if (Filename == null)
-            {
-                using (var save = new SaveFileDialog())
-                {
-                    save.Filter = "SQL Scripts (*.sql)|*.sql";
-
-                    if (save.ShowDialog() != DialogResult.OK)
-                        return false;
-
-                    Filename = save.FileName;
-                }
-            }
-
-            File.WriteAllText(Filename, _editor.Text);
-            _modified = false;
-            _lastModified = new FileInfo(Filename).LastWriteTimeUtc;
-            SyncTitle();
-            return true;
-        }
+        string ISaveableDocumentWindow.Filter => "SQL Scripts (*.sql)|*.sql";
 
         public void InsertText(string text)
         {
@@ -460,12 +369,7 @@ namespace MarkMpn.Sql4Cds
             // Handle changes
             scintilla.TextChanged += (s, e) =>
             {
-                if (!_modified)
-                {
-                    _modified = true;
-                    SyncTitle();
-                }
-
+                Modified = true;
                 CalcLineNumberWidth((Scintilla)s);
             };
 
@@ -556,33 +460,6 @@ namespace MarkMpn.Sql4Cds
             Controls.Add(_findReplace);
             _findReplace.ShowFind();
             _findReplace.BringToFront();
-        }
-
-        TabContent IDocumentWindow.GetSessionDetails()
-        {
-            return new TabContent
-            {
-                Type = "SQL",
-                Filename = Filename,
-                Query = _modified ? _editor.Text : null
-            };
-        }
-
-        void IDocumentWindow.RestoreSessionDetails(TabContent tab)
-        {
-            var content = tab.Query;
-
-            if (!String.IsNullOrEmpty(tab.Filename))
-            {
-                Filename = tab.Filename;
-
-                if (content == null && !String.IsNullOrEmpty(tab.Filename))
-                    content = File.ReadAllText(tab.Filename);
-            }
-
-            _editor.Text = content;
-            _modified = tab.Query != null;
-            SyncTitle();
         }
 
         private void CalcLineNumberWidth(Scintilla scintilla)

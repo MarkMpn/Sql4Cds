@@ -15,7 +15,7 @@ using ScintillaNET;
 
 namespace MarkMpn.Sql4Cds
 {
-    public partial class FetchXmlControl : WeifenLuo.WinFormsUI.Docking.DockContent, IDocumentWindow
+    public partial class FetchXmlControl : DocumentWindowBase
     {
         class XmlFragmentWriter : XmlTextWriter
         {
@@ -35,7 +35,8 @@ namespace MarkMpn.Sql4Cds
         {
             InitializeComponent();
 
-            Text = $"FetchXML {++_queryCounter} *";
+            DisplayName = $"FetchXML {++_queryCounter}";
+            Modified = true;
 
             // Ref: https://gist.github.com/anonymous/63036aa8c1cefcfcb013
 
@@ -98,7 +99,14 @@ namespace MarkMpn.Sql4Cds
             scintilla.Styles[Style.Xml.SingleString].ForeColor = Color.DeepPink;
         }
 
-        public string FetchXml
+        public void SetFocus()
+        {
+            scintilla.Focus();
+        }
+
+        protected override string Type => "FetchXML";
+
+        public override string Content
         {
             get { return scintilla.Text; }
             set
@@ -131,37 +139,6 @@ namespace MarkMpn.Sql4Cds
                 scintilla.ReadOnly = true;
                 scintilla.Focus();
             }
-        }
-
-        public void SetFocus()
-        {
-            scintilla.Focus();
-        }
-
-        void IDocumentWindow.Format()
-        {
-
-        }
-
-        void IDocumentWindow.Save()
-        {
-            throw new NotImplementedException();
-        }
-
-        TabContent IDocumentWindow.GetSessionDetails()
-        {
-            return new TabContent
-            {
-                Type = "FetchXML",
-                Query = scintilla.Text
-            };
-        }
-
-        void IDocumentWindow.RestoreSessionDetails(TabContent tab)
-        {
-            scintilla.ReadOnly = false;
-            scintilla.Text = tab.Query;
-            scintilla.ReadOnly = true;
         }
     }
 }
