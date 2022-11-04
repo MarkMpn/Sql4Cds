@@ -394,22 +394,50 @@ namespace MarkMpn.Sql4Cds
             if (!(dockPanel.ActiveDocument is ISaveableDocumentWindow doc))
                 return;
 
-            var filename = doc.Filename;
+            Save(doc, doc.Filename);
+        }
 
+        private void saveAsToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (!(dockPanel.ActiveDocument is ISaveableDocumentWindow doc))
+                return;
+
+            Save(doc, null);
+        }
+
+        private void saveAllToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var unsavedDocuments = dockPanel.Documents
+                .OfType<ISaveableDocumentWindow>()
+                .Where(query => query.Modified)
+                .ToArray();
+
+            foreach (var doc in unsavedDocuments)
+            {
+                ((IDockContent)doc).DockHandler.Show();
+                if (!Save(doc, doc.Filename))
+                    break;
+            }
+        }
+
+        private bool Save(ISaveableDocumentWindow doc, string filename)
+        {
             if (filename == null)
             {
                 using (var save = new SaveFileDialog())
                 {
                     save.Filter = doc.Filter;
+                    save.FileName = doc.Filename ?? doc.DisplayName;
 
                     if (save.ShowDialog() != DialogResult.OK)
-                        return;
+                        return false;
 
                     filename = save.FileName;
                 }
             }
 
             doc.Save(filename);
+            return true;
         }
 
         private void OnSelectedObjectChanged(object sender, EventArgs e)
