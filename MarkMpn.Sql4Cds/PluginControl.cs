@@ -313,7 +313,12 @@ namespace MarkMpn.Sql4Cds
 
             if (param.TryGetValue("FetchXml", out var xml) && xml is string xmlStr && !String.IsNullOrEmpty(xmlStr))
             {
-                var options = new FetchXml2SqlOptions();
+                var options = new FetchXml2SqlOptions
+                {
+                    ConvertDateTimeToUtc = Settings.Instance.FetchXml2SqlOptions.ConvertDateTimeToUtc,
+                    ConvertFetchXmlOperatorsTo = Settings.Instance.FetchXml2SqlOptions.ConvertFetchXmlOperatorsTo,
+                    UseParametersForLiterals = Settings.Instance.FetchXml2SqlOptions.UseParametersForLiterals
+                };
 
                 if ((bool)param["ConvertOnly"])
                     options.ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.SqlCalculations;

@@ -284,6 +284,12 @@
     <Compile Include="DocumentWindowBase.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="FetchXml2SqlSettingsForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="FetchXml2SqlSettingsForm.Designer.cs">
+      <DependentUpon>FetchXml2SqlSettingsForm.cs</DependentUpon>
+    </Compile>
     <Compile Include="FindReplace.cs">
       <SubType>UserControl</SubType>
     </Compile>
@@ -357,6 +363,9 @@
   <ItemGroup>
     <EmbeddedResource Include="ConfirmCloseForm.resx">
       <DependentUpon>ConfirmCloseForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="FetchXml2SqlSettingsForm.resx">
+      <DependentUpon>FetchXml2SqlSettingsForm.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="FindReplace.resx">
       <DependentUpon>FindReplace.cs</DependentUpon>

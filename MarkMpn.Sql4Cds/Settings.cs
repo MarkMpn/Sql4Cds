@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using MarkMpn.Sql4Cds.Engine;
 
 namespace MarkMpn.Sql4Cds
 {
@@ -59,6 +60,8 @@ namespace MarkMpn.Sql4Cds
         public bool UseNativeSqlConversion { get; set; }
 
         public bool ShowFetchXMLInEstimatedExecutionPlans { get; set; } = true;
+
+        public FetchXml2SqlOptions FetchXml2SqlOptions { get; set; } = new FetchXml2SqlOptions();
     }
 
     public class TabContent
