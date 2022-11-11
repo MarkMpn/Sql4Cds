@@ -65,6 +65,9 @@ namespace MarkMpn.Sql4Cds.Engine
             var entity = fetch.Items.OfType<FetchEntityType>().SingleOrDefault();
             AddSelectElements(query, entity.Items, entity?.name);
 
+            if (query.SelectElements.Count == 0)
+                query.SelectElements.Add(new SelectStarExpression());
+
             // FROM
             var aliasToLogicalName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 

@@ -373,6 +373,24 @@ namespace MarkMpn.Sql4Cds.Engine.FetchXml.Tests
             Assert.AreEqual("SELECT name FROM account WHERE ownerid = CURRENT_USER", NormalizeWhitespace(converted));
         }
 
+        [TestMethod]
+        public void NoAttributes()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var fetch = @"
+                <fetch>
+                    <entity name='account'>
+                        <filter>
+                            <condition attribute='ownerid' operator='eq-userid' />
+                        </filter>
+                    </entity>
+                </fetch>";
+
+            var converted = FetchXml2Sql.Convert(_service, metadata, fetch, new FetchXml2SqlOptions { ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.SqlCalculations }, out _);
+
+            Assert.AreEqual("SELECT * FROM account WHERE ownerid = CURRENT_USER", NormalizeWhitespace(converted));
+        }
+
         private static string NormalizeWhitespace(string s)
         {
             return Regex.Replace(s, "\\s+", " ");
