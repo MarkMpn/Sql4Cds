@@ -32,6 +32,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer
                     .WithHandler<ConnectionHandler>()
                     .WithHandler<CreateSessionHandler>()
                     .WithHandler<ExpandHandler>()
+                    .WithHandler<ExecuteHandler>()
                     .WithServices(x =>
                     {
                         x.AddLogging(b => b.SetMinimumLevel(LogLevel.Trace));
