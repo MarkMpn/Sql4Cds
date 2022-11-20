@@ -31,11 +31,37 @@ namespace MarkMpn.Sql4Cds.LanguageServer
                                 SpecialValueType = ConnectionOption.SpecialValueServerName,
                                 IsIdentity = true
                             },
+                            new ConnectionOption
+                            {
+                                SpecialValueType = ConnectionOption.SpecialValueDatabaseName,
+                                IsIdentity = true
+                            },
                             // TODO: More
                         }
                     },
                     AdminServicesProvider = new AdminServicesProviderOptions
                     {
+                        DatabaseInfoOptions = new[]
+                        {
+                            new ServiceOption
+                            {
+                                Name = "name",
+                                DisplayName = "Name",
+                                Description = "Name of the database",
+                                ValueType = "string",
+                                IsRequired = true,
+                                GroupName = "General"
+                            },
+                            new ServiceOption
+                            {
+                                Name = "url",
+                                DisplayName = "Url",
+                                Description = "Url of the database",
+                                ValueType = "string",
+                                IsRequired = true,
+                                GroupName = "General"
+                            }
+                        }
                     },
                     Features = new []
                     {

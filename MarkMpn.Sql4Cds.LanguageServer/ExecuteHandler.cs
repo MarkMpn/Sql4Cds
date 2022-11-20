@@ -1,9 +1,11 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
 using System.Data.SqlTypes;
 using System.Diagnostics;
+using System.Linq;
 using System.Runtime.Serialization;
 using System.Text;
 using System.Text.Json.Serialization;
@@ -18,22 +20,27 @@ namespace MarkMpn.Sql4Cds.LanguageServer
 {
     [Method("query/executeDocumentSelection")]
     [Serial]
-    class ExecuteHandler : IRequestHandler<ExecuteDocumentSelectionParams,ExecuteRequestResult>, IJsonRpcHandler
+    class ExecuteHandler : IRequestHandler<ExecuteDocumentSelectionParams,ExecuteRequestResult>, IRequestHandler<SubsetParams, SubsetResult>, IJsonRpcHandler
     {
         private readonly ILanguageServerFacade _lsp;
         private readonly ConnectionManager _connectionManager;
+        private readonly TextDocumentManager _documentManager;
+        private readonly ConcurrentDictionary<string, List<ResultSetSummary>> _resultSets;
 
-        public ExecuteHandler(ILanguageServerFacade lsp, ConnectionManager connectionManager)
+        public ExecuteHandler(ILanguageServerFacade lsp, ConnectionManager connectionManager, TextDocumentManager documentManager)
         {
             _lsp = lsp;
             _connectionManager = connectionManager;
+            _documentManager = documentManager;
+            _resultSets = new ConcurrentDictionary<string, List<ResultSetSummary>>();
         }
 
         public Task<ExecuteRequestResult> Handle(ExecuteDocumentSelectionParams request, CancellationToken cancellationToken)
         {
-            //var session = _connectionManager.Connect(request.);
-            var uri = new Uri(request.OwnerUri);
-            var session = _connectionManager.GetConnection(uri.Host);
+            var session = _connectionManager.GetConnection(request.OwnerUri);
+
+            if (session == null)
+                return Task.FromResult(new ExecuteRequestResult()); // TODO: Send error
 
             Task.Run(async () =>
             {
@@ -44,17 +51,12 @@ namespace MarkMpn.Sql4Cds.LanguageServer
                 // query/resultSetComplete (ResultSetCompleteEventParams)
                 // query/batchComplete (BatchEventParams)
                 var startTime = DateTime.UtcNow;
+
                 var batchSummary = new BatchSummary
                 {
                     Id = 0,
                     ExecutionStart = startTime.ToLocalTime().ToString("o"),
-                    Selection = new SelectionData
-                    {
-                        StartColumn = 0,
-                        StartLine =0,
-                        EndColumn = 1,
-                        EndLine = 0
-                    }
+                    Selection = request.QuerySelection
                 };
 
                 _lsp.SendNotification("query/batchStart", new BatchEventParams
@@ -63,58 +65,102 @@ namespace MarkMpn.Sql4Cds.LanguageServer
                     BatchSummary = batchSummary
                 });
 
-                //await Task.Delay(TimeSpan.FromSeconds(2));
-
-                _lsp.SendNotification("query/message", new MessageParams
+                session.Connection.InfoMessage += (sender, msg) =>
                 {
-                    OwnerUri = request.OwnerUri,
-                    Message = new ResultMessage
+                    _lsp.SendNotification("query/message", new MessageParams
                     {
-                        BatchId = batchSummary.Id,
-                        Time = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss"),
-                        Message = "Hello from SQL 4 CDS"
-                    }
-                });
+                        OwnerUri = request.OwnerUri,
+                        Message = new ResultMessage
+                        {
+                            BatchId = batchSummary.Id,
+                            Time = DateTime.UtcNow.ToString("o"),
+                            Message = msg.Message
+                        }
+                    });
+                };
 
-                //await Task.Delay(TimeSpan.FromSeconds(2));
+                var resultSets = new List<ResultSetSummary>();
+                _resultSets[request.OwnerUri] = resultSets;
+
+                using (var cmd = session.Connection.CreateCommand())
+                {
+                    var qry = "";
+
+                    var doc = _documentManager.GetContent(request.OwnerUri).Split('\n');
+                    for (var i = request.QuerySelection.StartLine; i <= request.QuerySelection.EndLine; i++)
+                    {
+                        if (i == request.QuerySelection.StartLine && i == request.QuerySelection.EndLine)
+                            qry += doc[i].Substring(request.QuerySelection.StartColumn, request.QuerySelection.EndColumn - request.QuerySelection.StartColumn);
+                        else if (i == request.QuerySelection.StartLine)
+                            qry += doc[i].Substring(request.QuerySelection.StartColumn);
+                        else if (i == request.QuerySelection.EndLine)
+                            qry += doc[i].Substring(0, request.QuerySelection.EndColumn);
+                        else
+                            qry += doc[i];
+
+                        qry += '\n';
+                    }
+
+                    cmd.CommandText = qry;
+
+                    using (var reader = await cmd.ExecuteReaderAsync())
+                    {
+                        while (reader.FieldCount > 0)
+                        {
+                            var resultSet = new ResultSetSummary
+                            {
+                                Id = resultSets.Count,
+                                BatchId = batchSummary.Id,
+                                Complete = false,
+                                ColumnInfo = new DbColumnWrapper[reader.FieldCount],
+                                RowCount = 0,
+                                SpecialAction = new SpecialAction(),
+                            };
+
+                            for (var i = 0; i < reader.FieldCount; i++)
+                                resultSet.ColumnInfo[i] = new DbColumnWrapper(new ColumnInfo(reader.GetName(i), reader.GetDataTypeName(i)));
+
+                            resultSets.Add(resultSet);
+
+                            _lsp.SendNotification("query/resultSetAvailable", new ResultSetAvailableEventParams
+                            {
+                                OwnerUri = request.OwnerUri,
+                                ResultSetSummary = resultSet,
+                            });
+
+                            while (await reader.ReadAsync())
+                            {
+                                var row = new object[reader.FieldCount];
+                                reader.GetValues(row);
+                                resultSet.Values.Add(row);
+                                resultSet.RowCount++;
+
+                                _lsp.SendNotification("query/resultSetUpdated", new ResultSetUpdatedEventParams
+                                {
+                                    OwnerUri = request.OwnerUri,
+                                    ResultSetSummary = resultSet,
+                                });
+                            }
+
+                            resultSet.Complete = true;
+
+                            _lsp.SendNotification("query/resultSetComplete", new ResultSetCompleteEventParams
+                            {
+                                OwnerUri = request.OwnerUri,
+                                ResultSetSummary = resultSet
+                            });
+
+                            if (!await reader.NextResultAsync())
+                                break;
+                        }
+                    }
+                }
 
                 var endTime = DateTime.UtcNow;
-                ResultSetSummary resultSet = /*new ResultSetSummary
-                {
-                    Id =0,
-                    BatchId = batchSummary.Id,
-                    Complete = true,
-                    ColumnInfo = null,
-                    RowCount = -1,
-                    SpecialAction = new SpecialAction(),
-                }*/null;
-
-                //_lsp.SendNotification("query/resultSetAvailable", new ResultSetCompleteEventParams
-                //{
-                //    OwnerUri = request.OwnerUri,
-                //    ResultSetSummary = resultSet,
-                //    
-                //});
-                //_lsp.SendNotification("query/resultSetComplete", new ResultSetCompleteEventParams
-                //{
-                //    OwnerUri = request.OwnerUri,
-                //    ResultSetSummary = resultSet
-                //});
-
-                _lsp.SendNotification("query/message", new MessageParams
-                {
-                    OwnerUri = request.OwnerUri,
-                    Message = new ResultMessage
-                    {
-                        BatchId = batchSummary.Id,
-                        Time = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss"),
-                        Message = "Hello from SQL 4 CDS",
-                    }
-                });
 
                 batchSummary.ExecutionEnd = endTime.ToLocalTime().ToString("o");
                 batchSummary.ExecutionElapsed = (endTime - startTime).ToString();
-                batchSummary.ResultSetSummaries = new ResultSetSummary[0];
+                batchSummary.ResultSetSummaries = resultSets.ToArray();
                 batchSummary.SpecialAction = new SpecialAction();
 
                 _lsp.SendNotification("query/batchComplete", new BatchEventParams
@@ -133,6 +179,134 @@ namespace MarkMpn.Sql4Cds.LanguageServer
                 });
             });
             return Task.FromResult(new ExecuteRequestResult());
+        }
+
+        public Task<SubsetResult> Handle(SubsetParams request, CancellationToken cancellationToken)
+        {
+            var resultSet = _resultSets[request.OwnerUri][request.ResultSetIndex];
+
+            return Task.FromResult(new SubsetResult
+            {
+                ResultSubset = new ResultSetSubset
+                {
+                    RowCount = 1,
+                    Rows = resultSet.Values
+                        .Skip((int)request.RowsStartIndex)
+                        .Take(request.RowsCount)
+                        .Select(row => row
+                            .Select(value => new DbCellValue
+                            {
+                                DisplayValue = value?.ToString(),
+                                InvariantCultureDisplayValue = value?.ToString(),
+                                IsNull = value == null || value == DBNull.Value,
+                                RawObject = value,
+                            })
+                            .ToArray())
+                        .ToArray()
+                }
+            });
+        }
+    }
+
+
+    [Method("query/subset")]
+    [Serial]
+    public class SubsetParams : IRequest<SubsetResult>
+    {
+        /// <summary>
+        /// URI for the file that owns the query to look up the results for
+        /// </summary>
+        public string OwnerUri { get; set; }
+
+        /// <summary>
+        /// Index of the batch to get the results from
+        /// </summary>
+        public int BatchIndex { get; set; }
+
+        /// <summary>
+        /// Index of the result set to get the results from
+        /// </summary>
+        public int ResultSetIndex { get; set; }
+
+        /// <summary>
+        /// Beginning index of the rows to return from the selected resultset. This index will be
+        /// included in the results.
+        /// </summary>
+        public long RowsStartIndex { get; set; }
+
+        /// <summary>
+        /// Number of rows to include in the result of this request. If the number of the rows
+        /// exceeds the number of rows available after the start index, all available rows after
+        /// the start index will be returned.
+        /// </summary>
+        public int RowsCount { get; set; }
+    }
+
+    public class SubsetResult
+    {
+        /// <summary>
+        /// The requested subset of results. Optional, can be set to null to indicate an error
+        /// </summary>
+        public ResultSetSubset ResultSubset { get; set; }
+    }
+
+    public class ResultSetSubset
+    {
+        /// <summary>
+        /// The number of rows returned from result set, useful for determining if less rows were
+        /// returned than requested.
+        /// </summary>
+        public int RowCount { get; set; }
+
+        /// <summary>
+        /// 2D array of the cell values requested from result set
+        /// </summary>
+        public DbCellValue[][] Rows { get; set; }
+    }
+
+
+    /// <summary>
+    /// Class used for internally passing results from a cell around.
+    /// </summary>
+    public class DbCellValue
+    {
+        /// <summary>
+        /// Display value for the cell, suitable to be passed back to the client
+        /// </summary>
+        public string DisplayValue { get; set; }
+
+        /// <summary>
+        /// Whether or not the cell is NULL
+        /// </summary>
+        public bool IsNull { get; set; }
+
+        /// <summary>
+        /// Culture invariant display value for the cell, this value can later be used by the client to convert back to the original value.
+        /// </summary>
+        public string InvariantCultureDisplayValue { get; set; }
+
+        /// <summary>
+        /// The raw object for the cell, for use internally
+        /// </summary>
+        internal object RawObject { get; set; }
+
+        /// <summary>
+        /// The internal ID for the row. Should be used when directly referencing the row for edit
+        /// or other purposes.
+        /// </summary>
+        public long RowId { get; set; }
+
+        /// <summary>
+        /// Copies the values of this DbCellValue into another DbCellValue (or child object)
+        /// </summary>
+        /// <param name="other">The DbCellValue (or child) that will receive the values</param>
+        public virtual void CopyTo(DbCellValue other)
+        {
+            other.DisplayValue = DisplayValue;
+            other.InvariantCultureDisplayValue = InvariantCultureDisplayValue;
+            other.IsNull = IsNull;
+            other.RawObject = RawObject;
+            other.RowId = RowId;
         }
     }
 
@@ -676,6 +850,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer
         /// The visualization options for the client to render charts.
         /// </summary>
         public VisualizationOptions Visualization { get; set; }
+
+        internal List<object[]> Values { get; } = new List<object[]>();
 
         /// <summary>
         /// Returns a string represents the current object.

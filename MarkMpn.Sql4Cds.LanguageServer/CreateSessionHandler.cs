@@ -24,7 +24,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer
 
         public Task<CreateSessionResponse> Handle(ConnectionDetails request, CancellationToken cancellationToken)
         {
-            var session = _connectionManager.Connect(request);
+            var session = _connectionManager.Connect(request, null);
 
             Task.Run(async () =>
             {

@@ -33,10 +33,12 @@ namespace MarkMpn.Sql4Cds.LanguageServer
                     .WithHandler<CreateSessionHandler>()
                     .WithHandler<ExpandHandler>()
                     .WithHandler<ExecuteHandler>()
+                    .WithHandler<GetDatabaseInfoHandler>()
                     .WithServices(x =>
                     {
                         x.AddLogging(b => b.SetMinimumLevel(LogLevel.Trace));
                         x.AddSingleton<ConnectionManager>();
+                        x.AddSingleton<TextDocumentManager>();
                     });
             });
 

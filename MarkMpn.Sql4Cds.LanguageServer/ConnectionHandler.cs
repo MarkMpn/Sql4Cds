@@ -26,22 +26,28 @@ namespace MarkMpn.Sql4Cds.LanguageServer
         {
             try
             {
-                _connectionManager.Connect(request.Connection);
+                var session = _connectionManager.Connect(request.Connection, request.OwnerUri);
 
                 _lsp.SendNotification("connection/complete", new ConnectionCompleteParams
                 {
                     OwnerUri = request.OwnerUri,
-                    ConnectionId = request.OwnerUri,
+                    ConnectionId = session.SessionId,
                     ServerInfo = new ServerInfo
                     {
-                        MachineName = "TEST"
+                        MachineName = session.DataSource.ServerName,
+                        Options = new Dictionary<string, object>
+                        {
+                            ["server"] = session.DataSource.ServerName,
+                            ["orgVersion"] = session.DataSource.Version,
+                            ["edition"] = session.DataSource.ServerName.EndsWith(".dynamics.com") ? "Online" : "On-Premises"
+                        }
                     },
                     Type = request.Type,
                     ConnectionSummary = new ConnectionSummary
                     {
-                        ServerName = "TESTSERVER",
-                        DatabaseName = "TESTDB",
-                        UserName = "TESTUSER"
+                        ServerName = session.DataSource.ServerName,
+                        DatabaseName = session.DataSource.Name,
+                        UserName = session.DataSource.Username
                     }
                 });
                 return Task.FromResult(true);

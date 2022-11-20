@@ -17,28 +17,27 @@ namespace MarkMpn.Sql4Cds.LanguageServer
     {
         private readonly ILogger<TextDocumentHandler> _logger;
         private readonly ILanguageServerConfiguration _configuration;
+        private readonly TextDocumentManager _documentManager;
 
-        private readonly DocumentSelector _documentSelector = new DocumentSelector(
-            new DocumentFilter
-            {
-                Pattern = "**/*.sql"
-            }
-        );
+        private readonly DocumentSelector _documentSelector = DocumentSelector.ForLanguage("sql");
 
-        public TextDocumentHandler(ILogger<TextDocumentHandler> logger, ILanguageServerConfiguration configuration)
+        public TextDocumentHandler(ILogger<TextDocumentHandler> logger, ILanguageServerConfiguration configuration,
+            TextDocumentManager documentManager)
         {
             _logger = logger;
             _configuration = configuration;
+            _documentManager = documentManager;
         }
 
         public TextDocumentSyncKind Change { get; } = TextDocumentSyncKind.Full;
 
         public override Task<Unit> Handle(DidChangeTextDocumentParams notification, CancellationToken token)
         {
-            _logger.LogCritical("Critical");
-            _logger.LogDebug("Debug");
-            _logger.LogTrace("Trace");
-            _logger.LogInformation("Hello world!");
+            //_logger.LogCritical("Critical");
+            //_logger.LogDebug("Debug");
+            //_logger.LogTrace("Trace");
+            //_logger.LogInformation("Hello world!");
+            _documentManager.SetContent(notification.TextDocument.Uri.ToString(), notification.ContentChanges.Single().Text);
             return Unit.Task;
         }
 
@@ -69,6 +68,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer
             Save = new SaveOptions() { IncludeText = true }
         };
 
-        public override TextDocumentAttributes GetTextDocumentAttributes(DocumentUri uri) => new TextDocumentAttributes(uri, "csharp");
+        public override TextDocumentAttributes GetTextDocumentAttributes(DocumentUri uri) => new TextDocumentAttributes(uri, "sql");
     }
 }
