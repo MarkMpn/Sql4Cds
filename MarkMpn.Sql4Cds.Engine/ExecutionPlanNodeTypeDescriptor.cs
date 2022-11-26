@@ -277,7 +277,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 value = desc.GetPropertyOwner(null);
 
             var list = (System.Collections.IList)value;
-            return list.Count > 0;
+            return list!= null && list.Count > 0;
         }
 
         public override PropertyDescriptorCollection GetProperties(ITypeDescriptorContext context, object value, Attribute[] attributes)
@@ -315,7 +315,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var list = (System.Collections.IDictionary)value;
 
-            if (list.Count == 0)
+            if (list == null || list.Count == 0)
                 return "(None)";
 
             return WrappedPropertyDescriptor.GetName(context);
@@ -329,7 +329,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 value = desc.GetPropertyOwner(null);
 
             var dict = (System.Collections.IDictionary)value;
-            return dict.Count > 0;
+            return dict != null && dict.Count > 0;
         }
 
         public override PropertyDescriptorCollection GetProperties(ITypeDescriptorContext context, object value, Attribute[] attributes)
