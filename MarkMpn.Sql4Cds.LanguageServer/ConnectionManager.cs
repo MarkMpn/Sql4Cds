@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -40,6 +41,11 @@ namespace MarkMpn.Sql4Cds.LanguageServer
                 DataSource = ds,
                 Connection = new Sql4CdsConnection(new Dictionary<string, DataSource> { [ds.Name] = ds })
             };
+        }
+
+        public void Disconnect(string ownerUri)
+        {
+            _connectedDataSource.TryRemove(ownerUri, out _);
         }
 
         public Session GetConnection(string ownerUri)
@@ -89,7 +95,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer
                         if (!connection.Options.TryGetValue("user", out x) || !(x is string username))
                             throw new ArgumentOutOfRangeException("Missing user");
 
-                        org = new ServiceClient($"AuthType=OAuth;Username={username};Url={url};AppId=51f81489-12ee-4a9e-aaae-a2591f45987d;RedirectUri=http://localhost;LoginPrompt=Auto");
+                        org = new ServiceClient($"AuthType=OAuth;Username={username};Url={url};AppId=51f81489-12ee-4a9e-aaae-a2591f45987d;RedirectUri=http://localhost;LoginPrompt=Auto;TokenCacheStorePath=" + Path.Combine(Path.GetDirectoryName(GetType().Assembly.Location), "TokenCache"));
                         break;
 
                     default:
