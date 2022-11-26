@@ -278,5 +278,17 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
             base.Visit(node);
         }
+
+        public override void Visit(PrintStatement node)
+        {
+            // Can't use PRINT statement
+            IsCompatible = false;
+        }
+
+        public override void Visit(WaitForStatement node)
+        {
+            // Can't use WAITFOR statement
+            IsCompatible = false;
+        }
     }
 }
