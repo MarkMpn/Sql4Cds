@@ -2,6 +2,7 @@
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Server;
 
 namespace MarkMpn.Sql4Cds.LanguageServer
@@ -23,10 +24,11 @@ namespace MarkMpn.Sql4Cds.LanguageServer
                             .AddLanguageProtocolLogging()
                             .SetMinimumLevel(LogLevel.Debug)
                     )
-                    .WithConfigurationItem(new OmniSharp.Extensions.LanguageServer.Protocol.Models.ConfigurationItem
-                    {
-                        Section = "sql"
-                    })
+                    //.WithConfigurationSection("SQL4CDS")
+                    //.WithConfigurationItem(new OmniSharp.Extensions.LanguageServer.Protocol.Models.ConfigurationItem
+                    //{
+                    //    Section = "SQL4CDS"
+                    //})
                     .WithHandler<TextDocumentHandler>()
                     .WithHandler<CapabilitiesHandler>()
                     .WithHandler<ConnectionHandler>()
@@ -34,14 +36,15 @@ namespace MarkMpn.Sql4Cds.LanguageServer
                     .WithHandler<ExpandHandler>()
                     .WithHandler<ExecuteHandler>()
                     .WithHandler<GetDatabaseInfoHandler>()
+                    .WithHandler<ConfigurationHandler>()
                     .WithServices(x =>
                     {
                         x.AddLogging(b => b.SetMinimumLevel(LogLevel.Trace));
                         x.AddSingleton<ConnectionManager>();
                         x.AddSingleton<TextDocumentManager>();
+                        //x.AddSingleton(new ConfigurationItem { Section = "SQL4CDS" });
                     });
             });
-
             await server.WaitForExit;
         }
     }
