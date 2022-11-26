@@ -11,7 +11,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer
 {
     [Method("connection/connect")]
     [Serial]
-    class ConnectionHandler : IRequestHandler<ConnectRequest, bool>, IJsonRpcHandler
+    class ConnectionHandler : IRequestHandler<ConnectRequest, bool>, IRequestHandler<CancelConnectParams, bool>, IRequestHandler<DisconnectParams, bool>, IJsonRpcHandler
     {
         private readonly ILanguageServerFacade _lsp;
         private readonly ConnectionManager _connectionManager;
@@ -24,38 +24,59 @@ namespace MarkMpn.Sql4Cds.LanguageServer
 
         public Task<bool> Handle(ConnectRequest request, CancellationToken cancellationToken)
         {
-            try
+            Task.Run(() =>
             {
-                var session = _connectionManager.Connect(request.Connection, request.OwnerUri);
-
-                _lsp.SendNotification("connection/complete", new ConnectionCompleteParams
+                try
                 {
-                    OwnerUri = request.OwnerUri,
-                    ConnectionId = session.SessionId,
-                    ServerInfo = new ServerInfo
+                    var session = _connectionManager.Connect(request.Connection, request.OwnerUri);
+
+                    _lsp.SendNotification("connection/complete", new ConnectionCompleteParams
                     {
-                        MachineName = session.DataSource.ServerName,
-                        Options = new Dictionary<string, object>
+                        OwnerUri = request.OwnerUri,
+                        ConnectionId = session.SessionId,
+                        ServerInfo = new ServerInfo
                         {
-                            ["server"] = session.DataSource.ServerName,
-                            ["orgVersion"] = session.DataSource.Version,
-                            ["edition"] = session.DataSource.ServerName.EndsWith(".dynamics.com") ? "Online" : "On-Premises"
+                            MachineName = session.DataSource.ServerName,
+                            Options = new Dictionary<string, object>
+                            {
+                                ["server"] = session.DataSource.ServerName,
+                                ["orgVersion"] = session.DataSource.Version,
+                                ["edition"] = session.DataSource.ServerName.EndsWith(".dynamics.com") ? "Online" : "On-Premises"
+                            }
+                        },
+                        Type = request.Type,
+                        ConnectionSummary = new ConnectionSummary
+                        {
+                            ServerName = session.DataSource.ServerName,
+                            DatabaseName = session.DataSource.Name,
+                            UserName = session.DataSource.Username
                         }
-                    },
-                    Type = request.Type,
-                    ConnectionSummary = new ConnectionSummary
+                    });
+                }
+                catch (Exception ex)
+                {
+                    _lsp.SendNotification("connection/complete", new ConnectionCompleteParams
                     {
-                        ServerName = session.DataSource.ServerName,
-                        DatabaseName = session.DataSource.Name,
-                        UserName = session.DataSource.Username
-                    }
-                });
-                return Task.FromResult(true);
-            }
-            catch
-            {
-                return Task.FromResult(false);
-            }
+                        OwnerUri = request.OwnerUri,
+                        Type = request.Type,
+                        Messages = ex.Message,
+                        ErrorMessage = ex.Message
+                    });
+                }
+            });
+
+            return Task.FromResult(true);
+        }
+
+        public Task<bool> Handle(CancelConnectParams request, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(true);
+        }
+
+        public Task<bool> Handle(DisconnectParams request, CancellationToken cancellationToken)
+        {
+            _connectionManager.Disconnect(request.OwnerUri);
+            return Task.FromResult(true);
         }
     }
 
@@ -86,6 +107,39 @@ namespace MarkMpn.Sql4Cds.LanguageServer
         /// The porpose of the connection to keep track of open connections
         /// </summary>
         public string Purpose { get; set; } = ConnectionType.GeneralConnection;
+    }
+
+    [Method("connection/disconnect", Direction.ClientToServer)]
+    [Serial]
+    public class DisconnectParams : IRequest<bool>
+    {
+        /// <summary>
+        /// A URI identifying the owner of the connection. This will most commonly be a file in the workspace
+        /// or a virtual file representing an object in a database.
+        /// </summary>
+        public string OwnerUri { get; set; }
+
+        /// <summary>
+        /// The type of connection we are disconnecting. If null, we will disconnect all connections.
+        /// connections.
+        /// </summary>
+        public string Type { get; set; }
+    }
+
+    [Method("connection/cancelconnect", Direction.ClientToServer)]
+    [Serial]
+    public class CancelConnectParams : IRequest<bool>
+    {
+        /// <summary>
+        /// A URI identifying the owner of the connection. This will most commonly be a file in the workspace
+        /// or a virtual file representing an object in a database.
+        /// </summary>
+        public string OwnerUri { get; set; }
+
+        /// <summary>
+        /// The type of connection we are trying to cancel
+        /// </summary>
+        public string Type { get; set; } = ConnectionType.Default;
     }
 
     [Method("objectexplorer/createsession", Direction.ClientToServer)]
