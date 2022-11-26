@@ -1,31 +1,40 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Data;
 using System.Data.Common;
 using System.Data.SqlTypes;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.Serialization;
 using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using MarkMpn.Sql4Cds.Engine;
+using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using MediatR;
+using Microsoft.SqlTools.ServiceLayer.ExecutionPlan.Contracts;
+using Microsoft.SqlTools.ServiceLayer.ExecutionPlan.ShowPlan;
 using Newtonsoft.Json.Converters;
+using Newtonsoft.Json.Linq;
 using OmniSharp.Extensions.JsonRpc;
+using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 
 namespace MarkMpn.Sql4Cds.LanguageServer
 {
     [Method("query/executeDocumentSelection")]
     [Serial]
-    class ExecuteHandler : IRequestHandler<ExecuteDocumentSelectionParams,ExecuteRequestResult>, IRequestHandler<SubsetParams, SubsetResult>, IJsonRpcHandler
+    class ExecuteHandler : IRequestHandler<ExecuteDocumentSelectionParams,ExecuteRequestResult>, IRequestHandler<SubsetParams, SubsetResult>, IRequestHandler<QueryCancelParams, QueryCancelResult>, IRequestHandler<QueryExecutionPlanParams, QueryExecutionPlanResult>, IJsonRpcHandler
     {
         private readonly ILanguageServerFacade _lsp;
         private readonly ConnectionManager _connectionManager;
         private readonly TextDocumentManager _documentManager;
         private readonly ConcurrentDictionary<string, List<ResultSetSummary>> _resultSets;
+        private readonly ConcurrentDictionary<string, IDbCommand> _commands;
 
         public ExecuteHandler(ILanguageServerFacade lsp, ConnectionManager connectionManager, TextDocumentManager documentManager)
         {
@@ -33,6 +42,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer
             _connectionManager = connectionManager;
             _documentManager = documentManager;
             _resultSets = new ConcurrentDictionary<string, List<ResultSetSummary>>();
+            _commands = new ConcurrentDictionary<string, IDbCommand>();
         }
 
         public Task<ExecuteRequestResult> Handle(ExecuteDocumentSelectionParams request, CancellationToken cancellationToken)
@@ -44,6 +54,11 @@ namespace MarkMpn.Sql4Cds.LanguageServer
 
             Task.Run(async () =>
             {
+                var doc = _documentManager.GetContent(request.OwnerUri).Split('\n');
+
+                if (request.QuerySelection == null)
+                    request.QuerySelection = new SelectionData { StartLine = 0, StartColumn = 0, EndLine = doc.Length - 1, EndColumn = doc[doc.Length - 1].Length };
+
                 // query/batchStart (BatchEventParams)
                 // query/message (MessagePArams)
                 // query/resultSetAvailable (ResultSetAvailableEventPArams)
@@ -82,78 +97,176 @@ namespace MarkMpn.Sql4Cds.LanguageServer
                 var resultSets = new List<ResultSetSummary>();
                 _resultSets[request.OwnerUri] = resultSets;
 
-                using (var cmd = session.Connection.CreateCommand())
+                try
                 {
-                    var qry = "";
+                    session.Connection.UseTDSEndpoint = Sql4CdsSettings.Instance.UseTdsEndpoint;
+                    session.Connection.BlockDeleteWithoutWhere = Sql4CdsSettings.Instance.BlockDeleteWithoutWhere;
+                    session.Connection.BlockUpdateWithoutWhere = Sql4CdsSettings.Instance.BlockUpdateWithoutWhere;
+                    session.Connection.UseBulkDelete = Sql4CdsSettings.Instance.UseBulkDelete;
+                    session.Connection.BatchSize = Sql4CdsSettings.Instance.BatchSize;
+                    session.Connection.MaxDegreeOfParallelism = Sql4CdsSettings.Instance.MaxDegreeOfParallelism;
+                    session.Connection.UseLocalTimeZone = Sql4CdsSettings.Instance.UseLocalTimeZone;
+                    session.Connection.BypassCustomPlugins = Sql4CdsSettings.Instance.BypassCustomPlugins;
+                    session.Connection.QuotedIdentifiers = Sql4CdsSettings.Instance.QuotedIdentifiers;
 
-                    var doc = _documentManager.GetContent(request.OwnerUri).Split('\n');
-                    for (var i = request.QuerySelection.StartLine; i <= request.QuerySelection.EndLine; i++)
+                    using (var cmd = session.Connection.CreateCommand())
                     {
-                        if (i == request.QuerySelection.StartLine && i == request.QuerySelection.EndLine)
-                            qry += doc[i].Substring(request.QuerySelection.StartColumn, request.QuerySelection.EndColumn - request.QuerySelection.StartColumn);
-                        else if (i == request.QuerySelection.StartLine)
-                            qry += doc[i].Substring(request.QuerySelection.StartColumn);
-                        else if (i == request.QuerySelection.EndLine)
-                            qry += doc[i].Substring(0, request.QuerySelection.EndColumn);
+                        cmd.CommandTimeout = 0;
+
+                        _commands[request.OwnerUri] = cmd;
+
+                        var qry = "";
+
+                        for (var i = request.QuerySelection.StartLine; i <= request.QuerySelection.EndLine; i++)
+                        {
+                            if (i == request.QuerySelection.StartLine && i == request.QuerySelection.EndLine)
+                                qry += doc[i].Substring(request.QuerySelection.StartColumn, request.QuerySelection.EndColumn - request.QuerySelection.StartColumn);
+                            else if (i == request.QuerySelection.StartLine)
+                                qry += doc[i].Substring(request.QuerySelection.StartColumn);
+                            else if (i == request.QuerySelection.EndLine)
+                                qry += doc[i].Substring(0, request.QuerySelection.EndColumn);
+                            else
+                                qry += doc[i];
+
+                            qry += '\n';
+                        }
+
+                        cmd.CommandText = qry;
+
+                        if (!request.ExecutionPlanOptions.IncludeEstimatedExecutionPlanXml)
+                        {
+                            cmd.StatementCompleted += (_, stmt) =>
+                            {
+                                var resultSet = new ResultSetSummary
+                                {
+                                    Id = resultSets.Count,
+                                    BatchId = batchSummary.Id,
+                                    Complete = true,
+                                    ColumnInfo = new[] { new DbColumnWrapper(new ColumnInfo("Microsoft SQL Server 2005 XML Showplan", "xml")) },
+                                    RowCount = 0,
+                                    SpecialAction = new SpecialAction { ExpectYukonXMLShowPlan = true },
+                                };
+                                resultSets.Add(resultSet);
+
+                                _lsp.SendNotification("query/resultSetAvailable", new ResultSetAvailableEventParams
+                                {
+                                    OwnerUri = request.OwnerUri,
+                                    ResultSetSummary = resultSet,
+                                });
+                                _lsp.SendNotification("query/resultSetUpdated", new ResultSetUpdatedEventParams
+                                {
+                                    OwnerUri = request.OwnerUri,
+                                    ResultSetSummary = resultSet,
+                                    ExecutionPlans = new List<ExecutionPlanGraph> { ConvertExecutionPlan(stmt.Statement, true) }
+                                });
+                                _lsp.SendNotification("query/resultSetComplete", new ResultSetCompleteEventParams
+                                {
+                                    OwnerUri = request.OwnerUri,
+                                    ResultSetSummary = resultSet,
+                                });
+                            };
+
+                            using (var reader = await cmd.ExecuteReaderAsync())
+                            {
+                                while (reader.FieldCount > 0)
+                                {
+                                    var resultSet = new ResultSetSummary
+                                    {
+                                        Id = resultSets.Count,
+                                        BatchId = batchSummary.Id,
+                                        Complete = false,
+                                        ColumnInfo = new DbColumnWrapper[reader.FieldCount],
+                                        RowCount = 0,
+                                        SpecialAction = new SpecialAction(),
+                                    };
+
+                                    for (var i = 0; i < reader.FieldCount; i++)
+                                        resultSet.ColumnInfo[i] = new DbColumnWrapper(new ColumnInfo(reader.GetName(i), reader.GetDataTypeName(i)));
+
+                                    resultSets.Add(resultSet);
+
+                                    _lsp.SendNotification("query/resultSetAvailable", new ResultSetAvailableEventParams
+                                    {
+                                        OwnerUri = request.OwnerUri,
+                                        ResultSetSummary = resultSet,
+                                    });
+
+                                    while (await reader.ReadAsync())
+                                    {
+                                        var row = new object[reader.FieldCount];
+                                        reader.GetValues(row);
+                                        resultSet.Values.Add(row);
+                                        resultSet.RowCount++;
+
+                                        _lsp.SendNotification("query/resultSetUpdated", new ResultSetUpdatedEventParams
+                                        {
+                                            OwnerUri = request.OwnerUri,
+                                            ResultSetSummary = resultSet,
+                                        });
+                                    }
+
+                                    resultSet.Complete = true;
+
+                                    _lsp.SendNotification("query/resultSetComplete", new ResultSetCompleteEventParams
+                                    {
+                                        OwnerUri = request.OwnerUri,
+                                        ResultSetSummary = resultSet
+                                    });
+
+                                    if (!await reader.NextResultAsync())
+                                        break;
+                                }
+                            }
+                        }
                         else
-                            qry += doc[i];
-
-                        qry += '\n';
-                    }
-
-                    cmd.CommandText = qry;
-
-                    using (var reader = await cmd.ExecuteReaderAsync())
-                    {
-                        while (reader.FieldCount > 0)
                         {
                             var resultSet = new ResultSetSummary
                             {
                                 Id = resultSets.Count,
                                 BatchId = batchSummary.Id,
-                                Complete = false,
-                                ColumnInfo = new DbColumnWrapper[reader.FieldCount],
+                                Complete = true,
+                                ColumnInfo = new[] { new DbColumnWrapper(new ColumnInfo("Microsoft SQL Server 2005 XML Showplan", "xml")) },
                                 RowCount = 0,
-                                SpecialAction = new SpecialAction(),
+                                SpecialAction = new SpecialAction { ExpectYukonXMLShowPlan = true },
                             };
-
-                            for (var i = 0; i < reader.FieldCount; i++)
-                                resultSet.ColumnInfo[i] = new DbColumnWrapper(new ColumnInfo(reader.GetName(i), reader.GetDataTypeName(i)));
-
                             resultSets.Add(resultSet);
-
+                                
                             _lsp.SendNotification("query/resultSetAvailable", new ResultSetAvailableEventParams
                             {
                                 OwnerUri = request.OwnerUri,
                                 ResultSetSummary = resultSet,
                             });
-
-                            while (await reader.ReadAsync())
+                            _lsp.SendNotification("query/resultSetUpdated", new ResultSetUpdatedEventParams
                             {
-                                var row = new object[reader.FieldCount];
-                                reader.GetValues(row);
-                                resultSet.Values.Add(row);
-                                resultSet.RowCount++;
-
-                                _lsp.SendNotification("query/resultSetUpdated", new ResultSetUpdatedEventParams
-                                {
-                                    OwnerUri = request.OwnerUri,
-                                    ResultSetSummary = resultSet,
-                                });
-                            }
-
-                            resultSet.Complete = true;
-
+                                OwnerUri = request.OwnerUri,
+                                ResultSetSummary = resultSet,
+                                ExecutionPlans = cmd.GeneratePlan(false).Select(plan => ConvertExecutionPlan(plan, false)).ToList()// ExecutionPlanGraphUtils.CreateShowPlanGraph(DemoExecutionPlan, null)
+                            });
                             _lsp.SendNotification("query/resultSetComplete", new ResultSetCompleteEventParams
                             {
                                 OwnerUri = request.OwnerUri,
-                                ResultSetSummary = resultSet
+                                ResultSetSummary = resultSet,
                             });
-
-                            if (!await reader.NextResultAsync())
-                                break;
                         }
                     }
+                }
+                catch (Exception ex)
+                {
+                    _lsp.SendNotification("query/message", new MessageParams
+                    {
+                        OwnerUri = request.OwnerUri,
+                        Message = new ResultMessage
+                        {
+                            BatchId = batchSummary.Id,
+                            Time = DateTime.UtcNow.ToString("o"),
+                            Message = ex.Message,
+                            IsError = true
+                        }
+                    });
+                }
+                finally
+                {
+                    _commands.TryRemove(request.OwnerUri, out _);
                 }
 
                 var endTime = DateTime.UtcNow;
@@ -162,6 +275,9 @@ namespace MarkMpn.Sql4Cds.LanguageServer
                 batchSummary.ExecutionElapsed = (endTime - startTime).ToString();
                 batchSummary.ResultSetSummaries = resultSets.ToArray();
                 batchSummary.SpecialAction = new SpecialAction();
+
+                if (request.ExecutionPlanOptions.IncludeActualExecutionPlanXml || request.ExecutionPlanOptions.IncludeEstimatedExecutionPlanXml)
+                    batchSummary.SpecialAction.ExpectYukonXMLShowPlan = true;
 
                 _lsp.SendNotification("query/batchComplete", new BatchEventParams
                 {
@@ -181,9 +297,293 @@ namespace MarkMpn.Sql4Cds.LanguageServer
             return Task.FromResult(new ExecuteRequestResult());
         }
 
+        private ExecutionPlanGraph ConvertExecutionPlan(IRootExecutionPlanNode plan, bool executed)
+        {
+            var id = 1;
+
+            var sb = new StringBuilder();
+            sb.Append("<!--\r\nCreated from query:\r\n\r\n");
+            sb.Append(plan.Sql);
+
+            var nodes = GetAllNodes(plan).ToList();
+            var fetchXmlNodes = nodes.OfType<IFetchXmlExecutionPlanNode>().ToList();
+
+            if (nodes.Count > fetchXmlNodes.Count)
+            {
+                sb.Append("\r\n\r\n‼ WARNING ‼\r\n");
+                sb.Append("This query requires additional processing. This FetchXML gives the required data, but needs additional processing to format it in the same way as returned by the TDS Endpoint or SQL 4 CDS.\r\n\r\n");
+                sb.Append("See the estimated execution plan to see what extra processing is performed by SQL 4 CDS");
+            }
+
+            sb.Append("\r\n\r\n-->");
+
+            foreach (var fetchXml in nodes.OfType<IFetchXmlExecutionPlanNode>())
+            {
+                sb.Append("\r\n\r\n");
+                sb.Append(fetchXml.FetchXmlString);
+            }
+
+            var graph = new ExecutionPlanGraph
+            {
+                GraphFile = new ExecutionPlanGraphInfo
+                {
+                    PlanIndexInFile = 0,
+                    GraphFileType = "xml",
+                    GraphFileContent = sb.ToString()
+                },
+                Query = plan.Sql,
+                Recommendations = new List<ExecutionPlanRecommendation>(),
+                Root = ConvertExecutionPlanNode(plan, plan.Duration, executed, ref id)
+            };
+
+            return graph;
+        }
+
+        private IEnumerable<IExecutionPlanNode> GetAllNodes(IExecutionPlanNode node)
+        {
+            foreach (var source in node.GetSources())
+            {
+                yield return source;
+
+                foreach (var subSource in GetAllNodes(source))
+                    yield return subSource;
+            }
+        }
+
+        private ExecutionPlanNode ConvertExecutionPlanNode(IExecutionPlanNode node, TimeSpan totalDuration, bool executed, ref int id)
+        {
+            var nodeInternalDurationMS = node.Duration.TotalMilliseconds - node.GetSources().Sum(n => n.Duration.TotalMilliseconds);
+            var rows = node is IDataExecutionPlanNode dataNode ? executed ? dataNode.RowsOut : dataNode.EstimatedRowsOut : 1;
+
+            var converted = new ExecutionPlanNode
+            {
+                Badges = new List<Badge>(),
+                Children = new List<ExecutionPlanNode>(),
+                Cost = totalDuration == TimeSpan.Zero ? 0 : nodeInternalDurationMS / totalDuration.TotalMilliseconds,
+                CostMetrics = new List<CostMetric>(),
+                Description = null,
+                Edges = new List<ExecutionPlanEdges>(),
+                ElapsedTimeInMs = (long) nodeInternalDurationMS,
+                ID = id++,
+                Name = node.ToString(),
+                Properties = new List<ExecutionPlanGraphPropertyBase>(),
+                RowCountDisplayString = rows.ToString(),
+                Subtext = node.ToString().Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries),
+                TopOperationsData = GetTopOperations(node, executed),
+                Type = node.GetType().Name.Replace("Node", "")
+            };
+
+            if (executed)
+            {
+                converted.CostMetrics.Add(new CostMetric
+                {
+                    Name = "ElapsedCpuTime",
+                    Value = nodeInternalDurationMS.ToString()
+                });
+
+                if (node is IDataExecutionPlanNode)
+                {
+                    converted.CostMetrics.Add(new CostMetric
+                    {
+                        Name = "ActualRows",
+                        Value = rows.ToString()
+                    });
+                }
+            }
+            else
+            {
+                converted.CostMetrics.Add(new CostMetric
+                {
+                    Name = "EstimatedRows",
+                    Value = rows.ToString()
+                });
+            }
+
+            // Tweak the Type so we get the right icon
+            converted.Type = converted.Type.Substring(0, 1).ToLower() + converted.Type.Substring(1);
+
+            if (converted.Type == "fetchXmlScan")
+                converted.Type = "fetchQuery";
+            else if (converted.Type == "select")
+                converted.Type = "result";
+            else if (converted.Type == "nestedLoop")
+                converted.Type = "nestedLoops";
+            else if (converted.Type == "hashJoin")
+                converted.Type = "hashMatch";
+            else if (converted.Type == "metadataQuery")
+                converted.Type = "fetchQuery";
+
+            // Get the filtered list of properties
+            var typeDescriptor = new ExecutionPlanNodeTypeDescriptor(node, !executed, _ => null);
+            converted.Properties = ConvertProperties(typeDescriptor, typeDescriptor.GetProperties(null));
+
+            foreach (var source in node.GetSources())
+            {
+                var sourceRows = source is IDataExecutionPlanNode dataChild ? executed ? dataChild.RowsOut : dataChild.EstimatedRowsOut : 1;
+
+                converted.Children.Add(ConvertExecutionPlanNode(source, totalDuration, executed, ref id));
+                converted.Edges.Add(new ExecutionPlanEdges
+                {
+                    RowCount = sourceRows,
+                    RowSize = 1,
+                    Properties = new List<ExecutionPlanGraphPropertyBase>
+                    {
+                        new ExecutionPlanGraphProperty
+                        {
+
+                        }
+                    }
+                });
+            }
+
+            return converted;
+        }
+
+        private List<TopOperationsDataItem> GetTopOperations(IExecutionPlanNode node, bool executed)
+        {
+            var result = new List<TopOperationsDataItem>();
+
+            result.Add(new TopOperationsDataItem
+            {
+                ColumnName = "Operation",
+                DataType = PropertyValueDataType.String,
+                DisplayValue = node.ToString()
+            });
+
+            if (node is IDataExecutionPlanNode dataNode)
+            {
+                if (executed)
+                {
+                    result.Add(new TopOperationsDataItem
+                    {
+                        ColumnName = "ActualRows",
+                        DataType = PropertyValueDataType.Number,
+                        DisplayValue = dataNode.RowsOut.ToString()
+                    });
+
+                    result.Add(new TopOperationsDataItem
+                    {
+                        ColumnName = "ActualExecutions",
+                        DataType = PropertyValueDataType.Number,
+                        DisplayValue = node.ExecutionCount.ToString()
+                    });
+
+                    result.Add(new TopOperationsDataItem
+                    {
+                        ColumnName = "SubtreeDuration",
+                        DataType = PropertyValueDataType.Number,
+                        DisplayValue = node.Duration.TotalMilliseconds.ToString()
+                    });
+
+                    result.Add(new TopOperationsDataItem
+                    {
+                        ColumnName = "NodeDuration",
+                        DataType = PropertyValueDataType.Number,
+                        DisplayValue = (node.Duration.TotalMilliseconds - node.GetSources().Sum(n => n.Duration.TotalMilliseconds)).ToString()
+                    });
+                }
+                else
+                {
+                    result.Add(new TopOperationsDataItem
+                    {
+                        ColumnName = "EstimatedRows",
+                        DataType = PropertyValueDataType.Number,
+                        DisplayValue = dataNode.EstimatedRowsOut.ToString()
+                    });
+                }
+            }
+
+            return result;
+        }
+
+        class TypeDescriptorContext : ITypeDescriptorContext
+        {
+            public TypeDescriptorContext(object instance, PropertyDescriptor prop)
+            {
+                Instance = instance;
+                PropertyDescriptor = prop;
+            }
+
+            public IContainer Container => null;
+
+            public object Instance { get; }
+
+            public PropertyDescriptor PropertyDescriptor { get; }
+
+            public object GetService(Type serviceType) => null;
+
+            public void OnComponentChanged()
+            {
+            }
+
+            public bool OnComponentChanging() => false;
+        }
+
+        private List<ExecutionPlanGraphPropertyBase> ConvertProperties(object value, PropertyDescriptorCollection props)
+        {
+            var converted = new List<ExecutionPlanGraphPropertyBase>();
+
+            foreach (PropertyDescriptor prop in props)
+            {
+                var context = new TypeDescriptorContext(value, prop);
+                var propValue = prop.GetValue(value);
+                var displayValue = prop.Converter.ConvertToString(context, CultureInfo.CurrentCulture, propValue);
+
+                if (prop.Converter.GetPropertiesSupported(context))
+                {
+                    converted.Add(new NestedExecutionPlanGraphProperty
+                    {
+                        Name = prop.DisplayName,
+                        Value = ConvertProperties(propValue, prop.Converter.GetProperties(context, propValue, null)),
+                        DisplayValue = displayValue,
+                        DisplayOrder = converted.Count,
+                        DataType = PropertyValueDataType.Nested
+                    });
+                }
+                else
+                {
+                    converted.Add(new ExecutionPlanGraphProperty
+                    {
+                        Name = prop.DisplayName,
+                        Value = displayValue,
+                        DisplayValue = displayValue,
+                        DisplayOrder = converted.Count,
+                        DataType = prop.PropertyType == typeof(bool) ? PropertyValueDataType.Boolean : prop.PropertyType == typeof(int) ? PropertyValueDataType.Number : PropertyValueDataType.String,
+                        ShowInTooltip = prop.Name == nameof(IFetchXmlExecutionPlanNode.FetchXmlString)
+                    });
+                }
+            }
+
+            return converted;
+        }
+
         public Task<SubsetResult> Handle(SubsetParams request, CancellationToken cancellationToken)
         {
             var resultSet = _resultSets[request.OwnerUri][request.ResultSetIndex];
+
+            if (resultSet.SpecialAction.ExpectYukonXMLShowPlan)
+            {
+                return Task.FromResult(new SubsetResult
+                {
+                    ResultSubset = new ResultSetSubset
+                    {
+                        RowCount = 1,
+                        Rows = new[]
+                        {
+                            new[]
+                            {
+                                new DbCellValue
+                                {
+                                    DisplayValue = "", //DemoExecutionPlan,
+                                    InvariantCultureDisplayValue = "", //DemoExecutionPlan,
+                                    IsNull = false,
+                                    RawObject = "" //DemoExecutionPlan
+                                }
+                            }
+                        }
+                    }
+                });
+            }
 
             return Task.FromResult(new SubsetResult
             {
@@ -203,6 +603,36 @@ namespace MarkMpn.Sql4Cds.LanguageServer
                             })
                             .ToArray())
                         .ToArray()
+                }
+            });
+        }
+
+        public Task<QueryCancelResult> Handle(QueryCancelParams request, CancellationToken cancellationToken)
+        {
+            if (_commands.TryGetValue(request.OwnerUri, out var cmd))
+            {
+                try
+                {
+                    cmd.Cancel();
+                    return Task.FromResult(new QueryCancelResult());
+                }
+                catch (Exception ex)
+                {
+                    return Task.FromResult(new QueryCancelResult { Messages = ex.Message });
+                }
+            }
+
+            return Task.FromResult(new QueryCancelResult());
+        }
+
+        public Task<QueryExecutionPlanResult> Handle(QueryExecutionPlanParams request, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new QueryExecutionPlanResult
+            {
+                ExecutionPlan = new ExecutionPlan
+                {
+                    Format = "xml",
+                    Content = "" //DemoExecutionPlan
                 }
             });
         }
@@ -240,6 +670,23 @@ namespace MarkMpn.Sql4Cds.LanguageServer
         /// the start index will be returned.
         /// </summary>
         public int RowsCount { get; set; }
+    }
+
+
+    [Method("query/cancel")]
+    [Serial]
+    public class QueryCancelParams : IRequest<QueryCancelResult>
+    {
+        public string OwnerUri { get; set; }
+    }
+
+    public class QueryCancelResult
+    {
+        /// <summary>
+        /// Any error messages that occurred during disposing the result set. Optional, can be set
+        /// to null if there were no errors.
+        /// </summary>
+        public string Messages { get; set; }
     }
 
     public class SubsetResult
@@ -362,251 +809,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer
         public string ExecutionPlanErrorMessage { get; set; }
     }
 
-
-    /// <summary>
-    /// Execution plan graph object that is sent over JSON RPC
-    /// </summary>
-    public class ExecutionPlanGraph
-    {
-        /// <summary>
-        /// Root of the execution plan tree
-        /// </summary>
-        public ExecutionPlanNode Root { get; set; }
-        /// <summary>
-        /// Underlying query for the execution plan graph
-        /// </summary>
-        public string Query { get; set; }
-        /// <summary>
-        /// Graph file that used to generate ExecutionPlanGraph
-        /// </summary>
-        public ExecutionPlanGraphInfo GraphFile { get; set; }
-        /// <summary>
-        /// Index recommendations given by show plan to improve query performance
-        /// </summary>
-        public List<ExecutionPlanRecommendation> Recommendations { get; set; }
-    }
-
-    public class ExecutionPlanNode
-    {
-        /// <summary>
-        /// ID for the node.
-        /// </summary>
-        public int ID { get; set; }
-        /// <summary>
-        /// Type of the node. This determines the icon that is displayed for it
-        /// </summary>
-        public string Type { get; set; }
-        /// <summary>
-        /// Cost associated with the node
-        /// </summary>
-        public double Cost { get; set; }
-        /// <summary>
-        /// Output row count associated with the node
-        /// </summary>
-        public string RowCountDisplayString { get; set; }
-        /// <summary>
-        ///  Cost string for the node
-        /// </summary>
-        /// <value></value>
-        public string CostDisplayString { get; set; }
-        /// <summary>
-        /// Cost of the node subtree
-        /// </summary>
-        public double SubTreeCost { get; set; }
-        /// <summary>
-        /// Relative cost of the node compared to its siblings.
-        /// </summary>
-        public double RelativeCost { get; set; }
-        /// <summary>
-        /// Time taken by the node operation in milliseconds
-        /// </summary>
-        public long? ElapsedTimeInMs { get; set; }
-        /// <summary>
-        /// Node properties to be shown in the tooltip
-        /// </summary>
-        public List<ExecutionPlanGraphPropertyBase> Properties { get; set; }
-        /// <summary>
-        /// Display name for the node
-        /// </summary>
-        public string Name { get; set; }
-        /// <summary>
-        /// Description associated with the node.
-        /// </summary>
-        public string Description { get; set; }
-        /// <summary>
-        /// Subtext displayed under the node name
-        /// </summary>
-        public string[] Subtext { get; set; }
-        public List<ExecutionPlanNode> Children { get; set; }
-        public List<ExecutionPlanEdges> Edges { get; set; }
-        /// <summary>
-        /// Add badge icon to nodes like warnings and parallelism
-        /// </summary>
-        public List<Badge> Badges { get; set; }
-        /// <summary>
-        /// Top operations table data for the node
-        /// </summary>
-        public List<TopOperationsDataItem> TopOperationsData { get; set; }
-        /// <summary>
-        /// The cost metrics for the node.
-        /// </summary>
-        public List<CostMetric> CostMetrics { get; set; }
-    }
-
-    public class CostMetric
-    {
-        /// <summary>
-        /// Name of the cost metric
-        /// </summary>
-        public string Name { get; set; }
-        /// <summary>
-        /// The value for the cost metric
-        /// </summary>
-        public string Value { get; set; }
-    }
-
-    public class ExecutionPlanGraphPropertyBase
-    {
-        /// <summary>
-        /// Name of the property
-        /// </summary>
-        public string Name { get; set; }
-        /// <summary>
-        /// Flag to show/hide props in tooltip
-        /// </summary>
-        public bool ShowInTooltip { get; set; }
-        /// <summary>
-        /// Display order of property
-        /// </summary>
-        public int DisplayOrder { get; set; }
-        /// <summary>
-        /// Flag to show property at the bottom of tooltip. Generally done for for properties with longer value.
-        /// </summary>
-        public bool PositionAtBottom { get; set; }
-        /// <summary>
-        /// Value to be displayed in UI like tooltips and properties View
-        /// </summary>
-        /// <value></value>
-        public string DisplayValue { get; set; }
-        /// <summary>
-        /// Indicates what kind of value is better amongst 2 values of the same property
-        /// </summary>
-        public BetterValue BetterValue { get; set; }
-        /// <summary>
-        /// Indicates the data type of the property
-        /// </summary>
-        public PropertyValueDataType DataType { get; set; }
-    }
-
-
-    public enum BetterValue
-    {
-        LowerNumber = 0,
-        HigherNumber = 1,
-        True = 2,
-        False = 3,
-        None = 4
-    }
-
-    public class NestedExecutionPlanGraphProperty : ExecutionPlanGraphPropertyBase
-    {
-        /// <summary>
-        /// In case of nested properties, the value field is a list of properties. 
-        /// </summary>
-        public List<ExecutionPlanGraphPropertyBase> Value { get; set; }
-    }
-
-    public class ExecutionPlanGraphProperty : ExecutionPlanGraphPropertyBase
-    {
-        /// <summary>
-        /// Formatted value for the property
-        /// </summary>
-        public string Value { get; set; }
-    }
-
-    public class ExecutionPlanEdges
-    {
-        /// <summary>
-        /// Count of the rows returned by the subtree of the edge.
-        /// </summary>
-        public double RowCount { get; set; }
-        /// <summary>
-        /// Size of the rows returned by the subtree of the edge.
-        /// </summary>
-        public double RowSize { get; set; }
-        /// <summary>
-        /// Edge properties to be shown in the tooltip.
-        /// </summary>
-        public List<ExecutionPlanGraphPropertyBase> Properties { get; set; }
-    }
-
-
-    public class ExecutionPlanRecommendation
-    {
-        /// <summary>
-        /// Text displayed in the show plan graph control
-        /// </summary>
-        public string DisplayString { get; set; }
-        /// <summary>
-        /// Raw query that is recommended to the user
-        /// </summary>
-        public string Query { get; set; }
-        /// <summary>
-        /// Query that will be opened in a new file once the user click on the recommendation
-        /// </summary>
-        public string QueryWithDescription { get; set; }
-    }
-
-    public class ExecutionPlanGraphInfo
-    {
-        /// <summary>
-        /// File contents
-        /// </summary>
-        public string GraphFileContent { get; set; }
-        /// <summary>
-        /// File type for execution plan. This will be the file type of the editor when the user opens the graph file
-        /// </summary>
-        public string GraphFileType { get; set; }
-        /// <summary>
-        /// Index of the execution plan in the file content
-        /// </summary>
-        public int PlanIndexInFile { get; set; }
-    }
-
-    public class Badge
-    {
-        /// <summary>
-        /// Type of the node overlay. This determines the icon that is displayed for it
-        /// </summary>
-        public BadgeType Type { get; set; }
-
-        /// <summary>
-        /// Text to display for the overlay tooltip
-        /// </summary>
-        public string Tooltip { get; set; }
-    }
-
-    public enum BadgeType
-    {
-        Warning = 0,
-        CriticalWarning = 1,
-        Parallelism = 2
-    }
-
-    public enum PropertyValueDataType
-    {
-        Number = 0,
-        String = 1,
-        Boolean = 2,
-        Nested = 3
-    }
-
-    public class TopOperationsDataItem
-    {
-        public string ColumnName { get; set; }
-        public PropertyValueDataType DataType { get; set; }
-        public object DisplayValue { get; set; }
-    }
 
     /// <summary>
     /// Parameters to be sent back with a message notification
@@ -1347,6 +1549,59 @@ namespace MarkMpn.Sql4Cds.LanguageServer
 
     }
 
+
+    [Method("query/executionPlan")]
+    [Serial]
+    /// <summary>
+    /// Parameters for query execution plan request
+    /// </summary>
+    public class QueryExecutionPlanParams : IRequest<QueryExecutionPlanResult>
+    {
+        /// <summary>
+        /// URI for the file that owns the query to look up the results for
+        /// </summary>
+        public string OwnerUri { get; set; }
+
+        /// <summary>
+        /// Index of the batch to get the results from
+        /// </summary>
+        public int BatchIndex { get; set; }
+
+        /// <summary>
+        /// Index of the result set to get the results from
+        /// </summary>
+        public int ResultSetIndex { get; set; }
+
+    }
+
+
+    /// <summary>
+    /// Parameters for the query execution plan request
+    /// </summary>
+    public class QueryExecutionPlanResult
+    {
+        /// <summary>
+        /// The requested execution plan. Optional, can be set to null to indicate an error
+        /// </summary>
+        public ExecutionPlan ExecutionPlan { get; set; }
+    }
+
+
+    /// <summary>
+    /// Class used to represent an execution plan from a query for transmission across JSON RPC
+    /// </summary>
+    public class ExecutionPlan
+    {
+        /// <summary>
+        /// The format of the execution plan 
+        /// </summary>
+        public string Format { get; set; }
+
+        /// <summary>
+        /// The execution plan content
+        /// </summary>
+        public string Content { get; set; }
+    }
 
     /// <summary> 
     /// Container class for a selection range from file 
