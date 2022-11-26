@@ -43,19 +43,13 @@ namespace MarkMpn.Sql4Cds.LanguageServer
 
         public override async Task<Unit> Handle(DidOpenTextDocumentParams notification, CancellationToken token)
         {
-            await Task.Yield();
-            _logger.LogInformation("Hello world!");
-            await _configuration.GetScopedConfiguration(notification.TextDocument.Uri, token).ConfigureAwait(false);
+            _documentManager.SetContent(notification.TextDocument.Uri.ToString(), notification.TextDocument.Text);
             return Unit.Value;
         }
 
         public override Task<Unit> Handle(DidCloseTextDocumentParams notification, CancellationToken token)
         {
-            if (_configuration.TryGetScopedConfiguration(notification.TextDocument.Uri, out var disposable))
-            {
-                disposable.Dispose();
-            }
-
+            _documentManager.SetContent(notification.TextDocument.Uri.ToString(), null);
             return Unit.Task;
         }
 

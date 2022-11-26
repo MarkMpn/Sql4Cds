@@ -16,7 +16,10 @@ namespace MarkMpn.Sql4Cds.LanguageServer
 
         public void SetContent(string documentUri, string content)
         {
-            _contents[documentUri] = content;
+            if (content == null)
+                _contents.TryRemove(documentUri, out _);
+            else
+                _contents[documentUri] = content;
         }
 
         public string GetContent(string documentUri)
