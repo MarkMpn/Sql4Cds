@@ -235,7 +235,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             int min;
             int max;
 
-            if (OuterReferences != null && OuterReferences.Count > 0)
+            if (OuterReferences != null && OuterReferences.Count > 0 ||
+                JoinCondition == null)
             {
                 min = leftMin * rightMin;
                 max = leftMax * rightMax;
