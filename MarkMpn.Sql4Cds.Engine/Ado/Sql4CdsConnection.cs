@@ -77,6 +77,8 @@ namespace MarkMpn.Sql4Cds.Engine
             };
 
             _ai = new TelemetryClient(new Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration("79761278-a908-4575-afbf-2f4d82560da6"));
+
+            ApplicationName = System.IO.Path.GetFileNameWithoutExtension(System.Reflection.Assembly.GetEntryAssembly().Location);
         }
 
         private static IOrganizationService Connect(string connectionString)
