@@ -8,6 +8,7 @@ using System.Data.SqlTypes;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
+using System.Net;
 using System.Runtime.Serialization;
 using System.Text;
 using System.Text.Json.Serialization;
@@ -361,7 +362,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer
                 Children = new List<ExecutionPlanNode>(),
                 Cost = totalDuration == TimeSpan.Zero ? 0 : nodeInternalDurationMS / totalDuration.TotalMilliseconds,
                 CostMetrics = new List<CostMetric>(),
-                Description = null,
+                Description = node is IFetchXmlExecutionPlanNode fetchNode ? ("<pre>" + WebUtility.HtmlEncode(fetchNode.FetchXmlString) + "</pre>") : null,
                 Edges = new List<ExecutionPlanEdges>(),
                 ElapsedTimeInMs = (long) nodeInternalDurationMS,
                 ID = id++,
