@@ -39,7 +39,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer
             {
                 SessionId = key,
                 DataSource = ds,
-                Connection = new Sql4CdsConnection(new Dictionary<string, DataSource> { [ds.Name] = ds })
+                Connection = new Sql4CdsConnection(new Dictionary<string, DataSource> { [ds.Name] = ds }) { ApplicationName = "Azure Data Studio" }
             };
         }
 
@@ -60,7 +60,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer
             {
                 SessionId = ownerUri,
                 DataSource = ds,
-                Connection = new Sql4CdsConnection(new Dictionary<string, DataSource> { [ds.Name] = ds })
+                Connection = new Sql4CdsConnection(new Dictionary<string, DataSource> { [ds.Name] = ds }) { ApplicationName = "Azure Data Studio" }
             };
         }
 
@@ -124,6 +124,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer
             using (var con = new Sql4CdsConnection(new Dictionary<string, DataSource> { [Name] = this }))
             using (var cmd = con.CreateCommand())
             {
+                con.ApplicationName = "Azure Data Studio";
                 cmd.CommandText = "SELECT fullname FROM systemuser WHERE systemuserid = CURRENT_USER";
                 Username = (string)cmd.ExecuteScalar();
             }
