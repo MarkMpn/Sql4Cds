@@ -6,6 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.SqlServer.SqlManagementObjects" Version="170.8.0" />
     <PackageReference Include="OmniSharp.Extensions.LanguageServer" Version="0.19.6" />
   </ItemGroup>
 

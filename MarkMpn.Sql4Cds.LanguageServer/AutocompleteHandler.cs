@@ -1,0 +1,263 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using MediatR;
+using OmniSharp.Extensions.JsonRpc;
+
+namespace MarkMpn.Sql4Cds.LanguageServer
+{
+    class AutocompleteHandler : IRequestHandler<TextDocumentPosition, CompletionItem[]>, IJsonRpcHandler
+    {
+        private readonly TextDocumentManager _doc;
+        private readonly ConnectionManager _con;
+
+        public AutocompleteHandler(TextDocumentManager doc, ConnectionManager con)
+        {
+            _doc = doc;
+            _con = con;
+        }
+
+        public Task<CompletionItem[]> Handle(TextDocumentPosition request, CancellationToken cancellationToken)
+        {
+            var doc = _doc.GetContent(request.TextDocument.Uri);
+            var con = _con.GetConnection(request.TextDocument.Uri);
+            EntityCache.TryGetEntities(con.DataSource.Connection, out var entities);
+            var ac = new Autocomplete(new Dictionary<string, AutocompleteDataSource>
+            {
+                [con.DataSource.Name] = new AutocompleteDataSource
+                {
+                    Name = con.DataSource.Name,
+                    Entities = entities,
+                    Metadata = con.DataSource.Metadata,
+                    Messages = con.DataSource.MessageCache
+                }
+            },
+            con.DataSource.Name);
+            var lines = doc.Split('\n');
+            var pos = lines.Take(request.Position.Line - 1).Sum(line => line.Length) + request.Position.Character - 1;
+            var suggestions = ac.GetSuggestions(doc, pos);
+            return Task.FromResult(suggestions.Select(s => new CompletionItem
+            {
+                Label = s.MenuText,
+                InsertText = s.GetTextForReplace(),
+                Documentation = s.ToolTipText,
+                Detail = s.ToolTipTitle,
+                Kind = s.ImageIndex
+            }).ToArray());
+        }
+    }
+
+    [Method("textDocument/completion", Direction.ClientToServer)]
+    [Serial]
+    class TextDocumentPosition : IRequest<CompletionItem[]>
+    {
+        /// <summary>
+        /// Gets or sets the document identifier.
+        /// </summary>
+        public TextDocumentIdentifier TextDocument { get; set; }
+
+        /// <summary>
+        /// Gets or sets the position in the document.
+        /// </summary>
+        public Position Position { get; set; }
+    }
+
+    /// <summary>
+    /// Defines a base parameter class for identifying a text document.
+    /// </summary>
+    [DebuggerDisplay("TextDocumentIdentifier = {Uri}")]
+    public class TextDocumentIdentifier
+    {
+        /// <summary>
+        /// Gets or sets the URI which identifies the path of the
+        /// text document.
+        /// </summary>
+        public string Uri { get; set; }
+    }
+
+    [DebuggerDisplay("Kind = {Kind.ToString()}, Label = {Label}, Detail = {Detail}")]
+    public class CompletionItem
+    {
+        public string Label { get; set; }
+
+        public CompletionItemKind? Kind { get; set; }
+
+        public string Detail { get; set; }
+
+        /// <summary>
+        /// Gets or sets the documentation string for the completion item.
+        /// </summary>
+        public string Documentation { get; set; }
+
+        public string SortText { get; set; }
+
+        public string FilterText { get; set; }
+
+        public string InsertText { get; set; }
+
+        public TextEdit TextEdit { get; set; }
+
+        /// <summary>
+        /// Gets or sets a custom data field that allows the server to mark
+        /// each completion item with an identifier that will help correlate
+        /// the item to the previous completion request during a completion
+        /// resolve request.
+        /// </summary>
+        public object Data { get; set; }
+
+        /// <summary>
+        /// Exposing a command field for a completion item for passing telemetry
+        /// </summary>
+        public Command Command { get; set; }
+
+        /// <summary>
+        /// Whether this completion item is preselected or not
+        /// </summary>
+        public bool? Preselect { get; set; }
+    }
+
+    [DebuggerDisplay("NewText = {NewText}, Range = {Range.Start.Line}:{Range.Start.Character} - {Range.End.Line}:{Range.End.Character}")]
+    public class TextEdit
+    {
+        public Range Range { get; set; }
+
+        public string NewText { get; set; }
+    }
+
+    public enum CompletionItemKind
+    {
+        Text = 1,
+        Method = 2,
+        Function = 3,
+        Constructor = 4,
+        Field = 5,
+        Variable = 6,
+        Class = 7,
+        Interface = 8,
+        Module = 9,
+        Property = 10,
+        Unit = 11,
+        Value = 12,
+        Enum = 13,
+        Keyword = 14,
+        Snippet = 15,
+        Color = 16,
+        File = 17,
+        Reference = 18
+    }
+
+    public class Command
+    {
+        /// <summary>
+        /// Title of the command.
+        /// </summary>
+        public string Title { get; set; }
+
+        /// <summary>
+        /// The identifier of the actual command handler, like `vsintellicode.completionItemSelected`.
+        /// </summary>
+        public string command { get; set; }
+
+        /// <summary>
+        /// A tooltip for the command, when represented in the UI.
+        /// </summary>
+        public string Tooltip { get; set; }
+
+        /// <summary>
+        /// Arguments that the command handler should be invoked with.
+        /// </summary>
+        public object[] Arguments { get; set; }
+    }
+
+    [DebuggerDisplay("Position = {Line}:{Character}")]
+    public class Position
+    {
+        /// <summary>
+        /// Gets or sets the zero-based line number.
+        /// </summary>
+        public int Line { get; set; }
+
+        /// <summary>
+        /// Gets or sets the zero-based column number.
+        /// </summary>
+        public int Character { get; set; }
+
+        /// <summary>
+        /// Overrides the base equality method
+        /// </summary>
+        /// <param name="obj"></param>
+        /// <returns></returns>
+        public override bool Equals(object obj)
+        {
+            if (obj == null || (obj as Position == null))
+            {
+                return false;
+            }
+            Position p = (Position)obj;
+            bool result = (Line == p.Line) && (Character == p.Character);
+            return result;
+        }
+
+
+        /// <summary>
+        /// Overrides the base GetHashCode method
+        /// </summary>
+        /// <returns></returns>
+        public override int GetHashCode()
+        {
+            int hash = 17;
+            hash = hash * 23 + Line.GetHashCode();
+            hash = hash * 23 + Character.GetHashCode();
+            return hash;
+        }
+    }
+
+    [DebuggerDisplay("Start = {Start.Line}:{Start.Character}, End = {End.Line}:{End.Character}")]
+    public struct Range
+    {
+        /// <summary>
+        /// Gets or sets the starting position of the range.
+        /// </summary>
+        public Position Start { get; set; }
+
+        /// <summary>
+        /// Gets or sets the ending position of the range.
+        /// </summary>
+        public Position End { get; set; }
+
+        /// <summary>
+        /// Overrides the base equality method
+        /// </summary>
+        /// <param name="obj"></param>
+        /// <returns></returns>
+        public override bool Equals(object obj)
+        {
+
+
+            if (obj == null || !(obj is Range))
+            {
+                return false;
+            }
+            Range range = (Range)obj;
+            bool sameStart = range.Start.Equals(Start);
+            bool sameEnd = range.End.Equals(End);
+            return (sameStart && sameEnd);
+        }
+
+        /// <summary>
+        /// Overrides the base GetHashCode method
+        /// </summary>
+        /// <returns></returns>
+        public override int GetHashCode()
+        {
+            int hash = 17;
+            hash = hash * 23 + Start.GetHashCode();
+            hash = hash * 23 + End.GetHashCode();
+            return hash;
+        }
+    }
+}

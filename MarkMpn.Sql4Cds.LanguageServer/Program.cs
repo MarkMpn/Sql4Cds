@@ -37,6 +37,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer
                     .WithHandler<ExecuteHandler>()
                     .WithHandler<GetDatabaseInfoHandler>()
                     .WithHandler<ConfigurationHandler>()
+                    .WithHandler<AutocompleteHandler>()
                     .WithServices(x =>
                     {
                         x.AddLogging(b => b.SetMinimumLevel(LogLevel.Trace));
