@@ -10,6 +10,7 @@ using MarkMpn.Sql4Cds.LanguageServer;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
+using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using static MarkMpn.Sql4Cds.FunctionMetadata;
 
 namespace MarkMpn.Sql4Cds

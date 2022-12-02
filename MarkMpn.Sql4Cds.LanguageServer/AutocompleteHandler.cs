@@ -3,14 +3,16 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
 using OmniSharp.Extensions.JsonRpc;
+using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 
 namespace MarkMpn.Sql4Cds.LanguageServer
 {
-    class AutocompleteHandler : IRequestHandler<TextDocumentPosition, CompletionItem[]>, IJsonRpcHandler
+    class AutocompleteHandler : IRequestHandler<TextDocumentPosition, CompletionItem[]>, IRequestHandler<TextDocumentPositionHover, Hover>, IJsonRpcHandler
     {
         private readonly TextDocumentManager _doc;
         private readonly ConnectionManager _con;
@@ -24,6 +26,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer
         public Task<CompletionItem[]> Handle(TextDocumentPosition request, CancellationToken cancellationToken)
         {
             var doc = _doc.GetContent(request.TextDocument.Uri);
+            var lines = doc.Split('\n');
+            var pos = lines.Take(request.Position.Line).Sum(line => line.Length + 1) + request.Position.Character - 1;
             var con = _con.GetConnection(request.TextDocument.Uri);
             EntityCache.TryGetEntities(con.DataSource.Connection, out var entities);
             var ac = new Autocomplete(new Dictionary<string, AutocompleteDataSource>
@@ -37,8 +41,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer
                 }
             },
             con.DataSource.Name);
-            var lines = doc.Split('\n');
-            var pos = lines.Take(request.Position.Line - 1).Sum(line => line.Length) + request.Position.Character - 1;
             var suggestions = ac.GetSuggestions(doc, pos);
             return Task.FromResult(suggestions.Select(s => new CompletionItem
             {
@@ -49,6 +51,71 @@ namespace MarkMpn.Sql4Cds.LanguageServer
                 Kind = s.ImageIndex
             }).ToArray());
         }
+
+        public Task<Hover> Handle(TextDocumentPositionHover request, CancellationToken cancellationToken)
+        {
+            var doc = _doc.GetContent(request.TextDocument.Uri);
+            var lines = doc.Split('\n');
+            var pos = lines.Take(request.Position.Line).Sum(line => line.Length + 1) + request.Position.Character - 1;
+            var wordEnd = new Regex("\\b").Match(doc, pos);
+
+            if (!wordEnd.Success)
+                return Task.FromResult<Hover>(null);
+
+            var con = _con.GetConnection(request.TextDocument.Uri);
+            EntityCache.TryGetEntities(con.DataSource.Connection, out var entities);
+            var ac = new Autocomplete(new Dictionary<string, AutocompleteDataSource>
+            {
+                [con.DataSource.Name] = new AutocompleteDataSource
+                {
+                    Name = con.DataSource.Name,
+                    Entities = entities,
+                    Metadata = con.DataSource.Metadata,
+                    Messages = con.DataSource.MessageCache
+                }
+            },
+            con.DataSource.Name);
+            var suggestions = ac.GetSuggestions(doc, pos);
+            var exactSuggestions = suggestions.Where(suggestion => suggestion.Text.Length <= wordEnd.Index && doc.Substring(wordEnd.Index - suggestion.CompareText.Length, suggestion.CompareText.Length).Equals(suggestion.CompareText, StringComparison.OrdinalIgnoreCase)).ToList();
+
+            if (exactSuggestions.Count != 1)
+                return Task.FromResult<Hover>(null);
+
+            return Task.FromResult(new Hover
+            {
+                Range = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range
+                {
+                    Start = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Position
+                    {
+                        Line = request.Position.Line,
+                        Character = request.Position.Character + wordEnd.Index - pos - exactSuggestions[0].Text.Length
+                    },
+                    End = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Position
+                    {
+                        Line = request.Position.Line,
+                        Character = request.Position.Character + wordEnd.Index - pos
+                    }
+                },
+                Contents = new MarkedStringsOrMarkupContent(
+                    new OmniSharp.Extensions.LanguageServer.Protocol.Models.MarkedString("**" + exactSuggestions[0].ToolTipTitle + "**"),
+                    new OmniSharp.Extensions.LanguageServer.Protocol.Models.MarkedString(exactSuggestions[0].ToolTipText))
+            });
+        }
+    }
+
+    [Method("textDocument/hover", Direction.ClientToServer)]
+    [Serial]
+    class TextDocumentPositionHover : IRequest<Hover>
+    {
+        /// <summary>
+        /// Gets or sets the document identifier.
+        /// </summary>
+        public TextDocumentIdentifier TextDocument { get; set; }
+
+        /// <summary>
+        /// Gets or sets the position in the document.
+        /// </summary>
+        public Position Position { get; set; }
     }
 
     [Method("textDocument/completion", Direction.ClientToServer)]
@@ -77,100 +144,6 @@ namespace MarkMpn.Sql4Cds.LanguageServer
         /// text document.
         /// </summary>
         public string Uri { get; set; }
-    }
-
-    [DebuggerDisplay("Kind = {Kind.ToString()}, Label = {Label}, Detail = {Detail}")]
-    public class CompletionItem
-    {
-        public string Label { get; set; }
-
-        public CompletionItemKind? Kind { get; set; }
-
-        public string Detail { get; set; }
-
-        /// <summary>
-        /// Gets or sets the documentation string for the completion item.
-        /// </summary>
-        public string Documentation { get; set; }
-
-        public string SortText { get; set; }
-
-        public string FilterText { get; set; }
-
-        public string InsertText { get; set; }
-
-        public TextEdit TextEdit { get; set; }
-
-        /// <summary>
-        /// Gets or sets a custom data field that allows the server to mark
-        /// each completion item with an identifier that will help correlate
-        /// the item to the previous completion request during a completion
-        /// resolve request.
-        /// </summary>
-        public object Data { get; set; }
-
-        /// <summary>
-        /// Exposing a command field for a completion item for passing telemetry
-        /// </summary>
-        public Command Command { get; set; }
-
-        /// <summary>
-        /// Whether this completion item is preselected or not
-        /// </summary>
-        public bool? Preselect { get; set; }
-    }
-
-    [DebuggerDisplay("NewText = {NewText}, Range = {Range.Start.Line}:{Range.Start.Character} - {Range.End.Line}:{Range.End.Character}")]
-    public class TextEdit
-    {
-        public Range Range { get; set; }
-
-        public string NewText { get; set; }
-    }
-
-    public enum CompletionItemKind
-    {
-        Text = 1,
-        Method = 2,
-        Function = 3,
-        Constructor = 4,
-        Field = 5,
-        Variable = 6,
-        Class = 7,
-        Interface = 8,
-        Module = 9,
-        Property = 10,
-        Unit = 11,
-        Value = 12,
-        Enum = 13,
-        Keyword = 14,
-        Snippet = 15,
-        Color = 16,
-        File = 17,
-        Reference = 18
-    }
-
-    public class Command
-    {
-        /// <summary>
-        /// Title of the command.
-        /// </summary>
-        public string Title { get; set; }
-
-        /// <summary>
-        /// The identifier of the actual command handler, like `vsintellicode.completionItemSelected`.
-        /// </summary>
-        public string command { get; set; }
-
-        /// <summary>
-        /// A tooltip for the command, when represented in the UI.
-        /// </summary>
-        public string Tooltip { get; set; }
-
-        /// <summary>
-        /// Arguments that the command handler should be invoked with.
-        /// </summary>
-        public object[] Arguments { get; set; }
     }
 
     [DebuggerDisplay("Position = {Line}:{Character}")]
