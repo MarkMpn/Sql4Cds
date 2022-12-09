@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Data8.PowerPlatform.Dataverse.Client;
 using MarkMpn.Sql4Cds.Engine;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.PowerPlatform.Dataverse.Client;
@@ -92,14 +93,23 @@ namespace MarkMpn.Sql4Cds.LanguageServer
                 switch (authType)
                 {
                     case "AzureMFAAndUser":
-                        if (!connection.Options.TryGetValue("user", out x) || !(x is string username))
+                        if (!connection.Options.TryGetValue("user", out x) || !(x is string oauthUsername))
                             throw new ArgumentOutOfRangeException("Missing user");
 
-                        org = new ServiceClient($"AuthType=OAuth;Username={username};Url={url};AppId=51f81489-12ee-4a9e-aaae-a2591f45987d;RedirectUri=http://localhost;LoginPrompt=Auto;TokenCacheStorePath=" + Path.Combine(Path.GetDirectoryName(GetType().Assembly.Location), "TokenCache"));
+                        org = new ServiceClient($"AuthType=OAuth;Username={oauthUsername};Url={url};AppId=51f81489-12ee-4a9e-aaae-a2591f45987d;RedirectUri=http://localhost;LoginPrompt=Auto;TokenCacheStorePath=" + Path.Combine(Path.GetDirectoryName(GetType().Assembly.Location), "TokenCache"));
+                        break;
+
+                    case "SqlLogin":
+                        if (!connection.Options.TryGetValue("user", out x) || !(x is string ifdUsername))
+                            throw new ArgumentOutOfRangeException("Missing user");
+                        if (!connection.Options.TryGetValue("password", out x) || !(x is string ifdPassword))
+                            throw new ArgumentOutOfRangeException("Missing password");
+
+                        org = new OnPremiseClient(url, ifdUsername, ifdPassword);
                         break;
 
                     default:
-                        throw new ArgumentOutOfRangeException("Unknown authenticationType");
+                        throw new ArgumentOutOfRangeException("Unknown authenticationType " + authType);
                 }
             }
 
