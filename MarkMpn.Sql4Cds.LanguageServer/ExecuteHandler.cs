@@ -29,7 +29,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer
 {
     [Method("query/executeDocumentSelection")]
     [Serial]
-    class ExecuteHandler : IRequestHandler<ExecuteDocumentSelectionParams,ExecuteRequestResult>, IRequestHandler<SubsetParams, SubsetResult>, IRequestHandler<QueryCancelParams, QueryCancelResult>, IRequestHandler<QueryExecutionPlanParams, QueryExecutionPlanResult>, IJsonRpcHandler
+    class ExecuteHandler : IRequestHandler<ExecuteDocumentSelectionParams,ExecuteRequestResult>, IRequestHandler<SubsetParams, SubsetResult>, IRequestHandler<QueryCancelParams, QueryCancelResult>, IRequestHandler<QueryExecutionPlanParams, QueryExecutionPlanResult>, IRequestHandler<QueryDisposeParams>, IJsonRpcHandler
     {
         private readonly ILanguageServerFacade _lsp;
         private readonly ConnectionManager _connectionManager;
@@ -637,6 +637,12 @@ namespace MarkMpn.Sql4Cds.LanguageServer
                 }
             });
         }
+
+        public Task<Unit> Handle(QueryDisposeParams request, CancellationToken cancellationToken)
+        {
+            _resultSets.Remove(request.OwnerUri, out _);
+            return Unit.Task;
+        }
     }
 
 
@@ -677,6 +683,14 @@ namespace MarkMpn.Sql4Cds.LanguageServer
     [Method("query/cancel")]
     [Serial]
     public class QueryCancelParams : IRequest<QueryCancelResult>
+    {
+        public string OwnerUri { get; set; }
+    }
+
+
+    [Method("query/dispose")]
+    [Serial]
+    public class QueryDisposeParams : IRequest
     {
         public string OwnerUri { get; set; }
     }
