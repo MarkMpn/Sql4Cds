@@ -413,6 +413,44 @@ namespace MarkMpn.Sql4Cds.LanguageServer
                 converted.Type = "hashMatch";
             else if (converted.Type == "metadataQuery")
                 converted.Type = "fetchQuery";
+            else if (converted.Type == "executeMessage")
+                converted.Type = "tableValuedFunction";
+            else if (converted.Type == "declareVariables")
+                converted.Type = "declare";
+            else if (converted.Type == "assignVariables")
+                converted.Type = "assign";
+            else if (converted.Type == "sql")
+                converted.Type = "tsql";
+            else if (converted.Type == "alias")
+                converted.Type = "computeScalar";
+            else if (converted.Type == "hashMatchAggregate")
+                converted.Type = "hashMatch";
+            else if (converted.Type == "insert")
+                converted.Type = "tableInsert";
+            else if (converted.Type == "delete")
+                converted.Type = "tableDelete";
+            else if (converted.Type == "bulkDelete")
+                converted.Type = "remoteDelete";
+            else if (converted.Type == "concatenate")
+                converted.Type = "concatenation";
+            else if (converted.Type == "distinct")
+                converted.Type = "hashMatch";
+            else if (converted.Type == "conditional")
+                converted.Type = "ifOperator";
+            else if (converted.Type == "executeAs")
+                converted.Type = "languageConstructCatchAll";
+            else if (converted.Type == "revert")
+                converted.Type = "languageConstructCatchAll";
+            else if (converted.Type == "globalOptionSetQuery")
+                converted.Type = "fetchQuery";
+            else if (converted.Type == "offsetFetch")
+                converted.Type = "top";
+            else if (converted.Type == "partitionedAggregate")
+                converted.Type = "hashMatchRoot";
+            else if (converted.Type == "tryCatch")
+                converted.Type = "languageConstructCatchAll";
+            else if (converted.Type == "waitFor")
+                converted.Type = "languageConstructCatchAll";
 
             // Get the filtered list of properties
             var typeDescriptor = new ExecutionPlanNodeTypeDescriptor(node, !executed, _ => null);
