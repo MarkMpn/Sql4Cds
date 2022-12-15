@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using MarkMpn.Sql4Cds.Engine;
 using MediatR;
 using OmniSharp.Extensions.JsonRpc;
 
@@ -52,14 +54,51 @@ namespace MarkMpn.Sql4Cds.LanguageServer
             return Task.FromResult(con.DataSource.Name == request.NewDatabase || request.NewDatabase == null);
         }
 
-        public Task<MetadataQueryResult> Handle(MetadataQueryParams request, CancellationToken cancellationToken)
+        public async Task<MetadataQueryResult> Handle(MetadataQueryParams request, CancellationToken cancellationToken)
         {
             var con = _connectionManager.GetConnection(request.OwnerUri);
+            var metadata = new List<ObjectMetadata>();
 
-            return Task.FromResult(new MetadataQueryResult
+            metadata.Add(new ObjectMetadata { MetadataType = MetadataType.Schema, MetadataTypeName = "Schema", Name = "dbo" });
+            metadata.Add(new ObjectMetadata { MetadataType = MetadataType.Schema, MetadataTypeName = "Schema", Name = "metadata" });
+
+            using (var cmd = con.Connection.CreateCommand())
             {
-                Metadata = new[] { new ObjectMetadata { MetadataType = MetadataType.Table, MetadataTypeName = "Table", Name = "account", Schema = "dbo" } }
-            });
+                cmd.CommandText = "SELECT logicalname FROM metadata.entity ORDER BY 1";
+
+                using (var reader = await cmd.ExecuteReaderAsync())
+                {
+                    while (await reader.ReadAsync())
+                    {
+                        var logicalName = reader.GetString(0);
+
+                        metadata.Add(new ObjectMetadata { MetadataType = MetadataType.Table, MetadataTypeName = "Table", Name = logicalName, Schema = "dbo" });
+                    }
+                }
+            }
+
+            foreach (var table in MetaMetadataCache.GetMetadata().OrderBy(t => t.LogicalName))
+            {
+                metadata.Add(new ObjectMetadata { MetadataType = MetadataType.Table, MetadataTypeName = "Table", Name = table.LogicalName, Schema = "metadata" });
+            }
+
+            foreach (var msg in con.DataSource.MessageCache.GetAllMessages().OrderBy(m => m.Name))
+            {
+                if (msg.IsValidAsTableValuedFunction())
+                {
+                    metadata.Add(new ObjectMetadata { MetadataType = MetadataType.Function, MetadataTypeName = "Function", Name = msg.Name, Schema = "dbo" });
+                }
+
+                if (msg.IsValidAsStoredProcedure())
+                {
+                    metadata.Add(new ObjectMetadata { MetadataType = MetadataType.SProc, MetadataTypeName = "SProc", Name = msg.Name, Schema = "dbo" });
+                }
+            }
+
+            return new MetadataQueryResult
+            {
+                Metadata = metadata.ToArray()
+            };
         }
     }
 
