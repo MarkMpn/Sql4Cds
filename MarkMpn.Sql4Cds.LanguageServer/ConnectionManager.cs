@@ -36,12 +36,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer
             var ds = _dataSources.GetOrAdd(key, (_) => CreateDataSource(connection));
             _connectedDataSource[ownerUri] = key;
 
-            return new Session
-            {
-                SessionId = key,
-                DataSource = ds,
-                Connection = new Sql4CdsConnection(new Dictionary<string, DataSource> { [ds.Name] = ds }) { ApplicationName = "Azure Data Studio" }
-            };
+            return GetConnection(ownerUri);
         }
 
         public void Disconnect(string ownerUri)
@@ -57,12 +52,26 @@ namespace MarkMpn.Sql4Cds.LanguageServer
             if (!_dataSources.TryGetValue(dsName, out var ds))
                 return null;
 
+            var con = new Sql4CdsConnection(GetAllConnections())
+            {
+                ApplicationName = "Azure Data Studio"
+            };
+            con.ChangeDatabase(ds.Name);
+
             return new Session
             {
                 SessionId = ownerUri,
                 DataSource = ds,
-                Connection = new Sql4CdsConnection(new Dictionary<string, DataSource> { [ds.Name] = ds }) { ApplicationName = "Azure Data Studio" }
+                Connection = con
             };
+        }
+
+        public IDictionary<string, DataSource> GetAllConnections()
+        {
+            return _dataSources
+                .Values
+                .Cast<DataSource>()
+                .ToDictionary(ds => ds.Name);
         }
 
         private DataSourceWithInfo CreateDataSource(ConnectionDetails connection)

@@ -29,18 +29,22 @@ namespace MarkMpn.Sql4Cds.LanguageServer
             var lines = doc.Split('\n');
             var pos = lines.Take(request.Position.Line).Sum(line => line.Length + 1) + request.Position.Character - 1;
             var con = _con.GetConnection(request.TextDocument.Uri);
-            EntityCache.TryGetEntities(con.DataSource.Connection, out var entities);
-            var ac = new Autocomplete(new Dictionary<string, AutocompleteDataSource>
+            var cons = _con.GetAllConnections();
+            var acds = new Dictionary<string, AutocompleteDataSource>();
+
+            foreach (var c in cons)
             {
-                [con.DataSource.Name] = new AutocompleteDataSource
+                EntityCache.TryGetEntities(c.Value.Connection, out var entities);
+
+                acds.Add(c.Key, new AutocompleteDataSource
                 {
-                    Name = con.DataSource.Name,
+                    Name = c.Value.Name,
                     Entities = entities,
-                    Metadata = con.DataSource.Metadata,
-                    Messages = con.DataSource.MessageCache
-                }
-            },
-            con.DataSource.Name);
+                    Metadata = c.Value.Metadata,
+                    Messages = c.Value.MessageCache
+                });
+            }
+            var ac = new Autocomplete(acds, con.DataSource.Name);
             var suggestions = ac.GetSuggestions(doc, pos);
             return Task.FromResult(suggestions.Select(s => new CompletionItem
             {
@@ -63,18 +67,22 @@ namespace MarkMpn.Sql4Cds.LanguageServer
                 return Task.FromResult<Hover>(null);
 
             var con = _con.GetConnection(request.TextDocument.Uri);
-            EntityCache.TryGetEntities(con.DataSource.Connection, out var entities);
-            var ac = new Autocomplete(new Dictionary<string, AutocompleteDataSource>
+            var cons = _con.GetAllConnections();
+            var acds = new Dictionary<string, AutocompleteDataSource>();
+
+            foreach (var c in cons)
             {
-                [con.DataSource.Name] = new AutocompleteDataSource
+                EntityCache.TryGetEntities(c.Value.Connection, out var entities);
+
+                acds.Add(c.Key, new AutocompleteDataSource
                 {
-                    Name = con.DataSource.Name,
+                    Name = c.Value.Name,
                     Entities = entities,
-                    Metadata = con.DataSource.Metadata,
-                    Messages = con.DataSource.MessageCache
-                }
-            },
-            con.DataSource.Name);
+                    Metadata = c.Value.Metadata,
+                    Messages = c.Value.MessageCache
+                });
+            }
+            var ac = new Autocomplete(acds, con.DataSource.Name);
             var suggestions = ac.GetSuggestions(doc, pos);
             var exactSuggestions = suggestions.Where(suggestion => suggestion.Text.Length <= wordEnd.Index && doc.Substring(wordEnd.Index - suggestion.CompareText.Length, suggestion.CompareText.Length).Equals(suggestion.CompareText, StringComparison.OrdinalIgnoreCase)).ToList();
 
