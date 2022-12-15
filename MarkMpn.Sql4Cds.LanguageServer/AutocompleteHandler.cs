@@ -56,8 +56,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer
         {
             var doc = _doc.GetContent(request.TextDocument.Uri);
             var lines = doc.Split('\n');
-            var pos = lines.Take(request.Position.Line).Sum(line => line.Length + 1) + request.Position.Character - 1;
-            var wordEnd = new Regex("\\b").Match(doc, pos);
+            var pos = lines.Take(request.Position.Line).Sum(line => line.Length + 1) + request.Position.Character;
+            var wordEnd = new Regex("\\b").Match(doc, pos + 1);
 
             if (!wordEnd.Success)
                 return Task.FromResult<Hover>(null);
