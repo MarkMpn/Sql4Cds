@@ -18,7 +18,6 @@ using MarkMpn.Sql4Cds.Engine;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using MediatR;
 using Microsoft.SqlTools.ServiceLayer.ExecutionPlan.Contracts;
-using Microsoft.SqlTools.ServiceLayer.ExecutionPlan.ShowPlan;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 using OmniSharp.Extensions.JsonRpc;
@@ -362,7 +361,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer
                 Children = new List<ExecutionPlanNode>(),
                 Cost = totalDuration == TimeSpan.Zero ? 0 : nodeInternalDurationMS / totalDuration.TotalMilliseconds,
                 CostMetrics = new List<CostMetric>(),
-                Description = node is IFetchXmlExecutionPlanNode fetchNode ? ("<pre>" + WebUtility.HtmlEncode(fetchNode.FetchXmlString) + "</pre>") : null,
+                Description = node is IFetchXmlExecutionPlanNode fetchNode ? ("<pre style='line-height: 60%'>" + WebUtility.HtmlEncode(fetchNode.FetchXmlString) + "</pre>") : null,
                 Edges = new List<ExecutionPlanEdges>(),
                 ElapsedTimeInMs = (long) nodeInternalDurationMS,
                 ID = id++,
@@ -455,6 +454,17 @@ namespace MarkMpn.Sql4Cds.LanguageServer
             // Get the filtered list of properties
             var typeDescriptor = new ExecutionPlanNodeTypeDescriptor(node, !executed, _ => null);
             converted.Properties = ConvertProperties(typeDescriptor, typeDescriptor.GetProperties(null));
+
+            if (node is IFetchXmlExecutionPlanNode && converted.Properties.Count > 0)
+                converted.Description += "<hr />";
+
+            converted.Description += "<table>";
+            foreach (var prop in converted.Properties)
+            {
+                if (prop.Name != "FetchXML")
+                    converted.Description += "<tr><th style='text-align: left'>" + prop.Name + "</th><td>" + prop.DisplayValue + "</td></tr>";
+            }
+            converted.Description += "</table>";
 
             foreach (var source in node.GetSources())
             {

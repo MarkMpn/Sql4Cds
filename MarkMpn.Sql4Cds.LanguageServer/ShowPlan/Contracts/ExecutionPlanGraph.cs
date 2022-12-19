@@ -4,7 +4,6 @@
 //
 
 using System.Collections.Generic;
-using Microsoft.SqlTools.ServiceLayer.ExecutionPlan.ShowPlan;
 
 namespace Microsoft.SqlTools.ServiceLayer.ExecutionPlan.Contracts
 {
@@ -141,6 +140,14 @@ namespace Microsoft.SqlTools.ServiceLayer.ExecutionPlan.Contracts
         /// Indicates the data type of the property
         /// </summary>
         public PropertyValueDataType DataType { get; set; }
+    }
+    public enum BetterValue
+    {
+        LowerNumber = 0,
+        HigherNumber = 1,
+        True = 2,
+        False = 3,
+        None = 4
     }
 
     public class NestedExecutionPlanGraphProperty : ExecutionPlanGraphPropertyBase
