@@ -1,9 +1,12 @@
 ﻿using System;
+using System.Linq;
+using System.Reflection;
 using System.Threading.Tasks;
+using MarkMpn.Sql4Cds.LanguageServer.Connection;
+using MarkMpn.Sql4Cds.LanguageServer.Workspace;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using OmniSharp.Extensions.LanguageServer.Protocol.Models;
-using OmniSharp.Extensions.LanguageServer.Server;
+using Newtonsoft.Json.Serialization;
+using StreamJsonRpc;
 
 namespace MarkMpn.Sql4Cds.LanguageServer
 {
@@ -14,39 +17,41 @@ namespace MarkMpn.Sql4Cds.LanguageServer
             if (Array.IndexOf(args, "--enable-remote-debugging-wait") != -1)
                 System.Diagnostics.Debugger.Launch();
 
-            var server = await OmniSharp.Extensions.LanguageServer.Server.LanguageServer.From(options =>
+            var formatter = new JsonMessageFormatter();
+            formatter.JsonSerializer.ContractResolver = new DefaultContractResolver
             {
-                options
-                    .WithInput(Console.OpenStandardInput())
-                    .WithOutput(Console.OpenStandardOutput())
-                    .ConfigureLogging(
-                        x => x
-                            .AddLanguageProtocolLogging()
-                            .SetMinimumLevel(LogLevel.Debug)
-                    )
-                    //.WithConfigurationSection("SQL4CDS")
-                    //.WithConfigurationItem(new OmniSharp.Extensions.LanguageServer.Protocol.Models.ConfigurationItem
-                    //{
-                    //    Section = "SQL4CDS"
-                    //})
-                    .WithHandler<TextDocumentHandler>()
-                    .WithHandler<CapabilitiesHandler>()
-                    .WithHandler<ConnectionHandler>()
-                    .WithHandler<CreateSessionHandler>()
-                    .WithHandler<ExpandHandler>()
-                    .WithHandler<ExecuteHandler>()
-                    .WithHandler<GetDatabaseInfoHandler>()
-                    .WithHandler<ConfigurationHandler>()
-                    .WithHandler<AutocompleteHandler>()
-                    .WithServices(x =>
-                    {
-                        x.AddLogging(b => b.SetMinimumLevel(LogLevel.Trace));
-                        x.AddSingleton<ConnectionManager>();
-                        x.AddSingleton<TextDocumentManager>();
-                        //x.AddSingleton(new ConfigurationItem { Section = "SQL4CDS" });
-                    });
-            });
-            await server.WaitForExit;
+                NamingStrategy = new CamelCaseNamingStrategy
+                {
+                    OverrideSpecifiedNames = false
+                }
+            };
+            var messageHandler = new HeaderDelimitedMessageHandler(Console.OpenStandardOutput(), Console.OpenStandardInput(), formatter);
+            var rpc = new JsonRpc(messageHandler);
+            
+            var serviceCollection = new ServiceCollection();
+            serviceCollection.AddSingleton(rpc);
+            serviceCollection.AddSingleton<ConnectionManager>();
+            serviceCollection.AddSingleton<TextDocumentManager>();
+
+            var handlerTypes = Assembly
+                .GetExecutingAssembly()
+                .GetTypes()
+                .Where(t => typeof(IJsonRpcMethodHandler).IsAssignableFrom(t) && t.IsClass && !t.IsAbstract)
+                .ToList();
+
+            foreach (var handlerType in handlerTypes)
+                serviceCollection.AddSingleton(handlerType);
+
+            var services = serviceCollection.BuildServiceProvider();
+
+            foreach (var handlerType in handlerTypes)
+            {
+                var handler = (IJsonRpcMethodHandler)services.GetService(handlerType);
+                handler.Initialize(rpc);
+            }
+
+            rpc.StartListening();
+            await rpc.Completion;
         }
     }
 }
