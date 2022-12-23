@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using MarkMpn.Sql4Cds.Engine;
+using MarkMpn.Sql4Cds.LanguageServer.Admin.Contracts;
 using MarkMpn.Sql4Cds.LanguageServer.Connection;
 using MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer.Contracts;
-using Microsoft.VisualStudio.LanguageServer.Protocol;
 using StreamJsonRpc;
 
 namespace MarkMpn.Sql4Cds.LanguageServer.Admin
@@ -108,121 +108,5 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Admin
                 Metadata = metadata.ToArray()
             };
         }
-    }
-
-    /// <summary>
-    /// Params for a get database info request
-    /// </summar>
-    public class GetDatabaseInfoParams
-    {
-        /// <summary>
-        /// Uri identifier for the connection to get the database info for
-        /// </summary>
-        public string OwnerUri { get; set; }
-    }
-
-    /// <summary>
-    /// Response object for get database info
-    /// </summary>
-    public class GetDatabaseInfoResponse
-    {
-        /// <summary>
-        /// The object containing the database info
-        /// </summary>
-        public DatabaseInfo DatabaseInfo { get; set; }
-    }
-
-    /// <summary>
-    /// Get database info request mapping
-    /// </summary>
-    public class GetDatabaseInfoRequest
-    {
-        public const string MessageName = "admin/getdatabaseinfo";
-
-        public static readonly LspRequest<GetDatabaseInfoParams, GetDatabaseInfoResponse> Type = new LspRequest<GetDatabaseInfoParams, GetDatabaseInfoResponse>(MessageName);
-    }
-
-    public class DatabaseInfo
-    {
-        /// <summary>
-        /// Gets or sets the options
-        /// </summary>
-        public Dictionary<string, object> Options { get; set; }
-
-        public DatabaseInfo()
-        {
-            Options = new Dictionary<string, object>();
-        }
-
-    }
-
-    public class ListDatabasesParams
-    {
-        /// <summary>
-        /// URI of the owner of the connection requesting the list of databases.
-        /// </summary>
-        public string OwnerUri { get; set; }
-
-        /// <summary>
-        /// whether to include the details of the databases.
-        /// </summary>
-        public bool? IncludeDetails { get; set; }
-    }
-
-    public class ListDatabasesResponse
-    {
-        /// <summary>
-        /// Gets or sets the list of database names.
-        /// </summary>
-        public string[] DatabaseNames { get; set; }
-    }
-    /// <summary>
-    /// List databases request mapping entry 
-    /// </summary>
-    public class ListDatabasesRequest
-    {
-        public const string MessageName = "connection/listdatabases";
-
-        public static readonly LspRequest<ListDatabasesParams, ListDatabasesResponse> Type = new LspRequest<ListDatabasesParams, ListDatabasesResponse>(MessageName);
-    }
-
-    public class ChangeDatabaseParams
-    {
-        /// <summary>
-        /// URI of the owner of the connection requesting the list of databases.
-        /// </summary>
-        public string OwnerUri { get; set; }
-
-        /// <summary>
-        /// The database to change to
-        /// </summary>
-        public string NewDatabase { get; set; }
-    }
-
-    /// <summary>
-    /// List databases request mapping entry 
-    /// </summary>
-    public class ChangeDatabaseRequest
-    {
-        public const string MessageName = "connection/changedatabase";
-
-        public static readonly LspRequest<ChangeDatabaseParams, bool> Type = new LspRequest<ChangeDatabaseParams, bool>(MessageName);
-    }
-
-    public class MetadataQueryParams
-    {
-        public string OwnerUri { get; set; }
-    }
-
-    public class MetadataQueryResult
-    {
-        public ObjectMetadata[] Metadata { get; set; }
-    }
-
-    public class MetadataListRequest
-    {
-        public const string MessageName = "metadata/list";
-
-        public static readonly LspRequest<MetadataQueryParams, MetadataQueryResult> Type = new LspRequest<MetadataQueryParams, MetadataQueryResult>(MessageName);
     }
 }
