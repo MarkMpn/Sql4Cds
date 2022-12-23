@@ -354,7 +354,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
         private ExecutionPlanNode ConvertExecutionPlanNode(IExecutionPlanNode node, TimeSpan totalDuration, bool executed, ref int id)
         {
             var nodeInternalDurationMS = node.Duration.TotalMilliseconds - node.GetSources().Sum(n => n.Duration.TotalMilliseconds);
-            var rows = node is IDataExecutionPlanNode dataNode ? executed ? dataNode.RowsOut : dataNode.EstimatedRowsOut : 1;
+            var rows = node is IDataExecutionPlanNode dataNode ? (executed ? dataNode.RowsOut : dataNode.EstimatedRowsOut).ToString() : "";
 
             var converted = new ExecutionPlanNode
             {
@@ -368,7 +368,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                 ID = id++,
                 Name = node.ToString(),
                 Properties = new List<ExecutionPlanGraphPropertyBase>(),
-                RowCountDisplayString = rows.ToString(),
+                RowCountDisplayString = rows,
                 Subtext = node.ToString().Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries),
                 TopOperationsData = GetTopOperations(node, executed),
                 Type = node.GetType().Name.Replace("Node", "")
@@ -387,17 +387,21 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                     converted.CostMetrics.Add(new CostMetric
                     {
                         Name = "ActualRows",
-                        Value = rows.ToString()
+                        Value = rows
                     });
                 }
+
+                converted.CostDisplayString = converted.Cost.ToString("P1");
             }
             else
             {
                 converted.CostMetrics.Add(new CostMetric
                 {
                     Name = "EstimatedRows",
-                    Value = rows.ToString()
+                    Value = rows
                 });
+
+                converted.CostDisplayString = "";
             }
 
             // Tweak the Type so we get the right icon
