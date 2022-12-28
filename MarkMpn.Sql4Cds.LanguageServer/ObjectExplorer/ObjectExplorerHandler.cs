@@ -36,7 +36,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer
             _ = Task.Run(async () =>
             {
                 await Task.Delay(TimeSpan.FromSeconds(1));
-                _ = _lsp.NotifyAsync("objectexplorer/sessioncreated", new SessionCreatedParameters
+                _ = _lsp.NotifyAsync(CreateSessionCompleteNotification.Type, new SessionCreatedParameters
                 {
                     Success = true,
                     SessionId = session.SessionId,
@@ -297,7 +297,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer
                     }
                 }
 
-                await _lsp.NotifyAsync("objectexplorer/expandCompleted", new ExpandResponse
+                await _lsp.NotifyAsync(ExpandCompleteNotification.Type, new ExpandResponse
                 {
                     SessionId = request.SessionId,
                     NodePath = request.NodePath,

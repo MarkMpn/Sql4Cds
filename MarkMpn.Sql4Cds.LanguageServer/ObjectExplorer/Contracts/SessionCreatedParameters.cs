@@ -1,4 +1,6 @@
-﻿namespace MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer.Contracts
+﻿using Microsoft.VisualStudio.LanguageServer.Protocol;
+
+namespace MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer.Contracts
 {
     /// <summary>
     /// Information returned from a <see cref="CreateSessionRequest"/>.
@@ -28,5 +30,13 @@
         /// Error message returned from the engine for a object explorer session failure reason, if any.
         /// </summary>
         public string ErrorMessage { get; set; }
+    }
+
+    /// <summary>
+    /// Session notification mapping entry 
+    /// </summary>
+    public class CreateSessionCompleteNotification
+    {
+        public static readonly LspNotification<SessionCreatedParameters> Type = new LspNotification<SessionCreatedParameters>("objectexplorer/sessioncreated");
     }
 }

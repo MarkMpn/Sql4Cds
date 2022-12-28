@@ -57,7 +57,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
                 }
                 catch (Exception ex)
                 {
-                    _ = _lsp.NotifyAsync("connection/complete", new ConnectionCompleteParams
+                    _ = _lsp.NotifyAsync(ConnectionCompleteNotification.Type, new ConnectionCompleteParams
                     {
                         OwnerUri = request.OwnerUri,
                         Type = request.Type,

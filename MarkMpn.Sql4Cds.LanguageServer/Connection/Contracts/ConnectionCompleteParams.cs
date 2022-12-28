@@ -1,4 +1,6 @@
-﻿namespace MarkMpn.Sql4Cds.LanguageServer.Connection.Contracts
+﻿using Microsoft.VisualStudio.LanguageServer.Protocol;
+
+namespace MarkMpn.Sql4Cds.LanguageServer.Connection.Contracts
 {
     /// <summary>
     /// Parameters to be sent back with a connection complete event
@@ -45,5 +47,13 @@
         /// The type of connection that this notification is for
         /// </summary>
         public string Type { get; set; } = ConnectionType.Default;
+    }
+
+    /// <summary>
+    /// ConnectionComplete notification mapping entry 
+    /// </summary>
+    public class ConnectionCompleteNotification
+    {
+        public static readonly LspNotification<ConnectionCompleteParams> Type = new LspNotification<ConnectionCompleteParams>("connection/complete");
     }
 }

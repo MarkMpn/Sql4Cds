@@ -1,4 +1,6 @@
-﻿namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution.Contracts
+﻿using Microsoft.VisualStudio.LanguageServer.Protocol;
+
+namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution.Contracts
 {
     /// <summary>
     /// Parameters to be sent back with a message notification
@@ -14,5 +16,10 @@
         /// The message that is being returned
         /// </summary>
         public ResultMessage Message { get; set; }
+    }
+
+    public class MessageEvent
+    {
+        public static readonly LspNotification<MessageParams> Type = new LspNotification<MessageParams>("query/message");
     }
 }
