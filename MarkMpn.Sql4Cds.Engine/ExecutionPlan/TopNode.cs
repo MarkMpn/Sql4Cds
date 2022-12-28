@@ -147,7 +147,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         break;
                 }
 
-                if (fetchXml != null)
+                if (fetchXml != null && fetchXml.FetchXml.count == null)
                 {
                     fetchXml.FetchXml.top = literal.Value;
                     fetchXml.AllPages = false;
