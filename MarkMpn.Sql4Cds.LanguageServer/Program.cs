@@ -2,6 +2,7 @@
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
+using MarkMpn.Sql4Cds.LanguageServer.Capabilities;
 using MarkMpn.Sql4Cds.LanguageServer.Connection;
 using MarkMpn.Sql4Cds.LanguageServer.Workspace;
 using Microsoft.Extensions.DependencyInjection;
@@ -32,6 +33,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer
             serviceCollection.AddSingleton(rpc);
             serviceCollection.AddSingleton<ConnectionManager>();
             serviceCollection.AddSingleton<TextDocumentManager>();
+            serviceCollection.AddSingleton<VersionChecker>();
 
             var handlerTypes = Assembly
                 .GetExecutingAssembly()
