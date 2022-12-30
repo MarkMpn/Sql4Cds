@@ -182,6 +182,17 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
                         org = new ServiceClient($"AuthType=OAuth;Username={oauthUsername};Url={url};AppId=51f81489-12ee-4a9e-aaae-a2591f45987d;RedirectUri=http://localhost;LoginPrompt=Auto;TokenCacheStorePath=" + Path.Combine(Path.GetDirectoryName(GetType().Assembly.Location), "TokenCache"));
                         break;
 
+                    case "None":
+                        if (!connection.Options.TryGetValue("clientid", out x) || !(x is string clientId))
+                            throw new ArgumentOutOfRangeException("Missing Client ID");
+                        if (!connection.Options.TryGetValue("clientsecret", out x) || !(x is string clientSecret))
+                            throw new ArgumentOutOfRangeException("Missing Client Secret");
+                        if (!connection.Options.TryGetValue("redirectUrl", out x) || !(x is string redirectUrl))
+                            throw new ArgumentOutOfRangeException("Missing Redirect URL");
+
+                        org = new ServiceClient($"AuthType=ClientSecret;Url={url};ClientId={clientId};ClientSecret={clientSecret};RedirectUri={redirectUrl};LoginPrompt=Never;TokenCacheStorePath=" + Path.Combine(Path.GetDirectoryName(GetType().Assembly.Location), "TokenCache"));
+                        break;
+
                     case "SqlLogin":
                         if (!connection.Options.TryGetValue("user", out x) || !(x is string ifdUsername))
                             throw new ArgumentOutOfRangeException("Missing user");
