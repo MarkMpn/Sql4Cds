@@ -129,7 +129,30 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
 
             ValidateConnection(org);
 
-            return new DataSourceWithInfo(org, url, _persistentMetadataCache);
+            var dataSource = new DataSourceWithInfo(org, url, _persistentMetadataCache);
+
+            if (connection.Options.TryGetValue("connectionName", out x) && x is string name && !String.IsNullOrEmpty(name))
+            {
+                dataSource.Name = name;
+            }
+            else if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            {
+                if (uri.Host.EndsWith(".dynamics.com") ||
+                    String.IsNullOrEmpty(uri.AbsolutePath) ||
+                    uri.AbsolutePath == "/" ||
+                    uri.AbsolutePath.Equals("/XRMServices/2011/Organization.svc", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Online and IFD instances are identified by the host name
+                    dataSource.Name = uri.Host;
+                }
+                else
+                {
+                    // On-prem instances are identified by the org name in the URL
+                    dataSource.Name = uri.AbsolutePath.Split('/')[1];
+                }
+            }
+
+            return dataSource;
         }
 
         private void ValidateConnection(IOrganizationService org)
