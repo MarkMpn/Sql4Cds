@@ -10,6 +10,7 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="7.0.0" />
     <PackageReference Include="Microsoft.VisualStudio.LanguageServer.Protocol" Version="17.2.8" />
     <PackageReference Include="StreamJsonRpc" Version="2.13.33" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="6.21.0" />
   </ItemGroup>
 
   <ItemGroup>
