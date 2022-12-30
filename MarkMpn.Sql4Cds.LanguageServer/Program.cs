@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
@@ -18,6 +19,9 @@ namespace MarkMpn.Sql4Cds.LanguageServer
             if (Array.IndexOf(args, "--enable-remote-debugging-wait") != -1)
                 System.Diagnostics.Debugger.Launch();
 
+            var logDirArg = "--log-dir=";
+            var logDir = args.Single(a => a.StartsWith(logDirArg)).Substring(logDirArg.Length);
+
             var formatter = new JsonMessageFormatter();
             formatter.JsonSerializer.ContractResolver = new DefaultContractResolver
             {
@@ -34,6 +38,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer
             serviceCollection.AddSingleton<ConnectionManager>();
             serviceCollection.AddSingleton<TextDocumentManager>();
             serviceCollection.AddSingleton<VersionChecker>();
+            serviceCollection.AddSingleton(new PersistentMetadataCache(Path.Join(logDir, "Metadata"), rpc));
 
             var handlerTypes = Assembly
                 .GetExecutingAssembly()

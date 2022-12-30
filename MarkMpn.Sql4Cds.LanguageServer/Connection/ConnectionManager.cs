@@ -12,16 +12,19 @@ using Microsoft.Crm.Sdk.Messages;
 using Microsoft.PowerPlatform.Dataverse.Client;
 using Microsoft.PowerPlatform.Dataverse.Client.Model;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Metadata;
 
 namespace MarkMpn.Sql4Cds.LanguageServer.Connection
 {
     class ConnectionManager
     {
-        private ConcurrentDictionary<string, DataSourceWithInfo> _dataSources;
-        private ConcurrentDictionary<string, string> _connectedDataSource;
+        private readonly PersistentMetadataCache _persistentMetadataCache;
+        private readonly ConcurrentDictionary<string, DataSourceWithInfo> _dataSources;
+        private readonly ConcurrentDictionary<string, string> _connectedDataSource;
 
-        public ConnectionManager()
+        public ConnectionManager(PersistentMetadataCache persistentMetadataCache)
         {
+            _persistentMetadataCache = persistentMetadataCache;
             _dataSources = new ConcurrentDictionary<string, DataSourceWithInfo>();
             _connectedDataSource = new ConcurrentDictionary<string, string>();
         }
@@ -126,7 +129,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
 
             ValidateConnection(org);
 
-            return new DataSourceWithInfo(org, url);
+            return new DataSourceWithInfo(org, url, _persistentMetadataCache);
         }
 
         private void ValidateConnection(IOrganizationService org)
@@ -138,7 +141,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
 
     class DataSourceWithInfo : DataSource
     {
-        public DataSourceWithInfo(IOrganizationService org, string url) : base(org)
+        public DataSourceWithInfo(IOrganizationService org, string url, PersistentMetadataCache persistentMetadataCache) : base(org)
         {
             ServerName = new Uri(url).Host;
 
@@ -159,6 +162,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
                 var resp = (RetrieveVersionResponse)org.Execute(new RetrieveVersionRequest());
                 Version = resp.Version;
             }
+
+            Metadata = new CachedMetadata(org, persistentMetadataCache);
         }
 
         public string ServerName { get; set; }
