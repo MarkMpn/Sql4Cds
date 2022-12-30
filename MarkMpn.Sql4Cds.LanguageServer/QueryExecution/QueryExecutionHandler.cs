@@ -7,6 +7,7 @@ using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine;
@@ -294,6 +295,70 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                             IsError = true
                         }
                     });
+
+                    var error = ex;
+
+                    while (error.InnerException != null)
+                        error = error.InnerException;
+
+                    if (error is QueryParseException parseException)
+                    {
+                        var length = Regex.Match(String.Join("\n", doc).Substring(parseException.Error.Offset), "\\b").Index;
+
+                        await _lsp.NotifyAsync(Methods.TextDocumentPublishDiagnostics, new PublishDiagnosticParams
+                        {
+                            Uri = new Uri(request.OwnerUri),
+                            Diagnostics = new[]
+                            {
+                                new Diagnostic
+                                {
+                                    Range = new Microsoft.VisualStudio.LanguageServer.Protocol.Range
+                                    {
+                                        Start = new Position
+                                        {
+                                            Line = parseException.Error.Line - 1 + request.QuerySelection.StartLine,
+                                            Character = parseException.Error.Column - 1 + (parseException.Error.Line == 1 ? request.QuerySelection.StartColumn : 0)
+                                        },
+                                        End = new Position
+                                        {
+                                            Line = parseException.Error.Line - 1 + request.QuerySelection.StartLine,
+                                            Character = parseException.Error.Column - 1 + (parseException.Error.Line == 1 ? request.QuerySelection.StartColumn : 0) + length
+                                        }
+                                    },
+                                    Message = parseException.Message
+                                }
+                            }
+                        });
+                    }
+                    else if (error is NotSupportedQueryFragmentException queryException)
+                    {
+                        var lines = queryException.Fragment.ToSql().Split('\n');
+
+                        await _lsp.NotifyAsync(Methods.TextDocumentPublishDiagnostics, new PublishDiagnosticParams
+                        {
+                            Uri = new Uri(request.OwnerUri),
+                            Diagnostics = new[]
+                            {
+                                new Diagnostic
+                                {
+                                    Range = new Microsoft.VisualStudio.LanguageServer.Protocol.Range
+                                    {
+                                        Start = new Position
+                                        {
+                                            Line = queryException.Fragment.StartLine - 1 + request.QuerySelection.StartLine,
+                                            Character = queryException.Fragment.StartColumn - 1 + (queryException.Fragment.StartLine == 1 ? request.QuerySelection.StartColumn : 0)
+                                        },
+                                        End = new Position
+                                        {
+                                            Line = queryException.Fragment.StartLine - 1 + request.QuerySelection.StartLine + lines.Length - 1,
+                                            Character = lines.Length > 1 ? lines.Last().Length - 1 : queryException.Fragment.StartColumn - 1 + (queryException.Fragment.StartLine == 1 ? request.QuerySelection.StartColumn : 0) + queryException.Fragment.FragmentLength
+                                        }
+                                    },
+                                    Message = queryException.Message
+                                }
+                            }
+                        });
+                    }
                 }
                 finally
                 {
