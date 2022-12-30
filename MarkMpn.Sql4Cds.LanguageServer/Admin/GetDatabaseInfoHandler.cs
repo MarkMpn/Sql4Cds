@@ -6,6 +6,8 @@ using MarkMpn.Sql4Cds.Engine;
 using MarkMpn.Sql4Cds.LanguageServer.Admin.Contracts;
 using MarkMpn.Sql4Cds.LanguageServer.Connection;
 using MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer.Contracts;
+using Microsoft.Crm.Sdk.Messages;
+using Microsoft.PowerPlatform.Dataverse.Client;
 using StreamJsonRpc;
 
 namespace MarkMpn.Sql4Cds.LanguageServer.Admin
@@ -37,7 +39,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Admin
                 {
                     Options = new Dictionary<string, object>
                     {
-                        ["dbname"] = con.DataSource.Name,
+                        ["dbname"] = con.DataSource.UniqueName,
+                        ["orgid"] = con.DataSource.OrgId,
                         ["url"] = con.DataSource.ServerName,
                         ["username"] = con.DataSource.Username
                     }
@@ -47,6 +50,29 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Admin
 
         public ListDatabasesResponse HandleListDatabases(ListDatabasesParams request)
         {
+            if (request.IncludeDetails == true)
+            {
+                // Database list in server dashboard - show actual database unique name
+                var con = _connectionManager.GetConnection(request.OwnerUri);
+
+                return new ListDatabasesResponse
+                {
+                    DatabaseNames = new[] { con.DataSource.UniqueName }
+                };
+            }
+
+            if (request.OwnerUri.StartsWith("connection:"))
+            {
+                // Drop-down list of databases in connection widget. Needs to be displayed to show option to switch
+                // database in query tab, but doesn't have any effect on the connection itself
+                return new ListDatabasesResponse
+                {
+                    DatabaseNames = Array.Empty<string>()
+                };
+            }
+
+            // Getting the list of connections to show in the drop-down list in the query tab - show all possible
+            // connections
             var connections = _connectionManager.GetAllConnections();
 
             return new ListDatabasesResponse
@@ -57,6 +83,11 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Admin
 
         public bool HandleChangeDatabase(ChangeDatabaseParams request)
         {
+            var con = _connectionManager.GetConnection(request.OwnerUri);
+
+            if (con.DataSource.UniqueName == request.NewDatabase)
+                return true;
+
             return _connectionManager.ChangeConnection(request.OwnerUri, request.NewDatabase);
         }
 
