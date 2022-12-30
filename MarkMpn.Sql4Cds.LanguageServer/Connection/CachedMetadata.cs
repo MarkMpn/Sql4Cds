@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.ServiceModel;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 using MarkMpn.Sql4Cds.Engine;
@@ -47,7 +48,12 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
             get
             {
                 if (_persistentCacheByName != null)
-                    return _persistentCacheByName[name];
+                {
+                    if (_persistentCacheByName.TryGetValue(name, out var entity))
+                        return entity;
+
+                    throw new FaultException("Unknown entity " + name);
+                }
 
                 return _defaultCache[name];
             }
@@ -58,7 +64,12 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
             get
             {
                 if (_persistentCacheByOtc != null)
-                    return _persistentCacheByOtc[otc];
+                {
+                    if (_persistentCacheByOtc.TryGetValue(otc, out var entity))
+                        return entity;
+
+                    throw new FaultException("Unknown entity " + otc);
+                }
 
                 return _defaultCache[otc];
             }
