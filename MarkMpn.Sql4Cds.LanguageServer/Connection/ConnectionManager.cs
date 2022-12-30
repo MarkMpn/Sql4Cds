@@ -37,7 +37,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
             var dataSourceName = GetDataSourceName(connection);
 
             if (ownerUri == null)
-                ownerUri = dataSourceName;
+                ownerUri = Guid.NewGuid().ToString("N");
 
             var ds = _dataSources.GetOrAdd(dataSourceName, (_) => CreateDataSource(connection));
             _connectedDataSource[ownerUri] = dataSourceName;
@@ -239,6 +239,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
     {
         public DataSourceWithInfo(IOrganizationService org, string url, PersistentMetadataCache persistentMetadataCache) : base(org)
         {
+            UniqueName = Name;
             ServerName = new Uri(url).Host;
 
             using (var con = new Sql4CdsConnection(new Dictionary<string, DataSource> { [Name] = this }))
@@ -252,15 +253,23 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
             if (org is ServiceClient svc)
             {
                 Version = svc.ConnectedOrgVersion.ToString();
+                OrgId = svc.ConnectedOrgId;
             }
             else
             {
                 var resp = (RetrieveVersionResponse)org.Execute(new RetrieveVersionRequest());
                 Version = resp.Version;
+
+                var whoAmI = (WhoAmIResponse)org.Execute(new WhoAmIRequest());
+                OrgId = whoAmI.OrganizationId;
             }
 
             Metadata = new CachedMetadata(org, persistentMetadataCache);
         }
+
+        public string UniqueName { get; set; }
+
+        public Guid OrgId { get; set; }
 
         public string ServerName { get; set; }
 
