@@ -124,11 +124,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
                         Character = request.Position.Character + wordEnd.Index - pos
                     }
                 },
-                Contents = new[]
-                {
-                    (SumType<string, MarkedString>)new MarkedString { Value = "**" + exactSuggestions[0].ToolTipTitle + "**" },
-                    (SumType<string, MarkedString>)new MarkedString { Value = exactSuggestions[0].ToolTipText }
-                }
+                Contents = new MarkupContent { Kind = MarkupKind.Markdown, Value = "**" + exactSuggestions[0].ToolTipTitle + "**\r\n\r\n" + exactSuggestions[0].ToolTipText }
             };
         }
 
