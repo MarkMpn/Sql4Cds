@@ -17,7 +17,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
         public CachedMetadata(IOrganizationService org, PersistentMetadataCache persistentMetadataCache)
         {
             _defaultCache = new AttributeMetadataCache(org);
-            _ = persistentMetadataCache.GetMetadataAsync(org, false)
+            _ = Task.Run(() => persistentMetadataCache.GetMetadataAsync(org, false))
                 .ContinueWith(loader =>
                 {
                     if (loader.IsCanceled || loader.IsFaulted)
