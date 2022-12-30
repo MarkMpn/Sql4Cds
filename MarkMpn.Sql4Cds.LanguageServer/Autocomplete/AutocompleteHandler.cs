@@ -49,12 +49,10 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
 
             foreach (var c in cons)
             {
-                EntityCache.TryGetEntities(c.Value.Connection, out var entities);
-
                 acds.Add(c.Key, new AutocompleteDataSource
                 {
                     Name = c.Value.Name,
-                    Entities = entities,
+                    Entities = ((CachedMetadata)((DataSourceWithInfo)c.Value).Metadata).GetAutocompleteEntities(),
                     Metadata = c.Value.Metadata,
                     Messages = c.Value.MessageCache
                 });
@@ -92,12 +90,10 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
 
             foreach (var c in cons)
             {
-                EntityCache.TryGetEntities(c.Value.Connection, out var entities);
-
                 acds.Add(c.Key, new AutocompleteDataSource
                 {
                     Name = c.Value.Name,
-                    Entities = entities,
+                    Entities = ((CachedMetadata)((DataSourceWithInfo)c.Value).Metadata).GetAutocompleteEntities(),
                     Metadata = c.Value.Metadata,
                     Messages = c.Value.MessageCache
                 });
