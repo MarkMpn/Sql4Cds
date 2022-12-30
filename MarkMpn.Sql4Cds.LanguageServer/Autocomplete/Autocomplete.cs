@@ -1364,7 +1364,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
         {
             private readonly AutocompleteDataSource _dataSource;
 
-            public InstanceAutocompleteItem(AutocompleteDataSource dataSource, int replaceLength) : base(EscapeIdentifier(dataSource.Name), replaceLength, CompletionItemKind.Field)
+            public InstanceAutocompleteItem(AutocompleteDataSource dataSource, int replaceLength) : base(EscapeIdentifier(dataSource.Name), replaceLength, CompletionItemKind.Reference)
             {
                 _dataSource = dataSource;
             }
@@ -1384,7 +1384,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
 
         class SchemaAutocompleteItem : SqlAutocompleteItem
         {
-            public SchemaAutocompleteItem(string schema, int replaceLength) : base(schema, replaceLength, CompletionItemKind.Field)
+            public SchemaAutocompleteItem(string schema, int replaceLength) : base(schema, replaceLength, CompletionItemKind.Module)
             {
             }
 
