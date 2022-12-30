@@ -1,8 +1,11 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Data.Common;
+using System.IdentityModel.Tokens.Jwt;
 using System.IO;
 using System.Linq;
+using System.Security.Policy;
 using System.Text;
 using System.Threading.Tasks;
 using Data8.PowerPlatform.Dataverse.Client;
@@ -31,15 +34,13 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
 
         public Session Connect(ConnectionDetails connection, string ownerUri)
         {
-            connection.Options.TryGetValue("user", out var user);
-            connection.Options.TryGetValue("url", out var url);
-            var key = System.Text.Encodings.Web.UrlEncoder.Default.Encode(user as string ?? "").Replace("@", "%40") + "@" + url;
+            var dataSourceName = GetDataSourceName(connection);
 
             if (ownerUri == null)
-                ownerUri = key;
+                ownerUri = dataSourceName;
 
-            var ds = _dataSources.GetOrAdd(key, (_) => CreateDataSource(connection));
-            _connectedDataSource[ownerUri] = key;
+            var ds = _dataSources.GetOrAdd(dataSourceName, (_) => CreateDataSource(connection));
+            _connectedDataSource[ownerUri] = dataSourceName;
 
             return GetConnection(ownerUri);
         }
@@ -79,6 +80,71 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
                 .ToDictionary(ds => ds.Name);
         }
 
+        private Uri GetUri(ConnectionDetails connection)
+        {
+            string url;
+
+            if (connection.Options.TryGetValue("connectionString", out var x) && x is string conStr)
+            {
+                var builder = new DbConnectionStringBuilder();
+                builder.ConnectionString = conStr;
+
+                foreach (var keyword in new[] { "ServiceUri", "Service Uri", "Url", "Server"})
+                {
+                    if (builder.TryGetValue(keyword, out x) && x is string s)
+                    {
+                        url = s;
+                        break;
+                    }
+                }
+
+                throw new ArgumentOutOfRangeException("Missing url");
+            }
+            else if (!connection.Options.TryGetValue("authenticationType", out x) || !(x is string authType))
+            {
+                throw new ArgumentOutOfRangeException("Missing authenticationType");
+            }
+            else if (!connection.Options.TryGetValue("url", out x) || (url = x as string) == null)
+            {
+                throw new ArgumentOutOfRangeException("Missing url");
+            }
+            else
+            {
+                if (!url.Contains("://"))
+                    url = "https://" + url;
+                else if (!url.StartsWith("https://"))
+                    throw new ArgumentOutOfRangeException("Only HTTPS URLs are allowed");
+            }
+
+            return new Uri(url);
+        }
+
+        private string GetDataSourceName(ConnectionDetails connection)
+        {
+            if (connection.Options.TryGetValue("connectionName", out var x) && x is string name && !String.IsNullOrEmpty(name))
+            {
+                return name;
+            }
+            else
+            {
+                var uri = GetUri(connection);
+
+                if (uri.Host.EndsWith(".dynamics.com") ||
+                    String.IsNullOrEmpty(uri.AbsolutePath) ||
+                    uri.AbsolutePath == "/" ||
+                    uri.AbsolutePath.Equals("/XRMServices/2011/Organization.svc", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Online and IFD instances are identified by the host name
+                    return uri.Host;
+                }
+                else
+                {
+                    // On-prem instances are identified by the org name in the URL
+                    return uri.AbsolutePath.Split('/')[1];
+                }
+            }
+        }
+
         private DataSourceWithInfo CreateDataSource(ConnectionDetails connection)
         {
             IOrganizationService org;
@@ -106,9 +172,12 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
 
                 switch (authType)
                 {
-                    case "AzureMFAAndUser":
-                        if (!connection.Options.TryGetValue("user", out x) || !(x is string oauthUsername))
+                    case "AzureMFA":
+                        if (!connection.Options.TryGetValue("azureAccountToken", out x) || !(x is string oauthUsername))
                             throw new ArgumentOutOfRangeException("Missing user");
+
+                        var token = new JwtSecurityToken(oauthUsername);
+                        oauthUsername = token.Claims.Single(c => c.Type == "upn").Value;
 
                         org = new ServiceClient($"AuthType=OAuth;Username={oauthUsername};Url={url};AppId=51f81489-12ee-4a9e-aaae-a2591f45987d;RedirectUri=http://localhost;LoginPrompt=Auto;TokenCacheStorePath=" + Path.Combine(Path.GetDirectoryName(GetType().Assembly.Location), "TokenCache"));
                         break;
@@ -122,6 +191,10 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
                         org = new OnPremiseClient(url, ifdUsername, ifdPassword);
                         break;
 
+                    case "Integrated":
+                        org = new OnPremiseClient(url);
+                        break;
+
                     default:
                         throw new ArgumentOutOfRangeException("Unknown authenticationType " + authType);
                 }
@@ -130,27 +203,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
             ValidateConnection(org);
 
             var dataSource = new DataSourceWithInfo(org, url, _persistentMetadataCache);
-
-            if (connection.Options.TryGetValue("connectionName", out x) && x is string name && !String.IsNullOrEmpty(name))
-            {
-                dataSource.Name = name;
-            }
-            else if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
-            {
-                if (uri.Host.EndsWith(".dynamics.com") ||
-                    String.IsNullOrEmpty(uri.AbsolutePath) ||
-                    uri.AbsolutePath == "/" ||
-                    uri.AbsolutePath.Equals("/XRMServices/2011/Organization.svc", StringComparison.OrdinalIgnoreCase))
-                {
-                    // Online and IFD instances are identified by the host name
-                    dataSource.Name = uri.Host;
-                }
-                else
-                {
-                    // On-prem instances are identified by the org name in the URL
-                    dataSource.Name = uri.AbsolutePath.Split('/')[1];
-                }
-            }
+            dataSource.Name = GetDataSourceName(connection);
 
             return dataSource;
         }
@@ -159,6 +212,15 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
         {
             if (org is ServiceClient svc && !svc.IsReady)
                 throw new InvalidOperationException(svc.LastError);
+        }
+
+        public bool ChangeConnection(string ownerUri, string newDatabase)
+        {
+            if (!_dataSources.ContainsKey(newDatabase))
+                return false;
+
+            _connectedDataSource[ownerUri] = newDatabase;
+            return true;
         }
     }
 

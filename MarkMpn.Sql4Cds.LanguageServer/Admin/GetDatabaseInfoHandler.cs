@@ -47,19 +47,17 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Admin
 
         public ListDatabasesResponse HandleListDatabases(ListDatabasesParams request)
         {
-            var con = _connectionManager.GetConnection(request.OwnerUri);
+            var connections = _connectionManager.GetAllConnections();
 
             return new ListDatabasesResponse
             {
-                DatabaseNames = new[] { con.DataSource.Name }
+                DatabaseNames = connections.Keys.Order().ToArray()
             };
         }
 
         public bool HandleChangeDatabase(ChangeDatabaseParams request)
         {
-            var con = _connectionManager.GetConnection(request.OwnerUri);
-
-            return con.DataSource.Name == request.NewDatabase || request.NewDatabase == null;
+            return _connectionManager.ChangeConnection(request.OwnerUri, request.NewDatabase);
         }
 
         public MetadataQueryResult HandleMetadataList(MetadataQueryParams request)
