@@ -27,6 +27,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer
         {
             lsp.AddHandler(CreateSessionRequest.Type, HandleCreateSession);
             lsp.AddHandler(ExpandRequest.Type, HandleExpand);
+            lsp.AddHandler(RefreshRequest.Type, HandleRefresh);
         }
 
         public CreateSessionResponse HandleCreateSession(ConnectionDetails request)
@@ -306,6 +307,11 @@ namespace MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer
             });
 
             return true;
+        }
+
+        private bool HandleRefresh(RefreshParams args)
+        {
+            return HandleExpand(args);
         }
     }
 }
