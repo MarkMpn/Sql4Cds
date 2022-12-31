@@ -36,7 +36,7 @@ steps:
 - task: NodeTool@0
   displayName: Install Node.js
   inputs:
-    versionSpec: '15.x'
+    versionSpec: '18.x'
 
 - task: CmdLine@2
   displayName: Build Azure Data Studio Extension

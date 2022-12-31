@@ -33,13 +33,12 @@ steps:
 - task: NodeTool@0
   displayName: Install Node.js
   inputs:
-    versionSpec: '15.x'
+    versionSpec: '18.x'
 
 - task: CmdLine@2
   displayName: Build Azure Data Studio Extension
   inputs:
     script: |
-      npm --no-git-tag-version version $(GitVersion.SemVer)
       yarn install
       gulp build
     workingDirectory: '$(Build.SourcesDirectory)\AzureDataStudioExtension'
