@@ -36,8 +36,8 @@ steps:
     versionSpec: '18.x'
 
 - script: |
-    npm --no-git-tag-version version $(GitVersion.SemVer)
-    npm i -g vsce
+    call npm --no-git-tag-version version $(GitVersion.SemVer)
+    call npm i -g vsce
     yarn install
     gulp build
   displayName: Build ADS extension
