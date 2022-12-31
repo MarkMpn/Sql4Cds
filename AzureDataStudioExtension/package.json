@@ -1,0 +1,357 @@
+{
+  "name": "azuredatastudio-sql4cds",
+  "displayName": "SQL 4 CDS",
+  "version": "4.9.0",
+  "publisher": "Mark Carrington",
+  "description": "%sql4cds.description%",
+  "icon": "images/extension-icon.png",
+  "repository": {
+    "url": "https://github.com/MarkMpn/Sql4Cds"
+  },
+  "license": "MIT",
+  "activationEvents": [
+    "*"
+  ],
+  "engines": {
+    "vscode": "*",
+    "azdata": ">=1.30.0"
+  },
+  "main": "./out/main",
+  "extensionDependencies": [
+    "vscode.sql"
+  ],
+  "scripts": {
+    "compile": "gulp build",
+    "package": "gulp package:online",
+    "package-offline": "gulp package:offline"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "sql",
+        "extensions": [
+          ".sql"
+        ],
+        "aliases": [
+          "SQL"
+        ]
+      }
+    ],
+    "outputChannels": [
+      "SQL 4 CDS"
+    ],
+    "configuration":
+    {
+      "type": "object",
+      "title": "%sql4cds.configuration.title%",
+      "properties": {
+        "SQL4CDS.logDebugInfo": {
+          "type": "boolean",
+          "default": false,
+          "description": "%sql4cds.logDebugInfo.description%"
+        },
+        "SQL4CDS.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "%sql4cds.enabled.description%"
+        },
+        "SQL4CDS.debugSourcePath": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "%sql4cds.debugSourcePath.description%"
+        },
+        "SQL4CDS.useDebugSource": {
+          "type": "boolean",
+          "default": false,
+          "description": "%sql4cds.useDebugSource.description%"
+        },
+        "SQL4CDS.enableStartupDebugging": {
+          "type": "boolean",
+          "default": false,
+          "description": "%sql4cds.enableStartupDebugging.description%"
+        },
+        "SQL4CDS.useTdsEndpoint": {
+          "type": "boolean",
+          "default": false,
+          "description": "%sql4cds.useTdsEndpoint.description%"
+        },
+        "SQL4CDS.blockDeleteWithoutWhere": {
+          "type": "boolean",
+          "default": true,
+          "description": "%sql4cds.blockDeleteWithoutWhere.description%"
+        },
+        "SQL4CDS.blockUpdateWithoutWhere": {
+          "type": "boolean",
+          "default": true,
+          "description": "%sql4cds.blockUpdateWithoutWhere.description%"
+        },
+        "SQL4CDS.useBulkDelete": {
+          "type": "boolean",
+          "default": false,
+          "description": "%sql4cds.useBulkDelete.description%"
+        },
+        "SQL4CDS.batchSize": {
+          "type": "integer",
+          "default": 100,
+          "description": "%sql4cds.batchSize.description%"
+        },
+        "SQL4CDS.maxDegreeOfParallelism": {
+          "type": "integer",
+          "default": 10,
+          "description": "%sql4cds.maxDegreeOfParallelism.description%"
+        },
+        "SQL4CDS.useLocalTimeZone": {
+          "type": "boolean",
+          "default": false,
+          "description": "%sql4cds.useLocalTimeZone.description%"
+        },
+        "SQL4CDS.bypassCustomPlugins": {
+          "type": "boolean",
+          "default": false,
+          "description": "%sql4cds.bypassCustomPlugins.description%"
+        },
+        "SQL4CDS.quotedIdentifiers": {
+          "type": "boolean",
+          "default": false,
+          "description": "%sql4cds.quotedIdentifiers.description%"
+        }
+      }
+    },
+    "dashboard": {
+      "provider": "SQL4CDS",
+      "flavors": [
+        {
+          "flavor": "sql4cds",
+          "databaseProperties": [
+            {
+              "displayName": "Organization Unique Name",
+              "value": "dbname"
+            },
+            {
+              "displayName": "Organization ID",
+              "value": "orgid"
+            },
+            {
+              "displayName": "Url",
+              "value": "url"
+            },
+            {
+              "displayName": "Current User",
+              "value": "username"
+            }
+          ],
+          "serverProperties": [
+            {
+              "displayName": "Server",
+              "value": "server"
+            },
+            {
+              "displayName": "Version",
+              "value": "orgVersion"
+            },
+            {
+              "displayName": "Edition",
+              "value": "edition"
+            }
+          ]
+        }
+      ]
+    },
+    "connectionProvider": {
+        "protocolVersion": "1.0",
+        "providerName": "SQL 4 CDS",
+        "providerId": "SQL4CDS",
+        "displayName": "%sql4cds.provider.displayName%",
+        "azureResource": "SQL4CDS",
+        "iconPath": [
+          {
+            "id": "sql4cds",
+            "path": {
+              "light": "./images/Dataverse_scalable.svg",
+              "dark": "./images/Dataverse_scalable.svg"
+            },
+            "default": true
+          }
+        ],
+        "connectionStringOptions": {
+          "isEnabled": true,
+          "isDefault": false
+        },
+        "connectionOptions": [
+          {
+            "specialValueType": "connectionName",
+            "isIdentity": true,
+            "name": "connectionName",
+            "displayName": "%sql4cds.connectionOptions.connectionName.displayName%",
+            "description": "%sql4cds.connectionOptions.connectionName.description%",
+            "groupName": "%sql4cds.connectionOptions.groupName.source%",
+            "valueType": "string",
+            "defaultValue": null,
+            "objectType": null,
+            "categoryValues": null,
+            "isRequired": false,
+            "isArray": false
+          },
+          {
+            "specialValueType": "authType",
+            "isIdentity": true,
+            "name": "authenticationType",
+            "displayName": "%sql4cds.connectionOptions.authType.displayName%",
+            "description": "%sql4cds.connectionOptions.authType.description%",
+            "groupName": "%sql4cds.connectionOptions.groupName.security%",
+            "valueType": "category",
+            "defaultValue": "AzureMFA",
+            "objectType": null,
+            "categoryValues": [
+              {
+                "displayName": "%sql4cds.connectionOptions.authType.categoryValues.azureMFA%",
+                "name": "AzureMFA"
+              },
+              {
+                "displayName": "%sql4cds.connectionOptions.authType.categoryValues.password%",
+                "name": "SqlLogin"
+              },
+              {
+                "displayName": "%sql4cds.connectionOptions.authType.categoryValues.integrated%",
+                "name": "Integrated"
+              },
+              {
+                "displayName": "%sql4cds.connectionOptions.authType.categoryValues.s2s%",
+                "name": "None"
+              }
+            ],
+            "isRequired": true,
+            "isArray": false
+          },
+          {
+            "name": "url",
+            "displayName": "%sql4cds.connectionOptions.url.displayName%",
+            "description": "%sql4cds.connectionOptions.url.description%",
+            "valueType": "string",
+            "specialValueType": "serverName",
+            "isIdentity": true,
+            "isRequired": true,
+            "groupName": "%sql4cds.connectionOptions.groupName.source%",
+            "defaultValue": null,
+            "objectType": null,
+            "categoryValues": null,
+            "isArray": false
+          },
+          {
+            "name": "user",
+            "displayName": "%sql4cds.connectionOptions.user.displayName%",
+            "description": "%sql4cds.connectionOptions.user.description%",
+            "valueType": "string",
+            "specialValueType": "userName",
+            "isIdentity": true,
+            "isRequired": true,
+            "groupName": "%sql4cds.connectionOptions.groupName.security%"
+          },
+          {
+            "name": "password",
+            "displayName": "%sql4cds.connectionOptions.password.displayName%",
+            "description": "%sql4cds.connectionOptions.password.description%",
+            "valueType": "password",
+            "specialValueType": "password",
+            "isIdentity": true,
+            "isRequired": true,
+            "groupName": "%sql4cds.connectionOptions.groupName.security%",
+            "visible": false
+          },
+          {
+            "name": "dbname",
+            "displayName": "%sql4cds.connectionOptions.dbname.displayName%",
+            "description": "%sql4cds.connectionOptions.dbname.description%",
+            "valueType": "dbname",
+            "specialValueType": "databaseName",
+            "isIdentity": false,
+            "isRequired": false,
+            "groupName": "%sql4cds.connectionOptions.groupName.security%",
+            "visible": false
+          },
+          {
+            "name": "clientid",
+            "displayName": "%sql4cds.connectionOptions.clientid.displayName%",
+            "description": "%sql4cds.connectionOptions.clientid.description%",
+            "valueType": "string",
+            "specialValueType": null,
+            "defaultValue": null,
+            "isIdentity": true,
+            "isRequired": false,
+            "groupName": "%sql4cds.connectionOptions.groupName.security%"
+          },
+          {
+            "name": "clientsecret",
+            "displayName": "%sql4cds.connectionOptions.clientsecret.displayName%",
+            "description": "%sql4cds.connectionOptions.clientsecret.description%",
+            "valueType": "string",
+            "specialValueType": null,
+            "defaultValue": null,
+            "isIdentity": true,
+            "isRequired": false,
+            "groupName": "%sql4cds.connectionOptions.groupName.security%"
+          },
+          {
+            "name": "redirectUrl",
+            "displayName": "%sql4cds.connectionOptions.redirectUrl.displayName%",
+            "description": "%sql4cds.connectionOptions.redirectUrl.description%",
+            "valueType": "string",
+            "specialValueType": null,
+            "defaultValue": null,
+            "isIdentity": true,
+            "isRequired": false,
+            "groupName": "%sql4cds.connectionOptions.groupName.security%"
+          }
+        ]
+      }
+  },
+  "dependencies": {
+    "crypto": "^1.0.1",
+    "dataprotocol-client": "github:Microsoft/sqlops-dataprotocolclient#1.3.1",
+    "opener": "^1.5.2",
+    "@microsoft/ads-service-downloader": "1.0.2",
+    "tmp": "0.2.1 ",
+    "vscode-extension-telemetry": "0.4.2",
+    "vscode-languageclient": "5.2.1",
+    "eventemitter2": "^5.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^13.11.0",
+    "@types/vscode": "1.71.0",
+    "@types/azdata": "1.40.0",
+    "del": "^6.1.1",
+    "gulp": "github:gulpjs/gulp#4.0.2",
+    "gulp-json-editor": "^2.5.6",
+    "gulp-rename": "^2.0.0",
+    "gulp-shell": "^0.8.0",
+    "gulp-sourcemaps": "^3.0.0",
+    "gulp-tslint": "^8.1.4",
+    "gulp-typescript": "^5.0.1",
+    "typescript": "^4.8.3",
+    "tslint": "^6.1.3",
+    "vscode-nls-dev": "https://github.com/Raymondd/vscode-nls-dev/releases/download/2.0.2/build.tar.gz"
+  },
+  "resolutions": {
+    "gulp-cli": "^2.3.0",
+    "decompress": "^4.2.1",
+    "set-value": "^2.0.1",
+    "mixin-deep": "^1.3.2",
+    "ansi-regex": "^3.0.1",
+    "glob-parent": "^5.1.2",
+    "y18n": "^3.2.2",
+    "ini": "^1.3.6",
+    "kind-of": "^6.0.3",
+    "minimatch": "^3.0.2",
+    "minimist": "^1.2.3",
+    "copy-props": "^2.0.5",
+    "path-parse": "^1.0.7",
+    "hosted-git-info": "^2.8.9",
+    "yargs-parser": "^5.0.1",
+    "bl": "^1.2.3",
+    "https-proxy-agent": "^2.2.3",
+    "lodash.template": "^4.5.0"
+  }
+}

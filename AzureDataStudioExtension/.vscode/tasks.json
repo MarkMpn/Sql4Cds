@@ -1,0 +1,37 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "command": "gulp",
+    "args": [
+        "--no-color"
+    ],
+    "tasks": [
+        {
+            "label": "build",
+            "type": "gulp",
+            "task": "--no-color",
+            "problemMatcher": [
+                "$lessCompile",
+                "$tsc",
+                "$jshint"
+            ],
+            "group": {
+                "_id": "build",
+                "isDefault": false
+            }
+        },
+        {
+            "label": "cover:enable",
+            "type": "gulp",
+            "task": "--no-color",
+            "problemMatcher": []
+        },
+        {
+            "label": "cover:disable",
+            "type": "gulp",
+            "task": "--no-color",
+            "problemMatcher": []
+        }
+    ]
+}

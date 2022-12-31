@@ -1,0 +1,6 @@
+{
+	"installDirectory": "sql4cdstoolsservice",
+	"executableFiles": [
+		"MarkMpn.Sql4Cds.LanguageServer.exe"
+	]
+}
