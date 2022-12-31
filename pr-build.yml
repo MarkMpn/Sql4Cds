@@ -39,7 +39,7 @@ steps:
   displayName: Build Azure Data Studio Extension
   inputs:
     script: |
-      npm --no-git-tag-version version $(GitVersion.AssemblySemVer)
+      npm --no-git-tag-version version $(GitVersion.SemVer)
       yarn install
       gulp build
     workingDirectory: '$(Build.SourcesDirectory)\AzureDataStudioExtension'
