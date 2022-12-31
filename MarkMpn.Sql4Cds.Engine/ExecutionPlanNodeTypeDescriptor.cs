@@ -277,7 +277,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 value = desc.GetPropertyOwner(null);
 
             var list = (System.Collections.IList)value;
-            return list!= null && list.Count > 0;
+            return list != null && list.Count > 0;
         }
 
         public override PropertyDescriptorCollection GetProperties(ITypeDescriptorContext context, object value, Attribute[] attributes)

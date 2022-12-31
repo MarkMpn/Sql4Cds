@@ -13,7 +13,7 @@ variables:
 - name: buildConfiguration
   value: 'Release'
 - name: isMain
-  value: $[eq(variables['Build.SourceBranch'], 'refs/heads/main')]
+  value: $[eq(variables['Build.SourceBranch'], 'refs/heads/master')]
 
 steps:
 - checkout: self
