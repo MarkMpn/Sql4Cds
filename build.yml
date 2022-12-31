@@ -33,6 +33,20 @@ steps:
     arguments: '$(GitVersion.AssemblySemVer)'
     pwsh: true
   
+- task: NodeTool@0
+  displayName: Install Node.js
+  inputs:
+    versionSpec: '15.x'
+
+- task: CmdLine@2
+  displayName: Build Azure Data Studio Extension
+  inputs:
+    script: |
+      npm --no-git-tag-version version $(GitVersion.AssemblySemVer)
+      yarn install
+      gulp build
+    workingDirectory: '$(Build.SourcesDirectory)\AzureDataStudioExtension'
+  
 - task: NuGetCommand@2
   displayName: NuGet Restore
   inputs:
