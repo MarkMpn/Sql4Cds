@@ -29,19 +29,6 @@ steps:
     filePath: 'MarkMpn.Sql4Cds.SSMS\update-version.ps1'
     arguments: '$(GitVersion.AssemblySemVer)'
     pwsh: true
-  
-- task: NodeTool@0
-  displayName: Install Node.js
-  inputs:
-    versionSpec: '18.x'
-
-- script: |
-    call npm --no-git-tag-version version $(GitVersion.SemVer)
-    call npm i -g vsce
-    call yarn install
-    call gulp build
-  displayName: Build ADS extension
-  workingDirectory: '$(Build.SourcesDirectory)\AzureDataStudioExtension'
 
 - task: NuGetCommand@2
   displayName: NuGet Restore
@@ -72,3 +59,16 @@ steps:
     testAssemblyVer2: |
       **/MarkMpn.*.Tests.dll
       !**\obj\**
+  
+- task: NodeTool@0
+  displayName: Install Node.js
+  inputs:
+    versionSpec: '18.x'
+
+- script: |
+    call npm --no-git-tag-version version $(GitVersion.SemVer)
+    call npm i -g vsce
+    call yarn install
+    call gulp build
+  displayName: Build ADS extension
+  workingDirectory: '$(Build.SourcesDirectory)\AzureDataStudioExtension'
