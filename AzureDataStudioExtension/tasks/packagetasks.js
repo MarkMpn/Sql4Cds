@@ -6,7 +6,7 @@ var path = require('path');
 
 async function installService() {
     const targetPath = path.join(__dirname, '../out/' + 'sql4cdstoolsservice');
-    const srcPath = path.join(__dirname, '../../MarkMpn.Sql4Cds.LanguageServer/bin/Debug/net7.0');
+    const srcPath = path.join(__dirname, '../../MarkMpn.Sql4Cds.LanguageServer/bin/Release/net7.0');
 
     return new Promise(function(resolve, reject) {
         gulp
