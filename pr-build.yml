@@ -35,13 +35,13 @@ steps:
   inputs:
     versionSpec: '18.x'
 
-- task: CmdLine@2
-  displayName: Build Azure Data Studio Extension
-  inputs:
-    script: |
-      yarn install
-      gulp build
-    workingDirectory: '$(Build.SourcesDirectory)\AzureDataStudioExtension'
+- script: |
+    npm --no-git-tag-version version $(GitVersion.SemVer)
+    npm i -g vsce
+    yarn install
+    gulp build
+  displayName: Build ADS extension
+  workingDirectory: '$(Build.SourcesDirectory)\AzureDataStudioExtension'
 
 - task: NuGetCommand@2
   displayName: NuGet Restore

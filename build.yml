@@ -38,13 +38,30 @@ steps:
   inputs:
     versionSpec: '18.x'
 
+- script: |
+    npm --no-git-tag-version version $(GitVersion.SemVer)
+    npm i -g vsce
+    yarn install
+    gulp build
+  displayName: Build ADS extension
+  workingDirectory: '$(Build.SourcesDirectory)\AzureDataStudioExtension'
+
 - task: CmdLine@2
-  displayName: Build Azure Data Studio Extension
+  displayName: Update version of ADS extension
   inputs:
-    script: |
-      npm --no-git-tag-version version $(GitVersion.SemVer)
-      yarn install
-      gulp build
+    script: npm --no-git-tag-version version $(GitVersion.SemVer)
+    workingDirectory: '$(Build.SourcesDirectory)\AzureDataStudioExtension'
+
+- task: CmdLine@2
+  displayName: yarn install
+  inputs:
+    script: yarn install
+    workingDirectory: '$(Build.SourcesDirectory)\AzureDataStudioExtension'
+
+- task: CmdLine@2
+  displayName: gulp build
+  inputs:
+    script: gulp build
     workingDirectory: '$(Build.SourcesDirectory)\AzureDataStudioExtension'
   
 - task: NuGetCommand@2
