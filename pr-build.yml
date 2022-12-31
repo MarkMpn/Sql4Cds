@@ -38,8 +38,8 @@ steps:
 - script: |
     call npm --no-git-tag-version version $(GitVersion.SemVer)
     call npm i -g vsce
-    yarn install
-    gulp build
+    call yarn install
+    call gulp build
   displayName: Build ADS extension
   workingDirectory: '$(Build.SourcesDirectory)\AzureDataStudioExtension'
 
