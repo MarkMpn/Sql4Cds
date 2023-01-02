@@ -78,7 +78,12 @@ namespace MarkMpn.Sql4Cds.Engine
 
             _ai = new TelemetryClient(new Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration("79761278-a908-4575-afbf-2f4d82560da6"));
 
-            ApplicationName = System.IO.Path.GetFileNameWithoutExtension(System.Reflection.Assembly.GetEntryAssembly().Location);
+            var app = System.Reflection.Assembly.GetEntryAssembly();
+
+            if (app != null)
+                ApplicationName = System.IO.Path.GetFileNameWithoutExtension(app.Location);
+            else
+                ApplicationName = "SQL 4 CDS ADO.NET Provider";
         }
 
         private static IOrganizationService Connect(string connectionString)
