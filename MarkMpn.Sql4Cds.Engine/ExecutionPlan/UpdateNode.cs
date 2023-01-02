@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Crm.Sdk.Messages;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
@@ -127,6 +128,45 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 var value = attributeAccessor.Value(entity);
 
                                 update[attr.LogicalName] = value;
+                            }
+
+                            if (LogicalName == "quote" && update.GetAttributeValue<OptionSetValue>("statecode")?.Value == 3)
+                            {
+                                var closeRequest = new CloseQuoteRequest
+                                {
+                                    QuoteClose = new Entity("quoteclose")
+                                    {
+                                        ["quoteid"] = update.ToEntityReference()
+                                    },
+                                    Status = update.GetAttributeValue<OptionSetValue>("statuscode")
+                                };
+
+                                if (closeRequest.Status == null)
+                                {
+                                    var closedState = meta
+                                        .Attributes
+                                        .OfType<StateAttributeMetadata>()
+                                        .Single(a => a.LogicalName == "statecode")
+                                        .OptionSet
+                                        .Options
+                                        .Single(o => o.Value == 3);
+                                    closeRequest.Status = new OptionSetValue((int)((StateOptionMetadata)closedState).DefaultStatus);
+                                }
+
+                                update.Attributes.Remove("statecode");
+                                update.Attributes.Remove("statuscode");
+
+                                if (!update.Attributes.Any())
+                                    return closeRequest;
+
+                                return new ExecuteTransactionRequest
+                                {
+                                    Requests = new OrganizationRequestCollection
+                                    {
+                                        new UpdateRequest{ Target = update },
+                                        closeRequest
+                                    }
+                                };
                             }
 
                             return new UpdateRequest { Target = update };
