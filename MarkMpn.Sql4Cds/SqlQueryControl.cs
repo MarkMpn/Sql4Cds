@@ -112,6 +112,7 @@ namespace MarkMpn.Sql4Cds
             statusStrip.Items.Insert(0, _progressHost);
 
             splitContainer.Panel1.Controls.Add(_editor);
+            splitContainer.Panel1.Controls.SetChildIndex(_editor, 0);
             Icon = _sqlIcon;
 
             _connection = new Sql4CdsConnection(DataSources);
@@ -168,8 +169,11 @@ namespace MarkMpn.Sql4Cds
                 toolStripStatusLabel.Text = "Connected";
                 toolStripStatusLabel.Image = Properties.Resources.ConnectFilled_grey_16x;
 
-                statusStrip.BackColor = con.EnvironmentHighlightingInfo?.Color ?? Color.Khaki;
-                statusStrip.ForeColor = con.EnvironmentHighlightingInfo?.TextColor ?? SystemColors.WindowText;
+                environmentHighlightLabel.BackColor = statusStrip.BackColor = con.EnvironmentHighlightingInfo?.Color ?? Color.Khaki;
+                environmentHighlightLabel.ForeColor = statusStrip.ForeColor = con.EnvironmentHighlightingInfo?.TextColor ?? SystemColors.WindowText;
+                environmentHighlightLabel.Text = con.EnvironmentHighlightingInfo?.Text ?? "";
+
+                environmentHighlightLabel.Visible = con.EnvironmentHighlightingInfo != null;
             }
             else
             {
@@ -181,6 +185,8 @@ namespace MarkMpn.Sql4Cds
 
                 statusStrip.BackColor = Color.Khaki;
                 statusStrip.ForeColor = SystemColors.WindowText;
+
+                environmentHighlightLabel.Visible = false;
             }
 
             SyncUsername();

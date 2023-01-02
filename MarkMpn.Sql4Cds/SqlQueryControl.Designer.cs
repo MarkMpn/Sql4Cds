@@ -55,7 +55,9 @@
             this.rowsLabel = new System.Windows.Forms.ToolStripStatusLabel();
             this.backgroundWorker = new System.ComponentModel.BackgroundWorker();
             this.timer = new System.Windows.Forms.Timer(this.components);
+            this.environmentHighlightLabel = new System.Windows.Forms.Label();
             ((System.ComponentModel.ISupportInitialize)(this.splitContainer)).BeginInit();
+            this.splitContainer.Panel1.SuspendLayout();
             this.splitContainer.Panel2.SuspendLayout();
             this.splitContainer.SuspendLayout();
             this.tabControl.SuspendLayout();
@@ -72,6 +74,10 @@
             this.splitContainer.Margin = new System.Windows.Forms.Padding(2);
             this.splitContainer.Name = "splitContainer";
             this.splitContainer.Orientation = System.Windows.Forms.Orientation.Horizontal;
+            // 
+            // splitContainer.Panel1
+            // 
+            this.splitContainer.Panel1.Controls.Add(this.environmentHighlightLabel);
             // 
             // splitContainer.Panel2
             // 
@@ -307,6 +313,19 @@
             this.timer.Interval = 1000;
             this.timer.Tick += new System.EventHandler(this.timer_Tick);
             // 
+            // environmentHighlightLabel
+            // 
+            this.environmentHighlightLabel.BackColor = System.Drawing.Color.Red;
+            this.environmentHighlightLabel.Dock = System.Windows.Forms.DockStyle.Top;
+            this.environmentHighlightLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 8.25F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.environmentHighlightLabel.ForeColor = System.Drawing.Color.White;
+            this.environmentHighlightLabel.Location = new System.Drawing.Point(0, 0);
+            this.environmentHighlightLabel.Name = "environmentHighlightLabel";
+            this.environmentHighlightLabel.Size = new System.Drawing.Size(595, 23);
+            this.environmentHighlightLabel.TabIndex = 0;
+            this.environmentHighlightLabel.Text = "Environment Name";
+            this.environmentHighlightLabel.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            // 
             // SqlQueryControl
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -316,6 +335,7 @@
             this.Controls.Add(this.statusStrip);
             this.Margin = new System.Windows.Forms.Padding(2);
             this.Name = "SqlQueryControl";
+            this.splitContainer.Panel1.ResumeLayout(false);
             this.splitContainer.Panel2.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.splitContainer)).EndInit();
             this.splitContainer.ResumeLayout(false);
@@ -357,5 +377,6 @@
         private System.Windows.Forms.ToolStripSeparator toolStripMenuItem1;
         private System.Windows.Forms.ToolStripMenuItem openRecordToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem createSELECTStatementToolStripMenuItem;
+        private System.Windows.Forms.Label environmentHighlightLabel;
     }
 }

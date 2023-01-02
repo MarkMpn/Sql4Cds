@@ -18,7 +18,7 @@ using XrmToolBox.Extensibility.Interfaces;
 
 namespace MarkMpn.Sql4Cds
 {
-    public partial class PluginControl : PluginControlBase, IMessageBusHost, IGitHubPlugin, IHelpPlugin, ISettingsPlugin, IPayPalPlugin
+    public partial class PluginControl : PluginControlBase, IMessageBusHost, IGitHubPlugin, IHelpPlugin, ISettingsPlugin, IPayPalPlugin, INoHighlightingPlugin
     {
         private readonly IDictionary<string, DataSource> _dataSources;
         private readonly TelemetryClient _ai;
