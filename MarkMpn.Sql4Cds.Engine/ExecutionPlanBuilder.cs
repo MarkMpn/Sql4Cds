@@ -1262,6 +1262,9 @@ namespace MarkMpn.Sql4Cds.Engine
             var attributes = targetMetadata.Attributes.ToDictionary(attr => attr.LogicalName, StringComparer.OrdinalIgnoreCase);
             var attributeNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var virtualTypeAttributes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var existingAttributes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var useStateTransitions = !hints.OfType<UseHintList>().Any(h => h.Hints.Any(s => s.Value.Equals("DISABLE_STATE_TRANSITIONS", StringComparison.OrdinalIgnoreCase)));
+            var stateTransitions = useStateTransitions ? StateTransitionLoader.LoadStateTransitions(targetMetadata) : null;
 
             foreach (var set in update.SetClauses)
             {
@@ -1333,7 +1336,44 @@ namespace MarkMpn.Sql4Cds.Engine
                     targetAttrName = attr.LogicalName;
                 }
 
-                queryExpression.SelectElements.Add(new SelectScalarExpression { Expression = assignment.NewValue, ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = targetAttrName } } });
+                queryExpression.SelectElements.Add(new SelectScalarExpression { Expression = assignment.NewValue, ColumnName = new IdentifierOrValueExpression { Identifier = new Identifier { Value = "new_" + targetAttrName } } });
+
+                // If we're changing the status of a record where only specific state transitions are allowed, we need to include the
+                // current statecode and statuscode values
+                if ((targetAttrName == "statecode" || targetAttrName == "statuscode") && stateTransitions != null)
+                {
+                    existingAttributes.Add("statecode");
+                    existingAttributes.Add("statuscode");
+                }
+            }
+
+            // quote/salesorder/invoice have custom logic for updating closed records, so load in the existing statecode & statuscode fields too
+            if (useStateTransitions && (targetLogicalName == "quote" || targetLogicalName == "salesorder" || targetLogicalName == "invoice"))
+            {
+                existingAttributes.Add("statecode");
+                existingAttributes.Add("statuscode");
+            }
+
+            foreach (var existingAttribute in existingAttributes)
+            {
+                queryExpression.SelectElements.Add(new SelectScalarExpression
+                {
+                    Expression = new ColumnReferenceExpression
+                    {
+                        MultiPartIdentifier = new MultiPartIdentifier
+                        {
+                            Identifiers =
+                            {
+                                new Identifier { Value = targetAlias },
+                                new Identifier { Value = existingAttribute }
+                            }
+                        }
+                    },
+                    ColumnName = new IdentifierOrValueExpression
+                    {
+                        Identifier = new Identifier { Value = "existing_" + existingAttribute }
+                    }
+                });
             }
 
             var selectStatement = new SelectStatement { QueryExpression = queryExpression };
@@ -1342,7 +1382,8 @@ namespace MarkMpn.Sql4Cds.Engine
             var source = ConvertSelectStatement(selectStatement);
 
             // Add UPDATE
-            var updateNode = ConvertSetClause(update.SetClauses, dataSource, source, targetLogicalName, targetAlias, attributeNames, virtualTypeAttributes, hints);
+            var updateNode = ConvertSetClause(update.SetClauses, existingAttributes, dataSource, source, targetLogicalName, targetAlias, attributeNames, virtualTypeAttributes, hints);
+            updateNode.StateTransitions = stateTransitions;
 
             return updateNode;
         }
@@ -1369,7 +1410,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
         }
 
-        private UpdateNode ConvertSetClause(IList<SetClause> setClauses, DataSource dataSource, IExecutionPlanNodeInternal node, string targetLogicalName, string targetAlias, HashSet<string> attributeNames, HashSet<string> virtualTypeAttributes, IList<OptimizerHint> queryHints)
+        private UpdateNode ConvertSetClause(IList<SetClause> setClauses, HashSet<string> existingAttributes, DataSource dataSource, IExecutionPlanNodeInternal node, string targetLogicalName, string targetAlias, HashSet<string> attributeNames, HashSet<string> virtualTypeAttributes, IList<OptimizerHint> queryHints)
         {
             var targetMetadata = dataSource.Metadata[targetLogicalName];
             var attributes = targetMetadata.Attributes.ToDictionary(attr => attr.LogicalName, StringComparer.OrdinalIgnoreCase);
@@ -1416,7 +1457,7 @@ namespace MarkMpn.Sql4Cds.Engine
                             targetType = DataTypeHelpers.UniqueIdentifier;
                     }
 
-                    var sourceColName = select.ColumnSet.Single(col => col.OutputColumn == targetAttrName.ToLower()).SourceColumn;
+                    var sourceColName = select.ColumnSet.Single(col => col.OutputColumn == "new_" + targetAttrName.ToLower()).SourceColumn;
                     var sourceCol = sourceColName.ToColumnReference();
                     sourceCol.GetType(schema, null, null, out var sourceType);
 
@@ -1430,7 +1471,21 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     // Normalize the column name
                     schema.ContainsColumn(sourceColName, out sourceColName);
-                    update.ColumnMappings[targetAttrName] = sourceColName;
+                    update.ColumnMappings[targetAttrName] = new UpdateMapping { NewValueColumn = sourceColName };
+                }
+
+                foreach (var existingAttribute in existingAttributes)
+                {
+                    var sourceColName = select.ColumnSet.Single(col => col.OutputColumn == "existing_" + existingAttribute).SourceColumn;
+                    schema.ContainsColumn(sourceColName, out sourceColName);
+
+                    if (!update.ColumnMappings.TryGetValue(existingAttribute, out var mapping))
+                    {
+                        mapping = new UpdateMapping();
+                        update.ColumnMappings[existingAttribute] = mapping;
+                    }
+
+                    mapping.OldValueColumn = sourceColName;
                 }
             }
             else
@@ -1441,7 +1496,18 @@ namespace MarkMpn.Sql4Cds.Engine
                 foreach (var assignment in setClauses.Cast<AssignmentSetClause>())
                 {
                     var targetAttrName = assignment.Column.MultiPartIdentifier.Identifiers.Last().Value;
-                    update.ColumnMappings[targetAttrName] = targetAttrName;
+                    update.ColumnMappings[targetAttrName] = new UpdateMapping { NewValueColumn = "new_" + targetAttrName };
+                }
+
+                foreach (var existingAttribute in existingAttributes)
+                {
+                    if (!update.ColumnMappings.TryGetValue(existingAttribute, out var mapping))
+                    {
+                        mapping = new UpdateMapping();
+                        update.ColumnMappings[existingAttribute] = mapping;
+                    }
+
+                    mapping.OldValueColumn = "existing_" + existingAttribute;
                 }
             }
 

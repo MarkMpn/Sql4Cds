@@ -48,6 +48,9 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
             // Custom hint to get query plan without any optimization
             "DEBUG_BYPASS_OPTIMIZATION",
+
+            // Custom hint to disable logic to automatically navigate restricted state transitions
+            "DISABLE_STATE_TRANSITIONS",
         };
 
         private static readonly HashSet<string> _removableSql4CdsQueryHints = new HashSet<string>(StringComparer.OrdinalIgnoreCase)

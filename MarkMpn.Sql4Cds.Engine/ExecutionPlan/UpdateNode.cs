@@ -4,7 +4,6 @@ using System.ComponentModel;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Crm.Sdk.Messages;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
@@ -45,13 +44,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Category("Update")]
         [Description("The columns to update and the associated column to take the new value from")]
         [DisplayName("Column Mappings")]
-        public IDictionary<string, string> ColumnMappings { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        public IDictionary<string, UpdateMapping> ColumnMappings { get; } = new Dictionary<string, UpdateMapping>(StringComparer.OrdinalIgnoreCase);
 
         [Category("Update")]
         public override int MaxDOP { get; set; }
 
         [Category("Update")]
         public override bool BypassCustomPluginExecution { get; set; }
+
+        [Category("Update")]
+        [Description("The state transition graph that will be navigated automatically when applying updates")]
+        [DisplayName("State Transitions")]
+        public IDictionary<int, StatusWithState> StateTransitions { get; set; }
 
         public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
         {
@@ -60,8 +64,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var col in ColumnMappings.Values)
             {
-                if (!requiredColumns.Contains(col))
-                    requiredColumns.Add(col);
+                if (col.OldValueColumn != null && !requiredColumns.Contains(col.OldValueColumn))
+                    requiredColumns.Add(col.OldValueColumn);
+
+                if (col.NewValueColumn != null && !requiredColumns.Contains(col.NewValueColumn))
+                    requiredColumns.Add(col.NewValueColumn);
             }
 
             Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
@@ -79,7 +86,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 List<Entity> entities;
                 EntityMetadata meta;
                 Dictionary<string, AttributeMetadata> attributes;
-                Dictionary<string, Func<Entity, object>> attributeAccessors;
+                Dictionary<string, Func<Entity, object>> newAttributeAccessors;
+                Dictionary<string, Func<Entity, object>> oldAttributeAccessors;
                 Func<Entity, object> primaryIdAccessor;
 
                 using (_timer.Run())
@@ -90,10 +98,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     meta = dataSource.Metadata[LogicalName];
                     attributes = meta.Attributes.ToDictionary(a => a.LogicalName, StringComparer.OrdinalIgnoreCase);
                     var dateTimeKind = options.UseLocalTimeZone ? DateTimeKind.Local : DateTimeKind.Utc;
-                    var fullMappings = new Dictionary<string, string>(ColumnMappings);
-                    fullMappings[meta.PrimaryIdAttribute] = PrimaryIdSource;
-                    attributeAccessors = CompileColumnMappings(dataSource.Metadata, LogicalName, fullMappings, schema, dateTimeKind, entities);
-                    primaryIdAccessor = attributeAccessors[meta.PrimaryIdAttribute];
+                    var fullMappings = new Dictionary<string, UpdateMapping>(ColumnMappings);
+                    fullMappings[meta.PrimaryIdAttribute] = new UpdateMapping { OldValueColumn = PrimaryIdSource, NewValueColumn = PrimaryIdSource };
+                    newAttributeAccessors = CompileColumnMappings(dataSource.Metadata, LogicalName, fullMappings.Where(kvp => kvp.Value.NewValueColumn != null).ToDictionary(kvp => kvp.Key, kvp => kvp.Value.NewValueColumn), schema, dateTimeKind, entities);
+                    oldAttributeAccessors = CompileColumnMappings(dataSource.Metadata, LogicalName, fullMappings.Where(kvp => kvp.Value.OldValueColumn != null).ToDictionary(kvp => kvp.Key, kvp => kvp.Value.OldValueColumn), schema, dateTimeKind, entities);
+                    primaryIdAccessor = newAttributeAccessors[meta.PrimaryIdAttribute];
                 }
 
                 // Check again that the update is allowed. Don't count any UI interaction in the execution time
@@ -104,6 +113,44 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (confirmArgs.Cancel)
                     throw new OperationCanceledException("UPDATE cancelled by user");
 
+                var isSysAdminOrBackOfficeIntegrationUser = new Lazy<bool>(() =>
+                {
+                    // Check if the current user is a system administrator by looking for the known role guid
+                    // https://learn.microsoft.com/en-us/power-apps/developer/data-platform/security-roles
+                    var roleQry = new Microsoft.Xrm.Sdk.Query.QueryExpression("role");
+                    roleQry.Criteria.AddCondition("roletemplateid", Microsoft.Xrm.Sdk.Query.ConditionOperator.Equal, new Guid("627090FF-40A3-4053-8790-584EDC5BE201"));
+                    var userRoles = roleQry.AddLink("systemuserroles", "roleid", "roleid");
+                    userRoles.LinkCriteria.AddCondition("systemuserid", Microsoft.Xrm.Sdk.Query.ConditionOperator.EqualUserId);
+                    roleQry.ColumnSet = new Microsoft.Xrm.Sdk.Query.ColumnSet("roleid");
+                    roleQry.TopCount = 1;
+                    var sysAdminRoles = dataSource.Connection.RetrieveMultiple(roleQry).Entities;
+
+                    if (sysAdminRoles.Any())
+                        return true;
+
+                    // If the current user is not a sysadmin, check if it is an integration user and SOP integration is enabled
+                    // This only applies to salesorder and invoice, not quote
+                    if (LogicalName == "quote")
+                        return false;
+
+                    var orgQry = new Microsoft.Xrm.Sdk.Query.QueryExpression("organization");
+                    orgQry.ColumnSet = new Microsoft.Xrm.Sdk.Query.ColumnSet("issopintegrationenabled", "integrationuserid");
+                    var org = dataSource.Connection.RetrieveMultiple(orgQry).Entities[0];
+                    var isSOPIntegrationEnabled = org.GetAttributeValue<bool>("issopintegrationenabled");
+                    var integrationUserId = org.GetAttributeValue<Guid>("integrationuserid");
+
+                    if (!isSOPIntegrationEnabled)
+                        return false;
+
+                    var userQry = new Microsoft.Xrm.Sdk.Query.QueryExpression("systemuser");
+                    userQry.Criteria.AddCondition("systemuserid", Microsoft.Xrm.Sdk.Query.ConditionOperator.EqualUserId);
+                    userQry.ColumnSet = new Microsoft.Xrm.Sdk.Query.ColumnSet("isintegrationuser");
+                    var user = dataSource.Connection.RetrieveMultiple(userQry).Entities[0];
+                    var isIntegrationUser = user.GetAttributeValue<bool>("isintegrationuser");
+
+                    return isIntegrationUser || integrationUserId == user.Id;
+                }, LazyThreadSafetyMode.ExecutionAndPublication);
+
                 using (_timer.Run())
                 {
                     return ExecuteDmlOperation(
@@ -113,63 +160,72 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         meta,
                         entity =>
                         {
-                            var update = new Entity(LogicalName, (Guid)primaryIdAccessor(entity));
+                            var preImage = ExtractEntity(entity, meta, attributes, oldAttributeAccessors, primaryIdAccessor);
+                            var update = ExtractEntity(entity, meta, attributes, newAttributeAccessors, primaryIdAccessor);
 
-                            foreach (var attributeAccessor in attributeAccessors)
+                            var updateRequest = new UpdateRequest { Target = update };
+                            var requests = new OrganizationRequestCollection();
+
+                            var requestedState = update.GetAttributeValue<OptionSetValue>("statecode");
+                            var requestedStatus = update.GetAttributeValue<OptionSetValue>("statuscode");
+                            var currentState = preImage.GetAttributeValue<OptionSetValue>("statecode");
+                            var currentStatus = preImage.GetAttributeValue<OptionSetValue>("statuscode");
+
+                            if (requestedState == null && requestedStatus != null)
+                                requestedState = GetStateCode(meta, requestedStatus.Value);
+                            else if (requestedState != null && requestedStatus == null)
+                                requestedStatus = GetDefaultStatusCode(meta, requestedState.Value);
+
+                            if ((LogicalName == "quote" || LogicalName == "salesorder" || LogicalName == "invoice") &&
+                                currentState?.Value != 0 &&
+                                !isSysAdminOrBackOfficeIntegrationUser.Value)
                             {
-                                if (attributeAccessor.Key == meta.PrimaryIdAttribute)
-                                    continue;
+                                // QOI records can only be updated if they are in an editable state or the user is a sysadmin or integration user
+                                // Add a request to change the status back to editable before making the update, then change the status back again
+                                // afterwards
+                                var defaultDraftStatusCode = GetDefaultStatusCode(meta, 0);
 
-                                var attr = attributes[attributeAccessor.Key];
-
-                                if (!String.IsNullOrEmpty(attr.AttributeOf))
-                                    continue;
-
-                                var value = attributeAccessor.Value(entity);
-
-                                update[attr.LogicalName] = value;
-                            }
-
-                            if (LogicalName == "quote" && update.GetAttributeValue<OptionSetValue>("statecode")?.Value == 3)
-                            {
-                                var closeRequest = new CloseQuoteRequest
+                                requests.Insert(0, new UpdateRequest
                                 {
-                                    QuoteClose = new Entity("quoteclose")
+                                    Target = new Entity(LogicalName, update.Id)
                                     {
-                                        ["quoteid"] = update.ToEntityReference()
-                                    },
-                                    Status = update.GetAttributeValue<OptionSetValue>("statuscode")
-                                };
+                                        ["statecode"] = new OptionSetValue(0),
+                                        ["statuscode"] = defaultDraftStatusCode
+                                    }
+                                });
 
-                                if (closeRequest.Status == null)
+                                if (requestedState == null)
                                 {
-                                    var closedState = meta
-                                        .Attributes
-                                        .OfType<StateAttributeMetadata>()
-                                        .Single(a => a.LogicalName == "statecode")
-                                        .OptionSet
-                                        .Options
-                                        .Single(o => o.Value == 3);
-                                    closeRequest.Status = new OptionSetValue((int)((StateOptionMetadata)closedState).DefaultStatus);
+                                    requestedState = currentState;
+                                    update["statecode"] = requestedState;
                                 }
 
-                                update.Attributes.Remove("statecode");
-                                update.Attributes.Remove("statuscode");
-
-                                if (!update.Attributes.Any())
-                                    return closeRequest;
-
-                                return new ExecuteTransactionRequest
+                                if (requestedStatus == null)
                                 {
-                                    Requests = new OrganizationRequestCollection
-                                    {
-                                        new UpdateRequest{ Target = update },
-                                        closeRequest
-                                    }
-                                };
+                                    requestedStatus = currentStatus;
+                                    update["statuscode"] = requestedStatus;
+                                }
+
+                                currentState = new OptionSetValue(0);
+                                currentStatus = defaultDraftStatusCode;
                             }
 
-                            return new UpdateRequest { Target = update };
+                            if ((requestedState != null || requestedStatus != null) && StateTransitions != null)
+                            {
+                                update.Attributes.Remove("statecode");
+                                update.Attributes.Remove("statuscode");
+                            }
+
+                            if (update.Attributes.Any())
+                                requests.Add(updateRequest);
+
+                            if (requestedStatus != null && StateTransitions != null)
+                                AddStateTransitions(update, currentStatus, requestedStatus, requests);
+
+                            if (requests.Count == 1)
+                                return requests[0];
+
+                            return new ExecuteTransactionRequest { Requests = requests };
                         },
                         new OperationNames
                         {
@@ -194,6 +250,122 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
+        private void AddStateTransitions(Entity entity, OptionSetValue currentStatus, OptionSetValue requestedStatus, OrganizationRequestCollection requests)
+        {
+            if (!StateTransitions.TryGetValue(currentStatus.Value, out var startNode))
+                throw new QueryExecutionException("Unknown current status code " + currentStatus.Value);
+
+            if (!StateTransitions.TryGetValue(requestedStatus.Value, out var endNode))
+                throw new QueryExecutionException("Unknown requested status code " + requestedStatus.Value);
+
+            var states = BfsSearchStateTransitions(startNode, endNode);
+
+            for (var i = 1; i < states.Count; i++)
+            {
+                var transition = states[i - 1].Transitions[states[i]];
+                var request = transition(entity, states[i]);
+                requests.Add(request);
+            }
+        }
+
+        private List<StatusWithState> BfsSearchStateTransitions(StatusWithState startNode, StatusWithState endNode)
+        {
+            var prevNode = new Dictionary<StatusWithState, StatusWithState>
+            {
+                [startNode] = null
+            };
+            var distance = new Dictionary<StatusWithState, int>
+            {
+                [startNode] = 0
+            };
+            var queue = new Queue<StatusWithState>();
+            queue.Enqueue(startNode);
+
+            while (queue.Count > 0)
+            {
+                var node = queue.Dequeue();
+
+                if (node == endNode)
+                    break;
+
+                var nextDistance = distance[node] + 1;
+
+                foreach (var nextNode in node.Transitions.Keys)
+                {
+                    if (distance.ContainsKey(nextNode))
+                        continue;
+
+                    distance[nextNode] = nextDistance;
+                    prevNode[nextNode] = node;
+                    queue.Enqueue(nextNode);
+                }
+            }
+
+            var path = new List<StatusWithState>();
+            var pathNode = endNode;
+
+            while (pathNode != startNode)
+            {
+                if (!prevNode.TryGetValue(pathNode, out var prev))
+                    throw new QueryExecutionException("No transition available from status code " + startNode.StatusCode + " to " + endNode.StatusCode);
+
+                path.Insert(0, pathNode);
+                pathNode = prev;
+            }
+
+            path.Insert(0, startNode);
+
+            return path;
+        }
+
+        private OptionSetValue GetStateCode(EntityMetadata meta, int statuscode)
+        {
+            var statusCode = meta
+                .Attributes
+                .OfType<StatusAttributeMetadata>()
+                .Single(a => a.LogicalName == "statuscode")
+                .OptionSet
+                .Options
+                .Single(o => o.Value == statuscode);
+
+            return new OptionSetValue((int)((StatusOptionMetadata)statusCode).State);
+        }
+
+        private OptionSetValue GetDefaultStatusCode(EntityMetadata meta, int statecode)
+        {
+            var stateCode = meta
+                .Attributes
+                .OfType<StateAttributeMetadata>()
+                .Single(a => a.LogicalName == "statecode")
+                .OptionSet
+                .Options
+                .Single(o => o.Value == statecode);
+
+            return new OptionSetValue((int)((StateOptionMetadata)stateCode).DefaultStatus);
+        }
+
+        private Entity ExtractEntity(Entity entity, EntityMetadata meta, Dictionary<string, AttributeMetadata> attributes, Dictionary<string, Func<Entity, object>> newAttributeAccessors, Func<Entity, object> primaryIdAccessor)
+        {
+            var update = new Entity(LogicalName, (Guid)primaryIdAccessor(entity));
+
+            foreach (var attributeAccessor in newAttributeAccessors)
+            {
+                if (attributeAccessor.Key == meta.PrimaryIdAttribute)
+                    continue;
+
+                var attr = attributes[attributeAccessor.Key];
+
+                if (!String.IsNullOrEmpty(attr.AttributeOf))
+                    continue;
+
+                var value = attributeAccessor.Value(entity);
+
+                update[attr.LogicalName] = value;
+            }
+
+            return update;
+        }
+
         protected override void RenameSourceColumns(IDictionary<string, string> columnRenamings)
         {
             if (columnRenamings.TryGetValue(PrimaryIdSource, out var primaryIdSourceRenamed))
@@ -201,8 +373,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var kvp in ColumnMappings.ToList())
             {
-                if (columnRenamings.TryGetValue(kvp.Value, out var renamed))
-                    ColumnMappings[kvp.Key] = renamed;
+                if (kvp.Value.OldValueColumn != null && columnRenamings.TryGetValue(kvp.Value.OldValueColumn, out var oldRenamed))
+                    ColumnMappings[kvp.Key].OldValueColumn = oldRenamed;
+
+                if (kvp.Value.NewValueColumn != null && columnRenamings.TryGetValue(kvp.Value.NewValueColumn, out var newRenamed))
+                    ColumnMappings[kvp.Key].NewValueColumn = newRenamed;
             }
         }
 
@@ -222,6 +397,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 LogicalName = LogicalName,
                 MaxDOP = MaxDOP,
                 PrimaryIdSource = PrimaryIdSource,
+                StateTransitions = StateTransitions,
                 Source = (IExecutionPlanNodeInternal)Source.Clone(),
                 Sql = Sql
             };
@@ -232,5 +408,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             clone.Source.Parent = clone;
             return clone;
         }
+    }
+
+    class UpdateMapping
+    {
+        public string OldValueColumn { get; set; }
+        public string NewValueColumn { get; set; }
     }
 }

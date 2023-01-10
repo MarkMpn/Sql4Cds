@@ -2411,8 +2411,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(Regex.Replace(@"
                 SELECT DISTINCT
                     c.contactid AS contactid,
-                    account.accountid AS parentcustomerid,
-                    'account' AS parentcustomeridtype
+                    account.accountid AS new_parentcustomerid,
+                    'account' AS new_parentcustomeridtype
                 FROM
                     contact AS c
                     INNER JOIN account
