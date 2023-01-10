@@ -95,7 +95,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public const int LabelMaxLength = 200;
         private static readonly XmlSerializer _serializer = new XmlSerializer(typeof(FetchXml.FetchType));
 
-        private Dictionary<string, ParameterizedCondition> _parameterizedConditions;
+        private Dictionary<string, List<ParameterizedCondition>> _parameterizedConditions;
         private HashSet<string> _entityNameGroupings;
         private Dictionary<string, string> _primaryKeyColumns;
         private string _lastSchemaFetchXml;
@@ -335,8 +335,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var param in parameterValues)
             {
-                if (_parameterizedConditions.TryGetValue(param.Key, out var condition))
-                    condition.SetValue(param.Value, options);
+                if (_parameterizedConditions.TryGetValue(param.Key, out var conditions))
+                {
+                    foreach (var condition in conditions)
+                        condition.SetValue(param.Value, options);
+                }
             }
         }
 
@@ -509,23 +512,39 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 PrefixAliasedScalarAttributes(entity, linkEntity.Items, linkEntity.alias);
         }
 
-        private Dictionary<string, ParameterizedCondition> FindParameterizedConditions()
+        private Dictionary<string, List<ParameterizedCondition>> FindParameterizedConditions()
         {
-            var parameterizedConditions = new Dictionary<string, ParameterizedCondition>(StringComparer.OrdinalIgnoreCase);
+            var parameterizedConditions = new Dictionary<string, List<ParameterizedCondition>>(StringComparer.OrdinalIgnoreCase);
             FindParameterizedConditions(parameterizedConditions, null, null, Entity.Items);
             return parameterizedConditions;
         }
 
-        private void FindParameterizedConditions(Dictionary<string, ParameterizedCondition>  parameterizedConditions, filter filter, condition condition, object[] items)
+        private void FindParameterizedConditions(Dictionary<string, List<ParameterizedCondition>>  parameterizedConditions, filter filter, condition condition, object[] items)
         {
             if (items == null)
                 return;
 
             foreach (var cond in items.OfType<condition>().Where(c => c.IsVariable))
-                parameterizedConditions[cond.value] = new ParameterizedCondition(filter, cond, null);
+            {
+                if (!parameterizedConditions.TryGetValue(cond.value, out var conditions))
+                {
+                    conditions = new List<ParameterizedCondition>();
+                    parameterizedConditions[cond.value] = conditions;
+                }
+
+                conditions.Add(new ParameterizedCondition(filter, cond, null));
+            }
 
             foreach (var value in items.OfType<conditionValue>().Where(v => v.IsVariable))
-                parameterizedConditions[value.Value] = new ParameterizedCondition(filter, condition, value);
+            {
+                if (!parameterizedConditions.TryGetValue(value.Value, out var conditions))
+                {
+                    conditions = new List<ParameterizedCondition>();
+                    parameterizedConditions[value.Value] = conditions;
+                }
+
+                conditions.Add(new ParameterizedCondition(filter, condition, value));
+            }
 
             foreach (var cond in items.OfType<condition>().Where(c => c.Items != null))
                 FindParameterizedConditions(parameterizedConditions, filter, cond, cond.Items.Cast<object>().ToArray());

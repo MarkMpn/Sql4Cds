@@ -980,5 +980,34 @@ GO";
                 }
             }
         }
+
+        [TestMethod]
+        public void ReusedParameter()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = @"
+DECLARE @name nvarchar(100) = 'Data8'
+INSERT INTO account (name) VALUES (@name)
+SELECT name FROM account WHERE name = @name OR name = @name";
+                IRootExecutionPlanNode statement = null;
+                cmd.StatementCompleted += (s, e) =>
+                {
+                    statement = e.Statement;
+                };
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.IsFalse(reader.Read());
+
+                    var select = (SelectNode)statement;
+                    var fetch = (FetchXmlScan)select.Source;
+                    foreach (var condition in fetch.Entity.GetConditions())
+                        Assert.AreEqual("Data8", condition.value);
+                }
+            }
+        }
     }
 }
