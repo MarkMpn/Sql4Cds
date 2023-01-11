@@ -207,7 +207,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
 
                             using (var reader = await cmd.ExecuteReaderAsync())
                             {
-                                while (reader.FieldCount > 0)
+                                while (!reader.IsClosed)
                                 {
                                     var resultSet = new ResultSetSummary
                                     {
