@@ -22,14 +22,16 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
     class ConnectionManager
     {
         private readonly PersistentMetadataCache _persistentMetadataCache;
-        private readonly ConcurrentDictionary<string, DataSourceWithInfo> _dataSources;
+        private readonly ConcurrentDictionary<string, DataSource> _dataSources;
         private readonly ConcurrentDictionary<string, string> _connectedDataSource;
+        private readonly ConcurrentDictionary<string, Sql4CdsConnection> _connections;
 
         public ConnectionManager(PersistentMetadataCache persistentMetadataCache)
         {
             _persistentMetadataCache = persistentMetadataCache;
-            _dataSources = new ConcurrentDictionary<string, DataSourceWithInfo>();
+            _dataSources = new ConcurrentDictionary<string, DataSource>();
             _connectedDataSource = new ConcurrentDictionary<string, string>();
+            _connections = new ConcurrentDictionary<string, Sql4CdsConnection>();
         }
 
         public Session Connect(ConnectionDetails connection, string ownerUri)
@@ -48,6 +50,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
         public void Disconnect(string ownerUri)
         {
             _connectedDataSource.TryRemove(ownerUri, out _);
+            _connections.TryRemove(ownerUri, out _);
         }
 
         public Session GetConnection(string ownerUri)
@@ -58,16 +61,13 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
             if (!_dataSources.TryGetValue(dsName, out var ds))
                 return null;
 
-            var con = new Sql4CdsConnection(GetAllConnections())
-            {
-                ApplicationName = "Azure Data Studio"
-            };
+            var con = _connections.GetOrAdd(ownerUri, _ => new Sql4CdsConnection(_dataSources) { ApplicationName = "Azure Data Studio" });
             con.ChangeDatabase(ds.Name);
 
             return new Session
             {
                 SessionId = ownerUri,
-                DataSource = ds,
+                DataSource = (DataSourceWithInfo)ds,
                 Connection = con
             };
         }
