@@ -52,10 +52,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Category("Update")]
         public override bool BypassCustomPluginExecution { get; set; }
 
+        [Browsable(false)]
+        public IDictionary<int, StatusWithState> StateTransitions { get; set; }
+
         [Category("Update")]
         [Description("The state transition graph that will be navigated automatically when applying updates")]
         [DisplayName("State Transitions")]
-        public IDictionary<int, StatusWithState> StateTransitions { get; set; }
+        public IDictionary<string, Transitions> StateTransitionsDisplay => StateTransitions == null ? null : StateTransitions.Values.ToDictionary(s => $"{s.Name} ({s.StatusCode})", s => new Transitions(s.Transitions.Keys.Select(t => $"{t.Name} ({t.StatusCode})").OrderBy(n => n)));
 
         public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
         {
@@ -414,5 +417,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     {
         public string OldValueColumn { get; set; }
         public string NewValueColumn { get; set; }
+    }
+
+    class Transitions : List<string>
+    {
+        public Transitions(IEnumerable<string> values) : base(values)
+        {
+        }
     }
 }

@@ -263,12 +263,15 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             StatusCode = option.Value.Value;
             StateCode = option.State.Value;
+            Name = option.Label?.UserLocalizedLabel?.Label ?? option.Value.Value.ToString();
             Transitions = new Dictionary<StatusWithState, Func<Entity, StatusWithState, OrganizationRequest>>();
         }
 
         public int StatusCode { get; }
 
         public int StateCode { get; }
+
+        public string Name { get; }
 
         public Dictionary<StatusWithState, Func<Entity, StatusWithState, OrganizationRequest>> Transitions { get; }
 

@@ -339,7 +339,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var dict = (System.Collections.IDictionary)value;
 
-            return new PropertyDescriptorCollection(dict.Keys.OfType<string>().Select(key => new WrappedPropertyDescriptor(dict, key, dict[key])).ToArray());
+            return new PropertyDescriptorCollection(dict.Keys.OfType<object>().OrderBy(key => key).Select(key => new WrappedPropertyDescriptor(dict, key.ToString(), dict[key])).ToArray());
         }
     }
 
