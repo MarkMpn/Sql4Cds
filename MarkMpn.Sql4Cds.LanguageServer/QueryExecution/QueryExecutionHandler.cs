@@ -171,6 +171,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
 
                         if (!request.ExecutionPlanOptions.IncludeEstimatedExecutionPlanXml)
                         {
+                            if (request.ExecutionPlanOptions.IncludeActualExecutionPlanXml)
+                            {
                             cmd.StatementCompleted += (_, stmt) =>
                             {
                                 var resultSet = new ResultSetSummary
@@ -201,6 +203,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                                     ResultSetSummary = resultSet,
                                 }).ConfigureAwait(false).GetAwaiter().GetResult();
                             };
+                            }
 
                             using (var reader = await cmd.ExecuteReaderAsync())
                             {
