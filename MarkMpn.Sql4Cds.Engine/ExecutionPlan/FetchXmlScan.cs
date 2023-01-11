@@ -956,7 +956,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return;
 
             // Add standard virtual attributes
-            if (attrMetadata is EnumAttributeMetadata || attrMetadata is BooleanAttributeMetadata)
+            if (attrMetadata is MultiSelectPicklistAttributeMetadata)
+                AddSchemaAttribute(schema, aliases, notNullColumns, fullName + "name", attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(Int32.MaxValue), notNull);
+            else if (attrMetadata is EnumAttributeMetadata || attrMetadata is BooleanAttributeMetadata)
                 AddSchemaAttribute(schema, aliases, notNullColumns, fullName + "name", attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(LabelMaxLength), notNull);
 
             if (attrMetadata is LookupAttributeMetadata lookup)
