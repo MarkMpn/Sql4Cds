@@ -242,6 +242,12 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                                     resultSet.Complete = true;
                                     resultSetInProgress = null;
 
+                                    await _lsp.NotifyAsync(ResultSetUpdatedEvent.Type, new ResultSetUpdatedEventParams
+                                    {
+                                        OwnerUri = request.OwnerUri,
+                                        ResultSetSummary = resultSet,
+                                    });
+
                                     await _lsp.NotifyAsync(ResultSetCompleteEvent.Type, new ResultSetCompleteEventParams
                                     {
                                         OwnerUri = request.OwnerUri,
