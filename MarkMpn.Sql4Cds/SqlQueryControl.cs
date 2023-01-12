@@ -80,6 +80,7 @@ namespace MarkMpn.Sql4Cds
         private IDictionary<int, TextRange> _messageLocations;
         private readonly Sql4CdsConnection _connection;
         private FindReplace _findReplace;
+        private bool _ctrlK;
 
         static SqlQueryControl()
         {
@@ -1344,6 +1345,55 @@ namespace MarkMpn.Sql4Cds
                 select += $" WHERE {Autocomplete.SqlAutocompleteItem.EscapeIdentifier(metadata.PrimaryIdAttribute)} = '{er.Id}'";
 
                 _editor.AppendText(select);
+            }
+        }
+
+        protected override bool ProcessCmdKey(ref System.Windows.Forms.Message msg, Keys keyData)
+        {
+            if (keyData == (Keys.Control | Keys.K))
+            {
+                _ctrlK = true;
+                return true;
+            }
+            else
+            {
+                _ctrlK = false;
+
+                if (keyData == (Keys.Control | Keys.C))
+                {
+                    // Comment
+                    var startLine = _editor.LineFromPosition(_editor.SelectionStart);
+                    var endLine = _editor.LineFromPosition(_editor.SelectionEnd);
+
+                    for (var line = startLine; line <= endLine; line++)
+                    {
+                        _editor.TargetStart = _editor.Lines[line].Position;
+                        _editor.TargetEnd = _editor.TargetStart;
+                        _editor.ReplaceTarget("--");
+                    }
+
+                    return true;
+                }
+                else if (keyData == (Keys.Control | Keys.U))
+                {
+                    // Uncomment
+                    var startLine = _editor.LineFromPosition(_editor.SelectionStart);
+                    var endLine = _editor.LineFromPosition(_editor.SelectionEnd);
+
+                    for (var line = startLine; line <= endLine; line++)
+                    {
+                        if (_editor.Lines[line].Text.StartsWith("--"))
+                        {
+                            _editor.TargetStart = _editor.Lines[line].Position;
+                            _editor.TargetEnd = _editor.TargetStart + 2;
+                            _editor.ReplaceTarget(string.Empty);
+                        }
+                    }
+
+                    return true;
+                }
+
+                return base.ProcessCmdKey(ref msg, keyData);
             }
         }
     }
