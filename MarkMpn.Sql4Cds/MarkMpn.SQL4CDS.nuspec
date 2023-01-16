@@ -33,7 +33,8 @@ Handle complex statuscode transitions
 TDS Endpoint compatibility improvements
 Row count estimate improvements
 Fixed retrieving large multi-select picklist names
-Added Ctrl+K/Ctrl+C and Ctrl+K/Ctrl+U keyboard shortcuts to comment/uncomment code</releaseNotes>
+Added Ctrl+K/Ctrl+C and Ctrl+K/Ctrl+U keyboard shortcuts to comment/uncomment code
+Added autocomplete for optionset values</releaseNotes>
     <copyright>Copyright © 2019 Mark Carrington</copyright>
     <language>en-GB</language>
     <tags>XrmToolBox SQL CDS</tags>
