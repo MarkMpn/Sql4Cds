@@ -1355,7 +1355,7 @@ namespace MarkMpn.Sql4Cds
                 _ctrlK = true;
                 return true;
             }
-            else
+            else if (_ctrlK)
             {
                 _ctrlK = false;
 
@@ -1392,9 +1392,9 @@ namespace MarkMpn.Sql4Cds
 
                     return true;
                 }
-
-                return base.ProcessCmdKey(ref msg, keyData);
             }
+
+            return base.ProcessCmdKey(ref msg, keyData);
         }
     }
 }
