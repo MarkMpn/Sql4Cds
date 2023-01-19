@@ -12,6 +12,8 @@ variables:
   value: 'x86'
 - name: buildConfiguration
   value: 'Release'
+- name: isMain
+  value: $[eq(variables['Build.SourceBranch'], 'refs/heads/master')]
 
 steps:
 - checkout: self
@@ -33,6 +35,11 @@ steps:
     arguments: '$(GitVersion.AssemblySemVer)'
     pwsh: true
   
+- task: NodeTool@0
+  displayName: Install Node.js
+  inputs:
+    versionSpec: '18.x'
+
 - task: NuGetCommand@2
   displayName: NuGet Restore
   inputs:
@@ -113,8 +120,25 @@ steps:
     artifact: 'SSMSVersion'
     publishLocation: 'pipeline'
 
+- script: |
+    call npm --no-git-tag-version version $(GitVersion.SemVer)
+    call npm i -g vsce
+    call yarn install
+    call gulp build
+    call gulp package:offline
+  displayName: Build ADS extension
+  workingDirectory: '$(Build.SourcesDirectory)\AzureDataStudioExtension'
+
+- task: PublishPipelineArtifact@1
+  displayName: Publish ADS Extension installer to pipeline
+  inputs:
+    targetPath: 'AzureDataStudioExtension\azuredatastudio-sql4cds-$(GitVersion.SemVer).vsix'
+    artifact: 'ADSInstaller'
+    publishLocation: 'pipeline'
+
 - task: GitTag@5
   displayName: Label Source
+  condition: and(succeeded(), eq(variables.isMain, 'true'))
   inputs:
     workingdir: '$(Build.SourcesDirectory)'
     tag: 'v$(GitVersion.NuGetVersion)'
