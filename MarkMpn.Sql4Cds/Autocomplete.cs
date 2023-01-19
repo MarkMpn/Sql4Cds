@@ -151,6 +151,10 @@ namespace MarkMpn.Sql4Cds
                                 foundFrom = true;
                                 break;
 
+                            case "values":
+                                clause = clause ?? "values";
+                                break;
+
                             case "exec":
                             case "execute":
                                 clause = clause ?? "exec";
@@ -204,8 +208,8 @@ namespace MarkMpn.Sql4Cds
                     }
 
                     // Don't confuse the open bracket in "INSERT INTO account (" to mean account is a TVF
-                    if (words.Count == 2 && words[1] == "(" && clause == "insert")
-                        words.RemoveAt(1);
+                    if (words.Count >= 2 && words[1] == "(" && clause == "insert")
+                        words.RemoveRange(1, words.Count - 1);
 
                     IDictionary<string, string> tables = null;
 
