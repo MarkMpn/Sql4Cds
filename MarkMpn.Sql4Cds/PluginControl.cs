@@ -18,7 +18,7 @@ using XrmToolBox.Extensibility.Interfaces;
 
 namespace MarkMpn.Sql4Cds
 {
-    public partial class PluginControl : PluginControlBase, IMessageBusHost, IGitHubPlugin, IHelpPlugin, ISettingsPlugin, IPayPalPlugin
+    public partial class PluginControl : PluginControlBase, IMessageBusHost, IGitHubPlugin, IHelpPlugin, ISettingsPlugin, IPayPalPlugin, INoHighlightingPlugin
     {
         private readonly IDictionary<string, DataSource> _dataSources;
         private readonly TelemetryClient _ai;
@@ -38,7 +38,7 @@ namespace MarkMpn.Sql4Cds
             _properties.SelectedObjectChanged += OnSelectedObjectChanged;
             _ai = new TelemetryClient(new Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration("79761278-a908-4575-afbf-2f4d82560da6"));
             tscbConnection.Items.Add("Add Connection...");
-
+            
             TabIcon = Properties.Resources.SQL4CDS_Icon_16;
             PluginIcon = System.Drawing.Icon.FromHandle(Properties.Resources.SQL4CDS_Icon_16.GetHicon());
         }
@@ -235,6 +235,7 @@ namespace MarkMpn.Sql4Cds
             query.CancellableChanged += SyncStopButton;
             query.BusyChanged += SyncExecuteButton;
 
+            query.TabPageContextMenuStrip = tabContextMenuStrip;
             query.Show(dockPanel, DockState.Document);
             query.SetFocus();
 
@@ -244,8 +245,9 @@ namespace MarkMpn.Sql4Cds
         private FetchXmlControl CreateFetchXML(string xml)
         {
             var query = new FetchXmlControl();
-            query.FetchXml = xml;
+            query.Content = xml;
 
+            query.TabPageContextMenuStrip = tabContextMenuStrip;
             query.Show(dockPanel, DockState.Document);
             query.SetFocus();
 
@@ -255,8 +257,9 @@ namespace MarkMpn.Sql4Cds
         private MQueryControl CreateM(string m)
         {
             var query = new MQueryControl();
-            query.M = m;
+            query.Content = m;
 
+            query.TabPageContextMenuStrip = tabContextMenuStrip;
             query.Show(dockPanel, DockState.Document);
             query.SetFocus();
 
@@ -265,11 +268,10 @@ namespace MarkMpn.Sql4Cds
 
         private void tsbFormat_Click(object sender, EventArgs e)
         {
-            if (dockPanel.ActiveDocument == null)
+            if (!(dockPanel.ActiveDocument is IFormatableDocumentWindow doc))
                 return;
 
-            var query = (IDocumentWindow)dockPanel.ActiveDocument;
-            query.Format();
+            doc.Format();
         }
 
         private void tsbSettings_Click(object sender, EventArgs e)
@@ -311,7 +313,12 @@ namespace MarkMpn.Sql4Cds
 
             if (param.TryGetValue("FetchXml", out var xml) && xml is string xmlStr && !String.IsNullOrEmpty(xmlStr))
             {
-                var options = new FetchXml2SqlOptions();
+                var options = new FetchXml2SqlOptions
+                {
+                    ConvertDateTimeToUtc = Settings.Instance.FetchXml2SqlOptions.ConvertDateTimeToUtc,
+                    ConvertFetchXmlOperatorsTo = Settings.Instance.FetchXml2SqlOptions.ConvertFetchXmlOperatorsTo,
+                    UseParametersForLiterals = Settings.Instance.FetchXml2SqlOptions.UseParametersForLiterals
+                };
 
                 if ((bool)param["ConvertOnly"])
                     options.ConvertFetchXmlOperatorsTo = FetchXmlOperatorConversion.SqlCalculations;
@@ -382,17 +389,60 @@ namespace MarkMpn.Sql4Cds
                 if (open.ShowDialog() != DialogResult.OK)
                     return;
 
-                var query = CreateQuery(_objectExplorer.SelectedConnection, File.ReadAllText(open.FileName));
-                query.Filename = open.FileName;
+                var query = CreateQuery(_objectExplorer.SelectedConnection, "");
+                query.Open(open.FileName);
             }
         }
 
         private void tsbSave_Click(object sender, EventArgs e)
         {
-            if (dockPanel.ActiveDocument == null)
+            if (!(dockPanel.ActiveDocument is ISaveableDocumentWindow doc))
                 return;
 
-            ((IDocumentWindow)dockPanel.ActiveDocument).Save();
+            Save(doc, doc.Filename);
+        }
+
+        private void saveAsToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (!(dockPanel.ActiveDocument is ISaveableDocumentWindow doc))
+                return;
+
+            Save(doc, null);
+        }
+
+        private void saveAllToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var unsavedDocuments = dockPanel.Documents
+                .OfType<ISaveableDocumentWindow>()
+                .Where(query => query.Modified)
+                .ToArray();
+
+            foreach (var doc in unsavedDocuments)
+            {
+                ((IDockContent)doc).DockHandler.Show();
+                if (!Save(doc, doc.Filename))
+                    break;
+            }
+        }
+
+        private bool Save(ISaveableDocumentWindow doc, string filename)
+        {
+            if (filename == null)
+            {
+                using (var save = new SaveFileDialog())
+                {
+                    save.Filter = doc.Filter;
+                    save.FileName = doc.Filename ?? doc.DisplayName;
+
+                    if (save.ShowDialog() != DialogResult.OK)
+                        return false;
+
+                    filename = save.FileName;
+                }
+            }
+
+            doc.Save(filename);
+            return true;
         }
 
         private void OnSelectedObjectChanged(object sender, EventArgs e)
@@ -403,13 +453,15 @@ namespace MarkMpn.Sql4Cds
         private void dockPanel_ActiveDocumentChanged(object sender, EventArgs e)
         {
             var doc = (IDocumentWindow)dockPanel.ActiveDocument;
+            var saveable = doc as ISaveableDocumentWindow;
+            var formatable = doc as IFormatableDocumentWindow;
             var sql = doc as SqlQueryControl;
             var xml = doc as FetchXmlControl;
-            tsbSave.Enabled = doc != null;
+            tsbSave.Enabled = saveable != null;
             tsbConnect.Enabled = sql != null && sql.Connection == null;
             tsbChangeConnection.Enabled = sql != null && sql.Connection != null;
             tsbFetchXMLBuilder.Enabled = xml != null;
-            tsbFormat.Enabled = doc != null;
+            tsbFormat.Enabled = formatable != null;
             SyncStopButton(sender, e);
             SyncExecuteButton(sender, e);
 
@@ -522,47 +574,10 @@ namespace MarkMpn.Sql4Cds
 
         public override void ClosingPlugin(PluginCloseInfo info)
         {
-            if (!info.Silent)
+            if (!ConfirmBulkClose(dockPanel.DocumentsToArray(), info.Silent))
             {
-                var busy = dockPanel.Documents
-                    .OfType<SqlQueryControl>()
-                    .Any(query => query.Busy);
-
-                if (busy)
-                {
-                    MessageBox.Show(this, "Query is still executing. Please wait for the query to finish before closing this tab.", "Query Running", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    info.Cancel = true;
-                    return;
-                }
-            }
-
-            var unsavedDocuments = dockPanel.Documents
-                .OfType<SqlQueryControl>()
-                .Where(query => query.Modified)
-                .ToArray();
-
-            if (unsavedDocuments.Length > 0 && !Settings.Instance.RememberSession)
-            {
-                using (var form = new ConfirmCloseForm(unsavedDocuments.Select(query => query.DisplayName).ToArray(), !info.Silent))
-                {
-                    switch (form.ShowDialog())
-                    {
-                        case DialogResult.Yes:
-                            foreach (var doc in unsavedDocuments)
-                            {
-                                if (!doc.Save())
-                                {
-                                    info.Cancel = true;
-                                    return;
-                                }
-                            }
-                            break;
-
-                        case DialogResult.Cancel:
-                            info.Cancel = true;
-                            return;
-                    }
-                }
+                info.Cancel = true;
+                return;
             }
 
             if (Settings.Instance.RememberSession)
@@ -582,7 +597,7 @@ namespace MarkMpn.Sql4Cds
             string fetchXml;
 
             if (dockPanel.ActiveDocument is FetchXmlControl xml)
-                fetchXml = xml.FetchXml;
+                fetchXml = xml.Content;
             else
                 fetchXml = ((IFetchXmlExecutionPlanNode) _properties.SelectedObject).FetchXmlString;
 
@@ -701,6 +716,145 @@ in
                     OnConnectionRequested(this, args);
                 }
             }
+        }
+
+        private void tabContextMenuStrip_Opening(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            var tabIndex = 0;
+
+            while (tabIndex < dockPanel.ActiveDocumentPane.DisplayingContents.Count && dockPanel.ActiveDocumentPane.DisplayingContents[tabIndex] != dockPanel.ActiveDocument)
+                tabIndex++;
+
+            closeOthersToolStripMenuItem.Enabled = dockPanel.DocumentsCount > 1;
+            closeToTheRightToolStripMenuItem.Enabled = tabIndex < dockPanel.ActiveDocumentPane.DisplayingContents.Count - 1;
+            copyFullPathToolStripMenuItem.Enabled = !String.IsNullOrEmpty((dockPanel.ActiveDocument as ISaveableDocumentWindow)?.Filename);
+            openContainingFolderToolStripMenuItem.Enabled = copyFullPathToolStripMenuItem.Enabled;
+        }
+
+        private void closeToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            dockPanel.ActiveDocument.DockHandler.Close();
+        }
+
+        private void closeOthersToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var others = dockPanel.Documents.Except(new[] { dockPanel.ActiveDocument }).ToArray();
+
+            if (!ConfirmBulkClose(others, false))
+                return;
+
+            foreach (var doc in others)
+                doc.DockHandler.Close();
+        }
+
+        private void closeToTheRightToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var right = new List<IDockContent>();
+            var foundCurrent = false;
+
+            for (var i = 0; i < dockPanel.ActiveDocumentPane.DisplayingContents.Count; i++)
+            {
+                if (dockPanel.ActiveDocumentPane.DisplayingContents[i] == dockPanel.ActiveDocument)
+                    foundCurrent = true;
+                else if (foundCurrent)
+                    right.Add(dockPanel.ActiveDocumentPane.DisplayingContents[i]);
+            }
+
+            if (!ConfirmBulkClose(right.ToArray(), false))
+                return;
+
+            foreach (var doc in right)
+                doc.DockHandler.Close();
+        }
+
+        private void closeSavedToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var saved = dockPanel.Documents
+                .OfType<ISaveableDocumentWindow>()
+                .Where(doc => !doc.Modified)
+                .Cast<IDockContent>()
+                .ToList();
+
+            foreach (var doc in saved)
+                doc.DockHandler.Close();
+        }
+
+        private void closeAllToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (!ConfirmBulkClose(dockPanel.DocumentsToArray(), false))
+                return;
+
+            foreach (var doc in dockPanel.DocumentsToArray())
+                doc.DockHandler.Close();
+        }
+
+        private bool ConfirmBulkClose(IDockContent[] documents, bool silent)
+        {
+            if (!silent)
+            {
+                var busy = documents
+                    .OfType<SqlQueryControl>()
+                    .Any(query => query.Busy);
+
+                if (busy)
+                {
+                    MessageBox.Show(this, "Query is still executing. Please wait for the query to finish before closing this tab.", "Query Running", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return false;
+                }
+            }
+
+            var unsavedDocuments = dockPanel.Documents
+                .OfType<ISaveableDocumentWindow>()
+                .Where(query => query.Modified)
+                .ToArray();
+
+            if (unsavedDocuments.Length > 0 && !Settings.Instance.RememberSession)
+            {
+                using (var form = new ConfirmCloseForm(unsavedDocuments.Select(query => query.DisplayName).ToArray(), !silent))
+                {
+                    switch (form.ShowDialog())
+                    {
+                        case DialogResult.Yes:
+                            foreach (var doc in unsavedDocuments)
+                            {
+                                var filename = doc.Filename;
+
+                                if (filename == null)
+                                {
+                                    using (var save = new SaveFileDialog())
+                                    {
+                                        save.Filter = doc.Filter;
+
+                                        if (save.ShowDialog() != DialogResult.OK)
+                                            return false;
+
+                                        filename = save.FileName;
+                                    }
+                                }
+
+                                doc.Save(filename);
+                            }
+                            break;
+
+                        case DialogResult.Cancel:
+                            return false;
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        private void copyFullPathToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var saveable = (ISaveableDocumentWindow)dockPanel.ActiveDocument;
+            Clipboard.SetText(saveable.Filename);
+        }
+
+        private void openContainingFolderToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var saveable = (ISaveableDocumentWindow)dockPanel.ActiveDocument;
+            Process.Start("explorer.exe", $"/select,\"{saveable.Filename}\"");
         }
     }
 }

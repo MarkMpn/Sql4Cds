@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using MarkMpn.Sql4Cds.Engine;
 using ScintillaNET;
 
 namespace MarkMpn.Sql4Cds
@@ -14,6 +15,7 @@ namespace MarkMpn.Sql4Cds
     public partial class SettingsForm : Form
     {
         private readonly Settings _settings;
+        private readonly FetchXml2SqlOptions _fetchXml2SqlOptions;
 
         public SettingsForm(Settings settings)
         {
@@ -45,6 +47,12 @@ namespace MarkMpn.Sql4Cds
             SetSqlStyle(nativeSqlScintilla);
 
             _settings = settings;
+            _fetchXml2SqlOptions = new FetchXml2SqlOptions
+            {
+                ConvertDateTimeToUtc = _settings.FetchXml2SqlOptions.ConvertDateTimeToUtc,
+                ConvertFetchXmlOperatorsTo = _settings.FetchXml2SqlOptions.ConvertFetchXmlOperatorsTo,
+                UseParametersForLiterals = _settings.FetchXml2SqlOptions.UseParametersForLiterals
+            };
         }
 
         private void SetSqlStyle(Scintilla scintilla)
@@ -110,6 +118,7 @@ namespace MarkMpn.Sql4Cds
                 _settings.RememberSession = rememberSessionCheckbox.Checked;
                 _settings.LocalFormatDates = localDateFormatCheckbox.Checked;
                 _settings.UseNativeSqlConversion = nativeSqlRadioButton.Checked;
+                _settings.FetchXml2SqlOptions = _fetchXml2SqlOptions;
             }
         }
 
@@ -145,6 +154,14 @@ namespace MarkMpn.Sql4Cds
 
             if (!tsqlEndpointCheckBox.Checked)
                 showFetchXMLInEstimatedExecutionPlansCheckBox.Checked = true;
+        }
+
+        private void fetchXml2SqlConversionAdvancedLinkLabel_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
+        {
+            using (var form = new FetchXml2SqlSettingsForm(_fetchXml2SqlOptions))
+            {
+                form.ShowDialog(this);
+            }
         }
     }
 }

@@ -6,6 +6,7 @@ using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Data.SqlTypes;
+using System.Globalization;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -598,6 +599,53 @@ namespace MarkMpn.Sql4Cds.Engine
 
             return replacement;
         }
+
+        /// <summary>
+        /// Returns a value formatted with the specified format and optional culture
+        /// </summary>
+        /// <typeparam name="T">The type of value to be formatted</typeparam>
+        /// <param name="value">The value to be formatted</param>
+        /// <param name="format">Format pattern</param>
+        /// <param name="culture">Optional argument specifying a culture</param>
+        /// <returns></returns>
+        public static SqlString Format<T>(T value, SqlString format, [Optional] SqlString culture)
+            where T : INullable
+        {
+            if (value.IsNull)
+                return SqlString.Null;
+
+            var valueProp = typeof(T).GetProperty("Value");
+
+            if (!typeof(IFormattable).IsAssignableFrom(valueProp.PropertyType))
+                throw new QueryExecutionException("Invalid type for FORMAT function");
+
+            var innerValue = (IFormattable)valueProp.GetValue(value);
+            return Format(innerValue, format, culture);
+        }
+
+        private static SqlString Format(IFormattable value, SqlString format, SqlString culture)
+        {
+            if (value == null)
+                return SqlString.Null;
+
+            if (format.IsNull)
+                return SqlString.Null;
+
+            var cultureInfo = CultureInfo.CurrentCulture;
+
+            try
+            {
+                if (!culture.IsNull)
+                    cultureInfo = CultureInfo.GetCultureInfo(culture.Value);
+
+                var formatted = value.ToString(format.Value, cultureInfo);
+                return SqlTypeConverter.UseDefaultCollation(formatted);
+            }
+            catch
+            {
+                return SqlString.Null;
+            }
+        }
     }
 
     /// <summary>
@@ -866,6 +914,14 @@ namespace MarkMpn.Sql4Cds.Engine
     /// </summary>
     [AttributeUsage(AttributeTargets.Parameter)]
     class SourceTypeAttribute : Attribute
+    {
+    }
+
+    /// <summary>
+    /// Indicates that the parameter is optional
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Parameter)]
+    class OptionalAttribute : Attribute
     {
     }
 }

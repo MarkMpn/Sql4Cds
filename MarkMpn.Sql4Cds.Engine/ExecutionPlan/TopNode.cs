@@ -55,7 +55,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (Percent)
             {
                 var top = new ConvertCall { Parameter = Top, DataType = DataTypeHelpers.Float };
-                var topPercent = (SqlSingle)top.Compile(null, parameterTypes)(null, parameterValues, options);
+                var topPercent = (SqlDouble)top.Compile(null, parameterTypes)(null, parameterValues, options);
 
                 if (topPercent.IsNull)
                 {
@@ -70,7 +70,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     else
                         count = Source.Execute(dataSources, options, parameterTypes, parameterValues).Count();
 
-                    topCount = (int)(count * topPercent.Value / 100);
+                    topCount = (int)Math.Ceiling(count * topPercent.Value / 100);
                 }
             }
             else
@@ -174,9 +174,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!Top.IsConstantValueExpression(null, options, out var topLiteral))
                 return sourceCount;
 
-            var top = Int32.Parse(topLiteral.Value, CultureInfo.InvariantCulture);
+            var top = Decimal.Parse(topLiteral.Value, CultureInfo.InvariantCulture);
 
-            return new RowCountEstimateDefiniteRange(0, Math.Max(0, Math.Min(top, sourceCount.Value)));
+            if (Percent)
+                return new RowCountEstimate((int)Math.Max(0, Math.Min(Math.Ceiling(sourceCount.Value * top / 100), sourceCount.Value)));
+            else if (WithTies)
+                return new RowCountEstimate(Math.Max(0, Math.Min((int)top, sourceCount.Value)));
+            else
+                return new RowCountEstimateDefiniteRange(0, Math.Max(0, Math.Min((int)top, sourceCount.Value)));
         }
 
         protected override IEnumerable<string> GetVariablesInternal()

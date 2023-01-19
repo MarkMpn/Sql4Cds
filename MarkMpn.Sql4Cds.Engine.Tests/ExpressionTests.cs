@@ -63,6 +63,37 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual((SqlInt32)3, value);
         }
 
+        [TestMethod]
+        public void FormatDateTime()
+        {
+            var expr = new FunctionCall
+            {
+                FunctionName = new Identifier { Value = "FORMAT" },
+                Parameters =
+                {
+                    Col("createdon"),
+                    Str("yyyy-MM-dd")
+                }
+            };
+            var schema = new NodeSchema(new Dictionary<string, DataTypeReference>
+            {
+                ["createdon"] = DataTypeHelpers.DateTime
+            }, new Dictionary<string, IReadOnlyList<string>>(), null, Array.Empty<string>(), Array.Empty<string>());
+            var parameterTypes = new Dictionary<string, DataTypeReference>();
+            var func = expr.Compile(schema, parameterTypes);
+
+            var options = new StubOptions();
+            var parameterValues = new Dictionary<string, object>();
+
+            var record = new Entity
+            {
+                ["createdon"] = (SqlDateTime)new DateTime(2022, 1, 2)
+            };
+
+            var value = func(record, parameterValues, options);
+            Assert.AreEqual(SqlTypeConverter.UseDefaultCollation("2022-01-02"), value);
+        }
+
         private ColumnReferenceExpression Col(string name)
         {
             return new ColumnReferenceExpression

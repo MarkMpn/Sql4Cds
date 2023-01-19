@@ -10,12 +10,28 @@ namespace MarkMpn.Sql4Cds
 {
     interface IDocumentWindow
     {
-        void Format();
-
-        void Save();
-
         TabContent GetSessionDetails();
 
         void RestoreSessionDetails(TabContent tab);
+    }
+
+    interface ISaveableDocumentWindow : IDocumentWindow
+    {
+        string Filter { get; }
+
+        void Save(string filename);
+
+        void Open(string filename);
+
+        string Filename { get; }
+
+        string DisplayName { get; }
+
+        bool Modified { get; }
+    }
+
+    interface IFormatableDocumentWindow : IDocumentWindow
+    {
+        void Format();
     }
 }

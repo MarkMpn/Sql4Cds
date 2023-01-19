@@ -335,5 +335,45 @@ namespace MarkMpn.Sql4Cds.Tests
 
             CollectionAssert.AreEqual(Array.Empty<string>(), suggestions);
         }
+
+        [TestMethod]
+        public void SuggestOptionSetValuesWhere()
+        {
+            var sql = "SELECT * FROM new_customentity WHERE new_optionsetvalue = ";
+
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1).Select(s => s.Text).ToList();
+
+            CollectionAssert.IsSubsetOf(new[] { "100001", "100002", "100003" }, suggestions);
+        }
+
+        [TestMethod]
+        public void SuggestOptionSetValuesSet()
+        {
+            var sql = "UPDATE new_customentity SET new_optionsetvalue = ";
+
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1).Select(s => s.Text).ToList();
+
+            CollectionAssert.IsSubsetOf(new[] { "100001", "100002", "100003" }, suggestions);
+        }
+
+        [TestMethod]
+        public void SuggestColumnsForInsertList1()
+        {
+            var sql = "INSERT INTO contact (f";
+
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1).Select(s => s.Text).ToList();
+
+            CollectionAssert.IsSubsetOf(new[] { "firstname" }, suggestions);
+        }
+
+        [TestMethod]
+        public void SuggestColumnsForInsertList2()
+        {
+            var sql = "INSERT INTO contact (firstname, ";
+
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1).Select(s => s.Text).ToList();
+
+            CollectionAssert.IsSubsetOf(new[] { "lastname" }, suggestions);
+        }
     }
 }

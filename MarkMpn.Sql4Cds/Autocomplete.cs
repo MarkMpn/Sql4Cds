@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data.SqlTypes;
+using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -150,6 +151,10 @@ namespace MarkMpn.Sql4Cds
                                 foundFrom = true;
                                 break;
 
+                            case "values":
+                                clause = clause ?? "values";
+                                break;
+
                             case "exec":
                             case "execute":
                                 clause = clause ?? "exec";
@@ -203,8 +208,8 @@ namespace MarkMpn.Sql4Cds
                     }
 
                     // Don't confuse the open bracket in "INSERT INTO account (" to mean account is a TVF
-                    if (words.Count == 2 && words[1] == "(" && clause == "insert")
-                        words.RemoveAt(1);
+                    if (words.Count >= 2 && words[1] == "(" && clause == "insert")
+                        words.RemoveRange(1, words.Count - 1);
 
                     IDictionary<string, string> tables = null;
 
@@ -547,7 +552,7 @@ namespace MarkMpn.Sql4Cds
 
                             items.AddRange(typeof(FunctionMetadata.SqlFunctions).GetMethods(BindingFlags.DeclaredOnly | BindingFlags.Instance | BindingFlags.Public).Select(m => new FunctionAutocompleteItem(m, currentLength)));
 
-                            if (clause == "where" && prevWord == "=")
+                            if ((clause == "where" || clause == "set") && prevWord == "=")
                             {
                                 // Check if there are any applicable filter operator functions that match the type of the current attribute
                                 var identifiers = prevPrevWord.Split('.');
@@ -589,19 +594,25 @@ namespace MarkMpn.Sql4Cds
 
                                 if (attribute != null)
                                 {
-                                    var expectedType = default(Type);
+                                    if (clause == "where")
+                                    {
+                                        var expectedType = default(Type);
 
-                                    if (attribute.AttributeType == AttributeTypeCode.String || attribute.AttributeType == AttributeTypeCode.Memo)
-                                        expectedType = typeof(SqlString);
-                                    else if (attribute.AttributeType == AttributeTypeCode.DateTime)
-                                        expectedType = typeof(SqlDateTime);
-                                    else if (attribute.AttributeType == AttributeTypeCode.Uniqueidentifier || attribute.AttributeType == AttributeTypeCode.Lookup || attribute.AttributeType == AttributeTypeCode.Owner || attribute.AttributeType == AttributeTypeCode.Customer)
-                                        expectedType = typeof(SqlGuid);
-                                    else if (attribute.AttributeTypeName == "MultiSelectPicklistType")
-                                        expectedType = typeof(SqlString);
+                                        if (attribute.AttributeType == AttributeTypeCode.String || attribute.AttributeType == AttributeTypeCode.Memo)
+                                            expectedType = typeof(SqlString);
+                                        else if (attribute.AttributeType == AttributeTypeCode.DateTime)
+                                            expectedType = typeof(SqlDateTime);
+                                        else if (attribute.AttributeType == AttributeTypeCode.Uniqueidentifier || attribute.AttributeType == AttributeTypeCode.Lookup || attribute.AttributeType == AttributeTypeCode.Owner || attribute.AttributeType == AttributeTypeCode.Customer)
+                                            expectedType = typeof(SqlGuid);
+                                        else if (attribute.AttributeTypeName == "MultiSelectPicklistType")
+                                            expectedType = typeof(SqlString);
 
-                                    if (expectedType != null)
-                                        items.AddRange(typeof(FetchXmlConditionMethods).GetMethods(BindingFlags.Public | BindingFlags.Static).Where(m => m.GetParameters()[0].ParameterType == expectedType).Select(m => new FunctionAutocompleteItem(m, currentLength)));
+                                        if (expectedType != null)
+                                            items.AddRange(typeof(FetchXmlConditionMethods).GetMethods(BindingFlags.Public | BindingFlags.Static).Where(m => m.GetParameters()[0].ParameterType == expectedType).Select(m => new FunctionAutocompleteItem(m, currentLength)));
+                                    }
+
+                                    if (attribute is EnumAttributeMetadata enumAttr)
+                                        items.AddRange(enumAttr.OptionSet.Options.Select(o => new OptionSetAutocompleteItem(o, currentLength)));
                                 }
                             }
 
@@ -1678,6 +1689,31 @@ namespace MarkMpn.Sql4Cds
             }
 
             public override string CompareText => _method.DeclaringType == typeof(FetchXmlConditionMethods) ? _method.Name.ToLowerInvariant() : _method.Name.ToUpperInvariant();
+        }
+
+        class OptionSetAutocompleteItem : SqlAutocompleteItem
+        {
+            private readonly OptionMetadata _option;
+
+            public OptionSetAutocompleteItem(OptionMetadata option, int replaceLength) : base(option.Value.Value.ToString(CultureInfo.InvariantCulture), replaceLength, 11)
+            {
+                _option = option;
+
+                if (!String.IsNullOrEmpty(option.Label?.UserLocalizedLabel?.Label))
+                    MenuText = $"{_option.Label.UserLocalizedLabel.Label} ({_option.Value.Value.ToString(CultureInfo.InvariantCulture)})";
+            }
+
+            public override string ToolTipTitle
+            {
+                get => _option.Label?.UserLocalizedLabel?.Label ?? Text;
+                set => base.ToolTipTitle = value;
+            }
+
+            public override string ToolTipText
+            {
+                get => _option.Label?.UserLocalizedLabel?.Label ?? Text;
+                set => base.ToolTipText = value;
+            }
         }
     }
 

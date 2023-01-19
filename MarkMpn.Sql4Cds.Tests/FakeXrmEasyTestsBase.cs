@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using FakeXrmEasy;
+using MarkMpn.Sql4Cds.Tests.Metadata;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
 
@@ -41,6 +42,20 @@ namespace MarkMpn.Sql4Cds.Tests
                     typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.ObjectTypeCode)).SetValue(entity, 1);
                     var primaryContactId = (LookupAttributeMetadata)entity.Attributes.Single(a => a.LogicalName == "primarycontactid");
                     primaryContactId.Targets = new[] { "contact" };
+                    context.SetEntityMetadata(entity);
+                }
+
+                if (entity.LogicalName == "new_customentity")
+                {
+                    var new_optionsetvalue = (EnumAttributeMetadata)entity.Attributes.Single(a => a.LogicalName == "new_optionsetvalue");
+                    new_optionsetvalue.OptionSet = new OptionSetMetadata(
+                        new OptionMetadataCollection(
+                            Enum.GetValues(typeof(New_OptionSet))
+                            .Cast<New_OptionSet>()
+                            .Select(o => new OptionMetadata(new Label(o.ToString(), 1033), (int)o))
+                            .ToList()
+                            )
+                        );
                     context.SetEntityMetadata(entity);
                 }
 

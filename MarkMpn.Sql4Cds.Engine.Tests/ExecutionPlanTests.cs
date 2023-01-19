@@ -2389,7 +2389,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var update = AssertNode<UpdateNode>(plans[0]);
             Assert.AreEqual("account", update.LogicalName);
             Assert.AreEqual("account.accountid", update.PrimaryIdSource);
-            Assert.AreEqual("Expr1", update.ColumnMappings["name"]);
+            Assert.AreEqual("Expr1", update.ColumnMappings["name"].NewValueColumn);
             var computeScalar = AssertNode<ComputeScalarNode>(update.Source);
             Assert.AreEqual("'foo'", computeScalar.Columns["Expr1"].ToSql());
             var fetch = AssertNode<FetchXmlScan>(computeScalar.Source);
@@ -2419,7 +2419,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var update = AssertNode<UpdateNode>(plans[0]);
             Assert.AreEqual("account", update.LogicalName);
             Assert.AreEqual("a.accountid", update.PrimaryIdSource);
-            Assert.AreEqual("Expr1", update.ColumnMappings["name"]);
+            Assert.AreEqual("Expr1", update.ColumnMappings["name"].NewValueColumn);
             var distinct = AssertNode<DistinctNode>(update.Source);
             var computeScalar = AssertNode<ComputeScalarNode>(distinct.Source);
             Assert.AreEqual("'foo'", computeScalar.Columns["Expr1"].ToSql());
@@ -4540,7 +4540,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
             AssertNode<AssignVariablesNode>(plans[2]);
             var update = AssertNode<UpdateNode>(plans[3]);
             var compute = AssertNode<ComputeScalarNode>(update.Source);
-            Assert.AreEqual(compute.Columns[update.ColumnMappings["employees"]].ToSql(), "@employees");
+            Assert.AreEqual(compute.Columns[update.ColumnMappings["employees"].NewValueColumn].ToSql(), "@employees");
             var fetch = AssertNode<FetchXmlScan>(compute.Source);
 
             AssertFetchXml(fetch, @"
@@ -4831,7 +4831,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
 
             Assert.AreEqual(1, plans.Length);
             var update = AssertNode<UpdateNode>(plans[0]);
-            Assert.AreEqual("Expr1", update.ColumnMappings["name"]);
+            Assert.AreEqual("Expr1", update.ColumnMappings["name"].NewValueColumn);
 
             var compute = AssertNode<ComputeScalarNode>(update.Source);
             Assert.AreEqual("'1'", compute.Columns["Expr1"].ToSql());

@@ -594,10 +594,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var correctParameterCount = methods
                 .Select(m => new { Method = m, Parameters = m.GetParameters() })
                 .Where(m =>
-                    m.Parameters.Where(p => p.GetCustomAttribute<SourceTypeAttribute>() == null).Count() == paramTypes.Length ||
-                    (m.Parameters.Length < paramTypes.Length && m.Parameters.Length > 0 && m.Parameters.Last().ParameterType.IsArray) ||
-                    (m.Parameters.Length == paramTypes.Length + 1 && m.Parameters.Last().ParameterType == typeof(IQueryExecutionOptions))
-                    )
+                {
+                    var allowedParameters = m.Parameters.Where(p => p.GetCustomAttribute<SourceTypeAttribute>() == null && p.ParameterType != typeof(IQueryExecutionOptions));
+                    var requiredParameters = allowedParameters.Where(p => p.GetCustomAttribute<OptionalAttribute>() == null);
+                    var isArrayParameter = requiredParameters.Any() && requiredParameters.Last().ParameterType.IsArray;
+
+                    if (paramTypes.Length < requiredParameters.Count())
+                        return false;
+
+                    if (paramTypes.Length > allowedParameters.Count() && !isArrayParameter)
+                        return false;
+
+                    return true;
+                })
                 .ToList();
 
             if (correctParameterCount.Count == 0)
@@ -670,6 +679,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     paramsWithOptions[paramExpressions.Length] = optionsParam;
                     paramExpressions = paramsWithOptions;
                     break;
+                }
+
+                if (i >= paramTypes.Length && parameters[i].GetCustomAttribute<OptionalAttribute>() != null)
+                {
+                    var paramsWithDefaultValue = new Expression[paramExpressions.Length + 1];
+                    paramExpressions.CopyTo(paramsWithDefaultValue, 0);
+                    paramsWithDefaultValue[i] = Expression.Constant(SqlTypeConverter.GetNullValue(paramType));
+                    paramExpressions = paramsWithDefaultValue;
+                    continue;
                 }
 
                 if (paramType == typeof(DataTypeReference))

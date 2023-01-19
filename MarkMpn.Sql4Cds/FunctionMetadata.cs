@@ -144,6 +144,9 @@ namespace MarkMpn.Sql4Cds
 
             [Description("Replaces NULL with the specified replacement value")]
             public abstract object isnull(object check, object replacement);
+
+            [Description("Returns a value formatted with the specified format and optional culture")]
+            public abstract object format(object value, string format, string culture);
         }
     }
 }

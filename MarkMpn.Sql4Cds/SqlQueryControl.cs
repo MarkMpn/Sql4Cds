@@ -8,14 +8,9 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
-using System.Runtime.Serialization;
 using System.ServiceModel;
-using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading;
 using System.Windows.Forms;
-using System.Xml;
-using System.Xml.Serialization;
 using AutocompleteMenuNS;
 using MarkMpn.Sql4Cds.Controls;
 using MarkMpn.Sql4Cds.Engine;
@@ -27,13 +22,11 @@ using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
 using Microsoft.Xrm.Tooling.Connector;
 using ScintillaNET;
-using xrmtb.XrmToolBox.Controls;
 using xrmtb.XrmToolBox.Controls.Controls;
-using XrmToolBox.Extensibility;
 
 namespace MarkMpn.Sql4Cds
 {
-    partial class SqlQueryControl : WeifenLuo.WinFormsUI.Docking.DockContent, IDocumentWindow
+    partial class SqlQueryControl : DocumentWindowBase, ISaveableDocumentWindow, IFormatableDocumentWindow
     {
         class ExecuteParams
         {
@@ -71,9 +64,6 @@ namespace MarkMpn.Sql4Cds
         private readonly Action<string> _log;
         private readonly PropertiesWindow _properties;
         private int _maxLineNumberCharLength;
-        private string _displayName;
-        private string _filename;
-        private bool _modified;
         private static int _queryCounter;
         private static ImageList _images;
         private static Icon _sqlIcon;
@@ -89,6 +79,8 @@ namespace MarkMpn.Sql4Cds
         private bool _addingResult;
         private IDictionary<int, TextRange> _messageLocations;
         private readonly Sql4CdsConnection _connection;
+        private FindReplace _findReplace;
+        private bool _ctrlK;
 
         static SqlQueryControl()
         {
@@ -101,7 +93,7 @@ namespace MarkMpn.Sql4Cds
         public SqlQueryControl(ConnectionDetail con, IDictionary<string, DataSource> dataSources, TelemetryClient ai, Action<string> showFetchXml, Action<string> log, PropertiesWindow properties)
         {
             InitializeComponent();
-            _displayName = $"SQLQuery{++_queryCounter}.sql";
+            DisplayName = $"SQLQuery{++_queryCounter}.sql";
             ShowFetchXML = showFetchXml;
             DataSources = dataSources;
             _editor = CreateSqlEditor();
@@ -121,6 +113,7 @@ namespace MarkMpn.Sql4Cds
             statusStrip.Items.Insert(0, _progressHost);
 
             splitContainer.Panel1.Controls.Add(_editor);
+            splitContainer.Panel1.Controls.SetChildIndex(_editor, 0);
             Icon = _sqlIcon;
 
             _connection = new Sql4CdsConnection(DataSources);
@@ -133,25 +126,21 @@ namespace MarkMpn.Sql4Cds
             ChangeConnection(con);
         }
 
-        public IDictionary<string, DataSource> DataSources { get; }
+        protected override string Type => "SQL";
 
-        public Action<string> ShowFetchXML { get; }
-        
-        public string Filename
+        public override string Content
         {
-            get { return _filename; }
+            get => _editor.Text;
             set
             {
-                _filename = value;
-                _displayName = Path.GetFileName(value);
-                _modified = false;
-                SyncTitle();
+                _editor.Text = value;
+                Modified = true;
             }
         }
 
-        public bool Modified => _modified;
+        public IDictionary<string, DataSource> DataSources { get; }
 
-        public string DisplayName => _displayName + (_modified ? " *" : "");
+        public Action<string> ShowFetchXML { get; }
 
         public ConnectionDetail Connection => _con;
         
@@ -159,8 +148,6 @@ namespace MarkMpn.Sql4Cds
 
         protected override void OnClosing(CancelEventArgs e)
         {
-            base.OnClosing(e);
-
             if (Busy)
             {
                 MessageBox.Show(this, "Query is still executing. Please wait for the query to finish before closing this tab.", "Query Running", MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -168,23 +155,7 @@ namespace MarkMpn.Sql4Cds
                 return;
             }
 
-            if (_modified)
-            {
-                using (var form = new ConfirmCloseForm(new[] { DisplayName }, true))
-                {
-                    switch (form.ShowDialog())
-                    {
-                        case DialogResult.Yes:
-                            if (!Save())
-                                e.Cancel = true;
-                            break;
-
-                        case DialogResult.Cancel:
-                            e.Cancel = true;
-                            break;
-                    }
-                }
-            }
+            base.OnClosing(e);
         }
 
         internal void ChangeConnection(ConnectionDetail con)
@@ -198,6 +169,12 @@ namespace MarkMpn.Sql4Cds
 
                 toolStripStatusLabel.Text = "Connected";
                 toolStripStatusLabel.Image = Properties.Resources.ConnectFilled_grey_16x;
+
+                environmentHighlightLabel.BackColor = statusStrip.BackColor = con.EnvironmentHighlightingInfo?.Color ?? Color.Khaki;
+                environmentHighlightLabel.ForeColor = statusStrip.ForeColor = con.EnvironmentHighlightingInfo?.TextColor ?? SystemColors.WindowText;
+                environmentHighlightLabel.Text = con.EnvironmentHighlightingInfo?.Text ?? "";
+
+                environmentHighlightLabel.Visible = con.EnvironmentHighlightingInfo != null;
             }
             else
             {
@@ -206,20 +183,25 @@ namespace MarkMpn.Sql4Cds
 
                 toolStripStatusLabel.Text = "Disconnected";
                 toolStripStatusLabel.Image = Properties.Resources.Disconnect_Filled_16x;
+
+                statusStrip.BackColor = Color.Khaki;
+                statusStrip.ForeColor = SystemColors.WindowText;
+
+                environmentHighlightLabel.Visible = false;
             }
 
             SyncUsername();
             SyncTitle();
         }
 
-        private void SyncTitle()
+        protected override string GetTitle()
         {
-            var text = _displayName;
+            var text = DisplayName;
 
             if (Busy)
                 text += " Executing...";
 
-            if (_modified)
+            if (Modified)
                 text += " *";
 
             if (_con != null)
@@ -227,7 +209,7 @@ namespace MarkMpn.Sql4Cds
             else
                 text += " (Disconnected)";
 
-            Text = text;
+            return text;
         }
 
         public void SetFocus()
@@ -235,31 +217,7 @@ namespace MarkMpn.Sql4Cds
             _editor.Focus();
         }
 
-        void IDocumentWindow.Save()
-        {
-            this.Save();
-        }
-
-        public bool Save()
-        {
-            if (Filename == null)
-            {
-                using (var save = new SaveFileDialog())
-                {
-                    save.Filter = "SQL Scripts (*.sql)|*.sql";
-
-                    if (save.ShowDialog() != DialogResult.OK)
-                        return false;
-
-                    Filename = save.FileName;
-                }
-            }
-
-            File.WriteAllText(Filename, _editor.Text);
-            _modified = false;
-            SyncTitle();
-            return true;
-        }
+        string ISaveableDocumentWindow.Filter => "SQL Scripts (*.sql)|*.sql";
 
         public void InsertText(string text)
         {
@@ -357,9 +315,38 @@ namespace MarkMpn.Sql4Cds
                         e.Handled = true;
                     }
                 }
-                if (e.KeyCode == Keys.Space && e.Control)
+                else if (e.KeyCode == Keys.Space && e.Control)
                 {
                     _autocomplete.Show(_editor, true);
+                    e.Handled = true;
+                    e.SuppressKeyPress = true;
+                }
+                else if (e.KeyCode == Keys.F && e.Control)
+                {
+                    ShowFindControl();
+                    e.Handled = true;
+                    e.SuppressKeyPress = true;
+                }
+                else if (e.KeyCode == Keys.H && e.Control)
+                {
+                    ShowFindControl();
+                    _findReplace.ShowReplace = true;
+                    e.Handled = true;
+                    e.SuppressKeyPress = true;
+                }
+                else if (e.KeyCode == Keys.Escape && _findReplace != null)
+                {
+                    _findReplace.Hide();
+                    e.Handled = true;
+                    e.SuppressKeyPress = true;
+                }
+                else if (e.KeyCode == Keys.F3 && _findReplace != null)
+                {
+                    if (e.Shift)
+                        _findReplace.FindPrevious();
+                    else
+                        _findReplace.FindNext();
+
                     e.Handled = true;
                     e.SuppressKeyPress = true;
                 }
@@ -389,12 +376,7 @@ namespace MarkMpn.Sql4Cds
             // Handle changes
             scintilla.TextChanged += (s, e) =>
             {
-                if (!_modified)
-                {
-                    _modified = true;
-                    SyncTitle();
-                }
-
+                Modified = true;
                 CalcLineNumberWidth((Scintilla)s);
             };
 
@@ -464,34 +446,27 @@ namespace MarkMpn.Sql4Cds
             };
             scintilla.MouseDwellTime = (int)TimeSpan.FromSeconds(1).TotalMilliseconds;
 
+            scintilla.GotFocus += CheckForNewVersion;
+
             return scintilla;
         }
 
-        TabContent IDocumentWindow.GetSessionDetails()
+        private void ShowFindControl()
         {
-            return new TabContent
+            if (_findReplace != null)
             {
-                Type = "SQL",
-                Filename = Filename,
-                Query = _modified ? _editor.Text : null
-            };
-        }
-
-        void IDocumentWindow.RestoreSessionDetails(TabContent tab)
-        {
-            var content = tab.Query;
-
-            if (!String.IsNullOrEmpty(tab.Filename))
-            {
-                Filename = tab.Filename;
-
-                if (content == null && !String.IsNullOrEmpty(tab.Filename))
-                    content = File.ReadAllText(tab.Filename);
+                _findReplace.Visible = true;
+                _findReplace.ShowFind();
+                return;
             }
 
-            _editor.Text = content;
-            _modified = tab.Query != null;
-            SyncTitle();
+            _findReplace = new FindReplace(_editor);
+            _findReplace.Left = ClientSize.Width - _findReplace.Width - 2;
+            _findReplace.Top = 2;
+            _findReplace.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            Controls.Add(_findReplace);
+            _findReplace.ShowFind();
+            _findReplace.BringToFront();
         }
 
         private void CalcLineNumberWidth(Scintilla scintilla)
@@ -1371,6 +1346,55 @@ namespace MarkMpn.Sql4Cds
 
                 _editor.AppendText(select);
             }
+        }
+
+        protected override bool ProcessCmdKey(ref System.Windows.Forms.Message msg, Keys keyData)
+        {
+            if (keyData == (Keys.Control | Keys.K))
+            {
+                _ctrlK = true;
+                return true;
+            }
+            else if (_ctrlK)
+            {
+                _ctrlK = false;
+
+                if (keyData == (Keys.Control | Keys.C))
+                {
+                    // Comment
+                    var startLine = _editor.LineFromPosition(_editor.SelectionStart);
+                    var endLine = _editor.LineFromPosition(_editor.SelectionEnd);
+
+                    for (var line = startLine; line <= endLine; line++)
+                    {
+                        _editor.TargetStart = _editor.Lines[line].Position;
+                        _editor.TargetEnd = _editor.TargetStart;
+                        _editor.ReplaceTarget("--");
+                    }
+
+                    return true;
+                }
+                else if (keyData == (Keys.Control | Keys.U))
+                {
+                    // Uncomment
+                    var startLine = _editor.LineFromPosition(_editor.SelectionStart);
+                    var endLine = _editor.LineFromPosition(_editor.SelectionEnd);
+
+                    for (var line = startLine; line <= endLine; line++)
+                    {
+                        if (_editor.Lines[line].Text.StartsWith("--"))
+                        {
+                            _editor.TargetStart = _editor.Lines[line].Position;
+                            _editor.TargetEnd = _editor.TargetStart + 2;
+                            _editor.ReplaceTarget(string.Empty);
+                        }
+                    }
+
+                    return true;
+                }
+            }
+
+            return base.ProcessCmdKey(ref msg, keyData);
         }
     }
 }
