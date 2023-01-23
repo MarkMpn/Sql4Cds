@@ -502,6 +502,12 @@ namespace MarkMpn.Sql4Cds
 
         private void SyncStopButton(object sender, EventArgs e)
         {
+            if (InvokeRequired)
+            {
+                Invoke(new EventHandler(SyncStopButton), sender, e);
+                return;
+            }
+
             if (!(dockPanel.ActiveDocument is SqlQueryControl query))
             {
                 tsbStop.Enabled = false;
@@ -513,6 +519,12 @@ namespace MarkMpn.Sql4Cds
 
         private void SyncExecuteButton(object sender, EventArgs e)
         {
+            if (InvokeRequired)
+            {
+                Invoke(new EventHandler(SyncExecuteButton), sender, e);
+                return;
+            }
+
             if (!(dockPanel.ActiveDocument is SqlQueryControl query))
             {
                 tscbConnection.Enabled = false;
