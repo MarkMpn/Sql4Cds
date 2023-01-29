@@ -45,6 +45,8 @@ namespace MarkMpn.Sql4Cds.SSMS
 
         private void QueryStatus(object sender, EventArgs e)
         {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
             var menuItem = (OleMenuCommand)sender;
 
             if (ActiveDocument == null || ActiveDocument.Language != "SQL" || !IsDataverse())
@@ -71,10 +73,6 @@ namespace MarkMpn.Sql4Cds.SSMS
         /// <param name="package">Owner package, not null.</param>
         public static async Task InitializeAsync(Sql4CdsPackage package, DTE2 dte)
         {
-            // Verify the current thread is the UI thread - the call to AddCommand in Sql2FetchXmlCommand's constructor requires
-            // the UI thread.
-            ThreadHelper.ThrowIfNotOnUIThread();
-            
             OleMenuCommandService commandService = await package.GetServiceAsync((typeof(IMenuCommandService))) as OleMenuCommandService;
             Instance = new Sql2FetchXmlCommand(package, commandService, dte);
         }

@@ -23,6 +23,8 @@ namespace MarkMpn.Sql4Cds.SSMS
         
         public DmlExecute(Sql4CdsPackage package, DTE2 dte) : base(package, dte)
         {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
             _options = new Dictionary<TextDocument, QueryExecutionOptions>();
 
             var execute = dte.Commands.Item("Query.Execute");
@@ -137,14 +139,14 @@ namespace MarkMpn.Sql4Cds.SSMS
                     };
 
                     // Run the queries in a background thread
-                    var task = new System.Threading.Tasks.Task(async () =>
+                    options.Task = System.Threading.Tasks.Task.Run(async () =>
                     {
                         try
                         {
                             // SSMS grid doesn't know how to show entity references, so show as simple guids
                             con.ReturnEntityReferenceAsGuid = true;
 
-                            using (var reader = cmd.ExecuteReader())
+                            using (var reader = await cmd.ExecuteReaderAsync())
                             {
                                 while (!reader.IsClosed)
                                 {
@@ -156,7 +158,7 @@ namespace MarkMpn.Sql4Cds.SSMS
                                     gridContainer.StartRetrievingData();
                                     gridContainer.UpdateGrid();
 
-                                    if (!reader.NextResult())
+                                    if (!await reader.NextResultAsync())
                                         break;
                                 }
                             }
@@ -189,9 +191,6 @@ namespace MarkMpn.Sql4Cds.SSMS
 
                         _options.Remove(doc);
                     });
-
-                    options.Task = task;
-                    task.Start();
                 }
             }
             catch (Exception ex)
@@ -202,6 +201,8 @@ namespace MarkMpn.Sql4Cds.SSMS
 
         private void OnCancelQuery(string Guid, int ID, object CustomIn, object CustomOut, ref bool CancelDefault)
         {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
             if (!_options.TryGetValue(ActiveDocument, out var options))
                 return;
 
@@ -301,7 +302,12 @@ namespace MarkMpn.Sql4Cds.SSMS
         {
             if (tabPage.InvokeRequired)
             {
-                tabPage.Invoke((Action) (() => ShowPlan(sqlScriptEditorControl, tabPage, query, dataSource, executed)));
+                tabPage.Invoke((Action) (() =>
+                {
+                    ThreadHelper.ThrowIfNotOnUIThread();
+
+                    ShowPlan(sqlScriptEditorControl, tabPage, query, dataSource, executed);
+                }));
                 return;
             }
 
@@ -322,9 +328,16 @@ namespace MarkMpn.Sql4Cds.SSMS
             var planView = new ExecutionPlanView { Dock = DockStyle.Fill, Executed = executed, DataSources = new Dictionary<string, DataSource> { [dataSource.Name] = dataSource } };
             planView.Plan = query;
 
-            planView.NodeSelected += (s, e) => ShowProperties(sqlScriptEditorControl, planView.Selected, executed);
+            planView.NodeSelected += (s, e) =>
+            {
+                ThreadHelper.ThrowIfNotOnUIThread();
+
+                ShowProperties(sqlScriptEditorControl, planView.Selected, executed);
+            };
             planView.DoubleClick += (s, e) =>
             {
+                ThreadHelper.ThrowIfNotOnUIThread();
+
                 if (planView.Selected is IFetchXmlExecutionPlanNode fetchXml)
                     ShowFetchXML(fetchXml.FetchXmlString);
             };
@@ -336,15 +349,23 @@ namespace MarkMpn.Sql4Cds.SSMS
 
         private void ShowFetchXML(string fetchXmlString)
         {
-            var window = Dte.ItemOperations.NewFile("General\\XML File");
+            ThreadHelper.ThrowIfNotOnUIThread();
 
+            var window = Dte.ItemOperations.NewFile("General\\XML File");
+            
             var editPoint = ActiveDocument.EndPoint.CreateEditPoint();
             editPoint.Insert(fetchXmlString);
         }
 
         private void ShowProperties(SqlScriptEditorControlWrapper sqlScriptEditorControl, IExecutionPlanNode selected, bool executed)
         {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
             var trackSelection = (Microsoft.SqlServer.Management.UI.VSIntegration.ITrackSelection) sqlScriptEditorControl.ServiceProvider.GetService(typeof(Microsoft.SqlServer.Management.UI.VSIntegration.ITrackSelection));
+
+            if (trackSelection == null)
+                return;
+
             var selection = new SelectionService();
 
             if (selected != null)

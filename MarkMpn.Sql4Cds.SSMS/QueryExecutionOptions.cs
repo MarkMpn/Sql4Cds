@@ -1,6 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+#if System_Data_SqlClient
 using System.Data.SqlClient;
+#else
+using Microsoft.Data.SqlClient;
+#endif
 using System.Threading;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine;
@@ -98,7 +102,7 @@ namespace MarkMpn.Sql4Cds.SSMS
         {
             IsCancelled = true;
             _sqlScriptEditorControl.Cancelling();
-            Task.ContinueWith(t => _sqlScriptEditorControl.DoCancelExec());
+            _ = Task.ContinueWith(t => _sqlScriptEditorControl.DoCancelExec(), TaskScheduler.Default);
             _cmd.Cancel();
         }
 

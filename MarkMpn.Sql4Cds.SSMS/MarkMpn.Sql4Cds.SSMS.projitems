@@ -1,0 +1,36 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <MSBuildAllProjects Condition="'$(MSBuildVersion)' == '' Or '$(MSBuildVersion)' &lt; '16.0'">$(MSBuildAllProjects);$(MSBuildThisFileFullPath)</MSBuildAllProjects>
+    <HasSharedItems>true</HasSharedItems>
+    <SharedGUID>73283a07-671d-4ba2-b922-98987f85330b</SharedGUID>
+  </PropertyGroup>
+  <PropertyGroup Label="Configuration">
+    <Import_RootNamespace>MarkMpn.Sql4Cds.SSMS</Import_RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)AuthOverrideHook.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)AuthParams.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)CommandBase.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)DmlExecute.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)FetchXml2SqlCommand.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)OptionsPage.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)QueryExecutionOptions.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Reflection\DisplaySQLResultsControlWrapper.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Reflection\QEResultSetWrapper.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Reflection\ReflectionObjectBase.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Reflection\ResultSetAndGridContainerWrapper.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Reflection\ScriptFactoryWrapper.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Reflection\SqlScriptEditorControlWrapper.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Sql2FetchXmlCommand.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Sql2MCommand.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Sql4CdsPackage.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)VersionChecker.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)Resources\FetchXml2SqlCommand.png" />
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)Resources\Sql2FetchXmlCommand.png" />
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)Resources\Sql2FetchXmlCommandPackage.ico" />
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)Resources\Sql2MCommand.png" />
+  </ItemGroup>
+</Project>

@@ -4,9 +4,9 @@
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">x86</Platform>
     <ProductVersion>3.10</ProductVersion>
-    <ProjectGuid>0891b2a6-c5e2-4df6-8005-486d79008e89</ProjectGuid>
+    <ProjectGuid>{51d4ed99-980d-4347-be9c-aae834855919}</ProjectGuid>
     <SchemaVersion>2.0</SchemaVersion>
-    <OutputName>MarkMpn.Sql4Cds.SSMS.Setup</OutputName>
+    <OutputName>MarkMpn.Sql4Cds.SSMS.19.Setup</OutputName>
     <OutputType>Package</OutputType>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x86' ">
@@ -19,7 +19,9 @@
     <IntermediateOutputPath>obj\$(Configuration)\</IntermediateOutputPath>
   </PropertyGroup>
   <PropertyGroup>
-    <DefineConstants>HarvestPath=..\MarkMpn.Sql4Cds.SSMS\bin\$(Configuration)</DefineConstants>
+    <DefineConstants>HarvestPath=..\MarkMpn.Sql4Cds.SSMS.19\bin\$(Configuration)</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Product.wxs" />
@@ -45,6 +47,6 @@
 	</Target>
 	-->
   <Target Name="BeforeBuild">
-    <HeatDirectory Directory="..\MarkMpn.Sql4Cds.SSMS\bin\$(Configuration)" PreprocessorVariable="var.HarvestPath" OutputFile="HeatGeneratedFileList.wxs" ComponentGroupName="HeatGenerated" DirectoryRefId="INSTALLFOLDER" AutogenerateGuids="true" ToolPath="$(WixToolPath)" SuppressFragments="true" SuppressRegistry="true" SuppressRootDirectory="true" SuppressUniqueIds="true" />
+    <HeatDirectory Directory="..\MarkMpn.Sql4Cds.SSMS.19\bin\$(Configuration)" PreprocessorVariable="var.HarvestPath" OutputFile="HeatGeneratedFileList.wxs" ComponentGroupName="HeatGenerated" DirectoryRefId="INSTALLFOLDER" AutogenerateGuids="true" ToolPath="$(WixToolPath)" SuppressFragments="true" SuppressRegistry="true" SuppressRootDirectory="true" SuppressUniqueIds="true" RunAsSeparateProcess="true" />
   </Target>
 </Project>

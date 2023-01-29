@@ -21,6 +21,8 @@ namespace MarkMpn.Sql4Cds.SSMS
 
         public SqlScriptEditorControlWrapper(Microsoft.SqlServer.Management.UI.VSIntegration.Editors.SqlScriptEditorControl obj) : base(obj)
         {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
             Results = new DisplaySQLResultsControlWrapper(GetField(obj, "m_sqlResultsControl"));
             ServiceProvider = new ServiceProvider((Microsoft.VisualStudio.OLE.Interop.IServiceProvider)GetField(obj, "m_serviceProvider"));
         }

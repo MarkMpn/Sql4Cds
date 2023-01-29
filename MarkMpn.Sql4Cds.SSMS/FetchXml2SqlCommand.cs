@@ -1,7 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel.Design;
+#if System_Data_SqlClient
 using System.Data.SqlClient;
+#else
+using Microsoft.Data.SqlClient;
+#endif
 using EnvDTE80;
 using MarkMpn.Sql4Cds.Engine;
 using Microsoft.SqlServer.Management.UI.VSIntegration;
@@ -49,6 +53,8 @@ namespace MarkMpn.Sql4Cds.SSMS
 
         private void QueryStatus(object sender, EventArgs e)
         {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
             var menuItem = (OleMenuCommand)sender;
 
             if (ActiveDocument == null)
@@ -80,7 +86,7 @@ namespace MarkMpn.Sql4Cds.SSMS
                 menuItem.Enabled = false;
                 return;
             }
-
+            
             if (ActiveDocument.Language != "XML")
             {
                 menuItem.Enabled = false;
@@ -105,10 +111,6 @@ namespace MarkMpn.Sql4Cds.SSMS
         /// <param name="package">Owner package, not null.</param>
         public static async Task InitializeAsync(Sql4CdsPackage package, DTE2 dte)
         {
-            // Verify the current thread is the UI thread - the call to AddCommand in FetchXml2SqlCommand's constructor requires
-            // the UI thread.
-            ThreadHelper.ThrowIfNotOnUIThread();
-
             OleMenuCommandService commandService = await package.GetServiceAsync(typeof(IMenuCommandService)) as OleMenuCommandService;
             var objectExplorer = await package.GetServiceAsync(typeof(IObjectExplorerService)) as IObjectExplorerService;
             Instance = new FetchXml2SqlCommand(package, commandService, objectExplorer, dte);

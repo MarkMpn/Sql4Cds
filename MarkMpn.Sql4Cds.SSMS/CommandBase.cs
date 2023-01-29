@@ -1,6 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+#if System_Data_SqlClient
 using System.Data.SqlClient;
+#else
+using Microsoft.Data.SqlClient;
+#endif
 using System.Net;
 using EnvDTE;
 using EnvDTE80;
@@ -37,7 +41,14 @@ namespace MarkMpn.Sql4Cds.SSMS
         /// <summary>
         /// Returns the currently active text document
         /// </summary>
-        protected TextDocument ActiveDocument => (TextDocument)Dte.ActiveDocument?.Object("TextDocument");
+        protected TextDocument ActiveDocument
+        {
+            get
+            {
+                ThreadHelper.ThrowIfNotOnUIThread();
+                return (TextDocument)Dte.ActiveDocument?.Object("TextDocument");
+            }
+        }
 
         protected DTE2 Dte { get; }
 
@@ -47,6 +58,8 @@ namespace MarkMpn.Sql4Cds.SSMS
         /// <returns></returns>
         protected string GetQuery()
         {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
             var scriptFactory = new ScriptFactoryWrapper(ServiceCache.ScriptFactory);
             var sqlScriptEditorControl = scriptFactory.GetCurrentlyActiveFrameDocView(ServiceCache.VSMonitorSelection, false, out _);
             var textSpan = sqlScriptEditorControl.GetSelectedTextSpan();
@@ -60,6 +73,8 @@ namespace MarkMpn.Sql4Cds.SSMS
         /// <returns></returns>
         protected SqlConnectionStringBuilder GetConnectionInfo(bool log)
         {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
             var scriptFactory = new ScriptFactoryWrapper(ServiceCache.ScriptFactory);
             var sqlScriptEditorControl = scriptFactory.GetCurrentlyActiveFrameDocView(ServiceCache.VSMonitorSelection, false, out _);
 
@@ -80,6 +95,8 @@ namespace MarkMpn.Sql4Cds.SSMS
         /// <returns></returns>
         protected bool IsDataverse()
         {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
             var conStr = GetConnectionInfo(false);
 
             return IsDataverse(conStr);
@@ -115,6 +132,8 @@ namespace MarkMpn.Sql4Cds.SSMS
         /// <returns>The <see cref="DataSource"/> instance representing this connection</returns>
         protected DataSource GetDataSource()
         {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
             var conStr = GetConnectionInfo(true);
             var name = conStr.DataSource.Split('.')[0];
             var con = ConnectCDS(conStr);
@@ -136,6 +155,8 @@ namespace MarkMpn.Sql4Cds.SSMS
         /// <returns></returns>
         protected CrmServiceClient ConnectCDS()
         {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
             // Get the server name based on the current SQL connection
             var conStr = GetConnectionInfo(true);
             return ConnectCDS(conStr);
@@ -162,7 +183,13 @@ namespace MarkMpn.Sql4Cds.SSMS
             var authority = new UriBuilder(resp.Headers[HttpResponseHeader.Location]);
             authority.Query = "";
             authority.Port = -1;
+
+#if System_Data_SqlClient
             var authParams = new AuthParams(conStr.Authentication, server, conStr.InitialCatalog, resource, authority.ToString(), conStr.UserID, "", Guid.Empty);
+#else
+            var authParams = new AuthParams(conStr.Authentication, server, conStr.InitialCatalog, resource, authority.ToString(), conStr.UserID, "", Guid.Empty, conStr.ConnectTimeout);
+#endif
+
             AuthOverrideHook.Instance.AddAuth(authParams);
 
             con = new CrmServiceClient(new Uri(resource), true);
@@ -177,6 +204,8 @@ namespace MarkMpn.Sql4Cds.SSMS
         /// <returns></returns>
         protected AttributeMetadataCache GetMetadataCache()
         {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
             // Get the server name based on the current SQL connection
             var conStr = GetConnectionInfo(true);
             return GetMetadataCache(conStr);
