@@ -53,6 +53,12 @@ namespace MarkMpn.Sql4Cds
 
         protected void SyncTitle()
         {
+            if (InvokeRequired)
+            {
+                Invoke(new Action(SyncTitle));
+                return;
+            }
+
             Text = GetTitle();
         }
 
