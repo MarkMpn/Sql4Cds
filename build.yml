@@ -25,7 +25,7 @@ steps:
     command: custom
     arguments: install GitVersion.CommandLine -Version 4.0.0 -OutputDirectory $(Build.BinariesDirectory)/tools -ExcludeVersion
 
-- script: $(Build.BinariesDirectory)/tools/GitVersion.CommandLine/tools/GitVersion.exe /output buildserver /nofetch /updateassemblyinfo
+- script: $(Build.BinariesDirectory)/tools/GitVersion.CommandLine/tools/GitVersion.exe /output buildserver /nofetch /updateassemblyinfo /updateprojectfiles
   displayName: Determine Version
 
 - task: PowerShell@2
