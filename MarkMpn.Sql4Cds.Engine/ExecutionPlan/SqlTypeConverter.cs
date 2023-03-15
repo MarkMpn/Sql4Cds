@@ -185,9 +185,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         /// <param name="lhs">The type of the first value</param>
         /// <param name="rhs">The type of the second value</param>
+        /// <param name="primaryDataSource">The details of the primary data source being used for the connection</param>
         /// <param name="consistent">The type that both values can be converted to</param>
         /// <returns><c>true</c> if the two values can be converted to a consistent type, or <c>false</c> otherwise</returns>
-        public static bool CanMakeConsistentTypes(DataTypeReference lhs, DataTypeReference rhs, out DataTypeReference consistent)
+        public static bool CanMakeConsistentTypes(DataTypeReference lhs, DataTypeReference rhs, DataSource primaryDataSource, out DataTypeReference consistent)
         {
             if (lhs.IsSameAs(rhs))
             {
@@ -252,7 +253,42 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             var targetType = _precendenceOrder[Math.Min(lhsPrecedence, rhsPrecedence)];
-            var fullTargetType = new SqlDataTypeReference { SqlDataTypeOption = targetType };
+            SqlDataTypeReference fullTargetType;
+
+            if (targetType.IsStringType())
+            {
+                var lhsColl = lhs as SqlDataTypeReferenceWithCollation;
+                var rhsColl = rhs as SqlDataTypeReferenceWithCollation;
+
+                if (lhsColl != null && rhsColl != null)
+                {
+                    if (!SqlDataTypeReferenceWithCollation.TryConvertCollation(lhsSql, rhsSql, out var coll, out var collLabel))
+                    {
+                        consistent = null;
+                        return false;
+                    }
+
+                    fullTargetType = new SqlDataTypeReferenceWithCollation
+                    {
+                        SqlDataTypeOption = targetType,
+                        Collation = coll,
+                        CollationLabel = collLabel
+                    };
+                }
+                else
+                {
+                    fullTargetType = new SqlDataTypeReferenceWithCollation
+                    {
+                        SqlDataTypeOption = targetType,
+                        Collation = primaryDataSource?.DefaultCollation ?? Collation.USEnglish,
+                        CollationLabel = CollationLabel.CoercibleDefault
+                    };
+                }
+            }
+            else
+            {
+                fullTargetType = new SqlDataTypeReference { SqlDataTypeOption = targetType };
+            }
 
             // If we're converting to a type that uses a length, choose the longest length
             if (targetType == SqlDataTypeOption.Binary || targetType == SqlDataTypeOption.VarBinary ||

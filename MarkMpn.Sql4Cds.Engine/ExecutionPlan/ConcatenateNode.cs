@@ -86,7 +86,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 for (var colIndex = 0; colIndex < types.Length; colIndex++)
                 {
-                    if (!SqlTypeConverter.CanMakeConsistentTypes(types[colIndex], nextTypes[colIndex], out var colType))
+                    if (!SqlTypeConverter.CanMakeConsistentTypes(types[colIndex], nextTypes[colIndex], dataSources[options.PrimaryDataSource], out var colType))
                         throw new NotSupportedQueryFragmentException("No available implicit type conversion", ColumnSet[colIndex].SourceExpressions[i]);
 
                     types[colIndex] = colType;

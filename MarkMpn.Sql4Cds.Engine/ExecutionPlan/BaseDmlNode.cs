@@ -220,6 +220,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var dataTable = new DataTable();
                 var schemaTable = dataReader.GetSchemaTable();
                 var columnTypes = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
+                var targetDataSource = dataSources[DataSource];
 
                 for (var i = 0; i < schemaTable.Rows.Count; i++)
                 {
@@ -239,10 +240,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         case "binary": colSqlType = DataTypeHelpers.Binary(colSize); break;
                         case "varbinary": colSqlType = DataTypeHelpers.VarBinary(colSize); break;
-                        case "char": colSqlType = DataTypeHelpers.Char(colSize); break;
-                        case "varchar": colSqlType = DataTypeHelpers.VarChar(colSize); break;
-                        case "nchar": colSqlType = DataTypeHelpers.NChar(colSize); break;
-                        case "nvarchar": colSqlType = DataTypeHelpers.NVarChar(colSize); break;
+                        case "char": colSqlType = DataTypeHelpers.Char(colSize, targetDataSource.DefaultCollation, CollationLabel.Implicit); break;
+                        case "varchar": colSqlType = DataTypeHelpers.VarChar(colSize, targetDataSource.DefaultCollation, CollationLabel.Implicit); break;
+                        case "nchar": colSqlType = DataTypeHelpers.NChar(colSize, targetDataSource.DefaultCollation, CollationLabel.Implicit); break;
+                        case "nvarchar": colSqlType = DataTypeHelpers.NVarChar(colSize, targetDataSource.DefaultCollation, CollationLabel.Implicit); break;
                         case "datetime": colSqlType = DataTypeHelpers.DateTime; break;
                         case "smalldatetime": colSqlType = DataTypeHelpers.SmallDateTime; break;
                         case "date": colSqlType = DataTypeHelpers.Date; break;
@@ -330,9 +331,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="dateTimeKind">The time zone that datetime values are supplied in</param>
         /// <param name="entities">The records that are being mapped</param>
         /// <returns></returns>
-        protected Dictionary<string, Func<Entity, object>> CompileColumnMappings(IAttributeMetadataCache cache, string logicalName, IDictionary<string,string> mappings, INodeSchema schema, DateTimeKind dateTimeKind, List<Entity> entities)
+        protected Dictionary<string, Func<Entity, object>> CompileColumnMappings(DataSource dataSource, string logicalName, IDictionary<string,string> mappings, INodeSchema schema, DateTimeKind dateTimeKind, List<Entity> entities)
         {
-            var metadata = cache[logicalName];
+            var metadata = dataSource.Metadata[logicalName];
             var attributes = metadata.Attributes.ToDictionary(a => a.LogicalName, StringComparer.OrdinalIgnoreCase);
 
             var attributeAccessors = new Dictionary<string, Func<Entity, object>>();
@@ -353,7 +354,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var sourceSqlType = schema.Schema[sourceColumnName];
                 var destType = attr.GetAttributeType();
-                var destSqlType = attr.IsPrimaryId == true ? DataTypeHelpers.UniqueIdentifier : attr.GetAttributeSqlType(cache, true);
+                var destSqlType = attr.IsPrimaryId == true ? DataTypeHelpers.UniqueIdentifier : attr.GetAttributeSqlType(dataSource, true);
 
                 if (attr is LookupAttributeMetadata && metadata.IsIntersect == true)
                 {
@@ -402,7 +403,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             {
                                 var sourceTargetColumnName = mappings[destAttributeName + "type"];
                                 var sourceTargetType = schema.Schema[sourceTargetColumnName];
-                                var stringType = DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength);
+                                var stringType = DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.Implicit);
                                 targetExpr = Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(sourceTargetColumnName));
                                 targetExpr = SqlTypeConverter.Convert(targetExpr, sourceTargetType, stringType);
                                 targetExpr = SqlTypeConverter.Convert(targetExpr, typeof(string));

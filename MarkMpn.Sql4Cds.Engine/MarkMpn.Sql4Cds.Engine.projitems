@@ -25,6 +25,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)Ado\SqlDataReaderWrapper.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Ado\StatementCompletedEventArgs.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)AttributeMetadataCache.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Collation.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DatabaseIdentifiers.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DataSource.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DataTypeHelpers.cs" />
@@ -141,5 +142,11 @@
     <None Include="$(MSBuildThisFileDirectory)FetchXml.xsd">
       <SubType>Designer</SubType>
     </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="$(MSBuildThisFileDirectory)Resources\" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)resources\CollationNameToLCID.txt" />
   </ItemGroup>
 </Project>

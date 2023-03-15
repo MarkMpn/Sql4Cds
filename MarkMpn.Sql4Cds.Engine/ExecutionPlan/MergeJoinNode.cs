@@ -18,6 +18,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     {
         protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
+            if (!dataSources.TryGetValue(options.PrimaryDataSource, out var dataSource))
+                throw new QueryExecutionException("Invalid data source");
+
             // https://sqlserverfast.com/epr/merge-join/
             // Implemented inner, left outer, right outer and full outer variants
             // Not implemented semi joins
@@ -30,7 +33,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var left = LeftSource.Execute(dataSources, options, parameterTypes, parameterValues).GetEnumerator();
             var right = RightSource.Execute(dataSources, options, parameterTypes, parameterValues).GetEnumerator();
             var mergedSchema = GetSchema(dataSources, parameterTypes, true);
-            var additionalJoinCriteria = AdditionalJoinCriteria?.Compile(mergedSchema, parameterTypes);
+            var additionalJoinCriteria = AdditionalJoinCriteria?.Compile(dataSource, mergedSchema, parameterTypes);
 
             var hasLeft = left.MoveNext();
             var hasRight = right.MoveNext();
@@ -42,21 +45,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 FirstExpression = LeftAttribute,
                 ComparisonType = BooleanComparisonType.LessThan,
                 SecondExpression = RightAttribute
-            }.Compile(mergedSchema, parameterTypes);
+            }.Compile(dataSource, mergedSchema, parameterTypes);
 
             var eq = new BooleanComparisonExpression
             {
                 FirstExpression = LeftAttribute,
                 ComparisonType = BooleanComparisonType.Equals,
                 SecondExpression = RightAttribute
-            }.Compile(mergedSchema, parameterTypes);
+            }.Compile(dataSource, mergedSchema, parameterTypes);
 
             var gt = new BooleanComparisonExpression
             {
                 FirstExpression = LeftAttribute,
                 ComparisonType = BooleanComparisonType.GreaterThan,
                 SecondExpression = RightAttribute
-            }.Compile(mergedSchema, parameterTypes);
+            }.Compile(dataSource, mergedSchema, parameterTypes);
 
             while (!Done(hasLeft, hasRight))
             {

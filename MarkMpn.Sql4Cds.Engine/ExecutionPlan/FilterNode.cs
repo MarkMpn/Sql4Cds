@@ -35,7 +35,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
             var schema = Source.GetSchema(dataSources, parameterTypes);
-            var filter = Filter.Compile(schema, parameterTypes);
+            var filter = Filter.Compile(dataSources[options.PrimaryDataSource], schema, parameterTypes);
 
             foreach (var entity in Source.Execute(dataSources, options, parameterTypes, parameterValues))
             {
@@ -681,7 +681,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         throw new NotSupportedQueryFragmentException("Missing datasource " + fetchXml.DataSource);
 
                     // If the criteria are ANDed, see if any of the individual conditions can be translated to FetchXML
-                    Filter = ExtractFetchXMLFilters(dataSource.Metadata, options, Filter, schema, null, fetchXml.Entity.name, fetchXml.Alias, fetchXml.Entity.Items, parameterTypes, out var fetchFilter);
+                    Filter = ExtractFetchXMLFilters(dataSources[options.PrimaryDataSource], dataSource.Metadata, options, Filter, schema, null, fetchXml.Entity.name, fetchXml.Alias, fetchXml.Entity.Items, parameterTypes, out var fetchFilter);
 
                     if (fetchFilter != null)
                     {
@@ -706,7 +706,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (source is MetadataQueryNode meta)
                 {
                     // If the criteria are ANDed, see if any of the individual conditions can be translated to the metadata query
-                    Filter = ExtractMetadataFilters(Filter, meta, options, out var entityFilter, out var attributeFilter, out var relationshipFilter);
+                    Filter = ExtractMetadataFilters(dataSources[options.PrimaryDataSource], Filter, meta, options, out var entityFilter, out var attributeFilter, out var relationshipFilter);
 
                     meta.Query.AddFilter(entityFilter);
 
@@ -1012,9 +1012,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
         }
 
-        private BooleanExpression ExtractFetchXMLFilters(IAttributeMetadataCache metadata, IQueryExecutionOptions options, BooleanExpression criteria, INodeSchema schema, string allowedPrefix, string targetEntityName, string targetEntityAlias, object[] items, IDictionary<string, DataTypeReference> parameterTypes, out filter filter)
+        private BooleanExpression ExtractFetchXMLFilters(DataSource primaryDataSource, IAttributeMetadataCache metadata, IQueryExecutionOptions options, BooleanExpression criteria, INodeSchema schema, string allowedPrefix, string targetEntityName, string targetEntityAlias, object[] items, IDictionary<string, DataTypeReference> parameterTypes, out filter filter)
         {
-            if (TranslateFetchXMLCriteria(metadata, options, criteria, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, parameterTypes, out filter))
+            if (TranslateFetchXMLCriteria(primaryDataSource, metadata, options, criteria, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, parameterTypes, out filter))
                 return null;
 
             if (!(criteria is BooleanBinaryExpression bin))
@@ -1023,8 +1023,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (bin.BinaryExpressionType != BooleanBinaryExpressionType.And)
                 return criteria;
 
-            bin.FirstExpression = ExtractFetchXMLFilters(metadata, options, bin.FirstExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, parameterTypes, out var lhsFilter);
-            bin.SecondExpression = ExtractFetchXMLFilters(metadata, options, bin.SecondExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, parameterTypes, out var rhsFilter);
+            bin.FirstExpression = ExtractFetchXMLFilters(primaryDataSource, metadata, options, bin.FirstExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, parameterTypes, out var lhsFilter);
+            bin.SecondExpression = ExtractFetchXMLFilters(primaryDataSource, metadata, options, bin.SecondExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, parameterTypes, out var rhsFilter);
 
             filter = (lhsFilter != null && rhsFilter != null) ? new filter { Items = new object[] { lhsFilter, rhsFilter } } : lhsFilter ?? rhsFilter;
 
@@ -1034,9 +1034,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return bin.FirstExpression ?? bin.SecondExpression;
         }
 
-        protected BooleanExpression ExtractMetadataFilters(BooleanExpression criteria, MetadataQueryNode meta, IQueryExecutionOptions options, out MetadataFilterExpression entityFilter, out MetadataFilterExpression attributeFilter, out MetadataFilterExpression relationshipFilter)
+        protected BooleanExpression ExtractMetadataFilters(DataSource primaryDataSource, BooleanExpression criteria, MetadataQueryNode meta, IQueryExecutionOptions options, out MetadataFilterExpression entityFilter, out MetadataFilterExpression attributeFilter, out MetadataFilterExpression relationshipFilter)
         {
-            if (TranslateMetadataCriteria(criteria, meta, options, out entityFilter, out attributeFilter, out relationshipFilter))
+            if (TranslateMetadataCriteria(primaryDataSource, criteria, meta, options, out entityFilter, out attributeFilter, out relationshipFilter))
                 return null;
 
             if (!(criteria is BooleanBinaryExpression bin))
@@ -1045,8 +1045,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (bin.BinaryExpressionType != BooleanBinaryExpressionType.And)
                 return criteria;
 
-            bin.FirstExpression = ExtractMetadataFilters(bin.FirstExpression, meta, options, out var lhsEntityFilter, out var lhsAttributeFilter, out var lhsRelationshipFilter);
-            bin.SecondExpression = ExtractMetadataFilters(bin.SecondExpression, meta, options, out var rhsEntityFilter, out var rhsAttributeFilter, out var rhsRelationshipFilter);
+            bin.FirstExpression = ExtractMetadataFilters(primaryDataSource, bin.FirstExpression, meta, options, out var lhsEntityFilter, out var lhsAttributeFilter, out var lhsRelationshipFilter);
+            bin.SecondExpression = ExtractMetadataFilters(primaryDataSource, bin.SecondExpression, meta, options, out var rhsEntityFilter, out var rhsAttributeFilter, out var rhsRelationshipFilter);
 
             entityFilter = (lhsEntityFilter != null && rhsEntityFilter != null) ? new MetadataFilterExpression { Filters = { lhsEntityFilter, rhsEntityFilter } } : lhsEntityFilter ?? rhsEntityFilter;
             attributeFilter = (lhsAttributeFilter != null && rhsAttributeFilter != null) ? new MetadataFilterExpression { Filters = { lhsAttributeFilter, rhsAttributeFilter } } : lhsAttributeFilter ?? rhsAttributeFilter;
@@ -1057,7 +1057,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             return bin.FirstExpression ?? bin.SecondExpression;
         }
-        protected bool TranslateMetadataCriteria(BooleanExpression criteria, MetadataQueryNode meta, IQueryExecutionOptions options, out MetadataFilterExpression entityFilter, out MetadataFilterExpression attributeFilter, out MetadataFilterExpression relationshipFilter)
+        protected bool TranslateMetadataCriteria(DataSource primaryDataSource, BooleanExpression criteria, MetadataQueryNode meta, IQueryExecutionOptions options, out MetadataFilterExpression entityFilter, out MetadataFilterExpression attributeFilter, out MetadataFilterExpression relationshipFilter)
         {
             entityFilter = null;
             attributeFilter = null;
@@ -1065,9 +1065,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (criteria is BooleanBinaryExpression binary)
             {
-                if (!TranslateMetadataCriteria(binary.FirstExpression, meta, options, out var lhsEntityFilter, out var lhsAttributeFilter, out var lhsRelationshipFilter))
+                if (!TranslateMetadataCriteria(primaryDataSource, binary.FirstExpression, meta, options, out var lhsEntityFilter, out var lhsAttributeFilter, out var lhsRelationshipFilter))
                     return false;
-                if (!TranslateMetadataCriteria(binary.SecondExpression, meta, options, out var rhsEntityFilter, out var rhsAttributeFilter, out var rhsRelationshipFilter))
+                if (!TranslateMetadataCriteria(primaryDataSource, binary.SecondExpression, meta, options, out var rhsEntityFilter, out var rhsAttributeFilter, out var rhsRelationshipFilter))
                     return false;
 
                 if (binary.BinaryExpressionType == BooleanBinaryExpressionType.Or)
@@ -1174,7 +1174,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         throw new InvalidOperationException();
                 }
 
-                var condition = new MetadataConditionExpression(parts[1], op, literal.Compile(null, null)(null, null, options));
+                var condition = new MetadataConditionExpression(parts[1], op, literal.Compile(primaryDataSource, null, null)(null, null, options));
 
                 return TranslateMetadataCondition(condition, parts[0], meta, out entityFilter, out attributeFilter, out relationshipFilter);
             }
@@ -1198,7 +1198,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (inPred.Values.Any(val => !(val is Literal)))
                     return false;
 
-                var condition = new MetadataConditionExpression(parts[1], inPred.NotDefined ? MetadataConditionOperator.NotIn : MetadataConditionOperator.In, inPred.Values.Select(val => val.Compile(null, null)(null, null, options)).ToArray());
+                var condition = new MetadataConditionExpression(parts[1], inPred.NotDefined ? MetadataConditionOperator.NotIn : MetadataConditionOperator.In, inPred.Values.Select(val => val.Compile(primaryDataSource, null, null)(null, null, options)).ToArray());
 
                 return TranslateMetadataCondition(condition, parts[0], meta, out entityFilter, out attributeFilter, out relationshipFilter);
             }

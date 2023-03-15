@@ -67,8 +67,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
             _globalVariableTypes = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase)
             {
-                ["@@IDENTITY"] = typeof(SqlEntityReference).ToSqlType(),
-                ["@@ROWCOUNT"] = typeof(SqlInt32).ToSqlType()
+                ["@@IDENTITY"] = DataTypeHelpers.EntityReference,
+                ["@@ROWCOUNT"] = DataTypeHelpers.Int
             };
             _globalVariableValues = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
             {

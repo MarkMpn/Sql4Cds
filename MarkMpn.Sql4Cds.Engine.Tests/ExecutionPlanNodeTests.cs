@@ -32,7 +32,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 },
                 Schema =
                 {
-                    ["firstname"] = typeof(SqlString).ToSqlType()
+                    ["firstname"] = typeof(SqlString).ToSqlType(null)
                 },
                 Alias = "test"
             };
@@ -63,7 +63,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["firstname"] = typeof(SqlString).ToSqlType()
+                        ["firstname"] = typeof(SqlString).ToSqlType(null)
                     },
                     Alias = "test"
                 },
@@ -112,8 +112,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["key"] = typeof(SqlInt32).ToSqlType(),
-                        ["firstname"] = typeof(SqlString).ToSqlType()
+                        ["key"] = typeof(SqlInt32).ToSqlType(null),
+                        ["firstname"] = typeof(SqlString).ToSqlType(null)
                     },
                     Alias = "f"
                 },
@@ -146,8 +146,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["key"] = typeof(SqlInt32).ToSqlType(),
-                        ["lastname"] = typeof(SqlString).ToSqlType()
+                        ["key"] = typeof(SqlInt32).ToSqlType(null),
+                        ["lastname"] = typeof(SqlString).ToSqlType(null)
                     },
                     Alias = "l"
                 },
@@ -192,8 +192,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["key"] = typeof(SqlInt32).ToSqlType(),
-                        ["firstname"] = typeof(SqlString).ToSqlType()
+                        ["key"] = typeof(SqlInt32).ToSqlType(null),
+                        ["firstname"] = typeof(SqlString).ToSqlType(null)
                     },
                     Alias = "f"
                 },
@@ -226,8 +226,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["key"] = typeof(SqlInt32).ToSqlType(),
-                        ["lastname"] = typeof(SqlString).ToSqlType()
+                        ["key"] = typeof(SqlInt32).ToSqlType(null),
+                        ["lastname"] = typeof(SqlString).ToSqlType(null)
                     },
                     Alias = "l"
                 },
@@ -274,8 +274,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["key"] = typeof(SqlInt32).ToSqlType(),
-                        ["firstname"] = typeof(SqlString).ToSqlType()
+                        ["key"] = typeof(SqlInt32).ToSqlType(null),
+                        ["firstname"] = typeof(SqlString).ToSqlType(null)
                     },
                     Alias = "f"
                 },
@@ -308,8 +308,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["key"] = typeof(SqlInt32).ToSqlType(),
-                        ["lastname"] = typeof(SqlString).ToSqlType()
+                        ["key"] = typeof(SqlInt32).ToSqlType(null),
+                        ["lastname"] = typeof(SqlString).ToSqlType(null)
                     },
                     Alias = "l"
                 },
@@ -354,7 +354,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["name"] = typeof(SqlString).ToSqlType()
+                        ["name"] = typeof(SqlString).ToSqlType(null)
                     },
                     Alias = "test"
                 },
@@ -393,8 +393,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["value1"] = typeof(SqlInt32).ToSqlType(),
-                        ["value2"] = typeof(SqlInt32).ToSqlType()
+                        ["value1"] = typeof(SqlInt32).ToSqlType(null),
+                        ["value2"] = typeof(SqlInt32).ToSqlType(null)
                     }
                 },
                 Columns =
@@ -455,8 +455,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["value1"] = typeof(SqlInt32).ToSqlType(),
-                        ["value2"] = typeof(SqlInt32).ToSqlType()
+                        ["value1"] = typeof(SqlInt32).ToSqlType(null),
+                        ["value2"] = typeof(SqlInt32).ToSqlType(null)
                     },
                     Alias = "test"
                 }
@@ -497,8 +497,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["value1"] = typeof(SqlString).ToSqlType(),
-                        ["value2"] = typeof(SqlInt32).ToSqlType()
+                        ["value1"] = typeof(SqlString).ToSqlType(null),
+                        ["value2"] = typeof(SqlInt32).ToSqlType(null)
                     },
                     Alias = "test"
                 }
@@ -554,9 +554,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["value1"] = typeof(SqlString).ToSqlType(),
-                        ["value2"] = typeof(SqlInt32).ToSqlType(),
-                        ["expectedorder"] = typeof(SqlInt32).ToSqlType()
+                        ["value1"] = typeof(SqlString).ToSqlType(null),
+                        ["value2"] = typeof(SqlInt32).ToSqlType(null),
+                        ["expectedorder"] = typeof(SqlInt32).ToSqlType(null)
                     },
                     Alias = "test"
                 }
@@ -619,9 +619,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["value1"] = typeof(SqlString).ToSqlType(),
-                        ["value2"] = typeof(SqlInt32).ToSqlType(),
-                        ["expectedorder"] = typeof(SqlInt32).ToSqlType()
+                        ["value1"] = typeof(SqlString).ToSqlType(null),
+                        ["value2"] = typeof(SqlInt32).ToSqlType(null),
+                        ["expectedorder"] = typeof(SqlInt32).ToSqlType(null)
                     },
                     Alias = "test"
                 }
@@ -652,7 +652,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 },
                 Schema =
                 {
-                    ["value1"] = typeof(SqlInt32).ToSqlType()
+                    ["value1"] = typeof(SqlInt32).ToSqlType(null)
                 },
                 Alias = "test"
             };
@@ -690,7 +690,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 },
                 Schema =
                 {
-                    ["value1"] = typeof(SqlString).ToSqlType()
+                    ["value1"] = typeof(SqlString).ToSqlType(null)
                 },
                 Alias = "src"
             };
@@ -823,7 +823,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 Schema =
                 {
-                    ["i"] = typeof(SqlInt32).ToSqlType()
+                    ["i"] = typeof(SqlInt32).ToSqlType(null)
                 },
                 Alias = "l"
             };

@@ -82,10 +82,10 @@ namespace MarkMpn.Sql4Cds.Engine
             throw new ApplicationException("Unknown attribute type " + attrMetadata.GetType());
         }
 
-        public static DataTypeReference GetAttributeSqlType(this AttributeMetadata attrMetadata, IAttributeMetadataCache cache, bool write)
+        public static DataTypeReference GetAttributeSqlType(this AttributeMetadata attrMetadata, DataSource dataSource, bool write)
         {
             if (attrMetadata is MultiSelectPicklistAttributeMetadata)
-                return DataTypeHelpers.NVarChar(Int32.MaxValue);
+                return DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.CoercibleDefault);
 
             var typeCode = attrMetadata.AttributeType;
 
@@ -114,7 +114,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 return DataTypeHelpers.Float;
 
             if (attrMetadata is EntityNameAttributeMetadata || typeCode == AttributeTypeCode.EntityName)
-                return DataTypeHelpers.NVarChar(EntityLogicalNameMaxLength);
+                return DataTypeHelpers.NVarChar(EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.CoercibleDefault);
 
             if (attrMetadata is ImageAttributeMetadata)
                 return DataTypeHelpers.VarBinary(Int32.MaxValue);
@@ -126,13 +126,13 @@ namespace MarkMpn.Sql4Cds.Engine
                 return DataTypeHelpers.BigInt;
 
             if (typeCode == AttributeTypeCode.PartyList)
-                return DataTypeHelpers.NVarChar(Int32.MaxValue);
+                return DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.CoercibleDefault);
 
             if (attrMetadata is LookupAttributeMetadata || attrMetadata.IsPrimaryId == true || typeCode == AttributeTypeCode.Lookup || typeCode == AttributeTypeCode.Customer || typeCode == AttributeTypeCode.Owner)
                 return DataTypeHelpers.EntityReference;
 
             if (attrMetadata is MemoAttributeMetadata || typeCode == AttributeTypeCode.Memo)
-                return DataTypeHelpers.NVarChar(write && attrMetadata is MemoAttributeMetadata memo && memo.MaxLength != null ? memo.MaxLength.Value : Int32.MaxValue);
+                return DataTypeHelpers.NVarChar(write && attrMetadata is MemoAttributeMetadata memo && memo.MaxLength != null ? memo.MaxLength.Value : Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.CoercibleDefault);
             
             if (attrMetadata is MoneyAttributeMetadata || typeCode == AttributeTypeCode.Money)
                 return DataTypeHelpers.Money;
@@ -151,7 +151,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (attrMetadata.LogicalName.StartsWith("address"))
                 {
                     var parts = attrMetadata.LogicalName.Split('_');
-                    if (parts.Length == 2 && Int32.TryParse(parts[0].Substring(7), out _) && cache.TryGetValue("customeraddress", out var addressMetadata))
+                    if (parts.Length == 2 && Int32.TryParse(parts[0].Substring(7), out _) && dataSource.Metadata.TryGetValue("customeraddress", out var addressMetadata))
                     {
                         // Attribute is e.g. address1_postalcode. Get the equivalent attribute from the customeraddress
                         // entity as it can have very different max length
@@ -170,7 +170,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         maxLength = maxLengthSetting.Value;
                 }
 
-                return DataTypeHelpers.NVarChar(maxLength);
+                return DataTypeHelpers.NVarChar(maxLength, dataSource.DefaultCollation, CollationLabel.CoercibleDefault);
             }
 
             if (attrMetadata is UniqueIdentifierAttributeMetadata || typeCode == AttributeTypeCode.Uniqueidentifier)
@@ -180,7 +180,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 return DataTypeHelpers.UniqueIdentifier;
 
             if (attrMetadata.AttributeType == AttributeTypeCode.Virtual)
-                return DataTypeHelpers.NVarChar(Int32.MaxValue);
+                return DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.CoercibleDefault);
 
             throw new ApplicationException("Unknown attribute type " + attrMetadata.GetType());
         }

@@ -122,7 +122,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         {
                             type = GetPropertyType(prop.Property.PropertyType);
                         }
-                        else if (!SqlTypeConverter.CanMakeConsistentTypes(type, GetPropertyType(prop.Property.PropertyType), out type))
+                        else if (!SqlTypeConverter.CanMakeConsistentTypes(type, GetPropertyType(prop.Property.PropertyType), null, out type))
                         {
                             // Can't make a consistent type for this property, so we can't use it
                             type = null;
@@ -647,7 +647,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             else if (typeof(MetadataBase).IsAssignableFrom(propType))
                 propType = typeof(Guid);
 
-            return SqlTypeConverter.NetToSqlType(propType).ToSqlType();
+            return SqlTypeConverter.NetToSqlType(propType).ToSqlType(null);
         }
 
         internal static Func<object,object> GetPropertyAccessor(PropertyInfo prop, Type targetType)

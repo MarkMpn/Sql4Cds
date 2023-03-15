@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlTypes;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -3942,7 +3943,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var parameters = new Dictionary<string, DataTypeReference>
             {
-                ["@param1"] = typeof(SqlInt32).ToSqlType()
+                ["@param1"] = typeof(SqlInt32).ToSqlType(null)
             };
             var plans = planBuilder.Build(query, parameters, out _);
 
@@ -3975,7 +3976,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var parameters = new Dictionary<string, DataTypeReference>
             {
-                ["@param1"] = typeof(SqlInt32).ToSqlType()
+                ["@param1"] = typeof(SqlInt32).ToSqlType(null)
             };
             var plans = planBuilder.Build(query, parameters, out _);
 
@@ -4004,7 +4005,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             var parameters = new Dictionary<string, DataTypeReference>
             {
-                ["@param1"] = typeof(SqlString).ToSqlType()
+                ["@param1"] = typeof(SqlString).ToSqlType(null)
             };
             var plans = planBuilder.Build(query, parameters, out _);
 
@@ -5230,6 +5231,29 @@ UPDATE account SET employees = @employees WHERE name = @name";
                         </filter>
                     </entity>
                 </fetch>");
+        }
+
+        [TestMethod]
+        public void ExplicitCollation()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
+
+            var query = "SELECT 'abc' COLLATE French_CI_AS";
+
+            planBuilder.Build(query, null, out _);
+        }
+
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        [TestMethod]
+        public void TwoExplicitCollationsError()
+        {
+            var metadata = new AttributeMetadataCache(_service);
+            var planBuilder = new ExecutionPlanBuilder(metadata, new StubTableSizeCache(), new StubMessageCache(), this);
+
+            var query = "SELECT ('abc' COLLATE French_CI_AS) COLLATE French_CS_AS";
+
+            planBuilder.Build(query, null, out _);
         }
     }
 }
