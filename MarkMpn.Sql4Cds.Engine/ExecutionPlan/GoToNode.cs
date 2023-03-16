@@ -110,7 +110,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (Source != null)
                 Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
 
-            _condition = Condition?.Compile(null, parameterTypes);
+            _condition = Condition?.Compile(dataSources[options.PrimaryDataSource], null, parameterTypes);
 
             return new[] { this };
         }

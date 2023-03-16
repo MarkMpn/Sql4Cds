@@ -65,7 +65,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         throw new QueryExecutionException("Ambiguous user");
 
                     // Precompile mappings with type conversions
-                    var attributeAccessors = CompileColumnMappings(dataSource.Metadata, "systemuser", new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["systemuserid"] = UserIdSource }, schema, DateTimeKind.Unspecified, entities);
+                    var attributeAccessors = CompileColumnMappings(dataSource, "systemuser", new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["systemuserid"] = UserIdSource }, schema, DateTimeKind.Unspecified, entities);
                     var userIdAccessor = attributeAccessors["systemuserid"];
 
                     var userId = (Guid)userIdAccessor(entities[0]);

@@ -52,6 +52,8 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         public bool EstimatedPlanOnly { get; set; }
 
+        private DataSource PrimaryDataSource => DataSources[Options.PrimaryDataSource];
+
         /// <summary>
         /// Builds the execution plans for a SQL command
         /// </summary>
@@ -72,8 +74,8 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             // Add in standard global variables
-            _parameterTypes["@@IDENTITY"] = typeof(SqlEntityReference).ToSqlType();
-            _parameterTypes["@@ROWCOUNT"] = typeof(SqlInt32).ToSqlType();
+            _parameterTypes["@@IDENTITY"] = DataTypeHelpers.EntityReference;
+            _parameterTypes["@@ROWCOUNT"] = DataTypeHelpers.Int;
 
             var queries = new List<IRootExecutionPlanNodeInternal>();
 
@@ -243,7 +245,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var dataSource = SelectDataSource(sproc.ProcedureReference.ProcedureReference.Name);
 
-            var node = ExecuteMessageNode.FromMessage(sproc, dataSource, _parameterTypes);
+            var node = ExecuteMessageNode.FromMessage(sproc, dataSource, PrimaryDataSource, _parameterTypes);
             var schema = node.GetSchema(DataSources, _parameterTypes);
 
             dataSource.MessageCache.TryGetValue(node.MessageName, out var message);
@@ -353,7 +355,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (waitFor.WaitForOption == WaitForOption.Statement)
                 throw new NotSupportedQueryFragmentException("WAITFOR <statement> is not supported", waitFor);
 
-            waitFor.Parameter.GetType(null, null, _parameterTypes, out var paramSqlType);
+            waitFor.Parameter.GetType(PrimaryDataSource, null, null, _parameterTypes, out var paramSqlType);
             var timeType = DataTypeHelpers.Time(3);
 
             if (!SqlTypeConverter.CanChangeTypeImplicit(paramSqlType, timeType))
@@ -408,15 +410,15 @@ namespace MarkMpn.Sql4Cds.Engine
             // Check the expression for errors. Ensure it can be converted to a string
             var expr = print.Expression.Clone();
 
-            if (expr.GetType(null, null, _parameterTypes, out _) != typeof(SqlString))
+            if (expr.GetType(PrimaryDataSource, null, null, _parameterTypes, out _) != typeof(SqlString))
             {
                 expr = new ConvertCall
                 {
-                    DataType = typeof(SqlString).ToSqlType(),
+                    DataType = typeof(SqlString).ToSqlType(PrimaryDataSource),
                     Parameter = expr
                 };
 
-                expr.GetType(null, null, _parameterTypes, out _);
+                expr.GetType(PrimaryDataSource, null, null, _parameterTypes, out _);
             }
 
             return new PrintNode
@@ -436,7 +438,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (subqueryVisitor.Subqueries.Count == 0)
             {
                 // Check the predicate for errors
-                predicate.GetType(null, null, _parameterTypes, out _);
+                predicate.GetType(PrimaryDataSource, null, null, _parameterTypes, out _);
             }
             else
             {
@@ -716,7 +718,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     Alias = "systemuser",
                     Schema =
                     {
-                        ["systemuserid"] = typeof(SqlString).ToSqlType()
+                        ["systemuserid"] = typeof(SqlString).ToSqlType(PrimaryDataSource)
                     },
                     Values =
                     {
@@ -943,13 +945,13 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (virtualTypeAttributes.Contains(colName))
                     {
                         targetName = colName;
-                        targetType = DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength);
+                        targetType = DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.CoercibleDefault);
                     }
                     else
                     {
                         var attr = attributes[colName];
                         targetName = attr.LogicalName;
-                        targetType = attr.GetAttributeSqlType(dataSource.Metadata, true);
+                        targetType = attr.GetAttributeSqlType(dataSource, true);
 
                         // If we're inserting into a lookup field, the field type will be a SqlEntityReference. Change this to
                         // a SqlGuid so we can accept any guid values, including from TDS endpoint where SqlEntityReference
@@ -985,7 +987,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (targetLookupAttribute.Targets.Length > 1 &&
                         !virtualTypeAttributes.Contains(targetAttrName + "type") &&
                         targetLookupAttribute.AttributeType != AttributeTypeCode.PartyList &&
-                        (schema == null || (node.ColumnMappings[targetAttrName].ToColumnReference().GetType(schema, null, null, out var lookupType) != typeof(SqlEntityReference) && lookupType != DataTypeHelpers.ImplicitIntForNullLiteral)))
+                        (schema == null || (node.ColumnMappings[targetAttrName].ToColumnReference().GetType(PrimaryDataSource, schema, null, null, out var lookupType) != typeof(SqlEntityReference) && lookupType != DataTypeHelpers.ImplicitIntForNullLiteral)))
                     {
                         // Special case: not required for listmember.entityid
                         if (metadata.LogicalName == "listmember" && targetLookupAttribute.LogicalName == "entityid")
@@ -1439,7 +1441,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     // entityid in listmember has an associated entitytypecode attribute
                     if (virtualTypeAttributes.Contains(targetAttrName))
                     {
-                        targetType = DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength);
+                        targetType = DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.CoercibleDefault);
 
                         var targetAttribute = attributes[targetAttrName.Substring(0, targetAttrName.Length - 4)];
                         targetAttrName = targetAttribute.LogicalName + targetAttrName.Substring(targetAttrName.Length - 4, 4).ToLower();
@@ -1447,7 +1449,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     else
                     {
                         var targetAttribute = attributes[targetAttrName];
-                        targetType = targetAttribute.GetAttributeSqlType(dataSource.Metadata, true);
+                        targetType = targetAttribute.GetAttributeSqlType(dataSource, true);
                         targetAttrName = targetAttribute.LogicalName;
 
                         // If we're updating a lookup field, the field type will be a SqlEntityReference. Change this to
@@ -1459,7 +1461,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                     var sourceColName = select.ColumnSet.Single(col => col.OutputColumn == "new_" + targetAttrName.ToLower()).SourceColumn;
                     var sourceCol = sourceColName.ToColumnReference();
-                    sourceCol.GetType(schema, null, null, out var sourceType);
+                    sourceCol.GetType(PrimaryDataSource, schema, null, null, out var sourceType);
 
                     if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, targetType))
                         throw new NotSupportedQueryFragmentException($"Cannot convert value of type {sourceType.ToSql()} to {targetType.ToSql()}", assignment);
@@ -1862,7 +1864,7 @@ namespace MarkMpn.Sql4Cds.Engine
             foreach (var inSubquery in visitor.InSubqueries)
             {
                 // Validate the LHS expression
-                inSubquery.Expression.GetType(schema, null, parameterTypes, out _);
+                inSubquery.Expression.GetType(PrimaryDataSource, schema, null, parameterTypes, out _);
 
                 // Each query of the format "col1 IN (SELECT col2 FROM source)" becomes a left outer join:
                 // LEFT JOIN source ON col1 = col2
@@ -2139,7 +2141,7 @@ namespace MarkMpn.Sql4Cds.Engine
             ConvertScalarSubqueries(havingClause.SearchCondition, hints, ref source, computeScalar, parameterTypes, query);
 
             // Validate the final expression
-            havingClause.SearchCondition.GetType(source.GetSchema(DataSources, parameterTypes), nonAggregateSchema, parameterTypes, out _);
+            havingClause.SearchCondition.GetType(PrimaryDataSource, source.GetSchema(DataSources, parameterTypes), nonAggregateSchema, parameterTypes, out _);
 
             return new FilterNode
             {
@@ -2183,7 +2185,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         throw new NotSupportedQueryFragmentException("Unhandled GROUP BY expression", grouping);
 
                     // Validate the GROUP BY expression
-                    exprGroup.Expression.GetType(schema, null, parameterTypes, out _);
+                    exprGroup.Expression.GetType(PrimaryDataSource, schema, null, parameterTypes, out _);
 
                     if (exprGroup.Expression is ColumnReferenceExpression col)
                     {
@@ -2339,7 +2341,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (converted.AggregateType == AggregateType.CountStar)
                     converted.SqlExpression = null;
                 else
-                    converted.SqlExpression.GetType(schema, null, parameterTypes, out _);
+                    converted.SqlExpression.GetType(PrimaryDataSource, schema, null, parameterTypes, out _);
 
                 // Create a name for the column that holds the aggregate value in the result set.
                 string aggregateName;
@@ -2418,8 +2420,8 @@ namespace MarkMpn.Sql4Cds.Engine
             if (offsetClause == null)
                 return source;
 
-            offsetClause.OffsetExpression.GetType(null, null, parameterTypes, out var offsetType);
-            offsetClause.FetchExpression.GetType(null, null, parameterTypes, out var fetchType);
+            offsetClause.OffsetExpression.GetType(PrimaryDataSource, null, null, parameterTypes, out var offsetType);
+            offsetClause.FetchExpression.GetType(PrimaryDataSource, null, null, parameterTypes, out var fetchType);
             var intType = DataTypeHelpers.Int;
 
             if (!SqlTypeConverter.CanChangeTypeImplicit(offsetType, intType))
@@ -2441,7 +2443,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (topRowFilter == null)
                 return source;
 
-            topRowFilter.Expression.GetType(null, null, parameterTypes, out var topType);
+            topRowFilter.Expression.GetType(PrimaryDataSource, null, null, parameterTypes, out var topType);
             var targetType = topRowFilter.Percent ? DataTypeHelpers.Float : DataTypeHelpers.BigInt;
 
             if (!SqlTypeConverter.CanChangeTypeImplicit(topType, targetType))
@@ -2559,7 +2561,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
 
                 // Validate the expression
-                orderBy.Expression.GetType(schema, nonAggregateSchema, parameterTypes, out _);
+                orderBy.Expression.GetType(PrimaryDataSource, schema, nonAggregateSchema, parameterTypes, out _);
 
                 sort.Sorts.Add(orderBy.Clone());
             }
@@ -2588,7 +2590,7 @@ namespace MarkMpn.Sql4Cds.Engine
             ConvertScalarSubqueries(whereClause.SearchCondition, hints, ref source, computeScalar, parameterTypes, query);
 
             // Validate the final expression
-            whereClause.SearchCondition.GetType(source.GetSchema(DataSources, parameterTypes), null, parameterTypes, out _);
+            whereClause.SearchCondition.GetType(PrimaryDataSource, source.GetSchema(DataSources, parameterTypes), null, parameterTypes, out _);
 
             return new FilterNode
             {
@@ -2668,7 +2670,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         if (!schema.ContainsColumn(colName, out colName))
                         {
                             // Column name isn't valid. Use the expression extensions to throw a consistent error message
-                            col.GetType(schema, nonAggregateSchema, parameterTypes, out _);
+                            col.GetType(PrimaryDataSource, schema, nonAggregateSchema, parameterTypes, out _);
                         }
 
                         var alias = scalar.ColumnName?.Value ?? col.MultiPartIdentifier.Identifiers.Last().Value;
@@ -2757,7 +2759,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             // Check the type of this expression now so any errors can be reported
             var computeScalarSchema = computeScalar.Source.GetSchema(DataSources, parameterTypes);
-            expression.GetType(computeScalarSchema, nonAggregateSchema, parameterTypes, out _);
+            expression.GetType(PrimaryDataSource, computeScalarSchema, nonAggregateSchema, parameterTypes, out _);
 
             var alias = $"Expr{++_colNameCounter}";
             computeScalar.Columns[alias] = expression.Clone();
@@ -3423,7 +3425,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 // Validate the join condition
                 var joinSchema = joinNode.GetSchema(DataSources, parameterTypes);
-                join.SearchCondition.GetType(joinSchema, null, parameterTypes, out _);
+                join.SearchCondition.GetType(PrimaryDataSource, joinSchema, null, parameterTypes, out _);
 
                 return joinNode;
             }
@@ -3518,7 +3520,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 CaptureOuterReferences(scalarSubquerySchema, null, tvf, parameterTypes, scalarSubqueryReferences);
 
                 var dataSource = SelectDataSource(tvf.SchemaObject);
-                var execute = ExecuteMessageNode.FromMessage(tvf, dataSource, parameterTypes);
+                var execute = ExecuteMessageNode.FromMessage(tvf, dataSource, PrimaryDataSource, parameterTypes);
 
                 if (source == null)
                     return execute;

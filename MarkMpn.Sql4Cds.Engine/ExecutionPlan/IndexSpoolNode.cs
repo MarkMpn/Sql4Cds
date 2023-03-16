@@ -65,7 +65,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var indexType = Source.GetSchema(dataSources, parameterTypes).Schema[KeyColumn];
             var seekType = parameterTypes[SeekValue];
 
-            if (!SqlTypeConverter.CanMakeConsistentTypes(indexType, seekType, out var consistentType))
+            if (!SqlTypeConverter.CanMakeConsistentTypes(indexType, seekType, dataSources[options.PrimaryDataSource], out var consistentType))
                 throw new QueryExecutionException($"No type conversion available for {indexType.ToSql()} and {seekType.ToSql()}");
 
             _keySelector = SqlTypeConverter.GetConversion(indexType, consistentType);

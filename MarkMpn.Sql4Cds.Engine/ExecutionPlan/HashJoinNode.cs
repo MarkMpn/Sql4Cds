@@ -27,7 +27,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             _hashTable = new Dictionary<object, List<OuterRecord>>();
             var mergedSchema = GetSchema(dataSources, parameterTypes, true);
-            var additionalJoinCriteria = AdditionalJoinCriteria?.Compile(mergedSchema, parameterTypes);
+            var additionalJoinCriteria = AdditionalJoinCriteria?.Compile(dataSources[options.PrimaryDataSource], mergedSchema, parameterTypes);
 
             // Build the hash table
             var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
@@ -37,18 +37,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             rightSchema.ContainsColumn(RightAttribute.GetColumnName(), out var rightCol);
             var rightColType = rightSchema.Schema[rightCol];
 
-            if (!SqlTypeConverter.CanMakeConsistentTypes(leftColType, rightColType, out var keyType))
+            if (!SqlTypeConverter.CanMakeConsistentTypes(leftColType, rightColType, dataSources[options.PrimaryDataSource], out var keyType))
                 throw new QueryExecutionException($"Cannot match key types {leftColType.ToSql()} and {rightColType.ToSql()}");
 
             var leftKeyAccessor = (ScalarExpression) leftCol.ToColumnReference();
             if (!leftColType.IsSameAs(keyType))
                 leftKeyAccessor = new ConvertCall { Parameter = leftKeyAccessor, DataType = keyType };
-            var leftKeyConverter = leftKeyAccessor.Compile(leftSchema, parameterTypes);
+            var leftKeyConverter = leftKeyAccessor.Compile(dataSources[options.PrimaryDataSource], leftSchema, parameterTypes);
 
             var rightKeyAccessor = (ScalarExpression)rightCol.ToColumnReference();
             if (!rightColType.IsSameAs(keyType))
                 rightKeyAccessor = new ConvertCall { Parameter = rightKeyAccessor, DataType = keyType };
-            var rightKeyConverter = rightKeyAccessor.Compile(rightSchema, parameterTypes);
+            var rightKeyConverter = rightKeyAccessor.Compile(dataSources[options.PrimaryDataSource], rightSchema, parameterTypes);
 
             foreach (var entity in LeftSource.Execute(dataSources, options, parameterTypes, parameterValues))
             {

@@ -119,9 +119,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _inputParameters = Values
                 .ToDictionary(value => value.Key, value =>
                 {
-                    var exprType = value.Value.GetType(null, null, parameterTypes, out _);
+                    var exprType = value.Value.GetType(dataSources[options.PrimaryDataSource], null, null, parameterTypes, out _);
                     var expectedType = ValueTypes[value.Key];
-                    var expr = value.Value.Compile(null, parameterTypes);
+                    var expr = value.Value.Compile(dataSources[options.PrimaryDataSource], null, parameterTypes);
                     var conversion = SqlTypeConverter.GetConversion(exprType, expectedType);
                     return (Func<IDictionary<string,object>, IQueryExecutionOptions, object>) ((IDictionary<string, object> parameterValues, IQueryExecutionOptions opts) => conversion(expr(null, parameterValues, opts)));
                 });
@@ -154,13 +154,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 sortOrder: null);
         }
 
-        private void SetOutputSchema(IAttributeMetadataCache metadata, Message message, TSqlFragment source)
+        private void SetOutputSchema(DataSource dataSource, Message message, TSqlFragment source)
         {
             // Add the response fields to the node schema
             if (message.OutputParameters.All(f => f.IsScalarType()))
             {
                 foreach (var value in message.OutputParameters)
-                    AddSchemaColumn(value.Name, SqlTypeConverter.NetToSqlType(value.Type).ToSqlType()); // TODO: How are OSV and ER fields represented?
+                    AddSchemaColumn(value.Name, SqlTypeConverter.NetToSqlType(value.Type).ToSqlType(dataSource)); // TODO: How are OSV and ER fields represented?
             }
             else
             {
@@ -172,13 +172,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (type == typeof(AuditDetail))
                 {
                     type = typeof(Entity);
-                    otc = metadata["audit"].ObjectTypeCode;
+                    otc = dataSource.Metadata["audit"].ObjectTypeCode;
                     audit = true;
                 }
                 else if (firstValue.Type == typeof(AuditDetailCollection))
                 {
                     type = typeof(EntityCollection);
-                    otc = metadata["audit"].ObjectTypeCode;
+                    otc = dataSource.Metadata["audit"].ObjectTypeCode;
                     audit = true;
                 }
 
@@ -187,30 +187,30 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 else
                     EntityCollectionResponseParameter = firstValue.Name;
 
-                foreach (var attrMetadata in metadata[otc.Value].Attributes.Where(a => a.AttributeOf == null))
+                foreach (var attrMetadata in dataSource.Metadata[otc.Value].Attributes.Where(a => a.AttributeOf == null))
                 {
-                    AddSchemaColumn(attrMetadata.LogicalName, attrMetadata.GetAttributeSqlType(metadata, false));
+                    AddSchemaColumn(attrMetadata.LogicalName, attrMetadata.GetAttributeSqlType(dataSource, false));
 
                     // Add standard virtual attributes
                     if (attrMetadata is EnumAttributeMetadata || attrMetadata is BooleanAttributeMetadata)
-                        AddSchemaColumn(attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(FetchXmlScan.LabelMaxLength));
+                        AddSchemaColumn(attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(FetchXmlScan.LabelMaxLength, dataSource.DefaultCollation, CollationLabel.CoercibleDefault));
 
                     if (attrMetadata is LookupAttributeMetadata lookup)
                     {
-                        AddSchemaColumn(attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(lookup.Targets == null || lookup.Targets.Length == 0 ? 100 : lookup.Targets.Select(e => ((StringAttributeMetadata)metadata[e].Attributes.SingleOrDefault(a => a.LogicalName == metadata[e].PrimaryNameAttribute))?.MaxLength ?? 100).Max()));
+                        AddSchemaColumn(attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(lookup.Targets == null || lookup.Targets.Length == 0 ? 100 : lookup.Targets.Select(e => ((StringAttributeMetadata)dataSource.Metadata[e].Attributes.SingleOrDefault(a => a.LogicalName == dataSource.Metadata[e].PrimaryNameAttribute))?.MaxLength ?? 100).Max(), dataSource.DefaultCollation, CollationLabel.CoercibleDefault));
 
                         if (lookup.Targets?.Length != 1 && lookup.AttributeType != AttributeTypeCode.PartyList)
-                            AddSchemaColumn(attrMetadata.LogicalName + "type", DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength));
+                            AddSchemaColumn(attrMetadata.LogicalName + "type", DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.CoercibleDefault));
                     }
                 }
 
                 if (audit)
                 {
-                    AddSchemaColumn("newvalues", DataTypeHelpers.NVarChar(Int32.MaxValue));
-                    AddSchemaColumn("oldvalues", DataTypeHelpers.NVarChar(Int32.MaxValue));
+                    AddSchemaColumn("newvalues", DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.CoercibleDefault));
+                    AddSchemaColumn("oldvalues", DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.CoercibleDefault));
                 }
 
-                _primaryKeyColumn = PrefixWithAlias(metadata[otc.Value].PrimaryIdAttribute);
+                _primaryKeyColumn = PrefixWithAlias(dataSource.Metadata[otc.Value].PrimaryIdAttribute);
             }
 
             if (!String.IsNullOrEmpty(PagingParameter) && EntityCollectionResponseParameter == null)
@@ -487,7 +487,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return clone;
         }
 
-        public static ExecuteMessageNode FromMessage(SchemaObjectFunctionTableReference tvf, DataSource dataSource, IDictionary<string, DataTypeReference> parameterTypes)
+        public static ExecuteMessageNode FromMessage(SchemaObjectFunctionTableReference tvf, DataSource dataSource, DataSource primaryDataSource, IDictionary<string, DataTypeReference> parameterTypes)
         {
             // All messages are in the "dbo" schema
             if (tvf.SchemaObject.SchemaIdentifier != null && !String.IsNullOrEmpty(tvf.SchemaObject.SchemaIdentifier.Value) &&
@@ -539,8 +539,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 var f = expectedInputParameters[i];
                 var sourceExpression = tvf.Parameters[i];
-                sourceExpression.GetType(null, null, parameterTypes, out var sourceType);
-                var expectedType = SqlTypeConverter.NetToSqlType(f.Type).ToSqlType();
+                sourceExpression.GetType(primaryDataSource, null, null, parameterTypes, out var sourceType);
+                var expectedType = SqlTypeConverter.NetToSqlType(f.Type).ToSqlType(primaryDataSource);
 
                 if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, expectedType))
                     throw new NotSupportedQueryFragmentException($"Cannot convert value of type {sourceType.ToSql()} to {expectedType.ToSql()}", tvf.Parameters[f.Position]);
@@ -561,12 +561,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 node.ValueTypes[f.Name] = f.Type;
             }
 
-            node.SetOutputSchema(dataSource.Metadata, message, tvf.SchemaObject);
+            node.SetOutputSchema(dataSource, message, tvf.SchemaObject);
 
             return node;
         }
 
-        public static ExecuteMessageNode FromMessage(ExecutableProcedureReference sproc, DataSource dataSource, IDictionary<string, DataTypeReference> parameterTypes)
+        public static ExecuteMessageNode FromMessage(ExecutableProcedureReference sproc, DataSource dataSource, DataSource primaryDataSource, IDictionary<string, DataTypeReference> parameterTypes)
         {
             // All messages are in the "dbo" schema
             if (sproc.ProcedureReference.ProcedureReference.Name.SchemaIdentifier != null && !String.IsNullOrEmpty(sproc.ProcedureReference.ProcedureReference.Name.SchemaIdentifier.Value) &&
@@ -647,8 +647,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     throw new NotSupportedQueryFragmentException("Unknown parameter", sproc.Parameters[i]);
 
                 var sourceExpression = sproc.Parameters[i].ParameterValue;
-                sourceExpression.GetType(null, null, parameterTypes, out var sourceType);
-                var expectedType = SqlTypeConverter.NetToSqlType(targetParam.Type).ToSqlType();
+                sourceExpression.GetType(primaryDataSource, null, null, parameterTypes, out var sourceType);
+                var expectedType = SqlTypeConverter.NetToSqlType(targetParam.Type).ToSqlType(primaryDataSource);
 
                 if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, expectedType))
                     throw new NotSupportedQueryFragmentException($"Cannot convert value of type {sourceType.ToSql()} to {expectedType.ToSql()}", sproc.Parameters[i].ParameterValue);
@@ -679,7 +679,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     throw new NotSupportedQueryFragmentException($"Missing parameter '{inputParameter.Name}'", sproc);
             }
 
-            node.SetOutputSchema(dataSource.Metadata, message, sproc.ProcedureReference);
+            node.SetOutputSchema(dataSource, message, sproc.ProcedureReference);
 
             return node;
         }

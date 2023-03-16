@@ -32,7 +32,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var schema = Source.GetSchema(dataSources, parameterTypes);
             var columns = Columns
-                .Select(kvp => new { Name = kvp.Key, Expression = kvp.Value.Compile(schema, parameterTypes) })
+                .Select(kvp => new { Name = kvp.Key, Expression = kvp.Value.Compile(dataSources[options.PrimaryDataSource], schema, parameterTypes) })
                 .ToList();
 
             foreach (var entity in Source.Execute(dataSources, options, parameterTypes, parameterValues))
@@ -55,7 +55,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var calc in Columns)
             {
-                calc.Value.GetType(sourceSchema, null, parameterTypes, out var calcType);
+                calc.Value.GetType(dataSources[options.PrimaryDataSource], sourceSchema, null, parameterTypes, out var calcType);
                 schema[calc.Key] = calcType;
             }
 
@@ -118,7 +118,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         }
                         else
                         {
-                            calc.Value.GetType(null, null, parameterTypes, out var calcType);
+                            calc.Value.GetType(dataSources[options.PrimaryDataSource], null, null, parameterTypes, out var calcType);
                             constant.Schema[calc.Key] = calcType;
                         }
                     }

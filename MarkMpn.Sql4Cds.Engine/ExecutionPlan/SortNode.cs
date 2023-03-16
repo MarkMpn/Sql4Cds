@@ -43,7 +43,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var source = Source.Execute(dataSources, options, parameterTypes, parameterValues);
             var schema = GetSchema(dataSources, parameterTypes);
-            var expressions = Sorts.Select(sort => sort.Expression.Compile(schema, parameterTypes)).ToList();
+            var expressions = Sorts.Select(sort => sort.Expression.Compile(dataSources[options.PrimaryDataSource], schema, parameterTypes)).ToList();
 
             if (PresortedCount == 0)
             {
@@ -367,7 +367,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                             if (top != null)
                             {
-                                if (!top.Top.IsConstantValueExpression(null, options, out var topLiteral))
+                                if (!top.Top.IsConstantValueExpression(dataSources[options.PrimaryDataSource], null, options, out var topLiteral))
                                     return this;
 
                                 if (Int32.Parse(topLiteral.Value, CultureInfo.InvariantCulture) > 50000)
@@ -375,8 +375,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             }
                             else if (offset != null)
                             {
-                                if (!offset.Offset.IsConstantValueExpression(null, options, out var offsetLiteral) ||
-                                    !offset.Fetch.IsConstantValueExpression(null, options, out var fetchLiteral))
+                                if (!offset.Offset.IsConstantValueExpression(dataSources[options.PrimaryDataSource], null, options, out var offsetLiteral) ||
+                                    !offset.Fetch.IsConstantValueExpression(dataSources[options.PrimaryDataSource], null, options, out var fetchLiteral))
                                     return this;
 
                                 if (Int32.Parse(offsetLiteral.Value, CultureInfo.InvariantCulture) + Int32.Parse(fetchLiteral.Value, CultureInfo.InvariantCulture) > 50000)

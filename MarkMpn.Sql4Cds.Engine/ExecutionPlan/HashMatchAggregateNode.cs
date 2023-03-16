@@ -29,7 +29,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var groupByCols = GetGroupingColumns(schema);
             var groups = new Dictionary<Entity, Dictionary<string, AggregateFunctionState>>(new DistinctEqualityComparer(groupByCols));
 
-            InitializeAggregates(schema, parameterTypes);
+            InitializeAggregates(dataSources[options.PrimaryDataSource], schema, parameterTypes);
             var aggregates = CreateAggregateFunctions(parameterValues, options, false);
 
             if (IsScalarAggregate)
@@ -340,7 +340,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             attribute.dategrouping = dateGrouping.Value;
                             attribute.dategroupingSpecified = true;
                         }
-                        else if (grouping.GetType(schema, null, parameterTypes, out _) == typeof(SqlDateTime))
+                        else if (grouping.GetType(dataSources[options.PrimaryDataSource], schema, null, parameterTypes, out _) == typeof(SqlDateTime))
                         {
                             // Can't group on datetime columns without a DATEPART specification
                             canUseFetchXmlAggregate = false;

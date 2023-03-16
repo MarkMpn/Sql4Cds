@@ -79,7 +79,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     meta = dataSource.Metadata[LogicalName];
                     attributes = meta.Attributes.ToDictionary(a => a.LogicalName, StringComparer.OrdinalIgnoreCase);
                     var dateTimeKind = options.UseLocalTimeZone ? DateTimeKind.Local : DateTimeKind.Utc;
-                    attributeAccessors = CompileColumnMappings(dataSource.Metadata, LogicalName, ColumnMappings, schema, dateTimeKind, entities);
+                    attributeAccessors = CompileColumnMappings(dataSource, LogicalName, ColumnMappings, schema, dateTimeKind, entities);
                     attributeAccessors.TryGetValue(meta.PrimaryIdAttribute, out primaryIdAccessor);
                 }
 

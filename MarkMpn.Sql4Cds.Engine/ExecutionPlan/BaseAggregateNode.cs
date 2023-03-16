@@ -55,15 +55,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public IDataExecutionPlanNodeInternal Source { get; set; }
 
-        protected void InitializeAggregates(INodeSchema schema, IDictionary<string, DataTypeReference> parameterTypes)
+        protected void InitializeAggregates(DataSource primaryDataSource, INodeSchema schema, IDictionary<string, DataTypeReference> parameterTypes)
         {
             foreach (var aggregate in Aggregates.Where(agg => agg.Value.SqlExpression != null))
             {
-                aggregate.Value.SqlExpression.GetType(schema, null, parameterTypes, out var retType);
+                aggregate.Value.SqlExpression.GetType(primaryDataSource, schema, null, parameterTypes, out var retType);
                 aggregate.Value.SourceType = retType;
                 aggregate.Value.ReturnType = retType;
 
-                aggregate.Value.Expression = aggregate.Value.SqlExpression.Compile(schema, parameterTypes);
+                aggregate.Value.Expression = aggregate.Value.SqlExpression.Compile(primaryDataSource, schema, parameterTypes);
 
                 // Return type of SUM and AVG is based on the input type with some modifications
                 // https://docs.microsoft.com/en-us/sql/t-sql/functions/avg-transact-sql?view=sql-server-ver15#return-types
@@ -82,13 +82,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        protected void InitializePartitionedAggregates(INodeSchema schema, IDictionary<string, DataTypeReference> parameterTypes)
+        protected void InitializePartitionedAggregates(DataSource primaryDataSource, INodeSchema schema, IDictionary<string, DataTypeReference> parameterTypes)
         {
             foreach (var aggregate in Aggregates)
             {
                 var sourceExpression = aggregate.Key.ToColumnReference();
-                aggregate.Value.Expression = sourceExpression.Compile(schema, parameterTypes);
-                sourceExpression.GetType(schema, null, parameterTypes, out var retType);
+                aggregate.Value.Expression = sourceExpression.Compile(primaryDataSource, schema, parameterTypes);
+                sourceExpression.GetType(primaryDataSource, schema, null, parameterTypes, out var retType);
                 aggregate.Value.SourceType = retType;
                 aggregate.Value.ReturnType = retType;
             }
@@ -213,7 +213,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         break;
 
                     default:
-                        aggregate.Value.SqlExpression.GetType(sourceSchema, null, parameterTypes, out aggregateType);
+                        aggregate.Value.SqlExpression.GetType(dataSources[options.PrimaryDataSource], sourceSchema, null, parameterTypes, out aggregateType);
 
                         // Return type of SUM and AVG is based on the input type with some modifications
                         // https://docs.microsoft.com/en-us/sql/t-sql/functions/avg-transact-sql?view=sql-server-ver15#return-types

@@ -40,7 +40,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var value = new Entity();
 
                 foreach (var col in Schema)
-                    value[PrefixWithAlias(col.Key)] = expressions[col.Key].Compile(null, parameterTypes)(null, parameterValues, options);
+                    value[PrefixWithAlias(col.Key)] = expressions[col.Key].Compile(dataSources[options.PrimaryDataSource], null, parameterTypes)(null, parameterValues, options);
 
                 yield return value;
             }

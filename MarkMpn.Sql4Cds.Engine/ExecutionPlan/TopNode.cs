@@ -50,12 +50,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
         {
             int topCount;
-            Top.GetType(null, null, parameterTypes, out var topType);
+            Top.GetType(dataSources[options.PrimaryDataSource], null, null, parameterTypes, out var topType);
 
             if (Percent)
             {
                 var top = new ConvertCall { Parameter = Top, DataType = DataTypeHelpers.Float };
-                var topPercent = (SqlDouble)top.Compile(null, parameterTypes)(null, parameterValues, options);
+                var topPercent = (SqlDouble)top.Compile(dataSources[options.PrimaryDataSource], null, parameterTypes)(null, parameterValues, options);
 
                 if (topPercent.IsNull)
                 {
@@ -76,7 +76,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             else
             {
                 var top = new ConvertCall { Parameter = Top, DataType = DataTypeHelpers.BigInt };
-                var topValue = (SqlInt64)top.Compile(null, parameterTypes)(null, parameterValues, options);
+                var topValue = (SqlInt64)top.Compile(dataSources[options.PrimaryDataSource], null, parameterTypes)(null, parameterValues, options);
 
                 if (topValue.IsNull)
                 {
@@ -125,7 +125,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
             Source.Parent = this;
 
-            if (!Top.IsConstantValueExpression(null, options, out var literal))
+            if (!Top.IsConstantValueExpression(dataSources[options.PrimaryDataSource], null, options, out var literal))
                 return this;
 
             // FetchXML can support TOP directly provided it's for no more than 5,000 records
@@ -171,7 +171,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var sourceCount = Source.EstimateRowsOut(dataSources, options, parameterTypes);
 
-            if (!Top.IsConstantValueExpression(null, options, out var topLiteral))
+            if (!Top.IsConstantValueExpression(dataSources[options.PrimaryDataSource], null, options, out var topLiteral))
                 return sourceCount;
 
             var top = Decimal.Parse(topLiteral.Value, CultureInfo.InvariantCulture);

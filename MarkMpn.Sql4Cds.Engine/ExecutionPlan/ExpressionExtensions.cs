@@ -1302,10 +1302,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         /// <param name="type">The data type to convert</param>
         /// <returns>The equivalent SQL <see cref="DataTypeReference"/></returns>
-        public static DataTypeReference ToSqlType(this Type type, DataSource primaryDataSource)
+        public static DataTypeReference ToSqlType(this Type type, DataSource dataSource)
         {
             if (type == typeof(SqlString))
-                return DataTypeHelpers.NVarChar(Int32.MaxValue, primaryDataSource?.DefaultCollation ?? Collation.USEnglish, CollationLabel.CoercibleDefault);
+                return DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource?.DefaultCollation ?? Collation.USEnglish, CollationLabel.CoercibleDefault);
 
             return _netTypeMapping[type];
         }

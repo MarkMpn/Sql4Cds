@@ -65,7 +65,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public IRootExecutionPlanNodeInternal[] FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
         {
-            _expression = Expression.Compile(null, parameterTypes);
+            _expression = Expression.Compile(dataSources[options.PrimaryDataSource], null, parameterTypes);
             return new[] { this };
         }
 

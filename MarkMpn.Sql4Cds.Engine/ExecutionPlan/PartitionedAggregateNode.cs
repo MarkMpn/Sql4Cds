@@ -64,7 +64,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var groupByCols = GetGroupingColumns(schema);
             var groups = new ConcurrentDictionary<Entity, Dictionary<string, AggregateFunctionState>>(new DistinctEqualityComparer(groupByCols));
 
-            InitializePartitionedAggregates(schema, parameterTypes);
+            InitializePartitionedAggregates(dataSources[options.PrimaryDataSource], schema, parameterTypes);
             var aggregates = CreateAggregateFunctions(parameterValues, options, true);
 
             var fetchXmlNode = (FetchXmlScan)Source;

@@ -64,7 +64,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 using (_timer.Run())
                 {
                     if (_timeExpr == null)
-                        _timeExpr = Time.Compile(null, parameterTypes);
+                        _timeExpr = Time.Compile(dataSources[options.PrimaryDataSource], null, parameterTypes);
 
                     var time = (SqlTime) _timeExpr(null, parameterValues, options);
 

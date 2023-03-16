@@ -141,7 +141,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (secondaryKey != null)
                         fullMappings[secondaryKey] = SecondaryIdSource;
 
-                    var attributeAccessors = CompileColumnMappings(dataSource.Metadata, LogicalName, fullMappings, schema, dateTimeKind, entities);
+                    var attributeAccessors = CompileColumnMappings(dataSource, LogicalName, fullMappings, schema, dateTimeKind, entities);
                     primaryIdAccessor = attributeAccessors[primaryKey];
 
                     if (SecondaryIdSource != null)
