@@ -40,16 +40,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("Seek Value")]
         public string SeekValue { get; set; }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
             requiredColumns.Add(KeyColumn);
 
-            Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
+            Source.AddRequiredColumns(context, requiredColumns);
         }
 
-        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(NodeCompilationContext context)
         {
-            var rows = Source.EstimateRowsOut(dataSources, options, parameterTypes);
+            var rows = Source.EstimateRowsOut(context);
 
             if (rows is RowCountEstimateDefiniteRange range && range.Maximum == 1)
                 return range;
@@ -57,15 +57,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return new RowCountEstimate(Source.EstimatedRowsOut / 100);
         }
 
-        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
-            Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
+            Source = Source.FoldQuery(context, hints);
 
             // Index and seek values must be the same type
-            var indexType = Source.GetSchema(dataSources, parameterTypes).Schema[KeyColumn];
-            var seekType = parameterTypes[SeekValue];
+            var indexType = Source.GetSchema(context).Schema[KeyColumn];
+            var seekType = context.ParameterTypes[SeekValue];
 
-            if (!SqlTypeConverter.CanMakeConsistentTypes(indexType, seekType, dataSources[options.PrimaryDataSource], out var consistentType))
+            if (!SqlTypeConverter.CanMakeConsistentTypes(indexType, seekType, context.PrimaryDataSource, out var consistentType))
                 throw new QueryExecutionException($"No type conversion available for {indexType.ToSql()} and {seekType.ToSql()}");
 
             _keySelector = SqlTypeConverter.GetConversion(indexType, consistentType);
@@ -74,9 +74,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return this;
         }
 
-        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
+        public override INodeSchema GetSchema(NodeCompilationContext context)
         {
-            return Source.GetSchema(dataSources, parameterTypes);
+            return Source.GetSchema(context);
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
@@ -84,17 +84,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
             // Build an internal hash table of the source indexed by the key column
             if (_hashTable == null)
             {
-                _hashTable = Source.Execute(dataSources, options, parameterTypes, parameterValues)
+                _hashTable = Source.Execute(context)
                     .GroupBy(e => _keySelector((INullable)e[KeyColumn]))
                     .ToDictionary(g => g.Key, g => g.ToList());
             }
 
-            var keyValue = _seekSelector((INullable)parameterValues[SeekValue]);
+            var keyValue = _seekSelector((INullable)context.ParameterValues[SeekValue]);
 
             if (!_hashTable.TryGetValue(keyValue, out var matches))
                 return Array.Empty<Entity>();

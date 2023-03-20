@@ -260,7 +260,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Description("The metadata query to be executed")]
         public EntityQueryExpression Query { get; private set; } = new EntityQueryExpression();
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
             _entityCols = new Dictionary<string, MetadataProperty>();
             _attributeCols = new Dictionary<string, AttributeProperty>();
@@ -373,7 +373,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(NodeCompilationContext context)
         {
             var entityCount = 100;
             var attributesPerEntity = 1;
@@ -434,12 +434,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return false;
         }
 
-        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
             return this;
         }
 
-        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
+        public override INodeSchema GetSchema(NodeCompilationContext context)
         {
             var schema = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
             var aliases = new Dictionary<string, IReadOnlyList<string>>();
@@ -689,7 +689,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (directConversionType == typeof(SqlString) && value.Type != typeof(string))
                 value = Expression.Call(value, nameof(Object.ToString), Array.Empty<Type>());
 
-            var converted = SqlTypeConverter.Convert(value, directConversionType);
+            Expression converted;
+
+            if (value.Type == typeof(string) && directConversionType == typeof(SqlString) && targetType == typeof(SqlString))
+                converted = Expr.Call(() => ApplyCollation(Expr.Arg<string>()), value);
+            else
+                converted = SqlTypeConverter.Convert(value, directConversionType);
+
             if (targetType != directConversionType)
                 converted = SqlTypeConverter.Convert(converted, targetType);
 
@@ -709,12 +715,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return func;
         }
 
+        private static SqlString ApplyCollation(string value)
+        {
+            if (value == null)
+                return SqlString.Null;
+
+            // Assume all metadata values should use standard collation rather than datasource specific?
+            return Collation.USEnglish.ToSqlString(value);
+        }
+
         public override IEnumerable<IExecutionPlanNode> GetSources()
         {
             return Array.Empty<IDataExecutionPlanNode>();
         }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
             if (MetadataSource.HasFlag(MetadataSource.Attribute))
             {
@@ -756,7 +771,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     Query.Properties.PropertyNames.Add(nameof(EntityMetadata.ManyToManyRelationships));
             }
 
-            if (!dataSources.TryGetValue(DataSource, out var dataSource))
+            if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
 
             var resp = (RetrieveMetadataChangesResponse) dataSource.Connection.Execute(new RetrieveMetadataChangesRequest { Query = Query });

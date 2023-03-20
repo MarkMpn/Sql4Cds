@@ -28,26 +28,32 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public IDataExecutionPlanNodeInternal Source { get; set; }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
-            var schema = Source.GetSchema(dataSources, parameterTypes);
+            var schema = Source.GetSchema(context);
+            var expressionCompilationContext = new ExpressionCompilationContext(context, schema, null);
             var columns = Columns
-                .Select(kvp => new { Name = kvp.Key, Expression = kvp.Value.Compile(dataSources[options.PrimaryDataSource], schema, parameterTypes) })
+                .Select(kvp => new { Name = kvp.Key, Expression = kvp.Value.Compile(expressionCompilationContext) })
                 .ToList();
 
-            foreach (var entity in Source.Execute(dataSources, options, parameterTypes, parameterValues))
+            var expressionContext = new ExpressionExecutionContext(context);
+
+            foreach (var entity in Source.Execute(context))
             {
+                expressionContext.Entity = entity;
+
                 foreach (var col in columns)
-                    entity[col.Name] = col.Expression(entity, parameterValues, options);
+                    entity[col.Name] = col.Expression(expressionContext);
 
                 yield return entity;
             }
         }
 
-        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
+        public override INodeSchema GetSchema(NodeCompilationContext context)
         {
             // Copy the source schema and add in the additional computed columns
-            var sourceSchema = Source.GetSchema(dataSources, parameterTypes);
+            var sourceSchema = Source.GetSchema(context);
+            var expressionCompilationContext = new ExpressionCompilationContext(context, sourceSchema, null);
             var schema = new Dictionary<string, DataTypeReference>(sourceSchema.Schema.Count, StringComparer.OrdinalIgnoreCase);
 
             foreach (var col in sourceSchema.Schema)
@@ -55,7 +61,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var calc in Columns)
             {
-                calc.Value.GetType(dataSources[options.PrimaryDataSource], sourceSchema, null, parameterTypes, out var calcType);
+                calc.Value.GetType(expressionCompilationContext, out var calcType);
                 schema[calc.Key] = calcType;
             }
 
@@ -72,9 +78,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
-            Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
+            Source = Source.FoldQuery(context, hints);
 
             // Combine multiple ComputeScalar nodes. Calculations in this node might be dependent on those in the previous node, so rewrite any references
             // to the earlier computed columns
@@ -93,9 +99,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return computeScalar;
             }
             
+            // Move literal expressions to the parent ConstantScan node for queries like SELECT 1
             if (Source is ConstantScanNode constant && String.IsNullOrEmpty(constant.Alias))
             {
                 var folded = new List<string>();
+                var expressionContext = new ExpressionCompilationContext(context, null, null);
 
                 foreach (var calc in Columns)
                 {
@@ -118,7 +126,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         }
                         else
                         {
-                            calc.Value.GetType(dataSources[options.PrimaryDataSource], null, null, parameterTypes, out var calcType);
+                            calc.Value.GetType(expressionContext, out var calcType);
                             constant.Schema[calc.Key] = calcType;
                         }
                     }
@@ -135,9 +143,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return this;
         }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
-            var schema = Source.GetSchema(dataSources, parameterTypes);
+            var schema = Source.GetSchema(context);
 
             var calcSourceColumns = Columns.Values
                 .SelectMany(expr => expr.GetColumns());
@@ -151,12 +159,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     requiredColumns.Add(normalized);
             }
 
-            Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
+            Source.AddRequiredColumns(context, requiredColumns);
         }
 
-        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(NodeCompilationContext context)
         {
-            return Source.EstimateRowsOut(dataSources, options, parameterTypes);
+            return Source.EstimateRowsOut(context);
         }
 
         protected override IEnumerable<string> GetVariablesInternal()

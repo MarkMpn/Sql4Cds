@@ -29,20 +29,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public IDataExecutionPlanNodeInternal Source { get; set; }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
             var distinct = new HashSet<Entity>(new DistinctEqualityComparer(Columns));
 
-            foreach (var entity in Source.Execute(dataSources, options, parameterTypes, parameterValues))
+            foreach (var entity in Source.Execute(context))
             {
                 if (distinct.Add(entity))
                     yield return entity;
             }
         }
 
-        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
+        public override INodeSchema GetSchema(NodeCompilationContext context)
         {
-            var schema = Source.GetSchema(dataSources, parameterTypes);
+            var schema = Source.GetSchema(context);
 
             // If this is a distinct list of one column we know the values in that column will be unique
             if (Columns.Count == 1)
@@ -61,9 +61,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
-            Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
+            Source = Source.FoldQuery(context, hints);
             Source.Parent = this;
 
             // Remove any duplicated column names
@@ -75,7 +75,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // If one of the fields to include in the DISTINCT calculation is the primary key, there is no possibility of duplicate
             // rows so we can discard the distinct node
-            var schema = Source.GetSchema(dataSources, parameterTypes);
+            var schema = Source.GetSchema(context);
 
             if (!String.IsNullOrEmpty(schema.PrimaryKey) && Columns.Contains(schema.PrimaryKey, StringComparer.OrdinalIgnoreCase))
                 return Source;
@@ -84,7 +84,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 fetch.FetchXml.distinct = true;
                 fetch.FetchXml.distinctSpecified = true;
-                var metadata = dataSources[fetch.DataSource].Metadata;
+                var metadata = context.DataSources[fetch.DataSource].Metadata;
                 var virtualAttr = false;
 
                 // Ensure there is a sort order applied to avoid paging issues
@@ -117,7 +117,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!virtualAttr)
                     return fetch;
 
-                schema = Source.GetSchema(dataSources, parameterTypes);
+                schema = Source.GetSchema(context);
             }
 
             // If the data is already sorted by all the distinct columns we can use a stream aggregate instead.
@@ -145,7 +145,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return aggregate;
         }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
             foreach (var col in Columns)
             {
@@ -153,15 +153,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     requiredColumns.Add(col);
             }
 
-            Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
+            Source.AddRequiredColumns(context, requiredColumns);
         }
 
-        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(NodeCompilationContext context)
         {
             // TODO: Is there any metadata available that could help give a better estimate for this?
             // Maybe get the schema and check if any of the columns included in the DISTINCT list are the
             // primary key and if so return the entire count, if some are optionset then there's a known list
-            var totalCount = Source.EstimateRowsOut(dataSources, options, parameterTypes);
+            var totalCount = Source.EstimateRowsOut(context);
 
             if (totalCount is RowCountEstimateDefiniteRange range && range.Maximum == 1)
                 return totalCount;

@@ -85,7 +85,7 @@ namespace MarkMpn.Sql4Cds.Engine
         public static DataTypeReference GetAttributeSqlType(this AttributeMetadata attrMetadata, DataSource dataSource, bool write)
         {
             if (attrMetadata is MultiSelectPicklistAttributeMetadata)
-                return DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.CoercibleDefault);
+                return DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.Implicit);
 
             var typeCode = attrMetadata.AttributeType;
 
@@ -114,7 +114,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 return DataTypeHelpers.Float;
 
             if (attrMetadata is EntityNameAttributeMetadata || typeCode == AttributeTypeCode.EntityName)
-                return DataTypeHelpers.NVarChar(EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.CoercibleDefault);
+                return DataTypeHelpers.NVarChar(EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.Implicit);
 
             if (attrMetadata is ImageAttributeMetadata)
                 return DataTypeHelpers.VarBinary(Int32.MaxValue);
@@ -126,7 +126,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 return DataTypeHelpers.BigInt;
 
             if (typeCode == AttributeTypeCode.PartyList)
-                return DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.CoercibleDefault);
+                return DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.Implicit);
 
             if (attrMetadata is LookupAttributeMetadata || attrMetadata.IsPrimaryId == true || typeCode == AttributeTypeCode.Lookup || typeCode == AttributeTypeCode.Customer || typeCode == AttributeTypeCode.Owner)
                 return DataTypeHelpers.EntityReference;
@@ -170,7 +170,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         maxLength = maxLengthSetting.Value;
                 }
 
-                return DataTypeHelpers.NVarChar(maxLength, dataSource.DefaultCollation, CollationLabel.CoercibleDefault);
+                return DataTypeHelpers.NVarChar(maxLength, dataSource.DefaultCollation, CollationLabel.Implicit);
             }
 
             if (attrMetadata is UniqueIdentifierAttributeMetadata || typeCode == AttributeTypeCode.Uniqueidentifier)
@@ -180,7 +180,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 return DataTypeHelpers.UniqueIdentifier;
 
             if (attrMetadata.AttributeType == AttributeTypeCode.Virtual)
-                return DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.CoercibleDefault);
+                return DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.Implicit);
 
             throw new ApplicationException("Unknown attribute type " + attrMetadata.GetType());
         }

@@ -34,7 +34,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public override bool BypassCustomPluginExecution { get; set; }
 
-        public override string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected)
+        public override string Execute(NodeExecutionContext context, out int recordsAffected)
         {
             _executionCount++;
 
@@ -42,18 +42,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 var count = 0;
 
-                var entities = GetDmlSourceEntities(dataSources, options, parameterTypes, parameterValues, out var schema);
-                var valueAccessors = CompileValueAccessors(schema, entities, parameterTypes);
+                var entities = GetDmlSourceEntities(context, out var schema);
+                var valueAccessors = CompileValueAccessors(schema, entities, context.ParameterTypes);
 
                 foreach (var entity in entities)
                 {
                     foreach (var variable in Variables)
-                        parameterValues[variable.VariableName] = valueAccessors[variable.VariableName](entity);
+                        context.ParameterValues[variable.VariableName] = valueAccessors[variable.VariableName](entity);
 
                     count++;
                 }
 
-                parameterValues["@@ROWCOUNT"] = (SqlInt32)count;
+                context.ParameterValues["@@ROWCOUNT"] = (SqlInt32)count;
             }
 
             recordsAffected = -1;
@@ -113,7 +113,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return valueAccessors;
         }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
             foreach (var variable in Variables)
             {
@@ -121,7 +121,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     requiredColumns.Add(variable.SourceColumn);
             }
 
-            Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
+            Source.AddRequiredColumns(context, requiredColumns);
         }
 
         protected override void RenameSourceColumns(IDictionary<string, string> columnRenamings)

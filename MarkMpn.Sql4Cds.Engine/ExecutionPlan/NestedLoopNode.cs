@@ -30,35 +30,37 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("Outer References")]
         public Dictionary<string,string> OuterReferences { get; set; }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
-            var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
-            var innerParameterTypes = GetInnerParameterTypes(leftSchema, parameterTypes);
+            var leftSchema = LeftSource.GetSchema(context);
+            var innerParameterTypes = GetInnerParameterTypes(leftSchema, context.ParameterTypes);
             if (OuterReferences != null)
             {
-                if (parameterTypes == null)
+                if (context.ParameterTypes == null)
                     innerParameterTypes = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
                 else
-                    innerParameterTypes = new Dictionary<string, DataTypeReference>(parameterTypes, StringComparer.OrdinalIgnoreCase);
+                    innerParameterTypes = new Dictionary<string, DataTypeReference>(context.ParameterTypes, StringComparer.OrdinalIgnoreCase);
 
                 foreach (var kvp in OuterReferences)
                     innerParameterTypes[kvp.Value] = leftSchema.Schema[kvp.Key];
             }
 
-            var rightSchema = RightSource.GetSchema(dataSources, innerParameterTypes);
-            var mergedSchema = GetSchema(dataSources, parameterTypes, true);
-            var joinCondition = JoinCondition?.Compile(dataSources[options.PrimaryDataSource], mergedSchema, parameterTypes);
+            var rightCompilationContext = new NodeCompilationContext(context.DataSources, context.Options, innerParameterTypes);
+            var rightSchema = RightSource.GetSchema(rightCompilationContext);
+            var mergedSchema = GetSchema(context, true);
+            var joinCondition = JoinCondition?.Compile(new ExpressionCompilationContext(context, mergedSchema, null));
+            var joinConditionContext = joinCondition == null ? null : new ExpressionExecutionContext(context);
 
-            foreach (var left in LeftSource.Execute(dataSources, options, parameterTypes, parameterValues))
+            foreach (var left in LeftSource.Execute(context))
             {
-                var innerParameters = parameterValues;
+                var innerParameters = context.ParameterValues;
 
                 if (OuterReferences != null)
                 {
-                    if (parameterValues == null)
+                    if (innerParameters == null)
                         innerParameters = new Dictionary<string, object>();
                     else
-                        innerParameters = new Dictionary<string, object>(parameterValues);
+                        innerParameters = new Dictionary<string, object>(innerParameters);
 
                     foreach (var kvp in OuterReferences)
                     {
@@ -69,12 +71,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var hasRight = false;
 
-                foreach (var right in RightSource.Execute(dataSources, options, innerParameterTypes, innerParameters))
+                foreach (var right in RightSource.Execute(new NodeExecutionContext(context.DataSources, context.Options, innerParameterTypes, innerParameters)))
                 {
                     var merged = Merge(left, leftSchema, right, rightSchema);
 
-                    if (joinCondition == null || joinCondition(merged, parameterValues, options))
+                    if (joinCondition == null)
+                    {
                         yield return merged;
+                    }
+                    else
+                    {
+                        joinConditionContext.Entity = merged;
+
+                        if (joinCondition(joinConditionContext))
+                            yield return merged;
+                    }
 
                     hasRight = true;
 
@@ -105,14 +116,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return innerParameterTypes;
         }
 
-        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
-            var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
-            LeftSource = LeftSource.FoldQuery(dataSources, options, parameterTypes, hints);
+            var leftSchema = LeftSource.GetSchema(context);
+            LeftSource = LeftSource.FoldQuery(context, hints);
             LeftSource.Parent = this;
 
-            var innerParameterTypes = GetInnerParameterTypes(leftSchema, parameterTypes);
-            RightSource = RightSource.FoldQuery(dataSources, options, innerParameterTypes, hints);
+            var innerParameterTypes = GetInnerParameterTypes(leftSchema, context.ParameterTypes);
+            var innerContext = new NodeCompilationContext(context.DataSources, context.Options, innerParameterTypes);
+            RightSource = RightSource.FoldQuery(innerContext, hints);
             RightSource.Parent = this;
 
             if (LeftSource is ConstantScanNode constant &&
@@ -121,7 +133,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 JoinType == QualifiedJoinType.LeftOuter &&
                 SemiJoin &&
                 JoinCondition == null &&
-                RightSource.EstimateRowsOut(dataSources, options, parameterTypes) is RowCountEstimateDefiniteRange range &&
+                RightSource.EstimateRowsOut(context) is RowCountEstimateDefiniteRange range &&
                 range.Minimum == 1 &&
                 range.Maximum == 1)
             {
@@ -143,7 +155,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return compute;
             }
 
-            if (RightSource is TableSpoolNode spool && LeftSource.EstimateRowsOut(dataSources, options, parameterTypes).Value <= 1)
+            if (RightSource is TableSpoolNode spool && LeftSource.EstimateRowsOut(context).Value <= 1)
             {
                 RightSource = spool.Source;
                 RightSource.Parent = this;
@@ -157,8 +169,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 aggregate.Aggregates[DefinedValues.Single().Value].AggregateType == AggregateType.First &&
                 aggregate.Source is IndexSpoolNode indexSpool &&
                 indexSpool.Source is FetchXmlScan fetch &&
-                LeftSource.EstimateRowsOut(dataSources, options, parameterTypes).Value < 100 &&
-                fetch.EstimateRowsOut(dataSources, options, innerParameterTypes).Value > 5000)
+                LeftSource.EstimateRowsOut(context).Value < 100 &&
+                fetch.EstimateRowsOut(innerContext).Value > 5000)
             {
                 // Scalar subquery was folded to use an index spool due to an expected large number of outer records,
                 // but the estimate has now changed (e.g. due to a TopNode being folded). Remove the index spool and replace
@@ -174,13 +186,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     },
                     Parent = aggregate
                 };
-                aggregate.Source = filter.FoldQuery(dataSources, options, innerParameterTypes, hints);
+                aggregate.Source = filter.FoldQuery(innerContext, hints);
             }
 
             return this;
         }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
             if (JoinCondition != null)
             {
@@ -191,39 +203,42 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
-            var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
+            var leftSchema = LeftSource.GetSchema(context);
             var leftColumns = requiredColumns
                 .Where(col => leftSchema.ContainsColumn(col, out _))
                 .Concat((IEnumerable<string>) OuterReferences?.Keys ?? Array.Empty<string>())
                 .Distinct()
                 .ToList();
-            var innerParameterTypes = GetInnerParameterTypes(leftSchema, parameterTypes);
-            var rightSchema = RightSource.GetSchema(dataSources, innerParameterTypes);
+            var innerParameterTypes = GetInnerParameterTypes(leftSchema, context.ParameterTypes);
+            var innerContext = new NodeCompilationContext(context.DataSources, context.Options, innerParameterTypes);
+            var rightSchema = RightSource.GetSchema(innerContext);
             var rightColumns = requiredColumns
                 .Where(col => rightSchema.ContainsColumn(col, out _))
                 .Concat(DefinedValues.Values)
                 .Distinct()
                 .ToList();
 
-            LeftSource.AddRequiredColumns(dataSources, parameterTypes, leftColumns);
-            RightSource.AddRequiredColumns(dataSources, parameterTypes, rightColumns);
+            LeftSource.AddRequiredColumns(context, leftColumns);
+            RightSource.AddRequiredColumns(context, rightColumns);
         }
 
-        protected override INodeSchema GetRightSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override INodeSchema GetRightSchema(NodeCompilationContext context)
         {
-            var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
-            var innerParameterTypes = GetInnerParameterTypes(leftSchema, parameterTypes);
-            return RightSource.GetSchema(dataSources, innerParameterTypes);
+            var leftSchema = LeftSource.GetSchema(context);
+            var innerParameterTypes = GetInnerParameterTypes(leftSchema, context.ParameterTypes);
+            var innerContext = new NodeCompilationContext(context.DataSources, context.Options, innerParameterTypes);
+            return RightSource.GetSchema(innerContext);
         }
 
-        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(NodeCompilationContext context)
         {
-            var leftEstimate = LeftSource.EstimateRowsOut(dataSources, options, parameterTypes);
+            var leftEstimate = LeftSource.EstimateRowsOut(context);
             ParseEstimate(leftEstimate, out var leftMin, out var leftMax, out var leftIsRange);
-            var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
-            var innerParameterTypes = GetInnerParameterTypes(leftSchema, parameterTypes);
+            var leftSchema = LeftSource.GetSchema(context);
+            var innerParameterTypes = GetInnerParameterTypes(leftSchema, context.ParameterTypes);
+            var innerContext = new NodeCompilationContext(context.DataSources, context.Options, innerParameterTypes);
 
-            var rightEstimate = RightSource.EstimateRowsOut(dataSources, options, innerParameterTypes);
+            var rightEstimate = RightSource.EstimateRowsOut(innerContext);
             ParseEstimate(rightEstimate, out var rightMin, out var rightMax, out var rightIsRange);
 
             if (JoinType == QualifiedJoinType.LeftOuter && SemiJoin)

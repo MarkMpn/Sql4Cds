@@ -84,7 +84,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// Returns the default collation used by this instance
         /// </summary>
-        internal Collation DefaultCollation { get; }
+        internal Collation DefaultCollation { get; set; }
 
         private Collation LoadDefaultCollation()
         {

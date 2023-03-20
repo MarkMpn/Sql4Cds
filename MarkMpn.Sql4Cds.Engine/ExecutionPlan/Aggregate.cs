@@ -49,7 +49,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// A compiled version of the <see cref="SqlExpression"/> that takes the row values and parameter values and returns the value to add to the aggregate
         /// </summary>
         [Browsable(false)]
-        public Func<Entity, IDictionary<string, object>, IQueryExecutionOptions, object> Expression { get; set; }
+        public Func<ExpressionExecutionContext, object> Expression { get; set; }
 
         /// <summary>
         /// The type of value produced by the <see cref="Expression"/>
@@ -69,13 +69,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// </summary>
     abstract class AggregateFunction
     {
-        private readonly Func<Entity, object> _selector;
+        private readonly Func<object> _selector;
 
         /// <summary>
         /// Creates a new <see cref="AggregateFunction"/>
         /// </summary>
         /// <param name="selector">The function that returns the value to aggregate from the source entity</param>
-        public AggregateFunction(Func<Entity, object> selector)
+        public AggregateFunction(Func<object> selector)
         {
             _selector = selector;
         }
@@ -83,24 +83,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// Updates the aggregate function state based on the next <see cref="Entity"/> in the sequence
         /// </summary>
-        /// <param name="entity">The <see cref="Entity"/> to take the value from and apply to this aggregation</param>
         /// <param name="state">The current state of the aggregation</param>
         /// <returns>The new state of the aggregation</returns>
-        public virtual void NextRecord(Entity entity, object state)
+        public virtual void NextRecord(object state)
         {
-            var value = _selector == null ? entity : _selector(entity);
+            var value = _selector();
             Update(value, state);
         }
 
         /// <summary>
         /// Updates the aggregate function state based on the aggregate values for a partition
         /// </summary>
-        /// <param name="entity">The <see cref="Entity"/> that contains aggregated values from a partition of the available records</param>
         /// <param name="state">The current state of the aggregation</param>
         /// <returns>The new state of the aggregation</returns>
-        public virtual void NextPartition(Entity entity, object state)
+        public virtual void NextPartition(object state)
         {
-            var value = _selector(entity);
+            var value = _selector();
             UpdatePartition(value, state);
         }
 
@@ -171,7 +169,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// Creates a new <see cref="Average"/>
         /// </summary>
         /// <param name="selector">A function that extracts the value to calculate the average from</param>
-        public Average(Func<Entity, object> selector, DataTypeReference sourceType, DataTypeReference returnType) : base(selector)
+        public Average(Func<object> selector, DataTypeReference sourceType, DataTypeReference returnType) : base(selector)
         {
             Type = returnType;
 
@@ -179,12 +177,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _count = new CountColumn(selector);
         }
 
-        public override void NextRecord(Entity entity, object state)
+        public override void NextRecord(object state)
         {
             var s = (State)state;
 
-            _sum.NextRecord(entity, s.SumState);
-            _count.NextRecord(entity, s.CountState);
+            _sum.NextRecord(s.SumState);
+            _count.NextRecord(s.CountState);
         }
 
         protected override void Update(object value, object state)
@@ -244,7 +242,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// Creates a new <see cref="Count"/>
         /// </summary>
         /// <param name="selector">Unused</param>
-        public Count(Func<Entity, object> selector) : base(selector)
+        public Count(Func<object> selector) : base(selector)
         {
         }
 
@@ -288,7 +286,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// Creates a new <see cref="CountColumn"/>
         /// </summary>
         /// <param name="selector">A function that extracts the value to count non-null instances of</param>
-        public CountColumn(Func<Entity, object> selector) : base(selector)
+        public CountColumn(Func<object> selector) : base(selector)
         {
         }
 
@@ -340,7 +338,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// Creates a new <see cref="Max"/>
         /// </summary>
         /// <param name="selector">A function that extracts the value to find the maximum value of</param>
-        public Max(Func<Entity, object> selector, DataTypeReference type) : base(selector)
+        public Max(Func<object> selector, DataTypeReference type) : base(selector)
         {
             Type = type;
         }
@@ -396,7 +394,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// Creates a new <see cref="Min"/>
         /// </summary>
         /// <param name="selector">A function that extracts the value to find the minimum value of</param>
-        public Min(Func<Entity, object> selector, DataTypeReference type) : base(selector)
+        public Min(Func<object> selector, DataTypeReference type) : base(selector)
         {
             Type = type;
         }
@@ -455,7 +453,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// Creates a new <see cref="Sum"/>
         /// </summary>
         /// <param name="selector">A function that extracts the value to sum</param>
-        public Sum(Func<Entity, object> selector, DataTypeReference sourceType, DataTypeReference returnType) : base(selector)
+        public Sum(Func<object> selector, DataTypeReference sourceType, DataTypeReference returnType) : base(selector)
         {
             Type = returnType;
 
@@ -559,7 +557,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// Creates a new <see cref="Sum"/>
         /// </summary>
         /// <param name="selector">A function that extracts the value to sum</param>
-        public First(Func<Entity, object> selector, DataTypeReference type) : base(selector)
+        public First(Func<object> selector, DataTypeReference type) : base(selector)
         {
             Type = type;
         }
@@ -602,9 +600,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         }
 
         private readonly AggregateFunction _func;
-        private readonly Func<Entity, object> _selector;
+        private readonly Func<object> _selector;
 
-        public DistinctAggregate(AggregateFunction func, Func<Entity, object> selector) : base(selector)
+        public DistinctAggregate(AggregateFunction func, Func<object> selector) : base(selector)
         {
             _func = func;
             _selector = selector;
@@ -615,13 +613,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override DataTypeReference Type => _func.Type;
 
-        public override void NextRecord(Entity entity, object state)
+        public override void NextRecord(object state)
         {
-            var value = _selector(entity);
+            var value = _selector();
             var s = (State)state;
 
             if (s.Distinct.Add(value))
-                _func.NextRecord(entity, s.InnerState);
+                _func.NextRecord(s.InnerState);
         }
 
         protected override void UpdatePartition(object value, object state)

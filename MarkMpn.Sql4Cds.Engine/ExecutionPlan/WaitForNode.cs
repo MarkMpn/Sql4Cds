@@ -17,7 +17,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     class WaitForNode : BaseNode, IDmlQueryExecutionPlanNode
     {
         private int _executionCount;
-        private Func<Entity, IDictionary<string, object>, IQueryExecutionOptions, object> _timeExpr;
+        private Func<ExpressionExecutionContext, object> _timeExpr;
         private readonly Timer _timer = new Timer();
 
         [Category("Wait")]
@@ -51,11 +51,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override TimeSpan Duration => _timer.Duration;
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
         }
 
-        public string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected)
+        public string Execute(NodeExecutionContext context, out int recordsAffected)
         {
             _executionCount++;
 
@@ -64,9 +64,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 using (_timer.Run())
                 {
                     if (_timeExpr == null)
-                        _timeExpr = Time.Compile(dataSources[options.PrimaryDataSource], null, parameterTypes);
+                        _timeExpr = Time.Compile(new ExpressionCompilationContext(context, null, null));
 
-                    var time = (SqlTime) _timeExpr(null, parameterValues, options);
+                    var time = (SqlTime) _timeExpr(new ExpressionExecutionContext(context));
 
                     if (time.IsNull)
                     {
@@ -84,8 +84,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 delay = delay + TimeSpan.FromDays(1) - DateTime.Now.TimeOfDay;
                         }
 
-                        options.Progress(null, $"Waiting for {delay}...");
-                        options.CancellationToken.WaitHandle.WaitOne(delay);
+                        context.Options.Progress(null, $"Waiting for {delay}...");
+                        context.Options.CancellationToken.WaitHandle.WaitOne(delay);
                     }
 
                     recordsAffected = -1;
@@ -105,7 +105,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public IRootExecutionPlanNodeInternal[] FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public IRootExecutionPlanNodeInternal[] FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
             return new[] { this };
         }

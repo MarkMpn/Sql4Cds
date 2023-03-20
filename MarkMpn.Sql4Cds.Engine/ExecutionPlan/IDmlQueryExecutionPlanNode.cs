@@ -16,8 +16,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// Executes the execution plan
         /// </summary>
-        /// <param name="org">The <see cref="IOrganizationService"/> to use to execute the plan</param>
+        /// <param name="context">The context in which the node is being executed</param>
+        /// <param name="recordsAffected">The number of records that were affected by the query</param>
         /// <returns>A status message for the results of the query</returns>
-        string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected);
+        string Execute(NodeExecutionContext context, out int recordsAffected);
     }
 }

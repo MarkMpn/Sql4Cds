@@ -55,15 +55,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public IDataExecutionPlanNodeInternal Source { get; set; }
 
-        protected void InitializeAggregates(DataSource primaryDataSource, INodeSchema schema, IDictionary<string, DataTypeReference> parameterTypes)
+        protected void InitializeAggregates(ExpressionCompilationContext context)
         {
             foreach (var aggregate in Aggregates.Where(agg => agg.Value.SqlExpression != null))
             {
-                aggregate.Value.SqlExpression.GetType(primaryDataSource, schema, null, parameterTypes, out var retType);
+                aggregate.Value.SqlExpression.GetType(context, out var retType);
                 aggregate.Value.SourceType = retType;
                 aggregate.Value.ReturnType = retType;
 
-                aggregate.Value.Expression = aggregate.Value.SqlExpression.Compile(primaryDataSource, schema, parameterTypes);
+                aggregate.Value.Expression = aggregate.Value.SqlExpression.Compile(context);
 
                 // Return type of SUM and AVG is based on the input type with some modifications
                 // https://docs.microsoft.com/en-us/sql/t-sql/functions/avg-transact-sql?view=sql-server-ver15#return-types
@@ -82,13 +82,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        protected void InitializePartitionedAggregates(DataSource primaryDataSource, INodeSchema schema, IDictionary<string, DataTypeReference> parameterTypes)
+        protected void InitializePartitionedAggregates(ExpressionCompilationContext context)
         {
             foreach (var aggregate in Aggregates)
             {
                 var sourceExpression = aggregate.Key.ToColumnReference();
-                aggregate.Value.Expression = sourceExpression.Compile(primaryDataSource, schema, parameterTypes);
-                sourceExpression.GetType(primaryDataSource, schema, null, parameterTypes, out var retType);
+                aggregate.Value.Expression = sourceExpression.Compile(context);
+                sourceExpression.GetType(context, out var retType);
                 aggregate.Value.SourceType = retType;
                 aggregate.Value.ReturnType = retType;
             }
@@ -108,16 +108,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return groupByCols;
         }
 
-        protected Dictionary<string, AggregateFunction> CreateAggregateFunctions(IDictionary<string, object> parameterValues, IQueryExecutionOptions options, bool partitioned)
+        protected Dictionary<string, AggregateFunction> CreateAggregateFunctions(ExpressionExecutionContext context, bool partitioned)
         {
             var values = new Dictionary<string, AggregateFunction>();
 
             foreach (var aggregate in Aggregates)
             {
-                Func<Entity, object> selector = null;
+                Func<object> selector = null;
 
                 if (partitioned || aggregate.Value.AggregateType != AggregateType.CountStar)
-                    selector = e => aggregate.Value.Expression(e, parameterValues, options);
+                    selector = () => aggregate.Value.Expression(context);
+                else
+                    selector = () => null;
 
                 switch (aggregate.Value.AggregateType)
                 {
@@ -172,9 +174,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return aggregateStates.Select(kvp => new KeyValuePair<string, object>(kvp.Key, kvp.Value.AggregateFunction.GetValue(kvp.Value.State)));
         }
 
-        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
+        public override INodeSchema GetSchema(NodeCompilationContext context)
         {
-            var sourceSchema = Source.GetSchema(dataSources, parameterTypes);
+            var sourceSchema = Source.GetSchema(context);
+            var expressionContext = new ExpressionCompilationContext(context, sourceSchema, null);
             var schema = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
             var aliases = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
             var primaryKey = (string)null;
@@ -213,7 +216,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         break;
 
                     default:
-                        aggregate.Value.SqlExpression.GetType(dataSources[options.PrimaryDataSource], sourceSchema, null, parameterTypes, out aggregateType);
+                        aggregate.Value.SqlExpression.GetType(expressionContext, out aggregateType);
 
                         // Return type of SUM and AVG is based on the input type with some modifications
                         // https://docs.microsoft.com/en-us/sql/t-sql/functions/avg-transact-sql?view=sql-server-ver15#return-types
@@ -307,17 +310,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return false;
         }
 
-        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(NodeCompilationContext context)
         {
             if (GroupBy.Count == 0)
                 return RowCountEstimateDefiniteRange.ExactlyOne;
 
-            var rows = Source.EstimateRowsOut(dataSources, options, parameterTypes).Value * 4 / 10;
+            var rows = Source.EstimateRowsOut(context).Value * 4 / 10;
 
             return new RowCountEstimate(rows);
         }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
             // Columns required by previous nodes must be derived from this node, so no need to pass them through.
             // Just calculate the columns that are required to calculate the groups & aggregates
@@ -327,7 +330,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             scalarRequiredColumns.AddRange(Aggregates.Where(agg => agg.Value.SqlExpression != null).SelectMany(agg => agg.Value.SqlExpression.GetColumns()).Distinct());
 
-            Source.AddRequiredColumns(dataSources, parameterTypes, scalarRequiredColumns);
+            Source.AddRequiredColumns(context, scalarRequiredColumns);
         }
 
         protected override IEnumerable<string> GetVariablesInternal()

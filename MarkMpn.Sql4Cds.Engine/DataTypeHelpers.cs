@@ -597,6 +597,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             collationLabel = CollationLabel.CoercibleDefault;
+            collation = lhsSqlWithColl.Collation;
             return true;
         }
     }

@@ -34,7 +34,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             _context.AddGenericFakeMessageExecutor(SampleMessageExecutor.MessageName, new SampleMessageExecutor());
 
             _service = _context.GetOrganizationService();
-            _dataSource = new DataSource { Name = "uat", Connection = _service, Metadata = new AttributeMetadataCache(_service), TableSizeCache = new StubTableSizeCache(), MessageCache = new StubMessageCache() };
+            _dataSource = new DataSource { Name = "uat", Connection = _service, Metadata = new AttributeMetadataCache(_service), TableSizeCache = new StubTableSizeCache(), MessageCache = new StubMessageCache(), DefaultCollation = Collation.USEnglish };
 
             _context2 = new XrmFakedContext();
             _context2.InitializeMetadata(Assembly.GetExecutingAssembly());
@@ -43,16 +43,19 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             _context2.AddGenericFakeMessageExecutor(SampleMessageExecutor.MessageName, new SampleMessageExecutor());
 
             _service2 = _context2.GetOrganizationService();
-            _dataSource2 = new DataSource { Name = "prod", Connection = _service2, Metadata = new AttributeMetadataCache(_service2), TableSizeCache = new StubTableSizeCache(), MessageCache = new StubMessageCache() };
+            _dataSource2 = new DataSource { Name = "prod", Connection = _service2, Metadata = new AttributeMetadataCache(_service2), TableSizeCache = new StubTableSizeCache(), MessageCache = new StubMessageCache(), DefaultCollation = Collation.USEnglish };
 
             _dataSources = new[] { _dataSource, _dataSource2 }.ToDictionary(ds => ds.Name);
             _localDataSource = new Dictionary<string, DataSource>
             {
-                ["local"] = new DataSource { Name = "local", Connection = _service, Metadata = _dataSource.Metadata, TableSizeCache = _dataSource.TableSizeCache, MessageCache = _dataSource.MessageCache }
+                ["local"] = new DataSource { Name = "local", Connection = _service, Metadata = _dataSource.Metadata, TableSizeCache = _dataSource.TableSizeCache, MessageCache = _dataSource.MessageCache, DefaultCollation = Collation.USEnglish }
             };
 
             SetPrimaryIdAttributes(_context);
             SetPrimaryIdAttributes(_context2);
+
+            SetPrimaryNameAttributes(_context);
+            SetPrimaryNameAttributes(_context2);
 
             SetLookupTargets(_context);
             SetLookupTargets(_context2);
@@ -62,6 +65,18 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             SetMaxLength(_context);
             SetMaxLength(_context2);
+        }
+
+        private void SetPrimaryNameAttributes(XrmFakedContext context)
+        {
+            foreach (var entity in context.CreateMetadataQuery())
+            {
+                if (entity.LogicalName != "contact")
+                    continue;
+
+                // Set the primary name attribute on contact
+                typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.PrimaryNameAttribute)).SetValue(entity, "fullname");
+            }
         }
 
         private void SetPrimaryIdAttributes(XrmFakedContext context)
@@ -119,11 +134,32 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             foreach (var entity in context.CreateMetadataQuery())
             {
-                if (entity.LogicalName != "new_customentity")
-                    continue;
+                if (entity.LogicalName == "new_customentity")
+                {
+                    var attr = entity.Attributes.Single(a => a.LogicalName == "new_optionsetvaluename");
+                    typeof(AttributeMetadata).GetProperty(nameof(AttributeMetadata.AttributeOf)).SetValue(attr, "new_optionsetvalue");
 
-                var attr = entity.Attributes.Single(a => a.LogicalName == "new_optionsetvaluename");
-                typeof(AttributeMetadata).GetProperty(nameof(AttributeMetadata.AttributeOf)).SetValue(attr, "new_optionsetvalue");
+                    var valueAttr = (EnumAttributeMetadata)entity.Attributes.Single(a => a.LogicalName == "new_optionsetvalue");
+                    valueAttr.OptionSet = new OptionSetMetadata
+                    {
+                        Options =
+                        {
+                            new OptionMetadata(new Label { UserLocalizedLabel = new LocalizedLabel(Metadata.New_OptionSet.Value1.ToString(), 1033) }, (int) Metadata.New_OptionSet.Value1),
+                            new OptionMetadata(new Label { UserLocalizedLabel = new LocalizedLabel(Metadata.New_OptionSet.Value2.ToString(), 1033) }, (int) Metadata.New_OptionSet.Value2),
+                            new OptionMetadata(new Label { UserLocalizedLabel = new LocalizedLabel(Metadata.New_OptionSet.Value3.ToString(), 1033) }, (int) Metadata.New_OptionSet.Value3)
+                        }
+                    };
+                }
+                else if (entity.LogicalName == "account")
+                {
+                    // Add metadata for primarycontactidname virtual attribute
+                    var nameAttr = entity.Attributes.Single(a => a.LogicalName == "primarycontactidname");
+                    nameAttr.GetType().GetProperty(nameof(AttributeMetadata.AttributeOf)).SetValue(nameAttr, "primarycontactid");
+                }
+                else
+                {
+                    continue;
+                }
 
                 context.SetEntityMetadata(entity);
             }

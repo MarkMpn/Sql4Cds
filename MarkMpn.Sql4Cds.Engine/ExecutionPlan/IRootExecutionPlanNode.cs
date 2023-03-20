@@ -33,11 +33,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// Attempts to fold this node into its source to simplify the query
         /// </summary>
-        /// <param name="dataSources">The data sources that the query can use</param>
-        /// <param name="options"><see cref="IQueryExpressionVisitor"/> to indicate how the query can be executed</param>
-        /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
+        /// <param name="context">The context in which the node is being built</param>
         /// <param name="hints">Any optimizer hints to apply</param>
         /// <returns>The node that should be used in place of this node</returns>
-        IRootExecutionPlanNodeInternal[] FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints);
+        IRootExecutionPlanNodeInternal[] FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints);
     }
 }

@@ -33,14 +33,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public Dictionary<string, DataTypeReference> Schema { get; private set; } = new Dictionary<string, DataTypeReference>();
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
-            foreach (var expressions in Values)
+            var compilationContext = new ExpressionCompilationContext(context, null, null);
+            var executionContext = new ExpressionExecutionContext(context);
+
+            foreach (var row in Values)
             {
                 var value = new Entity();
 
                 foreach (var col in Schema)
-                    value[PrefixWithAlias(col.Key)] = expressions[col.Key].Compile(dataSources[options.PrimaryDataSource], null, parameterTypes)(null, parameterValues, options);
+                    value[PrefixWithAlias(col.Key)] = row[col.Key].Compile(compilationContext)(executionContext);
 
                 yield return value;
             }
@@ -51,7 +54,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Array.Empty<IDataExecutionPlanNode>();
         }
 
-        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
+        public override INodeSchema GetSchema(NodeCompilationContext context)
         {
             return new NodeSchema(
                 primaryKey: null,
@@ -69,16 +72,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Alias + "." + columnName;
         }
 
-        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
             return this;
         }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
         }
 
-        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(NodeCompilationContext context)
         {
             return new RowCountEstimateDefiniteRange(Values.Count, Values.Count);
         }

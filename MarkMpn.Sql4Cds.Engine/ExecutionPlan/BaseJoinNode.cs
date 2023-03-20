@@ -105,15 +105,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return RightSource;
         }
 
-        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
+        public override INodeSchema GetSchema(NodeCompilationContext context)
         {
-            return GetSchema(dataSources, parameterTypes, false);
+            return GetSchema(context, false);
         }
 
-        protected virtual INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, bool includeSemiJoin)
+        protected virtual INodeSchema GetSchema(NodeCompilationContext context, bool includeSemiJoin)
         {
-            var outerSchema = LeftSource.GetSchema(dataSources, parameterTypes);
-            var innerSchema = GetRightSchema(dataSources, parameterTypes);
+            var outerSchema = LeftSource.GetSchema(context);
+            var innerSchema = GetRightSchema(context);
 
             if (outerSchema == _lastLeftSchema && innerSchema == _lastRightSchema)
                 return _lastSchema;
@@ -178,9 +178,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return null;
         }
 
-        protected virtual INodeSchema GetRightSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
+        protected virtual INodeSchema GetRightSchema(NodeCompilationContext context)
         {
-            return RightSource.GetSchema(dataSources, parameterTypes);
+            return RightSource.GetSchema(context);
         }
 
         public override string ToString()

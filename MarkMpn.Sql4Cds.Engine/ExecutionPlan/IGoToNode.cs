@@ -13,11 +13,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// Checks which nodes should be executed next
         /// </summary>
-        /// <param name="dataSources">The data sources that can be accessed by the query</param>
-        /// <param name="options">The options which describe how the query should be executed</param>
-        /// <param name="parameterTypes">The types of any parameters available to the query</param>
-        /// <param name="parameterValues">The values of any parameters available to the query</param>
+        /// <param name="context">The context in which the node is being executed</param>
         /// <returns>The label which should be executed next</returns>
-        string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues);
+        string Execute(NodeExecutionContext context);
     }
 }

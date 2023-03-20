@@ -25,7 +25,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public ContinueBreakNodeType Type { get; set; }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
         }
 
@@ -40,12 +40,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             };
         }
 
-        public string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        public string Execute(NodeExecutionContext context)
         {
             throw new NotSupportedException(Type.ToString() + " node should have been converted to GOTO during query plan building");
         }
 
-        public IRootExecutionPlanNodeInternal[] FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public IRootExecutionPlanNodeInternal[] FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
             if (hints != null && hints.OfType<ConditionalNode.DoNotCompileConditionsHint>().Any())
                 return new[] { this };
@@ -71,14 +71,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         Condition = loopNode.Condition,
                         Source = loopNode.Source,
                         SourceColumn = loopNode.SourceColumn
-                    }.FoldQuery(dataSources, options, parameterTypes, hints));
+                    }.FoldQuery(context, hints));
             }
 
             statements.AddRange(
                 new GoToNode
                 {
                     Label = loopNode.FalseLabel
-                }.FoldQuery(dataSources, options, parameterTypes, hints));
+                }.FoldQuery(context, hints));
 
             return statements.ToArray();
         }

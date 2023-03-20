@@ -62,6 +62,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
         private bool Execute(Dictionary<string, DataTypeReference> parameterTypes, Dictionary<string, object> parameterValues)
         {
+            var context = new NodeExecutionContext(_connection.DataSources, _options, parameterTypes, parameterValues);
+
             try
             {
                 while (_instructionPointer < _command.Plan.Length && !_options.CancellationToken.IsCancellationRequested)
@@ -73,7 +75,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         if (_resultSetsReturned == 0 || (!_behavior.HasFlag(CommandBehavior.SingleResult) && !_behavior.HasFlag(CommandBehavior.SingleRow)))
                         {
                             _readerQuery = (IDataReaderExecutionPlanNode)dataSetNode.Clone();
-                            _reader = _readerQuery.Execute(_connection.DataSources, _options, parameterTypes, parameterValues, _behavior);
+                            _reader = _readerQuery.Execute(context, _behavior);
                             _resultSetsReturned++;
                             _rows = 0;
                             _instructionPointer++;
@@ -88,7 +90,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     else if (node is IDmlQueryExecutionPlanNode dmlNode)
                     {
                         dmlNode = (IDmlQueryExecutionPlanNode)dmlNode.Clone();
-                        var msg = dmlNode.Execute(_connection.DataSources, _options, parameterTypes, parameterValues, out var recordsAffected);
+                        var msg = dmlNode.Execute(context, out var recordsAffected);
 
                         if (!String.IsNullOrEmpty(msg))
                             _connection.OnInfoMessage(dmlNode, msg);
@@ -106,7 +108,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     else if (node is IGoToNode cond)
                     {
                         cond = (IGoToNode)cond.Clone();
-                        var label = cond.Execute(_connection.DataSources, _options, parameterTypes, parameterValues);
+                        var label = cond.Execute(context);
 
                         if (cond.GetSources().Any())
                             _command.OnStatementCompleted(cond, -1);

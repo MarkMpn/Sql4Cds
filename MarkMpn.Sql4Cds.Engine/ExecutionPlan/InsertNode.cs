@@ -45,7 +45,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Category("Insert")]
         public override bool BypassCustomPluginExecution { get; set; }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
             foreach (var col in ColumnMappings.Values)
             {
@@ -53,16 +53,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     requiredColumns.Add(col);
             }
 
-            Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
+            Source.AddRequiredColumns(context, requiredColumns);
         }
 
-        public override string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected)
+        public override string Execute(NodeExecutionContext context, out int recordsAffected)
         {
             _executionCount++;
 
             try
             {
-                if (!dataSources.TryGetValue(DataSource, out var dataSource))
+                if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
                     throw new QueryExecutionException("Missing datasource " + DataSource);
 
                 List<Entity> entities;
@@ -73,21 +73,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 using (_timer.Run())
                 {
-                    entities = GetDmlSourceEntities(dataSources, options, parameterTypes, parameterValues, out var schema);
+                    entities = GetDmlSourceEntities(context, out var schema);
 
                     // Precompile mappings with type conversions
                     meta = dataSource.Metadata[LogicalName];
                     attributes = meta.Attributes.ToDictionary(a => a.LogicalName, StringComparer.OrdinalIgnoreCase);
-                    var dateTimeKind = options.UseLocalTimeZone ? DateTimeKind.Local : DateTimeKind.Utc;
+                    var dateTimeKind = context.Options.UseLocalTimeZone ? DateTimeKind.Local : DateTimeKind.Utc;
                     attributeAccessors = CompileColumnMappings(dataSource, LogicalName, ColumnMappings, schema, dateTimeKind, entities);
                     attributeAccessors.TryGetValue(meta.PrimaryIdAttribute, out primaryIdAccessor);
                 }
 
                 // Check again that the update is allowed. Don't count any UI interaction in the execution time
                 var confirmArgs = new ConfirmDmlStatementEventArgs(entities.Count, meta, BypassCustomPluginExecution);
-                if (options.CancellationToken.IsCancellationRequested)
+                if (context.Options.CancellationToken.IsCancellationRequested)
                     confirmArgs.Cancel = true;
-                options.ConfirmInsert(confirmArgs);
+                context.Options.ConfirmInsert(confirmArgs);
                 if (confirmArgs.Cancel)
                     throw new OperationCanceledException("INSERT cancelled by user");
 
@@ -95,7 +95,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     return ExecuteDmlOperation(
                         dataSource.Connection,
-                        options,
+                        context.Options,
                         entities,
                         meta,
                         entity => CreateInsertRequest(meta, entity, attributeAccessors, primaryIdAccessor, attributes),
@@ -106,8 +106,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             CompletedLowercase = "inserted"
                         },
                         out recordsAffected,
-                        parameterValues,
-                        LogicalName == "listmember" || meta.IsIntersect == true ? null : (Action<OrganizationResponse>) ((r) => SetIdentity(r, parameterValues))
+                        context.ParameterValues,
+                        LogicalName == "listmember" || meta.IsIntersect == true ? null : (Action<OrganizationResponse>) ((r) => SetIdentity(r, context.ParameterValues))
                         );
                 }
             }

@@ -29,26 +29,31 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// Populates <see cref="IDataExecutionPlanNode.EstimatedRowsOut"/> with an estimate of the number of rows that will be returned by this node
         /// </summary>
-        RowCountEstimate EstimateRowsOut(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes);
+        /// <param name="context">The context in which the node is being built</param>
+        /// <returns>An estimate of how many rows will be returned by the node</returns>
+        RowCountEstimate EstimateRowsOut(NodeCompilationContext context);
 
         /// <summary>
         /// Executes the execution plan
         /// </summary>
-        /// <param name="org">The <see cref="IOrganizationService"/> to use to execute the plan</param>
+        /// <param name="context">The context in which the node is being executed</param>
         /// <returns>A sequence of entities matched by the query</returns>
-        IEnumerable<Entity> Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues);
+        IEnumerable<Entity> Execute(NodeExecutionContext context);
 
         /// <summary>
         /// Attempts to fold the query operator down into its source
         /// </summary>
+        /// <param name="context">The context in which the node is being built</param>
+        /// <param name="hints">Any optimizer hints which may affect how the query is folded</param>
         /// <returns>The final execution plan node to execute</returns>
-        IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints);
+        IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints);
 
         /// <summary>
         /// Gets the schema of the dataset returned by the node
         /// </summary>
-        /// <returns></returns>
-        INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes);
+        /// <param name="context">The context in which the node is being built</param>
+        /// <returns>The schema of data that will be produced by the node</returns>
+        INodeSchema GetSchema(NodeCompilationContext context);
 
         /// <summary>
         /// Gets the variables that are in use by this node and optionally its sources

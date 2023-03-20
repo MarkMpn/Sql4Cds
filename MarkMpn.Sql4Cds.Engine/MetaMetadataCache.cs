@@ -32,7 +32,7 @@ namespace MarkMpn.Sql4Cds.Engine
             metadataNode.ManyToOneRelationshipAlias = "relationship_n_1";
             metadataNode.ManyToManyRelationshipAlias = "relationship_n_n";
 
-            var metadataSchema = metadataNode.GetSchema(null, null);
+            var metadataSchema = metadataNode.GetSchema(new NodeCompilationContext(null, null, null));
 
             _customMetadata["metadata." + metadataNode.EntityAlias] = SchemaToMetadata(metadataSchema, metadataNode.EntityAlias);
             _customMetadata["metadata." + metadataNode.AttributeAlias] = SchemaToMetadata(metadataSchema, metadataNode.AttributeAlias);
@@ -43,7 +43,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var optionsetNode = new GlobalOptionSetQueryNode();
             optionsetNode.Alias = "globaloptionset";
 
-            var optionsetSchema = optionsetNode.GetSchema(null, null);
+            var optionsetSchema = optionsetNode.GetSchema(new NodeCompilationContext(null, null, null));
 
             _customMetadata["metadata." + optionsetNode.Alias] = SchemaToMetadata(optionsetSchema, optionsetNode.Alias);
         }

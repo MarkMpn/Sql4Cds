@@ -53,7 +53,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Category("Delete")]
         public override bool BypassCustomPluginExecution { get; set; }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
             if (!requiredColumns.Contains(PrimaryIdSource))
                 requiredColumns.Add(PrimaryIdSource);
@@ -61,21 +61,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (SecondaryIdSource != null && !requiredColumns.Contains(SecondaryIdSource))
                 requiredColumns.Add(SecondaryIdSource);
 
-            Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
+            Source.AddRequiredColumns(context, requiredColumns);
         }
 
-        public override IRootExecutionPlanNodeInternal[] FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public override IRootExecutionPlanNodeInternal[] FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
-            var result = base.FoldQuery(dataSources, options, parameterTypes, hints);
+            var result = base.FoldQuery(context, hints);
 
             if (result.Length != 1 || result[0] != this)
                 return result;
 
-            if (!dataSources.TryGetValue(DataSource, out var dataSource))
+            if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
 
             // Use bulk delete if requested & possible
-            if ((options.UseBulkDelete || LogicalName == "audit") &&
+            if ((context.Options.UseBulkDelete || LogicalName == "audit") &&
                 Source is FetchXmlScan fetch &&
                 LogicalName == fetch.Entity.name &&
                 PrimaryIdSource.Equals($"{fetch.Alias}.{dataSource.Metadata[LogicalName].PrimaryIdAttribute}") &&
@@ -96,13 +96,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 SecondaryIdSource = secondaryIdSourceRenamed;
         }
 
-        public override string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected)
+        public override string Execute(NodeExecutionContext context, out int recordsAffected)
         {
             _executionCount++;
 
             try
             {
-                if (!dataSources.TryGetValue(DataSource, out var dataSource))
+                if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
                     throw new QueryExecutionException("Missing datasource " + DataSource);
 
                 List<Entity> entities;
@@ -112,11 +112,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 using (_timer.Run())
                 {
-                    entities = GetDmlSourceEntities(dataSources, options, parameterTypes, parameterValues, out var schema);
+                    entities = GetDmlSourceEntities(context, out var schema);
 
                     // Precompile mappings with type conversions
                     meta = dataSource.Metadata[LogicalName];
-                    var dateTimeKind = options.UseLocalTimeZone ? DateTimeKind.Local : DateTimeKind.Utc;
+                    var dateTimeKind = context.Options.UseLocalTimeZone ? DateTimeKind.Local : DateTimeKind.Utc;
                     var primaryKey = meta.PrimaryIdAttribute;
                     string secondaryKey = null;
 
@@ -150,9 +150,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 // Check again that the update is allowed. Don't count any UI interaction in the execution time
                 var confirmArgs = new ConfirmDmlStatementEventArgs(entities.Count, meta, BypassCustomPluginExecution);
-                if (options.CancellationToken.IsCancellationRequested)
+                if (context.Options.CancellationToken.IsCancellationRequested)
                     confirmArgs.Cancel = true;
-                options.ConfirmDelete(confirmArgs);
+                context.Options.ConfirmDelete(confirmArgs);
                 if (confirmArgs.Cancel)
                     throw new OperationCanceledException("DELETE cancelled by user");
 
@@ -160,7 +160,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     return ExecuteDmlOperation(
                         dataSource.Connection,
-                        options,
+                        context.Options,
                         entities,
                         meta,
                         entity => CreateDeleteRequest(meta, entity, primaryIdAccessor, secondaryIdAccessor),
@@ -171,7 +171,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             CompletedLowercase = "deleted"
                         },
                         out recordsAffected,
-                        parameterValues);
+                        context.ParameterValues);
                 }
             }
             catch (QueryExecutionException ex)

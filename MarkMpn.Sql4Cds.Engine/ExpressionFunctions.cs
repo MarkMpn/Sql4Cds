@@ -341,7 +341,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (s.Value.Length <= length)
                 return s;
 
-            return SqlTypeConverter.UseDefaultCollation(s.Value.Substring(0, length.Value));
+            return new SqlString(s.Value.Substring(0, length.Value), s.LCID, s.SqlCompareOptions);
         }
 
         /// <summary>
@@ -358,7 +358,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (s.Value.Length <= length)
                 return s;
 
-            return SqlTypeConverter.UseDefaultCollation(s.Value.Substring(s.Value.Length - length.Value, length.Value));
+            return new SqlString(s.Value.Substring(s.Value.Length - length.Value, length.Value), s.LCID, s.SqlCompareOptions);
         }
 
         /// <summary>
@@ -373,7 +373,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (input.IsNull || find.IsNull || replace.IsNull)
                 return SqlString.Null;
 
-            return SqlTypeConverter.UseDefaultCollation(Regex.Replace(input.Value, Regex.Escape(find.Value), replace.Value.Replace("$", "$$"), RegexOptions.IgnoreCase));
+            return new SqlString(Regex.Replace(input.Value, Regex.Escape(find.Value), replace.Value.Replace("$", "$$"), RegexOptions.IgnoreCase), input.LCID, input.SqlCompareOptions);
         }
 
         /// <summary>
@@ -440,14 +440,14 @@ namespace MarkMpn.Sql4Cds.Engine
                 start = 1;
 
             if (start > expression.Value.Length)
-                return SqlTypeConverter.UseDefaultCollation(String.Empty);
+                return new SqlString(String.Empty, expression.LCID, expression.SqlCompareOptions);
 
             start -= 1;
 
             if (start + length > expression.Value.Length)
                 length = expression.Value.Length - start;
 
-            return SqlTypeConverter.UseDefaultCollation(expression.Value.Substring(start.Value, length.Value));
+            return new SqlString(expression.Value.Substring(start.Value, length.Value), expression.LCID, expression.SqlCompareOptions);
         }
 
         /// <summary>
@@ -460,7 +460,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (expression.IsNull)
                 return expression;
 
-            return SqlTypeConverter.UseDefaultCollation(expression.Value.Trim(' '));
+            return new SqlString(expression.Value.Trim(' '), expression.LCID, expression.SqlCompareOptions);
         }
 
         /// <summary>
@@ -473,7 +473,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (expression.IsNull)
                 return expression;
 
-            return SqlTypeConverter.UseDefaultCollation(expression.Value.TrimStart(' '));
+            return new SqlString(expression.Value.TrimStart(' '), expression.LCID, expression.SqlCompareOptions);
         }
 
         /// <summary>
@@ -486,7 +486,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (expression.IsNull)
                 return expression;
 
-            return SqlTypeConverter.UseDefaultCollation(expression.Value.TrimEnd(' '));
+            return new SqlString(expression.Value.TrimEnd(' '), expression.LCID, expression.SqlCompareOptions);
         }
 
         /// <summary>
@@ -526,12 +526,12 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="value">An integer from 0 through 255</param>
         /// <returns></returns>
-        public static SqlString Char(SqlInt32 value)
+        public static SqlString Char(SqlInt32 value, ExpressionExecutionContext context)
         {
             if (value.IsNull || value.Value < 0 || value.Value > 255)
                 return SqlString.Null;
 
-            return SqlTypeConverter.UseDefaultCollation(new string((char)value.Value, 1));
+            return context.PrimaryDataSource.DefaultCollation.ToSqlString(new string((char)value.Value, 1));
         }
 
         /// <summary>
@@ -539,12 +539,12 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="value">An integer from 0 through 255</param>
         /// <returns></returns>
-        public static SqlString NChar(SqlInt32 value)
+        public static SqlString NChar(SqlInt32 value, ExpressionExecutionContext context)
         {
             if (value.IsNull || value.Value < 0 || value.Value > 0x10FFFF)
                 return SqlString.Null;
 
-            return SqlTypeConverter.UseDefaultCollation(new string((char)value.Value, 1));
+            return context.PrimaryDataSource.DefaultCollation.ToSqlString(new string((char)value.Value, 1));
         }
 
         /// <summary>
@@ -577,11 +577,11 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// Returns the identifier of the user
         /// </summary>
-        /// <param name="options">The options that provide access to the user details</param>
+        /// <param name="context">The context in which the expression is being executed</param>
         /// <returns></returns>
-        public static SqlEntityReference User_Name(IQueryExecutionOptions options)
+        public static SqlEntityReference User_Name(ExpressionExecutionContext context)
         {
-            return new SqlEntityReference(options.PrimaryDataSource, "systemuser", options.UserId);
+            return new SqlEntityReference(context.Options.PrimaryDataSource, "systemuser", context.Options.UserId);
         }
 
         /// <summary>
@@ -608,7 +608,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="format">Format pattern</param>
         /// <param name="culture">Optional argument specifying a culture</param>
         /// <returns></returns>
-        public static SqlString Format<T>(T value, SqlString format, [Optional] SqlString culture)
+        public static SqlString Format<T>(T value, SqlString format, [Optional] SqlString culture, ExpressionExecutionContext context)
             where T : INullable
         {
             if (value.IsNull)
@@ -620,10 +620,10 @@ namespace MarkMpn.Sql4Cds.Engine
                 throw new QueryExecutionException("Invalid type for FORMAT function");
 
             var innerValue = (IFormattable)valueProp.GetValue(value);
-            return Format(innerValue, format, culture);
+            return Format(innerValue, format, culture, context);
         }
 
-        private static SqlString Format(IFormattable value, SqlString format, SqlString culture)
+        private static SqlString Format(IFormattable value, SqlString format, SqlString culture, ExpressionExecutionContext context)
         {
             if (value == null)
                 return SqlString.Null;
@@ -639,7 +639,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     cultureInfo = CultureInfo.GetCultureInfo(culture.Value);
 
                 var formatted = value.ToString(format.Value, cultureInfo);
-                return SqlTypeConverter.UseDefaultCollation(formatted);
+                return context.PrimaryDataSource.DefaultCollation.ToSqlString(formatted);
             }
             catch
             {

@@ -49,18 +49,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override int ExecutionCount => _executionCount;
 
-        public DbDataReader Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, CommandBehavior behavior)
+        public DbDataReader Execute(NodeExecutionContext context, CommandBehavior behavior)
         {
             _executionCount++;
 
             var timer = _timer.Run();
-            var schema = Source.GetSchema(dataSources, parameterTypes);
-            var source = behavior.HasFlag(CommandBehavior.SchemaOnly) ? Array.Empty<Entity>() : Source.Execute(dataSources, options, parameterTypes, parameterValues);
+            var schema = Source.GetSchema(context);
+            var source = behavior.HasFlag(CommandBehavior.SchemaOnly) ? Array.Empty<Entity>() : Source.Execute(context);
 
             if (behavior.HasFlag(CommandBehavior.SingleRow))
                 source = source.Take(1);
 
-            return new SelectDataReader(ColumnSet, timer, schema, source, parameterValues);
+            return new SelectDataReader(ColumnSet, timer, schema, source, context.ParameterValues);
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
@@ -68,15 +68,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        public IRootExecutionPlanNodeInternal[] FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public IRootExecutionPlanNodeInternal[] FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
-            Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
+            Source = Source.FoldQuery(context, hints);
             Source.Parent = this;
 
-            FoldFetchXmlColumns(Source, ColumnSet, dataSources, parameterTypes);
+            FoldFetchXmlColumns(Source, ColumnSet, context);
             FoldMetadataColumns(Source, ColumnSet);
 
-            ExpandWildcardColumns(dataSources, parameterTypes);
+            ExpandWildcardColumns(context);
 
             if (Source is AliasNode alias)
             {
@@ -92,15 +92,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return new[] { this };
         }
 
-        internal static void FoldFetchXmlColumns(IDataExecutionPlanNode source, List<SelectColumn> columnSet, IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
+        internal static void FoldFetchXmlColumns(IDataExecutionPlanNode source, List<SelectColumn> columnSet, NodeCompilationContext context)
         {
             if (source is FetchXmlScan fetchXml)
             {
-                if (!dataSources.TryGetValue(fetchXml.DataSource, out var dataSource))
+                if (!context.DataSources.TryGetValue(fetchXml.DataSource, out var dataSource))
                     throw new NotSupportedQueryFragmentException("Missing datasource " + fetchXml.DataSource);
 
                 // Check if there are any aliases we can apply to the source FetchXml
-                var schema = fetchXml.GetSchema(dataSources, parameterTypes);
+                var schema = fetchXml.GetSchema(context);
                 var hasStar = columnSet.Any(col => col.AllColumns && col.SourceColumn == null);
                 var aliasStars = new HashSet<string>(columnSet.Where(col => col.AllColumns && col.SourceColumn != null).Select(col => col.SourceColumn.Replace(".*", "")).Distinct(StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase);
 
@@ -255,17 +255,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public void ExpandWildcardColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
+        public void ExpandWildcardColumns(NodeCompilationContext context)
         {
-            ExpandWildcardColumns(Source, ColumnSet, dataSources, parameterTypes);
+            ExpandWildcardColumns(Source, ColumnSet, context);
         }
 
-        internal static void ExpandWildcardColumns(IDataExecutionPlanNodeInternal source, List<SelectColumn> columnSet, IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
+        internal static void ExpandWildcardColumns(IDataExecutionPlanNodeInternal source, List<SelectColumn> columnSet, NodeCompilationContext context)
         {
             // Expand any AllColumns
             if (columnSet.Any(col => col.AllColumns))
             {
-                var schema = source.GetSchema(dataSources, parameterTypes);
+                var schema = source.GetSchema(context);
                 var expanded = new List<SelectColumn>();
 
                 foreach (var col in columnSet)
@@ -291,7 +291,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
             foreach (var col in ColumnSet.Select(c => c.SourceColumn + (c.AllColumns ? ".*" : "")))
             {
@@ -299,7 +299,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     requiredColumns.Add(col);
             }
 
-            Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
+            Source.AddRequiredColumns(context, requiredColumns);
         }
 
         public override string ToString()

@@ -52,9 +52,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// Adds columns into the query which are required by preceding nodes
         /// </summary>
-        /// <param name="metadata"></param>
-        /// <param name="parameterTypes"></param>
-        /// <param name="requiredColumns"></param>
-        void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns);
+        /// <param name="context">The context in which the node is being built</param>
+        /// <param name="requiredColumns">The columns which are required by the parent node</param>
+        void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns);
     }
 }

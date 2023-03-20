@@ -49,18 +49,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("Additional Join Criteria")]
         public BooleanExpression AdditionalJoinCriteria { get; set; }
 
-        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
-            LeftSource = LeftSource.FoldQuery(dataSources, options, parameterTypes, hints);
+            LeftSource = LeftSource.FoldQuery(context, hints);
             LeftSource.Parent = this;
-            RightSource = RightSource.FoldQuery(dataSources, options, parameterTypes, hints);
+            RightSource = RightSource.FoldQuery(context, hints);
             RightSource.Parent = this;
 
             if (SemiJoin)
                 return this;
 
-            var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
-            var rightSchema = RightSource.GetSchema(dataSources, parameterTypes);
+            var leftSchema = LeftSource.GetSchema(context);
+            var rightSchema = RightSource.GetSchema(context);
             var leftFilter = JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.LeftOuter ? LeftSource as FilterNode : null;
             var rightFilter = JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.RightOuter ? RightSource as FilterNode : null;
             var leftFetch = (leftFilter?.Source ?? LeftSource) as FetchXmlScan;
@@ -70,35 +70,35 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var leftMeta = (leftFilter?.Source ?? LeftSource) as MetadataQueryNode;
             var rightMeta = (rightFilter?.Source ?? RightSource) as MetadataQueryNode;
 
-            if (leftFetch != null && rightFetch != null && FoldFetchXmlJoin(dataSources, options, parameterTypes, hints, leftFetch, leftSchema, rightFetch, rightSchema, out var folded))
-                return PrependFilters(folded, dataSources, options, parameterTypes, hints, leftFilter, rightFilter);
+            if (leftFetch != null && rightFetch != null && FoldFetchXmlJoin(context, hints, leftFetch, leftSchema, rightFetch, rightSchema, out var folded))
+                return PrependFilters(folded, context, hints, leftFilter, rightFilter);
 
-            if (leftJoin != null && rightFetch != null && FoldFetchXmlJoin(dataSources, options, parameterTypes, hints, leftJoin, rightFetch, rightSchema, out folded))
-                return PrependFilters(folded, dataSources, options, parameterTypes, hints, leftFilter, rightFilter);
+            if (leftJoin != null && rightFetch != null && FoldFetchXmlJoin(context, hints, leftJoin, rightFetch, rightSchema, out folded))
+                return PrependFilters(folded, context, hints, leftFilter, rightFilter);
 
-            if (rightJoin != null && leftFetch != null && FoldFetchXmlJoin(dataSources, options, parameterTypes, hints, rightJoin, leftFetch, leftSchema, out folded))
-                return PrependFilters(folded, dataSources, options, parameterTypes, hints, leftFilter, rightFilter);
+            if (rightJoin != null && leftFetch != null && FoldFetchXmlJoin(context, hints, rightJoin, leftFetch, leftSchema, out folded))
+                return PrependFilters(folded, context, hints, leftFilter, rightFilter);
 
-            if (leftMeta != null && rightMeta != null && JoinType == QualifiedJoinType.Inner && FoldMetadataJoin(dataSources, options, parameterTypes, hints, leftMeta, leftSchema, rightMeta, rightSchema, out folded))
-                return PrependFilters(folded, dataSources, options, parameterTypes, hints, leftFilter, rightFilter);
+            if (leftMeta != null && rightMeta != null && JoinType == QualifiedJoinType.Inner && FoldMetadataJoin(context, hints, leftMeta, leftSchema, rightMeta, rightSchema, out folded))
+                return PrependFilters(folded, context, hints, leftFilter, rightFilter);
 
             // Add not-null filter on join keys
             // Inner join - both must be non-null
             // Left outer join - right key must be non-null
             // Right outer join - left key must be non-null
             if (JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.RightOuter)
-                LeftSource = AddNotNullFilter(LeftSource, LeftAttribute, dataSources, options, parameterTypes, hints);
+                LeftSource = AddNotNullFilter(LeftSource, LeftAttribute, context, hints);
 
             if (JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.LeftOuter)
-                RightSource = AddNotNullFilter(RightSource, RightAttribute, dataSources, options, parameterTypes, hints);
+                RightSource = AddNotNullFilter(RightSource, RightAttribute, context, hints);
 
-            if (FoldSingleRowJoinToNestedLoop(dataSources, options, parameterTypes, hints, leftSchema, rightSchema, out folded))
+            if (FoldSingleRowJoinToNestedLoop(context, hints, leftSchema, rightSchema, out folded))
                 return folded;
 
             return this;
         }
 
-        private IDataExecutionPlanNodeInternal PrependFilters(IDataExecutionPlanNodeInternal folded, IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints, params FilterNode[] filters)
+        private IDataExecutionPlanNodeInternal PrependFilters(IDataExecutionPlanNodeInternal folded, NodeCompilationContext context, IList<OptimizerHint> hints, params FilterNode[] filters)
         {
             foreach (var filter in filters)
             {
@@ -106,15 +106,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     continue;
 
                 filter.Source = folded;
-                folded = filter.FoldQuery(dataSources, options, parameterTypes, hints);
+                folded = filter.FoldQuery(context, hints);
             }
 
             return folded;
         }
 
-        private IDataExecutionPlanNodeInternal AddNotNullFilter(IDataExecutionPlanNodeInternal source, ColumnReferenceExpression attribute, IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        private IDataExecutionPlanNodeInternal AddNotNullFilter(IDataExecutionPlanNodeInternal source, ColumnReferenceExpression attribute, NodeCompilationContext context, IList<OptimizerHint> hints)
         {
-            var schema = source.GetSchema(dataSources, parameterTypes);
+            var schema = source.GetSchema(context);
             if (!schema.ContainsColumn(attribute.GetColumnName(), out var colName))
                 return source;
 
@@ -131,7 +131,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             };
 
-            var folded = filter.FoldQuery(dataSources, options, parameterTypes, hints);
+            var folded = filter.FoldQuery(context, hints);
 
             if (folded != filter)
             {
@@ -142,7 +142,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return source;
         }
 
-        private bool FoldFetchXmlJoin(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints, BaseJoinNode join, FetchXmlScan fetch, INodeSchema fetchSchema, out IDataExecutionPlanNodeInternal folded)
+        private bool FoldFetchXmlJoin(NodeCompilationContext context, IList<OptimizerHint> hints, BaseJoinNode join, FetchXmlScan fetch, INodeSchema fetchSchema, out IDataExecutionPlanNodeInternal folded)
         {
             folded = null;
 
@@ -161,7 +161,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if ((join.JoinType == QualifiedJoinType.Inner || join.JoinType == QualifiedJoinType.RightOuter) && join.LeftSource is FetchXmlScan leftInnerFetch)
             {
                 var leftSource = leftInnerFetch;
-                var leftSchema = leftInnerFetch.GetSchema(dataSources, parameterTypes);
+                var leftSchema = leftInnerFetch.GetSchema(context);
                 var rightSource = fetch;
                 var rightSchema = fetchSchema;
 
@@ -171,11 +171,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     Swap(ref leftSchema, ref rightSchema);
                 }
 
-                if (FoldFetchXmlJoin(dataSources, options, parameterTypes, hints, leftSource, leftSchema, rightSource, rightSchema, out folded))
+                if (FoldFetchXmlJoin(context, hints, leftSource, leftSchema, rightSource, rightSchema, out folded))
                 {
                     folded.Parent = join;
                     join.LeftSource = folded;
-                    folded = ConvertManyToManyMergeJoinToHashJoin(join, dataSources, options, parameterTypes, hints);
+                    folded = ConvertManyToManyMergeJoinToHashJoin(join, context, hints);
                     return true;
                 }
             }
@@ -183,7 +183,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if ((join.JoinType == QualifiedJoinType.Inner || join.JoinType == QualifiedJoinType.LeftOuter) && join.RightSource is FetchXmlScan rightInnerFetch)
             {
                 var leftSource = rightInnerFetch;
-                var leftSchema = rightInnerFetch.GetSchema(dataSources, parameterTypes);
+                var leftSchema = rightInnerFetch.GetSchema(context);
                 var rightSource = fetch;
                 var rightSchema = fetchSchema;
 
@@ -193,7 +193,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     Swap(ref leftSchema, ref rightSchema);
                 }
 
-                if (FoldFetchXmlJoin(dataSources, options, parameterTypes, hints, leftSource, leftSchema, rightSource, rightSchema, out folded))
+                if (FoldFetchXmlJoin(context, hints, leftSource, leftSchema, rightSource, rightSchema, out folded))
                 {
                     folded.Parent = join;
                     join.RightSource = folded;
@@ -205,14 +205,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return false;
         }
 
-        private IDataExecutionPlanNodeInternal ConvertManyToManyMergeJoinToHashJoin(BaseJoinNode join, IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        private IDataExecutionPlanNodeInternal ConvertManyToManyMergeJoinToHashJoin(BaseJoinNode join, NodeCompilationContext context, IList<OptimizerHint> hints)
         {
             // If folding the inner join has caused a one-to-many merge join to become a many-to-many merge join,
             // which we don't currently support, switch it to be a hash join
             if (!(join is MergeJoinNode merge))
                 return join;
 
-            var leftSchema = join.LeftSource.GetSchema(dataSources, parameterTypes);
+            var leftSchema = join.LeftSource.GetSchema(context);
             if (leftSchema.ContainsColumn(merge.LeftAttribute.GetColumnName(), out var leftKey) &&
                 leftKey == leftSchema.PrimaryKey)
                 return join;
@@ -246,10 +246,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             hash.LeftSource.Parent = hash;
             hash.RightSource.Parent = hash;
 
-            return hash.FoldQuery(dataSources, options, parameterTypes, hints);
+            return hash.FoldQuery(context, hints);
         }
 
-        private bool FoldFetchXmlJoin(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints, FetchXmlScan leftFetch, INodeSchema leftSchema, FetchXmlScan rightFetch, INodeSchema rightSchema, out IDataExecutionPlanNodeInternal folded)
+        private bool FoldFetchXmlJoin(NodeCompilationContext context, IList<OptimizerHint> hints, FetchXmlScan leftFetch, INodeSchema leftSchema, FetchXmlScan rightFetch, INodeSchema rightSchema, out IDataExecutionPlanNodeInternal folded)
         {
             folded = null;
 
@@ -283,7 +283,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return false;
 
             // If the entities are from different virtual entity data providers it's probably not going to work
-            if (!dataSources.TryGetValue(leftFetch.DataSource, out var dataSource))
+            if (!context.DataSources.TryGetValue(leftFetch.DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + leftFetch.DataSource);
 
             if (dataSource.Metadata[leftFetch.Entity.name].DataProviderId != dataSource.Metadata[rightFetch.Entity.name].DataProviderId)
@@ -318,7 +318,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // in the new link entity or we must be using an inner join so we can use a post-filter node
             var additionalCriteria = AdditionalJoinCriteria;
 
-            if (TranslateFetchXMLCriteria(dataSources[options.PrimaryDataSource], dataSource.Metadata, options, additionalCriteria, rightSchema, rightFetch.Alias, rightEntity.name, rightFetch.Alias, rightEntity.Items, parameterTypes, out var filter))
+            if (TranslateFetchXMLCriteria(context, dataSource.Metadata, additionalCriteria, rightSchema, rightFetch.Alias, rightEntity.name, rightFetch.Alias, rightEntity.Items, out var filter))
             {
                 rightEntity.AddItem(filter);
                 additionalCriteria = null;
@@ -360,7 +360,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (additionalCriteria != null)
             {
-                folded = new FilterNode { Filter = additionalCriteria, Source = leftFetch }.FoldQuery(dataSources, options, parameterTypes, hints);
+                folded = new FilterNode { Filter = additionalCriteria, Source = leftFetch }.FoldQuery(context, hints);
                 return true;
             }
 
@@ -382,7 +382,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return new Version(resp.Version);
         }
 
-        private bool FoldMetadataJoin(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints, MetadataQueryNode leftMeta, INodeSchema leftSchema, MetadataQueryNode rightMeta, INodeSchema rightSchema, out IDataExecutionPlanNodeInternal folded)
+        private bool FoldMetadataJoin(NodeCompilationContext context, IList<OptimizerHint> hints, MetadataQueryNode leftMeta, INodeSchema leftSchema, MetadataQueryNode rightMeta, INodeSchema rightSchema, out IDataExecutionPlanNodeInternal folded)
         {
             folded = null;
 
@@ -469,7 +469,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return false;
         }
 
-        private bool FoldSingleRowJoinToNestedLoop(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints, INodeSchema leftSchema, INodeSchema rightSchema, out IDataExecutionPlanNodeInternal folded)
+        private bool FoldSingleRowJoinToNestedLoop(NodeCompilationContext context, IList<OptimizerHint> hints, INodeSchema leftSchema, INodeSchema rightSchema, out IDataExecutionPlanNodeInternal folded)
         {
             folded = null;
 
@@ -483,8 +483,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var rightSource = RightSource;
             var leftAttribute = LeftAttribute;
             var rightAttribute = RightAttribute;
-            leftSource.EstimateRowsOut(dataSources, options, parameterTypes);
-            rightSource.EstimateRowsOut(dataSources, options, parameterTypes);
+            leftSource.EstimateRowsOut(context);
+            rightSource.EstimateRowsOut(context);
             leftSchema.ContainsColumn(leftAttribute.GetColumnName(), out var leftAttr);
             rightSchema.ContainsColumn(rightAttribute.GetColumnName(), out var rightAttr);
 
@@ -514,7 +514,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     SecondExpression = new VariableReference { Name = outerReference }
                 }
             };
-            var foldedRightSource = filteredRightSource.FoldQuery(dataSources, options, parameterTypes, hints);
+            var foldedRightSource = filteredRightSource.FoldQuery(context, hints);
 
             // If we can't fold the filter down to the data source, there's no benefit from doing this so stick with the
             // original join type
@@ -544,7 +544,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             else if (nestedLoop.RightSource is FetchXmlScan rightFetch)
                 rightFetch.RemoveSorts();
 
-            folded = nestedLoop.FoldQuery(dataSources, options, parameterTypes, hints);
+            folded = nestedLoop.FoldQuery(context, hints);
             return true;
         }
 
@@ -555,7 +555,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             right = temp;
         }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
             if (AdditionalJoinCriteria != null)
             {
@@ -567,8 +567,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             // Work out which columns need to be pushed down to which source
-            var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
-            var rightSchema = RightSource.GetSchema(dataSources, parameterTypes);
+            var leftSchema = LeftSource.GetSchema(context);
+            var rightSchema = RightSource.GetSchema(context);
 
             var leftColumns = requiredColumns
                 .Where(col => leftSchema.ContainsColumn(col, out _))
@@ -580,15 +580,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             leftColumns.Add(LeftAttribute.GetColumnName());
             rightColumns.Add(RightAttribute.GetColumnName());
 
-            LeftSource.AddRequiredColumns(dataSources, parameterTypes, leftColumns);
-            RightSource.AddRequiredColumns(dataSources, parameterTypes, rightColumns);
+            LeftSource.AddRequiredColumns(context, leftColumns);
+            RightSource.AddRequiredColumns(context, rightColumns);
         }
 
-        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(NodeCompilationContext context)
         {
-            var leftEstimate = LeftSource.EstimateRowsOut(dataSources, options, parameterTypes);
+            var leftEstimate = LeftSource.EstimateRowsOut(context);
             ParseEstimate(leftEstimate, out var leftMin, out var leftMax, out var leftIsRange);
-            var rightEstimate = RightSource.EstimateRowsOut(dataSources, options, parameterTypes);
+            var rightEstimate = RightSource.EstimateRowsOut(context);
             ParseEstimate(rightEstimate, out var rightMin, out var rightMax, out var rightIsRange);
 
             if (JoinType == QualifiedJoinType.LeftOuter && SemiJoin)
@@ -599,8 +599,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             int estimate;
 
-            var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
-            var rightSchema = GetRightSchema(dataSources, parameterTypes);
+            var leftSchema = LeftSource.GetSchema(context);
+            var rightSchema = GetRightSchema(context);
 
             if (LeftAttribute.GetColumnName() == leftSchema.PrimaryKey || RightAttribute.GetColumnName() == rightSchema.PrimaryKey)
             {

@@ -113,27 +113,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// Executes the DML query and returns an appropriate log message
         /// </summary>
-        /// <param name="org">The <see cref="IOrganizationService"/> to use to get the data</param>
-        /// <param name="metadata">The <see cref="IAttributeMetadataCache"/> to use to get metadata</param>
-        /// <param name="options"><see cref="IQueryExecutionOptions"/> to indicate how the query can be executed</param>
-        /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
-        /// <param name="parameterValues">A mapping of parameter names to their current values</param>
+        /// <param name="context">The context in which the node is being executed</param>
+        /// <param name="recordsAffected">The number of records that were affected by the query</param>
         /// <returns>A log message to display</returns>
-        public abstract string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected);
+        public abstract string Execute(NodeExecutionContext context, out int recordsAffected);
 
         /// <summary>
         /// Attempts to fold this node into its source to simplify the query
         /// </summary>
-        /// <param name="metadata">The <see cref="IAttributeMetadataCache"/> to use to get metadata</param>
-        /// <param name="options"><see cref="IQueryExecutionOptions"/> to indicate how the query can be executed</param>
-        /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
+        /// <param name="context">The context in which the node is being built</param>
+        /// <param name="hints">Any hints that can control the folding of this node</param>
         /// <returns>The node that should be used in place of this node</returns>
-        public virtual IRootExecutionPlanNodeInternal[] FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public virtual IRootExecutionPlanNodeInternal[] FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
             if (Source is IDataExecutionPlanNodeInternal dataNode)
-                Source = dataNode.FoldQuery(dataSources, options, parameterTypes, hints);
+                Source = dataNode.FoldQuery(context, hints);
             else if (Source is IDataReaderExecutionPlanNode dataSetNode)
-                Source = dataSetNode.FoldQuery(dataSources, options, parameterTypes, hints).Single();
+                Source = dataSetNode.FoldQuery(context, hints).Single();
 
             if (Source is AliasNode alias)
             {
@@ -142,16 +138,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 RenameSourceColumns(alias.ColumnSet.ToDictionary(col => alias.Alias + "." + col.OutputColumn, col => col.SourceColumn, StringComparer.OrdinalIgnoreCase));
             }
 
-            MaxDOP = GetMaxDOP(hints, options);
-            BypassCustomPluginExecution = GetBypassPluginExecution(hints, options);
+            MaxDOP = GetMaxDOP(context, hints);
+            BypassCustomPluginExecution = GetBypassPluginExecution(context, hints);
 
             return new[] { this };
         }
 
-        private int GetMaxDOP(IList<OptimizerHint> queryHints, IQueryExecutionOptions options)
+        private int GetMaxDOP(NodeCompilationContext context, IList<OptimizerHint> queryHints)
         {
             if (queryHints == null)
-                return options.MaxDegreeOfParallelism;
+                return context.Options.MaxDegreeOfParallelism;
 
             var maxDopHint = queryHints
                 .OfType<LiteralOptimizerHint>()
@@ -166,20 +162,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return value;
             }
 
-            return options.MaxDegreeOfParallelism;
+            return context.Options.MaxDegreeOfParallelism;
         }
 
-        private bool GetBypassPluginExecution(IList<OptimizerHint> queryHints, IQueryExecutionOptions options)
+        private bool GetBypassPluginExecution(NodeCompilationContext context, IList<OptimizerHint> queryHints)
         {
             if (queryHints == null)
-                return options.BypassCustomPlugins;
+                return context.Options.BypassCustomPlugins;
 
             var bypassPluginExecution = queryHints
                 .OfType<UseHintList>()
                 .Where(hint => hint.Hints.Any(s => s.Value.Equals("BYPASS_CUSTOM_PLUGIN_EXECUTION", StringComparison.OrdinalIgnoreCase)))
                 .Any();
 
-            return bypassPluginExecution || options.BypassCustomPlugins;
+            return bypassPluginExecution || context.Options.BypassCustomPlugins;
         }
 
         /// <summary>
@@ -196,31 +192,27 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// Gets the records to perform the DML operation on
         /// </summary>
-        /// <param name="org">The <see cref="IOrganizationService"/> to use to get the data</param>
-        /// <param name="metadata">The <see cref="IAttributeMetadataCache"/> to use to get metadata</param>
-        /// <param name="options"><see cref="IQueryExecutionOptions"/> to indicate how the query can be executed</param>
-        /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
-        /// <param name="parameterValues">A mapping of parameter names to their current values</param>
+        /// <param name="context">The context in which the node is being executed</param>
         /// <param name="schema">The schema of the data source</param>
         /// <returns>The entities to perform the DML operation on</returns>
-        protected List<Entity> GetDmlSourceEntities(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out INodeSchema schema)
+        protected List<Entity> GetDmlSourceEntities(NodeExecutionContext context, out INodeSchema schema)
         {
             List<Entity> entities;
 
             if (Source is IDataExecutionPlanNodeInternal dataSource)
             {
-                schema = dataSource.GetSchema(dataSources, parameterTypes);
-                entities = dataSource.Execute(dataSources, options, parameterTypes, parameterValues).ToList();
+                schema = dataSource.GetSchema(context);
+                entities = dataSource.Execute(context).ToList();
             }
             else if (Source is IDataReaderExecutionPlanNode dataSetSource)
             {
-                var dataReader = dataSetSource.Execute(dataSources, options, parameterTypes, parameterValues, CommandBehavior.Default);
+                var dataReader = dataSetSource.Execute(context, CommandBehavior.Default);
 
                 // Store the values under the column index as well as name for compatibility with INSERT ... SELECT ...
                 var dataTable = new DataTable();
                 var schemaTable = dataReader.GetSchemaTable();
                 var columnTypes = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
-                var targetDataSource = dataSources[DataSource];
+                var targetDataSource = context.DataSources[DataSource];
 
                 for (var i = 0; i < schemaTable.Rows.Count; i++)
                 {

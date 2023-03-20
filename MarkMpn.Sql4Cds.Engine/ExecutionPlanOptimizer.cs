@@ -49,16 +49,18 @@ namespace MarkMpn.Sql4Cds.Engine
                 hints.Add(new ConditionalNode.DoNotCompileConditionsHint());
             }
 
+            var context = new NodeCompilationContext(DataSources, Options, ParameterTypes);
+
             // Move any additional operators down to the FetchXml
             var nodes =
                 hints != null && hints.OfType<UseHintList>().Any(list => list.Hints.Any(h => h.Value.Equals("DEBUG_BYPASS_OPTIMIZATION", StringComparison.OrdinalIgnoreCase)))
                 ? new[] { node }
-                : node.FoldQuery(DataSources, Options, ParameterTypes, hints);
+                : node.FoldQuery(context, hints);
 
             foreach (var n in nodes)
             {
                 // Ensure all required columns are added to the FetchXML
-                n.AddRequiredColumns(DataSources, ParameterTypes, new List<string>());
+                n.AddRequiredColumns(context, new List<string>());
 
                 // Sort the items in the FetchXml nodes to match examples in documentation
                 SortFetchXmlElements(n);

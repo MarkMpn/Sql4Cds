@@ -23,36 +23,40 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private IDictionary<object, List<OuterRecord>> _hashTable;
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
             _hashTable = new Dictionary<object, List<OuterRecord>>();
-            var mergedSchema = GetSchema(dataSources, parameterTypes, true);
-            var additionalJoinCriteria = AdditionalJoinCriteria?.Compile(dataSources[options.PrimaryDataSource], mergedSchema, parameterTypes);
+            var mergedSchema = GetSchema(context, true);
+            var additionalJoinCriteria = AdditionalJoinCriteria?.Compile(new ExpressionCompilationContext(context, mergedSchema, null));
 
             // Build the hash table
-            var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
+            var leftSchema = LeftSource.GetSchema(context);
             leftSchema.ContainsColumn(LeftAttribute.GetColumnName(), out var leftCol);
             var leftColType = leftSchema.Schema[leftCol];
-            var rightSchema = RightSource.GetSchema(dataSources, parameterTypes);
+            var rightSchema = RightSource.GetSchema(context);
             rightSchema.ContainsColumn(RightAttribute.GetColumnName(), out var rightCol);
             var rightColType = rightSchema.Schema[rightCol];
 
-            if (!SqlTypeConverter.CanMakeConsistentTypes(leftColType, rightColType, dataSources[options.PrimaryDataSource], out var keyType))
+            if (!SqlTypeConverter.CanMakeConsistentTypes(leftColType, rightColType, context.PrimaryDataSource, out var keyType))
                 throw new QueryExecutionException($"Cannot match key types {leftColType.ToSql()} and {rightColType.ToSql()}");
 
             var leftKeyAccessor = (ScalarExpression) leftCol.ToColumnReference();
             if (!leftColType.IsSameAs(keyType))
                 leftKeyAccessor = new ConvertCall { Parameter = leftKeyAccessor, DataType = keyType };
-            var leftKeyConverter = leftKeyAccessor.Compile(dataSources[options.PrimaryDataSource], leftSchema, parameterTypes);
+            var leftKeyConverter = leftKeyAccessor.Compile(new ExpressionCompilationContext(context, leftSchema, null));
 
             var rightKeyAccessor = (ScalarExpression)rightCol.ToColumnReference();
             if (!rightColType.IsSameAs(keyType))
                 rightKeyAccessor = new ConvertCall { Parameter = rightKeyAccessor, DataType = keyType };
-            var rightKeyConverter = rightKeyAccessor.Compile(dataSources[options.PrimaryDataSource], rightSchema, parameterTypes);
+            var rightKeyConverter = rightKeyAccessor.Compile(new ExpressionCompilationContext(context, rightSchema, null));
 
-            foreach (var entity in LeftSource.Execute(dataSources, options, parameterTypes, parameterValues))
+            var expressionContext = new ExpressionExecutionContext(context);
+
+            foreach (var entity in LeftSource.Execute(context))
             {
-                var key = leftKeyConverter(entity, parameterValues, options);
+                expressionContext.Entity = entity;
+
+                var key = leftKeyConverter(expressionContext);
 
                 if (!_hashTable.TryGetValue(key, out var list))
                 {
@@ -64,9 +68,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             // Probe the hash table using the right source
-            foreach (var entity in RightSource.Execute(dataSources, options, parameterTypes, parameterValues))
+            foreach (var entity in RightSource.Execute(context))
             {
-                var key = rightKeyConverter(entity, parameterValues, options);
+                expressionContext.Entity = entity;
+
+                var key = rightKeyConverter(expressionContext);
                 var matched = false;
 
                 if (_hashTable.TryGetValue(key, out var list))
@@ -77,8 +83,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             continue;
 
                         var merged = Merge(left.Entity, leftSchema, entity, rightSchema);
+                        expressionContext.Entity = merged;
 
-                        if (additionalJoinCriteria == null || additionalJoinCriteria(merged, parameterValues, options))
+                        if (additionalJoinCriteria == null || additionalJoinCriteria(expressionContext))
                         {
                             yield return merged;
                             left.Used = true;
@@ -106,9 +113,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return null;
         }
 
-        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
-            var folded = base.FoldQuery(dataSources, options, parameterTypes, hints);
+            var folded = base.FoldQuery(context, hints);
 
             if (folded != this)
                 return folded;
@@ -118,8 +125,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // If we can't fold this query, try to make sure the smaller table is used as the left input to reduce the
             // number of records held in memory in the hash table
-            LeftSource.EstimateRowsOut(dataSources, options, parameterTypes);
-            RightSource.EstimateRowsOut(dataSources, options, parameterTypes);
+            LeftSource.EstimateRowsOut(context);
+            RightSource.EstimateRowsOut(context);
 
             if (LeftSource.EstimatedRowsOut > RightSource.EstimatedRowsOut)
             {

@@ -297,7 +297,7 @@ namespace MarkMpn.Sql4Cds.Engine
             else if (value is float f)
                 value = (SqlSingle)f;
             else if (value is string str)
-                value = SqlTypeConverter.UseDefaultCollation(str);
+                value = new SqlString(str, LocaleId, CompareInfo);
             else if (value is DateTimeOffset dto)
                 value = (SqlDateTime)dto.DateTime;
             else if (value is EntityReference er)
