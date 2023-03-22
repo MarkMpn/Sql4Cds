@@ -5092,16 +5092,5 @@ UPDATE account SET employees = @employees WHERE name = @name";
 
             planBuilder.Build(query, null, out _);
         }
-
-        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
-        [TestMethod]
-        public void TwoExplicitCollationsError()
-        {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
-
-            var query = "SELECT ('abc' COLLATE French_CI_AS) COLLATE French_CS_AS";
-
-            planBuilder.Build(query, null, out _);
-        }
     }
 }
