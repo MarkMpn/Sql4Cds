@@ -66,64 +66,96 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private static Expression ToExpression(this TSqlFragment expr, ExpressionCompilationContext context, ParameterExpression contextParam, out DataTypeReference sqlType)
         {
+            Expression expression;
+
             if (expr is ColumnReferenceExpression col)
-                return ToExpression(col, context, contextParam, out sqlType);
+                expression = ToExpression(col, context, contextParam, out sqlType);
             else if (expr is IdentifierLiteral guid)
-                return ToExpression(guid, context, contextParam, out sqlType);
+                expression = ToExpression(guid, context, contextParam, out sqlType);
             else if (expr is IntegerLiteral i)
-                return ToExpression(i, context, contextParam, out sqlType);
+                expression = ToExpression(i, context, contextParam, out sqlType);
             else if (expr is MoneyLiteral money)
-                return ToExpression(money, context, contextParam, out sqlType);
+                expression = ToExpression(money, context, contextParam, out sqlType);
             else if (expr is NullLiteral n)
-                return ToExpression(n, context, contextParam, out sqlType);
+                expression = ToExpression(n, context, contextParam, out sqlType);
             else if (expr is NumericLiteral num)
-                return ToExpression(num, context, contextParam, out sqlType);
+                expression = ToExpression(num, context, contextParam, out sqlType);
             else if (expr is RealLiteral real)
-                return ToExpression(real, context, contextParam, out sqlType);
+                expression = ToExpression(real, context, contextParam, out sqlType);
             else if (expr is StringLiteral str)
-                return ToExpression(str, context, contextParam, out sqlType);
+                expression = ToExpression(str, context, contextParam, out sqlType);
             else if (expr is OdbcLiteral odbc)
-                return ToExpression(odbc, context, contextParam, out sqlType);
+                expression = ToExpression(odbc, context, contextParam, out sqlType);
             else if (expr is BooleanBinaryExpression boolBin)
-                return ToExpression(boolBin, context, contextParam, out sqlType);
+                expression = ToExpression(boolBin, context, contextParam, out sqlType);
             else if (expr is BooleanComparisonExpression cmp)
-                return ToExpression(cmp, context, contextParam, out sqlType);
+                expression = ToExpression(cmp, context, contextParam, out sqlType);
             else if (expr is BooleanParenthesisExpression boolParen)
-                return ToExpression(boolParen, context, contextParam, out sqlType);
+                expression = ToExpression(boolParen, context, contextParam, out sqlType);
             else if (expr is InPredicate inPred)
-                return ToExpression(inPred, context, contextParam, out sqlType);
+                expression = ToExpression(inPred, context, contextParam, out sqlType);
             else if (expr is BooleanIsNullExpression isNull)
-                return ToExpression(isNull, context, contextParam, out sqlType);
+                expression = ToExpression(isNull, context, contextParam, out sqlType);
             else if (expr is LikePredicate like)
-                return ToExpression(like, context, contextParam, out sqlType);
+                expression = ToExpression(like, context, contextParam, out sqlType);
             else if (expr is BooleanNotExpression not)
-                return ToExpression(not, context, contextParam, out sqlType);
+                expression = ToExpression(not, context, contextParam, out sqlType);
             else if (expr is FullTextPredicate fullText)
-                return ToExpression(fullText, context, contextParam, out sqlType);
+                expression = ToExpression(fullText, context, contextParam, out sqlType);
             else if (expr is Microsoft.SqlServer.TransactSql.ScriptDom.BinaryExpression bin)
-                return ToExpression(bin, context, contextParam, out sqlType);
+                expression = ToExpression(bin, context, contextParam, out sqlType);
             else if (expr is FunctionCall func)
-                return ToExpression(func, context, contextParam, out sqlType);
+                expression = ToExpression(func, context, contextParam, out sqlType);
             else if (expr is ParenthesisExpression paren)
-                return ToExpression(paren, context, contextParam, out sqlType);
+                expression = ToExpression(paren, context, contextParam, out sqlType);
             else if (expr is Microsoft.SqlServer.TransactSql.ScriptDom.UnaryExpression unary)
-                return ToExpression(unary, context, contextParam, out sqlType);
+                expression = ToExpression(unary, context, contextParam, out sqlType);
             else if (expr is VariableReference var)
-                return ToExpression(var, context, contextParam, out sqlType);
+                expression = ToExpression(var, context, contextParam, out sqlType);
             else if (expr is SimpleCaseExpression simpleCase)
-                return ToExpression(simpleCase, context, contextParam, out sqlType);
+                expression = ToExpression(simpleCase, context, contextParam, out sqlType);
             else if (expr is SearchedCaseExpression searchedCase)
-                return ToExpression(searchedCase, context, contextParam, out sqlType);
+                expression = ToExpression(searchedCase, context, contextParam, out sqlType);
             else if (expr is ConvertCall convert)
-                return ToExpression(convert, context, contextParam, out sqlType);
+                expression = ToExpression(convert, context, contextParam, out sqlType);
             else if (expr is CastCall cast)
-                return ToExpression(cast, context, contextParam, out sqlType);
+                expression = ToExpression(cast, context, contextParam, out sqlType);
             else if (expr is ParameterlessCall parameterless)
-                return ToExpression(parameterless, context, contextParam, out sqlType);
+                expression = ToExpression(parameterless, context, contextParam, out sqlType);
             else if (expr is GlobalVariableExpression global)
-                return ToExpression(global, context, contextParam, out sqlType);
+                expression = ToExpression(global, context, contextParam, out sqlType);
             else
                 throw new NotSupportedQueryFragmentException("Unhandled expression type", expr);
+
+            if (expr is PrimaryExpression primary && primary.Collation != null)
+            {
+                if (!Collation.TryParse(primary.Collation.Value, out var coll))
+                    throw new NotSupportedQueryFragmentException("Invalid collation", primary.Collation);
+
+                if (expression.Type == typeof(SqlString) && sqlType is SqlDataTypeReferenceWithCollation sqlTypeWithCollation)
+                {
+                    expression = Expr.Call(() => ConvertCollation(Expr.Arg<SqlString>(), Expr.Arg<Collation>()), expression, Expression.Constant(coll));
+                    sqlType = new SqlDataTypeReferenceWithCollation
+                    {
+                        SqlDataTypeOption = sqlTypeWithCollation.SqlDataTypeOption,
+                        Collation = coll,
+                        CollationLabel = CollationLabel.Explicit
+                    };
+
+                    foreach (var param in sqlTypeWithCollation.Parameters)
+                        ((SqlDataTypeReferenceWithCollation)sqlType).Parameters.Add(param);
+                }
+            }
+
+            return expression;
+        }
+
+        private static SqlString ConvertCollation(SqlString value, Collation collation)
+        {
+            if (value.IsNull)
+                return value;
+
+            return collation.ToSqlString(value.Value);
         }
 
         private static Expression ToExpression(ColumnReferenceExpression col, ExpressionCompilationContext context, ParameterExpression contextParam, out DataTypeReference sqlType)
@@ -200,14 +232,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private static Expression ToExpression(StringLiteral str, ExpressionCompilationContext context, ParameterExpression contextParam, out DataTypeReference sqlType)
         {
-            var collationLabel = CollationLabel.CoercibleDefault;
-            var collation = GetCollation(context.PrimaryDataSource, str.Collation, ref collationLabel);
-
             sqlType = str.IsNational
-                ? DataTypeHelpers.NVarChar(str.Value.Length, collation, collationLabel)
-                : DataTypeHelpers.VarChar(str.Value.Length, collation, collationLabel);
+                ? DataTypeHelpers.NVarChar(str.Value.Length, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault)
+                : DataTypeHelpers.VarChar(str.Value.Length, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault);
 
-            return Expression.Constant(collation.ToSqlString(str.Value));
+            return Expression.Constant(context.PrimaryDataSource.DefaultCollation.ToSqlString(str.Value));
         }
 
         private static Expression ToExpression(OdbcLiteral odbc, ExpressionCompilationContext context, ParameterExpression contextParam, out DataTypeReference sqlType)
@@ -1589,18 +1618,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return false;
 
             return true;
-        }
-
-        private static Collation GetCollation(DataSource dataSource, Identifier collation, ref CollationLabel collationLabel)
-        {
-            if (collation == null)
-                return dataSource.DefaultCollation;
-
-            if (!Collation.TryParse(collation.Value, out var coll))
-                throw new NotSupportedQueryFragmentException("Invalid collation", collation);
-
-            collationLabel = CollationLabel.Explicit;
-            return coll;
         }
     }
 }
