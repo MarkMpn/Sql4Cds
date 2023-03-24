@@ -973,7 +973,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var pattern = like.SecondExpression.ToExpression(context, contextParam, out var patternType);
             var escape = like.EscapeExpression?.ToExpression(context, contextParam, out escapeType);
 
-            // TODO: Use the collations of the value/pattern and ensure they are consistent
             sqlType = DataTypeHelpers.Bit;
             var stringType = DataTypeHelpers.NVarChar(Int32.MaxValue, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault);
 
@@ -1032,7 +1031,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var inRange = false;
             var escapeChar = escape.IsNull ? '\0' : escape.Value[0];
 
-            foreach (var ch in pattern.Value)
+            var pat = pattern.Value;
+
+            if (pattern.SqlCompareOptions.HasFlag(SqlCompareOptions.IgnoreNonSpace))
+                pat = RemoveDiacritics(pat);
+
+            foreach (var ch in pat)
             {
                 if (escapeChar != '\0' && ch == escapeChar)
                 {
@@ -1093,7 +1097,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             regexBuilder.Append("$");
 
-            return new Regex(regexBuilder.ToString(), RegexOptions.IgnoreCase);
+            return new Regex(regexBuilder.ToString(), pattern.SqlCompareOptions.HasFlag(SqlCompareOptions.IgnoreCase) ? RegexOptions.IgnoreCase : RegexOptions.None);
         }
 
         private static SqlBoolean Like(SqlString value, SqlString pattern, SqlString escape, bool not)
@@ -1103,12 +1107,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Convert the LIKE pattern to a regex
             var regex = LikeToRegex(pattern, escape);
-            var result = regex.IsMatch(value.Value);
 
-            if (not)
-                result = !result;
-
-            return result;
+            return Like(value, regex, not);
         }
 
         private static SqlBoolean Like(SqlString value, Regex pattern, bool not)
@@ -1116,12 +1116,43 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (value.IsNull)
                 return false;
 
-            var result = pattern.IsMatch(value.Value);
+            var text = value.Value;
+
+            if (value.SqlCompareOptions.HasFlag(SqlCompareOptions.IgnoreNonSpace))
+                text = RemoveDiacritics(text);
+
+            var result = pattern.IsMatch(text);
 
             if (not)
                 result = !result;
 
             return result;
+        }
+
+        /// <summary>
+        /// Removes accents from a string, used for accent-insensitive collations
+        /// </summary>
+        /// <ref>https://stackoverflow.com/a/249126/269629</ref>
+        /// <param name="text">The text to remove the accents from</param>
+        /// <returns>A version of the <paramref name="text"/> with accents removed</returns>
+        static string RemoveDiacritics(string text)
+        {
+            var normalizedString = text.Normalize(NormalizationForm.FormD);
+            var stringBuilder = new StringBuilder(capacity: normalizedString.Length);
+
+            for (int i = 0; i < normalizedString.Length; i++)
+            {
+                char c = normalizedString[i];
+                var unicodeCategory = CharUnicodeInfo.GetUnicodeCategory(c);
+                if (unicodeCategory != UnicodeCategory.NonSpacingMark)
+                {
+                    stringBuilder.Append(c);
+                }
+            }
+
+            return stringBuilder
+                .ToString()
+                .Normalize(NormalizationForm.FormC);
         }
 
         private static Expression ToExpression(this SimpleCaseExpression simpleCase, ExpressionCompilationContext context, ParameterExpression contextParam, out DataTypeReference sqlType)
