@@ -150,6 +150,12 @@ namespace MarkMpn.Sql4Cds
 
             [Description("Returns the starting position of the first occurrence of a pattern in a specified expression, or zero if the pattern is not found")]
             public abstract string patindex(string pattern, string expression);
+
+            [Description("Converts a string to uppercase")]
+            public abstract string upper(string value);
+
+            [Description("Converts a string to lowercase")]
+            public abstract string lower(string value);
         }
     }
 }

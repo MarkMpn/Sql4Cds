@@ -679,6 +679,34 @@ namespace MarkMpn.Sql4Cds.Engine
                 return SqlString.Null;
             }
         }
+
+        /// <summary>
+        /// Returns a character expression with lowercase character data converted to uppercase
+        /// </summary>
+        /// <param name="value">An expression of character data</param>
+        /// <returns></returns>
+        [CollationSensitive]
+        public static SqlString Upper([MaxLength] SqlString value)
+        {
+            if (value.IsNull)
+                return value;
+
+            return value.Value.ToUpper(value.CultureInfo);
+        }
+
+        /// <summary>
+        /// Returns a character expression with uppercase character data converted to lowercase
+        /// </summary>
+        /// <param name="value">An expression of character data</param>
+        /// <returns></returns>
+        [CollationSensitive]
+        public static SqlString Lower([MaxLength] SqlString value)
+        {
+            if (value.IsNull)
+                return value;
+
+            return value.Value.ToLower(value.CultureInfo);
+        }
     }
 
     /// <summary>
