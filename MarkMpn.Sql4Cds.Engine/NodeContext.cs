@@ -12,6 +12,9 @@ namespace MarkMpn.Sql4Cds.Engine
     /// </summary>
     class NodeCompilationContext
     {
+        private readonly NodeCompilationContext _parentContext;
+        private int _expressionCounter;
+
         /// <summary>
         /// Creates a new <see cref="NodeCompilationContext"/>
         /// </summary>
@@ -26,6 +29,21 @@ namespace MarkMpn.Sql4Cds.Engine
             DataSources = dataSources;
             Options = options;
             ParameterTypes = parameterTypes;
+        }
+
+        /// <summary>
+        /// Creates a new <see cref="NodeCompilationContext"/> as a child of another context
+        /// </summary>
+        /// <param name="parentContext">The parent context that this context is being created from</param>
+        /// <param name="parameterTypes">The names and types of the parameters that are available to this section of the query</param>
+        public NodeCompilationContext(
+            NodeCompilationContext parentContext,
+            IDictionary<string, DataTypeReference> parameterTypes)
+        {
+            DataSources = parentContext.DataSources;
+            Options = parentContext.Options;
+            ParameterTypes = parameterTypes;
+            _parentContext = parentContext;
         }
 
         /// <summary>
@@ -47,6 +65,18 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Returns the details of the primary data source
         /// </summary>
         public DataSource PrimaryDataSource => DataSources[Options.PrimaryDataSource];
+
+        /// <summary>
+        /// Generates a unique name for an expression
+        /// </summary>
+        /// <returns>The name to use for the expression</returns>
+        public string GetExpressionName()
+        {
+            if (_parentContext != null)
+                return _parentContext.GetExpressionName();
+
+            return $"Expr{++_expressionCounter}";
+        }
     }
 
     /// <summary>

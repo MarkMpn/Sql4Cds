@@ -1009,5 +1009,46 @@ SELECT name FROM account WHERE name = @name OR name = @name";
                 }
             }
         }
+
+        [TestMethod]
+        public void SortByCollation()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "INSERT INTO account (name) VALUES ('Chiapas'),('Colima'), ('Cinco Rios'), ('California')";
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = "SELECT name FROM account ORDER BY name COLLATE Latin1_General_CS_AS ASC";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    var results = new List<string>();
+
+                    while (reader.Read())
+                        results.Add(reader.GetString(0));
+
+                    var expected = new[] { "California", "Chiapas", "Cinco Rios", "Colima" };
+                    
+                    for (var i = 0; i < expected.Length; i++)
+                        Assert.AreEqual(expected[i], results[i]);
+                }
+
+                cmd.CommandText = "SELECT name FROM account ORDER BY name COLLATE Traditional_Spanish_ci_ai ASC";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    var results = new List<string>();
+
+                    while (reader.Read())
+                        results.Add(reader.GetString(0));
+
+                    var expected = new[] { "California", "Cinco Rios", "Colima", "Chiapas" };
+
+                    for (var i = 0; i < expected.Length; i++)
+                        Assert.AreEqual(expected[i], results[i]);
+                }
+            }
+        }
     }
 }

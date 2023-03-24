@@ -22,6 +22,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         protected readonly IOrganizationService _service2;
         protected readonly XrmFakedContext _context2;
         protected readonly DataSource _dataSource2;
+        protected readonly IOrganizationService _service3;
+        protected readonly XrmFakedContext _context3;
+        protected readonly DataSource _dataSource3;
         protected readonly IDictionary<string, DataSource> _dataSources;
         protected readonly IDictionary<string, DataSource> _localDataSource;
 
@@ -45,7 +48,17 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             _service2 = _context2.GetOrganizationService();
             _dataSource2 = new DataSource { Name = "prod", Connection = _service2, Metadata = new AttributeMetadataCache(_service2), TableSizeCache = new StubTableSizeCache(), MessageCache = new StubMessageCache(), DefaultCollation = Collation.USEnglish };
 
-            _dataSources = new[] { _dataSource, _dataSource2 }.ToDictionary(ds => ds.Name);
+            _context3 = new XrmFakedContext();
+            _context3.InitializeMetadata(Assembly.GetExecutingAssembly());
+            _context3.CallerId = _context.CallerId;
+            _context3.AddFakeMessageExecutor<RetrieveVersionRequest>(new RetrieveVersionRequestExecutor());
+            _context3.AddGenericFakeMessageExecutor(SampleMessageExecutor.MessageName, new SampleMessageExecutor());
+
+            _service3 = _context3.GetOrganizationService();
+            Collation.TryParse("French_CI_AI", out var frenchCIAI);
+            _dataSource3 = new DataSource { Name = "french", Connection = _service3, Metadata = new AttributeMetadataCache(_service3), TableSizeCache = new StubTableSizeCache(), MessageCache = new StubMessageCache(), DefaultCollation = frenchCIAI };
+
+            _dataSources = new[] { _dataSource, _dataSource2, _dataSource3 }.ToDictionary(ds => ds.Name);
             _localDataSource = new Dictionary<string, DataSource>
             {
                 ["local"] = new DataSource { Name = "local", Connection = _service, Metadata = _dataSource.Metadata, TableSizeCache = _dataSource.TableSizeCache, MessageCache = _dataSource.MessageCache, DefaultCollation = Collation.USEnglish }

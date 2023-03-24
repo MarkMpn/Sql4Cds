@@ -480,7 +480,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     return false;
             }
 
-            if (xColl != null && yColl != null &&!xColl.Collation.Equals(yColl.Collation))
+            if (xColl != null && yColl != null && (xColl.Collation == null ^ yColl.Collation == null || xColl.Collation != null && yColl.Collation != null && !xColl.Collation.Equals(yColl.Collation)))
                 return false;
 
             return true;

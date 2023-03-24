@@ -134,7 +134,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (expression.Type == typeof(SqlString) && sqlType is SqlDataTypeReferenceWithCollation sqlTypeWithCollation)
                 {
-                    expression = Expr.Call(() => ConvertCollation(Expr.Arg<SqlString>(), Expr.Arg<Collation>()), expression, Expression.Constant(coll));
+                    expression = Expr.Call(() => SqlTypeConverter.ConvertCollation(Expr.Arg<SqlString>(), Expr.Arg<Collation>()), expression, Expression.Constant(coll));
                     sqlType = new SqlDataTypeReferenceWithCollation
                     {
                         SqlDataTypeOption = sqlTypeWithCollation.SqlDataTypeOption,
@@ -148,14 +148,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return expression;
-        }
-
-        private static SqlString ConvertCollation(SqlString value, Collation collation)
-        {
-            if (value.IsNull)
-                return value;
-
-            return collation.ToSqlString(value.Value);
         }
 
         private static Expression ToExpression(ColumnReferenceExpression col, ExpressionCompilationContext context, ParameterExpression contextParam, out DataTypeReference sqlType)
@@ -326,6 +318,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 rhs = SqlTypeConverter.Convert(rhs, rhsType, type);
             }
+
+            AssertCollationSensitive(type, cmp.ComparisonType.ToString().ToLowerInvariant() + " operation", cmp);
 
             switch (cmp.ComparisonType)
             {
@@ -685,9 +679,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // Use the [MaxLength(value)] attribute from the method where available
                 var methodMaxLength = method.GetCustomAttribute<MaxLengthAttribute>();
 
-                // TODO: Add an attribute to indicate if the collation should be taken from a parameter to the function
-                // or use the default collation for the connection
-
                 if (methodMaxLength?.MaxLength != null)
                     sqlType = DataTypeHelpers.NVarChar(methodMaxLength.MaxLength.Value, primaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault);
 
@@ -773,6 +764,64 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     throw new NotSupportedQueryFragmentException($"Cannot convert {paramTypes[i].ToSql()} to {paramType.ToSqlType(primaryDataSource).ToSql()}", i < paramOffset ? func : func.Parameters[i - paramOffset]);
             }
 
+            if (method.GetCustomAttribute(typeof(CollationSensitiveAttribute)) != null)
+            {
+                // If method is collation sensitive:
+                // 1. check all string parameters can be converted to a consistent collation
+                // 2. check the consistent collation label is not no-collation
+                // 3. use the same collation for the return type
+                SqlDataTypeReferenceWithCollation collation = null;
+
+                foreach (var paramType in paramTypes)
+                {
+                    if (!(paramType is SqlDataTypeReferenceWithCollation collationParam))
+                        continue;
+
+                    if (collation == null)
+                    {
+                        collation = collationParam;
+                        continue;
+                    }
+
+                    if (!SqlDataTypeReferenceWithCollation.TryConvertCollation(collation, collationParam, out var consistentCollation, out var collationLabel))
+                        throw new NotSupportedQueryFragmentException($"Cannot resolve collation conflict between '{collation.Collation.Name}' and {collationParam.Collation.Name}' in {func.FunctionName.Value.ToLowerInvariant()} operation", func);
+
+                    collation = new SqlDataTypeReferenceWithCollation
+                    {
+                        Collation = consistentCollation,
+                        CollationLabel = collationLabel
+                    };
+                }
+
+                AssertCollationSensitive(collation, func.FunctionName.Value.ToLowerInvariant() + " operation", func);
+
+                for (var i = 0; i < paramTypes.Length; i++)
+                {
+                    if (!(paramTypes[i] is SqlDataTypeReferenceWithCollation collationParam))
+                        continue;
+
+                    if (!collationParam.Collation.Equals(collation.Collation))
+                    {
+                        paramExpressions[i] = Expr.Call(() => SqlTypeConverter.ConvertCollation(Expr.Arg<SqlString>(), Expr.Arg<Collation>()), paramExpressions[i], Expression.Constant(collation.Collation));
+                        paramTypes[i] = new SqlDataTypeReferenceWithCollation
+                        {
+                            SqlDataTypeOption = collationParam.SqlDataTypeOption,
+                            Collation = collation.Collation,
+                            CollationLabel = CollationLabel.Explicit
+                        };
+
+                        foreach (var param in collationParam.Parameters)
+                            ((SqlDataTypeReferenceWithCollation)paramTypes[i]).Parameters.Add(param);
+                    }
+                }
+
+                if (sqlType is SqlDataTypeReferenceWithCollation outputCollation)
+                {
+                    outputCollation.Collation = collation.Collation;
+                    outputCollation.CollationLabel = collation.CollationLabel;
+                }
+            }
+
             if (sqlType == null)
                 sqlType = method.ReturnType.ToSqlType(primaryDataSource);
 
@@ -783,6 +832,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             if (func.OverClause != null)
                 throw new NotSupportedQueryFragmentException("Window functions are not supported", func);
+
+            // Special case: ExplicitCollation is a pseudo-function that's introduced by the ExplicitCollationVisitor to wrap
+            // primary expressions with a collation definition. The inner expression will already have applied the collation
+            // change so we can return it without any further processing
+            if (func.FunctionName.Value == "ExplicitCollation" && func.Parameters.Count == 1)
+            {
+                var converted = func.Parameters[0].ToExpression(context, contextParam, out sqlType);
+
+                if (!(sqlType is SqlDataTypeReferenceWithCollation coll) ||
+                    !coll.SqlDataTypeOption.IsStringType() ||
+                    coll.Collation == null ||
+                    coll.CollationLabel != CollationLabel.Explicit)
+                {
+                    throw new NotSupportedQueryFragmentException("Unknown function", func);
+                }
+
+                return converted;
+            }
 
             // Find the method to call and get the expressions for the parameter values
             var method = GetMethod(func, context, contextParam, out var paramValues, out sqlType);
@@ -933,6 +1000,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 escape = SqlTypeConverter.Convert(escape, escapeType, stringType);
             }
+
+            AssertCollationSensitive(stringType, "like operation", like);
 
             if (escape == null)
                 escape = Expression.Constant(SqlString.Null);
@@ -1344,10 +1413,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 sqlTargetType.SqlDataTypeOption.IsStringType() &&
                 sqlTargetType.Parameters.Count == 0)
             {
-                sqlType = new SqlDataTypeReference
+                var coll = sqlType as SqlDataTypeReferenceWithCollation;
+
+                sqlType = new SqlDataTypeReferenceWithCollation
                 {
                     SqlDataTypeOption = sqlTargetType.SqlDataTypeOption,
-                    Parameters = { new IntegerLiteral { Value = "30" } }
+                    Parameters = { new IntegerLiteral { Value = "30" } },
+                    Collation = coll?.Collation ?? context.PrimaryDataSource.DefaultCollation,
+                    CollationLabel = coll?.CollationLabel ?? CollationLabel.CoercibleDefault
                 };
             }
 
@@ -1618,6 +1691,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return false;
 
             return true;
+        }
+
+        private static void AssertCollationSensitive(DataTypeReference sqlType, string description, TSqlFragment fragment)
+        {
+            if (sqlType is SqlDataTypeReferenceWithCollation collation &&
+                collation.CollationLabel == CollationLabel.NoCollation)
+                throw new NotSupportedQueryFragmentException($"Cannot resolve collation conflict for {description}", fragment);
         }
     }
 }

@@ -215,7 +215,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var leftSchema = join.LeftSource.GetSchema(context);
                 var rightSchema = join.RightSource.GetSchema(context);
 
-                if (ExtractJoinCondition(Filter, loop, leftSchema, rightSchema, out foldedJoin, out var removedCondition))
+                if (ExtractJoinCondition(Filter, loop, context, leftSchema, rightSchema, out foldedJoin, out var removedCondition))
                 {
                     Filter = Filter.RemoveCondition(removedCondition);
                     foldedFilters = true;
@@ -238,38 +238,46 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return foldedFilters;
         }
 
-        private bool ExtractJoinCondition(BooleanExpression filter, NestedLoopNode join, INodeSchema leftSchema, INodeSchema rightSchema, out FoldableJoinNode foldedJoin, out BooleanExpression removedCondition)
+        private bool ExtractJoinCondition(BooleanExpression filter, NestedLoopNode join, NodeCompilationContext context, INodeSchema leftSchema, INodeSchema rightSchema, out FoldableJoinNode foldedJoin, out BooleanExpression removedCondition)
         {
             if (filter is BooleanComparisonExpression cmp &&
-                cmp.ComparisonType == BooleanComparisonType.Equals &&
-                cmp.FirstExpression is ColumnReferenceExpression col1 &&
-                cmp.SecondExpression is ColumnReferenceExpression col2)
+                cmp.ComparisonType == BooleanComparisonType.Equals)
             {
                 var leftSource = join.LeftSource;
                 var rightSource = join.RightSource;
+                var col1 = cmp.FirstExpression as ColumnReferenceExpression;
+                var col2 = cmp.SecondExpression as ColumnReferenceExpression;
+
+                // If join is not directly on a.col = b.col, it may be something that we can calculate such as
+                // a.col1 + a.col2 = left(b.col3, 10)
+                // Create a ComputeScalar node for each side so the join can work on a single column
+                // This only works if each side of the equality expression references columns only from one side of the join
+                var originalLeftSource = leftSource;
+                var originalRightSource = rightSource;
+
+                if (col1 == null)
+                    col1 = ComputeColumn(context, cmp.FirstExpression, ref leftSource, ref leftSchema, ref rightSource, ref rightSchema);
+
+                if (col2 == null)
+                    col2 = ComputeColumn(context, cmp.SecondExpression, ref leftSource, ref leftSchema, ref rightSource, ref rightSchema);
 
                 // Equality expression may be written in the opposite order to the join - swap the tables if necessary
-                if (rightSchema.ContainsColumn(col1.GetColumnName(), out _) &&
+                if (col1 != null &&
+                    col2 != null &&
+                    rightSchema.ContainsColumn(col1.GetColumnName(), out _) &&
                     leftSchema.ContainsColumn(col2.GetColumnName(), out _))
                 {
                     Swap(ref leftSource, ref rightSource);
                     Swap(ref leftSchema, ref rightSchema);
                 }
 
-                if (leftSchema.ContainsColumn(col1.GetColumnName(), out var leftCol) &&
+                if (col1 != null &&
+                    col2 != null &&
+                    leftSchema.ContainsColumn(col1.GetColumnName(), out var leftCol) &&
                     rightSchema.ContainsColumn(col2.GetColumnName(), out var rightCol))
                 {
-                    if (leftSource is TableSpoolNode leftSpool)
-                    {
-                        leftSpool.Source.Parent = leftSource.Parent;
-                        leftSource = leftSpool.Source;
-                    }
-
-                    if (rightSource is TableSpoolNode rightSpool)
-                    {
-                        rightSpool.Source.Parent = rightSource.Parent;
-                        rightSource = rightSpool.Source;
-                    }
+                    leftSource = RemoveTableSpool(leftSource);
+                    rightSource = RemoveTableSpool(rightSource);
 
                     // Prefer to use a merge join if either of the join keys are the primary key.
                     // Swap the tables if necessary to use the primary key from the right source.
@@ -277,6 +285,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         Swap(ref leftSource, ref rightSource);
                         Swap(ref leftSchema, ref rightSchema);
+                        Swap(ref col1, ref col2);
                         Swap(ref leftCol, ref rightCol);
                     }
 
@@ -303,8 +312,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 bin.BinaryExpressionType == BooleanBinaryExpressionType.And)
             {
                 // Recurse into ANDs but not into ORs
-                if (ExtractJoinCondition(bin.FirstExpression, join, leftSchema, rightSchema, out foldedJoin, out removedCondition) ||
-                    ExtractJoinCondition(bin.SecondExpression, join, leftSchema, rightSchema, out foldedJoin, out removedCondition))
+                if (ExtractJoinCondition(bin.FirstExpression, join, context, leftSchema, rightSchema, out foldedJoin, out removedCondition) ||
+                    ExtractJoinCondition(bin.SecondExpression, join, context, leftSchema, rightSchema, out foldedJoin, out removedCondition))
                 {
                     return true;
                 }
@@ -313,6 +322,52 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             foldedJoin = null;
             removedCondition = null;
             return false;
+        }
+
+        private IDataExecutionPlanNodeInternal RemoveTableSpool(IDataExecutionPlanNodeInternal source)
+        {
+            if (source is TableSpoolNode spool)
+            {
+                spool.Source.Parent = source.Parent;
+                return spool.Source;
+            }
+
+            if (source is ComputeScalarNode computeScalar && computeScalar.Source is TableSpoolNode computeScalarSpool)
+            {
+                computeScalarSpool.Source.Parent = computeScalar;
+                computeScalar.Source = computeScalarSpool.Source;
+            }
+
+            return source;
+        }
+
+        private ColumnReferenceExpression ComputeColumn(NodeCompilationContext context, ScalarExpression expression, ref IDataExecutionPlanNodeInternal leftSource, ref INodeSchema leftSchema, ref IDataExecutionPlanNodeInternal rightSource, ref INodeSchema rightSchema)
+        {
+            return ComputeColumn(context, expression, ref leftSource, ref leftSchema) ?? ComputeColumn(context, expression, ref rightSource, ref rightSchema);
+        }
+
+        private ColumnReferenceExpression ComputeColumn(NodeCompilationContext context, ScalarExpression expression, ref IDataExecutionPlanNodeInternal source, ref INodeSchema schema)
+        {
+            var columns = expression.GetColumns().ToList();
+            var s = schema;
+
+            if (columns.Count == 0 || !columns.All(c => s.ContainsColumn(c, out _)))
+                return null;
+
+            var exprName = context.GetExpressionName();
+            var computeScalar = new ComputeScalarNode
+            {
+                Source = source,
+                Columns =
+                {
+                    [exprName] = expression
+                }
+            };
+
+            source = computeScalar;
+            schema = computeScalar.GetSchema(context);
+
+            return exprName.ToColumnReference();
         }
 
         private void Swap<T>(ref T first, ref T second)
@@ -386,6 +441,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var rightFetch = (rightSort?.Source ?? join.RightSource) as FetchXmlScan;
 
                     if (rightFetch == null)
+                        break;
+
+                    // Can't fold queries using explicit collations
+                    if (merge.LeftAttribute.Collation != null || merge.RightAttribute.Collation != null)
                         break;
 
                     if (!leftFetch.DataSource.Equals(rightFetch.DataSource, StringComparison.OrdinalIgnoreCase))
@@ -947,14 +1006,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (filter is BooleanComparisonExpression cmp && cmp.ComparisonType == BooleanComparisonType.Equals)
             {
                 if (cmp.FirstExpression is ColumnReferenceExpression col1 && 
-                    cmp.SecondExpression is VariableReference var2)
+                    cmp.SecondExpression is VariableReference var2 &&
+                    col1.Collation == null &&
+                    var2.Collation == null)
                 {
                     indexColumn = col1.GetColumnName();
                     seekVariable = var2.Name;
                     return true;
                 }
                 else if (cmp.FirstExpression is VariableReference var1 &&
-                    cmp.SecondExpression is ColumnReferenceExpression col2)
+                    cmp.SecondExpression is ColumnReferenceExpression col2 &&
+                    var1.Collation == null &&
+                    col2.Collation == null)
                 {
                     indexColumn = col2.GetColumnName();
                     seekVariable = var1.Name;

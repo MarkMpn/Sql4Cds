@@ -612,6 +612,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     throw new NotSupportedQueryFragmentException("Invalid attributes specified for type " + toSqlType.SqlDataTypeOption, toSqlType);
                 }
+
+                if (targetCollation != null)
+                    expr = Expr.Call(() => ConvertCollation(Expr.Arg<SqlString>(), Expr.Arg<Collation>()), expr, Expression.Constant(targetCollation));
             }
 
             // Apply changes to precision & scale
@@ -644,6 +647,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return expr;
+        }
+
+        /// <summary>
+        /// Converts a <see cref="SqlString"/> value from one collation to another
+        /// </summary>
+        /// <param name="value">The value to convert</param>
+        /// <param name="collation">The collation to convert the <paramref name="value"/> to</param>
+        /// <returns>A new <see cref="SqlString"/> value with the requested collation</returns>
+        public static SqlString ConvertCollation(SqlString value, Collation collation)
+        {
+            if (value.IsNull)
+                return value;
+
+            return collation.ToSqlString(value.Value);
         }
 
         private static SqlString Truncate(SqlString value, int maxLength, string valueOnTruncate, Exception exceptionOnTruncate)

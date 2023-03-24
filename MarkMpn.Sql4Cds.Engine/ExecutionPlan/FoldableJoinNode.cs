@@ -268,6 +268,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var leftEntity = leftFetch.Entity;
             var rightEntity = rightFetch.Entity;
 
+            // Can't fold joins using explicit collations
+            if (LeftAttribute.Collation != null || RightAttribute.Collation != null)
+                return false;
+
             // Check that the join is on columns that are available in the FetchXML
             var leftAttribute = LeftAttribute.GetColumnName();
             if (!leftSchema.ContainsColumn(leftAttribute, out leftAttribute))

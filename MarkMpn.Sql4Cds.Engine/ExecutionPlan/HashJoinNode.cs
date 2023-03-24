@@ -31,24 +31,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Build the hash table
             var leftSchema = LeftSource.GetSchema(context);
-            leftSchema.ContainsColumn(LeftAttribute.GetColumnName(), out var leftCol);
-            var leftColType = leftSchema.Schema[leftCol];
+            var leftCompilationContext = new ExpressionCompilationContext(context, leftSchema, null);
+            LeftAttribute.GetType(leftCompilationContext, out var leftColType);
             var rightSchema = RightSource.GetSchema(context);
-            rightSchema.ContainsColumn(RightAttribute.GetColumnName(), out var rightCol);
-            var rightColType = rightSchema.Schema[rightCol];
+            var rightCompilationContext = new ExpressionCompilationContext(context, rightSchema, null);
+            RightAttribute.GetType(rightCompilationContext, out var rightColType);
 
             if (!SqlTypeConverter.CanMakeConsistentTypes(leftColType, rightColType, context.PrimaryDataSource, out var keyType))
                 throw new QueryExecutionException($"Cannot match key types {leftColType.ToSql()} and {rightColType.ToSql()}");
 
-            var leftKeyAccessor = (ScalarExpression) leftCol.ToColumnReference();
+            var leftKeyAccessor = (ScalarExpression)LeftAttribute;
             if (!leftColType.IsSameAs(keyType))
                 leftKeyAccessor = new ConvertCall { Parameter = leftKeyAccessor, DataType = keyType };
-            var leftKeyConverter = leftKeyAccessor.Compile(new ExpressionCompilationContext(context, leftSchema, null));
+            var leftKeyConverter = leftKeyAccessor.Compile(leftCompilationContext);
 
-            var rightKeyAccessor = (ScalarExpression)rightCol.ToColumnReference();
+            var rightKeyAccessor = (ScalarExpression)RightAttribute;
             if (!rightColType.IsSameAs(keyType))
                 rightKeyAccessor = new ConvertCall { Parameter = rightKeyAccessor, DataType = keyType };
-            var rightKeyConverter = rightKeyAccessor.Compile(new ExpressionCompilationContext(context, rightSchema, null));
+            var rightKeyConverter = rightKeyAccessor.Compile(rightCompilationContext);
 
             var expressionContext = new ExpressionExecutionContext(context);
 

@@ -333,6 +333,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="s">The string to get the prefix of</param>
         /// <param name="length">The number of characters to return</param>
         /// <returns>The first <paramref name="length"/> characters of the string <paramref name="s"/></returns>
+        [CollationSensitive]
         public static SqlString Left(SqlString s, [MaxLength] SqlInt32 length)
         {
             if (s.IsNull || length.IsNull)
@@ -350,6 +351,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="s">The string to get the suffix of</param>
         /// <param name="length">The number of characters to return</param>
         /// <returns>The last <paramref name="length"/> characters of the string <paramref name="s"/></returns>
+        [CollationSensitive]
         public static SqlString Right(SqlString s, [MaxLength] SqlInt32 length)
         {
             if (s.IsNull || length.IsNull)
@@ -368,6 +370,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="find">The substring to be found</param>
         /// <param name="replace">The replacement string</param>
         /// <returns>Replaces any instances of <paramref name="find"/> with <paramref name="replace"/> in the <paramref name="input"/></returns>
+        [CollationSensitive]
         public static SqlString Replace(SqlString input, SqlString find, SqlString replace)
         {
             if (input.IsNull || find.IsNull || replace.IsNull)
@@ -381,6 +384,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="s">The string expression to be evaluated</param>
         /// <returns></returns>
+        [CollationSensitive]
         public static SqlInt32 Len(SqlString s)
         {
             if (s.IsNull)
@@ -428,6 +432,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="start">An integer that specifies where the returned characters start (the numbering is 1 based, meaning that the first character in the expression is 1)</param>
         /// <param name="length">A positive integer that specifies how many characters of the expression will be returned</param>
         /// <returns></returns>
+        [CollationSensitive]
         public static SqlString Substring(SqlString expression, SqlInt32 start, [MaxLength] SqlInt32 length)
         {
             if (expression.IsNull || start.IsNull || length.IsNull)
@@ -495,6 +500,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="find">A character expression containing the sequence to find</param>
         /// <param name="search">A character expression to search.</param>
         /// <returns></returns>
+        [CollationSensitive]
         public static SqlInt32 CharIndex(SqlString find, SqlString search)
         {
             return CharIndex(find, search, 0);
@@ -507,6 +513,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="search">A character expression to search.</param>
         /// <param name="startLocation">An integer or bigint expression at which the search starts. If start_location is not specified, has a negative value, or has a zero (0) value, the search starts at the beginning of expressionToSearch.</param>
         /// <returns></returns>
+        [CollationSensitive]
         public static SqlInt32 CharIndex(SqlString find, SqlString search, SqlInt32 startLocation)
         {
             if (find.IsNull || search.IsNull || startLocation.IsNull)
@@ -519,6 +526,18 @@ namespace MarkMpn.Sql4Cds.Engine
                 return 0;
 
             return search.Value.IndexOf(find.Value, startLocation.Value - 1, StringComparison.OrdinalIgnoreCase) + 1;
+        }
+
+        /// <summary>
+        /// Returns the starting position of the first occurrence of a pattern in a specified expression, or zero if the pattern is not found, on all valid text and character data types.
+        /// </summary>
+        /// <param name="pattern">A character expression that contains the sequence to be found. Wildcard characters can be used; however, the % character must come before and follow <paramref name="pattern"/></param>
+        /// <param name="expression">An expression that is searched for the specified <paramref name="pattern"/></param>
+        /// <returns></returns>
+        [CollationSensitive]
+        public static SqlInt32 PatIndex(SqlString pattern, SqlString expression)
+        {
+            throw new NotImplementedException();
         }
 
         /// <summary>
@@ -922,6 +941,14 @@ namespace MarkMpn.Sql4Cds.Engine
     /// </summary>
     [AttributeUsage(AttributeTargets.Parameter)]
     class OptionalAttribute : Attribute
+    {
+    }
+
+    /// <summary>
+    /// Indicates that a function is collation sensitive
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Method)]
+    class CollationSensitiveAttribute : Attribute
     {
     }
 }

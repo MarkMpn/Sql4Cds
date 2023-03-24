@@ -5084,12 +5084,63 @@ UPDATE account SET employees = @employees WHERE name = @name";
         }
 
         [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void CollationConflict()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = "SELECT * FROM prod.dbo.account p, french.dbo.account f WHERE p.name = f.name";
+            planBuilder.Build(query, null, out _);
+        }
+
+        [TestMethod]
         public void ExplicitCollation()
         {
-            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = "SELECT * FROM prod.dbo.account p, french.dbo.account f WHERE p.name = f.name COLLATE French_CI_AS";
+            var plans = planBuilder.Build(query, null, out _);
 
-            var query = "SELECT 'abc' COLLATE French_CI_AS";
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var join = AssertNode<HashJoinNode>(select.Source);
+            Assert.AreEqual("p.name", join.LeftAttribute.ToSql());
+            Assert.AreEqual("Expr1", join.RightAttribute.ToSql());
+            var fetch1 = AssertNode<FetchXmlScan>(join.LeftSource);
+            var computeScalar = AssertNode<ComputeScalarNode>(join.RightSource);
+            Assert.AreEqual("ExplicitCollation(f.name COLLATE French_CI_AS)", computeScalar.Columns["Expr1"].ToSql());
+            var fetch2 = AssertNode<FetchXmlScan>(computeScalar.Source);
+        }
 
+        [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void NoCollationSelectListError()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = "SELECT (CASE WHEN p.employees > f.employees THEN p.name ELSE f.name END) FROM prod.dbo.account p, french.dbo.account f";
+            planBuilder.Build(query, null, out _);
+        }
+
+        [TestMethod]
+        public void NoCollationExprWithExplicitCollationSelectList()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = "SELECT (CASE WHEN p.employees > f.employees THEN p.name ELSE f.name END) COLLATE Latin1_General_CI_AS FROM prod.dbo.account p, french.dbo.account f";
+            planBuilder.Build(query, null, out _);
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void NoCollationCollationSensitiveFunctionError()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = "SELECT PATINDEX((CASE WHEN p.employees > f.employees THEN p.name ELSE f.name END), 'a') FROM prod.dbo.account p, french.dbo.account f";
+            planBuilder.Build(query, null, out _);
+        }
+
+        [TestMethod]
+        public void NoCollationExprWithExplicitCollationCollationSensitiveFunctionError()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = "SELECT PATINDEX((CASE WHEN p.employees > f.employees THEN p.name ELSE f.name END) COLLATE Latin1_General_CI_AS, 'a') FROM prod.dbo.account p, french.dbo.account f";
             planBuilder.Build(query, null, out _);
         }
     }
