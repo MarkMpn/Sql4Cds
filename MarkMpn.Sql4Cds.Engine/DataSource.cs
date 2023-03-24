@@ -14,6 +14,8 @@ namespace MarkMpn.Sql4Cds.Engine
     /// </summary>
     public class DataSource
     {
+        private Collation _defaultCollation;
+
         /// <summary>
         /// Creates a new <see cref="DataSource"/> using default values based on an existing connection.
         /// </summary>
@@ -45,8 +47,6 @@ namespace MarkMpn.Sql4Cds.Engine
             Name = name;
             TableSizeCache = new TableSizeCache(org, Metadata);
             MessageCache = new MessageCache(org, Metadata);
-
-            DefaultCollation = LoadDefaultCollation();
         }
 
         /// <summary>
@@ -84,16 +84,29 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// Returns the default collation used by this instance
         /// </summary>
-        internal Collation DefaultCollation { get; set; }
+        internal Collation DefaultCollation
+        {
+            get
+            {
+                if (_defaultCollation == null)
+                    _defaultCollation = LoadDefaultCollation();
+
+                return _defaultCollation;
+            }
+            set
+            {
+                _defaultCollation = value;
+            }
+        }
 
         private Collation LoadDefaultCollation()
         {
             var qry = new QueryExpression("organization")
             {
-                ColumnSet = new ColumnSet("lcid")
+                ColumnSet = new ColumnSet("localeid")
             };
             var org = Connection.RetrieveMultiple(qry).Entities[0];
-            var lcid = org.GetAttributeValue<int>("lcid");
+            var lcid = org.GetAttributeValue<int>("localeid");
 
             // Collation options are set based on the default language. Most are CI/AI but a few are not
             // https://learn.microsoft.com/en-us/power-platform/admin/language-collations#language-and-associated-collation-used-with-dataverse
