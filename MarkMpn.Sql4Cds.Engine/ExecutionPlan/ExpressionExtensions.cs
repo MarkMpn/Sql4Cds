@@ -1010,7 +1010,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // Do a one-off conversion to regex
                 try
                 {
-                    var regex = LikeToRegex((SqlString)((ConstantExpression)pattern).Value, (SqlString)(((ConstantExpression)escape)?.Value ?? SqlString.Null));
+                    var regex = LikeToRegex((SqlString)((ConstantExpression)pattern).Value, (SqlString)(((ConstantExpression)escape)?.Value ?? SqlString.Null), false);
                     return Expr.Call(() => Like(Expr.Arg<SqlString>(), Expr.Arg<Regex>(), Expr.Arg<bool>()), value, Expression.Constant(regex), Expression.Constant(like.NotDefined));
                 }
                 catch (ArgumentException ex)
@@ -1022,19 +1022,36 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Expr.Call(() => Like(Expr.Arg<SqlString>(), Expr.Arg<SqlString>(), Expr.Arg<SqlString>(), Expr.Arg<bool>()), value, pattern, escape, Expression.Constant(like.NotDefined));
         }
 
-        private static Regex LikeToRegex(SqlString pattern, SqlString escape)
+        internal static Regex LikeToRegex(SqlString pattern, SqlString escape, bool patIndex)
         {
             var regexBuilder = new StringBuilder();
-            regexBuilder.Append("^");
-
-            var escaped = false;
-            var inRange = false;
-            var escapeChar = escape.IsNull ? '\0' : escape.Value[0];
-
             var pat = pattern.Value;
 
             if (pattern.SqlCompareOptions.HasFlag(SqlCompareOptions.IgnoreNonSpace))
                 pat = RemoveDiacritics(pat);
+
+            var endWildcard = false;
+
+            if (!patIndex)
+            {
+                regexBuilder.Append("^");
+            }
+            else
+            {
+                if (!pattern.Value.StartsWith("%"))
+                    regexBuilder.Append("^");
+                else
+                    pat = pat.TrimStart('%');
+
+                endWildcard = pat.EndsWith("%");
+
+                if (endWildcard)
+                    pat = pat.TrimEnd('%');
+            }
+
+            var escaped = false;
+            var inRange = false;
+            var escapeChar = escape.IsNull ? '\0' : escape.Value[0];
 
             foreach (var ch in pat)
             {
@@ -1095,7 +1112,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (escaped || inRange)
                 throw new ArgumentException("Invalid LIKE pattern");
 
-            regexBuilder.Append("$");
+            if (!patIndex || !endWildcard)
+                regexBuilder.Append("$");
 
             return new Regex(regexBuilder.ToString(), pattern.SqlCompareOptions.HasFlag(SqlCompareOptions.IgnoreCase) ? RegexOptions.IgnoreCase : RegexOptions.None);
         }
@@ -1106,7 +1124,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return false;
 
             // Convert the LIKE pattern to a regex
-            var regex = LikeToRegex(pattern, escape);
+            var regex = LikeToRegex(pattern, escape, false);
 
             return Like(value, regex, not);
         }
@@ -1135,7 +1153,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <ref>https://stackoverflow.com/a/249126/269629</ref>
         /// <param name="text">The text to remove the accents from</param>
         /// <returns>A version of the <paramref name="text"/> with accents removed</returns>
-        static string RemoveDiacritics(string text)
+        internal static string RemoveDiacritics(string text)
         {
             var normalizedString = text.Normalize(NormalizationForm.FormD);
             var stringBuilder = new StringBuilder(capacity: normalizedString.Length);

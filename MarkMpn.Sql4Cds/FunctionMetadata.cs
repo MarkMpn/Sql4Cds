@@ -147,6 +147,9 @@ namespace MarkMpn.Sql4Cds
 
             [Description("Returns a value formatted with the specified format and optional culture")]
             public abstract object format(object value, string format, string culture);
+
+            [Description("Returns the starting position of the first occurrence of a pattern in a specified expression, or zero if the pattern is not found")]
+            public abstract string patindex(string pattern, string expression);
         }
     }
 }

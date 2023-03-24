@@ -537,7 +537,21 @@ namespace MarkMpn.Sql4Cds.Engine
         [CollationSensitive]
         public static SqlInt32 PatIndex(SqlString pattern, SqlString expression)
         {
-            throw new NotImplementedException();
+            if (pattern.IsNull || expression.IsNull)
+                return 0;
+
+            var regex = ExpressionExtensions.LikeToRegex(pattern, SqlString.Null, true);
+            var value = expression.Value;
+
+            if (expression.SqlCompareOptions.HasFlag(SqlCompareOptions.IgnoreNonSpace))
+                value = ExpressionExtensions.RemoveDiacritics(value);
+
+            var match = regex.Match(value);
+
+            if (!match.Success)
+                return 0;
+
+            return match.Index + 1;
         }
 
         /// <summary>
