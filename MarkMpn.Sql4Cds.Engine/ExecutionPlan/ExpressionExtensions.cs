@@ -764,6 +764,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     throw new NotSupportedQueryFragmentException($"Cannot convert {paramTypes[i].ToSql()} to {paramType.ToSqlType(primaryDataSource).ToSql()}", i < paramOffset ? func : func.Parameters[i - paramOffset]);
             }
 
+            if (sqlType == null)
+                sqlType = method.ReturnType.ToSqlType(primaryDataSource);
+
             if (method.GetCustomAttribute(typeof(CollationSensitiveAttribute)) != null)
             {
                 // If method is collation sensitive:
@@ -821,9 +824,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     outputCollation.CollationLabel = collation.CollationLabel;
                 }
             }
-
-            if (sqlType == null)
-                sqlType = method.ReturnType.ToSqlType(primaryDataSource);
 
             return method;
         }
@@ -982,6 +982,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     throw new NotSupportedQueryFragmentException($"No implicit conversion exists for types {valueType.ToSql()} and {stringType.ToSql()}", like.FirstExpression);
 
                 value = SqlTypeConverter.Convert(value, valueType, stringType);
+                valueType = stringType;
             }
 
             if (pattern.Type != typeof(SqlString))
@@ -990,6 +991,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     throw new NotSupportedQueryFragmentException($"No implicit conversion exists for types {patternType.ToSql()} and {stringType.ToSql()}", like.SecondExpression);
 
                 pattern = SqlTypeConverter.Convert(pattern, patternType, stringType);
+                patternType = stringType;
             }
 
             if (escape != null && escape.Type != typeof(SqlString))
@@ -998,6 +1000,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     throw new NotSupportedQueryFragmentException($"No implicit conversion exists for types {escapeType.ToSql()} and {stringType.ToSql()}", like.EscapeExpression);
 
                 escape = SqlTypeConverter.Convert(escape, escapeType, stringType);
+                escapeType = stringType;
+            }
+
+            if (!SqlDataTypeReferenceWithCollation.TryConvertCollation((SqlDataTypeReference)valueType, (SqlDataTypeReference)patternType, out var collation, out var collationLabel))
+                throw new NotSupportedQueryFragmentException($"Cannot resolve collation conflict between '{((SqlDataTypeReferenceWithCollation)valueType).Collation.Name}' and {((SqlDataTypeReferenceWithCollation)patternType).Collation.Name}' in like operation", like);
+
+            ((SqlDataTypeReferenceWithCollation)stringType).Collation = collation;
+            ((SqlDataTypeReferenceWithCollation)stringType).CollationLabel = collationLabel;
+
+            if (escapeType != null && !SqlDataTypeReferenceWithCollation.TryConvertCollation(stringType, (SqlDataTypeReference)escapeType, out collation, out collationLabel))
+            {
+                throw new NotSupportedQueryFragmentException($"Cannot resolve collation conflict between '{((SqlDataTypeReferenceWithCollation)stringType).Collation.Name}' and {((SqlDataTypeReferenceWithCollation)escapeType).Collation.Name}' in like operation", like);
+            }
+            else
+            {
+                ((SqlDataTypeReferenceWithCollation)stringType).Collation = collation;
+                ((SqlDataTypeReferenceWithCollation)stringType).CollationLabel = collationLabel;
             }
 
             AssertCollationSensitive(stringType, "like operation", like);
@@ -1010,7 +1029,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // Do a one-off conversion to regex
                 try
                 {
-                    var regex = LikeToRegex((SqlString)((ConstantExpression)pattern).Value, (SqlString)(((ConstantExpression)escape)?.Value ?? SqlString.Null), false);
+                    var regex = LikeToRegex(SqlTypeConverter.ConvertCollation((SqlString)((ConstantExpression)pattern).Value, collation), (SqlString)(((ConstantExpression)escape)?.Value ?? SqlString.Null), false);
                     return Expr.Call(() => Like(Expr.Arg<SqlString>(), Expr.Arg<Regex>(), Expr.Arg<bool>()), value, Expression.Constant(regex), Expression.Constant(like.NotDefined));
                 }
                 catch (ArgumentException ex)
@@ -1018,6 +1037,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     throw new NotSupportedQueryFragmentException(ex.Message, like.SecondExpression);
                 }
             }
+
+            value = Expr.Call(() => SqlTypeConverter.ConvertCollation(Expr.Arg<SqlString>(), Expr.Arg<Collation>()), value, Expression.Constant(collation));
+            pattern = Expr.Call(() => SqlTypeConverter.ConvertCollation(Expr.Arg<SqlString>(), Expr.Arg<Collation>()), pattern, Expression.Constant(collation));
 
             return Expr.Call(() => Like(Expr.Arg<SqlString>(), Expr.Arg<SqlString>(), Expr.Arg<SqlString>(), Expr.Arg<bool>()), value, pattern, escape, Expression.Constant(like.NotDefined));
         }

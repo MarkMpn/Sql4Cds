@@ -1050,5 +1050,28 @@ SELECT name FROM account WHERE name = @name OR name = @name";
                 }
             }
         }
+
+        [TestMethod]
+        public void CollationSensitiveFunctions()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "select case when 'test' like 't%' then 1 else 0 end";
+                var actual = cmd.ExecuteScalar();
+
+                Assert.AreEqual(1, actual);
+
+                cmd.CommandText = "select case when 'TEST' collate latin1_general_cs_ai like 't%' then 1 else 0 end";
+                actual = cmd.ExecuteScalar();
+
+                Assert.AreEqual(0, actual);
+
+                cmd.CommandText = "select case when upper('test' collate latin1_general_cs_ai) like 't%' then 1 else 0 end";
+                actual = cmd.ExecuteScalar();
+
+                Assert.AreEqual(0, actual);
+            }
+        }
     }
 }

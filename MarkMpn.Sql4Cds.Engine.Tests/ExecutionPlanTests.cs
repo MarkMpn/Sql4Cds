@@ -3625,7 +3625,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 if (plan is IDataReaderExecutionPlanNode selectQuery)
                 {
-                    var results = selectQuery.Execute(new NodeExecutionContext(_dataSources, this, parameterTypes, parameterValues), CommandBehavior.Default);
+                    var results = selectQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues), CommandBehavior.Default);
                     var dataTable = new DataTable();
                     dataTable.Load(results);
 
@@ -3635,7 +3635,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
                 else if (plan is IDmlQueryExecutionPlanNode dmlQuery)
                 {
-                    dmlQuery.Execute(new NodeExecutionContext(_dataSources, this, parameterTypes, parameterValues), out _);
+                    dmlQuery.Execute(new NodeExecutionContext(_localDataSource, this, parameterTypes, parameterValues), out _);
                 }
             }
         }
