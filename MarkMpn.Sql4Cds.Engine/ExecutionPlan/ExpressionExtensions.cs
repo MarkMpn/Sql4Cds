@@ -1408,19 +1408,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             sqlType = convert.DataType;
 
-            // Set default length to 30
             if (sqlType is SqlDataTypeReference sqlTargetType &&
-                sqlTargetType.SqlDataTypeOption.IsStringType() &&
-                sqlTargetType.Parameters.Count == 0)
+                sqlTargetType.SqlDataTypeOption.IsStringType())
             {
-                var coll = sqlType as SqlDataTypeReferenceWithCollation;
+                // Set default length to 30
+                if (sqlTargetType.Parameters.Count == 0)
+                    sqlTargetType.Parameters.Add(new IntegerLiteral { Value = "30" });
+
+                // If the input is a character string, the output string has the collation label of the input string
+                // If the input is not a character string, the output string is coercible-default and assigned the collation of the current database for the connection
+                var valueTypeColl = valueType as SqlDataTypeReferenceWithCollation;
+                var collation = valueTypeColl?.Collation ?? context.PrimaryDataSource.DefaultCollation;
+                var collationLabel = valueTypeColl?.CollationLabel ?? CollationLabel.CoercibleDefault;
 
                 sqlType = new SqlDataTypeReferenceWithCollation
                 {
                     SqlDataTypeOption = sqlTargetType.SqlDataTypeOption,
-                    Parameters = { new IntegerLiteral { Value = "30" } },
-                    Collation = coll?.Collation ?? context.PrimaryDataSource.DefaultCollation,
-                    CollationLabel = coll?.CollationLabel ?? CollationLabel.CoercibleDefault
+                    Parameters = { sqlTargetType.Parameters[0] },
+                    Collation = collation,
+                    CollationLabel = collationLabel
                 };
             }
 
