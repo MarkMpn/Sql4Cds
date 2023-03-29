@@ -1073,5 +1073,28 @@ SELECT name FROM account WHERE name = @name OR name = @name";
                 Assert.AreEqual(0, actual);
             }
         }
+
+        [TestMethod]
+        public void MergeSemiJoin()
+        {
+            using (var con = new Sql4CdsConnection(_dataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "insert into account (name) values ('data8')";
+                cmd.ExecuteNonQuery();
+                cmd.ExecuteNonQuery();
+
+                con.ChangeDatabase("prod");
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = "SELECT name FROM account WHERE name IN (SELECT name FROM uat..account)";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
     }
 }
