@@ -180,6 +180,15 @@ namespace MarkMpn.Sql4Cds.Engine
             return false;
         }
 
+        public static IEnumerable<Collation> GetAllCollations()
+        {
+            foreach (var kvp in _collationNameToLcid)
+            {
+                yield return new Collation(kvp.Key + "_BIN", kvp.Value, SqlCompareOptions.BinarySort);
+                yield return new Collation(kvp.Key + "_BIN2", kvp.Value, SqlCompareOptions.BinarySort2);
+            }
+        }
+
         /// <summary>
         /// Applies the current collation to a string value
         /// </summary>

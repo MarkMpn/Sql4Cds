@@ -5143,5 +5143,13 @@ UPDATE account SET employees = @employees WHERE name = @name";
             var query = "SELECT PATINDEX((CASE WHEN p.employees > f.employees THEN p.name ELSE f.name END) COLLATE Latin1_General_CI_AS, 'a') FROM prod.dbo.account p, french.dbo.account f";
             planBuilder.Build(query, null, out _);
         }
+
+        [TestMethod]
+        public void CollationFunctions()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = "SELECT name, COLLATIONPROPERTY(name, 'lcid') FROM sys.fn_helpcollations()";
+            planBuilder.Build(query, null, out _);
+        }
     }
 }

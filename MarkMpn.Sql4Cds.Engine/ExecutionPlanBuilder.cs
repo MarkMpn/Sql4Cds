@@ -3549,7 +3549,28 @@ namespace MarkMpn.Sql4Cds.Engine
                 CaptureOuterReferences(scalarSubquerySchema, null, tvf, context, scalarSubqueryReferences);
 
                 var dataSource = SelectDataSource(tvf.SchemaObject);
-                var execute = ExecuteMessageNode.FromMessage(tvf, dataSource, GetExpressionContext(null, context));
+                IDataExecutionPlanNodeInternal execute;
+
+                if (String.IsNullOrEmpty(tvf.SchemaObject.SchemaIdentifier?.Value) ||
+                    tvf.SchemaObject.SchemaIdentifier.Value.Equals("dbo", StringComparison.OrdinalIgnoreCase))
+                {
+                    execute = ExecuteMessageNode.FromMessage(tvf, dataSource, GetExpressionContext(null, context));
+                }
+                else if (tvf.SchemaObject.SchemaIdentifier.Value.Equals("sys", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!Enum.TryParse<SystemFunction>(tvf.SchemaObject.BaseIdentifier.Value, true, out var systemFunction))
+                        throw new NotSupportedQueryFragmentException("Invalid function name", tvf);
+
+                    execute = new SystemFunctionNode
+                    {
+                        DataSource = dataSource.Name,
+                        SystemFunction = systemFunction
+                    };
+                }
+                else
+                {
+                    throw new NotSupportedQueryFragmentException("Invalid function name", tvf);
+                }
 
                 if (source == null)
                     return execute;
