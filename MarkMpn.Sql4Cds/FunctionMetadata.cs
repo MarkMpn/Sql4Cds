@@ -156,6 +156,9 @@ namespace MarkMpn.Sql4Cds
 
             [Description("Converts a string to lowercase")]
             public abstract string lower(string value);
+
+            [Description("Returns the requested property of a specified collation")]
+            public abstract int collationproperty(string collation_name, string property);
         }
     }
 }

@@ -37,11 +37,13 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="name">The name the collation was parsed from</param>
         /// <param name="lcid">The locale ID to use</param>
         /// <param name="compareOptions">Additional comparison options</param>
-        public Collation(string name, int lcid, SqlCompareOptions compareOptions)
+        /// <param name="description">A description of the collation for display purposes</param>
+        public Collation(string name, int lcid, SqlCompareOptions compareOptions, string description)
         {
             Name = name;
             LCID = lcid;
             CompareOptions = compareOptions;
+            Description = description;
         }
 
         /// <summary>
@@ -81,6 +83,11 @@ namespace MarkMpn.Sql4Cds.Engine
         /// This will be null for the default collation
         /// </remarks>
         public string Name { get; }
+
+        /// <summary>
+        /// Returns the description of the collation
+        /// </summary>
+        public string Description { get; }
 
         /// <summary>
         /// Returns the default collation to be used for system data
@@ -171,7 +178,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         if (!_collationNameToLcid.TryGetValue(collationName, out var lcid))
                             break;
                         
-                        coll = new Collation(name, lcid, compareOptions);
+                        coll = new Collation(name, lcid, compareOptions, null);
                         return true;
                 }
             }
@@ -184,8 +191,71 @@ namespace MarkMpn.Sql4Cds.Engine
         {
             foreach (var kvp in _collationNameToLcid)
             {
-                yield return new Collation(kvp.Key + "_BIN", kvp.Value, SqlCompareOptions.BinarySort);
-                yield return new Collation(kvp.Key + "_BIN2", kvp.Value, SqlCompareOptions.BinarySort2);
+                yield return new Collation(kvp.Key + "_BIN", kvp.Value, SqlCompareOptions.BinarySort, kvp.Key + ", binary sort");
+                yield return new Collation(kvp.Key + "_BIN2", kvp.Value, SqlCompareOptions.BinarySort2, kvp.Key + ", binary code point comparison sort");
+
+                var options = SqlCompareOptions.None;
+                var description = new string[5];
+                description[0] = kvp.Key;
+
+                foreach (var c in new[] { "_CI", "_CS" })
+                {
+                    if (c == "_CI")
+                    {
+                        options |= SqlCompareOptions.IgnoreCase;
+                        description[1] = "case-insensitive";
+                    }
+                    else
+                    {
+                        options &= ~SqlCompareOptions.IgnoreCase;
+                        description[1] = "case-sensitive";
+                    }
+
+                    foreach (var a in new[] { "_AI", "_AS" })
+                    {
+                        if (a == "_AI")
+                        {
+                            options |= SqlCompareOptions.IgnoreNonSpace;
+                            description[2] = "accent-insensitive";
+                        }
+                        else
+                        {
+                            options &= ~SqlCompareOptions.IgnoreNonSpace;
+                            description[2] = "accent-sensitive";
+                        }
+
+                        foreach (var k in new[] { "", "_KS" })
+                        {
+                            if (k == "")
+                            {
+                                options |= SqlCompareOptions.IgnoreKanaType;
+                                description[3] = "kanatype-insensitive";
+                            }
+                            else
+                            {
+                                options &= ~SqlCompareOptions.IgnoreKanaType;
+                                description[3] = "kanatype-sensitive";
+                            }
+
+                            foreach (var w in new[] { "", "_WS" })
+                            {
+                                if (w == "")
+                                {
+                                    options |= SqlCompareOptions.IgnoreWidth;
+                                    description[4] = "width-insensitive";
+                                }
+                                else
+                                {
+                                    options &= ~SqlCompareOptions.IgnoreWidth;
+                                    description[4] = "width-sensitive";
+                                }
+
+                                // Albanian-100, case-sensitive, accent-insensitive, kanatype-sensitive, width-insensitive
+                                yield return new Collation(kvp.Key + c + a + k + w, kvp.Value, options, String.Join(", ", description));
+                            }
+                        }
+                    }
+                }
             }
         }
 

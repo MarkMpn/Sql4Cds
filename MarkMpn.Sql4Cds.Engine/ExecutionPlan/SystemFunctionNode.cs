@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Data.SqlTypes;
 using System.Text;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
@@ -80,10 +81,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             switch (SystemFunction)
             {
                 case SystemFunction.fn_helpcollations:
+                    foreach (var coll in Collation.GetAllCollations())
+                    {
+                        yield return new Entity
+                        {
+                            ["name"] = dataSource.DefaultCollation.ToSqlString(coll.Name),
+                            ["description"] = dataSource.DefaultCollation.ToSqlString(coll.Description)
+                        };
+                    }
                     break;
-            }
 
-            throw new NotSupportedException("Unsupported function " + SystemFunction);
+                default:
+                    throw new NotSupportedException("Unsupported function " + SystemFunction);
+            }
         }
     }
 

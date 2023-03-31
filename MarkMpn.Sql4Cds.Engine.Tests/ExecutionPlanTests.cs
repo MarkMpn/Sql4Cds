@@ -5148,8 +5148,15 @@ UPDATE account SET employees = @employees WHERE name = @name";
         public void CollationFunctions()
         {
             var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
-            var query = "SELECT name, COLLATIONPROPERTY(name, 'lcid') FROM sys.fn_helpcollations()";
-            planBuilder.Build(query, null, out _);
+            var query = "SELECT *, COLLATIONPROPERTY(name, 'lcid') FROM sys.fn_helpcollations()";
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            CollectionAssert.AreEqual(new[] { "name", "description", "Expr1" }, select.ColumnSet.Select(col => col.OutputColumn).ToArray());
+            var computeScalar = AssertNode<ComputeScalarNode>(select.Source);
+            var sysFunc = AssertNode<SystemFunctionNode>(computeScalar.Source);
+            Assert.AreEqual(SystemFunction.fn_helpcollations, sysFunc.SystemFunction);
         }
     }
 }

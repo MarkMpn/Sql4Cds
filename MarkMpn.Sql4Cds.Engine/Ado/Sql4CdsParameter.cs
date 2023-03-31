@@ -149,11 +149,11 @@ namespace MarkMpn.Sql4Cds.Engine
                 switch (DbType)
                 {
                     case DbType.AnsiString:
-                        _dataType = DataTypeHelpers.VarChar(Size, new Collation(null, LocaleId, CompareInfo), CollationLabel.CoercibleDefault);
+                        _dataType = DataTypeHelpers.VarChar(Size, new Collation(null, LocaleId, CompareInfo, null), CollationLabel.CoercibleDefault);
                         break;
 
                     case DbType.AnsiStringFixedLength:
-                        _dataType = DataTypeHelpers.Char(Size, new Collation(null, LocaleId, CompareInfo), CollationLabel.CoercibleDefault);
+                        _dataType = DataTypeHelpers.Char(Size, new Collation(null, LocaleId, CompareInfo, null), CollationLabel.CoercibleDefault);
                         break;
 
                     case DbType.Binary:
@@ -226,11 +226,11 @@ namespace MarkMpn.Sql4Cds.Engine
                         break;
 
                     case DbType.String:
-                        _dataType = DataTypeHelpers.NVarChar(Size, new Collation(null, LocaleId, CompareInfo), CollationLabel.CoercibleDefault);
+                        _dataType = DataTypeHelpers.NVarChar(Size, new Collation(null, LocaleId, CompareInfo, null), CollationLabel.CoercibleDefault);
                         break;
 
                     case DbType.StringFixedLength:
-                        _dataType = DataTypeHelpers.NChar(Size, new Collation(null, LocaleId, CompareInfo), CollationLabel.CoercibleDefault);
+                        _dataType = DataTypeHelpers.NChar(Size, new Collation(null, LocaleId, CompareInfo, null), CollationLabel.CoercibleDefault);
                         break;
 
                     case DbType.Time:
@@ -250,11 +250,11 @@ namespace MarkMpn.Sql4Cds.Engine
                         break;
 
                     case DbType.VarNumeric:
-                        _dataType = DataTypeHelpers.NVarChar(Int32.MaxValue, new Collation(null, LocaleId, CompareInfo), CollationLabel.CoercibleDefault);
+                        _dataType = DataTypeHelpers.NVarChar(Int32.MaxValue, new Collation(null, LocaleId, CompareInfo, null), CollationLabel.CoercibleDefault);
                         break;
 
                     case DbType.Xml:
-                        _dataType = DataTypeHelpers.NVarChar(Int32.MaxValue, new Collation(null, LocaleId, CompareInfo), CollationLabel.CoercibleDefault);
+                        _dataType = DataTypeHelpers.NVarChar(Int32.MaxValue, new Collation(null, LocaleId, CompareInfo, null), CollationLabel.CoercibleDefault);
                         break;
                 }
             }

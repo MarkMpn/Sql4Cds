@@ -707,6 +707,61 @@ namespace MarkMpn.Sql4Cds.Engine
 
             return value.Value.ToLower(value.CultureInfo);
         }
+
+        /// <summary>
+        /// Returns the requested property of a specified collation
+        /// </summary>
+        /// <param name="collation">The name of the collation</param>
+        /// <param name="property">The collation property</param>
+        /// <returns></returns>
+        public static SqlInt32 CollationProperty(SqlString collation, SqlString property)
+        {
+            if (collation.IsNull || property.IsNull)
+                return SqlInt32.Null;
+
+            if (!Collation.TryParse(collation.Value, out var coll))
+                return SqlInt32.Null;
+
+            switch (property.Value.ToLowerInvariant())
+            {
+                case "codepage":
+                    return 0;
+
+                case "lcid":
+                    return coll.LCID;
+
+                case "comparisonstyle":
+                    var compare = 0;
+
+                    if (coll.CompareOptions.HasFlag(CompareOptions.IgnoreCase))
+                        compare |= 1;
+
+                    if (coll.CompareOptions.HasFlag(CompareOptions.IgnoreNonSpace))
+                        compare |= 2;
+
+                    if (coll.CompareOptions.HasFlag(CompareOptions.IgnoreKanaType))
+                        compare |= 65536;
+
+                    if (coll.CompareOptions.HasFlag(CompareOptions.IgnoreWidth))
+                        compare |= 131072;
+
+                    return compare;
+
+                case "version":
+                    if (coll.Name.Contains("140"))
+                        return 3;
+
+                    if (coll.Name.Contains("100"))
+                        return 2;
+
+                    if (coll.Name.Contains("90"))
+                        return 1;
+
+                    return 0;
+            }
+
+            return SqlInt32.Null;
+        }
     }
 
     /// <summary>
