@@ -22,6 +22,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private int _executionCount;
         private readonly Timer _timer = new Timer();
 
+        public SelectNode() { }
+
         /// <summary>
         /// The columns that should be included in the query results
         /// </summary>
@@ -35,6 +37,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         [Browsable(false)]
         public IDataExecutionPlanNodeInternal Source { get; set; }
+
+        /// <summary>
+        /// The schema that shold be used for expanding "*" columns
+        /// </summary>
+        [Browsable(false)]
+        public INodeSchema LogicalSourceSchema { get; set; }
 
         [Browsable(false)]
         public string Sql { get; set; }
@@ -257,10 +265,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public void ExpandWildcardColumns(NodeCompilationContext context)
         {
-            ExpandWildcardColumns(Source, ColumnSet, context);
+            ExpandWildcardColumns(Source, LogicalSourceSchema, ColumnSet, context);
         }
 
-        internal static void ExpandWildcardColumns(IDataExecutionPlanNodeInternal source, List<SelectColumn> columnSet, NodeCompilationContext context)
+        internal static void ExpandWildcardColumns(IDataExecutionPlanNodeInternal source, INodeSchema sourceSchema, List<SelectColumn> columnSet, NodeCompilationContext context)
         {
             // Expand any AllColumns
             if (columnSet.Any(col => col.AllColumns))
@@ -276,8 +284,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         continue;
                     }
 
-                    foreach (var src in schema.Schema.Keys.Where(k => col.SourceColumn == null || k.StartsWith(col.SourceColumn + ".", StringComparison.OrdinalIgnoreCase)).OrderBy(k => k, StringComparer.OrdinalIgnoreCase))
+                    foreach (var src in sourceSchema.Schema.Keys.Where(k => col.SourceColumn == null || k.StartsWith(col.SourceColumn + ".", StringComparison.OrdinalIgnoreCase)).OrderBy(k => k, StringComparer.OrdinalIgnoreCase))
                     {
+                        // Columns might be available in the logical source schema but not in
+                        // the real one, e.g. due to aggregation
+                        if (!schema.ContainsColumn(src, out _))
+                            src.ToColumnReference().GetType(new ExpressionCompilationContext(context, schema, sourceSchema), out _);
+
                         expanded.Add(new SelectColumn
                         {
                             SourceColumn = src,
@@ -312,6 +325,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var clone = new SelectNode
             {
                 Source = (IDataExecutionPlanNodeInternal)Source.Clone(),
+                LogicalSourceSchema = LogicalSourceSchema,
                 Sql = Sql,
                 Index = Index,
                 Length = Length

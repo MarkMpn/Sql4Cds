@@ -261,7 +261,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (message.OutputParameters.Any(p => !p.IsScalarType()))
                 {
                     // Expose the produced data set
-                    var select = new SelectNode { Source = node };
+                    var select = new SelectNode { Source = node, LogicalSourceSchema = schema };
 
                     foreach (var col in schema.Schema.Keys.OrderBy(col => col))
                         select.ColumnSet.Add(new SelectColumn { SourceColumn = col, OutputColumn = col });
@@ -1767,7 +1767,7 @@ namespace MarkMpn.Sql4Cds.Engine
             node = ConvertOrderByClause(node, hints, binary.OrderByClause, concat.ColumnSet.Select(col => new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = col.OutputColumn } } } }).ToArray(), binary, context, outerSchema, outerReferences, null);
             node = ConvertOffsetClause(node, binary.OffsetClause, context);
 
-            var select = new SelectNode { Source = node };
+            var select = new SelectNode { Source = node, LogicalSourceSchema = concat.GetSchema(context) };
             select.ColumnSet.AddRange(concat.ColumnSet.Select((col, i) => new SelectColumn { SourceColumn = col.OutputColumn, SourceExpression = col.SourceExpressions[0], OutputColumn = left.ColumnSet[i].OutputColumn }));
 
             return select;
@@ -1794,6 +1794,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             // Each table in the FROM clause starts as a separate FetchXmlScan node. Add appropriate join nodes
             var node = querySpec.FromClause == null ? new ConstantScanNode { Values = { new Dictionary<string, ScalarExpression>() } } : ConvertFromClause(querySpec.FromClause.TableReferences, hints, querySpec, outerSchema, outerReferences, context);
+            var logicalSchema = node.GetSchema(context);
 
             node = ConvertInSubqueries(node, hints, querySpec, context, outerSchema, outerReferences);
             node = ConvertExistsSubqueries(node, hints, querySpec, context, outerSchema, outerReferences);
@@ -1814,7 +1815,7 @@ namespace MarkMpn.Sql4Cds.Engine
             node = distinct ?? node;
 
             // Add SELECT
-            var selectNode = ConvertSelectClause(querySpec.SelectElements, hints, node, distinct, querySpec, context, outerSchema, outerReferences, nonAggregateSchema);
+            var selectNode = ConvertSelectClause(querySpec.SelectElements, hints, node, distinct, querySpec, context, outerSchema, outerReferences, nonAggregateSchema, logicalSchema);
             node = selectNode.Source;
 
             // Add sorts from ORDER BY
@@ -2652,13 +2653,14 @@ namespace MarkMpn.Sql4Cds.Engine
             return query;
         }
 
-        private SelectNode ConvertSelectClause(IList<SelectElement> selectElements, IList<OptimizerHint> hints, IDataExecutionPlanNodeInternal node, DistinctNode distinct, TSqlFragment query, NodeCompilationContext context, INodeSchema outerSchema, IDictionary<string,string> outerReferences, INodeSchema nonAggregateSchema)
+        private SelectNode ConvertSelectClause(IList<SelectElement> selectElements, IList<OptimizerHint> hints, IDataExecutionPlanNodeInternal node, DistinctNode distinct, TSqlFragment query, NodeCompilationContext context, INodeSchema outerSchema, IDictionary<string,string> outerReferences, INodeSchema nonAggregateSchema, INodeSchema logicalSourceSchema)
         {
             var schema = node.GetSchema(context);
 
             var select = new SelectNode
             {
-                Source = node
+                Source = node,
+                LogicalSourceSchema = logicalSourceSchema
             };
 
             var computeScalar = new ComputeScalarNode

@@ -24,6 +24,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             ColumnSet.AddRange(select.ColumnSet);
             Source = select.Source;
             Alias = identifier.Value;
+            LogicalSourceSchema = select.LogicalSourceSchema;
 
             // Check for duplicate columns
             var duplicateColumn = select.ColumnSet
@@ -60,6 +61,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public IDataExecutionPlanNodeInternal Source { get; set; }
 
+        /// <summary>
+        /// The schema that shold be used for expanding "*" columns
+        /// </summary>
+        [Browsable(false)]
+        public INodeSchema LogicalSourceSchema { get; set; }
+
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
             var mappings = ColumnSet.Where(col => !col.AllColumns).ToDictionary(col => col.OutputColumn, col => col.SourceColumn);
@@ -94,7 +101,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source.Parent = this;
 
             SelectNode.FoldFetchXmlColumns(Source, ColumnSet, context);
-            SelectNode.ExpandWildcardColumns(Source, ColumnSet, context);
+            SelectNode.ExpandWildcardColumns(Source, LogicalSourceSchema, ColumnSet, context);
 
             if (Source is FetchXmlScan fetchXml)
             {
@@ -266,7 +273,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var clone = new AliasNode
             {
                 Alias = Alias,
-                Source = (IDataExecutionPlanNodeInternal)Source.Clone()
+                Source = (IDataExecutionPlanNodeInternal)Source.Clone(),
+                LogicalSourceSchema = LogicalSourceSchema,
             };
 
             clone.Source.Parent = clone;
