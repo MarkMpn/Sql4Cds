@@ -1080,6 +1080,8 @@ SELECT name FROM account WHERE name = @name OR name = @name";
             using (var con = new Sql4CdsConnection(_dataSources))
             using (var cmd = con.CreateCommand())
             {
+                cmd.CommandTimeout = 0;
+
                 cmd.CommandText = "insert into account (name) values ('data8')";
                 cmd.ExecuteNonQuery();
                 cmd.ExecuteNonQuery();

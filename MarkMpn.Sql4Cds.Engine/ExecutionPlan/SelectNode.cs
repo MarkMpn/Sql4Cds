@@ -284,7 +284,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         continue;
                     }
 
-                    foreach (var src in sourceSchema.Schema.Keys.Where(k => col.SourceColumn == null || k.StartsWith(col.SourceColumn + ".", StringComparison.OrdinalIgnoreCase)).OrderBy(k => k, StringComparer.OrdinalIgnoreCase))
+                    foreach (var src in sourceSchema.Schema.Keys.Where(k => col.SourceColumn == null || k.StartsWith(col.SourceColumn + ".", StringComparison.OrdinalIgnoreCase)))
                     {
                         // Columns might be available in the logical source schema but not in
                         // the real one, e.g. due to aggregation

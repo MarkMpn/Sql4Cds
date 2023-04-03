@@ -655,7 +655,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var entity = FetchXml.Items.OfType<FetchEntityType>().Single();
             var meta = dataSource.Metadata[entity.name];
 
-            var schema = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
+            var schema = new ColumnList();
             var aliases = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
             var primaryKey = FetchXml.aggregate ? null : $"{Alias}.{meta.PrimaryIdAttribute}";
             var notNullColumns = new HashSet<string>();
@@ -759,7 +759,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Regex.IsMatch(alias, "^[A-Za-z_][A-Za-z0-9_]*$");
         }
 
-        private void AddSchemaAttributes(DataSource dataSource, Dictionary<string, DataTypeReference> schema, Dictionary<string, IReadOnlyList<string>> aliases, ref string primaryKey, HashSet<string> notNullColumns, List<string> sortOrder, string entityName, string alias, object[] items, bool innerJoin, bool requireTablePrefix)
+        private void AddSchemaAttributes(DataSource dataSource, ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, ref string primaryKey, HashSet<string> notNullColumns, List<string> sortOrder, string entityName, string alias, object[] items, bool innerJoin, bool requireTablePrefix)
         {
             if (items == null && !ReturnFullSchema)
                 return;
@@ -768,7 +768,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (ReturnFullSchema && !FetchXml.aggregate)
             {
-                foreach (var attrMetadata in meta.Attributes)
+                foreach (var attrMetadata in meta.Attributes.OrderBy(a => a.LogicalName))
                 {
                     if (attrMetadata.IsValidForRead == false)
                         continue;
@@ -918,7 +918,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private void AddNotNullFilters(Dictionary<string, DataTypeReference> schema, Dictionary<string, IReadOnlyList<string>> aliases, HashSet<string> notNullColumns, string alias, filter filter)
+        private void AddNotNullFilters(ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, HashSet<string> notNullColumns, string alias, filter filter)
         {
             if (filter.Items == null)
                 return;
@@ -941,7 +941,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 AddNotNullFilters(schema, aliases, notNullColumns, alias, subFilter);
         }
 
-        private void AddSchemaAttribute(DataSource dataSource, Dictionary<string, DataTypeReference> schema, Dictionary<string, IReadOnlyList<string>> aliases, HashSet<string> notNullColumns, string fullName, string simpleName, DataTypeReference type, AttributeMetadata attrMetadata, bool innerJoin)
+        private void AddSchemaAttribute(DataSource dataSource, ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, HashSet<string> notNullColumns, string fullName, string simpleName, DataTypeReference type, AttributeMetadata attrMetadata, bool innerJoin)
         {
             var notNull = innerJoin && (attrMetadata.RequiredLevel?.Value == AttributeRequiredLevel.SystemRequired || attrMetadata.LogicalName == "createdon" || attrMetadata.LogicalName == "createdby" || attrMetadata.AttributeOf == "createdby");
 
@@ -969,7 +969,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private void AddSchemaAttribute(Dictionary<string, DataTypeReference> schema, Dictionary<string, IReadOnlyList<string>> aliases, HashSet<string> notNullColumns, string fullName, string simpleName, DataTypeReference type, bool notNull)
+        private void AddSchemaAttribute(ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, HashSet<string> notNullColumns, string fullName, string simpleName, DataTypeReference type, bool notNull)
         {
             schema[fullName] = type;
 

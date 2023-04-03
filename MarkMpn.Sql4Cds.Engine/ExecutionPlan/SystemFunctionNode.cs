@@ -50,7 +50,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 case SystemFunction.fn_helpcollations:
                     return new NodeSchema(
-                        schema: new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase)
+                        schema: new ColumnList
                         {
                             ["name"] = DataTypeHelpers.NVarChar(128, dataSource.DefaultCollation, CollationLabel.CoercibleDefault),
                             ["description"] = DataTypeHelpers.NVarChar(1000, dataSource.DefaultCollation, CollationLabel.CoercibleDefault),

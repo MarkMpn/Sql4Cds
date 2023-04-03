@@ -441,7 +441,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override INodeSchema GetSchema(NodeCompilationContext context)
         {
-            var schema = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
+            var schema = new ColumnList();
             var aliases = new Dictionary<string, IReadOnlyList<string>>();
             var primaryKey = (string)null;
             var notNullColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -456,7 +456,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (Query.Properties != null)
                     entityProps = entityProps.Where(p => Query.Properties.AllProperties || Query.Properties.PropertyNames.Contains(p.PropertyName, StringComparer.OrdinalIgnoreCase));
 
-                foreach (var prop in entityProps)
+                foreach (var prop in entityProps.OrderBy(p => p.SqlName))
                 {
                     var fullName = $"{EntityAlias}.{prop.SqlName}";
                     schema[fullName] = prop.SqlType;
@@ -483,7 +483,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (Query.AttributeQuery?.Properties != null)
                     attributeProps = attributeProps.Where(p => Query.AttributeQuery.Properties.AllProperties || Query.AttributeQuery.Properties.PropertyNames.Contains(p.PropertyName, StringComparer.OrdinalIgnoreCase));
 
-                foreach (var prop in attributeProps)
+                foreach (var prop in attributeProps.OrderBy(p => p.SqlName))
                 {
                     var fullName = $"{AttributeAlias}.{prop.SqlName}";
                     schema[fullName] = prop.SqlType;
@@ -511,7 +511,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (Query.RelationshipQuery?.Properties != null)
                     relationshipProps = relationshipProps.Where(p => Query.RelationshipQuery.Properties.AllProperties || Query.RelationshipQuery.Properties.PropertyNames.Contains(p.PropertyName, StringComparer.OrdinalIgnoreCase));
 
-                foreach (var prop in relationshipProps)
+                foreach (var prop in relationshipProps.OrderBy(p => p.SqlName))
                 {
                     var fullName = $"{OneToManyRelationshipAlias}.{prop.SqlName}";
                     schema[fullName] = prop.SqlType;
@@ -539,7 +539,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (Query.RelationshipQuery?.Properties != null)
                     relationshipProps = relationshipProps.Where(p => Query.RelationshipQuery.Properties.AllProperties || Query.RelationshipQuery.Properties.PropertyNames.Contains(p.PropertyName, StringComparer.OrdinalIgnoreCase));
 
-                foreach (var prop in relationshipProps)
+                foreach (var prop in relationshipProps.OrderBy(p => p.SqlName))
                 {
                     var fullName = $"{ManyToOneRelationshipAlias}.{prop.SqlName}";
                     schema[fullName] = prop.SqlType;
@@ -567,7 +567,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (Query.RelationshipQuery?.Properties != null)
                     relationshipProps = relationshipProps.Where(p => Query.RelationshipQuery.Properties.AllProperties || Query.RelationshipQuery.Properties.PropertyNames.Contains(p.PropertyName, StringComparer.OrdinalIgnoreCase));
 
-                foreach (var prop in relationshipProps)
+                foreach (var prop in relationshipProps.OrderBy(p => p.SqlName))
                 {
                     var fullName = $"{ManyToManyRelationshipAlias}.{prop.SqlName}";
                     schema[fullName] = prop.SqlType;

@@ -17,6 +17,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private INodeSchema _lastLeftSchema;
         private INodeSchema _lastRightSchema;
         private INodeSchema _lastSchema;
+        private bool _lastSchemaIncludedSemiJoin;
 
         /// <summary>
         /// The first data source to merge
@@ -115,10 +116,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var outerSchema = LeftSource.GetSchema(context);
             var innerSchema = GetRightSchema(context);
 
-            if (outerSchema == _lastLeftSchema && innerSchema == _lastRightSchema)
+            if (outerSchema == _lastLeftSchema && innerSchema == _lastRightSchema && includeSemiJoin == _lastSchemaIncludedSemiJoin)
                 return _lastSchema;
 
-            var schema = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
+            var schema = new ColumnList();
             var aliases = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
             var primaryKey = GetPrimaryKey(outerSchema, innerSchema);
             var notNullColumns = new List<string>();
@@ -162,6 +163,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 aliases: aliases,
                 notNullColumns: notNullColumns,
                 sortOrder: GetSortOrder(outerSchema, innerSchema));
+            _lastSchemaIncludedSemiJoin = includeSemiJoin;
             return _lastSchema;
         }
 

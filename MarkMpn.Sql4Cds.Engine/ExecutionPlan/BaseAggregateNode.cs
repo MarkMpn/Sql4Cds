@@ -178,7 +178,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var sourceSchema = Source.GetSchema(context);
             var expressionContext = new ExpressionCompilationContext(context, sourceSchema, null);
-            var schema = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
+            var schema = new ColumnList();
             var aliases = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
             var primaryKey = (string)null;
             var notNullColumns = new List<string>();

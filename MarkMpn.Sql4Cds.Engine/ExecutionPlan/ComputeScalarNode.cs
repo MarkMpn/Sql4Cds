@@ -54,7 +54,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Copy the source schema and add in the additional computed columns
             var sourceSchema = Source.GetSchema(context);
             var expressionCompilationContext = new ExpressionCompilationContext(context, sourceSchema, null);
-            var schema = new Dictionary<string, DataTypeReference>(sourceSchema.Schema.Count, StringComparer.OrdinalIgnoreCase);
+            var schema = new ColumnList();
 
             foreach (var col in sourceSchema.Schema)
                 schema[col.Key] = col.Value;

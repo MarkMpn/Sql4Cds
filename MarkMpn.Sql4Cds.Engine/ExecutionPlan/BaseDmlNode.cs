@@ -211,7 +211,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 // Store the values under the column index as well as name for compatibility with INSERT ... SELECT ...
                 var dataTable = new DataTable();
                 var schemaTable = dataReader.GetSchemaTable();
-                var columnTypes = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
+                var columnTypes = new ColumnList();
                 var targetDataSource = context.DataSources[DataSource];
 
                 for (var i = 0; i < schemaTable.Rows.Count; i++)

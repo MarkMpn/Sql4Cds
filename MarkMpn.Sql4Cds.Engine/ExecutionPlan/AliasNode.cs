@@ -155,7 +155,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             // Map the base names to the alias names
             var sourceSchema = Source.GetSchema(context);
-            var schema = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
+            var schema = new ColumnList();
             var aliases = new Dictionary<string, IReadOnlyList<string>>();
             var primaryKey = (string)null;
             var mappings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -218,7 +218,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 sortOrder: sortOrder);
         }
 
-        private void AddSchemaColumn(string outputColumn, string sourceColumn, Dictionary<string, DataTypeReference> schema, Dictionary<string, IReadOnlyList<string>> aliases, ref string primaryKey, Dictionary<string, string> mappings, INodeSchema sourceSchema)
+        private void AddSchemaColumn(string outputColumn, string sourceColumn, ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, ref string primaryKey, Dictionary<string, string> mappings, INodeSchema sourceSchema)
         {
             if (!sourceSchema.ContainsColumn(sourceColumn, out var normalized))
                 return;

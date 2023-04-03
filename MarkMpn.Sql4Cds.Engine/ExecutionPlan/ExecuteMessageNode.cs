@@ -92,7 +92,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// The types of values to be returned
         /// </summary>
         [Browsable(false)]
-        public Dictionary<string, DataTypeReference> Schema { get; private set; } = new Dictionary<string, DataTypeReference>();
+        public IDictionary<string, DataTypeReference> Schema { get; private set; } = new ColumnList();
 
         /// <summary>
         /// Indicates if custom plugins should be skipped
@@ -148,9 +148,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override INodeSchema GetSchema(NodeCompilationContext context)
         {
+            var schema = new ColumnList();
+
+            foreach (var col in Schema)
+                schema[PrefixWithAlias(col.Key)] = col.Value;
+
             return new NodeSchema(
                 primaryKey: null,
-                schema: Schema.ToDictionary(kvp => PrefixWithAlias(kvp.Key), kvp => kvp.Value, StringComparer.OrdinalIgnoreCase),
+                schema: schema,
                 aliases: Schema.ToDictionary(kvp => kvp.Key, kvp => (IReadOnlyList<string>)new List<string> { PrefixWithAlias(kvp.Key) }, StringComparer.OrdinalIgnoreCase),
                 notNullColumns: null,
                 sortOrder: null);

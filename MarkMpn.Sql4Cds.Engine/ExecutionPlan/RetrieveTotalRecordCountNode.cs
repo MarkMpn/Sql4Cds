@@ -51,7 +51,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             return new NodeSchema(
                 primaryKey: null,
-                schema: new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase)
+                schema: new ColumnList
                 {
                     [$"{EntityName}_count"] = DataTypeHelpers.BigInt
                 },
