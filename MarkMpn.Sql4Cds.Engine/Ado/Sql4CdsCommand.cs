@@ -27,6 +27,7 @@ namespace MarkMpn.Sql4Cds.Engine
         private CommandType _commandType;
         private CancellationTokenSource _cts;
         private bool _cancelledManually;
+        private string _lastDatabase;
 
         public Sql4CdsCommand(Sql4CdsConnection connection) : this(connection, string.Empty)
         {
@@ -161,7 +162,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public override void Prepare()
         {
-            if (UseTDSEndpointDirectly || Plan != null)
+            if (_lastDatabase == _connection.Database && (UseTDSEndpointDirectly || Plan != null))
                 return;
 
             GeneratePlan(true);
@@ -199,6 +200,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 var plan = _planBuilder.Build(commandText, ((Sql4CdsParameterCollection)Parameters).GetParameterTypes(), out var useTDSEndpointDirectly);
                 UseTDSEndpointDirectly = useTDSEndpointDirectly;
+                _lastDatabase = _connection.Database;
 
                 if (compileForExecution)
                 {
