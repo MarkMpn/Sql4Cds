@@ -5,6 +5,7 @@ using System.Data.SqlTypes;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.Serialization;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
@@ -28,6 +29,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             public Func<object,object> Accessor { get; set; }
             public DataTypeReference SqlType { get; set; }
             public Type Type { get; set; }
+            public IComparable[] DataMemberOrder { get; set; }
         }
 
         class AttributeProperty
@@ -38,6 +40,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             public DataTypeReference SqlType { get; set; }
             public Type Type { get; set; }
             public bool IsNullable { get; set; }
+            public IComparable[] DataMemberOrder { get; set; }
         }
 
         private IDictionary<string, MetadataProperty> _entityCols;
@@ -72,7 +75,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _entityProps = typeof(EntityMetadata)
                 .GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .Where(p => !excludedEntityProps.Contains(p.Name))
-                .ToDictionary(p => p.Name, p => new MetadataProperty { SqlName = p.Name.ToLowerInvariant(), PropertyName = p.Name, Type = p.PropertyType, SqlType = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType).ToNetType(out _)) }, StringComparer.OrdinalIgnoreCase);
+                .ToDictionary(p => p.Name, p => new MetadataProperty { SqlName = p.Name.ToLowerInvariant(), PropertyName = p.Name, Type = p.PropertyType, SqlType = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType).ToNetType(out _)), DataMemberOrder = GetDataMemberOrder(p) }, StringComparer.OrdinalIgnoreCase);
 
             var excludedOneToManyRelationshipProps = new[]
             {
@@ -85,7 +88,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _oneToManyRelationshipProps = typeof(OneToManyRelationshipMetadata)
                 .GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .Where(p => !excludedOneToManyRelationshipProps.Contains(p.Name))
-                .ToDictionary(p => p.Name, p => new MetadataProperty { SqlName = p.Name.ToLowerInvariant(), PropertyName = p.Name, Type = p.PropertyType, SqlType = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType).ToNetType(out _)) }, StringComparer.OrdinalIgnoreCase);
+                .ToDictionary(p => p.Name, p => new MetadataProperty { SqlName = p.Name.ToLowerInvariant(), PropertyName = p.Name, Type = p.PropertyType, SqlType = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType).ToNetType(out _)), DataMemberOrder = GetDataMemberOrder(p) }, StringComparer.OrdinalIgnoreCase);
 
             var excludedManyToManyRelationshipProps = new[]
             {
@@ -97,7 +100,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _manyToManyRelationshipProps = typeof(ManyToManyRelationshipMetadata)
                 .GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .Where(p => !excludedManyToManyRelationshipProps.Contains(p.Name))
-                .ToDictionary(p => p.Name, p => new MetadataProperty { SqlName = p.Name.ToLowerInvariant(), PropertyName = p.Name, Type = p.PropertyType, SqlType = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType).ToNetType(out _)) }, StringComparer.OrdinalIgnoreCase);
+                .ToDictionary(p => p.Name, p => new MetadataProperty { SqlName = p.Name.ToLowerInvariant(), PropertyName = p.Name, Type = p.PropertyType, SqlType = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType).ToNetType(out _)), DataMemberOrder = GetDataMemberOrder(p) }, StringComparer.OrdinalIgnoreCase);
 
             // Get a list of all attribute types
             _attributeTypes = typeof(AttributeMetadata).Assembly
@@ -145,7 +148,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         SqlType = type,
                         Type = netType,
                         Accessors = g.ToDictionary(p => p.Type, p => GetPropertyAccessor(p.Property, netType)),
-                        IsNullable = isNullable
+                        IsNullable = isNullable,
+                        DataMemberOrder = GetDataMemberOrder(g.First().Property)
                     };
                 })
                 .Where(p => p != null)
@@ -456,7 +460,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (Query.Properties != null)
                     entityProps = entityProps.Where(p => Query.Properties.AllProperties || Query.Properties.PropertyNames.Contains(p.PropertyName, StringComparer.OrdinalIgnoreCase));
 
-                foreach (var prop in entityProps.OrderBy(p => p.SqlName))
+                if (context.Options.ColumnOrdering == ColumnOrdering.Alphabetical)
+                    entityProps = entityProps.OrderBy(p => p.SqlName);
+                else
+                    entityProps = entityProps.OrderBy(p => p.DataMemberOrder[0]).ThenBy(p => p.DataMemberOrder[1]).ThenBy(p => p.DataMemberOrder[2]);
+
+                foreach (var prop in entityProps)
                 {
                     var fullName = $"{EntityAlias}.{prop.SqlName}";
                     schema[fullName] = prop.SqlType;
@@ -483,7 +492,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (Query.AttributeQuery?.Properties != null)
                     attributeProps = attributeProps.Where(p => Query.AttributeQuery.Properties.AllProperties || Query.AttributeQuery.Properties.PropertyNames.Contains(p.PropertyName, StringComparer.OrdinalIgnoreCase));
 
-                foreach (var prop in attributeProps.OrderBy(p => p.SqlName))
+                if (context.Options.ColumnOrdering == ColumnOrdering.Alphabetical)
+                    attributeProps = attributeProps.OrderBy(p => p.SqlName);
+                else
+                    attributeProps = attributeProps.OrderBy(p => p.DataMemberOrder[0]).ThenBy(p => p.DataMemberOrder[1]).ThenBy(p => p.DataMemberOrder[2]);
+
+                foreach (var prop in attributeProps)
                 {
                     var fullName = $"{AttributeAlias}.{prop.SqlName}";
                     schema[fullName] = prop.SqlType;
@@ -511,7 +525,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (Query.RelationshipQuery?.Properties != null)
                     relationshipProps = relationshipProps.Where(p => Query.RelationshipQuery.Properties.AllProperties || Query.RelationshipQuery.Properties.PropertyNames.Contains(p.PropertyName, StringComparer.OrdinalIgnoreCase));
 
-                foreach (var prop in relationshipProps.OrderBy(p => p.SqlName))
+                if (context.Options.ColumnOrdering == ColumnOrdering.Alphabetical)
+                    relationshipProps = relationshipProps.OrderBy(p => p.SqlName);
+                else
+                    relationshipProps = relationshipProps.OrderBy(p => p.DataMemberOrder[0]).ThenBy(p => p.DataMemberOrder[1]).ThenBy(p => p.DataMemberOrder[2]);
+
+                foreach (var prop in relationshipProps)
                 {
                     var fullName = $"{OneToManyRelationshipAlias}.{prop.SqlName}";
                     schema[fullName] = prop.SqlType;
@@ -539,7 +558,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (Query.RelationshipQuery?.Properties != null)
                     relationshipProps = relationshipProps.Where(p => Query.RelationshipQuery.Properties.AllProperties || Query.RelationshipQuery.Properties.PropertyNames.Contains(p.PropertyName, StringComparer.OrdinalIgnoreCase));
 
-                foreach (var prop in relationshipProps.OrderBy(p => p.SqlName))
+                if (context.Options.ColumnOrdering == ColumnOrdering.Alphabetical)
+                    relationshipProps = relationshipProps.OrderBy(p => p.SqlName);
+                else
+                    relationshipProps = relationshipProps.OrderBy(p => p.DataMemberOrder[0]).ThenBy(p => p.DataMemberOrder[1]).ThenBy(p => p.DataMemberOrder[2]);
+
+                foreach (var prop in relationshipProps)
                 {
                     var fullName = $"{ManyToOneRelationshipAlias}.{prop.SqlName}";
                     schema[fullName] = prop.SqlType;
@@ -567,7 +591,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (Query.RelationshipQuery?.Properties != null)
                     relationshipProps = relationshipProps.Where(p => Query.RelationshipQuery.Properties.AllProperties || Query.RelationshipQuery.Properties.PropertyNames.Contains(p.PropertyName, StringComparer.OrdinalIgnoreCase));
 
-                foreach (var prop in relationshipProps.OrderBy(p => p.SqlName))
+                if (context.Options.ColumnOrdering == ColumnOrdering.Alphabetical)
+                    relationshipProps = relationshipProps.OrderBy(p => p.SqlName);
+                else
+                    relationshipProps = relationshipProps.OrderBy(p => p.DataMemberOrder[0]).ThenBy(p => p.DataMemberOrder[1]).ThenBy(p => p.DataMemberOrder[2]);
+
+                foreach (var prop in relationshipProps)
                 {
                     var fullName = $"{ManyToManyRelationshipAlias}.{prop.SqlName}";
                     schema[fullName] = prop.SqlType;
@@ -713,6 +742,27 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             value = Expr.Box(value);
             var func = (Func<object,object>) Expression.Lambda(value, rawParam).Compile();
             return func;
+        }
+
+        internal static IComparable[] GetDataMemberOrder(PropertyInfo prop)
+        {
+            // https://learn.microsoft.com/en-us/dotnet/framework/wcf/feature-details/data-member-order
+            var inheritanceDepth = 0;
+            var type = prop.DeclaringType;
+            while (type.BaseType != null)
+            {
+                inheritanceDepth++;
+                type = type.BaseType;
+            }
+
+            var attr = prop.GetCustomAttribute<DataMemberAttribute>();
+
+            return new IComparable[]
+            {
+                inheritanceDepth,
+                attr?.Order ?? Int32.MinValue,
+                prop.Name
+            };
         }
 
         private static SqlString ApplyCollation(string value)

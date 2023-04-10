@@ -33,6 +33,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         bool IQueryExecutionOptions.BypassCustomPlugins => false;
 
+        ColumnOrdering IQueryExecutionOptions.ColumnOrdering => ColumnOrdering.Alphabetical;
+
         void IQueryExecutionOptions.ConfirmInsert(ConfirmDmlStatementEventArgs e)
         {
         }

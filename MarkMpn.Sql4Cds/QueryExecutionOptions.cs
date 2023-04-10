@@ -42,6 +42,7 @@ namespace MarkMpn.Sql4Cds
             _con.UseLocalTimeZone = Settings.Instance.ShowLocalTimes;
             _con.BypassCustomPlugins = Settings.Instance.BypassCustomPlugins;
             _con.QuotedIdentifiers = Settings.Instance.QuotedIdentifiers;
+            _con.ColumnOrdering = Settings.Instance.ColumnOrdering;
 
             _con.PreInsert += ConfirmInsert;
             _con.PreUpdate += ConfirmUpdate;

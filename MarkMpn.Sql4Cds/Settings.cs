@@ -62,6 +62,8 @@ namespace MarkMpn.Sql4Cds
         public bool ShowFetchXMLInEstimatedExecutionPlans { get; set; } = true;
 
         public FetchXml2SqlOptions FetchXml2SqlOptions { get; set; } = new FetchXml2SqlOptions();
+
+        public ColumnOrdering ColumnOrdering { get; set; } = ColumnOrdering.Alphabetical;
     }
 
     public class TabContent

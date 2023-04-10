@@ -221,6 +221,15 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         public string ApplicationName { get; set; }
 
+        /// <summary>
+        /// Returns or sets how columns should be sorted within tables
+        /// </summary>
+        public ColumnOrdering ColumnOrdering
+        {
+            get => _options.ColumnOrdering;
+            set => _options.ColumnOrdering = value;
+        }
+
         internal Dictionary<string, DataTypeReference> GlobalVariableTypes => _globalVariableTypes;
 
         internal Dictionary<string, object> GlobalVariableValues => _globalVariableValues;

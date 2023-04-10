@@ -64,6 +64,7 @@
             this.showTooltipsCheckbox = new System.Windows.Forms.CheckBox();
             this.tabControl1 = new System.Windows.Forms.TabControl();
             this.tabPage1 = new System.Windows.Forms.TabPage();
+            this.schemaColumnOrderingCheckbox = new System.Windows.Forms.CheckBox();
             this.showFetchXMLInEstimatedExecutionPlansCheckBox = new System.Windows.Forms.CheckBox();
             this.tabPage2 = new System.Windows.Forms.TabPage();
             this.label15 = new System.Windows.Forms.Label();
@@ -386,7 +387,7 @@
             this.localTimesComboBox.Margin = new System.Windows.Forms.Padding(2);
             this.localTimesComboBox.Name = "localTimesComboBox";
             this.localTimesComboBox.Size = new System.Drawing.Size(203, 21);
-            this.localTimesComboBox.TabIndex = 13;
+            this.localTimesComboBox.TabIndex = 12;
             // 
             // label11
             // 
@@ -395,7 +396,7 @@
             this.label11.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
             this.label11.Name = "label11";
             this.label11.Size = new System.Drawing.Size(128, 13);
-            this.label11.TabIndex = 12;
+            this.label11.TabIndex = 11;
             this.label11.Text = "Treat date/time values as";
             // 
             // maxDopUpDown
@@ -481,6 +482,7 @@
             // 
             // tabPage1
             // 
+            this.tabPage1.Controls.Add(this.schemaColumnOrderingCheckbox);
             this.tabPage1.Controls.Add(this.showFetchXMLInEstimatedExecutionPlansCheckBox);
             this.tabPage1.Controls.Add(this.pictureBox6);
             this.tabPage1.Controls.Add(this.pictureBox4);
@@ -506,6 +508,16 @@
             this.tabPage1.TabIndex = 0;
             this.tabPage1.Text = "Query Execution";
             this.tabPage1.UseVisualStyleBackColor = true;
+            // 
+            // schemaColumnOrderingCheckbox
+            // 
+            this.schemaColumnOrderingCheckbox.AutoSize = true;
+            this.schemaColumnOrderingCheckbox.Location = new System.Drawing.Point(9, 193);
+            this.schemaColumnOrderingCheckbox.Name = "schemaColumnOrderingCheckbox";
+            this.schemaColumnOrderingCheckbox.Size = new System.Drawing.Size(163, 17);
+            this.schemaColumnOrderingCheckbox.TabIndex = 13;
+            this.schemaColumnOrderingCheckbox.Text = "Use schema column ordering";
+            this.schemaColumnOrderingCheckbox.UseVisualStyleBackColor = true;
             // 
             // showFetchXMLInEstimatedExecutionPlansCheckBox
             // 
@@ -887,5 +899,6 @@
         private ScintillaNET.Scintilla nativeSqlScintilla;
         private System.Windows.Forms.CheckBox showFetchXMLInEstimatedExecutionPlansCheckBox;
         private System.Windows.Forms.LinkLabel fetchXml2SqlConversionAdvancedLinkLabel;
+        private System.Windows.Forms.CheckBox schemaColumnOrderingCheckbox;
     }
 }

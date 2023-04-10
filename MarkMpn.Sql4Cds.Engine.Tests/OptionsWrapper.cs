@@ -31,6 +31,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             PrimaryDataSource = options.PrimaryDataSource;
             UserId = options.UserId;
             QuotedIdentifiers = options.QuotedIdentifiers;
+            ColumnOrdering = options.ColumnOrdering;
         }
 
         public CancellationToken CancellationToken { get; set; }
@@ -62,6 +63,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public Guid UserId { get; set; }
 
         public bool QuotedIdentifiers { get; set; }
+
+        public ColumnOrdering ColumnOrdering { get; set; }
 
         public void ConfirmDelete(ConfirmDmlStatementEventArgs e)
         {

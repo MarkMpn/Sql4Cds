@@ -47,6 +47,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public bool QuotedIdentifiers => _options.QuotedIdentifiers;
 
+        public ColumnOrdering ColumnOrdering => _options.ColumnOrdering;
+
         public void ConfirmDelete(ConfirmDmlStatementEventArgs e)
         {
             _options.ConfirmDelete(e);

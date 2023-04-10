@@ -20,6 +20,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             public IDictionary<Type, Func<object, object>> Accessors { get; set; }
             public DataTypeReference SqlType { get; set; }
             public Type NetType { get; set; }
+            public IComparable[] DataMemberOrder { get; set; }
         }
 
         private static readonly Type[] _optionsetTypes;
@@ -65,7 +66,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         Name = g.Key.ToLowerInvariant(),
                         SqlType = type,
                         NetType = netType,
-                        Accessors = g.ToDictionary(p => p.Type, p => MetadataQueryNode.GetPropertyAccessor(p.Property, netType))
+                        Accessors = g.ToDictionary(p => p.Type, p => MetadataQueryNode.GetPropertyAccessor(p.Property, netType)),
+                        DataMemberOrder = MetadataQueryNode.GetDataMemberOrder(g.First().Property)
                     };
                 })
                 .Where(p => p != null)
@@ -120,7 +122,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var schema = new ColumnList();
             var aliases = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (var prop in _optionsetProps.Values)
+            var props = (IEnumerable<OptionSetProperty>)_optionsetProps.Values;
+
+            if (context.Options.ColumnOrdering == ColumnOrdering.Alphabetical)
+                props = props.OrderBy(p => p.Name);
+            else
+                props = props.OrderBy(p => p.DataMemberOrder[0]).ThenBy(p => p.DataMemberOrder[1]).ThenBy(p => p.DataMemberOrder[2]);
+
+            foreach (var prop in props)
             {
                 schema[$"{Alias}.{prop.Name}"] = prop.SqlType;
 

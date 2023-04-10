@@ -56,6 +56,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
         bool IQueryExecutionOptions.QuotedIdentifiers => false;
 
+        ColumnOrdering IQueryExecutionOptions.ColumnOrdering => ColumnOrdering.Alphabetical;
+
         [TestMethod]
         public void SimpleSelect()
         {

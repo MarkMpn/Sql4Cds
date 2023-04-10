@@ -112,5 +112,26 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Returns or sets a value indicating if SQL will be parsed using quoted identifiers
         /// </summary>
         bool QuotedIdentifiers { get; }
+
+        /// <summary>
+        /// Indicates how columns should be assumed to be ordered within tables
+        /// </summary>
+        ColumnOrdering ColumnOrdering { get; }
+    }
+
+    /// <summary>
+    /// Indicates how columns should be assumed to be ordered within tables
+    /// </summary>
+    public enum ColumnOrdering
+    {
+        /// <summary>
+        /// Columns are ordered according to the original metadata order
+        /// </summary>
+        Strict,
+
+        /// <summary>
+        /// Columns are ordered alphabetically
+        /// </summary>
+        Alphabetical
     }
 }

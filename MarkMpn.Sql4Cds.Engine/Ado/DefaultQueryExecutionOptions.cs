@@ -90,6 +90,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public bool QuotedIdentifiers => true;
 
+        public ColumnOrdering ColumnOrdering => ColumnOrdering.Strict;
+
         public void ConfirmDelete(ConfirmDmlStatementEventArgs e)
         {
         }

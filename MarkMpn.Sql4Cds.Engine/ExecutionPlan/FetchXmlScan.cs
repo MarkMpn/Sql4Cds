@@ -661,7 +661,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var notNullColumns = new HashSet<string>();
             var sortOrder = new List<string>();
 
-            AddSchemaAttributes(dataSource, schema, aliases, ref primaryKey, notNullColumns, sortOrder, entity.name, Alias, entity.Items, true, false);
+            AddSchemaAttributes(context, dataSource, schema, aliases, ref primaryKey, notNullColumns, sortOrder, entity.name, Alias, entity.Items, true, false);
 
             _lastSchema = new NodeSchema(
                 primaryKey: primaryKey,
@@ -759,7 +759,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Regex.IsMatch(alias, "^[A-Za-z_][A-Za-z0-9_]*$");
         }
 
-        private void AddSchemaAttributes(DataSource dataSource, ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, ref string primaryKey, HashSet<string> notNullColumns, List<string> sortOrder, string entityName, string alias, object[] items, bool innerJoin, bool requireTablePrefix)
+        private void AddSchemaAttributes(NodeCompilationContext context, DataSource dataSource, ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, ref string primaryKey, HashSet<string> notNullColumns, List<string> sortOrder, string entityName, string alias, object[] items, bool innerJoin, bool requireTablePrefix)
         {
             if (items == null && !ReturnFullSchema)
                 return;
@@ -768,7 +768,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (ReturnFullSchema && !FetchXml.aggregate)
             {
-                foreach (var attrMetadata in meta.Attributes.OrderBy(a => a.LogicalName))
+                foreach (var attrMetadata in SortAttributes(meta, context))
                 {
                     if (attrMetadata.IsValidForRead == false)
                         continue;
@@ -842,7 +842,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (items.OfType<allattributes>().Any())
                 {
-                    foreach (var attrMetadata in meta.Attributes)
+                    foreach (var attrMetadata in SortAttributes(meta, context))
                     {
                         if (attrMetadata.IsValidForRead == false)
                             continue;
@@ -907,7 +907,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         }
                     }
 
-                    AddSchemaAttributes(dataSource, schema, aliases, ref primaryKey, notNullColumns, sortOrder, linkEntity.name, linkEntity.alias, linkEntity.Items, innerJoin && linkEntity.linktype == "inner", requireTablePrefix || linkEntity.RequireTablePrefix);
+                    AddSchemaAttributes(context, dataSource, schema, aliases, ref primaryKey, notNullColumns, sortOrder, linkEntity.name, linkEntity.alias, linkEntity.Items, innerJoin && linkEntity.linktype == "inner", requireTablePrefix || linkEntity.RequireTablePrefix);
                 }
 
                 if (innerJoin)
@@ -915,6 +915,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     foreach (var filter in items.OfType<filter>())
                         AddNotNullFilters(schema, aliases, notNullColumns, alias, filter);
                 }
+            }
+        }
+
+        private IEnumerable<AttributeMetadata> SortAttributes(EntityMetadata metadata, NodeCompilationContext context)
+        {
+            switch (context.Options.ColumnOrdering)
+            {
+                case ColumnOrdering.Alphabetical:
+                    return metadata.Attributes.OrderBy(a => a.LogicalName);
+
+                case ColumnOrdering.Strict:
+                    return metadata.Attributes.OrderBy(a => a.ColumnNumber.Value);
+
+                default:
+                    throw new ArgumentOutOfRangeException("Invalid column ordering " + context.Options.ColumnOrdering);
             }
         }
 
