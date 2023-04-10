@@ -98,6 +98,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public abstract int MaxDOP { get; set; }
 
         /// <summary>
+        /// The number of requests that will be submitted in a single batch
+        /// </summary>
+        [Description("The number of requests that will be submitted in a single batch")]
+        public abstract int BatchSize { get; set; }
+
+        /// <summary>
         /// Indicates if custom plugins should be skipped
         /// </summary>
         [DisplayName("Bypass Plugin Execution")]
@@ -139,6 +145,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             MaxDOP = GetMaxDOP(context, hints);
+            BatchSize = GetBatchSize(context, hints);
             BypassCustomPluginExecution = GetBypassPluginExecution(context, hints);
 
             return new[] { this };
@@ -157,12 +164,34 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (maxDopHint != null)
             {
                 if (!(maxDopHint.Value is IntegerLiteral maxDop) || !Int32.TryParse(maxDop.Value, out var value) || value < 1)
-                    throw new NotSupportedQueryFragmentException("MAXDOP requires a positive integer value");
+                    throw new NotSupportedQueryFragmentException("MAXDOP requires a positive integer value", maxDopHint);
 
                 return value;
             }
 
             return context.Options.MaxDegreeOfParallelism;
+        }
+
+        private int GetBatchSize(NodeCompilationContext context, IList<OptimizerHint> queryHints)
+        {
+            if (queryHints == null)
+                return context.Options.BatchSize;
+
+            var batchSizeHint = queryHints
+                .OfType<UseHintList>()
+                .SelectMany(hint => hint.Hints)
+                .Where(hint => hint.Value.StartsWith("BATCH_SIZE_", StringComparison.OrdinalIgnoreCase))
+                .FirstOrDefault();
+
+            if (batchSizeHint != null)
+            {
+                if (!Int32.TryParse(batchSizeHint.Value.Substring(11), out var value) || value < 1)
+                    throw new NotSupportedQueryFragmentException("BATCH_SIZE requires a positive integer value", batchSizeHint);
+
+                return value;
+            }
+
+            return context.Options.BatchSize;
         }
 
         private bool GetBypassPluginExecution(NodeCompilationContext context, IList<OptimizerHint> queryHints)
@@ -555,7 +584,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             if (BypassCustomPluginExecution)
                                 request.Parameters["BypassCustomPluginExecution"] = true;
 
-                            if (options.BatchSize == 1)
+                            if (BatchSize == 1)
                             {
                                 var newCount = Interlocked.Increment(ref inProgressCount);
                                 var progress = (double)newCount / entities.Count;
@@ -586,7 +615,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                                 threadLocalState.EMR.Requests.Add(request);
 
-                                if (threadLocalState.EMR.Requests.Count == options.BatchSize)
+                                if (threadLocalState.EMR.Requests.Count == BatchSize)
                                 {
                                     var newCount = Interlocked.Add(ref inProgressCount, threadLocalState.EMR.Requests.Count);
                                     var progress = (double)newCount / entities.Count;

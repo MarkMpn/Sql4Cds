@@ -50,6 +50,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override int MaxDOP { get; set; }
 
         [Category("Update")]
+        public override int BatchSize { get; set; }
+
+        [Category("Update")]
         public override bool BypassCustomPluginExecution { get; set; }
 
         [Browsable(false)]

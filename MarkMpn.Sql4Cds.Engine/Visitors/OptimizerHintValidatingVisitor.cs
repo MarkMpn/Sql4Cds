@@ -68,6 +68,9 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
         {
             // Custom hint to set the default page size of FetchXML queries
             "FETCHXML_PAGE_SIZE_",
+
+            // Custom hint to set the batch size for DML queries
+            "BATCH_SIZE_",
         };
 
         private readonly bool _removeSql4CdsHints;

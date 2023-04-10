@@ -43,6 +43,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override int MaxDOP { get; set; }
 
         [Category("Insert")]
+        public override int BatchSize { get; set; }
+
+        [Category("Insert")]
         public override bool BypassCustomPluginExecution { get; set; }
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)

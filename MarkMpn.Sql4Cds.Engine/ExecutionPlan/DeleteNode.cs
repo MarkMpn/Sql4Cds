@@ -51,6 +51,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override int MaxDOP { get; set; }
 
         [Category("Delete")]
+        public override int BatchSize { get; set; }
+
+        [Category("Delete")]
         public override bool BypassCustomPluginExecution { get; set; }
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
