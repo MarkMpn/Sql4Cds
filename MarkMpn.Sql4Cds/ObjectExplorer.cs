@@ -563,6 +563,8 @@ INNER JOIN {manyToMany.Entity2LogicalName}
                 node = node.Parent;
 
             node.Remove();
+
+            tsbDisconnect.Enabled = treeView.SelectedNode != null;
         }
 
         private void serverContextMenuStrip_Opening(object sender, System.ComponentModel.CancelEventArgs e)
@@ -616,6 +618,11 @@ INNER JOIN {manyToMany.Entity2LogicalName}
         private void tsbConnect_Click(object sender, EventArgs e)
         {
             _connect();
+        }
+
+        private void treeView_AfterSelect(object sender, TreeViewEventArgs e)
+        {
+            tsbDisconnect.Enabled = treeView.SelectedNode != null;
         }
     }
 }
