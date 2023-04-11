@@ -57,7 +57,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	let diagnosticCollection = vscode.languages.createDiagnosticCollection(Constants.providerId);
 	context.subscriptions.push(diagnosticCollection);
 
-	let e = path.join(Utils.getResolvedServiceInstallationPath(), "MarkMpn.Sql4Cds.LanguageServer.exe");
+	let e = path.join(Utils.getResolvedServiceInstallationPath(), "MarkMpn.Sql4Cds.LanguageServer.dll");
 	let serverOptions = generateServerOptions(e);
 	languageClient = new SqlOpsDataClient(Constants.serviceName, serverOptions, clientOptions);
 	languageClient.onReady().then(() => {
@@ -68,6 +68,13 @@ export async function activate(context: vscode.ExtensionContext) {
 		languageClient.onNotification("sql4cds/progress", (msg: string) => {
 			statusView.text = msg;
 			statusView.show();
+		});
+		languageClient.onNotification("sql4cds/confirmation", (message: {ownerUri: string, msg: string}) => {
+			vscode.window
+				.showInformationMessage(message.msg, "Yes", "No")
+				.then(answer => {
+					languageClient.sendNotification("sql4cds/confirm", { ownerUri: message.ownerUri, result: answer === "Yes" })
+				});
 		});
 		languageClient.onNotification("query/batchComplete", () => {
 			statusView.hide();
@@ -114,8 +121,7 @@ export async function activate(context: vscode.ExtensionContext) {
 }
 
 function generateServerOptions(executablePath: string): ServerOptions {
-	let serverArgs = [];
-	let serverCommand: string = executablePath;
+	let serverArgs = [executablePath];
 
 	let config = vscode.workspace.getConfiguration(Constants.providerId);
 	if (config) {
@@ -124,8 +130,8 @@ function generateServerOptions(executablePath: string): ServerOptions {
 		let useLocalSource = config["useDebugSource"];
 		if (useLocalSource) {
 			let localSourcePath = config["debugSourcePath"];
-			let filePath = path.join(localSourcePath, "MarkMpn.Sql4Cds.LanguageServer.exe");
-			serverCommand = filePath;
+			let filePath = path.join(localSourcePath, "MarkMpn.Sql4Cds.LanguageServer.dll");
+			serverArgs[0] = filePath;
 
 			let enableStartupDebugging = config["enableStartupDebugging"];
 			if (enableStartupDebugging)
@@ -143,7 +149,7 @@ function generateServerOptions(executablePath: string): ServerOptions {
 	}
 
 	// run the service host
-	return { command: serverCommand, args: serverArgs, transport: TransportKind.stdio };
+	return { command: "dotnet", args: serverArgs, transport: TransportKind.stdio };
 }
 
 function generateHandleServerProviderEvent() {

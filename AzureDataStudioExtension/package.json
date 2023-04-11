@@ -117,6 +117,31 @@
           "type": "boolean",
           "default": false,
           "description": "%sql4cds.quotedIdentifiers.description%"
+        },
+        "SQL4CDS.insertWarnThreshold": {
+          "type": "integer",
+          "default": 1,
+          "description": "%sql4cds.insertWarnThreshold.description%"
+        },
+        "SQL4CDS.updateWarnThreshold": {
+          "type": "integer",
+          "default": 0,
+          "description": "%sql4cds.updateWarnThreshold.description%"
+        },
+        "SQL4CDS.deleteWarnThreshold": {
+          "type": "integer",
+          "default": 0,
+          "description": "%sql4cds.deleteWarnThreshold.description%"
+        },
+        "SQL4CDS.selectLimit": {
+          "type": "integer",
+          "default": 0,
+          "description": "%sql4cds.selectLimit.description%"
+        },
+        "SQL4CDS.maxRetrievesPerQuery": {
+          "type": "integer",
+          "default": 100,
+          "description": "%sql4cds.maxRetrievesPerQuery.description%"
         }
       }
     },

@@ -18,6 +18,7 @@ using MarkMpn.Sql4Cds.LanguageServer.QueryExecution.Contracts;
 using MarkMpn.Sql4Cds.LanguageServer.Workspace;
 using Microsoft.SqlTools.ServiceLayer.ExecutionPlan.Contracts;
 using Microsoft.VisualStudio.LanguageServer.Protocol;
+using Microsoft.Xrm.Sdk.Metadata;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using StreamJsonRpc;
@@ -31,6 +32,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
         private readonly TextDocumentManager _documentManager;
         private readonly ConcurrentDictionary<string, List<ResultSetSummary>> _resultSets;
         private readonly ConcurrentDictionary<string, IDbCommand> _commands;
+        private readonly ConcurrentDictionary<string, ManualResetEventSlim> _confirmationEvents;
+        private readonly ConcurrentDictionary<string, bool> _confirmationResults;
 
         public QueryExecutionHandler(JsonRpc lsp, ConnectionManager connectionManager, TextDocumentManager documentManager)
         {
@@ -39,6 +42,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
             _documentManager = documentManager;
             _resultSets = new ConcurrentDictionary<string, List<ResultSetSummary>>();
             _commands = new ConcurrentDictionary<string, IDbCommand>();
+            _confirmationEvents = new ConcurrentDictionary<string, ManualResetEventSlim>();
+            _confirmationResults = new ConcurrentDictionary<string, bool>();
         }
 
         public void Initialize(JsonRpc lsp)
@@ -48,6 +53,13 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
             lsp.AddHandler(QueryCancelRequest.Type, HandleQueryCancel);
             lsp.AddHandler(QueryExecutionPlanRequest.Type, HandleQueryExecutionPlan);
             lsp.AddHandler(QueryDisposeRequest.Type, HandleQueryDispose);
+            lsp.AddHandler(ConfirmationResponse.Type, HandleConfirmation);
+        }
+
+        private void HandleConfirmation(ConfirmationResponseParams arg)
+        {
+            _confirmationResults[arg.OwnerUri] = arg.Result;
+            _confirmationEvents[arg.OwnerUri].Set();
         }
 
         public ExecuteRequestResult HandleExecuteDocumentSelection(ExecuteDocumentSelectionParams request)
@@ -127,9 +139,58 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                         });
                     }
                 });
+                var confirm = (ConfirmDmlStatementEventArgs e, int threshold, string operation) =>
+                {
+                    e.Cancel = false;
+
+                    if (e.Count > threshold || e.BypassCustomPluginExecution)
+                    {
+                        var msg = $"{operation} will affect {e.Count:N0} {GetDisplayName(e.Count, e.Metadata)}.";
+                        if (e.BypassCustomPluginExecution)
+                            msg += " This operation will bypass any custom plugins.";
+                        msg += " Do you want to proceed?";
+
+                        var evt = new ManualResetEventSlim();
+                        _confirmationEvents[request.OwnerUri] = evt;
+                        _ = _lsp.NotifyAsync(ConfirmationRequest.Type, new ConfirmationParams { OwnerUri = request.OwnerUri, Msg = msg });
+                        evt.Wait();
+                        e.Cancel = !_confirmationResults[request.OwnerUri];
+                        _confirmationEvents.Remove(request.OwnerUri, out _);
+                        _confirmationResults.Remove(request.OwnerUri, out _);
+                    };
+                };
+                var confirmInsert = (EventHandler<ConfirmDmlStatementEventArgs>)((object sender, ConfirmDmlStatementEventArgs e) =>
+                {
+                    confirm(e, Sql4CdsSettings.Instance.InsertWarnThreshold, "Insert");
+                });
+                var confirmUpdate = (EventHandler<ConfirmDmlStatementEventArgs>)((object sender, ConfirmDmlStatementEventArgs e) =>
+                {
+                    confirm(e, Sql4CdsSettings.Instance.UpdateWarnThreshold, "Update");
+                });
+                var confirmDelete = (EventHandler<ConfirmDmlStatementEventArgs>)((object sender, ConfirmDmlStatementEventArgs e) =>
+                {
+                    confirm(e, Sql4CdsSettings.Instance.DeleteWarnThreshold, "Delete");
+                });
+                var pages = 0;
+                var confirmRetrieve = (EventHandler<ConfirmRetrieveEventArgs>)((object sender, ConfirmRetrieveEventArgs e) =>
+                {
+                    e.Cancel = e.Count >= Sql4CdsSettings.Instance.SelectLimit;
+
+                    if (!e.Cancel)
+                    {
+                        pages++;
+
+                        if (Sql4CdsSettings.Instance.MaxRetrievesPerQuery != 0 && pages > Sql4CdsSettings.Instance.MaxRetrievesPerQuery)
+                            throw new QueryExecutionException($"Hit maximum retrieval limit. This limit is in place to protect against excessive API requests. Try restricting the data to retrieve with WHERE clauses or eliminating subqueries.\r\nYour limit of {Sql4CdsSettings.Instance.MaxRetrievesPerQuery:N0} retrievals per query can be modified in Settings.");
+                    }
+                });
 
                 session.Connection.InfoMessage += infoMessageHandler;
                 session.Connection.Progress += progressHandler;
+                session.Connection.PreInsert += confirmInsert;
+                session.Connection.PreUpdate += confirmUpdate;
+                session.Connection.PreDelete += confirmDelete;
+                session.Connection.PreRetrieve += confirmRetrieve;
 
                 var resultSets = new List<ResultSetSummary>();
                 _resultSets[request.OwnerUri] = resultSets;
@@ -376,6 +437,10 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
 
                     session.Connection.InfoMessage -= infoMessageHandler;
                     session.Connection.Progress -= progressHandler;
+                    session.Connection.PreInsert -= confirmInsert;
+                    session.Connection.PreUpdate -= confirmUpdate;
+                    session.Connection.PreDelete -= confirmDelete;
+                    session.Connection.PreRetrieve -= confirmRetrieve;
                 }
 
                 var endTime = DateTime.UtcNow;
@@ -404,6 +469,16 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                 });
             });
             return new ExecuteRequestResult();
+        }
+
+        private string GetDisplayName(int count, EntityMetadata meta)
+        {
+            if (count == 1)
+                return meta.DisplayName.UserLocalizedLabel?.Label ?? meta.LogicalName;
+
+            return meta.DisplayCollectionName.UserLocalizedLabel?.Label ??
+                meta.LogicalCollectionName ??
+                meta.LogicalName;
         }
 
         private ExecutionPlanGraph ConvertExecutionPlan(IRootExecutionPlanNode plan, bool executed)
