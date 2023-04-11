@@ -153,23 +153,44 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private int GetMaxDOP(NodeCompilationContext context, IList<OptimizerHint> queryHints)
         {
-            if (queryHints == null)
-                return context.Options.MaxDegreeOfParallelism;
+            if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
+                throw new NotSupportedQueryFragmentException("Unknown datasource");
 
-            var maxDopHint = queryHints
+            var org = dataSource.Connection;
+            var recommendedMaxDop = 1;
+
+#if NETCOREAPP
+            var svc = org as ServiceClient;
+
+            if (svc != null)
+                recommendedMaxDop = svc.RecommendedDegreesOfParallelism;
+#else
+            var svc = org as CrmServiceClient;
+
+            if (svc != null)
+                recommendedMaxDop = svc.RecommendedDegreesOfParallelism;
+#endif
+
+            var maxDopHint = (queryHints ?? Array.Empty<OptimizerHint>())
                 .OfType<LiteralOptimizerHint>()
                 .Where(hint => hint.HintKind == OptimizerHintKind.MaxDop)
                 .FirstOrDefault();
 
             if (maxDopHint != null)
             {
-                if (!(maxDopHint.Value is IntegerLiteral maxDop) || !Int32.TryParse(maxDop.Value, out var value) || value < 1)
-                    throw new NotSupportedQueryFragmentException("MAXDOP requires a positive integer value", maxDopHint);
+                if (!(maxDopHint.Value is IntegerLiteral maxDop) || !Int32.TryParse(maxDop.Value, out var value) || value < 0)
+                    throw new NotSupportedQueryFragmentException("MAXDOP requires a positive integer value, or 0 to use recommended value", maxDopHint);
 
-                return value;
+                if (value > 0)
+                    return value;
+
+                return recommendedMaxDop;
             }
 
-            return context.Options.MaxDegreeOfParallelism;
+            if (context.Options.MaxDegreeOfParallelism > 0)
+                return context.Options.MaxDegreeOfParallelism;
+
+            return recommendedMaxDop;
         }
 
         private int GetBatchSize(NodeCompilationContext context, IList<OptimizerHint> queryHints)
