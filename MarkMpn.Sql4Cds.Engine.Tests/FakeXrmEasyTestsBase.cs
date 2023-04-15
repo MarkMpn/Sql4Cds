@@ -78,6 +78,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             SetMaxLength(_context);
             SetMaxLength(_context2);
+
+            SetColumnNumber(_context);
+            SetColumnNumber(_context2);
         }
 
         private void SetPrimaryNameAttributes(XrmFakedContext context)
@@ -187,6 +190,19 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     attr.MaxLength = 100;
                     typeof(StringAttributeMetadata).GetProperty(nameof(StringAttributeMetadata.DatabaseLength)).SetValue(attr, 100);
                 }
+
+                context.SetEntityMetadata(entity);
+            }
+        }
+
+        private void SetColumnNumber(XrmFakedContext context)
+        {
+            foreach (var entity in context.CreateMetadataQuery())
+            {
+                var index = 0;
+
+                foreach (var attr in entity.Attributes)
+                    typeof(AttributeMetadata).GetProperty(nameof(AttributeMetadata.ColumnNumber)).SetValue(attr, index++);
 
                 context.SetEntityMetadata(entity);
             }

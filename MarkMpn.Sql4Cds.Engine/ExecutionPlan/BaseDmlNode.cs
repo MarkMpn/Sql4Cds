@@ -153,6 +153,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private int GetMaxDOP(NodeCompilationContext context, IList<OptimizerHint> queryHints)
         {
+            if (DataSource == null)
+                return 1;
+
             if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Unknown datasource");
 
