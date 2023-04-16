@@ -32,7 +32,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Connection
 
             // Generate the contracts used by JSON.NET to serialize the metadata cache in the background.
             // This saves about 0.5 seconds on the first connection.
-            Task.Run(() =>
+            _ = Task.Run(() =>
             {
                 MetadataCacheContractResolver.Instance.PreloadContracts(typeof(MetadataCache));
             });

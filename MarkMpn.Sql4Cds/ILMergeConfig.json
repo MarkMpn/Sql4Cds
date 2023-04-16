@@ -1,4 +1,14 @@
 {
+  "General": {
+    "InputAssemblies": [
+      "AutocompleteMenu-ScintillaNET.dll",
+      "MarkMpn.Sql4Cds.Controls.dll",
+      "MarkMpn.Sql4Cds.Engine.dll",
+      "Microsoft.ApplicationInsights.dll",
+      "Microsoft.SqlServer.TransactSql.ScriptDom.dll",
+      "xrmtb.XrmToolBox.Controls.dll"
+    ]
+  },
   "Advanced": {
     "AttributeFile": "$(TargetDir)\\MarkMpn.Sql4Cds.dll",
     "CopyAttributes": false
