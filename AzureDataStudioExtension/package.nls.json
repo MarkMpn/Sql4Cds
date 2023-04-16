@@ -11,7 +11,7 @@
 	"sql4cds.blockUpdateWithoutWhere.description": "Prevent UPDATE queries that do not have a WHERE clause",
 	"sql4cds.useBulkDelete.description": "Use bulk delete operations",
 	"sql4cds.batchSize.description": "Number of requests to make in each batch",
-	"sql4cds.maxDegreeOfParallelism.description": "Maximum number of requests to send in parallel",
+	"sql4cds.maxDegreeOfParallelism.description": "Maximum number of requests to send in parallel (0 for auto)",
 	"sql4cds.useLocalTimeZone.description": "Use local time zone for date/time values",
 	"sql4cds.bypassCustomPlugins.description": "Bypass custom plugins for INSERT/UPDATE/DELETE requests",
 	"sql4cds.quotedIdentifiers.description": "Use quoted identifiers",
