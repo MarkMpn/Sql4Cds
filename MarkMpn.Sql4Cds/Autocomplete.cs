@@ -43,7 +43,7 @@ namespace MarkMpn.Sql4Cds
         public IEnumerable<SqlAutocompleteItem> GetSuggestions(string text, int pos)
         {
             // Don't try to auto-complete inside string literals
-            if (InStringLiteral(text, pos))
+            if (InCommentOrStringLiteral(text, pos))
                 return Array.Empty<SqlAutocompleteItem>();
 
             // If we're in the first word after a FROM or JOIN, show a list of table names
@@ -107,6 +107,7 @@ namespace MarkMpn.Sql4Cds
 
                             case "select":
                                 foundQueryStart = true;
+                                clause = clause ?? "select";
                                 break;
 
                             case "update":
@@ -621,6 +622,13 @@ namespace MarkMpn.Sql4Cds
                             return additionalSuggestions.Concat(FilterList(items, currentWord)).OrderBy(x => x);
                         }
                     }
+                    else if (clause == "select")
+                    {
+                        // In the SELECT clause with no tables, just offer known functions
+                        var items = new List<SqlAutocompleteItem>();
+                        items.AddRange(typeof(FunctionMetadata.SqlFunctions).GetMethods(BindingFlags.DeclaredOnly | BindingFlags.Instance | BindingFlags.Public).Select(m => new FunctionAutocompleteItem(m, currentLength)));
+                        return FilterList(items, currentWord).OrderBy(x => x);
+                    }
                     else if (prevWord.Equals("update", StringComparison.OrdinalIgnoreCase) ||
                         prevWord.Equals("insert", StringComparison.OrdinalIgnoreCase) ||
                         prevPrevWord != null && prevPrevWord.Equals("insert", StringComparison.OrdinalIgnoreCase) && prevWord.Equals("into", StringComparison.OrdinalIgnoreCase))
@@ -914,20 +922,28 @@ namespace MarkMpn.Sql4Cds
             return false;
         }
 
-        private bool InStringLiteral(string text, int pos)
+        private bool InCommentOrStringLiteral(string text, int pos)
         {
             var i = -1;
-            var quotes = 0;
+            var inSingleLineComment = false;
+            var commentDepth = 0;
+            var inQuotes = false;
 
-            while ((i = text.IndexOf('\'', i + 1)) != -1)
+            while ((i = text.IndexOfAny(new[] { '\n', '-', '\'', '/' }, i + 1)) != -1)
             {
-                if (i > pos)
-                    break;
-
-                quotes++;
+                if (text[i] == '\n')
+                    inSingleLineComment = false;
+                else if (i > 0 && !inQuotes && text[i - 1] == '-' && text[i] == '-')
+                    inSingleLineComment = true;
+                else if (i < text.Length - 1 && !inQuotes && text[i] == '/' && text[i + 1] == '*')
+                    commentDepth++;
+                else if (i > 0 && !inQuotes && text[i - 1] == '*' && text[i] == '/')
+                    commentDepth--;
+                else if (text[i] == '\'' && !inSingleLineComment && commentDepth == 0)
+                    inQuotes = !inQuotes;
             }
 
-            return (quotes % 2) == 1;
+            return inSingleLineComment || commentDepth > 0 || inQuotes;
         }
 
         private IEnumerable<SqlAutocompleteItem> FilterList(IEnumerable<SqlAutocompleteItem> list, string currentWord)
