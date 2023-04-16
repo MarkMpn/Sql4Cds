@@ -11,12 +11,13 @@
     <iconUrl>https://markcarrington.dev/sql4cds-icon/</iconUrl>
     <description>Convert SQL queries to FetchXml and execute them against Dataverse / D365</description>
     <summary>Convert SQL queries to FetchXml and execute them against Dataverse / D365</summary>
-    <releaseNotes>Added FORMAT function
-Handle updating read-only sales entities
-Handle complex statuscode transitions
-TDS Endpoint compatibility improvements
-Row count estimate improvements
-Fixed retrieving large multi-select picklist names</releaseNotes>
+    <releaseNotes>Added collation awareness throughout.
+Added PATINDEX, UPPER, LOWER and COLLATIONPROPERTY functions.
+Added sys.fn_helpcollations() TVF
+Added option to select preferred column order for SELECT * queries
+Fixed duplicated calculated columns in SELECT * queries
+Added option to use the recommended degree of parallelism for DML operations
+Added BATCH_SIZE_n query hint to control batch size</releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>
     <tags>SQL CDS</tags>
