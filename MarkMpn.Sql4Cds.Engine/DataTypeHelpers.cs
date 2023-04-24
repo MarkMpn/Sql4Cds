@@ -94,6 +94,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public static UserDataTypeReference EntityReference { get; } = Object(typeof(SqlEntityReference));
 
+        public static XmlDataTypeReference Xml { get; } = new XmlDataTypeReference();
+
         /// <summary>
         /// Checks if a type represents an exact numeric type
         /// </summary>
@@ -449,12 +451,17 @@ namespace MarkMpn.Sql4Cds.Engine
             var xUser = x as UserDataTypeReference;
             var xSql = x as SqlDataTypeReference;
             var xColl = x as SqlDataTypeReferenceWithCollation;
+            var xXml = x as XmlDataTypeReference;
             var yUser = y as UserDataTypeReference;
             var ySql = y as SqlDataTypeReference;
             var yColl = y as SqlDataTypeReferenceWithCollation;
+            var yXml = y as XmlDataTypeReference;
 
             if (xUser != null && yUser != null)
                 return String.Join(".", xUser.Name.Identifiers.Select(i => i.Value)).Equals(String.Join(".", yUser.Name.Identifiers.Select(i => i.Value)), StringComparison.OrdinalIgnoreCase);
+
+            if (xXml != null && yXml != null)
+                return xXml.XmlDataTypeOption == yXml.XmlDataTypeOption && xXml.XmlSchemaCollection == yXml.XmlSchemaCollection;
 
             if (xSql == null || ySql == null)
                 return false;

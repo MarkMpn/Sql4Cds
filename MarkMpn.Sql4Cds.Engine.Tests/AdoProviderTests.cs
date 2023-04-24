@@ -1098,5 +1098,50 @@ SELECT name FROM account WHERE name = @name OR name = @name";
                 }
             }
         }
+
+        [TestMethod]
+        public void XmlQuery()
+        {
+            using (var con = new Sql4CdsConnection(_dataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandTimeout = 0;
+
+                cmd.CommandText = @"
+DECLARE @x xml  
+SET @x = '<ROOT><a>111</a><a>222</a></ROOT>'  
+SELECT @x.query('/ROOT/a')";
+
+                var actual = cmd.ExecuteScalar();
+
+                Assert.AreEqual("<a>111</a><a>222</a>", actual);
+            }
+        }
+
+        [TestMethod]
+        public void Base64()
+        {
+            using (var con = new Sql4CdsConnection(_dataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandTimeout = 0;
+
+                cmd.CommandText = @"
+SELECT 
+    CONVERT
+    (
+        VARCHAR(MAX), 
+        CAST('' AS XML).value('xs:base64Binary(sql:column(""BASE64_COLUMN""))', 'VARBINARY(MAX)')
+    ) AS RESULT
+FROM
+    (
+        SELECT 'cm9sZToxIHByb2R1Y2VyOjEyIHRpbWVzdGFtcDoxNDY4NjQwMjIyNTcxMDAwIGxhdGxuZ3tsYXRpdHVkZV9lNzo0MTY5ODkzOTQgbG9uZ2l0dWRlX2U3Oi03Mzg5NjYyMTB9IHJhZGl1czoxOTc2NA==' AS BASE64_COLUMN
+    ) A";
+
+                var actual = cmd.ExecuteScalar();
+
+                Assert.AreEqual("role:1 producer:12 timestamp:1468640222571000 latlng{latitude_e7:416989394 longitude_e7:-738966210} radius:19764", actual);
+            }
+        }
     }
 }

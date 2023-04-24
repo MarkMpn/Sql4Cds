@@ -1,4 +1,5 @@
-﻿using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
+﻿using java.io;
+using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.VisualBasic;
 using Microsoft.Xrm.Sdk;
@@ -7,11 +8,14 @@ using System;
 using System.Collections.Generic;
 using System.Data.SqlTypes;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Xml;
+using System.Xml.XPath;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
@@ -761,6 +765,41 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             return SqlInt32.Null;
+        }
+
+        public static SqlXml Query(SqlXml value, XPathExpression query)
+        {
+            if (value.IsNull)
+                return value;
+
+            var doc = new XPathDocument(value.CreateReader());
+            var nav = doc.CreateNavigator();
+            var result = nav.Evaluate(query);
+            var stream = new MemoryStream();
+
+            var xmlWriterSettings = new XmlWriterSettings
+            {
+                CloseOutput = false,
+                ConformanceLevel = ConformanceLevel.Fragment,
+                Encoding = Encoding.GetEncoding("utf-16"),
+                OmitXmlDeclaration = true
+            };
+            var xmlWriter = XmlWriter.Create(stream, xmlWriterSettings);
+
+            foreach (XPathNavigator r in (XPathNodeIterator)result)
+            {
+                var reader = r.ReadSubtree();
+
+                if (reader.ReadState == ReadState.Initial)
+                    reader.Read();
+
+                while (!reader.EOF)
+                    xmlWriter.WriteNode(reader, defattr: true);
+            }
+
+            xmlWriter.Flush();
+            stream.Position = 0;
+            return new SqlXml(stream);
         }
     }
 

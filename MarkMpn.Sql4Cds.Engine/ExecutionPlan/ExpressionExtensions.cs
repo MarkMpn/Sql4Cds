@@ -9,6 +9,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.Xml.XPath;
 using MarkMpn.Sql4Cds.Engine.Visitors;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
@@ -124,6 +125,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 expression = ToExpression(parameterless, context, contextParam, out sqlType);
             else if (expr is GlobalVariableExpression global)
                 expression = ToExpression(global, context, contextParam, out sqlType);
+            else if (expr is ExpressionCallTarget callTarget)
+                expression = ToExpression(callTarget, context, contextParam, out sqlType);
             else
                 throw new NotSupportedQueryFragmentException("Unhandled expression type", expr);
 
@@ -601,6 +604,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     .ToArray();
             }
 
+            if (func.CallTarget != null)
+            {
+                // If this function has a target (e.g. xml functions), add the target as the first parameter
+                var targetParam = func.CallTarget.ToExpression(context, contextParam, out var targetType);
+                paramExpressionsWithType = new[] { new KeyValuePair<Expression, DataTypeReference>(targetParam, targetType) }.Concat(paramExpressionsWithType).ToArray();
+            }
+
             paramExpressions = paramExpressionsWithType
                 .Select(kvp => kvp.Key)
                 .ToArray();
@@ -707,6 +717,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (i == parameters.Length - 1 && paramTypes.Length >= parameters.Length && paramType.IsArray)
                     paramType = paramType.GetElementType();
 
+                var paramIndex = i;
+
+                if (func.CallTarget != null)
+                    paramIndex--;
+
                 if (i == parameters.Length - 1 && paramTypes.Length < parameters.Length && paramType == typeof(ExpressionExecutionContext))
                 {
                     var paramsWithOptions = new Expression[paramExpressions.Length + 1];
@@ -737,7 +752,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     else
                     {
                         // Expect only a literal string
-                        if (!(func.Parameters[i] is StringLiteral typeLiteral))
+                        if (!(func.Parameters[paramIndex] is StringLiteral typeLiteral))
                             throw new NotSupportedQueryFragmentException($"Only string literals are supported for type parameters", func.Parameters[i]);
 
                         if (!DataTypeHelpers.TryParse(typeLiteral.Value, out var parsedType))
@@ -749,6 +764,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             sqlType = parsedType;
                     }
 
+                    continue;
+                }
+
+                if (paramType == typeof(XPathExpression))
+                {
+                    // Expect only a literal string
+                    if (!(func.Parameters[paramIndex] is StringLiteral xpathLiteral))
+                        throw new NotSupportedQueryFragmentException($"The argument {i} of the XML data type method \"{func.FunctionName.Value}\" must be a string literal");
+
+                    paramExpressions[i] = Expression.Constant(XPathExpression.Compile(xpathLiteral.Value));
                     continue;
                 }
 
@@ -874,6 +899,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private static Expression ToExpression(this ParenthesisExpression paren, ExpressionCompilationContext context, ParameterExpression contextParam, out DataTypeReference sqlType)
         {
             return paren.Expression.ToExpression(context, contextParam, out sqlType);
+        }
+
+        private static Expression ToExpression(this ExpressionCallTarget callTarget, ExpressionCompilationContext context, ParameterExpression contextParam, out DataTypeReference sqlType)
+        {
+            return callTarget.Expression.ToExpression(context, contextParam, out sqlType);
         }
 
         private static Expression ToExpression(this Microsoft.SqlServer.TransactSql.ScriptDom.UnaryExpression unary, ExpressionCompilationContext context, ParameterExpression contextParam, out DataTypeReference sqlType)
@@ -1393,7 +1423,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             [SqlDataTypeOption.UniqueIdentifier] = typeof(SqlGuid),
             [SqlDataTypeOption.VarBinary] = typeof(SqlBinary),
             [SqlDataTypeOption.VarChar] = typeof(SqlString),
-            [SqlDataTypeOption.Sql_Variant] = typeof(object)
+            [SqlDataTypeOption.Sql_Variant] = typeof(object),
         };
 
         /// <summary>
@@ -1410,6 +1440,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     sqlDataType = null;
                     return typeof(SqlEntityReference);
+                }
+
+                if (type.IsSameAs(DataTypeHelpers.Xml))
+                {
+                    sqlDataType = null;
+                    return typeof(SqlXml);
                 }
 
                 throw new NotSupportedQueryFragmentException("Unsupported data type reference", type);
@@ -1456,6 +1492,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             [typeof(SqlDateTimeOffset)] = DataTypeHelpers.DateTimeOffset,
             [typeof(SqlDate)] = DataTypeHelpers.Date,
             [typeof(SqlTime)] = DataTypeHelpers.Time(7),
+            [typeof(SqlXml)] = DataTypeHelpers.Xml,
         };
 
         /// <summary>
