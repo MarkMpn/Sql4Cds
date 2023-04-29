@@ -50,6 +50,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override int MaxDOP { get; set; }
 
         [Category("Update")]
+        public override int BatchSize { get; set; }
+
+        [Category("Update")]
         public override bool BypassCustomPluginExecution { get; set; }
 
         [Browsable(false)]
@@ -60,7 +63,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("State Transitions")]
         public IDictionary<string, Transitions> StateTransitionsDisplay => StateTransitions == null ? null : StateTransitions.Values.ToDictionary(s => $"{s.Name} ({s.StatusCode})", s => new Transitions(s.Transitions.Keys.Select(t => $"{t.Name} ({t.StatusCode})").OrderBy(n => n)));
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
             if (!requiredColumns.Contains(PrimaryIdSource))
                 requiredColumns.Add(PrimaryIdSource);
@@ -74,16 +77,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     requiredColumns.Add(col.NewValueColumn);
             }
 
-            Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
+            Source.AddRequiredColumns(context, requiredColumns);
         }
 
-        public override string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected)
+        public override string Execute(NodeExecutionContext context, out int recordsAffected)
         {
             _executionCount++;
 
             try
             {
-                if (!dataSources.TryGetValue(DataSource, out var dataSource))
+                if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
                     throw new QueryExecutionException("Missing datasource " + DataSource);
 
                 List<Entity> entities;
@@ -95,24 +98,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 using (_timer.Run())
                 {
-                    entities = GetDmlSourceEntities(dataSources, options, parameterTypes, parameterValues, out var schema);
+                    entities = GetDmlSourceEntities(context, out var schema);
 
                     // Precompile mappings with type conversions
                     meta = dataSource.Metadata[LogicalName];
                     attributes = meta.Attributes.ToDictionary(a => a.LogicalName, StringComparer.OrdinalIgnoreCase);
-                    var dateTimeKind = options.UseLocalTimeZone ? DateTimeKind.Local : DateTimeKind.Utc;
+                    var dateTimeKind = context.Options.UseLocalTimeZone ? DateTimeKind.Local : DateTimeKind.Utc;
                     var fullMappings = new Dictionary<string, UpdateMapping>(ColumnMappings);
                     fullMappings[meta.PrimaryIdAttribute] = new UpdateMapping { OldValueColumn = PrimaryIdSource, NewValueColumn = PrimaryIdSource };
-                    newAttributeAccessors = CompileColumnMappings(dataSource.Metadata, LogicalName, fullMappings.Where(kvp => kvp.Value.NewValueColumn != null).ToDictionary(kvp => kvp.Key, kvp => kvp.Value.NewValueColumn), schema, dateTimeKind, entities);
-                    oldAttributeAccessors = CompileColumnMappings(dataSource.Metadata, LogicalName, fullMappings.Where(kvp => kvp.Value.OldValueColumn != null).ToDictionary(kvp => kvp.Key, kvp => kvp.Value.OldValueColumn), schema, dateTimeKind, entities);
+                    newAttributeAccessors = CompileColumnMappings(dataSource, LogicalName, fullMappings.Where(kvp => kvp.Value.NewValueColumn != null).ToDictionary(kvp => kvp.Key, kvp => kvp.Value.NewValueColumn), schema, dateTimeKind, entities);
+                    oldAttributeAccessors = CompileColumnMappings(dataSource, LogicalName, fullMappings.Where(kvp => kvp.Value.OldValueColumn != null).ToDictionary(kvp => kvp.Key, kvp => kvp.Value.OldValueColumn), schema, dateTimeKind, entities);
                     primaryIdAccessor = newAttributeAccessors[meta.PrimaryIdAttribute];
                 }
 
                 // Check again that the update is allowed. Don't count any UI interaction in the execution time
                 var confirmArgs = new ConfirmDmlStatementEventArgs(entities.Count, meta, BypassCustomPluginExecution);
-                if (options.CancellationToken.IsCancellationRequested)
+                if (context.Options.CancellationToken.IsCancellationRequested)
                     confirmArgs.Cancel = true;
-                options.ConfirmUpdate(confirmArgs);
+                context.Options.ConfirmUpdate(confirmArgs);
                 if (confirmArgs.Cancel)
                     throw new OperationCanceledException("UPDATE cancelled by user");
 
@@ -158,7 +161,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     return ExecuteDmlOperation(
                         dataSource.Connection,
-                        options,
+                        context.Options,
                         entities,
                         meta,
                         entity =>
@@ -237,7 +240,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             CompletedLowercase = "updated"
                         },
                         out recordsAffected,
-                        parameterValues);
+                        context.ParameterValues);
                 }
             }
             catch (QueryExecutionException ex)

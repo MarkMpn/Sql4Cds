@@ -32,14 +32,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public IDataExecutionPlanNodeInternal Source { get; set; }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
-            var schema = Source.GetSchema(dataSources, parameterTypes);
-            var filter = Filter.Compile(schema, parameterTypes);
+            var schema = Source.GetSchema(context);
+            var expressionCompilationContext = new ExpressionCompilationContext(context, schema, null);
+            var filter = Filter.Compile(expressionCompilationContext);
+            var expressionContext = new ExpressionExecutionContext(context);
 
-            foreach (var entity in Source.Execute(dataSources, options, parameterTypes, parameterValues))
+            foreach (var entity in Source.Execute(context))
             {
-                if (filter(entity, parameterValues, options))
+                expressionContext.Entity = entity;
+
+                if (filter(expressionContext))
                     yield return entity;
             }
         }
@@ -49,9 +53,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
+        public override INodeSchema GetSchema(NodeCompilationContext context)
         {
-            var schema = Source.GetSchema(dataSources, parameterTypes);
+            var schema = Source.GetSchema(context);
             var notNullColumns = new HashSet<string>(schema.NotNullColumns, StringComparer.OrdinalIgnoreCase);
             AddNotNullColumns(schema, notNullColumns, Filter, false);
 
@@ -125,21 +129,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             notNullColumns.Add(colName);
         }
 
-        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
-            Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
+            Source = Source.FoldQuery(context, hints);
             Source.Parent = this;
 
             var foldedFilters = false;
 
             foldedFilters |= FoldConsecutiveFilters();
-            foldedFilters |= FoldNestedLoopFiltersToJoins(dataSources, options, parameterTypes, hints);
-            foldedFilters |= FoldInExistsToFetchXml(dataSources, options, parameterTypes, hints, out var addedLinks);
-            foldedFilters |= FoldTableSpoolToIndexSpool(dataSources, options, parameterTypes, hints);
-            foldedFilters |= FoldFiltersToDataSources(dataSources, options, parameterTypes);
+            foldedFilters |= FoldNestedLoopFiltersToJoins(context, hints);
+            foldedFilters |= FoldInExistsToFetchXml(context, hints, out var addedLinks);
+            foldedFilters |= FoldTableSpoolToIndexSpool(context, hints);
+            foldedFilters |= FoldFiltersToDataSources(context);
 
-            if (FoldColumnComparisonsWithKnownValues(dataSources, parameterTypes))
-                foldedFilters |= FoldFiltersToDataSources(dataSources, options, parameterTypes);
+            if (FoldColumnComparisonsWithKnownValues(context))
+                foldedFilters |= FoldFiltersToDataSources(context);
 
             foreach (var addedLink in addedLinks)
             {
@@ -150,7 +154,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // Some of the filters have been folded into the source. Fold the sources again as the filter can have changed estimated row
             // counts and lead to a better execution plan.
             if (foldedFilters)
-                Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
+                Source = Source.FoldQuery(context, hints);
 
             // All the filters have been folded into the source. 
             if (Filter == null)
@@ -176,7 +180,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return false;
         }
 
-        private bool FoldNestedLoopFiltersToJoins(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        private bool FoldNestedLoopFiltersToJoins(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
             // Queries like "FROM table1, table2 WHERE table1.col = table2.col" are created as:
             // Filter: table1.col = table2.col
@@ -184,7 +188,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             //    -> FetchXml
             //    -> Table Spool
             //       -> FetchXml
-            if (FoldNestedLoopFiltersToJoins(Source as BaseJoinNode, dataSources, options, parameterTypes, hints, out var foldedJoin))
+            if (FoldNestedLoopFiltersToJoins(Source as BaseJoinNode, context, hints, out var foldedJoin))
             {
                 Source = foldedJoin;
                 return true;
@@ -193,7 +197,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return false;
         }
 
-        private bool FoldNestedLoopFiltersToJoins(BaseJoinNode join, IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints, out FoldableJoinNode foldedJoin)
+        private bool FoldNestedLoopFiltersToJoins(BaseJoinNode join, NodeCompilationContext context, IList<OptimizerHint> hints, out FoldableJoinNode foldedJoin)
         {
             foldedJoin = null;
 
@@ -208,10 +212,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 join is NestedLoopNode loop &&
                 (loop.OuterReferences == null || loop.OuterReferences.Count == 0))
             {
-                var leftSchema = join.LeftSource.GetSchema(dataSources, parameterTypes);
-                var rightSchema = join.RightSource.GetSchema(dataSources, parameterTypes);
+                var leftSchema = join.LeftSource.GetSchema(context);
+                var rightSchema = join.RightSource.GetSchema(context);
 
-                if (ExtractJoinCondition(Filter, loop, leftSchema, rightSchema, out foldedJoin, out var removedCondition))
+                if (ExtractJoinCondition(Filter, loop, context, leftSchema, rightSchema, out foldedJoin, out var removedCondition))
                 {
                     Filter = Filter.RemoveCondition(removedCondition);
                     foldedFilters = true;
@@ -219,13 +223,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
-            if (FoldNestedLoopFiltersToJoins(join.LeftSource as BaseJoinNode, dataSources, options, parameterTypes, hints, out var foldedLeftSource))
+            if (FoldNestedLoopFiltersToJoins(join.LeftSource as BaseJoinNode, context, hints, out var foldedLeftSource))
             {
                 join.LeftSource = foldedLeftSource;
                 foldedFilters = true;
             }
 
-            if (FoldNestedLoopFiltersToJoins(join.RightSource as BaseJoinNode, dataSources, options, parameterTypes, hints, out var foldedRightSource))
+            if (FoldNestedLoopFiltersToJoins(join.RightSource as BaseJoinNode, context, hints, out var foldedRightSource))
             {
                 join.RightSource = foldedRightSource;
                 foldedFilters = true;
@@ -234,38 +238,46 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return foldedFilters;
         }
 
-        private bool ExtractJoinCondition(BooleanExpression filter, NestedLoopNode join, INodeSchema leftSchema, INodeSchema rightSchema, out FoldableJoinNode foldedJoin, out BooleanExpression removedCondition)
+        private bool ExtractJoinCondition(BooleanExpression filter, NestedLoopNode join, NodeCompilationContext context, INodeSchema leftSchema, INodeSchema rightSchema, out FoldableJoinNode foldedJoin, out BooleanExpression removedCondition)
         {
             if (filter is BooleanComparisonExpression cmp &&
-                cmp.ComparisonType == BooleanComparisonType.Equals &&
-                cmp.FirstExpression is ColumnReferenceExpression col1 &&
-                cmp.SecondExpression is ColumnReferenceExpression col2)
+                cmp.ComparisonType == BooleanComparisonType.Equals)
             {
                 var leftSource = join.LeftSource;
                 var rightSource = join.RightSource;
+                var col1 = cmp.FirstExpression as ColumnReferenceExpression;
+                var col2 = cmp.SecondExpression as ColumnReferenceExpression;
+
+                // If join is not directly on a.col = b.col, it may be something that we can calculate such as
+                // a.col1 + a.col2 = left(b.col3, 10)
+                // Create a ComputeScalar node for each side so the join can work on a single column
+                // This only works if each side of the equality expression references columns only from one side of the join
+                var originalLeftSource = leftSource;
+                var originalRightSource = rightSource;
+
+                if (col1 == null)
+                    col1 = ComputeColumn(context, cmp.FirstExpression, ref leftSource, ref leftSchema, ref rightSource, ref rightSchema);
+
+                if (col2 == null)
+                    col2 = ComputeColumn(context, cmp.SecondExpression, ref leftSource, ref leftSchema, ref rightSource, ref rightSchema);
 
                 // Equality expression may be written in the opposite order to the join - swap the tables if necessary
-                if (rightSchema.ContainsColumn(col1.GetColumnName(), out _) &&
+                if (col1 != null &&
+                    col2 != null &&
+                    rightSchema.ContainsColumn(col1.GetColumnName(), out _) &&
                     leftSchema.ContainsColumn(col2.GetColumnName(), out _))
                 {
                     Swap(ref leftSource, ref rightSource);
                     Swap(ref leftSchema, ref rightSchema);
                 }
 
-                if (leftSchema.ContainsColumn(col1.GetColumnName(), out var leftCol) &&
+                if (col1 != null &&
+                    col2 != null &&
+                    leftSchema.ContainsColumn(col1.GetColumnName(), out var leftCol) &&
                     rightSchema.ContainsColumn(col2.GetColumnName(), out var rightCol))
                 {
-                    if (leftSource is TableSpoolNode leftSpool)
-                    {
-                        leftSpool.Source.Parent = leftSource.Parent;
-                        leftSource = leftSpool.Source;
-                    }
-
-                    if (rightSource is TableSpoolNode rightSpool)
-                    {
-                        rightSpool.Source.Parent = rightSource.Parent;
-                        rightSource = rightSpool.Source;
-                    }
+                    leftSource = RemoveTableSpool(leftSource);
+                    rightSource = RemoveTableSpool(rightSource);
 
                     // Prefer to use a merge join if either of the join keys are the primary key.
                     // Swap the tables if necessary to use the primary key from the right source.
@@ -273,6 +285,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         Swap(ref leftSource, ref rightSource);
                         Swap(ref leftSchema, ref rightSchema);
+                        Swap(ref col1, ref col2);
                         Swap(ref leftCol, ref rightCol);
                     }
 
@@ -299,8 +312,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 bin.BinaryExpressionType == BooleanBinaryExpressionType.And)
             {
                 // Recurse into ANDs but not into ORs
-                if (ExtractJoinCondition(bin.FirstExpression, join, leftSchema, rightSchema, out foldedJoin, out removedCondition) ||
-                    ExtractJoinCondition(bin.SecondExpression, join, leftSchema, rightSchema, out foldedJoin, out removedCondition))
+                if (ExtractJoinCondition(bin.FirstExpression, join, context, leftSchema, rightSchema, out foldedJoin, out removedCondition) ||
+                    ExtractJoinCondition(bin.SecondExpression, join, context, leftSchema, rightSchema, out foldedJoin, out removedCondition))
                 {
                     return true;
                 }
@@ -311,6 +324,52 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return false;
         }
 
+        private IDataExecutionPlanNodeInternal RemoveTableSpool(IDataExecutionPlanNodeInternal source)
+        {
+            if (source is TableSpoolNode spool)
+            {
+                spool.Source.Parent = source.Parent;
+                return spool.Source;
+            }
+
+            if (source is ComputeScalarNode computeScalar && computeScalar.Source is TableSpoolNode computeScalarSpool)
+            {
+                computeScalarSpool.Source.Parent = computeScalar;
+                computeScalar.Source = computeScalarSpool.Source;
+            }
+
+            return source;
+        }
+
+        private ColumnReferenceExpression ComputeColumn(NodeCompilationContext context, ScalarExpression expression, ref IDataExecutionPlanNodeInternal leftSource, ref INodeSchema leftSchema, ref IDataExecutionPlanNodeInternal rightSource, ref INodeSchema rightSchema)
+        {
+            return ComputeColumn(context, expression, ref leftSource, ref leftSchema) ?? ComputeColumn(context, expression, ref rightSource, ref rightSchema);
+        }
+
+        private ColumnReferenceExpression ComputeColumn(NodeCompilationContext context, ScalarExpression expression, ref IDataExecutionPlanNodeInternal source, ref INodeSchema schema)
+        {
+            var columns = expression.GetColumns().ToList();
+            var s = schema;
+
+            if (columns.Count == 0 || !columns.All(c => s.ContainsColumn(c, out _)))
+                return null;
+
+            var exprName = context.GetExpressionName();
+            var computeScalar = new ComputeScalarNode
+            {
+                Source = source,
+                Columns =
+                {
+                    [exprName] = expression
+                }
+            };
+
+            source = computeScalar;
+            schema = computeScalar.GetSchema(context);
+
+            return exprName.ToColumnReference();
+        }
+
         private void Swap<T>(ref T first, ref T second)
         {
             var temp = first;
@@ -318,7 +377,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             second = temp;
         }
 
-        private bool FoldInExistsToFetchXml(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints, out Dictionary<FetchLinkEntityType, FetchXmlScan> addedLinks)
+        private bool FoldInExistsToFetchXml(NodeCompilationContext context, IList<OptimizerHint> hints, out Dictionary<FetchLinkEntityType, FetchXmlScan> addedLinks)
         {
             var foldedFilters = false;
 
@@ -384,10 +443,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (rightFetch == null)
                         break;
 
+                    // Can't fold queries using explicit collations
+                    if (merge.LeftAttribute.Collation != null || merge.RightAttribute.Collation != null)
+                        break;
+
                     if (!leftFetch.DataSource.Equals(rightFetch.DataSource, StringComparison.OrdinalIgnoreCase))
                         break;
 
-                    var rightSchema = rightFetch.GetSchema(dataSources, parameterTypes);
+                    var rightSchema = rightFetch.GetSchema(context);
 
                     if (!rightSchema.ContainsColumn(merge.RightAttribute.GetColumnName(), out var attribute))
                         break;
@@ -410,8 +473,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     // Can't do this if there is any conflict in join aliases
                     if (notNullFilterRemovable &&
                         leftFetch.Entity.name == rightFetch.Entity.name &&
-                        merge.LeftAttribute.GetColumnName() == leftFetch.Alias + "." + dataSources[leftFetch.DataSource].Metadata[leftFetch.Entity.name].PrimaryIdAttribute &&
-                        merge.RightAttribute.GetColumnName() == rightFetch.Alias + "." + dataSources[rightFetch.DataSource].Metadata[rightFetch.Entity.name].PrimaryIdAttribute &&
+                        merge.LeftAttribute.GetColumnName() == leftFetch.Alias + "." + context.DataSources[leftFetch.DataSource].Metadata[leftFetch.Entity.name].PrimaryIdAttribute &&
+                        merge.RightAttribute.GetColumnName() == rightFetch.Alias + "." + context.DataSources[rightFetch.DataSource].Metadata[rightFetch.Entity.name].PrimaryIdAttribute &&
                         !leftFetch.Entity.GetLinkEntities().Select(l => l.alias).Intersect(rightFetch.Entity.GetLinkEntities().Select(l => l.alias), StringComparer.OrdinalIgnoreCase).Any() &&
                         (leftFetch.FetchXml.top == null || rightFetch.FetchXml.top == null))
                     {
@@ -485,7 +548,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                     // We need to use an "in" join type - check that's supported
                     else if (notNullFilterRemovable &&
-                        options.JoinOperatorsAvailable.Contains(JoinOperator.Any))
+                        context.Options.JoinOperatorsAvailable.Contains(JoinOperator.Any))
                     {
                         // Remove the filter and replace with an "in" link-entity
                         Filter = Filter.RemoveCondition(notNullFilter);
@@ -521,7 +584,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 else if (join is NestedLoopNode loop)
                 {
                     // Check we meet all the criteria for a foldable correlated EXISTS query
-                    if (!options.JoinOperatorsAvailable.Contains(JoinOperator.Exists))
+                    if (!context.Options.JoinOperatorsAvailable.Contains(JoinOperator.Exists))
                         break;
 
                     if (loop.JoinCondition != null ||
@@ -628,13 +691,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return foldedFilters;
         }
 
-        private bool FoldTableSpoolToIndexSpool(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        private bool FoldTableSpoolToIndexSpool(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
             // If we've got a filter matching a column and a variable (key lookup in a nested loop) from a table spool, replace it with a index spool
             if (!(Source is TableSpoolNode tableSpool))
                 return false;
 
-            var schema = Source.GetSchema(dataSources, parameterTypes);
+            var schema = Source.GetSchema(context);
 
             if (!ExtractKeyLookupFilter(Filter, out var filter, out var indexColumn, out var seekVariable) || !schema.ContainsColumn(indexColumn, out indexColumn))
                 return false;
@@ -660,28 +723,28 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Source = spoolSource,
                 KeyColumn = indexColumn,
                 SeekValue = seekVariable
-            }.FoldQuery(dataSources, options, parameterTypes, hints);
+            }.FoldQuery(context, hints);
 
             Filter = filter;
             return true;
         }
 
-        private bool FoldFiltersToDataSources(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        private bool FoldFiltersToDataSources(NodeCompilationContext context)
         {
             var foldedFilters = false;
 
             // Find all the data source nodes we could fold this into. Include direct data sources, those from either side of an inner join, or the main side of an outer join
             foreach (var source in GetFoldableSources(Source))
             {
-                var schema = source.GetSchema(dataSources, parameterTypes);
+                var schema = source.GetSchema(context);
 
                 if (source is FetchXmlScan fetchXml && !fetchXml.FetchXml.aggregate)
                 {
-                    if (!dataSources.TryGetValue(fetchXml.DataSource, out var dataSource))
+                    if (!context.DataSources.TryGetValue(fetchXml.DataSource, out var dataSource))
                         throw new NotSupportedQueryFragmentException("Missing datasource " + fetchXml.DataSource);
 
                     // If the criteria are ANDed, see if any of the individual conditions can be translated to FetchXML
-                    Filter = ExtractFetchXMLFilters(dataSource.Metadata, options, Filter, schema, null, fetchXml.Entity.name, fetchXml.Alias, fetchXml.Entity.Items, parameterTypes, out var fetchFilter);
+                    Filter = ExtractFetchXMLFilters(context, dataSource.Metadata, Filter, schema, null, fetchXml.Entity.name, fetchXml.Alias, fetchXml.Entity.Items, out var fetchFilter);
 
                     if (fetchFilter != null)
                     {
@@ -706,7 +769,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (source is MetadataQueryNode meta)
                 {
                     // If the criteria are ANDed, see if any of the individual conditions can be translated to the metadata query
-                    Filter = ExtractMetadataFilters(Filter, meta, options, out var entityFilter, out var attributeFilter, out var relationshipFilter);
+                    Filter = ExtractMetadataFilters(context, Filter, meta, out var entityFilter, out var attributeFilter, out var relationshipFilter);
 
                     meta.Query.AddFilter(entityFilter);
 
@@ -728,7 +791,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return foldedFilters;
         }
 
-        private bool FoldColumnComparisonsWithKnownValues(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
+        private bool FoldColumnComparisonsWithKnownValues(NodeCompilationContext context)
         {
             var foldedFilters = false;
 
@@ -737,12 +800,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 if (source is FetchXmlScan fetchXml && !fetchXml.FetchXml.aggregate)
                 {
-                    if (!dataSources.TryGetValue(fetchXml.DataSource, out var dataSource))
+                    if (!context.DataSources.TryGetValue(fetchXml.DataSource, out var dataSource))
                         throw new NotSupportedQueryFragmentException("Missing datasource " + fetchXml.DataSource);
 
-                    var schema = source.GetSchema(dataSources, parameterTypes);
+                    var schema = source.GetSchema(context);
 
-                    var newFilter = FoldColumnComparisonsWithKnownValues(dataSources, parameterTypes, fetchXml, schema, Filter);
+                    var newFilter = FoldColumnComparisonsWithKnownValues(context, fetchXml, schema, Filter);
 
                     if (newFilter != Filter)
                     {
@@ -758,13 +821,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return foldedFilters;
         }
 
-        private BooleanExpression FoldColumnComparisonsWithKnownValues(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, FetchXmlScan fetchXml, INodeSchema schema, BooleanExpression filter)
+        private BooleanExpression FoldColumnComparisonsWithKnownValues(NodeCompilationContext context, FetchXmlScan fetchXml, INodeSchema schema, BooleanExpression filter)
         {
             if (filter is BooleanComparisonExpression cmp &&
                 cmp.FirstExpression is ColumnReferenceExpression col1 &&
                 cmp.SecondExpression is ColumnReferenceExpression col2)
             {
-                if (HasKnownValue(dataSources, parameterTypes, fetchXml, col1, schema, out var value))
+                if (HasKnownValue(context, fetchXml, col1, schema, out var value))
                 {
                     return new BooleanComparisonExpression
                     {
@@ -773,7 +836,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         SecondExpression = col2
                     };
                 }
-                else if (HasKnownValue(dataSources, parameterTypes, fetchXml, col2, schema, out value))
+                else if (HasKnownValue(context, fetchXml, col2, schema, out value))
                 {
                     return new BooleanComparisonExpression
                     {
@@ -786,8 +849,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             else if (filter is BooleanBinaryExpression bin &&
                 bin.BinaryExpressionType == BooleanBinaryExpressionType.And)
             {
-                var bin1 = FoldColumnComparisonsWithKnownValues(dataSources, parameterTypes, fetchXml, schema, bin.FirstExpression);
-                var bin2 = FoldColumnComparisonsWithKnownValues(dataSources, parameterTypes, fetchXml, schema, bin.SecondExpression);
+                var bin1 = FoldColumnComparisonsWithKnownValues(context, fetchXml, schema, bin.FirstExpression);
+                var bin2 = FoldColumnComparisonsWithKnownValues(context, fetchXml, schema, bin.SecondExpression);
 
                 if (bin1 != bin.FirstExpression || bin2 != bin.SecondExpression)
                 {
@@ -803,7 +866,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return filter;
         }
 
-        private bool HasKnownValue(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, FetchXmlScan fetchXml, ColumnReferenceExpression col, INodeSchema schema, out Literal value)
+        private bool HasKnownValue(NodeCompilationContext context, FetchXmlScan fetchXml, ColumnReferenceExpression col, INodeSchema schema, out Literal value)
         {
             value = null;
 
@@ -943,14 +1006,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (filter is BooleanComparisonExpression cmp && cmp.ComparisonType == BooleanComparisonType.Equals)
             {
                 if (cmp.FirstExpression is ColumnReferenceExpression col1 && 
-                    cmp.SecondExpression is VariableReference var2)
+                    cmp.SecondExpression is VariableReference var2 &&
+                    col1.Collation == null &&
+                    var2.Collation == null)
                 {
                     indexColumn = col1.GetColumnName();
                     seekVariable = var2.Name;
                     return true;
                 }
                 else if (cmp.FirstExpression is VariableReference var1 &&
-                    cmp.SecondExpression is ColumnReferenceExpression col2)
+                    cmp.SecondExpression is ColumnReferenceExpression col2 &&
+                    var1.Collation == null &&
+                    col2.Collation == null)
                 {
                     indexColumn = col2.GetColumnName();
                     seekVariable = var1.Name;
@@ -996,9 +1063,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return false;
         }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
-            var schema = Source.GetSchema(dataSources, parameterTypes);
+            var schema = Source.GetSchema(context);
 
             foreach (var col in Filter.GetColumns())
             {
@@ -1009,12 +1076,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     requiredColumns.Add(normalized);
             }
 
-            Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
+            Source.AddRequiredColumns(context, requiredColumns);
         }
 
-        private BooleanExpression ExtractFetchXMLFilters(IAttributeMetadataCache metadata, IQueryExecutionOptions options, BooleanExpression criteria, INodeSchema schema, string allowedPrefix, string targetEntityName, string targetEntityAlias, object[] items, IDictionary<string, DataTypeReference> parameterTypes, out filter filter)
+        private BooleanExpression ExtractFetchXMLFilters(NodeCompilationContext context, IAttributeMetadataCache metadata, BooleanExpression criteria, INodeSchema schema, string allowedPrefix, string targetEntityName, string targetEntityAlias, object[] items, out filter filter)
         {
-            if (TranslateFetchXMLCriteria(metadata, options, criteria, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, parameterTypes, out filter))
+            if (TranslateFetchXMLCriteria(context, metadata, criteria, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out filter))
                 return null;
 
             if (!(criteria is BooleanBinaryExpression bin))
@@ -1023,8 +1090,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (bin.BinaryExpressionType != BooleanBinaryExpressionType.And)
                 return criteria;
 
-            bin.FirstExpression = ExtractFetchXMLFilters(metadata, options, bin.FirstExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, parameterTypes, out var lhsFilter);
-            bin.SecondExpression = ExtractFetchXMLFilters(metadata, options, bin.SecondExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, parameterTypes, out var rhsFilter);
+            bin.FirstExpression = ExtractFetchXMLFilters(context, metadata, bin.FirstExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out var lhsFilter);
+            bin.SecondExpression = ExtractFetchXMLFilters(context, metadata, bin.SecondExpression, schema, allowedPrefix, targetEntityName, targetEntityAlias, items, out var rhsFilter);
 
             filter = (lhsFilter != null && rhsFilter != null) ? new filter { Items = new object[] { lhsFilter, rhsFilter } } : lhsFilter ?? rhsFilter;
 
@@ -1034,9 +1101,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return bin.FirstExpression ?? bin.SecondExpression;
         }
 
-        protected BooleanExpression ExtractMetadataFilters(BooleanExpression criteria, MetadataQueryNode meta, IQueryExecutionOptions options, out MetadataFilterExpression entityFilter, out MetadataFilterExpression attributeFilter, out MetadataFilterExpression relationshipFilter)
+        protected BooleanExpression ExtractMetadataFilters(NodeCompilationContext context, BooleanExpression criteria, MetadataQueryNode meta, out MetadataFilterExpression entityFilter, out MetadataFilterExpression attributeFilter, out MetadataFilterExpression relationshipFilter)
         {
-            if (TranslateMetadataCriteria(criteria, meta, options, out entityFilter, out attributeFilter, out relationshipFilter))
+            if (TranslateMetadataCriteria(context, criteria, meta, out entityFilter, out attributeFilter, out relationshipFilter))
                 return null;
 
             if (!(criteria is BooleanBinaryExpression bin))
@@ -1045,8 +1112,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (bin.BinaryExpressionType != BooleanBinaryExpressionType.And)
                 return criteria;
 
-            bin.FirstExpression = ExtractMetadataFilters(bin.FirstExpression, meta, options, out var lhsEntityFilter, out var lhsAttributeFilter, out var lhsRelationshipFilter);
-            bin.SecondExpression = ExtractMetadataFilters(bin.SecondExpression, meta, options, out var rhsEntityFilter, out var rhsAttributeFilter, out var rhsRelationshipFilter);
+            bin.FirstExpression = ExtractMetadataFilters(context, bin.FirstExpression, meta, out var lhsEntityFilter, out var lhsAttributeFilter, out var lhsRelationshipFilter);
+            bin.SecondExpression = ExtractMetadataFilters(context, bin.SecondExpression, meta, out var rhsEntityFilter, out var rhsAttributeFilter, out var rhsRelationshipFilter);
 
             entityFilter = (lhsEntityFilter != null && rhsEntityFilter != null) ? new MetadataFilterExpression { Filters = { lhsEntityFilter, rhsEntityFilter } } : lhsEntityFilter ?? rhsEntityFilter;
             attributeFilter = (lhsAttributeFilter != null && rhsAttributeFilter != null) ? new MetadataFilterExpression { Filters = { lhsAttributeFilter, rhsAttributeFilter } } : lhsAttributeFilter ?? rhsAttributeFilter;
@@ -1057,17 +1124,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             return bin.FirstExpression ?? bin.SecondExpression;
         }
-        protected bool TranslateMetadataCriteria(BooleanExpression criteria, MetadataQueryNode meta, IQueryExecutionOptions options, out MetadataFilterExpression entityFilter, out MetadataFilterExpression attributeFilter, out MetadataFilterExpression relationshipFilter)
+
+        protected bool TranslateMetadataCriteria(NodeCompilationContext context, BooleanExpression criteria, MetadataQueryNode meta, out MetadataFilterExpression entityFilter, out MetadataFilterExpression attributeFilter, out MetadataFilterExpression relationshipFilter)
         {
             entityFilter = null;
             attributeFilter = null;
             relationshipFilter = null;
 
+            var expressionCompilationContext = new ExpressionCompilationContext(context, null, null);
+            var expressionExecutionContext = new ExpressionExecutionContext(new NodeExecutionContext(context.DataSources, context.Options, context.ParameterTypes, null));
+
             if (criteria is BooleanBinaryExpression binary)
             {
-                if (!TranslateMetadataCriteria(binary.FirstExpression, meta, options, out var lhsEntityFilter, out var lhsAttributeFilter, out var lhsRelationshipFilter))
+                if (!TranslateMetadataCriteria(context, binary.FirstExpression, meta, out var lhsEntityFilter, out var lhsAttributeFilter, out var lhsRelationshipFilter))
                     return false;
-                if (!TranslateMetadataCriteria(binary.SecondExpression, meta, options, out var rhsEntityFilter, out var rhsAttributeFilter, out var rhsRelationshipFilter))
+                if (!TranslateMetadataCriteria(context, binary.SecondExpression, meta, out var rhsEntityFilter, out var rhsAttributeFilter, out var rhsRelationshipFilter))
                     return false;
 
                 if (binary.BinaryExpressionType == BooleanBinaryExpressionType.Or)
@@ -1140,7 +1211,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (col == null || literal == null)
                     return false;
 
-                var schema = meta.GetSchema(null, null);
+                var schema = meta.GetSchema(context);
                 if (!schema.ContainsColumn(col.GetColumnName(), out var colName))
                     return false;
 
@@ -1174,7 +1245,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         throw new InvalidOperationException();
                 }
 
-                var condition = new MetadataConditionExpression(parts[1], op, literal.Compile(null, null)(null, null, options));
+                var condition = new MetadataConditionExpression(parts[1], op, literal.Compile(expressionCompilationContext)(expressionExecutionContext));
 
                 return TranslateMetadataCondition(condition, parts[0], meta, out entityFilter, out attributeFilter, out relationshipFilter);
             }
@@ -1186,7 +1257,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (col == null)
                     return false;
 
-                var schema = meta.GetSchema(null, null);
+                var schema = meta.GetSchema(context);
                 if (!schema.ContainsColumn(col.GetColumnName(), out var colName))
                     return false;
 
@@ -1198,7 +1269,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (inPred.Values.Any(val => !(val is Literal)))
                     return false;
 
-                var condition = new MetadataConditionExpression(parts[1], inPred.NotDefined ? MetadataConditionOperator.NotIn : MetadataConditionOperator.In, inPred.Values.Select(val => val.Compile(null, null)(null, null, options)).ToArray());
+                var condition = new MetadataConditionExpression(parts[1], inPred.NotDefined ? MetadataConditionOperator.NotIn : MetadataConditionOperator.In, inPred.Values.Select(val => val.Compile(expressionCompilationContext)(expressionExecutionContext)).ToArray());
 
                 return TranslateMetadataCondition(condition, parts[0], meta, out entityFilter, out attributeFilter, out relationshipFilter);
             }
@@ -1210,7 +1281,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (col == null)
                     return false;
 
-                var schema = meta.GetSchema(null, null);
+                var schema = meta.GetSchema(context);
                 if (!schema.ContainsColumn(col.GetColumnName(), out var colName))
                     return false;
 
@@ -1357,9 +1428,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return false;
         }
 
-        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(NodeCompilationContext context)
         {
-            return new RowCountEstimate(Source.EstimateRowsOut(dataSources, options, parameterTypes).Value * 8 / 10);
+            return new RowCountEstimate(Source.EstimateRowsOut(context).Value * 8 / 10);
         }
 
         protected override IEnumerable<string> GetVariablesInternal()

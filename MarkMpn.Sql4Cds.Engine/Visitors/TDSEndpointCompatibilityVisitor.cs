@@ -290,5 +290,19 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
             // Can't use WAITFOR statement
             IsCompatible = false;
         }
+
+        public override void Visit(FunctionCall node)
+        {
+            // Can't use JSON functions
+            switch (node.FunctionName.Value.ToUpperInvariant())
+            {
+                case "JSON_VALUE":
+                case "JSON_PATH_EXISTS":
+                    IsCompatible = false;
+                    break;
+            }
+
+            base.Visit(node);
+        }
     }
 }

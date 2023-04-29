@@ -96,27 +96,27 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("Spool Type")]
         public SpoolType SpoolType { get; set; }
 
-        internal int GetCount(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        internal int GetCount(NodeExecutionContext context)
         {
             if (_eagerSpool == null)
-                _eagerSpool = Source.Execute(dataSources, options, parameterTypes, parameterValues).ToArray();
+                _eagerSpool = Source.Execute(context).ToArray();
 
             return _eagerSpool.Length;
         }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
             if (SpoolType == SpoolType.Eager)
             {
                 if (_eagerSpool == null)
-                    _eagerSpool = Source.Execute(dataSources, options, parameterTypes, parameterValues).ToArray();
+                    _eagerSpool = Source.Execute(context).ToArray();
 
                 return _eagerSpool;
             }
             else
             {
                 if (_lazyCache == null)
-                    _lazyCache = new CachedList<Entity>(Source.Execute(dataSources, options, parameterTypes, parameterValues));
+                    _lazyCache = new CachedList<Entity>(Source.Execute(context));
 
                 return _lazyCache;
             }
@@ -127,14 +127,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
+        public override INodeSchema GetSchema(NodeCompilationContext context)
         {
-            return Source.GetSchema(dataSources, parameterTypes);
+            return Source.GetSchema(context);
         }
 
-        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
-            Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
+            Source = Source.FoldQuery(context, hints);
 
             if (hints != null && hints.Any(hint => hint.HintKind == OptimizerHintKind.NoPerformanceSpool))
                 return Source;
@@ -143,14 +143,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return this;
         }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
-            Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
+            Source.AddRequiredColumns(context, requiredColumns);
         }
 
-        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(NodeCompilationContext context)
         {
-            return Source.EstimateRowsOut(dataSources, options, parameterTypes);
+            return Source.EstimateRowsOut(context);
         }
 
         public override string ToString()

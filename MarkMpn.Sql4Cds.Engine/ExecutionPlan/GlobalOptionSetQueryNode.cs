@@ -20,6 +20,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             public IDictionary<Type, Func<object, object>> Accessors { get; set; }
             public DataTypeReference SqlType { get; set; }
             public Type NetType { get; set; }
+            public IComparable[] DataMemberOrder { get; set; }
         }
 
         private static readonly Type[] _optionsetTypes;
@@ -47,7 +48,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         {
                             type = MetadataQueryNode.GetPropertyType(prop.Property.PropertyType);
                         }
-                        else if (!SqlTypeConverter.CanMakeConsistentTypes(type, MetadataQueryNode.GetPropertyType(prop.Property.PropertyType), out type))
+                        else if (!SqlTypeConverter.CanMakeConsistentTypes(type, MetadataQueryNode.GetPropertyType(prop.Property.PropertyType), null, out type))
                         {
                             // Can't make a consistent type for this property, so we can't use it
                             type = null;
@@ -65,7 +66,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         Name = g.Key.ToLowerInvariant(),
                         SqlType = type,
                         NetType = netType,
-                        Accessors = g.ToDictionary(p => p.Type, p => MetadataQueryNode.GetPropertyAccessor(p.Property, netType))
+                        Accessors = g.ToDictionary(p => p.Type, p => MetadataQueryNode.GetPropertyAccessor(p.Property, netType)),
+                        DataMemberOrder = MetadataQueryNode.GetDataMemberOrder(g.First().Property)
                     };
                 })
                 .Where(p => p != null)
@@ -86,7 +88,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Description("The alias to use for the dataset")]
         public string Alias { get; set; }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
             _optionsetCols = new Dictionary<string, OptionSetProperty>();
 
@@ -105,22 +107,29 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(NodeCompilationContext context)
         {
             return new RowCountEstimate(100);
         }
 
-        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
             return this;
         }
 
-        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
+        public override INodeSchema GetSchema(NodeCompilationContext context)
         {
-            var schema = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
+            var schema = new ColumnList();
             var aliases = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (var prop in _optionsetProps.Values)
+            var props = (IEnumerable<OptionSetProperty>)_optionsetProps.Values;
+
+            if (context.Options.ColumnOrdering == ColumnOrdering.Alphabetical)
+                props = props.OrderBy(p => p.Name);
+            else
+                props = props.OrderBy(p => p.DataMemberOrder[0]).ThenBy(p => p.DataMemberOrder[1]).ThenBy(p => p.DataMemberOrder[2]);
+
+            foreach (var prop in props)
             {
                 schema[$"{Alias}.{prop.Name}"] = prop.SqlType;
 
@@ -147,9 +156,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Array.Empty<IExecutionPlanNode>();
         }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
-            if (!dataSources.TryGetValue(DataSource, out var dataSource))
+            if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
 
             var resp = (RetrieveAllOptionSetsResponse)dataSource.Connection.Execute(new RetrieveAllOptionSetsRequest());

@@ -47,39 +47,39 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         internal string FalseLabel { get; private set; }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
             if (Source != null)
-                Source.AddRequiredColumns(dataSources, parameterTypes, new List<string>(requiredColumns));
+                Source.AddRequiredColumns(context, new List<string>(requiredColumns));
 
             foreach (var node in TrueStatements)
-                node.AddRequiredColumns(dataSources, parameterTypes, new List<string>(requiredColumns));
+                node.AddRequiredColumns(context, new List<string>(requiredColumns));
 
             if (FalseStatements != null)
             {
                 foreach (var node in FalseStatements)
-                    node.AddRequiredColumns(dataSources, parameterTypes, new List<string>(requiredColumns));
+                    node.AddRequiredColumns(context, new List<string>(requiredColumns));
             }
         }
 
-        public string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        public string Execute(NodeExecutionContext context)
         {
             throw new NotSupportedException("Conditional node should have been converted to GOTO during query plan building");
         }
 
-        public IRootExecutionPlanNodeInternal[] FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public IRootExecutionPlanNodeInternal[] FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
             TrueLabel = Guid.NewGuid().ToString();
             FalseLabel = Guid.NewGuid().ToString();
 
-            Source = Source?.FoldQuery(dataSources, options, parameterTypes, hints);
+            Source = Source?.FoldQuery(context, hints);
 
             TrueStatements = TrueStatements
-                .SelectMany(s => s.FoldQuery(dataSources, options, parameterTypes, hints))
+                .SelectMany(s => s.FoldQuery(context, hints))
                 .ToArray();
 
             FalseStatements = FalseStatements
-                ?.SelectMany(s => s.FoldQuery(dataSources, options, parameterTypes, hints))
+                ?.SelectMany(s => s.FoldQuery(context, hints))
                 ?.ToArray();
 
             if (hints != null && hints.OfType<DoNotCompileConditionsHint>().Any())
@@ -94,13 +94,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     Condition = Condition,
                     Source = Source,
                     SourceColumn = SourceColumn
-                }.FoldQuery(dataSources, options, parameterTypes, hints));
+                }.FoldQuery(context, hints));
 
             statements.AddRange(
                 new GoToNode
                 {
                     Label = FalseLabel
-                }.FoldQuery(dataSources, options, parameterTypes, hints));
+                }.FoldQuery(context, hints));
 
             statements.Add(new GotoLabelNode { Label = TrueLabel });
 
@@ -117,7 +117,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             Condition = Condition,
                             Source = Source,
                             SourceColumn = SourceColumn
-                        }.FoldQuery(dataSources, options, parameterTypes, hints));
+                        }.FoldQuery(context, hints));
                 }
 
                 statements.Add(new GotoLabelNode { Label = FalseLabel });
@@ -129,7 +129,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     new GoToNode
                     {
                         Label = endLabel
-                    }.FoldQuery(dataSources, options, parameterTypes, hints));
+                    }.FoldQuery(context, hints));
 
                 statements.Add(new GotoLabelNode { Label = FalseLabel });
 

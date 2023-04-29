@@ -98,6 +98,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public abstract int MaxDOP { get; set; }
 
         /// <summary>
+        /// The number of requests that will be submitted in a single batch
+        /// </summary>
+        [Description("The number of requests that will be submitted in a single batch")]
+        public abstract int BatchSize { get; set; }
+
+        /// <summary>
         /// Indicates if custom plugins should be skipped
         /// </summary>
         [DisplayName("Bypass Plugin Execution")]
@@ -113,27 +119,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// Executes the DML query and returns an appropriate log message
         /// </summary>
-        /// <param name="org">The <see cref="IOrganizationService"/> to use to get the data</param>
-        /// <param name="metadata">The <see cref="IAttributeMetadataCache"/> to use to get metadata</param>
-        /// <param name="options"><see cref="IQueryExecutionOptions"/> to indicate how the query can be executed</param>
-        /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
-        /// <param name="parameterValues">A mapping of parameter names to their current values</param>
+        /// <param name="context">The context in which the node is being executed</param>
+        /// <param name="recordsAffected">The number of records that were affected by the query</param>
         /// <returns>A log message to display</returns>
-        public abstract string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected);
+        public abstract string Execute(NodeExecutionContext context, out int recordsAffected);
 
         /// <summary>
         /// Attempts to fold this node into its source to simplify the query
         /// </summary>
-        /// <param name="metadata">The <see cref="IAttributeMetadataCache"/> to use to get metadata</param>
-        /// <param name="options"><see cref="IQueryExecutionOptions"/> to indicate how the query can be executed</param>
-        /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
+        /// <param name="context">The context in which the node is being built</param>
+        /// <param name="hints">Any hints that can control the folding of this node</param>
         /// <returns>The node that should be used in place of this node</returns>
-        public virtual IRootExecutionPlanNodeInternal[] FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public virtual IRootExecutionPlanNodeInternal[] FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
             if (Source is IDataExecutionPlanNodeInternal dataNode)
-                Source = dataNode.FoldQuery(dataSources, options, parameterTypes, hints);
+                Source = dataNode.FoldQuery(context, hints);
             else if (Source is IDataReaderExecutionPlanNode dataSetNode)
-                Source = dataSetNode.FoldQuery(dataSources, options, parameterTypes, hints).Single();
+                Source = dataSetNode.FoldQuery(context, hints).Single();
 
             if (Source is AliasNode alias)
             {
@@ -142,44 +144,91 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 RenameSourceColumns(alias.ColumnSet.ToDictionary(col => alias.Alias + "." + col.OutputColumn, col => col.SourceColumn, StringComparer.OrdinalIgnoreCase));
             }
 
-            MaxDOP = GetMaxDOP(hints, options);
-            BypassCustomPluginExecution = GetBypassPluginExecution(hints, options);
+            MaxDOP = GetMaxDOP(context, hints);
+            BatchSize = GetBatchSize(context, hints);
+            BypassCustomPluginExecution = GetBypassPluginExecution(context, hints);
 
             return new[] { this };
         }
 
-        private int GetMaxDOP(IList<OptimizerHint> queryHints, IQueryExecutionOptions options)
+        private int GetMaxDOP(NodeCompilationContext context, IList<OptimizerHint> queryHints)
         {
-            if (queryHints == null)
-                return options.MaxDegreeOfParallelism;
+            if (DataSource == null)
+                return 1;
 
-            var maxDopHint = queryHints
+            if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
+                throw new NotSupportedQueryFragmentException("Unknown datasource");
+
+            var org = dataSource.Connection;
+            var recommendedMaxDop = 1;
+
+#if NETCOREAPP
+            var svc = org as ServiceClient;
+
+            if (svc != null)
+                recommendedMaxDop = svc.RecommendedDegreesOfParallelism;
+#else
+            var svc = org as CrmServiceClient;
+
+            if (svc != null)
+                recommendedMaxDop = svc.RecommendedDegreesOfParallelism;
+#endif
+
+            var maxDopHint = (queryHints ?? Array.Empty<OptimizerHint>())
                 .OfType<LiteralOptimizerHint>()
                 .Where(hint => hint.HintKind == OptimizerHintKind.MaxDop)
                 .FirstOrDefault();
 
             if (maxDopHint != null)
             {
-                if (!(maxDopHint.Value is IntegerLiteral maxDop) || !Int32.TryParse(maxDop.Value, out var value) || value < 1)
-                    throw new NotSupportedQueryFragmentException("MAXDOP requires a positive integer value");
+                if (!(maxDopHint.Value is IntegerLiteral maxDop) || !Int32.TryParse(maxDop.Value, out var value) || value < 0)
+                    throw new NotSupportedQueryFragmentException("MAXDOP requires a positive integer value, or 0 to use recommended value", maxDopHint);
+
+                if (value > 0)
+                    return value;
+
+                return recommendedMaxDop;
+            }
+
+            if (context.Options.MaxDegreeOfParallelism > 0)
+                return context.Options.MaxDegreeOfParallelism;
+
+            return recommendedMaxDop;
+        }
+
+        private int GetBatchSize(NodeCompilationContext context, IList<OptimizerHint> queryHints)
+        {
+            if (queryHints == null)
+                return context.Options.BatchSize;
+
+            var batchSizeHint = queryHints
+                .OfType<UseHintList>()
+                .SelectMany(hint => hint.Hints)
+                .Where(hint => hint.Value.StartsWith("BATCH_SIZE_", StringComparison.OrdinalIgnoreCase))
+                .FirstOrDefault();
+
+            if (batchSizeHint != null)
+            {
+                if (!Int32.TryParse(batchSizeHint.Value.Substring(11), out var value) || value < 1)
+                    throw new NotSupportedQueryFragmentException("BATCH_SIZE requires a positive integer value", batchSizeHint);
 
                 return value;
             }
 
-            return options.MaxDegreeOfParallelism;
+            return context.Options.BatchSize;
         }
 
-        private bool GetBypassPluginExecution(IList<OptimizerHint> queryHints, IQueryExecutionOptions options)
+        private bool GetBypassPluginExecution(NodeCompilationContext context, IList<OptimizerHint> queryHints)
         {
             if (queryHints == null)
-                return options.BypassCustomPlugins;
+                return context.Options.BypassCustomPlugins;
 
             var bypassPluginExecution = queryHints
                 .OfType<UseHintList>()
                 .Where(hint => hint.Hints.Any(s => s.Value.Equals("BYPASS_CUSTOM_PLUGIN_EXECUTION", StringComparison.OrdinalIgnoreCase)))
                 .Any();
 
-            return bypassPluginExecution || options.BypassCustomPlugins;
+            return bypassPluginExecution || context.Options.BypassCustomPlugins;
         }
 
         /// <summary>
@@ -196,30 +245,27 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// Gets the records to perform the DML operation on
         /// </summary>
-        /// <param name="org">The <see cref="IOrganizationService"/> to use to get the data</param>
-        /// <param name="metadata">The <see cref="IAttributeMetadataCache"/> to use to get metadata</param>
-        /// <param name="options"><see cref="IQueryExecutionOptions"/> to indicate how the query can be executed</param>
-        /// <param name="parameterTypes">A mapping of parameter names to their related types</param>
-        /// <param name="parameterValues">A mapping of parameter names to their current values</param>
+        /// <param name="context">The context in which the node is being executed</param>
         /// <param name="schema">The schema of the data source</param>
         /// <returns>The entities to perform the DML operation on</returns>
-        protected List<Entity> GetDmlSourceEntities(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out INodeSchema schema)
+        protected List<Entity> GetDmlSourceEntities(NodeExecutionContext context, out INodeSchema schema)
         {
             List<Entity> entities;
 
             if (Source is IDataExecutionPlanNodeInternal dataSource)
             {
-                schema = dataSource.GetSchema(dataSources, parameterTypes);
-                entities = dataSource.Execute(dataSources, options, parameterTypes, parameterValues).ToList();
+                schema = dataSource.GetSchema(context);
+                entities = dataSource.Execute(context).ToList();
             }
             else if (Source is IDataReaderExecutionPlanNode dataSetSource)
             {
-                var dataReader = dataSetSource.Execute(dataSources, options, parameterTypes, parameterValues, CommandBehavior.Default);
+                var dataReader = dataSetSource.Execute(context, CommandBehavior.Default);
 
                 // Store the values under the column index as well as name for compatibility with INSERT ... SELECT ...
                 var dataTable = new DataTable();
                 var schemaTable = dataReader.GetSchemaTable();
-                var columnTypes = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
+                var columnTypes = new ColumnList();
+                var targetDataSource = context.DataSources[DataSource];
 
                 for (var i = 0; i < schemaTable.Rows.Count; i++)
                 {
@@ -239,10 +285,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         case "binary": colSqlType = DataTypeHelpers.Binary(colSize); break;
                         case "varbinary": colSqlType = DataTypeHelpers.VarBinary(colSize); break;
-                        case "char": colSqlType = DataTypeHelpers.Char(colSize); break;
-                        case "varchar": colSqlType = DataTypeHelpers.VarChar(colSize); break;
-                        case "nchar": colSqlType = DataTypeHelpers.NChar(colSize); break;
-                        case "nvarchar": colSqlType = DataTypeHelpers.NVarChar(colSize); break;
+                        case "char": colSqlType = DataTypeHelpers.Char(colSize, targetDataSource.DefaultCollation, CollationLabel.Implicit); break;
+                        case "varchar": colSqlType = DataTypeHelpers.VarChar(colSize, targetDataSource.DefaultCollation, CollationLabel.Implicit); break;
+                        case "nchar": colSqlType = DataTypeHelpers.NChar(colSize, targetDataSource.DefaultCollation, CollationLabel.Implicit); break;
+                        case "nvarchar": colSqlType = DataTypeHelpers.NVarChar(colSize, targetDataSource.DefaultCollation, CollationLabel.Implicit); break;
                         case "datetime": colSqlType = DataTypeHelpers.DateTime; break;
                         case "smalldatetime": colSqlType = DataTypeHelpers.SmallDateTime; break;
                         case "date": colSqlType = DataTypeHelpers.Date; break;
@@ -330,9 +376,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="dateTimeKind">The time zone that datetime values are supplied in</param>
         /// <param name="entities">The records that are being mapped</param>
         /// <returns></returns>
-        protected Dictionary<string, Func<Entity, object>> CompileColumnMappings(IAttributeMetadataCache cache, string logicalName, IDictionary<string,string> mappings, INodeSchema schema, DateTimeKind dateTimeKind, List<Entity> entities)
+        protected Dictionary<string, Func<Entity, object>> CompileColumnMappings(DataSource dataSource, string logicalName, IDictionary<string,string> mappings, INodeSchema schema, DateTimeKind dateTimeKind, List<Entity> entities)
         {
-            var metadata = cache[logicalName];
+            var metadata = dataSource.Metadata[logicalName];
             var attributes = metadata.Attributes.ToDictionary(a => a.LogicalName, StringComparer.OrdinalIgnoreCase);
 
             var attributeAccessors = new Dictionary<string, Func<Entity, object>>();
@@ -353,7 +399,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var sourceSqlType = schema.Schema[sourceColumnName];
                 var destType = attr.GetAttributeType();
-                var destSqlType = attr.IsPrimaryId == true ? DataTypeHelpers.UniqueIdentifier : attr.GetAttributeSqlType(cache, true);
+                var destSqlType = attr.IsPrimaryId == true ? DataTypeHelpers.UniqueIdentifier : attr.GetAttributeSqlType(dataSource, true);
 
                 if (attr is LookupAttributeMetadata && metadata.IsIntersect == true)
                 {
@@ -402,7 +448,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             {
                                 var sourceTargetColumnName = mappings[destAttributeName + "type"];
                                 var sourceTargetType = schema.Schema[sourceTargetColumnName];
-                                var stringType = DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength);
+                                var stringType = DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.Implicit);
                                 targetExpr = Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(sourceTargetColumnName));
                                 targetExpr = SqlTypeConverter.Convert(targetExpr, sourceTargetType, stringType);
                                 targetExpr = SqlTypeConverter.Convert(targetExpr, typeof(string));
@@ -562,7 +608,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             if (BypassCustomPluginExecution)
                                 request.Parameters["BypassCustomPluginExecution"] = true;
 
-                            if (options.BatchSize == 1)
+                            if (BatchSize == 1)
                             {
                                 var newCount = Interlocked.Increment(ref inProgressCount);
                                 var progress = (double)newCount / entities.Count;
@@ -593,7 +639,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                                 threadLocalState.EMR.Requests.Add(request);
 
-                                if (threadLocalState.EMR.Requests.Count == options.BatchSize)
+                                if (threadLocalState.EMR.Requests.Count == BatchSize)
                                 {
                                     var newCount = Interlocked.Add(ref inProgressCount, threadLocalState.EMR.Requests.Count);
                                     var progress = (double)newCount / entities.Count;

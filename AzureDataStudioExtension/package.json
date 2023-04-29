@@ -40,8 +40,7 @@
     "outputChannels": [
       "SQL 4 CDS"
     ],
-    "configuration":
-    {
+    "configuration": {
       "type": "object",
       "title": "%sql4cds.configuration.title%",
       "properties": {
@@ -117,6 +116,31 @@
           "type": "boolean",
           "default": false,
           "description": "%sql4cds.quotedIdentifiers.description%"
+        },
+        "SQL4CDS.insertWarnThreshold": {
+          "type": "integer",
+          "default": 1,
+          "description": "%sql4cds.insertWarnThreshold.description%"
+        },
+        "SQL4CDS.updateWarnThreshold": {
+          "type": "integer",
+          "default": 0,
+          "description": "%sql4cds.updateWarnThreshold.description%"
+        },
+        "SQL4CDS.deleteWarnThreshold": {
+          "type": "integer",
+          "default": 0,
+          "description": "%sql4cds.deleteWarnThreshold.description%"
+        },
+        "SQL4CDS.selectLimit": {
+          "type": "integer",
+          "default": 0,
+          "description": "%sql4cds.selectLimit.description%"
+        },
+        "SQL4CDS.maxRetrievesPerQuery": {
+          "type": "integer",
+          "default": 100,
+          "description": "%sql4cds.maxRetrievesPerQuery.description%"
         }
       }
     },
@@ -161,152 +185,152 @@
       ]
     },
     "connectionProvider": {
-        "protocolVersion": "1.0",
-        "providerName": "SQL 4 CDS",
-        "providerId": "SQL4CDS",
-        "displayName": "%sql4cds.provider.displayName%",
-        "azureResource": "SQL4CDS",
-        "iconPath": [
-          {
-            "id": "sql4cds",
-            "path": {
-              "light": "./images/Dataverse_scalable.svg",
-              "dark": "./images/Dataverse_scalable.svg"
-            },
-            "default": true
-          }
-        ],
-        "connectionStringOptions": {
-          "isEnabled": true,
-          "isDefault": false
+      "protocolVersion": "1.0",
+      "providerName": "SQL 4 CDS",
+      "providerId": "SQL4CDS",
+      "displayName": "%sql4cds.provider.displayName%",
+      "azureResource": "SQL4CDS",
+      "iconPath": [
+        {
+          "id": "sql4cds",
+          "path": {
+            "light": "./images/Dataverse_scalable.svg",
+            "dark": "./images/Dataverse_scalable.svg"
+          },
+          "default": true
+        }
+      ],
+      "connectionStringOptions": {
+        "isEnabled": true,
+        "isDefault": false
+      },
+      "connectionOptions": [
+        {
+          "specialValueType": "connectionName",
+          "isIdentity": true,
+          "name": "connectionName",
+          "displayName": "%sql4cds.connectionOptions.connectionName.displayName%",
+          "description": "%sql4cds.connectionOptions.connectionName.description%",
+          "groupName": "%sql4cds.connectionOptions.groupName.source%",
+          "valueType": "string",
+          "defaultValue": null,
+          "objectType": null,
+          "categoryValues": null,
+          "isRequired": false,
+          "isArray": false
         },
-        "connectionOptions": [
-          {
-            "specialValueType": "connectionName",
-            "isIdentity": true,
-            "name": "connectionName",
-            "displayName": "%sql4cds.connectionOptions.connectionName.displayName%",
-            "description": "%sql4cds.connectionOptions.connectionName.description%",
-            "groupName": "%sql4cds.connectionOptions.groupName.source%",
-            "valueType": "string",
-            "defaultValue": null,
-            "objectType": null,
-            "categoryValues": null,
-            "isRequired": false,
-            "isArray": false
-          },
-          {
-            "specialValueType": "authType",
-            "isIdentity": true,
-            "name": "authenticationType",
-            "displayName": "%sql4cds.connectionOptions.authType.displayName%",
-            "description": "%sql4cds.connectionOptions.authType.description%",
-            "groupName": "%sql4cds.connectionOptions.groupName.security%",
-            "valueType": "category",
-            "defaultValue": "AzureMFA",
-            "objectType": null,
-            "categoryValues": [
-              {
-                "displayName": "%sql4cds.connectionOptions.authType.categoryValues.azureMFA%",
-                "name": "AzureMFA"
-              },
-              {
-                "displayName": "%sql4cds.connectionOptions.authType.categoryValues.password%",
-                "name": "SqlLogin"
-              },
-              {
-                "displayName": "%sql4cds.connectionOptions.authType.categoryValues.integrated%",
-                "name": "Integrated"
-              },
-              {
-                "displayName": "%sql4cds.connectionOptions.authType.categoryValues.s2s%",
-                "name": "None"
-              }
-            ],
-            "isRequired": true,
-            "isArray": false
-          },
-          {
-            "name": "url",
-            "displayName": "%sql4cds.connectionOptions.url.displayName%",
-            "description": "%sql4cds.connectionOptions.url.description%",
-            "valueType": "string",
-            "specialValueType": "serverName",
-            "isIdentity": true,
-            "isRequired": true,
-            "groupName": "%sql4cds.connectionOptions.groupName.source%",
-            "defaultValue": null,
-            "objectType": null,
-            "categoryValues": null,
-            "isArray": false
-          },
-          {
-            "name": "user",
-            "displayName": "%sql4cds.connectionOptions.user.displayName%",
-            "description": "%sql4cds.connectionOptions.user.description%",
-            "valueType": "string",
-            "specialValueType": "userName",
-            "isIdentity": true,
-            "isRequired": true,
-            "groupName": "%sql4cds.connectionOptions.groupName.security%"
-          },
-          {
-            "name": "password",
-            "displayName": "%sql4cds.connectionOptions.password.displayName%",
-            "description": "%sql4cds.connectionOptions.password.description%",
-            "valueType": "password",
-            "specialValueType": "password",
-            "isIdentity": true,
-            "isRequired": true,
-            "groupName": "%sql4cds.connectionOptions.groupName.security%",
-            "visible": false
-          },
-          {
-            "name": "dbname",
-            "displayName": "%sql4cds.connectionOptions.dbname.displayName%",
-            "description": "%sql4cds.connectionOptions.dbname.description%",
-            "valueType": "dbname",
-            "specialValueType": "databaseName",
-            "isIdentity": false,
-            "isRequired": false,
-            "groupName": "%sql4cds.connectionOptions.groupName.security%",
-            "visible": false
-          },
-          {
-            "name": "clientid",
-            "displayName": "%sql4cds.connectionOptions.clientid.displayName%",
-            "description": "%sql4cds.connectionOptions.clientid.description%",
-            "valueType": "string",
-            "specialValueType": null,
-            "defaultValue": null,
-            "isIdentity": true,
-            "isRequired": false,
-            "groupName": "%sql4cds.connectionOptions.groupName.security%"
-          },
-          {
-            "name": "clientsecret",
-            "displayName": "%sql4cds.connectionOptions.clientsecret.displayName%",
-            "description": "%sql4cds.connectionOptions.clientsecret.description%",
-            "valueType": "string",
-            "specialValueType": null,
-            "defaultValue": null,
-            "isIdentity": true,
-            "isRequired": false,
-            "groupName": "%sql4cds.connectionOptions.groupName.security%"
-          },
-          {
-            "name": "redirectUrl",
-            "displayName": "%sql4cds.connectionOptions.redirectUrl.displayName%",
-            "description": "%sql4cds.connectionOptions.redirectUrl.description%",
-            "valueType": "string",
-            "specialValueType": null,
-            "defaultValue": null,
-            "isIdentity": true,
-            "isRequired": false,
-            "groupName": "%sql4cds.connectionOptions.groupName.security%"
-          }
-        ]
-      }
+        {
+          "specialValueType": "authType",
+          "isIdentity": true,
+          "name": "authenticationType",
+          "displayName": "%sql4cds.connectionOptions.authType.displayName%",
+          "description": "%sql4cds.connectionOptions.authType.description%",
+          "groupName": "%sql4cds.connectionOptions.groupName.security%",
+          "valueType": "category",
+          "defaultValue": "AzureMFA",
+          "objectType": null,
+          "categoryValues": [
+            {
+              "displayName": "%sql4cds.connectionOptions.authType.categoryValues.azureMFA%",
+              "name": "AzureMFA"
+            },
+            {
+              "displayName": "%sql4cds.connectionOptions.authType.categoryValues.password%",
+              "name": "SqlLogin"
+            },
+            {
+              "displayName": "%sql4cds.connectionOptions.authType.categoryValues.integrated%",
+              "name": "Integrated"
+            },
+            {
+              "displayName": "%sql4cds.connectionOptions.authType.categoryValues.s2s%",
+              "name": "None"
+            }
+          ],
+          "isRequired": true,
+          "isArray": false
+        },
+        {
+          "name": "url",
+          "displayName": "%sql4cds.connectionOptions.url.displayName%",
+          "description": "%sql4cds.connectionOptions.url.description%",
+          "valueType": "string",
+          "specialValueType": "serverName",
+          "isIdentity": true,
+          "isRequired": true,
+          "groupName": "%sql4cds.connectionOptions.groupName.source%",
+          "defaultValue": null,
+          "objectType": null,
+          "categoryValues": null,
+          "isArray": false
+        },
+        {
+          "name": "user",
+          "displayName": "%sql4cds.connectionOptions.user.displayName%",
+          "description": "%sql4cds.connectionOptions.user.description%",
+          "valueType": "string",
+          "specialValueType": "userName",
+          "isIdentity": true,
+          "isRequired": true,
+          "groupName": "%sql4cds.connectionOptions.groupName.security%"
+        },
+        {
+          "name": "password",
+          "displayName": "%sql4cds.connectionOptions.password.displayName%",
+          "description": "%sql4cds.connectionOptions.password.description%",
+          "valueType": "password",
+          "specialValueType": "password",
+          "isIdentity": true,
+          "isRequired": true,
+          "groupName": "%sql4cds.connectionOptions.groupName.security%",
+          "visible": false
+        },
+        {
+          "name": "dbname",
+          "displayName": "%sql4cds.connectionOptions.dbname.displayName%",
+          "description": "%sql4cds.connectionOptions.dbname.description%",
+          "valueType": "dbname",
+          "specialValueType": "databaseName",
+          "isIdentity": false,
+          "isRequired": false,
+          "groupName": "%sql4cds.connectionOptions.groupName.security%",
+          "visible": false
+        },
+        {
+          "name": "clientid",
+          "displayName": "%sql4cds.connectionOptions.clientid.displayName%",
+          "description": "%sql4cds.connectionOptions.clientid.description%",
+          "valueType": "string",
+          "specialValueType": null,
+          "defaultValue": null,
+          "isIdentity": true,
+          "isRequired": false,
+          "groupName": "%sql4cds.connectionOptions.groupName.security%"
+        },
+        {
+          "name": "clientsecret",
+          "displayName": "%sql4cds.connectionOptions.clientsecret.displayName%",
+          "description": "%sql4cds.connectionOptions.clientsecret.description%",
+          "valueType": "string",
+          "specialValueType": null,
+          "defaultValue": null,
+          "isIdentity": true,
+          "isRequired": false,
+          "groupName": "%sql4cds.connectionOptions.groupName.security%"
+        },
+        {
+          "name": "redirectUrl",
+          "displayName": "%sql4cds.connectionOptions.redirectUrl.displayName%",
+          "description": "%sql4cds.connectionOptions.redirectUrl.description%",
+          "valueType": "string",
+          "specialValueType": null,
+          "defaultValue": null,
+          "isIdentity": true,
+          "isRequired": false,
+          "groupName": "%sql4cds.connectionOptions.groupName.security%"
+        }
+      ]
+    }
   },
   "dependencies": {
     "crypto": "^1.0.1",

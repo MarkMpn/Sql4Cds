@@ -50,11 +50,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public HashSet<string> Parameters { get; private set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
         }
 
-        public DbDataReader Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, CommandBehavior behavior)
+        public DbDataReader Execute(NodeExecutionContext context, CommandBehavior behavior)
         {
             _executionCount++;
 
@@ -62,10 +62,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 try
                 {
-                    if (!dataSources.TryGetValue(DataSource, out var dataSource))
+                    if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
                         throw new QueryExecutionException("Missing datasource " + DataSource);
 
-                    if (options.UseLocalTimeZone)
+                    if (context.Options.UseLocalTimeZone)
                         throw new QueryExecutionException("Cannot use automatic local time zone conversion with the TDS Endpoint");
 
 #if NETCOREAPP
@@ -86,9 +86,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     var cmd = con.CreateCommand();
                     cmd.CommandTimeout = (int)TimeSpan.FromMinutes(2).TotalSeconds;
-                    cmd.CommandText = ApplyCommandBehavior(Sql, behavior, options);
+                    cmd.CommandText = ApplyCommandBehavior(Sql, behavior, context.Options);
 
-                    foreach (var paramValue in parameterValues)
+                    foreach (var paramValue in context.ParameterValues)
                     {
                         if (paramValue.Key.StartsWith("@@"))
                             continue;
@@ -107,12 +107,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         cmd.Parameters.Add(param);
                     }
 
-                    options.CancellationToken.Register(() => cmd.Cancel());
+                    context.Options.CancellationToken.Register(() => cmd.Cancel());
                     if (Parent == null)
                     {
                         cmd.StatementCompleted += (s, e) =>
                         {
-                            parameterValues["@@ROWCOUNT"] = (SqlInt32)e.RecordCount;
+                            context.ParameterValues["@@ROWCOUNT"] = (SqlInt32)e.RecordCount;
                         };
                     }
 
@@ -207,7 +207,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return script.ToSql();
         }
 
-        public IRootExecutionPlanNodeInternal[] FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public IRootExecutionPlanNodeInternal[] FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
             return new[] { this };
         }

@@ -53,7 +53,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private static ConcurrentDictionary<string, Func<object, object>> _conversions;
         private static ConcurrentDictionary<string, Func<INullable, INullable>> _sqlConversions;
         private static Dictionary<Type, Type> _netToSqlTypeConversions;
-        private static Dictionary<Type, Func<string, object, DataTypeReference, INullable>> _netToSqlTypeConversionFuncs;
+        private static Dictionary<Type, Func<DataSource, object, DataTypeReference, INullable>> _netToSqlTypeConversionFuncs;
         private static Dictionary<Type, Type> _sqlToNetTypeConversions;
         private static Dictionary<Type, Func<INullable, object>> _sqlToNetTypeConversionFuncs;
 
@@ -89,7 +89,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _sqlConversions = new ConcurrentDictionary<string, Func<INullable, INullable>>();
 
             _netToSqlTypeConversions = new Dictionary<Type, Type>();
-            _netToSqlTypeConversionFuncs = new Dictionary<Type, Func<string, object, DataTypeReference, INullable>>();
+            _netToSqlTypeConversionFuncs = new Dictionary<Type, Func<DataSource, object, DataTypeReference, INullable>>();
             _sqlToNetTypeConversions = new Dictionary<Type, Type>();
             _sqlToNetTypeConversionFuncs = new Dictionary<Type, Func<INullable, object>>();
 
@@ -105,7 +105,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             AddTypeConversion<SqlInt32, int>((ds, v, dt) => v, v => v.Value);
             AddTypeConversion<SqlInt64, long>((ds, v, dt) => v, v => v.Value);
             AddTypeConversion<SqlSingle, float>((ds, v, dt) => v, v => v.Value);
-            AddNullableTypeConversion<SqlString, string>((ds, v, dt) => UseDefaultCollation(v), v => v.Value);
+            AddNullableTypeConversion<SqlString, string>((ds, v, dt) => ((SqlDataTypeReferenceWithCollation)dt).Collation.ToSqlString(v), v => v.Value);
             AddTypeConversion<SqlMoney, decimal>((ds, v, dt) => v, v => v.Value);
             AddTypeConversion<SqlDate, DateTime>((ds, v, dt) => (SqlDateTime)v, v => v.Value);
             AddTypeConversion<SqlDateTime2, DateTime>((ds, v, dt) => (SqlDateTime)v, v => v.Value);
@@ -114,12 +114,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             AddNullableTypeConversion<SqlMoney, Money>((ds, v, dt) => v.Value, null);
             AddNullableTypeConversion<SqlInt32, OptionSetValue>((ds, v, dt) => v.Value, null);
-            AddNullableTypeConversion<SqlString, OptionSetValueCollection>((ds, v, dt) => UseDefaultCollation(String.Join(",", v.Select(osv => osv.Value))), null);
-            AddNullableTypeConversion<SqlString, EntityCollection>((ds, v, dt) => UseDefaultCollation(String.Join(",", v.Entities.Select(e => FormatEntityCollectionEntry(e)))), null);
-            AddNullableTypeConversion<SqlEntityReference, EntityReference>((ds, v, dt) => new SqlEntityReference(ds, v), v => v);
+            AddNullableTypeConversion<SqlString, OptionSetValueCollection>((ds, v, dt) => ds.DefaultCollation.ToSqlString(String.Join(",", v.Select(osv => osv.Value))), null);
+            AddNullableTypeConversion<SqlString, EntityCollection>((ds, v, dt) => ds.DefaultCollation.ToSqlString(String.Join(",", v.Entities.Select(e => FormatEntityCollectionEntry(e)))), null);
+            AddNullableTypeConversion<SqlEntityReference, EntityReference>((ds, v, dt) => new SqlEntityReference(ds.Name, v), v => v);
         }
 
-        private static void AddTypeConversion<TSql, TNet>(Func<string, TNet, DataTypeReference, TSql> netToSql, Func<TSql, TNet> sqlToNet)
+        private static void AddTypeConversion<TSql, TNet>(Func<DataSource, TNet, DataTypeReference, TSql> netToSql, Func<TSql, TNet> sqlToNet)
             where TSql: INullable
             where TNet: struct
         {
@@ -153,7 +153,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private static void AddNullableTypeConversion<TSql, TNet>(Func<string, TNet, DataTypeReference, TSql> netToSql, Func<TSql, TNet> sqlToNet)
+        private static void AddNullableTypeConversion<TSql, TNet>(Func<DataSource, TNet, DataTypeReference, TSql> netToSql, Func<TSql, TNet> sqlToNet)
             where TSql : INullable
         {
             if (netToSql != null)
@@ -185,9 +185,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         /// <param name="lhs">The type of the first value</param>
         /// <param name="rhs">The type of the second value</param>
+        /// <param name="primaryDataSource">The details of the primary data source being used for the connection</param>
         /// <param name="consistent">The type that both values can be converted to</param>
         /// <returns><c>true</c> if the two values can be converted to a consistent type, or <c>false</c> otherwise</returns>
-        public static bool CanMakeConsistentTypes(DataTypeReference lhs, DataTypeReference rhs, out DataTypeReference consistent)
+        public static bool CanMakeConsistentTypes(DataTypeReference lhs, DataTypeReference rhs, DataSource primaryDataSource, out DataTypeReference consistent)
         {
             if (lhs.IsSameAs(rhs))
             {
@@ -252,7 +253,42 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             var targetType = _precendenceOrder[Math.Min(lhsPrecedence, rhsPrecedence)];
-            var fullTargetType = new SqlDataTypeReference { SqlDataTypeOption = targetType };
+            SqlDataTypeReference fullTargetType;
+
+            if (targetType.IsStringType())
+            {
+                var lhsColl = lhs as SqlDataTypeReferenceWithCollation;
+                var rhsColl = rhs as SqlDataTypeReferenceWithCollation;
+
+                if (lhsColl != null && rhsColl != null)
+                {
+                    if (!SqlDataTypeReferenceWithCollation.TryConvertCollation(lhsSql, rhsSql, out var coll, out var collLabel))
+                    {
+                        consistent = null;
+                        return false;
+                    }
+
+                    fullTargetType = new SqlDataTypeReferenceWithCollation
+                    {
+                        SqlDataTypeOption = targetType,
+                        Collation = coll,
+                        CollationLabel = collLabel
+                    };
+                }
+                else
+                {
+                    fullTargetType = new SqlDataTypeReferenceWithCollation
+                    {
+                        SqlDataTypeOption = targetType,
+                        Collation = primaryDataSource?.DefaultCollation ?? Collation.USEnglish,
+                        CollationLabel = CollationLabel.CoercibleDefault
+                    };
+                }
+            }
+            else
+            {
+                fullTargetType = new SqlDataTypeReference { SqlDataTypeOption = targetType };
+            }
 
             // If we're converting to a type that uses a length, choose the longest length
             if (targetType == SqlDataTypeOption.Binary || targetType == SqlDataTypeOption.VarBinary ||
@@ -399,6 +435,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         /// <param name="expr">The expression that generates the values to convert</param>
         /// <param name="to">The type to convert to</param>
+        /// <param name="contextParam">The expression which contains the <see cref="ExpressionExecutionContext"/> the expression will be evaluated in</param>
         /// <returns>An expression to generate values of the required type</returns>
         public static Expression Convert(Expression expr, Type to)
         {
@@ -457,11 +494,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 expr = Expression.Convert(expr, to);
 
-                if (to == typeof(SqlString))
-                    expr = Expr.Call(() => UseDefaultCollation(Expr.Arg<SqlString>()), expr);
+                //if (to == typeof(SqlString))
+                //    expr = Expr.Call(() => ApplyCollation(Expr.Arg<Collation>(), Expr.Arg<SqlString>()), Expression.Constant(collation), expr);
             }
 
             return expr;
+        }
+
+        private static SqlString ApplyCollation(ExpressionExecutionContext context, SqlString sqlString)
+        {
+            return ApplyCollation(context.PrimaryDataSource.DefaultCollation, sqlString);
+        }
+
+        private static SqlString ApplyCollation(Collation collation, SqlString sqlString)
+        {
+            if (sqlString.IsNull)
+                return sqlString;
+
+            return collation.ToSqlString(sqlString.Value);
         }
 
         /// <summary>
@@ -501,12 +551,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!CanChangeTypeImplicit(styleType, DataTypeHelpers.Int))
                 throw new NotSupportedQueryFragmentException($"No type conversion available from {styleType.ToSql()} to {DataTypeHelpers.Int.ToSql()}", convert.Style);
 
+            var targetCollation = (to as SqlDataTypeReferenceWithCollation)?.Collation;
+
             if (fromSqlType != null && (fromSqlType.SqlDataTypeOption.IsDateTimeType() || fromSqlType.SqlDataTypeOption == SqlDataTypeOption.Date || fromSqlType.SqlDataTypeOption == SqlDataTypeOption.Time) && targetType == typeof(SqlString))
-                expr = Expr.Call(() => Convert(Expr.Arg<SqlDateTime>(), Expr.Arg<bool>(), Expr.Arg<bool>(), Expr.Arg<int>(), Expr.Arg<DataTypeReference>(), Expr.Arg<DataTypeReference>(), Expr.Arg<SqlInt32>()), Convert(expr, typeof(SqlDateTime)), Expression.Constant(fromSqlType.SqlDataTypeOption != SqlDataTypeOption.Time), Expression.Constant(fromSqlType.SqlDataTypeOption != SqlDataTypeOption.Date), Expression.Constant(from.GetScale()), Expression.Constant(from), Expression.Constant(to), style);
+                expr = Expr.Call(() => Convert(Expr.Arg<SqlDateTime>(), Expr.Arg<bool>(), Expr.Arg<bool>(), Expr.Arg<int>(), Expr.Arg<DataTypeReference>(), Expr.Arg<DataTypeReference>(), Expr.Arg<SqlInt32>(), Expr.Arg<Collation>()), Convert(expr, typeof(SqlDateTime)), Expression.Constant(fromSqlType.SqlDataTypeOption != SqlDataTypeOption.Time), Expression.Constant(fromSqlType.SqlDataTypeOption != SqlDataTypeOption.Date), Expression.Constant(from.GetScale()), Expression.Constant(from), Expression.Constant(to), style, Expression.Constant(targetCollation));
             else if ((expr.Type == typeof(SqlDouble) || expr.Type == typeof(SqlSingle)) && targetType == typeof(SqlString))
-                expr = Expr.Call(() => Convert(Expr.Arg<SqlDouble>(), Expr.Arg<SqlInt32>()), expr, style);
+                expr = Expr.Call(() => Convert(Expr.Arg<SqlDouble>(), Expr.Arg<SqlInt32>(), Expr.Arg<Collation>()), expr, style, Expression.Constant(targetCollation));
             else if (expr.Type == typeof(SqlMoney) && targetType == typeof(SqlString))
-                expr = Expr.Call(() => Convert(Expr.Arg<SqlMoney>(), Expr.Arg<SqlInt32>()), expr, style);
+                expr = Expr.Call(() => Convert(Expr.Arg<SqlMoney>(), Expr.Arg<SqlInt32>(), Expr.Arg<Collation>()), expr, style, Expression.Constant(targetCollation));
 
             if (expr.Type != targetType)
                 expr = Convert(expr, targetType);
@@ -560,6 +612,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     throw new NotSupportedQueryFragmentException("Invalid attributes specified for type " + toSqlType.SqlDataTypeOption, toSqlType);
                 }
+
+                if (targetCollation != null)
+                    expr = Expr.Call(() => ConvertCollation(Expr.Arg<SqlString>(), Expr.Arg<Collation>()), expr, Expression.Constant(targetCollation));
             }
 
             // Apply changes to precision & scale
@@ -594,6 +649,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return expr;
         }
 
+        /// <summary>
+        /// Converts a <see cref="SqlString"/> value from one collation to another
+        /// </summary>
+        /// <param name="value">The value to convert</param>
+        /// <param name="collation">The collation to convert the <paramref name="value"/> to</param>
+        /// <returns>A new <see cref="SqlString"/> value with the requested collation</returns>
+        public static SqlString ConvertCollation(SqlString value, Collation collation)
+        {
+            if (value.IsNull)
+                return value;
+
+            return collation.ToSqlString(value.Value);
+        }
+
         private static SqlString Truncate(SqlString value, int maxLength, string valueOnTruncate, Exception exceptionOnTruncate)
         {
             if (value.IsNull)
@@ -603,12 +672,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return value;
 
             if (valueOnTruncate != null)
-                return SqlTypeConverter.UseDefaultCollation(new SqlString(valueOnTruncate));
+                return new SqlString(valueOnTruncate, value.LCID, value.SqlCompareOptions);
 
             if (exceptionOnTruncate != null)
                 throw exceptionOnTruncate;
 
-            return SqlTypeConverter.UseDefaultCollation(new SqlString(value.Value.Substring(0, maxLength)));
+            return new SqlString(value.Value.Substring(0, maxLength), value.LCID, value.SqlCompareOptions);
         }
 
         private static EntityCollection ParseEntityCollection(SqlString value)
@@ -666,9 +735,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="date">Indicates if the date part should be included</param>
         /// <param name="time">Indicates if the time part should be included</param>
         /// <param name="timeScale">The scale of the fractional seconds part</param>
+        /// <param name="fromType">The original SQL type that is being converted from</param>
+        /// <param name="toType">The original SQL type that is being converted to</param>
         /// <param name="style">The style to apply</param>
+        /// <param name="collation">The collation to use for the returned result</param>
         /// <returns>The converted string</returns>
-        private static SqlString Convert(SqlDateTime value, bool date, bool time, int timeScale, DataTypeReference fromType, DataTypeReference toType, SqlInt32 style)
+        private static SqlString Convert(SqlDateTime value, bool date, bool time, int timeScale, DataTypeReference fromType, DataTypeReference toType, SqlInt32 style, Collation collation)
         {
             if (value.IsNull || style.IsNull)
                 return SqlString.Null;
@@ -856,7 +928,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 formatString += timeFormatString;
 
             var formatted = value.Value.ToString(formatString, cultureInfo);
-            return UseDefaultCollation(formatted);
+            return collation.ToSqlString(formatted);
         }
 
         /// <summary>
@@ -864,8 +936,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         /// <param name="value">The value to convert</param>
         /// <param name="style">The style to apply</param>
+        /// <param name="collation">The collation to use for the returned result</param>
         /// <returns>The converted string</returns>
-        public static SqlString Convert(SqlDouble value, SqlInt32 style)
+        public static SqlString Convert(SqlDouble value, SqlInt32 style, Collation collation)
         {
             if (value.IsNull || style.IsNull)
                 return SqlString.Null;
@@ -892,7 +965,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             var formatted = value.Value.ToString(formatString);
-            return UseDefaultCollation(formatted);
+            return collation.ToSqlString(formatted);
         }
 
         /// <summary>
@@ -900,8 +973,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         /// <param name="value">The value to convert</param>
         /// <param name="style">The style to apply</param>
+        /// <param name="collation">The collation to use for the returned result</param>
         /// <returns>The converted string</returns>
-        public static SqlString Convert(SqlMoney value, SqlInt32 style)
+        public static SqlString Convert(SqlMoney value, SqlInt32 style, Collation collation)
         {
             if (value.IsNull || style.IsNull)
                 return SqlString.Null;
@@ -925,23 +999,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             var formatted = value.Value.ToString(formatString);
-            return UseDefaultCollation(formatted);
-        }
-
-        /// <summary>
-        /// Converts a <see cref="SqlString"/> value to the default collation
-        /// </summary>
-        /// <param name="value">The <see cref="SqlString"/> value to convert</param>
-        /// <returns>A <see cref="SqlString"/> value using the default collation</returns>
-        public static SqlString UseDefaultCollation(SqlString value)
-        {
-            if (value.IsNull)
-                return value;
-
-            if (value.LCID == CultureInfo.CurrentCulture.LCID && value.SqlCompareOptions == (SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreWidth))
-                return value;
-
-            return new SqlString((string)value, CultureInfo.CurrentCulture.LCID, SqlCompareOptions.IgnoreCase | SqlCompareOptions.IgnoreNonSpace);
+            return collation.ToSqlString(formatted);
         }
 
         /// <summary>
@@ -977,11 +1035,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// Converts a value from a CLR type to the equivalent SQL type. 
         /// </summary>
-        /// <param name="dataSource">The name of the data source the <paramref name="value"/> was obtained from</param>
+        /// <param name="dataSource">The data source the <paramref name="value"/> was obtained from</param>
         /// <param name="value">The value in a standard CLR type</param>
         /// <param name="dataType">The expected data type</param>
         /// <returns>The value converted to a SQL type</returns>
-        public static INullable NetToSqlType(string dataSource, object value, DataTypeReference dataType)
+        public static INullable NetToSqlType(DataSource dataSource, object value, DataTypeReference dataType)
         {
             var type = value.GetType();
 
@@ -1003,7 +1061,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             // Convert any other complex types (e.g. from metadata queries) to strings
-            func = (_, v, __) => UseDefaultCollation(v.ToString());
+            func = (ds, v, __) => ds.DefaultCollation.ToSqlString(v.ToString());
             _netToSqlTypeConversionFuncs[originalType] = func;
             return func(dataSource, value, dataType);
         }
@@ -1074,6 +1132,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// Converts a value from one type to another
         /// </summary>
+        /// <param name="context">The context in which the conversion is being performed</param>
         /// <param name="value">The value to convert</param>
         /// <param name="type">The type to convert the value to</param>
         /// <returns>The value converted to the requested type</returns>
@@ -1128,8 +1187,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 expression = Expression.Convert(expression, destType);
             }
 
-            if (destType == typeof(SqlString))
-                expression = Expr.Call(() => UseDefaultCollation(Expr.Arg<SqlString>()), expression);
+            //if (destType == typeof(SqlString))
+            //    expression = Expr.Call(() => ApplyCollation(Expr.Arg<ExpressionExecutionContext>(), Expr.Arg<SqlString>()), contextParam, expression);
 
             expression = Expression.Convert(expression, typeof(object));
             return Expression.Lambda<Func<object,object>>(expression, param).Compile();
@@ -1144,6 +1203,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public static Func<INullable, INullable> GetConversion(DataTypeReference sourceType, DataTypeReference destType)
         {
             var key = sourceType.ToSql() + " -> " + destType.ToSql();
+
+            if (destType is SqlDataTypeReferenceWithCollation collation)
+            {
+                if (!String.IsNullOrEmpty(collation.Collation.Name))
+                    key += " COLLATE " + collation.Collation.Name;
+                else
+                    key += " COLLATE " + collation.Collation.LCID + ":" + collation.Collation.CompareOptions;
+            }
+            
             return _sqlConversions.GetOrAdd(key, _ => CompileConversion(sourceType, destType));
         }
 

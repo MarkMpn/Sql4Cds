@@ -24,6 +24,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             ColumnSet.AddRange(select.ColumnSet);
             Source = select.Source;
             Alias = identifier.Value;
+            LogicalSourceSchema = select.LogicalSourceSchema;
 
             // Check for duplicate columns
             var duplicateColumn = select.ColumnSet
@@ -60,7 +61,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public IDataExecutionPlanNodeInternal Source { get; set; }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
+        /// <summary>
+        /// The schema that shold be used for expanding "*" columns
+        /// </summary>
+        [Browsable(false)]
+        public INodeSchema LogicalSourceSchema { get; set; }
+
+        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
             var mappings = ColumnSet.Where(col => !col.AllColumns).ToDictionary(col => col.OutputColumn, col => col.SourceColumn);
             ColumnSet.Clear();
@@ -85,16 +92,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
-            Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
+            Source.AddRequiredColumns(context, requiredColumns);
         }
 
-        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
-            Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
+            Source = Source.FoldQuery(context, hints);
             Source.Parent = this;
 
-            SelectNode.FoldFetchXmlColumns(Source, ColumnSet, dataSources, parameterTypes);
-            SelectNode.ExpandWildcardColumns(Source, ColumnSet, dataSources, parameterTypes);
+            SelectNode.FoldFetchXmlColumns(Source, ColumnSet, context);
+            SelectNode.ExpandWildcardColumns(Source, LogicalSourceSchema, ColumnSet, context);
 
             if (Source is FetchXmlScan fetchXml)
             {
@@ -144,11 +151,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return this;
         }
 
-        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
+        public override INodeSchema GetSchema(NodeCompilationContext context)
         {
             // Map the base names to the alias names
-            var sourceSchema = Source.GetSchema(dataSources, parameterTypes);
-            var schema = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
+            var sourceSchema = Source.GetSchema(context);
+            var schema = new ColumnList();
             var aliases = new Dictionary<string, IReadOnlyList<string>>();
             var primaryKey = (string)null;
             var mappings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -211,7 +218,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 sortOrder: sortOrder);
         }
 
-        private void AddSchemaColumn(string outputColumn, string sourceColumn, Dictionary<string, DataTypeReference> schema, Dictionary<string, IReadOnlyList<string>> aliases, ref string primaryKey, Dictionary<string, string> mappings, INodeSchema sourceSchema)
+        private void AddSchemaColumn(string outputColumn, string sourceColumn, ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, ref string primaryKey, Dictionary<string, string> mappings, INodeSchema sourceSchema)
         {
             if (!sourceSchema.ContainsColumn(sourceColumn, out var normalized))
                 return;
@@ -232,9 +239,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             ((List<string>)a).Add(mapped);
         }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
-            foreach (var entity in Source.Execute(dataSources, options, parameterTypes, parameterValues))
+            foreach (var entity in Source.Execute(context))
             {
                 foreach (var col in ColumnSet)
                 {
@@ -251,9 +258,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return "Subquery Alias";
         }
 
-        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(NodeCompilationContext context)
         {
-            return Source.EstimateRowsOut(dataSources, options, parameterTypes);
+            return Source.EstimateRowsOut(context);
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
@@ -266,7 +273,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var clone = new AliasNode
             {
                 Alias = Alias,
-                Source = (IDataExecutionPlanNodeInternal)Source.Clone()
+                Source = (IDataExecutionPlanNodeInternal)Source.Clone(),
+                LogicalSourceSchema = LogicalSourceSchema,
             };
 
             clone.Source.Parent = clone;

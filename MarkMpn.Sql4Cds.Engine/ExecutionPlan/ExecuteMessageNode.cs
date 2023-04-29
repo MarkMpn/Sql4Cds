@@ -15,7 +15,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
     class ExecuteMessageNode : BaseDataNode, IDmlQueryExecutionPlanNode
     {
-        private Dictionary<string, Func<IDictionary<string, object>, IQueryExecutionOptions, object>> _inputParameters;
+        private Dictionary<string, Func<ExpressionExecutionContext, object>> _inputParameters;
         private string _primaryKeyColumn;
 
         /// <summary>
@@ -92,7 +92,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// The types of values to be returned
         /// </summary>
         [Browsable(false)]
-        public Dictionary<string, DataTypeReference> Schema { get; private set; } = new Dictionary<string, DataTypeReference>();
+        public IDictionary<string, DataTypeReference> Schema { get; private set; } = new ColumnList();
 
         /// <summary>
         /// Indicates if custom plugins should be skipped
@@ -110,23 +110,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("Pages Retrieved")]
         public int PagesRetrieved { get; set; }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
         }
 
-        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
+            var expressionContext = new ExpressionCompilationContext(context, null, null);
+
             _inputParameters = Values
                 .ToDictionary(value => value.Key, value =>
                 {
-                    var exprType = value.Value.GetType(null, null, parameterTypes, out _);
+                    var exprType = value.Value.GetType(expressionContext, out _);
                     var expectedType = ValueTypes[value.Key];
-                    var expr = value.Value.Compile(null, parameterTypes);
+                    var expr = value.Value.Compile(expressionContext);
                     var conversion = SqlTypeConverter.GetConversion(exprType, expectedType);
-                    return (Func<IDictionary<string,object>, IQueryExecutionOptions, object>) ((IDictionary<string, object> parameterValues, IQueryExecutionOptions opts) => conversion(expr(null, parameterValues, opts)));
+                    return (Func<ExpressionExecutionContext, object>) ((ExpressionExecutionContext ctx) => conversion(expr(ctx)));
                 });
 
-            BypassCustomPluginExecution = GetBypassPluginExecution(hints, options);
+            BypassCustomPluginExecution = GetBypassPluginExecution(hints, context.Options);
 
             return this;
         }
@@ -144,23 +146,28 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return bypassPluginExecution || options.BypassCustomPlugins;
         }
 
-        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
+        public override INodeSchema GetSchema(NodeCompilationContext context)
         {
+            var schema = new ColumnList();
+
+            foreach (var col in Schema)
+                schema[PrefixWithAlias(col.Key)] = col.Value;
+
             return new NodeSchema(
                 primaryKey: null,
-                schema: Schema.ToDictionary(kvp => PrefixWithAlias(kvp.Key), kvp => kvp.Value, StringComparer.OrdinalIgnoreCase),
+                schema: schema,
                 aliases: Schema.ToDictionary(kvp => kvp.Key, kvp => (IReadOnlyList<string>)new List<string> { PrefixWithAlias(kvp.Key) }, StringComparer.OrdinalIgnoreCase),
                 notNullColumns: null,
                 sortOrder: null);
         }
 
-        private void SetOutputSchema(IAttributeMetadataCache metadata, Message message, TSqlFragment source)
+        private void SetOutputSchema(DataSource dataSource, Message message, TSqlFragment source)
         {
             // Add the response fields to the node schema
             if (message.OutputParameters.All(f => f.IsScalarType()))
             {
                 foreach (var value in message.OutputParameters)
-                    AddSchemaColumn(value.Name, SqlTypeConverter.NetToSqlType(value.Type).ToSqlType()); // TODO: How are OSV and ER fields represented?
+                    AddSchemaColumn(value.Name, SqlTypeConverter.NetToSqlType(value.Type).ToSqlType(dataSource)); // TODO: How are OSV and ER fields represented?
             }
             else
             {
@@ -172,13 +179,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (type == typeof(AuditDetail))
                 {
                     type = typeof(Entity);
-                    otc = metadata["audit"].ObjectTypeCode;
+                    otc = dataSource.Metadata["audit"].ObjectTypeCode;
                     audit = true;
                 }
                 else if (firstValue.Type == typeof(AuditDetailCollection))
                 {
                     type = typeof(EntityCollection);
-                    otc = metadata["audit"].ObjectTypeCode;
+                    otc = dataSource.Metadata["audit"].ObjectTypeCode;
                     audit = true;
                 }
 
@@ -187,30 +194,30 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 else
                     EntityCollectionResponseParameter = firstValue.Name;
 
-                foreach (var attrMetadata in metadata[otc.Value].Attributes.Where(a => a.AttributeOf == null))
+                foreach (var attrMetadata in dataSource.Metadata[otc.Value].Attributes.Where(a => a.AttributeOf == null))
                 {
-                    AddSchemaColumn(attrMetadata.LogicalName, attrMetadata.GetAttributeSqlType(metadata, false));
+                    AddSchemaColumn(attrMetadata.LogicalName, attrMetadata.GetAttributeSqlType(dataSource, false));
 
                     // Add standard virtual attributes
                     if (attrMetadata is EnumAttributeMetadata || attrMetadata is BooleanAttributeMetadata)
-                        AddSchemaColumn(attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(FetchXmlScan.LabelMaxLength));
+                        AddSchemaColumn(attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(FetchXmlScan.LabelMaxLength, dataSource.DefaultCollation, CollationLabel.CoercibleDefault));
 
                     if (attrMetadata is LookupAttributeMetadata lookup)
                     {
-                        AddSchemaColumn(attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(lookup.Targets == null || lookup.Targets.Length == 0 ? 100 : lookup.Targets.Select(e => ((StringAttributeMetadata)metadata[e].Attributes.SingleOrDefault(a => a.LogicalName == metadata[e].PrimaryNameAttribute))?.MaxLength ?? 100).Max()));
+                        AddSchemaColumn(attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(lookup.Targets == null || lookup.Targets.Length == 0 ? 100 : lookup.Targets.Select(e => ((StringAttributeMetadata)dataSource.Metadata[e].Attributes.SingleOrDefault(a => a.LogicalName == dataSource.Metadata[e].PrimaryNameAttribute))?.MaxLength ?? 100).Max(), dataSource.DefaultCollation, CollationLabel.CoercibleDefault));
 
                         if (lookup.Targets?.Length != 1 && lookup.AttributeType != AttributeTypeCode.PartyList)
-                            AddSchemaColumn(attrMetadata.LogicalName + "type", DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength));
+                            AddSchemaColumn(attrMetadata.LogicalName + "type", DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.CoercibleDefault));
                     }
                 }
 
                 if (audit)
                 {
-                    AddSchemaColumn("newvalues", DataTypeHelpers.NVarChar(Int32.MaxValue));
-                    AddSchemaColumn("oldvalues", DataTypeHelpers.NVarChar(Int32.MaxValue));
+                    AddSchemaColumn("newvalues", DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.CoercibleDefault));
+                    AddSchemaColumn("oldvalues", DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.CoercibleDefault));
                 }
 
-                _primaryKeyColumn = PrefixWithAlias(metadata[otc.Value].PrimaryIdAttribute);
+                _primaryKeyColumn = PrefixWithAlias(dataSource.Metadata[otc.Value].PrimaryIdAttribute);
             }
 
             if (!String.IsNullOrEmpty(PagingParameter) && EntityCollectionResponseParameter == null)
@@ -235,7 +242,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Array.Empty<IExecutionPlanNode>();
         }
 
-        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(NodeCompilationContext context)
         {
             if (EntityCollectionResponseParameter == null)
                 return RowCountEstimateDefiniteRange.ExactlyOne;
@@ -248,24 +255,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Values.Values.SelectMany(v => v.GetVariables());
         }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
             PagesRetrieved = 0;
 
-            if (!dataSources.TryGetValue(DataSource, out var dataSource))
+            if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
 
-            options.Progress(0, $"Executing {MessageName}...");
+            context.Options.Progress(0, $"Executing {MessageName}...");
 
             // Get the first page of results
-            if (!options.ContinueRetrieve(0))
+            if (!context.Options.ContinueRetrieve(0))
                 yield break;
 
             var request = new OrganizationRequest(MessageName);
             var pageNumber = 1;
+            var expressionContext = new ExpressionExecutionContext(context);
 
             foreach (var value in _inputParameters)
-                request[value.Key] = value.Value(parameterValues, options);
+                request[value.Key] = value.Value(expressionContext);
 
             if (BypassCustomPluginExecution)
                 request.Parameters["BypassCustomPluginExecution"] = true;
@@ -278,11 +286,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var entity in entities.Entities)
             {
-                OnRetrievedEntity(entity, options);
+                OnRetrievedEntity(entity, context.Options, dataSource);
                 yield return entity;
             }
 
-            while (PagingParameter != null && entities.MoreRecords && options.ContinueRetrieve(count))
+            while (PagingParameter != null && entities.MoreRecords && context.Options.ContinueRetrieve(count))
             {
                 pageNumber++;
                 request[PagingParameter] = new PagingInfo
@@ -299,7 +307,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 foreach (var entity in entities.Entities)
                 {
-                    OnRetrievedEntity(entity, options);
+                    OnRetrievedEntity(entity, context.Options, dataSource);
                     yield return entity;
                 }
 
@@ -401,7 +409,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return JsonConvert.SerializeObject(values);
         }
 
-        private void OnRetrievedEntity(Entity entity, IQueryExecutionOptions options)
+        private void OnRetrievedEntity(Entity entity, IQueryExecutionOptions options, DataSource dataSource)
         {
             // Expose any formatted values for OptionSetValue and EntityReference values
             foreach (var formatted in entity.FormattedValues)
@@ -454,7 +462,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 object sqlValue;
 
                 if (entity.Attributes.TryGetValue(col.Key, out var value) && value != null)
-                    sqlValue = SqlTypeConverter.NetToSqlType(DataSource, value, col.Value);
+                    sqlValue = SqlTypeConverter.NetToSqlType(dataSource, value, col.Value);
                 else
                     sqlValue = SqlTypeConverter.GetNullValue(col.Value.ToNetType(out _));
 
@@ -487,7 +495,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return clone;
         }
 
-        public static ExecuteMessageNode FromMessage(SchemaObjectFunctionTableReference tvf, DataSource dataSource, IDictionary<string, DataTypeReference> parameterTypes)
+        public static ExecuteMessageNode FromMessage(SchemaObjectFunctionTableReference tvf, DataSource dataSource, ExpressionCompilationContext context)
         {
             // All messages are in the "dbo" schema
             if (tvf.SchemaObject.SchemaIdentifier != null && !String.IsNullOrEmpty(tvf.SchemaObject.SchemaIdentifier.Value) &&
@@ -539,8 +547,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 var f = expectedInputParameters[i];
                 var sourceExpression = tvf.Parameters[i];
-                sourceExpression.GetType(null, null, parameterTypes, out var sourceType);
-                var expectedType = SqlTypeConverter.NetToSqlType(f.Type).ToSqlType();
+                sourceExpression.GetType(context, out var sourceType);
+                var expectedType = SqlTypeConverter.NetToSqlType(f.Type).ToSqlType(context.PrimaryDataSource);
 
                 if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, expectedType))
                     throw new NotSupportedQueryFragmentException($"Cannot convert value of type {sourceType.ToSql()} to {expectedType.ToSql()}", tvf.Parameters[f.Position]);
@@ -561,12 +569,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 node.ValueTypes[f.Name] = f.Type;
             }
 
-            node.SetOutputSchema(dataSource.Metadata, message, tvf.SchemaObject);
+            node.SetOutputSchema(dataSource, message, tvf.SchemaObject);
 
             return node;
         }
 
-        public static ExecuteMessageNode FromMessage(ExecutableProcedureReference sproc, DataSource dataSource, IDictionary<string, DataTypeReference> parameterTypes)
+        public static ExecuteMessageNode FromMessage(ExecutableProcedureReference sproc, DataSource dataSource, ExpressionCompilationContext context)
         {
             // All messages are in the "dbo" schema
             if (sproc.ProcedureReference.ProcedureReference.Name.SchemaIdentifier != null && !String.IsNullOrEmpty(sproc.ProcedureReference.ProcedureReference.Name.SchemaIdentifier.Value) &&
@@ -647,8 +655,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     throw new NotSupportedQueryFragmentException("Unknown parameter", sproc.Parameters[i]);
 
                 var sourceExpression = sproc.Parameters[i].ParameterValue;
-                sourceExpression.GetType(null, null, parameterTypes, out var sourceType);
-                var expectedType = SqlTypeConverter.NetToSqlType(targetParam.Type).ToSqlType();
+                sourceExpression.GetType(context, out var sourceType);
+                var expectedType = SqlTypeConverter.NetToSqlType(targetParam.Type).ToSqlType(context.PrimaryDataSource);
 
                 if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, expectedType))
                     throw new NotSupportedQueryFragmentException($"Cannot convert value of type {sourceType.ToSql()} to {expectedType.ToSql()}", sproc.Parameters[i].ParameterValue);
@@ -679,20 +687,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     throw new NotSupportedQueryFragmentException($"Missing parameter '{inputParameter.Name}'", sproc);
             }
 
-            node.SetOutputSchema(dataSource.Metadata, message, sproc.ProcedureReference);
+            node.SetOutputSchema(dataSource, message, sproc.ProcedureReference);
 
             return node;
         }
 
-        public string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected)
+        public string Execute(NodeExecutionContext context, out int recordsAffected)
         {
-            recordsAffected = Execute(dataSources, options, parameterTypes, parameterValues).Count();
+            recordsAffected = Execute(context).Count();
             return "Executed " + MessageName;
         }
 
-        IRootExecutionPlanNodeInternal[] IRootExecutionPlanNodeInternal.FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        IRootExecutionPlanNodeInternal[] IRootExecutionPlanNodeInternal.FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
-            FoldQuery(dataSources, options, parameterTypes, hints);
+            FoldQuery(context, hints);
             return new[] { this };
         }
     }

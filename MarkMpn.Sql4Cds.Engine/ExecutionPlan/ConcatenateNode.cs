@@ -28,13 +28,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("Column Set")]
         public List<ConcatenateColumn> ColumnSet { get; } = new List<ConcatenateColumn>();
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
             for (var i = 0; i < Sources.Count; i++)
             {
                 var source = Sources[i];
 
-                foreach (var entity in source.Execute(dataSources, options, parameterTypes, parameterValues))
+                foreach (var entity in source.Execute(context))
                 {
                     var result = new Entity(entity.LogicalName, entity.Id);
 
@@ -46,11 +46,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
+        public override INodeSchema GetSchema(NodeCompilationContext context)
         {
-            var schema = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
+            var schema = new ColumnList();
 
-            var sourceSchema = Sources[0].GetSchema(dataSources, parameterTypes);
+            var sourceSchema = Sources[0].GetSchema(context);
 
             foreach (var col in ColumnSet)
                 schema[col.OutputColumn] = sourceSchema.Schema[col.SourceColumns[0]];
@@ -68,25 +68,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Sources;
         }
 
-        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
             for (var i = 0; i < Sources.Count; i++)
             {
-                Sources[i] = Sources[i].FoldQuery(dataSources, options, parameterTypes, hints);
+                Sources[i] = Sources[i].FoldQuery(context, hints);
                 Sources[i].Parent = this;
             }
 
             // Work out the column types
-            var sourceColumnTypes = Sources.Select((source, index) => GetColumnTypes(index, dataSources, parameterTypes)).ToArray();
+            var sourceColumnTypes = Sources.Select((source, index) => GetColumnTypes(index, context)).ToArray();
             var types = (DataTypeReference[]) sourceColumnTypes[0].Clone();
 
             for (var i = 1; i < Sources.Count; i++)
             {
-                var nextTypes = GetColumnTypes(i, dataSources, parameterTypes);
+                var nextTypes = GetColumnTypes(i, context);
 
                 for (var colIndex = 0; colIndex < types.Length; colIndex++)
                 {
-                    if (!SqlTypeConverter.CanMakeConsistentTypes(types[colIndex], nextTypes[colIndex], out var colType))
+                    if (!SqlTypeConverter.CanMakeConsistentTypes(types[colIndex], nextTypes[colIndex], context.PrimaryDataSource, out var colType))
                         throw new NotSupportedQueryFragmentException("No available implicit type conversion", ColumnSet[colIndex].SourceExpressions[i]);
 
                     types[colIndex] = colType;
@@ -122,7 +122,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (conversion.Columns.Count > 0)
                 {
-                    Sources[i] = conversion.FoldQuery(dataSources, options, parameterTypes, hints);
+                    Sources[i] = conversion.FoldQuery(context, hints);
                     Sources[i].Parent = this;
 
                     if (Sources[i] is ComputeScalarNode foldedConversion)
@@ -171,9 +171,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return this;
         }
 
-        private DataTypeReference[] GetColumnTypes(int sourceIndex, IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
+        private DataTypeReference[] GetColumnTypes(int sourceIndex, NodeCompilationContext context)
         {
-            var schema = Sources[sourceIndex].GetSchema(dataSources, parameterTypes);
+            var schema = Sources[sourceIndex].GetSchema(context);
             var types = new DataTypeReference[ColumnSet.Count];
 
             for (var i = 0; i < ColumnSet.Count; i++)
@@ -182,7 +182,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return types;
         }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
             for (var i = 0; i < Sources.Count; i++)
             {
@@ -191,13 +191,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     .Distinct()
                     .ToList();
 
-                Sources[i].AddRequiredColumns(dataSources, parameterTypes, sourceRequiredColumns);
+                Sources[i].AddRequiredColumns(context, sourceRequiredColumns);
             }
         }
 
-        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(NodeCompilationContext context)
         {
-            return new RowCountEstimate(Sources.Sum(s => s.EstimateRowsOut(dataSources, options, parameterTypes).Value));
+            return new RowCountEstimate(Sources.Sum(s => s.EstimateRowsOut(context).Value));
         }
 
         public override object Clone()

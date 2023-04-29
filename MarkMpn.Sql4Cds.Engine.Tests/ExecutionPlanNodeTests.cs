@@ -32,13 +32,13 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 },
                 Schema =
                 {
-                    ["firstname"] = typeof(SqlString).ToSqlType()
+                    ["firstname"] = typeof(SqlString).ToSqlType(null)
                 },
                 Alias = "test"
             };
 
-            var results = node.Execute(_dataSources, new StubOptions(), null, null).ToArray();
-
+            var results = node.Execute(new NodeExecutionContext(_localDataSource, new StubOptions(), null, null)).ToArray();
+            
             Assert.AreEqual(1, results.Length);
             Assert.AreEqual("Mark", ((SqlString)results[0]["test.firstname"]).Value);
         }
@@ -63,7 +63,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["firstname"] = typeof(SqlString).ToSqlType()
+                        ["firstname"] = typeof(SqlString).ToSqlType(null)
                     },
                     Alias = "test"
                 },
@@ -84,7 +84,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var results = node.Execute(_dataSources, new StubOptions(), null, null).ToArray();
+            var results = node.Execute(new NodeExecutionContext(_localDataSource, new StubOptions(), null, null)).ToArray();
 
             Assert.AreEqual(1, results.Length);
             Assert.AreEqual("Mark", ((SqlString)results[0]["test.firstname"]).Value);
@@ -112,8 +112,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["key"] = typeof(SqlInt32).ToSqlType(),
-                        ["firstname"] = typeof(SqlString).ToSqlType()
+                        ["key"] = typeof(SqlInt32).ToSqlType(null),
+                        ["firstname"] = typeof(SqlString).ToSqlType(null)
                     },
                     Alias = "f"
                 },
@@ -146,8 +146,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["key"] = typeof(SqlInt32).ToSqlType(),
-                        ["lastname"] = typeof(SqlString).ToSqlType()
+                        ["key"] = typeof(SqlInt32).ToSqlType(null),
+                        ["lastname"] = typeof(SqlString).ToSqlType(null)
                     },
                     Alias = "l"
                 },
@@ -161,7 +161,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 JoinType = QualifiedJoinType.Inner
             };
 
-            var results = node.Execute(_dataSources, new StubOptions(), null, null).ToArray();
+            var results = node.Execute(new NodeExecutionContext(_localDataSource, new StubOptions(), null, null)).ToArray();
 
             Assert.AreEqual(2, results.Length);
             Assert.AreEqual("Mark", ((SqlString)results[0]["f.firstname"]).Value);
@@ -192,8 +192,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["key"] = typeof(SqlInt32).ToSqlType(),
-                        ["firstname"] = typeof(SqlString).ToSqlType()
+                        ["key"] = typeof(SqlInt32).ToSqlType(null),
+                        ["firstname"] = typeof(SqlString).ToSqlType(null)
                     },
                     Alias = "f"
                 },
@@ -226,8 +226,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["key"] = typeof(SqlInt32).ToSqlType(),
-                        ["lastname"] = typeof(SqlString).ToSqlType()
+                        ["key"] = typeof(SqlInt32).ToSqlType(null),
+                        ["lastname"] = typeof(SqlString).ToSqlType(null)
                     },
                     Alias = "l"
                 },
@@ -241,7 +241,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 JoinType = QualifiedJoinType.LeftOuter
             };
 
-            var results = node.Execute(_dataSources, new StubOptions(), null, null).ToArray();
+            var results = node.Execute(new NodeExecutionContext(_localDataSource, new StubOptions(), null, null)).ToArray();
 
             Assert.AreEqual(3, results.Length);
             Assert.AreEqual("Mark", ((SqlString)results[0]["f.firstname"]).Value);
@@ -274,8 +274,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["key"] = typeof(SqlInt32).ToSqlType(),
-                        ["firstname"] = typeof(SqlString).ToSqlType()
+                        ["key"] = typeof(SqlInt32).ToSqlType(null),
+                        ["firstname"] = typeof(SqlString).ToSqlType(null)
                     },
                     Alias = "f"
                 },
@@ -308,8 +308,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["key"] = typeof(SqlInt32).ToSqlType(),
-                        ["lastname"] = typeof(SqlString).ToSqlType()
+                        ["key"] = typeof(SqlInt32).ToSqlType(null),
+                        ["lastname"] = typeof(SqlString).ToSqlType(null)
                     },
                     Alias = "l"
                 },
@@ -323,7 +323,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 JoinType = QualifiedJoinType.RightOuter
             };
 
-            var results = node.Execute(_dataSources, new StubOptions(), null, null).ToArray();
+            var results = node.Execute(new NodeExecutionContext(_localDataSource, new StubOptions(), null, null)).ToArray();
 
             Assert.AreEqual(3, results.Length);
             Assert.AreEqual("Mark", ((SqlString)results[0]["f.firstname"]).Value);
@@ -354,7 +354,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["name"] = typeof(SqlString).ToSqlType()
+                        ["name"] = typeof(SqlString).ToSqlType(null)
                     },
                     Alias = "test"
                 },
@@ -362,7 +362,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 ErrorMessage = "Only Mark is allowed"
             };
 
-            var results = node.Execute(_dataSources, new StubOptions(), null, null).GetEnumerator();
+            var results = node.Execute(new NodeExecutionContext(_localDataSource, new StubOptions(), null, null)).GetEnumerator();
 
             Assert.IsTrue(results.MoveNext());
             Assert.AreEqual("Mark", results.Current.GetAttributeValue<SqlString>("test.name").Value);
@@ -393,8 +393,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["value1"] = typeof(SqlInt32).ToSqlType(),
-                        ["value2"] = typeof(SqlInt32).ToSqlType()
+                        ["value1"] = typeof(SqlInt32).ToSqlType(null),
+                        ["value2"] = typeof(SqlInt32).ToSqlType(null)
                     }
                 },
                 Columns =
@@ -420,7 +420,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var results = node.Execute(_dataSources, new StubOptions(), null, null)
+            var results = node.Execute(new NodeExecutionContext(_localDataSource, new StubOptions(), null, null))
                 .Select(e => e.GetAttributeValue<SqlInt32>("mul").Value)
                 .ToArray();
 
@@ -455,14 +455,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["value1"] = typeof(SqlInt32).ToSqlType(),
-                        ["value2"] = typeof(SqlInt32).ToSqlType()
+                        ["value1"] = typeof(SqlInt32).ToSqlType(null),
+                        ["value2"] = typeof(SqlInt32).ToSqlType(null)
                     },
                     Alias = "test"
                 }
             };
 
-            var results = node.Execute(_dataSources, new StubOptions(), null, null)
+            var results = node.Execute(new NodeExecutionContext(_localDataSource, new StubOptions(), null, null))
                 .Select(e => e.GetAttributeValue<SqlInt32>("test.value1").Value)
                 .ToArray();
 
@@ -497,14 +497,14 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["value1"] = typeof(SqlString).ToSqlType(),
-                        ["value2"] = typeof(SqlInt32).ToSqlType()
+                        ["value1"] = typeof(SqlString).ToSqlType(null),
+                        ["value2"] = typeof(SqlInt32).ToSqlType(null)
                     },
                     Alias = "test"
                 }
             };
 
-            var results = node.Execute(_dataSources, new StubOptions(), null, null)
+            var results = node.Execute(new NodeExecutionContext(_localDataSource, new StubOptions(), null, null))
                 .Select(e => e.GetAttributeValue<SqlString>("test.value1").Value)
                 .ToArray();
 
@@ -554,15 +554,15 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["value1"] = typeof(SqlString).ToSqlType(),
-                        ["value2"] = typeof(SqlInt32).ToSqlType(),
-                        ["expectedorder"] = typeof(SqlInt32).ToSqlType()
+                        ["value1"] = typeof(SqlString).ToSqlType(null),
+                        ["value2"] = typeof(SqlInt32).ToSqlType(null),
+                        ["expectedorder"] = typeof(SqlInt32).ToSqlType(null)
                     },
                     Alias = "test"
                 }
             };
 
-            var results = node.Execute(_dataSources, new StubOptions(), null, null)
+            var results = node.Execute(new NodeExecutionContext(_localDataSource, new StubOptions(), null, null))
                 .Select(e => e.GetAttributeValue<SqlInt32>("test.expectedorder").Value)
                 .ToArray();
 
@@ -619,15 +619,15 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     },
                     Schema =
                     {
-                        ["value1"] = typeof(SqlString).ToSqlType(),
-                        ["value2"] = typeof(SqlInt32).ToSqlType(),
-                        ["expectedorder"] = typeof(SqlInt32).ToSqlType()
+                        ["value1"] = typeof(SqlString).ToSqlType(null),
+                        ["value2"] = typeof(SqlInt32).ToSqlType(null),
+                        ["expectedorder"] = typeof(SqlInt32).ToSqlType(null)
                     },
                     Alias = "test"
                 }
             };
 
-            var results = node.Execute(_dataSources, new StubOptions(), null, null)
+            var results = node.Execute(new NodeExecutionContext(_localDataSource, new StubOptions(), null, null))
                 .Select(e => e.GetAttributeValue<SqlInt32>("test.expectedorder").Value)
                 .ToArray();
 
@@ -652,18 +652,18 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 },
                 Schema =
                 {
-                    ["value1"] = typeof(SqlInt32).ToSqlType()
+                    ["value1"] = typeof(SqlInt32).ToSqlType(null)
                 },
                 Alias = "test"
             };
 
             var spool = new TableSpoolNode { Source = source };
 
-            var results1 = spool.Execute(_dataSources, new StubOptions(), null, null)
+            var results1 = spool.Execute(new NodeExecutionContext(_localDataSource, new StubOptions(), null, null))
                 .Select(e => e.GetAttributeValue<SqlInt32>("test.value1").Value)
                 .ToArray();
 
-            var results2 = spool.Execute(_dataSources, new StubOptions(), null, null)
+            var results2 = spool.Execute(new NodeExecutionContext(_localDataSource, new StubOptions(), null, null))
                 .Select(e => e.GetAttributeValue<SqlInt32>("test.value1").Value)
                 .ToArray();
 
@@ -690,7 +690,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 },
                 Schema =
                 {
-                    ["value1"] = typeof(SqlString).ToSqlType()
+                    ["value1"] = typeof(SqlString).ToSqlType(null)
                 },
                 Alias = "src"
             };
@@ -708,7 +708,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 }
             };
 
-            var results = spool.Execute(_dataSources, new StubOptions(), null, null)
+            var results = spool.Execute(new NodeExecutionContext(_localDataSource, new StubOptions(), null, null))
                 .Select(e => new { Name = e.GetAttributeValue<SqlString>("src.value1").Value, Count = e.GetAttributeValue<SqlInt32>("count").Value })
                 .ToArray();
 
@@ -749,7 +749,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void AggregateInitialTest()
         {
             var aggregate = CreateAggregateTest();
-            var result = aggregate.Execute(_dataSources, new StubOptions(), null, null).Single();
+            var result = aggregate.Execute(new NodeExecutionContext(_localDataSource, new StubOptions(), null, null)).Single();
 
             Assert.AreEqual(SqlInt32.Null, result["min"]);
             Assert.AreEqual(SqlInt32.Null, result["max"]);
@@ -767,7 +767,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void AggregateSingleValueTest()
         {
             var aggregate = CreateAggregateTest(1);
-            var result = aggregate.Execute(_dataSources, new StubOptions(), null, null).Single();
+            var result = aggregate.Execute(new NodeExecutionContext(_localDataSource, new StubOptions(), null, null)).Single();
 
             Assert.AreEqual((SqlInt32)1, result["min"]);
             Assert.AreEqual((SqlInt32)1, result["max"]);
@@ -785,7 +785,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void AggregateTwoEqualValuesTest()
         {
             var aggregate = CreateAggregateTest(1, 1);
-            var result = aggregate.Execute(_dataSources, new StubOptions(), null, null).Single();
+            var result = aggregate.Execute(new NodeExecutionContext(_localDataSource, new StubOptions(), null, null)).Single();
 
             Assert.AreEqual((SqlInt32)1, result["min"]);
             Assert.AreEqual((SqlInt32)1, result["max"]);
@@ -803,7 +803,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         public void AggregateMultipleValuesTest()
         {
             var aggregate = CreateAggregateTest(1, 3, 1, 1);
-            var result = aggregate.Execute(_dataSources, new StubOptions(), null, null).Single();
+            var result = aggregate.Execute(new NodeExecutionContext(_localDataSource, new StubOptions(), null, null)).Single();
 
             Assert.AreEqual((SqlInt32)1, result["min"]);
             Assert.AreEqual((SqlInt32)3, result["max"]);
@@ -823,7 +823,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             {
                 Schema =
                 {
-                    ["i"] = typeof(SqlInt32).ToSqlType()
+                    ["i"] = typeof(SqlInt32).ToSqlType(null)
                 },
                 Alias = "l"
             };

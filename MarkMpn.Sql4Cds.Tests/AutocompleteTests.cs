@@ -327,13 +327,13 @@ namespace MarkMpn.Sql4Cds.Tests
         }
 
         [TestMethod]
-        public void SelectEmptySuggestions()
+        public void SelectSuggestsFunctions()
         {
             var sql = "SELECT ";
 
-            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1).Select(s => s.Text).ToList();
+            var suggestions = _autocomplete.GetSuggestions(sql, sql.Length - 1).Select(s => s.ImageIndex).Distinct().ToList();
 
-            CollectionAssert.AreEqual(Array.Empty<string>(), suggestions);
+            CollectionAssert.IsSubsetOf(new[] { 23, 24 }, suggestions);
         }
 
         [TestMethod]

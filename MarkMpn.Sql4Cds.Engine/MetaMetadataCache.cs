@@ -4,10 +4,12 @@ using System.Data.SqlTypes;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Metadata;
+using Microsoft.Xrm.Sdk.Query;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
@@ -16,6 +18,64 @@ namespace MarkMpn.Sql4Cds.Engine
     /// </summary>
     public class MetaMetadataCache : IAttributeMetadataCache
     {
+        class StubOptions : IQueryExecutionOptions
+        {
+            public CancellationToken CancellationToken => throw new NotImplementedException();
+
+            public bool BlockUpdateWithoutWhere => throw new NotImplementedException();
+
+            public bool BlockDeleteWithoutWhere => throw new NotImplementedException();
+
+            public bool UseBulkDelete => throw new NotImplementedException();
+
+            public int BatchSize => throw new NotImplementedException();
+
+            public bool UseTDSEndpoint => throw new NotImplementedException();
+
+            public int MaxDegreeOfParallelism => throw new NotImplementedException();
+
+            public bool ColumnComparisonAvailable => throw new NotImplementedException();
+
+            public bool UseLocalTimeZone => throw new NotImplementedException();
+
+            public List<JoinOperator> JoinOperatorsAvailable => throw new NotImplementedException();
+
+            public bool BypassCustomPlugins => throw new NotImplementedException();
+
+            public string PrimaryDataSource => throw new NotImplementedException();
+
+            public Guid UserId => throw new NotImplementedException();
+
+            public bool QuotedIdentifiers => throw new NotImplementedException();
+
+            public ColumnOrdering ColumnOrdering => ColumnOrdering.Alphabetical;
+
+            public void ConfirmDelete(ConfirmDmlStatementEventArgs e)
+            {
+                throw new NotImplementedException();
+            }
+
+            public void ConfirmInsert(ConfirmDmlStatementEventArgs e)
+            {
+                throw new NotImplementedException();
+            }
+
+            public void ConfirmUpdate(ConfirmDmlStatementEventArgs e)
+            {
+                throw new NotImplementedException();
+            }
+
+            public bool ContinueRetrieve(int count)
+            {
+                throw new NotImplementedException();
+            }
+
+            public void Progress(double? progress, string message)
+            {
+                throw new NotImplementedException();
+            }
+        }
+
         private readonly IAttributeMetadataCache _inner;
         private static readonly IDictionary<string, EntityMetadata> _customMetadata;
 
@@ -32,7 +92,7 @@ namespace MarkMpn.Sql4Cds.Engine
             metadataNode.ManyToOneRelationshipAlias = "relationship_n_1";
             metadataNode.ManyToManyRelationshipAlias = "relationship_n_n";
 
-            var metadataSchema = metadataNode.GetSchema(null, null);
+            var metadataSchema = metadataNode.GetSchema(new NodeCompilationContext(null, new StubOptions(), null));
 
             _customMetadata["metadata." + metadataNode.EntityAlias] = SchemaToMetadata(metadataSchema, metadataNode.EntityAlias);
             _customMetadata["metadata." + metadataNode.AttributeAlias] = SchemaToMetadata(metadataSchema, metadataNode.AttributeAlias);
@@ -43,7 +103,7 @@ namespace MarkMpn.Sql4Cds.Engine
             var optionsetNode = new GlobalOptionSetQueryNode();
             optionsetNode.Alias = "globaloptionset";
 
-            var optionsetSchema = optionsetNode.GetSchema(null, null);
+            var optionsetSchema = optionsetNode.GetSchema(new NodeCompilationContext(null, new StubOptions(), null));
 
             _customMetadata["metadata." + optionsetNode.Alias] = SchemaToMetadata(optionsetSchema, optionsetNode.Alias);
         }

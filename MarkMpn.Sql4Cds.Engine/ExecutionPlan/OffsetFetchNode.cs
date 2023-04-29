@@ -32,10 +32,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public IDataExecutionPlanNodeInternal Source { get; set; }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
-            var offset = SqlTypeConverter.ChangeType<int>(Offset.Compile(null, parameterTypes)(null, parameterValues, options));
-            var fetch = SqlTypeConverter.ChangeType<int>(Fetch.Compile(null, parameterTypes)(null, parameterValues, options));
+            var expressionCompilationContext = new ExpressionCompilationContext(context, null, null);
+            var expressionExecutionContext = new ExpressionExecutionContext(context);
+            var offset = SqlTypeConverter.ChangeType<int>(Offset.Compile(expressionCompilationContext)(expressionExecutionContext));
+            var fetch = SqlTypeConverter.ChangeType<int>(Fetch.Compile(expressionCompilationContext)(expressionExecutionContext));
 
             if (offset < 0)
                 throw new QueryExecutionException("The offset specified in a OFFSET clause may not be negative.");
@@ -43,14 +45,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (fetch <= 0)
                 throw new QueryExecutionException("The number of rows provided for a FETCH clause must be greater then zero.");
 
-            return Source.Execute(dataSources, options, parameterTypes, parameterValues)
+            return Source.Execute(context)
                 .Skip(offset)
                 .Take(fetch);
         }
 
-        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
+        public override INodeSchema GetSchema(NodeCompilationContext context)
         {
-            return Source.GetSchema(dataSources, parameterTypes);
+            return Source.GetSchema(context);
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
@@ -58,19 +60,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
-            Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
+            Source = Source.FoldQuery(context, hints);
             Source.Parent = this;
 
-            if (!Offset.IsConstantValueExpression(null, options, out var offsetLiteral) ||
-                !Fetch.IsConstantValueExpression(null, options, out var fetchLiteral))
+            var expressionCompilationContext = new ExpressionCompilationContext(context.DataSources, context.Options, null, null, null);
+            
+            if (!Offset.IsConstantValueExpression(expressionCompilationContext, out var offsetLiteral) ||
+                !Fetch.IsConstantValueExpression(expressionCompilationContext, out var fetchLiteral))
                 return this;
 
             if (Source is FetchXmlScan fetchXml)
             {
-                var offset = SqlTypeConverter.ChangeType<int>(offsetLiteral.Compile(null, null)(null, null, options));
-                var count = SqlTypeConverter.ChangeType<int>(fetchLiteral.Compile(null, null)(null, null, options));
+                var expressionExecutionContext = new ExpressionExecutionContext(expressionCompilationContext);
+                var offset = SqlTypeConverter.ChangeType<int>(offsetLiteral.Compile(expressionCompilationContext)(expressionExecutionContext));
+                var count = SqlTypeConverter.ChangeType<int>(fetchLiteral.Compile(expressionCompilationContext)(expressionExecutionContext));
                 var page = offset / count;
 
                 if (page * count == offset && count <= 5000)
@@ -85,17 +90,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return this;
         }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
-            Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
+            Source.AddRequiredColumns(context, requiredColumns);
         }
 
-        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(NodeCompilationContext context)
         {
-            var sourceCount = Source.EstimateRowsOut(dataSources, options, parameterTypes);
+            var sourceCount = Source.EstimateRowsOut(context);
+            var expressionCompilationContext = new ExpressionCompilationContext(context, null, null);
 
-            if (!Offset.IsConstantValueExpression(null, options, out var offsetLiteral) ||
-                !Fetch.IsConstantValueExpression(null, options, out var fetchLiteral))
+            if (!Offset.IsConstantValueExpression(expressionCompilationContext, out var offsetLiteral) ||
+                !Fetch.IsConstantValueExpression(expressionCompilationContext, out var fetchLiteral))
                 return sourceCount;
 
             var offset = Int32.Parse(offsetLiteral.Value, CultureInfo.InvariantCulture);

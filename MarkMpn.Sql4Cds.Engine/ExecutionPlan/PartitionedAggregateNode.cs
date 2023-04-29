@@ -46,36 +46,38 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private int _pendingPartitions;
         private object _lock;
 
-        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
-            Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
+            Source = Source.FoldQuery(context, hints);
             Source.Parent = this;
             return this;
         }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
             // All required columns must already have been added during the original folding of the HashMatchAggregateNode
         }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
-            var schema = Source.GetSchema(dataSources, parameterTypes);
+            var schema = Source.GetSchema(context);
             var groupByCols = GetGroupingColumns(schema);
             var groups = new ConcurrentDictionary<Entity, Dictionary<string, AggregateFunctionState>>(new DistinctEqualityComparer(groupByCols));
+            var expressionCompilationContext = new ExpressionCompilationContext(context, schema, null);
+            var expressionExecutionContext = new ExpressionExecutionContext(context);
 
-            InitializePartitionedAggregates(schema, parameterTypes);
-            var aggregates = CreateAggregateFunctions(parameterValues, options, true);
+            InitializePartitionedAggregates(expressionCompilationContext);
+            var aggregates = CreateAggregateFunctions(expressionExecutionContext, true);
 
             var fetchXmlNode = (FetchXmlScan)Source;
 
             var name = fetchXmlNode.Entity.name;
-            var meta = dataSources[fetchXmlNode.DataSource].Metadata[name];
-            options.Progress(0, $"Partitioning {GetDisplayName(0, meta)}...");
+            var meta = context.DataSources[fetchXmlNode.DataSource].Metadata[name];
+            context.Options.Progress(0, $"Partitioning {GetDisplayName(0, meta)}...");
 
             // Get the minimum and maximum primary keys from the source
-            var minKey = GetMinMaxKey(fetchXmlNode, dataSources, options, parameterTypes, parameterValues, false);
-            var maxKey = GetMinMaxKey(fetchXmlNode, dataSources, options, parameterTypes, parameterValues, true);
+            var minKey = GetMinMaxKey(fetchXmlNode, context, false);
+            var maxKey = GetMinMaxKey(fetchXmlNode, context, true);
 
             if (minKey.IsNull || maxKey.IsNull || minKey == maxKey)
                 throw new QueryExecutionException("Cannot partition query");
@@ -96,9 +98,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 ["@PartitionEnd"] = DataTypeHelpers.DateTime
             };
 
-            if (parameterTypes != null)
+            if (context.ParameterTypes != null)
             {
-                foreach (var kvp in parameterTypes)
+                foreach (var kvp in context.ParameterTypes)
                     partitionParameterTypes[kvp.Key] = kvp.Value;
             }
 
@@ -120,8 +122,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             SplitPartition(fullRange);
 
             // Multi-thread where possible
-            var org = dataSources[fetchXmlNode.DataSource].Connection;
-            var maxDop = options.MaxDegreeOfParallelism;
+            var org = context.DataSources[fetchXmlNode.DataSource].Connection;
+            var maxDop = context.Options.MaxDegreeOfParallelism;
             _lock = new object();
 
 #if NETCOREAPP
@@ -151,10 +153,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         [fetchXmlNode.DataSource] = new DataSource
                         {
                             Connection = svc?.Clone() ?? org,
-                            Metadata = dataSources[fetchXmlNode.DataSource].Metadata,
+                            Metadata = context.DataSources[fetchXmlNode.DataSource].Metadata,
                             Name = fetchXmlNode.DataSource,
-                            TableSizeCache = dataSources[fetchXmlNode.DataSource].TableSizeCache,
-                            MessageCache = dataSources[fetchXmlNode.DataSource].MessageCache
+                            TableSizeCache = context.DataSources[fetchXmlNode.DataSource].TableSizeCache,
+                            MessageCache = context.DataSources[fetchXmlNode.DataSource].MessageCache
                         }
                     };
 
@@ -172,9 +174,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         ["@PartitionEnd"] = maxKey
                     };
 
-                    if (parameterValues != null)
+                    if (context.ParameterValues != null)
                     {
-                        foreach (var kvp in parameterValues)
+                        foreach (var kvp in context.ParameterValues)
                             partitionParameterValues[kvp.Key] = kvp.Value;
                     }
 
@@ -183,12 +185,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         try
                         {
                             // Execute the query for this partition
-                            ExecuteAggregate(ds, options, partitionParameterTypes, partitionParameterValues, aggregates, groups, fetch, partition.MinValue, partition.MaxValue);
+                            ExecuteAggregate(context, expressionExecutionContext, aggregates, groups, fetch, partition.MinValue, partition.MaxValue);
 
                             lock (_lock)
                             {
                                 _progress += partition.Percentage;
-                                options.Progress(0, $"Partitioning {GetDisplayName(0, meta)} ({_progress:P0})...");
+                                context.Options.Progress(0, $"Partitioning {GetDisplayName(0, meta)} ({_progress:P0})...");
                             }
 
                             if (Interlocked.Decrement(ref _pendingPartitions) == 0)
@@ -287,27 +289,29 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private void ExecuteAggregate(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, Dictionary<string, AggregateFunction> aggregates, ConcurrentDictionary<Entity, Dictionary<string, AggregateFunctionState>> groups, FetchXmlScan fetchXmlNode, SqlDateTime minValue, SqlDateTime maxValue)
+        private void ExecuteAggregate(NodeExecutionContext context, ExpressionExecutionContext expressionContext, Dictionary<string, AggregateFunction> aggregates, ConcurrentDictionary<Entity, Dictionary<string, AggregateFunctionState>> groups, FetchXmlScan fetchXmlNode, SqlDateTime minValue, SqlDateTime maxValue)
         {
-            parameterValues["@PartitionStart"] = minValue;
-            parameterValues["@PartitionEnd"] = maxValue;
+            context.ParameterValues["@PartitionStart"] = minValue;
+            context.ParameterValues["@PartitionEnd"] = maxValue;
 
-            var results = fetchXmlNode.Execute(dataSources, options, parameterTypes, parameterValues);
+            var results = fetchXmlNode.Execute(context);
 
             foreach (var entity in results)
             {
                 // Update aggregates
                 var values = groups.GetOrAdd(entity, _ => ResetAggregates(aggregates));
 
-                lock (values)
+                lock (expressionContext)
                 {
+                    expressionContext.Entity = entity;
+
                     foreach (var func in values.Values)
-                        func.AggregateFunction.NextPartition(entity, func.State);
+                        func.AggregateFunction.NextPartition(func.State);
                 }
             }
         }
 
-        private SqlDateTime GetMinMaxKey(FetchXmlScan fetchXmlNode, IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, bool max)
+        private SqlDateTime GetMinMaxKey(FetchXmlScan fetchXmlNode, NodeExecutionContext context, bool max)
         {
             // Create a new FetchXmlScan node with a copy of the original query
             var minMaxNode = new FetchXmlScan
@@ -333,7 +337,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             try
             {
-                var result = minMaxNode.Execute(dataSources, options, parameterTypes, parameterValues).FirstOrDefault();
+                var result = minMaxNode.Execute(context).FirstOrDefault();
 
                 if (result == null)
                     return SqlDateTime.Null;

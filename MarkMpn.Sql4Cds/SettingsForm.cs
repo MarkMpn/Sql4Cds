@@ -42,6 +42,7 @@ namespace MarkMpn.Sql4Cds
             localDateFormatCheckbox.Checked = settings.LocalFormatDates;
             simpleSqlRadioButton.Checked = !settings.UseNativeSqlConversion;
             nativeSqlRadioButton.Checked = settings.UseNativeSqlConversion;
+            schemaColumnOrderingCheckbox.Checked = settings.ColumnOrdering == ColumnOrdering.Strict;
 
             SetSqlStyle(simpleSqlScintilla);
             SetSqlStyle(nativeSqlScintilla);
@@ -119,6 +120,7 @@ namespace MarkMpn.Sql4Cds
                 _settings.LocalFormatDates = localDateFormatCheckbox.Checked;
                 _settings.UseNativeSqlConversion = nativeSqlRadioButton.Checked;
                 _settings.FetchXml2SqlOptions = _fetchXml2SqlOptions;
+                _settings.ColumnOrdering = schemaColumnOrderingCheckbox.Checked ? ColumnOrdering.Strict : ColumnOrdering.Alphabetical;
             }
         }
 

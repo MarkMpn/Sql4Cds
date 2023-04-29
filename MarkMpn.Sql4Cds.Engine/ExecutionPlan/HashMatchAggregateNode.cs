@@ -23,14 +23,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     {
         private bool _folded;
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
-            var schema = Source.GetSchema(dataSources, parameterTypes);
+            var schema = Source.GetSchema(context);
             var groupByCols = GetGroupingColumns(schema);
             var groups = new Dictionary<Entity, Dictionary<string, AggregateFunctionState>>(new DistinctEqualityComparer(groupByCols));
 
-            InitializeAggregates(schema, parameterTypes);
-            var aggregates = CreateAggregateFunctions(parameterValues, options, false);
+            InitializeAggregates(new ExpressionCompilationContext(context, schema, null));
+            var executionContext = new ExpressionExecutionContext(context);
+            var aggregates = CreateAggregateFunctions(executionContext, false);
 
             if (IsScalarAggregate)
             {
@@ -39,7 +40,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 groups[new Entity()] = values;
             }
 
-            foreach (var entity in Source.Execute(dataSources, options, parameterTypes, parameterValues))
+            foreach (var entity in Source.Execute(context))
             {
                 if (!groups.TryGetValue(entity, out var values))
                 {
@@ -47,8 +48,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     groups[entity] = values;
                 }
 
+                executionContext.Entity = entity;
+
                 foreach (var func in values.Values)
-                    func.AggregateFunction.NextRecord(entity, func.State);
+                    func.AggregateFunction.NextRecord(func.State);
             }
 
             foreach (var group in groups)
@@ -65,12 +68,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
             if (_folded)
                 return this;
 
-            Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
+            Source = Source.FoldQuery(context, hints);
             Source.Parent = this;
 
             // Special case for using RetrieveTotalRecordCount instead of FetchXML
@@ -85,10 +88,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 GroupBy.Count == 0 &&
                 Aggregates.Count == 1 &&
                 Aggregates.Single().Value.AggregateType == AggregateType.CountStar &&
-                dataSources[fetch.DataSource].Metadata[fetch.Entity.name].DataProviderId == null) // RetrieveTotalRecordCountRequest is not valid for virtual entities
+                context.DataSources[fetch.DataSource].Metadata[fetch.Entity.name].DataProviderId == null) // RetrieveTotalRecordCountRequest is not valid for virtual entities
             {
                 var count = new RetrieveTotalRecordCountNode { DataSource = fetch.DataSource, EntityName = fetch.Entity.name };
-                var countName = count.GetSchema(dataSources, parameterTypes).Schema.Single().Key;
+                var countName = count.GetSchema(context).Schema.Single().Key;
 
                 if (countName == Aggregates.Single().Key)
                     return count;
@@ -234,7 +237,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         }
 
                         // FetchXML dategrouping always uses local timezone. If we're using UTC we can't use it
-                        if (!options.UseLocalTimeZone)
+                        if (!context.Options.UseLocalTimeZone)
                         {
                             canUseFetchXmlAggregate = false;
                             break;
@@ -242,14 +245,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                 }
 
-                var metadata = dataSources[fetchXml.DataSource].Metadata;
+                var metadata = context.DataSources[fetchXml.DataSource].Metadata;
 
                 // FetchXML is translated to QueryExpression for virtual entities, which doesn't support aggregates
                 if (metadata[fetchXml.Entity.name].DataProviderId != null)
                     canUseFetchXmlAggregate = false;
 
                 // Check FetchXML supports grouping by each of the requested attributes
-                var fetchSchema = fetchXml.GetSchema(dataSources, parameterTypes);
+                var fetchSchema = fetchXml.GetSchema(context);
                 foreach (var group in GroupBy)
                 {
                     if (!fetchSchema.ContainsColumn(group.GetColumnName(), out var groupCol))
@@ -304,7 +307,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     fetchXml.FetchXml.aggregateSpecified = true;
                     fetchXml.FetchXml = fetchXml.FetchXml;
 
-                    var schema = Source.GetSchema(dataSources, parameterTypes);
+                    var schema = Source.GetSchema(context);
+                    var expressionCompilationContext = new ExpressionCompilationContext(context, schema, null);
 
                     foreach (var grouping in GroupBy)
                     {
@@ -340,7 +344,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             attribute.dategrouping = dateGrouping.Value;
                             attribute.dategroupingSpecified = true;
                         }
-                        else if (grouping.GetType(schema, null, parameterTypes, out _) == typeof(SqlDateTime))
+                        else if (grouping.GetType(expressionCompilationContext, out _) == typeof(SqlDateTime))
                         {
                             // Can't group on datetime columns without a DATEPART specification
                             canUseFetchXmlAggregate = false;
@@ -435,7 +439,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 // Check how we should execute this aggregate if the FetchXML aggregate fails or is not available. Use stream aggregate
                 // for scalar aggregates or where all the grouping fields can be folded into sorts.
-                var nonFetchXmlAggregate = FoldToStreamAggregate(dataSources, options, parameterTypes, hints);
+                var nonFetchXmlAggregate = FoldToStreamAggregate(context, hints);
 
                 if (!canUseFetchXmlAggregate)
                     return nonFetchXmlAggregate;
@@ -583,10 +587,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return tryCatch;
             }
 
-            return FoldToStreamAggregate(dataSources, options, parameterTypes, hints);
+            return FoldToStreamAggregate(context, hints);
         }
 
-        private IDataExecutionPlanNodeInternal FoldToStreamAggregate(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        private IDataExecutionPlanNodeInternal FoldToStreamAggregate(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
             // Use stream aggregate where possible - if there are no grouping fields or the groups can be folded into sorts
             var streamAggregate = new StreamAggregateNode { Source = Source };
@@ -606,7 +610,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 foreach (var group in GroupBy)
                     sorts.Sorts.Add(new ExpressionWithSortOrder { Expression = group, SortOrder = SortOrder.Ascending });
 
-                streamAggregate.Source = sorts.FoldQuery(dataSources, options, parameterTypes, hints);
+                streamAggregate.Source = sorts.FoldQuery(context, hints);
 
                 // Don't bother using a sort + stream aggregate if none of the sorts can be folded
                 if (streamAggregate.Source == sorts && sorts.PresortedCount == 0)
@@ -616,7 +620,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return streamAggregate;
         }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
             // Columns required by previous nodes must be derived from this node, so no need to pass them through.
             // Just calculate the columns that are required to calculate the groups & aggregates
@@ -626,7 +630,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             scalarRequiredColumns.AddRange(Aggregates.Where(agg => agg.Value.SqlExpression != null).SelectMany(agg => agg.Value.SqlExpression.GetColumns()).Distinct());
 
-            Source.AddRequiredColumns(dataSources, parameterTypes, scalarRequiredColumns);
+            Source.AddRequiredColumns(context, scalarRequiredColumns);
         }
 
         public override object Clone()

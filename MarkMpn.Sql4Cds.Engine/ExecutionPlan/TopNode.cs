@@ -47,15 +47,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public IDataExecutionPlanNodeInternal Source { get; set; }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
             int topCount;
-            Top.GetType(null, null, parameterTypes, out var topType);
+
+            var expressionCompilationContext = new ExpressionCompilationContext(context, null, null);
+            var expressionExecutionContext = new ExpressionExecutionContext(context);
+            Top.GetType(expressionCompilationContext, out var topType);
 
             if (Percent)
             {
                 var top = new ConvertCall { Parameter = Top, DataType = DataTypeHelpers.Float };
-                var topPercent = (SqlDouble)top.Compile(null, parameterTypes)(null, parameterValues, options);
+                var topPercent = (SqlDouble)top.Compile(expressionCompilationContext)(expressionExecutionContext);
 
                 if (topPercent.IsNull)
                 {
@@ -66,9 +69,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     int count;
 
                     if (Source is TableSpoolNode spool && spool.SpoolType == SpoolType.Eager)
-                        count = spool.GetCount(dataSources, options, parameterTypes, parameterValues);
+                        count = spool.GetCount(context);
                     else
-                        count = Source.Execute(dataSources, options, parameterTypes, parameterValues).Count();
+                        count = Source.Execute(context).Count();
 
                     topCount = (int)Math.Ceiling(count * topPercent.Value / 100);
                 }
@@ -76,7 +79,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             else
             {
                 var top = new ConvertCall { Parameter = Top, DataType = DataTypeHelpers.BigInt };
-                var topValue = (SqlInt64)top.Compile(null, parameterTypes)(null, parameterValues, options);
+                var topValue = (SqlInt64)top.Compile(expressionCompilationContext)(expressionExecutionContext);
 
                 if (topValue.IsNull)
                 {
@@ -90,14 +93,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (!WithTies)
             {
-                return Source.Execute(dataSources, options, parameterTypes, parameterValues)
+                return Source.Execute(context)
                     .Take(topCount);
             }
 
             Entity lastRow = null;
             var tieComparer = new DistinctEqualityComparer(TieColumns);
 
-            return Source.Execute(dataSources, options, parameterTypes, parameterValues)
+            return Source.Execute(context)
                 .TakeWhile((entity, index) =>
                 {
                     if (index == topCount - 1)
@@ -110,9 +113,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 });
         }
 
-        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
+        public override INodeSchema GetSchema(NodeCompilationContext context)
         {
-            return Source.GetSchema(dataSources, parameterTypes);
+            return Source.GetSchema(context);
         }
 
         public override IEnumerable<IExecutionPlanNode> GetSources()
@@ -120,12 +123,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             yield return Source;
         }
 
-        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
-            Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
+            Source = Source.FoldQuery(context, hints);
             Source.Parent = this;
 
-            if (!Top.IsConstantValueExpression(null, options, out var literal))
+            var expressionCompilationContext = new ExpressionCompilationContext(context, null, null);
+
+            if (!Top.IsConstantValueExpression(expressionCompilationContext, out var literal))
                 return this;
 
             // FetchXML can support TOP directly provided it's for no more than 5,000 records
@@ -155,23 +160,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (Source == fetchXml)
                         return fetchXml;
 
-                    return Source.FoldQuery(dataSources, options, parameterTypes, hints);
+                    return Source.FoldQuery(context, hints);
                 }
             }
 
             return this;
         }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
-            Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
+            Source.AddRequiredColumns(context, requiredColumns);
         }
 
-        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(NodeCompilationContext context)
         {
-            var sourceCount = Source.EstimateRowsOut(dataSources, options, parameterTypes);
+            var sourceCount = Source.EstimateRowsOut(context);
 
-            if (!Top.IsConstantValueExpression(null, options, out var topLiteral))
+            var expressionCompilationContext = new ExpressionCompilationContext(context, null, null);
+
+            if (!Top.IsConstantValueExpression(expressionCompilationContext, out var topLiteral))
                 return sourceCount;
 
             var top = Decimal.Parse(topLiteral.Value, CultureInfo.InvariantCulture);

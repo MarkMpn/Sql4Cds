@@ -1009,5 +1009,94 @@ SELECT name FROM account WHERE name = @name OR name = @name";
                 }
             }
         }
+
+        [TestMethod]
+        public void SortByCollation()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "INSERT INTO account (name) VALUES ('Chiapas'),('Colima'), ('Cinco Rios'), ('California')";
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = "SELECT name FROM account ORDER BY name COLLATE Latin1_General_CS_AS ASC";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    var results = new List<string>();
+
+                    while (reader.Read())
+                        results.Add(reader.GetString(0));
+
+                    var expected = new[] { "California", "Chiapas", "Cinco Rios", "Colima" };
+                    
+                    for (var i = 0; i < expected.Length; i++)
+                        Assert.AreEqual(expected[i], results[i]);
+                }
+
+                cmd.CommandText = "SELECT name FROM account ORDER BY name COLLATE Traditional_Spanish_ci_ai ASC";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    var results = new List<string>();
+
+                    while (reader.Read())
+                        results.Add(reader.GetString(0));
+
+                    var expected = new[] { "California", "Cinco Rios", "Colima", "Chiapas" };
+
+                    for (var i = 0; i < expected.Length; i++)
+                        Assert.AreEqual(expected[i], results[i]);
+                }
+            }
+        }
+
+        [TestMethod]
+        public void CollationSensitiveFunctions()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "select case when 'test' like 't%' then 1 else 0 end";
+                var actual = cmd.ExecuteScalar();
+
+                Assert.AreEqual(1, actual);
+
+                cmd.CommandText = "select case when 'TEST' collate latin1_general_cs_ai like 't%' then 1 else 0 end";
+                actual = cmd.ExecuteScalar();
+
+                Assert.AreEqual(0, actual);
+
+                cmd.CommandText = "select case when upper('test' collate latin1_general_cs_ai) like 't%' then 1 else 0 end";
+                actual = cmd.ExecuteScalar();
+
+                Assert.AreEqual(0, actual);
+            }
+        }
+
+        [TestMethod]
+        public void MergeSemiJoin()
+        {
+            using (var con = new Sql4CdsConnection(_dataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandTimeout = 0;
+
+                cmd.CommandText = "insert into account (name) values ('data8')";
+                cmd.ExecuteNonQuery();
+                cmd.ExecuteNonQuery();
+
+                con.ChangeDatabase("prod");
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = "SELECT name FROM account WHERE name IN (SELECT name FROM uat..account)";
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    Assert.IsTrue(reader.Read());
+                    Assert.IsFalse(reader.Read());
+                }
+            }
+        }
     }
 }

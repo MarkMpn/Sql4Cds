@@ -13,7 +13,7 @@ using Microsoft.Xrm.Sdk;
 namespace MarkMpn.Sql4Cds.Engine.Tests
 {
     [TestClass]
-    public class ExpressionTests
+    public class ExpressionTests : FakeXrmEasyTestsBase
     {
         [TestMethod]
         public void SimpleCaseExpression()
@@ -38,28 +38,29 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             };
             var schema = new NodeSchema(new Dictionary<string, DataTypeReference>
             {
-                ["name"] = DataTypeHelpers.NVarChar(100)
+                ["name"] = DataTypeHelpers.NVarChar(100, Collation.USEnglish, CollationLabel.CoercibleDefault)
             }, new Dictionary<string, IReadOnlyList<string>>(), null, Array.Empty<string>(), Array.Empty<string>());
             var parameterTypes = new Dictionary<string, DataTypeReference>();
-            var func = expr.Compile(schema, parameterTypes);
-
             var options = new StubOptions();
-            var parameterValues = new Dictionary<string, object>();
+            var compilationContext = new ExpressionCompilationContext(_localDataSource, options, parameterTypes, schema, null);
+            var func = expr.Compile(compilationContext);
 
             var record = new Entity
             {
-                ["name"] = SqlTypeConverter.UseDefaultCollation("One")
+                ["name"] = compilationContext.PrimaryDataSource.DefaultCollation.ToSqlString("One")
             };
+            var executionContext = new ExpressionExecutionContext(compilationContext);
+            executionContext.Entity = record;
 
-            var value = func(record, parameterValues, options);
+            var value = func(executionContext);
             Assert.AreEqual((SqlInt32)1, value);
 
-            record["name"] = SqlTypeConverter.UseDefaultCollation("Two");
-            value = func(record, parameterValues, options);
+            record["name"] = compilationContext.PrimaryDataSource.DefaultCollation.ToSqlString("Two");
+            value = func(executionContext);
             Assert.AreEqual((SqlInt32)2, value);
 
-            record["name"] = SqlTypeConverter.UseDefaultCollation("Five");
-            value = func(record, parameterValues, options);
+            record["name"] = compilationContext.PrimaryDataSource.DefaultCollation.ToSqlString("Five");
+            value = func(executionContext);
             Assert.AreEqual((SqlInt32)3, value);
         }
 
@@ -80,18 +81,19 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 ["createdon"] = DataTypeHelpers.DateTime
             }, new Dictionary<string, IReadOnlyList<string>>(), null, Array.Empty<string>(), Array.Empty<string>());
             var parameterTypes = new Dictionary<string, DataTypeReference>();
-            var func = expr.Compile(schema, parameterTypes);
-
             var options = new StubOptions();
-            var parameterValues = new Dictionary<string, object>();
+            var compilationContext = new ExpressionCompilationContext(_localDataSource, options, parameterTypes, schema, null);
+            var func = expr.Compile(compilationContext);
 
             var record = new Entity
             {
                 ["createdon"] = (SqlDateTime)new DateTime(2022, 1, 2)
             };
+            var executionContext = new ExpressionExecutionContext(compilationContext);
+            executionContext.Entity = record;
 
-            var value = func(record, parameterValues, options);
-            Assert.AreEqual(SqlTypeConverter.UseDefaultCollation("2022-01-02"), value);
+            var value = func(executionContext);
+            Assert.AreEqual(compilationContext.PrimaryDataSource.DefaultCollation.ToSqlString("2022-01-02"), value);
         }
 
         private ColumnReferenceExpression Col(string name)

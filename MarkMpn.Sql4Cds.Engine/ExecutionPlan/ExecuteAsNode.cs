@@ -35,17 +35,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public override int MaxDOP { get; set; }
 
         [Browsable(false)]
+        public override int BatchSize { get; set; }
+
+        [Browsable(false)]
         public override bool BypassCustomPluginExecution { get; set; }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
             if (!requiredColumns.Contains(UserIdSource))
                 requiredColumns.Add(UserIdSource);
 
-            Source.AddRequiredColumns(dataSources, parameterTypes, requiredColumns);
+            Source.AddRequiredColumns(context, requiredColumns);
         }
 
-        public override string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected)
+        public override string Execute(NodeExecutionContext context, out int recordsAffected)
         {
             _executionCount++;
 
@@ -53,10 +56,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 using (_timer.Run())
                 {
-                    if (!dataSources.TryGetValue(DataSource, out var dataSource))
+                    if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
                         throw new QueryExecutionException("Missing datasource " + DataSource);
 
-                    var entities = GetDmlSourceEntities(dataSources, options, parameterTypes, parameterValues, out var schema);
+                    var entities = GetDmlSourceEntities(context, out var schema);
 
                     if (entities.Count == 0)
                         throw new QueryExecutionException("Cannot find user to impersonate");
@@ -65,7 +68,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         throw new QueryExecutionException("Ambiguous user");
 
                     // Precompile mappings with type conversions
-                    var attributeAccessors = CompileColumnMappings(dataSource.Metadata, "systemuser", new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["systemuserid"] = UserIdSource }, schema, DateTimeKind.Unspecified, entities);
+                    var attributeAccessors = CompileColumnMappings(dataSource, "systemuser", new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["systemuserid"] = UserIdSource }, schema, DateTimeKind.Unspecified, entities);
                     var userIdAccessor = attributeAccessors["systemuserid"];
 
                     var userId = (Guid)userIdAccessor(entities[0]);

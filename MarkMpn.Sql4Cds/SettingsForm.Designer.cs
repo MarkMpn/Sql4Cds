@@ -30,6 +30,7 @@
         {
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(SettingsForm));
             this.topPanel = new System.Windows.Forms.Panel();
+            this.pictureBox = new System.Windows.Forms.PictureBox();
             this.label1 = new System.Windows.Forms.Label();
             this.panel2 = new System.Windows.Forms.Panel();
             this.cancelButton = new System.Windows.Forms.Button();
@@ -64,29 +65,30 @@
             this.showTooltipsCheckbox = new System.Windows.Forms.CheckBox();
             this.tabControl1 = new System.Windows.Forms.TabControl();
             this.tabPage1 = new System.Windows.Forms.TabPage();
+            this.schemaColumnOrderingCheckbox = new System.Windows.Forms.CheckBox();
             this.showFetchXMLInEstimatedExecutionPlansCheckBox = new System.Windows.Forms.CheckBox();
-            this.tabPage2 = new System.Windows.Forms.TabPage();
-            this.label15 = new System.Windows.Forms.Label();
-            this.insertWarnThresholdUpDown = new System.Windows.Forms.NumericUpDown();
-            this.label16 = new System.Windows.Forms.Label();
-            this.tabPage3 = new System.Windows.Forms.TabPage();
-            this.localDateFormatCheckbox = new System.Windows.Forms.CheckBox();
-            this.rememberSessionCheckbox = new System.Windows.Forms.CheckBox();
-            this.tabPage4 = new System.Windows.Forms.TabPage();
-            this.nativeSqlScintilla = new ScintillaNET.Scintilla();
-            this.simpleSqlScintilla = new ScintillaNET.Scintilla();
-            this.nativeSqlRadioButton = new System.Windows.Forms.RadioButton();
-            this.simpleSqlRadioButton = new System.Windows.Forms.RadioButton();
-            this.label17 = new System.Windows.Forms.Label();
             this.pictureBox6 = new System.Windows.Forms.PictureBox();
             this.pictureBox4 = new System.Windows.Forms.PictureBox();
             this.pictureBox2 = new System.Windows.Forms.PictureBox();
             this.pictureBox1 = new System.Windows.Forms.PictureBox();
             this.bulkDeleteHelp = new System.Windows.Forms.PictureBox();
+            this.tabPage2 = new System.Windows.Forms.TabPage();
+            this.label15 = new System.Windows.Forms.Label();
+            this.insertWarnThresholdUpDown = new System.Windows.Forms.NumericUpDown();
+            this.label16 = new System.Windows.Forms.Label();
             this.pictureBox3 = new System.Windows.Forms.PictureBox();
-            this.pictureBox = new System.Windows.Forms.PictureBox();
+            this.tabPage3 = new System.Windows.Forms.TabPage();
+            this.localDateFormatCheckbox = new System.Windows.Forms.CheckBox();
+            this.rememberSessionCheckbox = new System.Windows.Forms.CheckBox();
+            this.tabPage4 = new System.Windows.Forms.TabPage();
             this.fetchXml2SqlConversionAdvancedLinkLabel = new System.Windows.Forms.LinkLabel();
+            this.nativeSqlScintilla = new ScintillaNET.Scintilla();
+            this.simpleSqlScintilla = new ScintillaNET.Scintilla();
+            this.nativeSqlRadioButton = new System.Windows.Forms.RadioButton();
+            this.simpleSqlRadioButton = new System.Windows.Forms.RadioButton();
+            this.label17 = new System.Windows.Forms.Label();
             this.topPanel.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.pictureBox)).BeginInit();
             this.panel2.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.selectLimitUpDown)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.updateWarnThresholdUpDown)).BeginInit();
@@ -96,17 +98,16 @@
             ((System.ComponentModel.ISupportInitialize)(this.maxDopUpDown)).BeginInit();
             this.tabControl1.SuspendLayout();
             this.tabPage1.SuspendLayout();
-            this.tabPage2.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.insertWarnThresholdUpDown)).BeginInit();
-            this.tabPage3.SuspendLayout();
-            this.tabPage4.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox6)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox4)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox2)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.bulkDeleteHelp)).BeginInit();
+            this.tabPage2.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.insertWarnThresholdUpDown)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox3)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.pictureBox)).BeginInit();
+            this.tabPage3.SuspendLayout();
+            this.tabPage4.SuspendLayout();
             this.SuspendLayout();
             // 
             // topPanel
@@ -120,6 +121,18 @@
             this.topPanel.Name = "topPanel";
             this.topPanel.Size = new System.Drawing.Size(441, 52);
             this.topPanel.TabIndex = 0;
+            // 
+            // pictureBox
+            // 
+            this.pictureBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(7)))), ((int)(((byte)(14)))), ((int)(((byte)(22)))));
+            this.pictureBox.Image = ((System.Drawing.Image)(resources.GetObject("pictureBox.Image")));
+            this.pictureBox.Location = new System.Drawing.Point(6, 6);
+            this.pictureBox.Margin = new System.Windows.Forms.Padding(2);
+            this.pictureBox.Name = "pictureBox";
+            this.pictureBox.Size = new System.Drawing.Size(40, 40);
+            this.pictureBox.SizeMode = System.Windows.Forms.PictureBoxSizeMode.StretchImage;
+            this.pictureBox.TabIndex = 0;
+            this.pictureBox.TabStop = false;
             // 
             // label1
             // 
@@ -371,9 +384,9 @@
             this.label12.AutoSize = true;
             this.label12.Location = new System.Drawing.Point(173, 52);
             this.label12.Name = "label12";
-            this.label12.Size = new System.Drawing.Size(77, 13);
+            this.label12.Size = new System.Drawing.Size(131, 13);
             this.label12.TabIndex = 6;
-            this.label12.Text = "worker threads";
+            this.label12.Text = "worker threads (0 for auto)";
             // 
             // localTimesComboBox
             // 
@@ -386,7 +399,7 @@
             this.localTimesComboBox.Margin = new System.Windows.Forms.Padding(2);
             this.localTimesComboBox.Name = "localTimesComboBox";
             this.localTimesComboBox.Size = new System.Drawing.Size(203, 21);
-            this.localTimesComboBox.TabIndex = 13;
+            this.localTimesComboBox.TabIndex = 12;
             // 
             // label11
             // 
@@ -395,17 +408,12 @@
             this.label11.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
             this.label11.Name = "label11";
             this.label11.Size = new System.Drawing.Size(128, 13);
-            this.label11.TabIndex = 12;
+            this.label11.TabIndex = 11;
             this.label11.Text = "Treat date/time values as";
             // 
             // maxDopUpDown
             // 
             this.maxDopUpDown.Location = new System.Drawing.Point(65, 50);
-            this.maxDopUpDown.Minimum = new decimal(new int[] {
-            1,
-            0,
-            0,
-            0});
             this.maxDopUpDown.Name = "maxDopUpDown";
             this.maxDopUpDown.Size = new System.Drawing.Size(102, 20);
             this.maxDopUpDown.TabIndex = 5;
@@ -481,6 +489,7 @@
             // 
             // tabPage1
             // 
+            this.tabPage1.Controls.Add(this.schemaColumnOrderingCheckbox);
             this.tabPage1.Controls.Add(this.showFetchXMLInEstimatedExecutionPlansCheckBox);
             this.tabPage1.Controls.Add(this.pictureBox6);
             this.tabPage1.Controls.Add(this.pictureBox4);
@@ -507,6 +516,16 @@
             this.tabPage1.Text = "Query Execution";
             this.tabPage1.UseVisualStyleBackColor = true;
             // 
+            // schemaColumnOrderingCheckbox
+            // 
+            this.schemaColumnOrderingCheckbox.AutoSize = true;
+            this.schemaColumnOrderingCheckbox.Location = new System.Drawing.Point(9, 193);
+            this.schemaColumnOrderingCheckbox.Name = "schemaColumnOrderingCheckbox";
+            this.schemaColumnOrderingCheckbox.Size = new System.Drawing.Size(163, 17);
+            this.schemaColumnOrderingCheckbox.TabIndex = 13;
+            this.schemaColumnOrderingCheckbox.Text = "Use schema column ordering";
+            this.schemaColumnOrderingCheckbox.UseVisualStyleBackColor = true;
+            // 
             // showFetchXMLInEstimatedExecutionPlansCheckBox
             // 
             this.showFetchXMLInEstimatedExecutionPlansCheckBox.AutoSize = true;
@@ -519,6 +538,69 @@
             this.showFetchXMLInEstimatedExecutionPlansCheckBox.TabIndex = 10;
             this.showFetchXMLInEstimatedExecutionPlansCheckBox.Text = "Show FetchXML in estimated execution plans";
             this.showFetchXMLInEstimatedExecutionPlansCheckBox.UseVisualStyleBackColor = true;
+            // 
+            // pictureBox6
+            // 
+            this.pictureBox6.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.pictureBox6.Image = global::MarkMpn.Sql4Cds.Properties.Resources.StatusHelp_16x;
+            this.pictureBox6.Location = new System.Drawing.Point(310, 52);
+            this.pictureBox6.Name = "pictureBox6";
+            this.pictureBox6.Size = new System.Drawing.Size(16, 16);
+            this.pictureBox6.TabIndex = 31;
+            this.pictureBox6.TabStop = false;
+            this.pictureBox6.Tag = "https://docs.microsoft.com/powerapps/developer/data-platform/api-limits#how-to-ma" +
+    "ximize-throughput";
+            this.pictureBox6.Click += new System.EventHandler(this.helpIcon_Click);
+            // 
+            // pictureBox4
+            // 
+            this.pictureBox4.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.pictureBox4.Image = global::MarkMpn.Sql4Cds.Properties.Resources.StatusHelp_16x;
+            this.pictureBox4.Location = new System.Drawing.Point(124, 6);
+            this.pictureBox4.Name = "pictureBox4";
+            this.pictureBox4.Size = new System.Drawing.Size(16, 16);
+            this.pictureBox4.TabIndex = 29;
+            this.pictureBox4.TabStop = false;
+            this.pictureBox4.Tag = "https://docs.microsoft.com/sql/t-sql/statements/set-quoted-identifier-transact-sq" +
+    "l";
+            this.pictureBox4.Click += new System.EventHandler(this.helpIcon_Click);
+            // 
+            // pictureBox2
+            // 
+            this.pictureBox2.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.pictureBox2.Image = global::MarkMpn.Sql4Cds.Properties.Resources.StatusHelp_16x;
+            this.pictureBox2.Location = new System.Drawing.Point(250, 122);
+            this.pictureBox2.Name = "pictureBox2";
+            this.pictureBox2.Size = new System.Drawing.Size(16, 16);
+            this.pictureBox2.TabIndex = 28;
+            this.pictureBox2.TabStop = false;
+            this.pictureBox2.Tag = "https://docs.microsoft.com/powerapps/developer/data-platform/dataverse-sql-query";
+            this.pictureBox2.Click += new System.EventHandler(this.helpIcon_Click);
+            // 
+            // pictureBox1
+            // 
+            this.pictureBox1.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.pictureBox1.Image = global::MarkMpn.Sql4Cds.Properties.Resources.StatusHelp_16x;
+            this.pictureBox1.Location = new System.Drawing.Point(148, 99);
+            this.pictureBox1.Name = "pictureBox1";
+            this.pictureBox1.Size = new System.Drawing.Size(16, 16);
+            this.pictureBox1.TabIndex = 27;
+            this.pictureBox1.TabStop = false;
+            this.pictureBox1.Tag = "https://docs.microsoft.com/powerapps/developer/data-platform/bypass-custom-busine" +
+    "ss-logic";
+            this.pictureBox1.Click += new System.EventHandler(this.helpIcon_Click);
+            // 
+            // bulkDeleteHelp
+            // 
+            this.bulkDeleteHelp.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.bulkDeleteHelp.Image = global::MarkMpn.Sql4Cds.Properties.Resources.StatusHelp_16x;
+            this.bulkDeleteHelp.Location = new System.Drawing.Point(167, 77);
+            this.bulkDeleteHelp.Name = "bulkDeleteHelp";
+            this.bulkDeleteHelp.Size = new System.Drawing.Size(16, 16);
+            this.bulkDeleteHelp.TabIndex = 26;
+            this.bulkDeleteHelp.TabStop = false;
+            this.bulkDeleteHelp.Tag = "https://docs.microsoft.com/powerapps/developer/data-platform/delete-data-bulk";
+            this.bulkDeleteHelp.Click += new System.EventHandler(this.helpIcon_Click);
             // 
             // tabPage2
             // 
@@ -578,6 +660,18 @@
             this.label16.TabIndex = 6;
             this.label16.Text = "Warn when inserting more than";
             // 
+            // pictureBox3
+            // 
+            this.pictureBox3.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.pictureBox3.Image = global::MarkMpn.Sql4Cds.Properties.Resources.StatusHelp_16x;
+            this.pictureBox3.Location = new System.Drawing.Point(378, 34);
+            this.pictureBox3.Name = "pictureBox3";
+            this.pictureBox3.Size = new System.Drawing.Size(16, 16);
+            this.pictureBox3.TabIndex = 27;
+            this.pictureBox3.TabStop = false;
+            this.pictureBox3.Tag = "https://docs.microsoft.com/powerapps/developer/data-platform/api-limits";
+            this.pictureBox3.Click += new System.EventHandler(this.helpIcon_Click);
+            // 
             // tabPage3
             // 
             this.tabPage3.Controls.Add(this.localDateFormatCheckbox);
@@ -627,6 +721,18 @@
             this.tabPage4.TabIndex = 3;
             this.tabPage4.Text = "Conversion";
             this.tabPage4.UseVisualStyleBackColor = true;
+            // 
+            // fetchXml2SqlConversionAdvancedLinkLabel
+            // 
+            this.fetchXml2SqlConversionAdvancedLinkLabel.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.fetchXml2SqlConversionAdvancedLinkLabel.AutoSize = true;
+            this.fetchXml2SqlConversionAdvancedLinkLabel.Location = new System.Drawing.Point(348, 21);
+            this.fetchXml2SqlConversionAdvancedLinkLabel.Name = "fetchXml2SqlConversionAdvancedLinkLabel";
+            this.fetchXml2SqlConversionAdvancedLinkLabel.Size = new System.Drawing.Size(56, 13);
+            this.fetchXml2SqlConversionAdvancedLinkLabel.TabIndex = 5;
+            this.fetchXml2SqlConversionAdvancedLinkLabel.TabStop = true;
+            this.fetchXml2SqlConversionAdvancedLinkLabel.Text = "Advanced";
+            this.fetchXml2SqlConversionAdvancedLinkLabel.LinkClicked += new System.Windows.Forms.LinkLabelLinkClickedEventHandler(this.fetchXml2SqlConversionAdvancedLinkLabel_LinkClicked);
             // 
             // nativeSqlScintilla
             // 
@@ -680,105 +786,6 @@
             this.label17.TabIndex = 0;
             this.label17.Text = "When converting FetchXML to SQL (e.g. from FetchXML Builder):";
             // 
-            // pictureBox6
-            // 
-            this.pictureBox6.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.pictureBox6.Image = global::MarkMpn.Sql4Cds.Properties.Resources.StatusHelp_16x;
-            this.pictureBox6.Location = new System.Drawing.Point(256, 52);
-            this.pictureBox6.Name = "pictureBox6";
-            this.pictureBox6.Size = new System.Drawing.Size(16, 16);
-            this.pictureBox6.TabIndex = 31;
-            this.pictureBox6.TabStop = false;
-            this.pictureBox6.Tag = "https://docs.microsoft.com/powerapps/developer/data-platform/api-limits#how-to-ma" +
-    "ximize-throughput";
-            this.pictureBox6.Click += new System.EventHandler(this.helpIcon_Click);
-            // 
-            // pictureBox4
-            // 
-            this.pictureBox4.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.pictureBox4.Image = global::MarkMpn.Sql4Cds.Properties.Resources.StatusHelp_16x;
-            this.pictureBox4.Location = new System.Drawing.Point(124, 6);
-            this.pictureBox4.Name = "pictureBox4";
-            this.pictureBox4.Size = new System.Drawing.Size(16, 16);
-            this.pictureBox4.TabIndex = 29;
-            this.pictureBox4.TabStop = false;
-            this.pictureBox4.Tag = "https://docs.microsoft.com/sql/t-sql/statements/set-quoted-identifier-transact-sq" +
-    "l";
-            this.pictureBox4.Click += new System.EventHandler(this.helpIcon_Click);
-            // 
-            // pictureBox2
-            // 
-            this.pictureBox2.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.pictureBox2.Image = global::MarkMpn.Sql4Cds.Properties.Resources.StatusHelp_16x;
-            this.pictureBox2.Location = new System.Drawing.Point(250, 122);
-            this.pictureBox2.Name = "pictureBox2";
-            this.pictureBox2.Size = new System.Drawing.Size(16, 16);
-            this.pictureBox2.TabIndex = 28;
-            this.pictureBox2.TabStop = false;
-            this.pictureBox2.Tag = "https://docs.microsoft.com/powerapps/developer/data-platform/dataverse-sql-query";
-            this.pictureBox2.Click += new System.EventHandler(this.helpIcon_Click);
-            // 
-            // pictureBox1
-            // 
-            this.pictureBox1.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.pictureBox1.Image = global::MarkMpn.Sql4Cds.Properties.Resources.StatusHelp_16x;
-            this.pictureBox1.Location = new System.Drawing.Point(148, 99);
-            this.pictureBox1.Name = "pictureBox1";
-            this.pictureBox1.Size = new System.Drawing.Size(16, 16);
-            this.pictureBox1.TabIndex = 27;
-            this.pictureBox1.TabStop = false;
-            this.pictureBox1.Tag = "https://docs.microsoft.com/powerapps/developer/data-platform/bypass-custom-busine" +
-    "ss-logic";
-            this.pictureBox1.Click += new System.EventHandler(this.helpIcon_Click);
-            // 
-            // bulkDeleteHelp
-            // 
-            this.bulkDeleteHelp.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.bulkDeleteHelp.Image = global::MarkMpn.Sql4Cds.Properties.Resources.StatusHelp_16x;
-            this.bulkDeleteHelp.Location = new System.Drawing.Point(167, 77);
-            this.bulkDeleteHelp.Name = "bulkDeleteHelp";
-            this.bulkDeleteHelp.Size = new System.Drawing.Size(16, 16);
-            this.bulkDeleteHelp.TabIndex = 26;
-            this.bulkDeleteHelp.TabStop = false;
-            this.bulkDeleteHelp.Tag = "https://docs.microsoft.com/powerapps/developer/data-platform/delete-data-bulk";
-            this.bulkDeleteHelp.Click += new System.EventHandler(this.helpIcon_Click);
-            // 
-            // pictureBox3
-            // 
-            this.pictureBox3.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.pictureBox3.Image = global::MarkMpn.Sql4Cds.Properties.Resources.StatusHelp_16x;
-            this.pictureBox3.Location = new System.Drawing.Point(378, 34);
-            this.pictureBox3.Name = "pictureBox3";
-            this.pictureBox3.Size = new System.Drawing.Size(16, 16);
-            this.pictureBox3.TabIndex = 27;
-            this.pictureBox3.TabStop = false;
-            this.pictureBox3.Tag = "https://docs.microsoft.com/powerapps/developer/data-platform/api-limits";
-            this.pictureBox3.Click += new System.EventHandler(this.helpIcon_Click);
-            // 
-            // pictureBox
-            // 
-            this.pictureBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(7)))), ((int)(((byte)(14)))), ((int)(((byte)(22)))));
-            this.pictureBox.Image = ((System.Drawing.Image)(resources.GetObject("pictureBox.Image")));
-            this.pictureBox.Location = new System.Drawing.Point(6, 6);
-            this.pictureBox.Margin = new System.Windows.Forms.Padding(2);
-            this.pictureBox.Name = "pictureBox";
-            this.pictureBox.Size = new System.Drawing.Size(40, 40);
-            this.pictureBox.SizeMode = System.Windows.Forms.PictureBoxSizeMode.StretchImage;
-            this.pictureBox.TabIndex = 0;
-            this.pictureBox.TabStop = false;
-            // 
-            // fetchXml2SqlConversionAdvancedLinkLabel
-            // 
-            this.fetchXml2SqlConversionAdvancedLinkLabel.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.fetchXml2SqlConversionAdvancedLinkLabel.AutoSize = true;
-            this.fetchXml2SqlConversionAdvancedLinkLabel.Location = new System.Drawing.Point(348, 21);
-            this.fetchXml2SqlConversionAdvancedLinkLabel.Name = "fetchXml2SqlConversionAdvancedLinkLabel";
-            this.fetchXml2SqlConversionAdvancedLinkLabel.Size = new System.Drawing.Size(56, 13);
-            this.fetchXml2SqlConversionAdvancedLinkLabel.TabIndex = 5;
-            this.fetchXml2SqlConversionAdvancedLinkLabel.TabStop = true;
-            this.fetchXml2SqlConversionAdvancedLinkLabel.Text = "Advanced";
-            this.fetchXml2SqlConversionAdvancedLinkLabel.LinkClicked += new System.Windows.Forms.LinkLabelLinkClickedEventHandler(this.fetchXml2SqlConversionAdvancedLinkLabel_LinkClicked);
-            // 
             // SettingsForm
             // 
             this.AcceptButton = this.okButton;
@@ -800,6 +807,7 @@
             this.Text = "SQL 4 CDS Settings";
             this.topPanel.ResumeLayout(false);
             this.topPanel.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.pictureBox)).EndInit();
             this.panel2.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.selectLimitUpDown)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.updateWarnThresholdUpDown)).EndInit();
@@ -810,20 +818,19 @@
             this.tabControl1.ResumeLayout(false);
             this.tabPage1.ResumeLayout(false);
             this.tabPage1.PerformLayout();
-            this.tabPage2.ResumeLayout(false);
-            this.tabPage2.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.insertWarnThresholdUpDown)).EndInit();
-            this.tabPage3.ResumeLayout(false);
-            this.tabPage3.PerformLayout();
-            this.tabPage4.ResumeLayout(false);
-            this.tabPage4.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox6)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox4)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox2)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.bulkDeleteHelp)).EndInit();
+            this.tabPage2.ResumeLayout(false);
+            this.tabPage2.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.insertWarnThresholdUpDown)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox3)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.pictureBox)).EndInit();
+            this.tabPage3.ResumeLayout(false);
+            this.tabPage3.PerformLayout();
+            this.tabPage4.ResumeLayout(false);
+            this.tabPage4.PerformLayout();
             this.ResumeLayout(false);
 
         }
@@ -887,5 +894,6 @@
         private ScintillaNET.Scintilla nativeSqlScintilla;
         private System.Windows.Forms.CheckBox showFetchXMLInEstimatedExecutionPlansCheckBox;
         private System.Windows.Forms.LinkLabel fetchXml2SqlConversionAdvancedLinkLabel;
+        private System.Windows.Forms.CheckBox schemaColumnOrderingCheckbox;
     }
 }

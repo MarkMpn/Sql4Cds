@@ -61,6 +61,7 @@
             this.treeView.Size = new System.Drawing.Size(284, 236);
             this.treeView.TabIndex = 1;
             this.treeView.BeforeExpand += new System.Windows.Forms.TreeViewCancelEventHandler(this.treeView_BeforeExpand);
+            this.treeView.AfterSelect += new System.Windows.Forms.TreeViewEventHandler(this.treeView_AfterSelect);
             this.treeView.NodeMouseClick += new System.Windows.Forms.TreeNodeMouseClickEventHandler(this.treeView_NodeMouseClick);
             this.treeView.NodeMouseDoubleClick += new System.Windows.Forms.TreeNodeMouseClickEventHandler(this.treeView_NodeMouseDoubleClick);
             // 
@@ -189,11 +190,13 @@
             // tsbDisconnect
             // 
             this.tsbDisconnect.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Image;
+            this.tsbDisconnect.Enabled = false;
             this.tsbDisconnect.Image = ((System.Drawing.Image)(resources.GetObject("tsbDisconnect.Image")));
             this.tsbDisconnect.ImageTransparentColor = System.Drawing.Color.Magenta;
             this.tsbDisconnect.Name = "tsbDisconnect";
             this.tsbDisconnect.Size = new System.Drawing.Size(23, 22);
             this.tsbDisconnect.Text = "Disconnect";
+            this.tsbDisconnect.Click += new System.EventHandler(this.disconnectToolStripMenuItem_Click);
             // 
             // ObjectExplorer
             // 

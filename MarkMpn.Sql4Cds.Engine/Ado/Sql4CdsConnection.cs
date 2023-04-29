@@ -67,8 +67,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
             _globalVariableTypes = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase)
             {
-                ["@@IDENTITY"] = typeof(SqlEntityReference).ToSqlType(),
-                ["@@ROWCOUNT"] = typeof(SqlInt32).ToSqlType()
+                ["@@IDENTITY"] = DataTypeHelpers.EntityReference,
+                ["@@ROWCOUNT"] = DataTypeHelpers.Int
             };
             _globalVariableValues = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
             {
@@ -220,6 +220,15 @@ namespace MarkMpn.Sql4Cds.Engine
         /// Returns or sets the name of the application using the connection
         /// </summary>
         public string ApplicationName { get; set; }
+
+        /// <summary>
+        /// Returns or sets how columns should be sorted within tables
+        /// </summary>
+        public ColumnOrdering ColumnOrdering
+        {
+            get => _options.ColumnOrdering;
+            set => _options.ColumnOrdering = value;
+        }
 
         internal Dictionary<string, DataTypeReference> GlobalVariableTypes => _globalVariableTypes;
 

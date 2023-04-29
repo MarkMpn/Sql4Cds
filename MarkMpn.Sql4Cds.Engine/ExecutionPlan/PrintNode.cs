@@ -12,7 +12,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     {
         private int _executionCount;
         private readonly Timer _timer = new Timer();
-        private Func<Entity, IDictionary<string, object>, IQueryExecutionOptions, object> _expression;
+        private Func<ExpressionExecutionContext, object> _expression;
 
         public override int ExecutionCount => _executionCount;
 
@@ -31,7 +31,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Description("The value to print")]
         public ScalarExpression Expression { get; set; }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
         }
 
@@ -47,14 +47,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             };
         }
 
-        public string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected)
+        public string Execute(NodeExecutionContext context, out int recordsAffected)
         {
             _executionCount++;
             recordsAffected = -1;
 
             using (_timer.Run())
             {
-                var value = (SqlString)_expression(null, parameterValues, options);
+                var value = (SqlString)_expression(new ExpressionExecutionContext(context));
 
                 if (value.IsNull)
                     return null;
@@ -63,9 +63,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public IRootExecutionPlanNodeInternal[] FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public IRootExecutionPlanNodeInternal[] FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
-            _expression = Expression.Compile(null, parameterTypes);
+            _expression = Expression.Compile(new ExpressionCompilationContext(context, null, null));
             return new[] { this };
         }
 

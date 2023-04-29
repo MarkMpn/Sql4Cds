@@ -5,6 +5,7 @@ using System.Data.SqlTypes;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.Serialization;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
@@ -28,6 +29,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             public Func<object,object> Accessor { get; set; }
             public DataTypeReference SqlType { get; set; }
             public Type Type { get; set; }
+            public IComparable[] DataMemberOrder { get; set; }
         }
 
         class AttributeProperty
@@ -38,6 +40,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             public DataTypeReference SqlType { get; set; }
             public Type Type { get; set; }
             public bool IsNullable { get; set; }
+            public IComparable[] DataMemberOrder { get; set; }
         }
 
         private IDictionary<string, MetadataProperty> _entityCols;
@@ -72,7 +75,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _entityProps = typeof(EntityMetadata)
                 .GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .Where(p => !excludedEntityProps.Contains(p.Name))
-                .ToDictionary(p => p.Name, p => new MetadataProperty { SqlName = p.Name.ToLowerInvariant(), PropertyName = p.Name, Type = p.PropertyType, SqlType = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType).ToNetType(out _)) }, StringComparer.OrdinalIgnoreCase);
+                .ToDictionary(p => p.Name, p => new MetadataProperty { SqlName = p.Name.ToLowerInvariant(), PropertyName = p.Name, Type = p.PropertyType, SqlType = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType).ToNetType(out _)), DataMemberOrder = GetDataMemberOrder(p) }, StringComparer.OrdinalIgnoreCase);
 
             var excludedOneToManyRelationshipProps = new[]
             {
@@ -85,7 +88,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _oneToManyRelationshipProps = typeof(OneToManyRelationshipMetadata)
                 .GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .Where(p => !excludedOneToManyRelationshipProps.Contains(p.Name))
-                .ToDictionary(p => p.Name, p => new MetadataProperty { SqlName = p.Name.ToLowerInvariant(), PropertyName = p.Name, Type = p.PropertyType, SqlType = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType).ToNetType(out _)) }, StringComparer.OrdinalIgnoreCase);
+                .ToDictionary(p => p.Name, p => new MetadataProperty { SqlName = p.Name.ToLowerInvariant(), PropertyName = p.Name, Type = p.PropertyType, SqlType = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType).ToNetType(out _)), DataMemberOrder = GetDataMemberOrder(p) }, StringComparer.OrdinalIgnoreCase);
 
             var excludedManyToManyRelationshipProps = new[]
             {
@@ -97,7 +100,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             _manyToManyRelationshipProps = typeof(ManyToManyRelationshipMetadata)
                 .GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .Where(p => !excludedManyToManyRelationshipProps.Contains(p.Name))
-                .ToDictionary(p => p.Name, p => new MetadataProperty { SqlName = p.Name.ToLowerInvariant(), PropertyName = p.Name, Type = p.PropertyType, SqlType = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType).ToNetType(out _)) }, StringComparer.OrdinalIgnoreCase);
+                .ToDictionary(p => p.Name, p => new MetadataProperty { SqlName = p.Name.ToLowerInvariant(), PropertyName = p.Name, Type = p.PropertyType, SqlType = GetPropertyType(p.PropertyType), Accessor = GetPropertyAccessor(p, GetPropertyType(p.PropertyType).ToNetType(out _)), DataMemberOrder = GetDataMemberOrder(p) }, StringComparer.OrdinalIgnoreCase);
 
             // Get a list of all attribute types
             _attributeTypes = typeof(AttributeMetadata).Assembly
@@ -122,7 +125,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         {
                             type = GetPropertyType(prop.Property.PropertyType);
                         }
-                        else if (!SqlTypeConverter.CanMakeConsistentTypes(type, GetPropertyType(prop.Property.PropertyType), out type))
+                        else if (!SqlTypeConverter.CanMakeConsistentTypes(type, GetPropertyType(prop.Property.PropertyType), null, out type))
                         {
                             // Can't make a consistent type for this property, so we can't use it
                             type = null;
@@ -145,7 +148,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         SqlType = type,
                         Type = netType,
                         Accessors = g.ToDictionary(p => p.Type, p => GetPropertyAccessor(p.Property, netType)),
-                        IsNullable = isNullable
+                        IsNullable = isNullable,
+                        DataMemberOrder = GetDataMemberOrder(g.First().Property)
                     };
                 })
                 .Where(p => p != null)
@@ -260,7 +264,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Description("The metadata query to be executed")]
         public EntityQueryExpression Query { get; private set; } = new EntityQueryExpression();
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
             _entityCols = new Dictionary<string, MetadataProperty>();
             _attributeCols = new Dictionary<string, AttributeProperty>();
@@ -373,7 +377,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(NodeCompilationContext context)
         {
             var entityCount = 100;
             var attributesPerEntity = 1;
@@ -434,14 +438,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return false;
         }
 
-        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
             return this;
         }
 
-        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
+        public override INodeSchema GetSchema(NodeCompilationContext context)
         {
-            var schema = new Dictionary<string, DataTypeReference>(StringComparer.OrdinalIgnoreCase);
+            var schema = new ColumnList();
             var aliases = new Dictionary<string, IReadOnlyList<string>>();
             var primaryKey = (string)null;
             var notNullColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -455,6 +459,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (Query.Properties != null)
                     entityProps = entityProps.Where(p => Query.Properties.AllProperties || Query.Properties.PropertyNames.Contains(p.PropertyName, StringComparer.OrdinalIgnoreCase));
+
+                if (context.Options.ColumnOrdering == ColumnOrdering.Alphabetical)
+                    entityProps = entityProps.OrderBy(p => p.SqlName);
+                else
+                    entityProps = entityProps.OrderBy(p => p.DataMemberOrder[0]).ThenBy(p => p.DataMemberOrder[1]).ThenBy(p => p.DataMemberOrder[2]);
 
                 foreach (var prop in entityProps)
                 {
@@ -482,6 +491,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (Query.AttributeQuery?.Properties != null)
                     attributeProps = attributeProps.Where(p => Query.AttributeQuery.Properties.AllProperties || Query.AttributeQuery.Properties.PropertyNames.Contains(p.PropertyName, StringComparer.OrdinalIgnoreCase));
+
+                if (context.Options.ColumnOrdering == ColumnOrdering.Alphabetical)
+                    attributeProps = attributeProps.OrderBy(p => p.SqlName);
+                else
+                    attributeProps = attributeProps.OrderBy(p => p.DataMemberOrder[0]).ThenBy(p => p.DataMemberOrder[1]).ThenBy(p => p.DataMemberOrder[2]);
 
                 foreach (var prop in attributeProps)
                 {
@@ -511,6 +525,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (Query.RelationshipQuery?.Properties != null)
                     relationshipProps = relationshipProps.Where(p => Query.RelationshipQuery.Properties.AllProperties || Query.RelationshipQuery.Properties.PropertyNames.Contains(p.PropertyName, StringComparer.OrdinalIgnoreCase));
 
+                if (context.Options.ColumnOrdering == ColumnOrdering.Alphabetical)
+                    relationshipProps = relationshipProps.OrderBy(p => p.SqlName);
+                else
+                    relationshipProps = relationshipProps.OrderBy(p => p.DataMemberOrder[0]).ThenBy(p => p.DataMemberOrder[1]).ThenBy(p => p.DataMemberOrder[2]);
+
                 foreach (var prop in relationshipProps)
                 {
                     var fullName = $"{OneToManyRelationshipAlias}.{prop.SqlName}";
@@ -539,6 +558,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (Query.RelationshipQuery?.Properties != null)
                     relationshipProps = relationshipProps.Where(p => Query.RelationshipQuery.Properties.AllProperties || Query.RelationshipQuery.Properties.PropertyNames.Contains(p.PropertyName, StringComparer.OrdinalIgnoreCase));
 
+                if (context.Options.ColumnOrdering == ColumnOrdering.Alphabetical)
+                    relationshipProps = relationshipProps.OrderBy(p => p.SqlName);
+                else
+                    relationshipProps = relationshipProps.OrderBy(p => p.DataMemberOrder[0]).ThenBy(p => p.DataMemberOrder[1]).ThenBy(p => p.DataMemberOrder[2]);
+
                 foreach (var prop in relationshipProps)
                 {
                     var fullName = $"{ManyToOneRelationshipAlias}.{prop.SqlName}";
@@ -566,6 +590,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (Query.RelationshipQuery?.Properties != null)
                     relationshipProps = relationshipProps.Where(p => Query.RelationshipQuery.Properties.AllProperties || Query.RelationshipQuery.Properties.PropertyNames.Contains(p.PropertyName, StringComparer.OrdinalIgnoreCase));
+
+                if (context.Options.ColumnOrdering == ColumnOrdering.Alphabetical)
+                    relationshipProps = relationshipProps.OrderBy(p => p.SqlName);
+                else
+                    relationshipProps = relationshipProps.OrderBy(p => p.DataMemberOrder[0]).ThenBy(p => p.DataMemberOrder[1]).ThenBy(p => p.DataMemberOrder[2]);
 
                 foreach (var prop in relationshipProps)
                 {
@@ -647,7 +676,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             else if (typeof(MetadataBase).IsAssignableFrom(propType))
                 propType = typeof(Guid);
 
-            return SqlTypeConverter.NetToSqlType(propType).ToSqlType();
+            return SqlTypeConverter.NetToSqlType(propType).ToSqlType(null);
         }
 
         internal static Func<object,object> GetPropertyAccessor(PropertyInfo prop, Type targetType)
@@ -689,7 +718,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (directConversionType == typeof(SqlString) && value.Type != typeof(string))
                 value = Expression.Call(value, nameof(Object.ToString), Array.Empty<Type>());
 
-            var converted = SqlTypeConverter.Convert(value, directConversionType);
+            Expression converted;
+
+            if (value.Type == typeof(string) && directConversionType == typeof(SqlString) && targetType == typeof(SqlString))
+                converted = Expr.Call(() => ApplyCollation(Expr.Arg<string>()), value);
+            else
+                converted = SqlTypeConverter.Convert(value, directConversionType);
+
             if (targetType != directConversionType)
                 converted = SqlTypeConverter.Convert(converted, targetType);
 
@@ -709,12 +744,42 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return func;
         }
 
+        internal static IComparable[] GetDataMemberOrder(PropertyInfo prop)
+        {
+            // https://learn.microsoft.com/en-us/dotnet/framework/wcf/feature-details/data-member-order
+            var inheritanceDepth = 0;
+            var type = prop.DeclaringType;
+            while (type.BaseType != null)
+            {
+                inheritanceDepth++;
+                type = type.BaseType;
+            }
+
+            var attr = prop.GetCustomAttribute<DataMemberAttribute>();
+
+            return new IComparable[]
+            {
+                inheritanceDepth,
+                attr?.Order ?? Int32.MinValue,
+                prop.Name
+            };
+        }
+
+        private static SqlString ApplyCollation(string value)
+        {
+            if (value == null)
+                return SqlString.Null;
+
+            // Assume all metadata values should use standard collation rather than datasource specific?
+            return Collation.USEnglish.ToSqlString(value);
+        }
+
         public override IEnumerable<IExecutionPlanNode> GetSources()
         {
             return Array.Empty<IDataExecutionPlanNode>();
         }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
             if (MetadataSource.HasFlag(MetadataSource.Attribute))
             {
@@ -756,7 +821,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     Query.Properties.PropertyNames.Add(nameof(EntityMetadata.ManyToManyRelationships));
             }
 
-            if (!dataSources.TryGetValue(DataSource, out var dataSource))
+            if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Missing datasource " + DataSource);
 
             var resp = (RetrieveMetadataChangesResponse) dataSource.Connection.Execute(new RetrieveMetadataChangesRequest { Query = Query });

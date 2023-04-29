@@ -28,6 +28,7 @@ namespace MarkMpn.Sql4Cds.Engine
             UseLocalTimeZone = options.UseLocalTimeZone;
             BypassCustomPlugins = options.BypassCustomPlugins;
             QuotedIdentifiers = options.QuotedIdentifiers;
+            ColumnOrdering = options.ColumnOrdering;
         }
 
         public CancellationToken CancellationToken => _options.CancellationToken;
@@ -57,6 +58,8 @@ namespace MarkMpn.Sql4Cds.Engine
         public Guid UserId => _options.UserId;
 
         public bool QuotedIdentifiers { get; set; }
+
+        public ColumnOrdering ColumnOrdering { get; set; }
 
         public void ConfirmDelete(ConfirmDmlStatementEventArgs e)
         {

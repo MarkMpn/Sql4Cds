@@ -27,6 +27,12 @@ namespace MarkMpn.Sql4Cds.Engine
             Value = value;
         }
 
+        /// <inheritdoc cref="System.Data.SqlClient.SqlParameter.LocaleId"/>
+        public int LocaleId { get; set; } = Collation.USEnglish.LCID;
+
+        /// <inheritdoc cref="System.Data.SqlClient.SqlParameter.CompareInfo"/>
+        public SqlCompareOptions CompareInfo { get; set; } = Collation.USEnglish.CompareOptions;
+
         public override DbType DbType
         {
             get
@@ -143,11 +149,11 @@ namespace MarkMpn.Sql4Cds.Engine
                 switch (DbType)
                 {
                     case DbType.AnsiString:
-                        _dataType = DataTypeHelpers.VarChar(Size);
+                        _dataType = DataTypeHelpers.VarChar(Size, new Collation(null, LocaleId, CompareInfo, null), CollationLabel.CoercibleDefault);
                         break;
 
                     case DbType.AnsiStringFixedLength:
-                        _dataType = DataTypeHelpers.Char(Size);
+                        _dataType = DataTypeHelpers.Char(Size, new Collation(null, LocaleId, CompareInfo, null), CollationLabel.CoercibleDefault);
                         break;
 
                     case DbType.Binary:
@@ -220,11 +226,11 @@ namespace MarkMpn.Sql4Cds.Engine
                         break;
 
                     case DbType.String:
-                        _dataType = DataTypeHelpers.NVarChar(Size);
+                        _dataType = DataTypeHelpers.NVarChar(Size, new Collation(null, LocaleId, CompareInfo, null), CollationLabel.CoercibleDefault);
                         break;
 
                     case DbType.StringFixedLength:
-                        _dataType = DataTypeHelpers.NChar(Size);
+                        _dataType = DataTypeHelpers.NChar(Size, new Collation(null, LocaleId, CompareInfo, null), CollationLabel.CoercibleDefault);
                         break;
 
                     case DbType.Time:
@@ -244,11 +250,11 @@ namespace MarkMpn.Sql4Cds.Engine
                         break;
 
                     case DbType.VarNumeric:
-                        _dataType = DataTypeHelpers.NVarChar(Int32.MaxValue);
+                        _dataType = DataTypeHelpers.NVarChar(Int32.MaxValue, new Collation(null, LocaleId, CompareInfo, null), CollationLabel.CoercibleDefault);
                         break;
 
                     case DbType.Xml:
-                        _dataType = DataTypeHelpers.NVarChar(Int32.MaxValue);
+                        _dataType = DataTypeHelpers.NVarChar(Int32.MaxValue, new Collation(null, LocaleId, CompareInfo, null), CollationLabel.CoercibleDefault);
                         break;
                 }
             }
@@ -291,7 +297,7 @@ namespace MarkMpn.Sql4Cds.Engine
             else if (value is float f)
                 value = (SqlSingle)f;
             else if (value is string str)
-                value = SqlTypeConverter.UseDefaultCollation(str);
+                value = new SqlString(str, LocaleId, CompareInfo);
             else if (value is DateTimeOffset dto)
                 value = (SqlDateTime)dto.DateTime;
             else if (value is EntityReference er)

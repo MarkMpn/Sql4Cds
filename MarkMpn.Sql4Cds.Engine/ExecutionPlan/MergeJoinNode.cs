@@ -16,7 +16,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// </summary>
     class MergeJoinNode : FoldableJoinNode
     {
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
             // https://sqlserverfast.com/epr/merge-join/
             // Implemented inner, left outer, right outer and full outer variants
@@ -25,12 +25,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             // TODO: Handle union & concatenate
 
             // Left & Right: GetNext, mark as unmatched
-            var leftSchema = LeftSource.GetSchema(dataSources, parameterTypes);
-            var rightSchema = RightSource.GetSchema(dataSources, parameterTypes);
-            var left = LeftSource.Execute(dataSources, options, parameterTypes, parameterValues).GetEnumerator();
-            var right = RightSource.Execute(dataSources, options, parameterTypes, parameterValues).GetEnumerator();
-            var mergedSchema = GetSchema(dataSources, parameterTypes, true);
-            var additionalJoinCriteria = AdditionalJoinCriteria?.Compile(mergedSchema, parameterTypes);
+            var leftSchema = LeftSource.GetSchema(context);
+            var rightSchema = RightSource.GetSchema(context);
+            var left = LeftSource.Execute(context).GetEnumerator();
+            var right = RightSource.Execute(context).GetEnumerator();
+            var mergedSchema = GetSchema(context, true);
+            var expressionCompilationContext = new ExpressionCompilationContext(context, mergedSchema, null);
+            var expressionExecutionContext = new ExpressionExecutionContext(context);
+            var additionalJoinCriteria = AdditionalJoinCriteria?.Compile(expressionCompilationContext);
 
             var hasLeft = left.MoveNext();
             var hasRight = right.MoveNext();
@@ -42,30 +44,31 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 FirstExpression = LeftAttribute,
                 ComparisonType = BooleanComparisonType.LessThan,
                 SecondExpression = RightAttribute
-            }.Compile(mergedSchema, parameterTypes);
+            }.Compile(expressionCompilationContext);
 
             var eq = new BooleanComparisonExpression
             {
                 FirstExpression = LeftAttribute,
                 ComparisonType = BooleanComparisonType.Equals,
                 SecondExpression = RightAttribute
-            }.Compile(mergedSchema, parameterTypes);
+            }.Compile(expressionCompilationContext);
 
             var gt = new BooleanComparisonExpression
             {
                 FirstExpression = LeftAttribute,
                 ComparisonType = BooleanComparisonType.GreaterThan,
                 SecondExpression = RightAttribute
-            }.Compile(mergedSchema, parameterTypes);
+            }.Compile(expressionCompilationContext);
 
             while (!Done(hasLeft, hasRight))
             {
                 // Compare key values
                 var merged = Merge(hasLeft ? left.Current : null, leftSchema, hasRight ? right.Current : null, rightSchema);
 
-                var isLt = lt(merged, parameterValues, options);
-                var isEq = eq(merged, parameterValues, options);
-                var isGt = gt(merged, parameterValues, options);
+                expressionExecutionContext.Entity = merged;
+                var isLt = lt(expressionExecutionContext);
+                var isEq = eq(expressionExecutionContext);
+                var isGt = gt(expressionExecutionContext);
 
                 if (isLt || (hasLeft && !hasRight))
                 {
@@ -77,7 +80,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
                 else if (isEq)
                 {
-                    if ((!leftMatched || !SemiJoin) && (additionalJoinCriteria == null || additionalJoinCriteria(merged, parameterValues, options) == true))
+                    if ((!leftMatched || !SemiJoin) && (additionalJoinCriteria == null || additionalJoinCriteria(expressionExecutionContext) == true))
                         yield return merged;
 
                     leftMatched = true;
@@ -110,9 +113,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return !hasLeft && !hasRight;
         }
 
-        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
-            var folded = base.FoldQuery(dataSources, options, parameterTypes, hints);
+            var folded = base.FoldQuery(context, hints);
 
             if (folded != this)
                 return folded;
@@ -129,7 +132,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         SortOrder = SortOrder.Ascending
                     }
                 }
-            }.FoldQuery(dataSources, options, parameterTypes, hints);
+            }.FoldQuery(context, hints);
             LeftSource.Parent = this;
 
             RightSource = new SortNode
@@ -143,7 +146,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         SortOrder = SortOrder.Ascending
                     }
                 }
-            }.FoldQuery(dataSources, options, parameterTypes, hints);
+            }.FoldQuery(context, hints);
             RightSource.Parent = this;
 
             return this;

@@ -30,12 +30,6 @@ steps:
     arguments: '$(GitVersion.AssemblySemVer)'
     pwsh: true
 
-- task: NuGetCommand@2
-  displayName: NuGet Restore
-  inputs:
-    command: restore
-    restoreSolution: '**/*.sln'
-
 - task: DotNetCoreCLI@2
   displayName: dotnet restore
   inputs:

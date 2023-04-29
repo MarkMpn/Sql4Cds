@@ -22,6 +22,9 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         protected readonly IOrganizationService _service2;
         protected readonly XrmFakedContext _context2;
         protected readonly DataSource _dataSource2;
+        protected readonly IOrganizationService _service3;
+        protected readonly XrmFakedContext _context3;
+        protected readonly DataSource _dataSource3;
         protected readonly IDictionary<string, DataSource> _dataSources;
         protected readonly IDictionary<string, DataSource> _localDataSource;
 
@@ -34,7 +37,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             _context.AddGenericFakeMessageExecutor(SampleMessageExecutor.MessageName, new SampleMessageExecutor());
 
             _service = _context.GetOrganizationService();
-            _dataSource = new DataSource { Name = "uat", Connection = _service, Metadata = new AttributeMetadataCache(_service), TableSizeCache = new StubTableSizeCache(), MessageCache = new StubMessageCache() };
+            _dataSource = new DataSource { Name = "uat", Connection = _service, Metadata = new AttributeMetadataCache(_service), TableSizeCache = new StubTableSizeCache(), MessageCache = new StubMessageCache(), DefaultCollation = Collation.USEnglish };
 
             _context2 = new XrmFakedContext();
             _context2.InitializeMetadata(Assembly.GetExecutingAssembly());
@@ -43,16 +46,29 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             _context2.AddGenericFakeMessageExecutor(SampleMessageExecutor.MessageName, new SampleMessageExecutor());
 
             _service2 = _context2.GetOrganizationService();
-            _dataSource2 = new DataSource { Name = "prod", Connection = _service2, Metadata = new AttributeMetadataCache(_service2), TableSizeCache = new StubTableSizeCache(), MessageCache = new StubMessageCache() };
+            _dataSource2 = new DataSource { Name = "prod", Connection = _service2, Metadata = new AttributeMetadataCache(_service2), TableSizeCache = new StubTableSizeCache(), MessageCache = new StubMessageCache(), DefaultCollation = Collation.USEnglish };
 
-            _dataSources = new[] { _dataSource, _dataSource2 }.ToDictionary(ds => ds.Name);
+            _context3 = new XrmFakedContext();
+            _context3.InitializeMetadata(Assembly.GetExecutingAssembly());
+            _context3.CallerId = _context.CallerId;
+            _context3.AddFakeMessageExecutor<RetrieveVersionRequest>(new RetrieveVersionRequestExecutor());
+            _context3.AddGenericFakeMessageExecutor(SampleMessageExecutor.MessageName, new SampleMessageExecutor());
+
+            _service3 = _context3.GetOrganizationService();
+            Collation.TryParse("French_CI_AI", out var frenchCIAI);
+            _dataSource3 = new DataSource { Name = "french", Connection = _service3, Metadata = new AttributeMetadataCache(_service3), TableSizeCache = new StubTableSizeCache(), MessageCache = new StubMessageCache(), DefaultCollation = frenchCIAI };
+
+            _dataSources = new[] { _dataSource, _dataSource2, _dataSource3 }.ToDictionary(ds => ds.Name);
             _localDataSource = new Dictionary<string, DataSource>
             {
-                ["local"] = new DataSource { Name = "local", Connection = _service, Metadata = _dataSource.Metadata, TableSizeCache = _dataSource.TableSizeCache, MessageCache = _dataSource.MessageCache }
+                ["local"] = new DataSource { Name = "local", Connection = _service, Metadata = _dataSource.Metadata, TableSizeCache = _dataSource.TableSizeCache, MessageCache = _dataSource.MessageCache, DefaultCollation = Collation.USEnglish }
             };
 
             SetPrimaryIdAttributes(_context);
             SetPrimaryIdAttributes(_context2);
+
+            SetPrimaryNameAttributes(_context);
+            SetPrimaryNameAttributes(_context2);
 
             SetLookupTargets(_context);
             SetLookupTargets(_context2);
@@ -62,6 +78,21 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             SetMaxLength(_context);
             SetMaxLength(_context2);
+
+            SetColumnNumber(_context);
+            SetColumnNumber(_context2);
+        }
+
+        private void SetPrimaryNameAttributes(XrmFakedContext context)
+        {
+            foreach (var entity in context.CreateMetadataQuery())
+            {
+                if (entity.LogicalName != "contact")
+                    continue;
+
+                // Set the primary name attribute on contact
+                typeof(EntityMetadata).GetProperty(nameof(EntityMetadata.PrimaryNameAttribute)).SetValue(entity, "fullname");
+            }
         }
 
         private void SetPrimaryIdAttributes(XrmFakedContext context)
@@ -119,11 +150,32 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             foreach (var entity in context.CreateMetadataQuery())
             {
-                if (entity.LogicalName != "new_customentity")
-                    continue;
+                if (entity.LogicalName == "new_customentity")
+                {
+                    var attr = entity.Attributes.Single(a => a.LogicalName == "new_optionsetvaluename");
+                    typeof(AttributeMetadata).GetProperty(nameof(AttributeMetadata.AttributeOf)).SetValue(attr, "new_optionsetvalue");
 
-                var attr = entity.Attributes.Single(a => a.LogicalName == "new_optionsetvaluename");
-                typeof(AttributeMetadata).GetProperty(nameof(AttributeMetadata.AttributeOf)).SetValue(attr, "new_optionsetvalue");
+                    var valueAttr = (EnumAttributeMetadata)entity.Attributes.Single(a => a.LogicalName == "new_optionsetvalue");
+                    valueAttr.OptionSet = new OptionSetMetadata
+                    {
+                        Options =
+                        {
+                            new OptionMetadata(new Label { UserLocalizedLabel = new LocalizedLabel(Metadata.New_OptionSet.Value1.ToString(), 1033) }, (int) Metadata.New_OptionSet.Value1),
+                            new OptionMetadata(new Label { UserLocalizedLabel = new LocalizedLabel(Metadata.New_OptionSet.Value2.ToString(), 1033) }, (int) Metadata.New_OptionSet.Value2),
+                            new OptionMetadata(new Label { UserLocalizedLabel = new LocalizedLabel(Metadata.New_OptionSet.Value3.ToString(), 1033) }, (int) Metadata.New_OptionSet.Value3)
+                        }
+                    };
+                }
+                else if (entity.LogicalName == "account")
+                {
+                    // Add metadata for primarycontactidname virtual attribute
+                    var nameAttr = entity.Attributes.Single(a => a.LogicalName == "primarycontactidname");
+                    nameAttr.GetType().GetProperty(nameof(AttributeMetadata.AttributeOf)).SetValue(nameAttr, "primarycontactid");
+                }
+                else
+                {
+                    continue;
+                }
 
                 context.SetEntityMetadata(entity);
             }
@@ -138,6 +190,19 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     attr.MaxLength = 100;
                     typeof(StringAttributeMetadata).GetProperty(nameof(StringAttributeMetadata.DatabaseLength)).SetValue(attr, 100);
                 }
+
+                context.SetEntityMetadata(entity);
+            }
+        }
+
+        private void SetColumnNumber(XrmFakedContext context)
+        {
+            foreach (var entity in context.CreateMetadataQuery())
+            {
+                var index = 0;
+
+                foreach (var attr in entity.Attributes)
+                    typeof(AttributeMetadata).GetProperty(nameof(AttributeMetadata.ColumnNumber)).SetValue(attr, index++);
 
                 context.SetEntityMetadata(entity);
             }

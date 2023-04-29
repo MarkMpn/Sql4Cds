@@ -39,11 +39,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Description("The name and type of each variable to be declared")]
         public IDictionary<string, DataTypeReference> Variables { get; } = new Dictionary<string, DataTypeReference>();
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
         }
 
-        public string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected)
+        public string Execute(NodeExecutionContext context, out int recordsAffected)
         {
             _executionCount++;
 
@@ -51,8 +51,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 foreach (var variable in Variables)
                 {
-                    parameterTypes[variable.Key] = variable.Value;
-                    parameterValues[variable.Key] = SqlTypeConverter.GetNullValue(variable.Value.ToNetType(out _));
+                    context.ParameterTypes[variable.Key] = variable.Value;
+                    context.ParameterValues[variable.Key] = SqlTypeConverter.GetNullValue(variable.Value.ToNetType(out _));
                 }
             }
 
@@ -60,7 +60,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return null;
         }
 
-        public IRootExecutionPlanNodeInternal[] FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public IRootExecutionPlanNodeInternal[] FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
             return new[] { this };
         }

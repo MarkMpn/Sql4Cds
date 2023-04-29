@@ -333,6 +333,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="s">The string to get the prefix of</param>
         /// <param name="length">The number of characters to return</param>
         /// <returns>The first <paramref name="length"/> characters of the string <paramref name="s"/></returns>
+        [CollationSensitive]
         public static SqlString Left(SqlString s, [MaxLength] SqlInt32 length)
         {
             if (s.IsNull || length.IsNull)
@@ -341,7 +342,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (s.Value.Length <= length)
                 return s;
 
-            return SqlTypeConverter.UseDefaultCollation(s.Value.Substring(0, length.Value));
+            return new SqlString(s.Value.Substring(0, length.Value), s.LCID, s.SqlCompareOptions);
         }
 
         /// <summary>
@@ -350,6 +351,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="s">The string to get the suffix of</param>
         /// <param name="length">The number of characters to return</param>
         /// <returns>The last <paramref name="length"/> characters of the string <paramref name="s"/></returns>
+        [CollationSensitive]
         public static SqlString Right(SqlString s, [MaxLength] SqlInt32 length)
         {
             if (s.IsNull || length.IsNull)
@@ -358,7 +360,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (s.Value.Length <= length)
                 return s;
 
-            return SqlTypeConverter.UseDefaultCollation(s.Value.Substring(s.Value.Length - length.Value, length.Value));
+            return new SqlString(s.Value.Substring(s.Value.Length - length.Value, length.Value), s.LCID, s.SqlCompareOptions);
         }
 
         /// <summary>
@@ -368,12 +370,13 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="find">The substring to be found</param>
         /// <param name="replace">The replacement string</param>
         /// <returns>Replaces any instances of <paramref name="find"/> with <paramref name="replace"/> in the <paramref name="input"/></returns>
+        [CollationSensitive]
         public static SqlString Replace(SqlString input, SqlString find, SqlString replace)
         {
             if (input.IsNull || find.IsNull || replace.IsNull)
                 return SqlString.Null;
 
-            return SqlTypeConverter.UseDefaultCollation(Regex.Replace(input.Value, Regex.Escape(find.Value), replace.Value.Replace("$", "$$"), RegexOptions.IgnoreCase));
+            return new SqlString(Regex.Replace(input.Value, Regex.Escape(find.Value), replace.Value.Replace("$", "$$"), RegexOptions.IgnoreCase), input.LCID, input.SqlCompareOptions);
         }
 
         /// <summary>
@@ -381,6 +384,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="s">The string expression to be evaluated</param>
         /// <returns></returns>
+        [CollationSensitive]
         public static SqlInt32 Len(SqlString s)
         {
             if (s.IsNull)
@@ -428,6 +432,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="start">An integer that specifies where the returned characters start (the numbering is 1 based, meaning that the first character in the expression is 1)</param>
         /// <param name="length">A positive integer that specifies how many characters of the expression will be returned</param>
         /// <returns></returns>
+        [CollationSensitive]
         public static SqlString Substring(SqlString expression, SqlInt32 start, [MaxLength] SqlInt32 length)
         {
             if (expression.IsNull || start.IsNull || length.IsNull)
@@ -440,14 +445,14 @@ namespace MarkMpn.Sql4Cds.Engine
                 start = 1;
 
             if (start > expression.Value.Length)
-                return SqlTypeConverter.UseDefaultCollation(String.Empty);
+                return new SqlString(String.Empty, expression.LCID, expression.SqlCompareOptions);
 
             start -= 1;
 
             if (start + length > expression.Value.Length)
                 length = expression.Value.Length - start;
 
-            return SqlTypeConverter.UseDefaultCollation(expression.Value.Substring(start.Value, length.Value));
+            return new SqlString(expression.Value.Substring(start.Value, length.Value), expression.LCID, expression.SqlCompareOptions);
         }
 
         /// <summary>
@@ -460,7 +465,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (expression.IsNull)
                 return expression;
 
-            return SqlTypeConverter.UseDefaultCollation(expression.Value.Trim(' '));
+            return new SqlString(expression.Value.Trim(' '), expression.LCID, expression.SqlCompareOptions);
         }
 
         /// <summary>
@@ -473,7 +478,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (expression.IsNull)
                 return expression;
 
-            return SqlTypeConverter.UseDefaultCollation(expression.Value.TrimStart(' '));
+            return new SqlString(expression.Value.TrimStart(' '), expression.LCID, expression.SqlCompareOptions);
         }
 
         /// <summary>
@@ -486,7 +491,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (expression.IsNull)
                 return expression;
 
-            return SqlTypeConverter.UseDefaultCollation(expression.Value.TrimEnd(' '));
+            return new SqlString(expression.Value.TrimEnd(' '), expression.LCID, expression.SqlCompareOptions);
         }
 
         /// <summary>
@@ -495,6 +500,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="find">A character expression containing the sequence to find</param>
         /// <param name="search">A character expression to search.</param>
         /// <returns></returns>
+        [CollationSensitive]
         public static SqlInt32 CharIndex(SqlString find, SqlString search)
         {
             return CharIndex(find, search, 0);
@@ -507,6 +513,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="search">A character expression to search.</param>
         /// <param name="startLocation">An integer or bigint expression at which the search starts. If start_location is not specified, has a negative value, or has a zero (0) value, the search starts at the beginning of expressionToSearch.</param>
         /// <returns></returns>
+        [CollationSensitive]
         public static SqlInt32 CharIndex(SqlString find, SqlString search, SqlInt32 startLocation)
         {
             if (find.IsNull || search.IsNull || startLocation.IsNull)
@@ -522,16 +529,42 @@ namespace MarkMpn.Sql4Cds.Engine
         }
 
         /// <summary>
+        /// Returns the starting position of the first occurrence of a pattern in a specified expression, or zero if the pattern is not found, on all valid text and character data types.
+        /// </summary>
+        /// <param name="pattern">A character expression that contains the sequence to be found. Wildcard characters can be used; however, the % character must come before and follow <paramref name="pattern"/></param>
+        /// <param name="expression">An expression that is searched for the specified <paramref name="pattern"/></param>
+        /// <returns></returns>
+        [CollationSensitive]
+        public static SqlInt32 PatIndex(SqlString pattern, SqlString expression)
+        {
+            if (pattern.IsNull || expression.IsNull)
+                return 0;
+
+            var regex = ExpressionExtensions.LikeToRegex(pattern, SqlString.Null, true);
+            var value = expression.Value;
+
+            if (expression.SqlCompareOptions.HasFlag(SqlCompareOptions.IgnoreNonSpace))
+                value = ExpressionExtensions.RemoveDiacritics(value);
+
+            var match = regex.Match(value);
+
+            if (!match.Success)
+                return 0;
+
+            return match.Index + 1;
+        }
+
+        /// <summary>
         /// Returns the single-byte character with the specified integer code
         /// </summary>
         /// <param name="value">An integer from 0 through 255</param>
         /// <returns></returns>
-        public static SqlString Char(SqlInt32 value)
+        public static SqlString Char(SqlInt32 value, ExpressionExecutionContext context)
         {
             if (value.IsNull || value.Value < 0 || value.Value > 255)
                 return SqlString.Null;
 
-            return SqlTypeConverter.UseDefaultCollation(new string((char)value.Value, 1));
+            return context.PrimaryDataSource.DefaultCollation.ToSqlString(new string((char)value.Value, 1));
         }
 
         /// <summary>
@@ -539,12 +572,12 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <param name="value">An integer from 0 through 255</param>
         /// <returns></returns>
-        public static SqlString NChar(SqlInt32 value)
+        public static SqlString NChar(SqlInt32 value, ExpressionExecutionContext context)
         {
             if (value.IsNull || value.Value < 0 || value.Value > 0x10FFFF)
                 return SqlString.Null;
 
-            return SqlTypeConverter.UseDefaultCollation(new string((char)value.Value, 1));
+            return context.PrimaryDataSource.DefaultCollation.ToSqlString(new string((char)value.Value, 1));
         }
 
         /// <summary>
@@ -577,11 +610,11 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// Returns the identifier of the user
         /// </summary>
-        /// <param name="options">The options that provide access to the user details</param>
+        /// <param name="context">The context in which the expression is being executed</param>
         /// <returns></returns>
-        public static SqlEntityReference User_Name(IQueryExecutionOptions options)
+        public static SqlEntityReference User_Name(ExpressionExecutionContext context)
         {
-            return new SqlEntityReference(options.PrimaryDataSource, "systemuser", options.UserId);
+            return new SqlEntityReference(context.Options.PrimaryDataSource, "systemuser", context.Options.UserId);
         }
 
         /// <summary>
@@ -608,7 +641,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="format">Format pattern</param>
         /// <param name="culture">Optional argument specifying a culture</param>
         /// <returns></returns>
-        public static SqlString Format<T>(T value, SqlString format, [Optional] SqlString culture)
+        public static SqlString Format<T>(T value, SqlString format, [Optional] SqlString culture, ExpressionExecutionContext context)
             where T : INullable
         {
             if (value.IsNull)
@@ -620,10 +653,10 @@ namespace MarkMpn.Sql4Cds.Engine
                 throw new QueryExecutionException("Invalid type for FORMAT function");
 
             var innerValue = (IFormattable)valueProp.GetValue(value);
-            return Format(innerValue, format, culture);
+            return Format(innerValue, format, culture, context);
         }
 
-        private static SqlString Format(IFormattable value, SqlString format, SqlString culture)
+        private static SqlString Format(IFormattable value, SqlString format, SqlString culture, ExpressionExecutionContext context)
         {
             if (value == null)
                 return SqlString.Null;
@@ -639,12 +672,95 @@ namespace MarkMpn.Sql4Cds.Engine
                     cultureInfo = CultureInfo.GetCultureInfo(culture.Value);
 
                 var formatted = value.ToString(format.Value, cultureInfo);
-                return SqlTypeConverter.UseDefaultCollation(formatted);
+                return context.PrimaryDataSource.DefaultCollation.ToSqlString(formatted);
             }
             catch
             {
                 return SqlString.Null;
             }
+        }
+
+        /// <summary>
+        /// Returns a character expression with lowercase character data converted to uppercase
+        /// </summary>
+        /// <param name="value">An expression of character data</param>
+        /// <returns></returns>
+        [CollationSensitive]
+        public static SqlString Upper([MaxLength] SqlString value)
+        {
+            if (value.IsNull)
+                return value;
+
+            return value.Value.ToUpper(value.CultureInfo);
+        }
+
+        /// <summary>
+        /// Returns a character expression with uppercase character data converted to lowercase
+        /// </summary>
+        /// <param name="value">An expression of character data</param>
+        /// <returns></returns>
+        [CollationSensitive]
+        public static SqlString Lower([MaxLength] SqlString value)
+        {
+            if (value.IsNull)
+                return value;
+
+            return value.Value.ToLower(value.CultureInfo);
+        }
+
+        /// <summary>
+        /// Returns the requested property of a specified collation
+        /// </summary>
+        /// <param name="collation">The name of the collation</param>
+        /// <param name="property">The collation property</param>
+        /// <returns></returns>
+        public static SqlInt32 CollationProperty(SqlString collation, SqlString property)
+        {
+            if (collation.IsNull || property.IsNull)
+                return SqlInt32.Null;
+
+            if (!Collation.TryParse(collation.Value, out var coll))
+                return SqlInt32.Null;
+
+            switch (property.Value.ToLowerInvariant())
+            {
+                case "codepage":
+                    return 0;
+
+                case "lcid":
+                    return coll.LCID;
+
+                case "comparisonstyle":
+                    var compare = 0;
+
+                    if (coll.CompareOptions.HasFlag(CompareOptions.IgnoreCase))
+                        compare |= 1;
+
+                    if (coll.CompareOptions.HasFlag(CompareOptions.IgnoreNonSpace))
+                        compare |= 2;
+
+                    if (coll.CompareOptions.HasFlag(CompareOptions.IgnoreKanaType))
+                        compare |= 65536;
+
+                    if (coll.CompareOptions.HasFlag(CompareOptions.IgnoreWidth))
+                        compare |= 131072;
+
+                    return compare;
+
+                case "version":
+                    if (coll.Name.Contains("140"))
+                        return 3;
+
+                    if (coll.Name.Contains("100"))
+                        return 2;
+
+                    if (coll.Name.Contains("90"))
+                        return 1;
+
+                    return 0;
+            }
+
+            return SqlInt32.Null;
         }
     }
 
@@ -922,6 +1038,14 @@ namespace MarkMpn.Sql4Cds.Engine
     /// </summary>
     [AttributeUsage(AttributeTargets.Parameter)]
     class OptionalAttribute : Attribute
+    {
+    }
+
+    /// <summary>
+    /// Indicates that a function is collation sensitive
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Method)]
+    class CollationSensitiveAttribute : Attribute
     {
     }
 }

@@ -13,7 +13,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     {
         private int _executionCount;
         private readonly Timer _timer = new Timer();
-        private Func<Entity, IDictionary<string, object>, IQueryExecutionOptions, bool> _condition;
+        private Func<ExpressionExecutionContext, bool> _condition;
 
         public override int ExecutionCount => _executionCount;
 
@@ -41,10 +41,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public string SourceColumn { get; set; }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
             if (Source != null)
-                Source.AddRequiredColumns(dataSources, parameterTypes, new List<string>(requiredColumns));
+                Source.AddRequiredColumns(context, new List<string>(requiredColumns));
         }
 
         public object Clone()
@@ -62,7 +62,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             };
         }
 
-        public string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        public string Execute(NodeExecutionContext context)
         {
             using (_timer.Run())
             {
@@ -74,11 +74,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     if (_condition != null)
                     {
-                        result = _condition(null, parameterValues, options);
+                        result = _condition(new ExpressionExecutionContext(context));
                     }
                     else if (Source != null)
                     {
-                        var record = Source.Execute(dataSources, options, parameterTypes, parameterValues).First();
+                        var record = Source.Execute(context).First();
                         result = ((SqlInt32)record[SourceColumn]).Value == 1;
                     }
                     else
@@ -105,12 +105,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public IRootExecutionPlanNodeInternal[] FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public IRootExecutionPlanNodeInternal[] FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
             if (Source != null)
-                Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
+                Source = Source.FoldQuery(context, hints);
 
-            _condition = Condition?.Compile(null, parameterTypes);
+            _condition = Condition?.Compile(new ExpressionCompilationContext(context, null, null));
 
             return new[] { this };
         }

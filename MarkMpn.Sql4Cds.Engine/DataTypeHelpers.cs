@@ -12,14 +12,14 @@ namespace MarkMpn.Sql4Cds.Engine
     /// </summary>
     static class DataTypeHelpers
     {
-        public static SqlDataTypeReference VarChar(int length)
+        public static SqlDataTypeReference VarChar(int length, Collation collation, CollationLabel collationLabel)
         {
-            return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.VarChar, Parameters = { length <= 8000 ? (Literal) new IntegerLiteral { Value = length.ToString(CultureInfo.InvariantCulture) } : new MaxLiteral() } };
+            return new SqlDataTypeReferenceWithCollation { SqlDataTypeOption = SqlDataTypeOption.VarChar, Parameters = { length <= 8000 ? (Literal) new IntegerLiteral { Value = length.ToString(CultureInfo.InvariantCulture) } : new MaxLiteral() }, Collation = collation, CollationLabel = collationLabel };
         }
 
-        public static SqlDataTypeReference Char(int length)
+        public static SqlDataTypeReference Char(int length, Collation collation, CollationLabel collationLabel)
         {
-            return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Char, Parameters = { length <= 8000 ? (Literal)new IntegerLiteral { Value = length.ToString(CultureInfo.InvariantCulture) } : new MaxLiteral() } };
+            return new SqlDataTypeReferenceWithCollation { SqlDataTypeOption = SqlDataTypeOption.Char, Parameters = { length <= 8000 ? (Literal)new IntegerLiteral { Value = length.ToString(CultureInfo.InvariantCulture) } : new MaxLiteral() }, Collation = collation, CollationLabel = collationLabel };
         }
 
         public static SqlDataTypeReference VarBinary(int length)
@@ -77,14 +77,14 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public static SqlDataTypeReference Float { get; } = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.Float };
 
-        public static SqlDataTypeReference NVarChar(int length)
+        public static SqlDataTypeReference NVarChar(int length, Collation collation, CollationLabel collationLabel)
         {
-            return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { length <= 8000 ? (Literal) new IntegerLiteral { Value = length.ToString(CultureInfo.InvariantCulture) } : new MaxLiteral() } };
+            return new SqlDataTypeReferenceWithCollation { SqlDataTypeOption = SqlDataTypeOption.NVarChar, Parameters = { length <= 8000 ? (Literal) new IntegerLiteral { Value = length.ToString(CultureInfo.InvariantCulture) } : new MaxLiteral() }, Collation = collation, CollationLabel = collationLabel };
         }
 
-        public static SqlDataTypeReference NChar(int length)
+        public static SqlDataTypeReference NChar(int length, Collation collation, CollationLabel collationLabel)
         {
-            return new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.NChar, Parameters = { length <= 8000 ? (Literal)new IntegerLiteral { Value = length.ToString(CultureInfo.InvariantCulture) } : new MaxLiteral() } };
+            return new SqlDataTypeReferenceWithCollation { SqlDataTypeOption = SqlDataTypeOption.NChar, Parameters = { length <= 8000 ? (Literal)new IntegerLiteral { Value = length.ToString(CultureInfo.InvariantCulture) } : new MaxLiteral() }, Collation = collation, CollationLabel = collationLabel };
         }
 
         public static SqlDataTypeReference Time(short scale)
@@ -388,6 +388,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <returns><c>true</c> if the <paramref name="value"/> could be successfully parsed, or <c>false</c> otherwise</returns>
         public static bool TryParse(string value, out DataTypeReference parsedType)
         {
+            // TODO: Collation
             parsedType = null;
 
             var name = value;
@@ -447,8 +448,10 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var xUser = x as UserDataTypeReference;
             var xSql = x as SqlDataTypeReference;
+            var xColl = x as SqlDataTypeReferenceWithCollation;
             var yUser = y as UserDataTypeReference;
             var ySql = y as SqlDataTypeReference;
+            var yColl = y as SqlDataTypeReferenceWithCollation;
 
             if (xUser != null && yUser != null)
                 return String.Join(".", xUser.Name.Identifiers.Select(i => i.Value)).Equals(String.Join(".", yUser.Name.Identifiers.Select(i => i.Value)), StringComparison.OrdinalIgnoreCase);
@@ -477,6 +480,9 @@ namespace MarkMpn.Sql4Cds.Engine
                     return false;
             }
 
+            if (xColl != null && yColl != null && (xColl.Collation == null ^ yColl.Collation == null || xColl.Collation != null && yColl.Collation != null && !xColl.Collation.Equals(yColl.Collation)))
+                return false;
+
             return true;
         }
 
@@ -490,5 +496,117 @@ namespace MarkMpn.Sql4Cds.Engine
 
             throw new NotSupportedException();
         }
+    }
+
+    /// <summary>
+    /// Extends the standard <see cref="SqlDataTypeReference"/> with additional collation information
+    /// </summary>
+    class SqlDataTypeReferenceWithCollation : SqlDataTypeReference
+    {
+        /// <summary>
+        /// Returns or sets the collation that the data will use
+        /// </summary>
+        public Collation Collation { get; set; }
+
+        /// <summary>
+        /// Indicates how the <see cref="Collation"/> has been spplied
+        /// </summary>
+        public CollationLabel CollationLabel { get; set; }
+
+        /// <summary>
+        /// Applies the precedence rules to convert values of different collations to a single collation
+        /// </summary>
+        /// <param name="lhsSql">The type of the first expression</param>
+        /// <param name="rhsSql">The type of the second expression</param>
+        /// <param name="collation">The final collation to use</param>
+        /// <param name="collationLabel">The final collation label to use</param>
+        /// <returns>The final collation to use</returns>
+        internal static bool TryConvertCollation(SqlDataTypeReference lhsSql, SqlDataTypeReference rhsSql, out Collation collation, out CollationLabel collationLabel)
+        {
+            collation = null;
+            collationLabel = CollationLabel.NoCollation;
+
+            if (!(lhsSql is SqlDataTypeReferenceWithCollation lhsSqlWithColl))
+                return false;
+
+            if (!(rhsSql is SqlDataTypeReferenceWithCollation rhsSqlWithColl))
+                return false;
+
+            // Two different explicit collations cannot be converted
+            if (lhsSqlWithColl.CollationLabel == CollationLabel.Explicit &&
+                rhsSqlWithColl.CollationLabel == CollationLabel.Explicit &&
+                !lhsSqlWithColl.Collation.Equals(rhsSqlWithColl.Collation))
+                return false;
+
+            // If either collation is explicit, use that
+            if (lhsSqlWithColl.CollationLabel == CollationLabel.Explicit)
+            {
+                collation = lhsSqlWithColl.Collation;
+                collationLabel = CollationLabel.Explicit;
+                return true;
+            }
+
+            if (rhsSqlWithColl.CollationLabel == CollationLabel.Explicit)
+            {
+                collation = rhsSqlWithColl.Collation;
+                collationLabel = CollationLabel.Explicit;
+                return true;
+            }
+
+            // If either label is no collation, use that
+            if (lhsSqlWithColl.CollationLabel == CollationLabel.NoCollation ||
+                rhsSqlWithColl.CollationLabel == CollationLabel.NoCollation)
+            {
+                collationLabel = CollationLabel.NoCollation;
+                return true;
+            }
+
+            if (lhsSqlWithColl.CollationLabel == CollationLabel.Implicit &&
+                rhsSqlWithColl.CollationLabel == CollationLabel.Implicit)
+            {
+                if (lhsSqlWithColl.Collation.Equals(rhsSqlWithColl.Collation))
+                {
+                    // Two identical implicit collations remains unchanged
+                    // This doesn't appear to be explicitly defined in the docs, but seems reasonable
+                    collation = lhsSqlWithColl.Collation;
+                    collationLabel = CollationLabel.Implicit;
+                    return true;
+                }
+                else
+                {
+                    // Two different implicit collations results in no collation
+                    collation = null;
+                    collationLabel = CollationLabel.NoCollation;
+                    return true;
+                }
+            }
+
+            // Implicit > coercible default
+            if (lhsSqlWithColl.CollationLabel == CollationLabel.Implicit)
+            {
+                collation = lhsSqlWithColl.Collation;
+                collationLabel = CollationLabel.Implicit;
+                return true;
+            }
+
+            if (rhsSqlWithColl.CollationLabel == CollationLabel.Implicit)
+            {
+                collation = rhsSqlWithColl.Collation;
+                collationLabel = CollationLabel.Implicit;
+                return true;
+            }
+
+            collationLabel = CollationLabel.CoercibleDefault;
+            collation = lhsSqlWithColl.Collation;
+            return true;
+        }
+    }
+
+    enum CollationLabel
+    {
+        CoercibleDefault,
+        Implicit,
+        Explicit,
+        NoCollation
     }
 }

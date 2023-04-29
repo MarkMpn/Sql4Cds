@@ -31,16 +31,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// The types of values to be returned
         /// </summary>
         [Browsable(false)]
-        public Dictionary<string, DataTypeReference> Schema { get; private set; } = new Dictionary<string, DataTypeReference>();
+        public IDictionary<string, DataTypeReference> Schema { get; private set; } = new ColumnList();
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
-            foreach (var expressions in Values)
+            var compilationContext = new ExpressionCompilationContext(context, null, null);
+            var executionContext = new ExpressionExecutionContext(context);
+
+            foreach (var row in Values)
             {
                 var value = new Entity();
 
                 foreach (var col in Schema)
-                    value[PrefixWithAlias(col.Key)] = expressions[col.Key].Compile(null, parameterTypes)(null, parameterValues, options);
+                    value[PrefixWithAlias(col.Key)] = row[col.Key].Compile(compilationContext)(executionContext);
 
                 yield return value;
             }
@@ -51,11 +54,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Array.Empty<IDataExecutionPlanNode>();
         }
 
-        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
+        public override INodeSchema GetSchema(NodeCompilationContext context)
         {
+            var schema = new ColumnList();
+
+            foreach (var col in Schema)
+                schema[PrefixWithAlias(col.Key)] = col.Value;
+
             return new NodeSchema(
                 primaryKey: null,
-                schema: Schema.ToDictionary(kvp => PrefixWithAlias(kvp.Key), kvp => kvp.Value, StringComparer.OrdinalIgnoreCase),
+                schema: schema,
                 aliases: Schema.ToDictionary(kvp => kvp.Key, kvp => (IReadOnlyList<string>) new List<string> { PrefixWithAlias(kvp.Key) }, StringComparer.OrdinalIgnoreCase),
                 notNullColumns: null,
                 sortOrder: null);
@@ -69,16 +77,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Alias + "." + columnName;
         }
 
-        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
             return this;
         }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
         }
 
-        protected override RowCountEstimate EstimateRowsOutInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes)
+        protected override RowCountEstimate EstimateRowsOutInternal(NodeCompilationContext context)
         {
             return new RowCountEstimateDefiniteRange(Values.Count, Values.Count);
         }

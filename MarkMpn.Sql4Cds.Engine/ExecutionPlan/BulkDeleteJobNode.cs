@@ -39,22 +39,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public FetchXmlScan Source { get; set; }
 
-        public override void AddRequiredColumns(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes, IList<string> requiredColumns)
+        public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
         }
 
-        public string Execute(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues, out int recordsAffected)
+        public string Execute(NodeExecutionContext context, out int recordsAffected)
         {
             _executionCount++;
 
             try
             {
-                if (!dataSources.TryGetValue(DataSource, out var dataSource))
+                if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
                     throw new QueryExecutionException("Missing datasource " + DataSource);
 
                 using (_timer.Run())
                 {
-                    Source.ApplyParameterValues(options, parameterValues);
+                    Source.ApplyParameterValues(context);
                     var query = ((FetchXmlToQueryExpressionResponse)dataSource.Connection.Execute(new FetchXmlToQueryExpressionRequest { FetchXml = Source.FetchXmlString })).Query;
                     var meta = dataSource.Metadata[query.EntityName];
 
@@ -72,7 +72,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var resp = (BulkDeleteResponse)dataSource.Connection.Execute(req);
 
                     recordsAffected = 1;
-                    parameterValues["@@IDENTITY"] = new SqlEntityReference(DataSource, "asyncoperation", resp.JobId);
+                    context.ParameterValues["@@IDENTITY"] = new SqlEntityReference(DataSource, "asyncoperation", resp.JobId);
                     return $"Bulk delete job started";
                 }
             }
@@ -89,7 +89,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        public IRootExecutionPlanNodeInternal[] FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public IRootExecutionPlanNodeInternal[] FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
             return new[] { this };
         }

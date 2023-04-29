@@ -11,16 +11,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
     /// </summary>
     class StreamAggregateNode : BaseAggregateNode
     {
-        public override IDataExecutionPlanNodeInternal FoldQuery(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IList<OptimizerHint> hints)
+        public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
-            Source = Source.FoldQuery(dataSources, options, parameterTypes, hints);
+            Source = Source.FoldQuery(context, hints);
             Source.Parent = this;
             return this;
         }
 
-        public override INodeSchema GetSchema(IDictionary<string, DataSource> dataSources, IDictionary<string, DataTypeReference> parameterTypes)
+        public override INodeSchema GetSchema(NodeCompilationContext context)
         {
-            var schema = base.GetSchema(dataSources, parameterTypes);
+            var schema = base.GetSchema(context);
             var groupByCols = GetGroupingColumns(schema);
 
             return new NodeSchema(
@@ -31,20 +31,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 sortOrder: groupByCols);
         }
 
-        protected override IEnumerable<Entity> ExecuteInternal(IDictionary<string, DataSource> dataSources, IQueryExecutionOptions options, IDictionary<string, DataTypeReference> parameterTypes, IDictionary<string, object> parameterValues)
+        protected override IEnumerable<Entity> ExecuteInternal(NodeExecutionContext context)
         {
-            var schema = Source.GetSchema(dataSources, parameterTypes);
+            var schema = Source.GetSchema(context);
             var groupByCols = GetGroupingColumns(schema);
+            var expressionCompilationContext = new ExpressionCompilationContext(context, schema, null);
+            var expressionExecutionContext = new ExpressionExecutionContext(context);
 
             var isScalarAggregate = IsScalarAggregate;
 
-            InitializeAggregates(schema, parameterTypes);
+            InitializeAggregates(expressionCompilationContext);
             Entity currentGroup = null;
             var comparer = new DistinctEqualityComparer(groupByCols);
-            var aggregates = CreateAggregateFunctions(parameterValues, options, false);
+            var aggregates = CreateAggregateFunctions(expressionExecutionContext, false);
             var states = isScalarAggregate ? ResetAggregates(aggregates) : null;
 
-            foreach (var entity in Source.Execute(dataSources, options, parameterTypes, parameterValues))
+            foreach (var entity in Source.Execute(context))
             {
                 if (!isScalarAggregate || currentGroup != null)
                 {
@@ -73,8 +75,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                 }
 
+                expressionExecutionContext.Entity = entity;
+
                 foreach (var func in states.Values)
-                    func.AggregateFunction.NextRecord(entity, func.State);
+                    func.AggregateFunction.NextRecord(func.State);
             }
 
             if (states != null)
