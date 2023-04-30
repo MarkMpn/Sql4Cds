@@ -691,7 +691,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (value.IsNull)
                 return value;
 
-            return value.Value.ToUpper(value.CultureInfo);
+            return new SqlString(value.Value.ToUpper(value.CultureInfo), value.LCID, value.SqlCompareOptions);
         }
 
         /// <summary>
@@ -705,7 +705,7 @@ namespace MarkMpn.Sql4Cds.Engine
             if (value.IsNull)
                 return value;
 
-            return value.Value.ToLower(value.CultureInfo);
+            return new SqlString(value.Value.ToLower(value.CultureInfo), value.LCID, value.SqlCompareOptions);
         }
 
         /// <summary>
