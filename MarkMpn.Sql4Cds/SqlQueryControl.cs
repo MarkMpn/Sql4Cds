@@ -956,7 +956,7 @@ namespace MarkMpn.Sql4Cds
                                         dataTable.Columns[i].ExtendedProperties["Schema"] = schemaTable.Rows[i];
 
                                     for (var i = 0; i < columnNames.Count; i++)
-                                        dataTable.Columns[i].Caption = columnNames[i];
+                                        dataTable.Columns[i].Caption = String.IsNullOrEmpty(columnNames[i]) ? "(No column name)" : columnNames[i];
 
                                     Execute(() => ShowResult(null, args, dataTable, null, null));
                                 }
