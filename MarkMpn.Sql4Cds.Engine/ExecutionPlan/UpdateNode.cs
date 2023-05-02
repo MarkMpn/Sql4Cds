@@ -402,6 +402,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Length = Length,
                 LogicalName = LogicalName,
                 MaxDOP = MaxDOP,
+                BatchSize = BatchSize,
                 PrimaryIdSource = PrimaryIdSource,
                 StateTransitions = StateTransitions,
                 Source = (IExecutionPlanNodeInternal)Source.Clone(),
