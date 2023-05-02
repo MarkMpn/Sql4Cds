@@ -12,6 +12,7 @@
     <PackageReference Include="Microsoft.ApplicationInsights" Version="2.20.0" />
     <PackageReference Include="Microsoft.PowerPlatform.Dataverse.Client" Version="0.6.6" />
     <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="150.4897.1" />
+    <PackageReference Include="SaxonHE10Net31" Version="10.9.0" />
     <PackageReference Include="System.Data.SqlClient" Version="4.8.3" />
   </ItemGroup>
 
