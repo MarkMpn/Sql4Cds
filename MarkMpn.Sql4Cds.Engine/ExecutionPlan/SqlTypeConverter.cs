@@ -367,16 +367,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (toUser != null)
                 return false;
 
-            // Xml can't be converted to anything
+            // Xml can't be implicitly converted to anything
             if (fromXml != null)
                 return false;
 
             // Get the basic type. Substitute SqlEntityReference with uniqueidentifier
             var fromType = fromSql?.SqlDataTypeOption ?? SqlDataTypeOption.UniqueIdentifier;
 
-            // Only strings can be converted to Xml
+            // Only strings and binary types can be converted to Xml
             if (toXml != null)
-                return fromType.IsStringType();
+                return fromType.IsStringType() || fromType == SqlDataTypeOption.Binary || fromType == SqlDataTypeOption.VarBinary;
 
             var toType = toSql.SqlDataTypeOption;
 
@@ -431,6 +431,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return true;
 
             var fromSql = from as SqlDataTypeReference;
+            var fromXml = from as XmlDataTypeReference;
             var toSql = to as SqlDataTypeReference;
 
             // Require explicit conversion from datetime to numeric types
@@ -440,6 +441,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Require explicit conversion between numeric types when precision/scale is reduced
             if (fromSql?.SqlDataTypeOption.IsNumeric() == true && toSql?.SqlDataTypeOption.IsNumeric() == true)
+                return true;
+
+            // Require explicit conversion from xml to string/binary types
+            if (fromXml != null && toSql != null && (toSql.SqlDataTypeOption.IsStringType() || toSql.SqlDataTypeOption == SqlDataTypeOption.Binary || toSql.SqlDataTypeOption == SqlDataTypeOption.VarBinary))
                 return true;
 
             return false;
@@ -577,6 +582,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 expr = Expr.Call(() => Convert(Expr.Arg<SqlDouble>(), Expr.Arg<SqlInt32>(), Expr.Arg<Collation>()), expr, style, Expression.Constant(targetCollation));
             else if (expr.Type == typeof(SqlMoney) && targetType == typeof(SqlString))
                 expr = Expr.Call(() => Convert(Expr.Arg<SqlMoney>(), Expr.Arg<SqlInt32>(), Expr.Arg<Collation>()), expr, style, Expression.Constant(targetCollation));
+            else if (expr.Type == typeof(SqlBinary) && targetType == typeof(SqlString))
+                expr = Expr.Call(() => Convert(Expr.Arg<SqlBinary>(), Expr.Arg<Collation>(), Expr.Arg<bool>()), expr, Expression.Constant(targetCollation), Expression.Constant(toSqlType.SqlDataTypeOption == SqlDataTypeOption.NChar || toSqlType.SqlDataTypeOption == SqlDataTypeOption.NVarChar));
 
             if (expr.Type != targetType)
                 expr = Convert(expr, targetType);
@@ -965,7 +972,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="style">The style to apply</param>
         /// <param name="collation">The collation to use for the returned result</param>
         /// <returns>The converted string</returns>
-        public static SqlString Convert(SqlDouble value, SqlInt32 style, Collation collation)
+        private static SqlString Convert(SqlDouble value, SqlInt32 style, Collation collation)
         {
             if (value.IsNull || style.IsNull)
                 return SqlString.Null;
@@ -1002,7 +1009,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="style">The style to apply</param>
         /// <param name="collation">The collation to use for the returned result</param>
         /// <returns>The converted string</returns>
-        public static SqlString Convert(SqlMoney value, SqlInt32 style, Collation collation)
+        private static SqlString Convert(SqlMoney value, SqlInt32 style, Collation collation)
         {
             if (value.IsNull || style.IsNull)
                 return SqlString.Null;
@@ -1027,6 +1034,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var formatted = value.Value.ToString(formatString);
             return collation.ToSqlString(formatted);
+        }
+
+        /// <summary>
+        /// Specialized type conversion from Decimal to String using a collation
+        /// </summary>
+        /// <param name="value">The value to convert</param>
+        /// <param name="collation">The collation to use for the returned result</param>
+        /// <param name="unicode">Indicates if the target string is Unicode</param>
+        /// <returns>The converted string</returns>
+        private static SqlString Convert(SqlBinary value, Collation collation, bool unicode)
+        {
+            if (value.IsNull)
+                return SqlString.Null;
+
+            return new SqlString(collation.LCID, collation.CompareOptions, value.Value, unicode);
         }
 
         /// <summary>

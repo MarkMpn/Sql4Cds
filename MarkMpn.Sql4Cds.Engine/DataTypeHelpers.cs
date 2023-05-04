@@ -385,12 +385,12 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// Parses a data type from a string
         /// </summary>
+        /// <param name="context">The context in which the type name is being parsed</param>
         /// <param name="value">The string representation of the data type to parse</param>
         /// <param name="parsedType">The data type that has been parsed from the <paramref name="value"/></param>
         /// <returns><c>true</c> if the <paramref name="value"/> could be successfully parsed, or <c>false</c> otherwise</returns>
-        public static bool TryParse(string value, out DataTypeReference parsedType)
+        public static bool TryParse(ExpressionCompilationContext context, string value, out DataTypeReference parsedType)
         {
-            // TODO: Collation
             parsedType = null;
 
             var name = value;
@@ -407,17 +407,35 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 foreach (var part in parts)
                 {
-                    if (!Int32.TryParse(part, out var paramValue))
+                    if (part.Trim().Equals("max", StringComparison.OrdinalIgnoreCase))
+                    {
+                        parameters.Add(new MaxLiteral());
+                        continue;
+                    }
+
+                    if (!Int32.TryParse(part.Trim(), out var paramValue))
                         return false;
 
                     parameters.Add(new IntegerLiteral { Value = part });
                 }
             }
 
+            if (name.Equals("xml", StringComparison.OrdinalIgnoreCase))
+            {
+                if (parameters.Count > 0)
+                    return false;
+
+                parsedType = DataTypeHelpers.Xml;
+                return true;
+            }
+
             if (!Enum.TryParse<SqlDataTypeOption>(name, true, out var sqlType))
                 return false;
 
-            parsedType = new SqlDataTypeReference { SqlDataTypeOption = sqlType };
+            if (sqlType.IsStringType())
+                parsedType = new SqlDataTypeReferenceWithCollation { SqlDataTypeOption = sqlType, Collation = context.PrimaryDataSource.DefaultCollation, CollationLabel = CollationLabel.CoercibleDefault };
+            else
+                parsedType = new SqlDataTypeReference { SqlDataTypeOption = sqlType };
 
             foreach (var param in parameters)
                 ((SqlDataTypeReference)parsedType).Parameters.Add(param);

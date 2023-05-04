@@ -1,5 +1,4 @@
-﻿using java.io;
-using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
+﻿using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.VisualBasic;
 using Microsoft.Xrm.Sdk;
@@ -16,6 +15,8 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.XPath;
+using Wmhelp.XPath2;
+using Wmhelp.XPath2.Value;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
@@ -767,14 +768,14 @@ namespace MarkMpn.Sql4Cds.Engine
             return SqlInt32.Null;
         }
 
-        public static SqlXml Query(SqlXml value, XPathExpression query)
+        public static SqlXml Query(SqlXml value, XPath2Expression query)
         {
             if (value.IsNull)
                 return value;
 
             var doc = new XPathDocument(value.CreateReader());
             var nav = doc.CreateNavigator();
-            var result = nav.Evaluate(query);
+            var result = nav.XPath2Evaluate(query);
             var stream = new MemoryStream();
 
             var xmlWriterSettings = new XmlWriterSettings
@@ -786,7 +787,7 @@ namespace MarkMpn.Sql4Cds.Engine
             };
             var xmlWriter = XmlWriter.Create(stream, xmlWriterSettings);
 
-            foreach (XPathNavigator r in (XPathNodeIterator)result)
+            foreach (XPathNavigator r in (XPath2NodeIterator)result)
             {
                 var reader = r.ReadSubtree();
 
@@ -800,6 +801,32 @@ namespace MarkMpn.Sql4Cds.Engine
             xmlWriter.Flush();
             stream.Position = 0;
             return new SqlXml(stream);
+        }
+
+        public static object Value(SqlXml value, XPath2Expression query, [TargetType] DataTypeReference targetType, ExpressionExecutionContext context, INodeSchema schema)
+        {
+            if (value.IsNull)
+                return value;
+
+            var doc = new XPathDocument(value.CreateReader());
+            var nav = doc.CreateNavigator();
+            var result = query.Evaluate(new XPath2Context(context, schema, nav), null);
+
+            var targetNetType = targetType.ToNetType(out _);
+
+            INullable sqlValue;
+
+            if (result == null)
+                sqlValue = SqlTypeConverter.GetNullValue(targetNetType);
+            else if (result is Base64BinaryValue bin)
+                sqlValue = new SqlBinary(bin.BinaryValue);
+            else
+                throw new NotSupportedException("Unhandled return type " + result.GetType().FullName);
+
+            if (sqlValue.GetType() != targetNetType)
+                sqlValue = (INullable) SqlTypeConverter.ChangeType(sqlValue, targetNetType);
+
+            return sqlValue;
         }
     }
 
@@ -1086,5 +1113,18 @@ namespace MarkMpn.Sql4Cds.Engine
     [AttributeUsage(AttributeTargets.Method)]
     class CollationSensitiveAttribute : Attribute
     {
+    }
+
+    class XPath2Context : NodeProvider
+    {
+        public XPath2Context(ExpressionExecutionContext context, INodeSchema schema, XPathItem item) : base(item)
+        {
+            Context = context;
+            Schema = schema;
+        }
+
+        public ExpressionExecutionContext Context { get; }
+
+        public INodeSchema Schema { get; }
     }
 }

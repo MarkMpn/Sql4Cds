@@ -2,6 +2,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Xml;
+using Wmhelp.XPath2;
 
 namespace MarkMpn.Sql4Cds.Engine.Visitors
 {
@@ -33,17 +35,47 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
         public override void ExplicitVisit(FunctionCall node)
         {
-            if (node.FunctionName.Value.Equals("DATEDIFF", StringComparison.OrdinalIgnoreCase) ||
-                node.FunctionName.Value.Equals("DATEADD", StringComparison.OrdinalIgnoreCase) ||
-                node.FunctionName.Value.Equals("DATEPART", StringComparison.OrdinalIgnoreCase))
+            if (node.CallTarget != null)
             {
-                // Skip the first parameter as it's not really a column
-                foreach (var param in node.Parameters.Skip(1))
-                    param.Accept(this);
+                if (node.FunctionName.Value.Equals("query", StringComparison.OrdinalIgnoreCase) ||
+                    node.FunctionName.Value.Equals("value", StringComparison.OrdinalIgnoreCase))
+                {
+                    // XQuery can contain column references in the sql:column function. Parse the XQuery to check
+                    if (node.Parameters.Count > 0 && node.Parameters[0] is StringLiteral xquery)
+                    {
+                        try
+                        {
+                            var nt = new XmlNamespaceManager(new NameTable());
+                            nt.AddNamespace("sql", "https://markcarrington.dev/sql-4-cds");
+                            var compiled = XPath2Expression.Compile(xquery.Value, nt);
+                            compiled.ExpressionTree.TraverseSubtree(n =>
+                            {
+                                // TODO
+                            });
+                        }
+                        catch
+                        {
+                            // Ignore any errors parsing the XQuery
+                        }
+                    }
+                }
+
+                base.ExplicitVisit(node);
             }
             else
             {
-                base.ExplicitVisit(node);
+                if (node.FunctionName.Value.Equals("DATEDIFF", StringComparison.OrdinalIgnoreCase) ||
+                    node.FunctionName.Value.Equals("DATEADD", StringComparison.OrdinalIgnoreCase) ||
+                    node.FunctionName.Value.Equals("DATEPART", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Skip the first parameter as it's not really a column
+                    foreach (var param in node.Parameters.Skip(1))
+                        param.Accept(this);
+                }
+                else
+                {
+                    base.ExplicitVisit(node);
+                }
             }
         }
 

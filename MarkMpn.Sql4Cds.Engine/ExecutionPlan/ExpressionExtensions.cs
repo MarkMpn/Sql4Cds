@@ -9,11 +9,14 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.Xml;
 using System.Xml.XPath;
 using MarkMpn.Sql4Cds.Engine.Visitors;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
+using Wmhelp.XPath2;
+using Wmhelp.XPath2.Extensions;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -273,7 +276,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var paramTypes = parameters.Select(p => p.Value).ToArray();
                 var paramExpressions = parameters.Select(p => p.Key).ToArray();
 
-                var fetchXmlComparison = GetMethod(typeof(FetchXmlConditionMethods), context.PrimaryDataSource, func, paramTypes, false, contextParam, ref paramExpressions, out sqlType);
+                var fetchXmlComparison = GetMethod(context, typeof(FetchXmlConditionMethods), context.PrimaryDataSource, func, paramTypes, false, contextParam, ref paramExpressions, out sqlType);
 
                 if (fetchXmlComparison != null)
                     return Expr.Call(fetchXmlComparison, paramExpressions);
@@ -615,10 +618,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 .Select(kvp => kvp.Key)
                 .ToArray();
 
-            return GetMethod(typeof(ExpressionFunctions), context.PrimaryDataSource, func, paramExpressionsWithType.Select(kvp => kvp.Value).ToArray(), true, contextParam, ref paramExpressions, out sqlType);
+            return GetMethod(context, typeof(ExpressionFunctions), context.PrimaryDataSource, func, paramExpressionsWithType.Select(kvp => kvp.Value).ToArray(), true, contextParam, ref paramExpressions, out sqlType);
         }
 
-        private static MethodInfo GetMethod(Type targetType, DataSource primaryDataSource, FunctionCall func, DataTypeReference[] paramTypes, bool throwOnMissing, ParameterExpression contextParam, ref Expression[] paramExpressions, out DataTypeReference sqlType)
+        private static MethodInfo GetMethod(ExpressionCompilationContext context, Type targetType, DataSource primaryDataSource, FunctionCall func, DataTypeReference[] paramTypes, bool throwOnMissing, ParameterExpression contextParam, ref Expression[] paramExpressions, out DataTypeReference sqlType)
         {
             // Find a method that implements this function
             var methods = targetType
@@ -640,7 +643,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 .Select(m => new { Method = m, Parameters = m.GetParameters() })
                 .Where(m =>
                 {
-                    var allowedParameters = m.Parameters.Where(p => p.GetCustomAttribute<SourceTypeAttribute>() == null && p.ParameterType != typeof(ExpressionExecutionContext));
+                    var allowedParameters = m.Parameters.Where(p => p.GetCustomAttribute<SourceTypeAttribute>() == null && p.ParameterType != typeof(ExpressionExecutionContext) && p.ParameterType != typeof(INodeSchema));
                     var requiredParameters = allowedParameters.Where(p => p.GetCustomAttribute<OptionalAttribute>() == null);
                     var isArrayParameter = requiredParameters.Any() && requiredParameters.Last().ParameterType.IsArray;
 
@@ -722,13 +725,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (func.CallTarget != null)
                     paramIndex--;
 
-                if (i == parameters.Length - 1 && paramTypes.Length < parameters.Length && paramType == typeof(ExpressionExecutionContext))
+                if (paramTypes.Length < parameters.Length && paramType == typeof(ExpressionExecutionContext))
                 {
                     var paramsWithOptions = new Expression[paramExpressions.Length + 1];
                     paramExpressions.CopyTo(paramsWithOptions, 0);
                     paramsWithOptions[paramExpressions.Length] = contextParam;
                     paramExpressions = paramsWithOptions;
-                    break;
+                    continue;
+                }
+
+                if (paramTypes.Length < parameters.Length && paramType == typeof(INodeSchema))
+                {
+                    var paramsWithOptions = new Expression[paramExpressions.Length + 1];
+                    paramExpressions.CopyTo(paramsWithOptions, 0);
+                    paramsWithOptions[paramExpressions.Length] = Expression.Constant(context.Schema);
+                    paramExpressions = paramsWithOptions;
+                    continue;
                 }
 
                 if (i >= paramTypes.Length && parameters[i].GetCustomAttribute<OptionalAttribute>() != null)
@@ -755,7 +767,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         if (!(func.Parameters[paramIndex] is StringLiteral typeLiteral))
                             throw new NotSupportedQueryFragmentException($"Only string literals are supported for type parameters", func.Parameters[i]);
 
-                        if (!DataTypeHelpers.TryParse(typeLiteral.Value, out var parsedType))
+                        if (!DataTypeHelpers.TryParse(context, typeLiteral.Value, out var parsedType))
                             throw new NotSupportedQueryFragmentException("Unknown type name", typeLiteral);
 
                         paramExpressions[i] = Expression.Constant(parsedType);
@@ -767,13 +779,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     continue;
                 }
 
-                if (paramType == typeof(XPathExpression))
+                if (paramType == typeof(XPath2Expression))
                 {
                     // Expect only a literal string
                     if (!(func.Parameters[paramIndex] is StringLiteral xpathLiteral))
                         throw new NotSupportedQueryFragmentException($"The argument {i} of the XML data type method \"{func.FunctionName.Value}\" must be a string literal");
 
-                    paramExpressions[i] = Expression.Constant(XPathExpression.Compile(xpathLiteral.Value));
+                    var nt = new XmlNamespaceManager(new NameTable());
+                    nt.AddNamespace("sql", "https://markcarrington.dev/sql-4-cds");
+                    FunctionTable.Inst.Add("https://markcarrington.dev/sql-4-cds", "column", XPath2ResultType.Any, (_, ctx, args) =>
+                    {
+                        var xpathContext = (XPath2Context)ctx;
+                        var colName = (string)args[0];
+                        if (!xpathContext.Schema.ContainsColumn(colName, out var normalizedColName))
+                            throw new QueryExecutionException("Missing column " + colName);
+                        var value = (INullable) xpathContext.Context.Entity[normalizedColName];
+                        return SqlTypeConverter.SqlToNetType(value);
+                    });
+                    paramExpressions[i] = Expression.Constant(XPath2Expression.Compile(xpathLiteral.Value, nt));
                     continue;
                 }
 
