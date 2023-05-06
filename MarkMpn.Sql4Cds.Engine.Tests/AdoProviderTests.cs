@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Activities.Expressions;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlTypes;
@@ -10,7 +11,9 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Windows.Controls.Primitives;
 using System.Xml.Serialization;
+using FakeItEasy;
 using FakeXrmEasy;
 using FakeXrmEasy.FakeMessageExecutors;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
@@ -1141,6 +1144,50 @@ FROM
                 var actual = cmd.ExecuteScalar();
 
                 Assert.AreEqual("role:1 producer:12 timestamp:1468640222571000 latlng{latitude_e7:416989394 longitude_e7:-738966210} radius:19764", actual);
+            }
+        }
+
+        [TestMethod]
+        public void XmlQueryFromTable()
+        {
+            using (var con = new Sql4CdsConnection(_dataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandTimeout = 0;
+
+                cmd.CommandText = "insert into account (name) values ('<ROOT><a>111</a><a>222</a></ROOT>')";
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = "SELECT CAST(name AS xml).query('/ROOT/a') FROM account";
+                var actual = cmd.ExecuteScalar();
+                Assert.AreEqual("<a>111</a><a>222</a>", actual);
+            }
+        }
+
+        [TestMethod]
+        public void XmlQueryFromUsingSqlColumn()
+        {
+            using (var con = new Sql4CdsConnection(_dataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandTimeout = 0;
+
+                cmd.CommandText = "insert into account (name) values ('SGVsbG8gd29ybGQh')";
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = @"
+SELECT
+    CONVERT
+    (
+        VARCHAR(MAX),
+        CAST('' AS XML).value('xs:base64Binary(sql:column(""name""))', 'VARBINARY(MAX)')
+    ) AS RESULT
+FROM
+    account";
+
+                var actual = cmd.ExecuteScalar();
+
+                Assert.AreEqual("Hello world!", actual);
             }
         }
     }

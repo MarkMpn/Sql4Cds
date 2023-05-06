@@ -1,9 +1,11 @@
-﻿using Microsoft.SqlServer.TransactSql.ScriptDom;
+﻿using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Xml;
 using Wmhelp.XPath2;
+using Wmhelp.XPath2.AST;
 
 namespace MarkMpn.Sql4Cds.Engine.Visitors
 {
@@ -50,7 +52,13 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                             var compiled = XPath2Expression.Compile(xquery.Value, nt);
                             compiled.ExpressionTree.TraverseSubtree(n =>
                             {
-                                // TODO
+                                // FuncNode doesn't expose the details of the function it's bound to, so assume it's sql:column
+                                // so long as it's got one literal string parameter.
+                                if (n is FuncNode f &&
+                                    f.Count == 1 &&
+                                    f[0] is ValueNode v &&
+                                    v.Content is string col)
+                                    Columns.Add(col.ToColumnReference());
                             });
                         }
                         catch
