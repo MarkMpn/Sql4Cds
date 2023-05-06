@@ -11,6 +11,7 @@ using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.Remoting.Contexts;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml;
@@ -768,14 +769,22 @@ namespace MarkMpn.Sql4Cds.Engine
             return SqlInt32.Null;
         }
 
-        public static SqlXml Query(SqlXml value, XPath2Expression query)
+        /// <summary>
+        /// Specifies an XQuery against an instance of the xml data type.
+        /// </summary>
+        /// <param name="value">The xml data to query</param>
+        /// <param name="query">The XQuery expression to apply</param>
+        /// <param name="context">The context the expression is evaluated in</param>
+        /// <param name="schema">The schema of data available to the query</param>
+        /// <returns></returns>
+        public static SqlXml Query(SqlXml value, XPath2Expression query, ExpressionExecutionContext context, INodeSchema schema)
         {
             if (value.IsNull)
                 return value;
 
             var doc = new XPathDocument(value.CreateReader());
             var nav = doc.CreateNavigator();
-            var result = nav.XPath2Evaluate(query);
+            var result = query.Evaluate(new XPath2ExpressionContext(context, schema, nav), null);
             var stream = new MemoryStream();
 
             var xmlWriterSettings = new XmlWriterSettings
@@ -803,6 +812,16 @@ namespace MarkMpn.Sql4Cds.Engine
             return new SqlXml(stream);
         }
 
+        /// <summary>
+        /// Performs an XQuery against the XML and returns a value of SQL type. This method returns a scalar value.
+        /// </summary>
+        /// <param name="value">The xml data to query</param>
+        /// <param name="query">The XQuery expression to apply</param>
+        /// <param name="targetType">The type of data to return</param>
+        /// <param name="context">The context the expression is evaluated in</param>
+        /// <param name="schema">The schema of data available to the query</param>
+        /// <returns></returns>
+        /// <exception cref="NotSupportedException"></exception>
         public static object Value(SqlXml value, XPath2Expression query, [TargetType] DataTypeReference targetType, ExpressionExecutionContext context, INodeSchema schema)
         {
             if (value.IsNull)

@@ -28,6 +28,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var value = (INullable)xpathContext.ExpressionExecutionContext.Entity[normalizedColName];
                 return SqlTypeConverter.SqlToNetType(value);
             });
+
+            FunctionTable.Inst.Add(SqlNamespace, "variable", XPath2ResultType.Any, (_, ctx, args) =>
+            {
+                var xpathContext = (XPath2ExpressionContext)ctx;
+                var varName = (string)args[0];
+                if (!xpathContext.ExpressionExecutionContext.ParameterValues.TryGetValue(varName, out var value))
+                    throw new QueryExecutionException("Missing variable " + varName);
+                return value;
+            });
         }
 
         public static XmlNamespaceManager XmlNamespaceManager => _xmlNamespaceManager;
