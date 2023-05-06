@@ -785,18 +785,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (!(func.Parameters[paramIndex] is StringLiteral xpathLiteral))
                         throw new NotSupportedQueryFragmentException($"The argument {i} of the XML data type method \"{func.FunctionName.Value}\" must be a string literal");
 
-                    var nt = new XmlNamespaceManager(new NameTable());
-                    nt.AddNamespace("sql", "https://markcarrington.dev/sql-4-cds");
-                    FunctionTable.Inst.Add("https://markcarrington.dev/sql-4-cds", "column", XPath2ResultType.Any, (_, ctx, args) =>
-                    {
-                        var xpathContext = (XPath2Context)ctx;
-                        var colName = (string)args[0];
-                        if (!xpathContext.Schema.ContainsColumn(colName, out var normalizedColName))
-                            throw new QueryExecutionException("Missing column " + colName);
-                        var value = (INullable) xpathContext.Context.Entity[normalizedColName];
-                        return SqlTypeConverter.SqlToNetType(value);
-                    });
-                    paramExpressions[i] = Expression.Constant(XPath2Expression.Compile(xpathLiteral.Value, nt));
+                    paramExpressions[i] = Expression.Constant(XPath2Expression.Compile(xpathLiteral.Value, XPath2ExpressionContext.XmlNamespaceManager));
                     continue;
                 }
 

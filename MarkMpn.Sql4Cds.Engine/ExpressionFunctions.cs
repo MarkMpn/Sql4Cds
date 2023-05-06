@@ -810,7 +810,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var doc = new XPathDocument(value.CreateReader());
             var nav = doc.CreateNavigator();
-            var result = query.Evaluate(new XPath2Context(context, schema, nav), null);
+            var result = query.Evaluate(new XPath2ExpressionContext(context, schema, nav), null);
 
             var targetNetType = targetType.ToNetType(out _);
 
@@ -1113,18 +1113,5 @@ namespace MarkMpn.Sql4Cds.Engine
     [AttributeUsage(AttributeTargets.Method)]
     class CollationSensitiveAttribute : Attribute
     {
-    }
-
-    class XPath2Context : NodeProvider
-    {
-        public XPath2Context(ExpressionExecutionContext context, INodeSchema schema, XPathItem item) : base(item)
-        {
-            Context = context;
-            Schema = schema;
-        }
-
-        public ExpressionExecutionContext Context { get; }
-
-        public INodeSchema Schema { get; }
     }
 }
