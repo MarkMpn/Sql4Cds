@@ -94,11 +94,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
-            // Can't use empty row element in attribute-centric XML
-            if (String.IsNullOrEmpty(ElementName) && ColumnFormat.HasFlag(XmlColumnFormat.Attribute))
-                throw new NotSupportedQueryFragmentException("Row tag omission (empty row tag name) cannot be used with attribute-centric FOR XML serialization");
-
-            if (XmlFormat == XmlFormat.Path)
+            if (XmlFormat == XmlFormat.Raw)
+            {
+                // Can't use empty row element in attribute-centric XML
+                if (String.IsNullOrEmpty(ElementName) && ColumnFormat.HasFlag(XmlColumnFormat.Attribute))
+                    throw new NotSupportedQueryFragmentException("Row tag omission (empty row tag name) cannot be used with attribute-centric FOR XML serialization");
+            }
+            else if (XmlFormat == XmlFormat.Path)
             {
                 // Validate the sequence of columns produces valid XML
                 string lastElement = null;
