@@ -846,6 +846,31 @@ namespace MarkMpn.Sql4Cds.Engine
 
             return sqlValue;
         }
+
+        /// <summary>
+        /// Deletes a specified length of characters in the first string at the start position and then inserts the second string into the first string at the start position
+        /// </summary>
+        /// <param name="value">The first string to manipulate</param>
+        /// <param name="start">The starting position within the first string to make the edits at</param>
+        /// <param name="length">The number of characters to remove from the first string</param>
+        /// <param name="replaceWith">The second string to insert into the first string</param>
+        /// <returns></returns>
+        [CollationSensitive]
+        public static SqlString Stuff(SqlString value, SqlInt32 start, SqlInt32 length, SqlString replaceWith)
+        {
+            if (value.IsNull || start.IsNull || length.IsNull || start.Value <= 0 || length.Value < 0)
+                return SqlString.Null;
+
+            var sb = new StringBuilder(value.Value);
+
+            if (length.Value > 0)
+                sb.Remove(start.Value - 1, length.Value);
+
+            if (!replaceWith.IsNull)
+                sb.Insert(start.Value - 1, replaceWith.Value);
+
+            return new SqlString(sb.ToString(), value.LCID, value.SqlCompareOptions);
+        }
     }
 
     /// <summary>

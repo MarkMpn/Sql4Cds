@@ -144,6 +144,24 @@ namespace MarkMpn.Sql4Cds.LanguageServer.Autocomplete
 
             [Description("Replaces NULL with the specified replacement value")]
             public abstract object isnull(object check, object replacement);
+
+            [Description("Returns a value formatted with the specified format and optional culture")]
+            public abstract object format(object value, string format, string culture);
+
+            [Description("Returns the starting position of the first occurrence of a pattern in a specified expression, or zero if the pattern is not found")]
+            public abstract string patindex(string pattern, string expression);
+
+            [Description("Converts a string to uppercase")]
+            public abstract string upper(string value);
+
+            [Description("Converts a string to lowercase")]
+            public abstract string lower(string value);
+
+            [Description("Returns the requested property of a specified collation")]
+            public abstract int collationproperty(string collation_name, string property);
+
+            [Description("Deletes a specified length of characters in the first string at the start position and then inserts the second string into the first string at the start position")]
+            public abstract string stuff(string character_expression, int start, int length, string replace_with_expression);
         }
     }
 }
