@@ -6,7 +6,8 @@
       "MarkMpn.Sql4Cds.Engine.dll",
       "Microsoft.ApplicationInsights.dll",
       "Microsoft.SqlServer.TransactSql.ScriptDom.dll",
-      "xrmtb.XrmToolBox.Controls.dll"
+      "xrmtb.XrmToolBox.Controls.dll",
+      "XPath2.dll"
     ]
   },
   "Advanced": {
