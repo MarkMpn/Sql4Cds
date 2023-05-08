@@ -1207,5 +1207,22 @@ FOR XML RAW";
                 Assert.AreEqual("<row Name=\"Name1\" Value=\"Value1\" /><row Name=\"Name2\" Value=\"Value2\" />", actual);
             }
         }
+
+        [TestMethod]
+        public void ForXmlPathColumnsWithNoName()
+        {
+            // https://learn.microsoft.com/en-us/sql/relational-databases/xml/columns-without-a-name?view=sql-server-ver16
+            using (var con = new Sql4CdsConnection(_dataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandTimeout = 0;
+
+                cmd.CommandText = @"
+SELECT 2 + 2
+FOR XML PATH";
+                var actual = cmd.ExecuteScalar();
+                Assert.AreEqual("<row>4</row>", actual);
+            }
+        }
     }
 }

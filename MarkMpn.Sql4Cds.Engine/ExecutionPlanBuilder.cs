@@ -1899,6 +1899,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     case XmlForClauseOptions.Path:
                         xmlNode.XmlFormat = XmlFormat.Path;
                         xmlNode.ElementName = option.Value?.Value ?? "row";
+                        xmlNode.ColumnFormat = XmlColumnFormat.Element;
                         break;
 
                     case XmlForClauseOptions.Elements:
@@ -2789,7 +2790,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         {
                             SourceColumn = alias,
                             SourceExpression = scalar.Expression,
-                            OutputColumn = scalar.ColumnName?.Value ?? alias
+                            OutputColumn = scalar.ColumnName?.Value
                         });
                     }
                 }

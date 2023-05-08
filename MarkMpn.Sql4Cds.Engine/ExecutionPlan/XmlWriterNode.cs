@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data.SqlTypes;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Xml;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
@@ -70,6 +71,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
+            foreach (var col in ColumnSet.Select(c => c.SourceColumn))
+            {
+                if (!requiredColumns.Contains(col, StringComparer.OrdinalIgnoreCase))
+                    requiredColumns.Add(col);
+            }
+
             Source.AddRequiredColumns(context, requiredColumns);
         }
 
@@ -83,7 +90,95 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 {
                     var col = ColumnSet[i];
                     if (!seen.Add(col.OutputColumn))
-                        throw new NotSupportedQueryFragmentException($"Column name '{col.OutputColumn}' is repeated. The same attribute cannot be generated more than once on the same XML tag.");
+                        throw new NotSupportedQueryFragmentException($"Column name '{col.OutputColumn}' is repeated. The same attribute cannot be generated more than once on the same XML tag");
+                }
+            }
+
+            // Can't use empty row element in attribute-centric XML
+            if (String.IsNullOrEmpty(ElementName) && ColumnFormat.HasFlag(XmlColumnFormat.Attribute))
+                throw new NotSupportedQueryFragmentException("Row tag omission (empty row tag name) cannot be used with attribute-centric FOR XML serialization");
+
+            if (XmlFormat == XmlFormat.Path)
+            {
+                // Validate the sequence of columns produces valid XML
+                string lastElement = null;
+
+                foreach (var col in ColumnSet)
+                {
+                    // Can't have an attribute column with no row tag
+                    if (col.OutputColumn?.StartsWith("@") == true && String.IsNullOrEmpty(ElementName))
+                        throw new NotSupportedQueryFragmentException("Row tag omission (empty row tag name) cannot be used with attribute-centric FOR XML serialization");
+
+                    if (!String.IsNullOrEmpty(col.OutputColumn) && col.OutputColumn != "*")
+                    {
+                        var parts = col.OutputColumn.Split('/');
+
+                        for (var i = 0; i < parts.Length; i++)
+                        {
+                            // Attributes and node tests can't have child elements
+                            if (parts[i].StartsWith("@") || parts[i] == "text()" || parts[i] == "comment()" || parts[i] == "node()" || parts[i].StartsWith("processing-instruction("))
+                            {
+                                if (i < parts.Length - 1)
+                                    throw new NotSupportedQueryFragmentException($"Column name '{col.OutputColumn}' is invalid. Attributes and node tests cannot have child elements");
+
+                                if (parts[i].StartsWith("@"))
+                                {
+                                    // Attribute names must be valid XML identifiers
+                                    try
+                                    {
+                                        XmlConvert.VerifyName(parts[i].Substring(1));
+                                    }
+                                    catch
+                                    {
+                                        throw new NotSupportedQueryFragmentException($"Column name '{col.OutputColumn}' contains an invalid XML identifier as required by FOR XML");
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                // Element names must be valid XML identifiers
+                                try
+                                {
+                                    XmlConvert.VerifyName(parts[i]);
+                                }
+                                catch
+                                {
+                                    throw new NotSupportedQueryFragmentException($"Column name '{col.OutputColumn}' contains an invalid XML identifier as required by FOR XML");
+                                }
+                            }
+                        }
+
+                        var elementName = ElementName + "/" + col.OutputColumn;
+
+                        if (parts[parts.Length - 1].StartsWith("@") ||
+                            parts[parts.Length - 1] == "text()" ||
+                            parts[parts.Length - 1] == "comment()" ||
+                            parts[parts.Length - 1] == "node()" ||
+                            parts[parts.Length - 1] == "data()" ||
+                            parts[parts.Length - 1].StartsWith("processing-instruction("))
+                        {
+                            // Attribute or node test
+                            elementName = ElementName + "/" + String.Join("/", parts, 0, parts.Length - 1);
+
+                            if (parts[parts.Length - 1].StartsWith("@"))
+                            {
+                                // Can't add attributes to elements with content
+                                if (lastElement == elementName)
+                                    throw new NotSupportedQueryFragmentException($"Attribute-centric column '{col.OutputColumn}' must not come after a non-attribute-centric sibling in XML hierarchy in FOR XML PATH");
+                            }
+                        }
+                        else
+                        {
+                            lastElement = elementName;
+                        }
+                    }
+                    else if (String.IsNullOrEmpty(lastElement))
+                    {
+                        // Columns without a name or named "*" are inlined
+                        // https://learn.microsoft.com/en-us/sql/relational-databases/xml/columns-without-a-name?view=sql-server-ver16
+                        // https://learn.microsoft.com/en-us/sql/relational-databases/xml/columns-with-a-name-specified-as-a-wildcard-character?view=sql-server-ver16
+                        lastElement = ElementName;
+                    }
                 }
             }
 
@@ -122,7 +217,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             using (var writer = XmlWriter.Create(buf, new XmlWriterSettings { ConformanceLevel = ConformanceLevel.Fragment }))
             {
                 if (!String.IsNullOrEmpty(RootName))
-                    WriteRootElement(RootName, writer);
+                    WriteStartElement(RootName, writer);
 
                 foreach (var row in Source.Execute(context))
                 {
@@ -130,6 +225,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         case XmlFormat.Raw:
                             WriteRawFormat(row, writer);
+                            break;
+
+                        case XmlFormat.Path:
+                            WritePathFormat(row, writer);
                             break;
 
                         default:
@@ -154,20 +253,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             };
         }
 
-        private void WriteRootElement(string rootName, XmlWriter writer)
+        private void WriteStartElement(string elementName, XmlWriter writer)
         {
-            writer.WriteStartElement(rootName);
+            var isRoot = writer.WriteState == WriteState.Start;
 
-            if (ColumnFormat.HasFlag(XmlColumnFormat.XsiNil))
+            writer.WriteStartElement(elementName);
+
+            if (ColumnFormat.HasFlag(XmlColumnFormat.XsiNil) && isRoot)
                 writer.WriteAttributeString("xmlns", "xsi", null, XsiNamespace);
         }
 
         private void WriteRawFormat(Entity row, XmlWriter writer)
         {
-            if (String.IsNullOrEmpty(ElementName))
-                throw new InvalidOperationException("ElementName must be specified when using Raw format");
-
-            writer.WriteStartElement(ElementName);
+            if (!String.IsNullOrEmpty(ElementName))
+                WriteStartElement(ElementName, writer);
 
             foreach (var col in ColumnSet)
             {
@@ -175,7 +274,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (ColumnFormat.HasFlag(XmlColumnFormat.Element) && (!value.IsNull || ColumnFormat.HasFlag(XmlColumnFormat.XsiNil)))
                 {
-                    writer.WriteStartElement(col.OutputColumn);
+                    WriteStartElement(col.OutputColumn, writer);
 
                     if (value.IsNull)
                         writer.WriteAttributeString("nil", XsiNamespace, "true");
@@ -188,7 +287,138 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
-            writer.WriteEndElement();
+            if (!String.IsNullOrEmpty(ElementName))
+                writer.WriteEndElement();
+        }
+
+        private void WritePathFormat(Entity row, XmlWriter writer)
+        {
+            if (!String.IsNullOrEmpty(ElementName))
+                WriteStartElement(ElementName, writer);
+
+            var elements = new Stack<string>();
+            var lastNull = false;
+            var inDataList = false;
+
+            foreach (var col in ColumnSet)
+            {
+                var value = (INullable)row[col.SourceColumn];
+                var parts = col.OutputColumn?.Split('/') ?? new[] { "" };
+
+                EnsureElements(parts, elements, writer, ref lastNull, out var modified);
+
+                var name = parts[parts.Length - 1];
+
+                if (String.IsNullOrEmpty(name) || name == "*" || name == "text()")
+                {
+                    if (!value.IsNull)
+                    {
+                        writer.WriteString(value.ToString());
+                        lastNull = false;
+                    }
+                }
+                else if (name == "data()")
+                {
+                    if (modified)
+                        inDataList = false;
+
+                    if (!value.IsNull)
+                    {
+                        if (inDataList)
+                            writer.WriteString(" ");
+
+                        writer.WriteString(value.ToString());
+                        inDataList = true;
+                        lastNull = false;
+                    }
+                }
+                else if (name.StartsWith("@"))
+                {
+                    if (!value.IsNull)
+                        writer.WriteAttributeString(name.Substring(1), value.ToString());
+                }
+                else
+                {
+                    if (!value.IsNull || ColumnFormat.HasFlag(XmlColumnFormat.XsiNil))
+                    {
+                        elements.Push(name);
+                        WriteStartElement(name, writer);
+
+                        if (!value.IsNull)
+                            writer.WriteString(value.ToString());
+                        else
+                            lastNull = true;
+                    }
+                }
+
+                if (name != "data()")
+                    inDataList = false;
+            }
+
+            while (elements.Count > 0)
+            {
+                if (lastNull)
+                {
+                    writer.WriteAttributeString("nil", XsiNamespace, "true");
+                    lastNull = false;
+                }
+
+                writer.WriteEndElement();
+                elements.Pop();
+            }
+
+            if (!String.IsNullOrEmpty(ElementName))
+                writer.WriteEndElement();
+        }
+
+        private void EnsureElements(string[] parts, Stack<string> elements, XmlWriter writer, ref bool lastNull, out bool modified)
+        {
+            modified = false;
+
+            // Close any additional elements
+            while (elements.Count > parts.Length - 1)
+            {
+                if (lastNull)
+                {
+                    writer.WriteAttributeString("nil", XsiNamespace, "true");
+                    lastNull = false;
+                }
+
+                elements.Pop();
+                writer.WriteEndElement();
+                modified = true;
+            }
+
+            // Check the remaining elements
+            var i = 0;
+            foreach (var element in elements.Reverse())
+            {
+                if (element == parts[i])
+                {
+                    i++;
+                    continue;
+                }
+
+                // Element is different, close it and all subsequent elements
+                while (elements.Count > i)
+                {
+                    elements.Pop();
+                    writer.WriteEndElement();
+                    lastNull = false;
+                    modified = true;
+                }
+
+                break;
+            }
+
+            // Open any additional elements
+            while (elements.Count < parts.Length - 1)
+            {
+                WriteStartElement(parts[elements.Count], writer);
+                elements.Push(parts[elements.Count]);
+                lastNull = false;
+                modified = true;
+            }
         }
 
         public override object Clone()
