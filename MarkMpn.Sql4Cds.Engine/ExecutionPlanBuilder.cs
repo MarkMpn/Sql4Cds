@@ -1719,9 +1719,6 @@ namespace MarkMpn.Sql4Cds.Engine
             if (binary.BinaryQueryExpressionType != BinaryQueryExpressionType.Union)
                 throw new NotSupportedQueryFragmentException($"Unhandled {binary.BinaryQueryExpressionType} query type", binary);
 
-            if (binary.ForClause != null)
-                throw new NotSupportedQueryFragmentException("Unhandled FOR clause", binary.ForClause);
-
             var left = ConvertSelectStatement(binary.FirstQueryExpression, hints, outerSchema, outerReferences, context);
             var right = ConvertSelectStatement(binary.SecondQueryExpression, hints, outerSchema, outerReferences, context);
 
@@ -1769,6 +1766,11 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var select = new SelectNode { Source = node, LogicalSourceSchema = concat.GetSchema(context) };
             select.ColumnSet.AddRange(concat.ColumnSet.Select((col, i) => new SelectColumn { SourceColumn = col.OutputColumn, SourceExpression = col.SourceExpressions[0], OutputColumn = left.ColumnSet[i].OutputColumn }));
+
+            if (binary.ForClause is XmlForClause forXml)
+                ConvertForXmlClause(select, forXml, context);
+            else if (binary.ForClause != null)
+                throw new NotSupportedQueryFragmentException("Unhandled FOR clause", binary.ForClause);
 
             return select;
         }
@@ -1854,7 +1856,81 @@ namespace MarkMpn.Sql4Cds.Engine
 
             selectNode.Source = node;
 
+            // Convert to XML
+            if (querySpec.ForClause is XmlForClause forXml)
+                ConvertForXmlClause(selectNode, forXml, context);
+            else if (querySpec.ForClause != null)
+                throw new NotSupportedQueryFragmentException("Unhandled FOR clause", querySpec.ForClause);
+
             return selectNode;
+        }
+
+        private void ConvertForXmlClause(SelectNode selectNode, XmlForClause forXml, NodeCompilationContext context)
+        {
+            // We need to know the individual column names, so expand any wildcard columns
+            selectNode.ExpandWildcardColumns(context);
+
+            // Create the node to convert the data to XML
+            var xmlNode = new XmlWriterNode
+            {
+                Source = selectNode.Source,
+            };
+
+            foreach (var col in selectNode.ColumnSet)
+                xmlNode.ColumnSet.Add(col);
+
+            foreach (var option in forXml.Options)
+            {
+                switch (option.OptionKind)
+                {
+                    case XmlForClauseOptions.Raw:
+                        xmlNode.XmlFormat = XmlFormat.Raw;
+                        xmlNode.ElementName = option.Value?.Value ?? "row";
+                        break;
+
+                    case XmlForClauseOptions.Explicit:
+                        xmlNode.XmlFormat = XmlFormat.Explicit;
+                        break;
+
+                    case XmlForClauseOptions.Auto:
+                        xmlNode.XmlFormat = XmlFormat.Auto;
+                        break;
+
+                    case XmlForClauseOptions.Path:
+                        xmlNode.XmlFormat = XmlFormat.Path;
+                        xmlNode.ElementName = option.Value?.Value ?? "row";
+                        break;
+
+                    case XmlForClauseOptions.Elements:
+                    case XmlForClauseOptions.ElementsAbsent:
+                        xmlNode.ColumnFormat = XmlColumnFormat.Element;
+                        break;
+
+                    case XmlForClauseOptions.ElementsXsiNil:
+                        xmlNode.ColumnFormat = XmlColumnFormat.Element | XmlColumnFormat.XsiNil;
+                        break;
+
+                    case XmlForClauseOptions.Type:
+                        xmlNode.XmlType = true;
+                        break;
+
+                    case XmlForClauseOptions.Root:
+                        xmlNode.RootName = option.Value?.Value ?? "root";
+                        break;
+
+                    default:
+                        throw new NotSupportedQueryFragmentException("Unhandled FOR XML option", option);
+                }
+            }
+
+            // Output the final XML
+            selectNode.Source = xmlNode;
+            selectNode.ColumnSet.Clear();
+            selectNode.ColumnSet.Add(new SelectColumn
+            {
+                SourceColumn = "xml",
+                OutputColumn = "xml"
+            });
         }
 
         private IDataExecutionPlanNodeInternal ConvertInSubqueries(IDataExecutionPlanNodeInternal source, IList<OptimizerHint> hints, TSqlFragment query, NodeCompilationContext context, INodeSchema outerSchema, IDictionary<string,string> outerReferences)

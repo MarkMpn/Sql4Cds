@@ -151,7 +151,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 {
                     Assert.AreEqual(1, reader.RecordsAffected);
                     Assert.IsTrue(reader.Read());
-                    var id = (SqlEntityReference) reader.GetValue(0);
+                    var id = (SqlEntityReference)reader.GetValue(0);
                     Assert.AreEqual("account", id.LogicalName);
                     Assert.IsFalse(reader.Read());
 
@@ -192,7 +192,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             using (var cmd = con.CreateCommand())
             {
                 cmd.CommandText = "INSERT INTO account (name) VALUES ('1'), ('2'), ('3'); SELECT @@ROWCOUNT; SELECT @@ROWCOUNT";
-                
+
                 using (var reader = cmd.ExecuteReader())
                 {
                     Assert.IsTrue(reader.Read());
@@ -331,7 +331,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     }
                 }
 
-                CollectionAssert.AreEqual(new[] {"3", "4", "5", "6", "7", "8", "9", "end" }, results);
+                CollectionAssert.AreEqual(new[] { "3", "4", "5", "6", "7", "8", "9", "end" }, results);
             }
         }
 
@@ -377,7 +377,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 CollectionAssert.AreEqual(new[] { "3", "4", "end" }, results);
             }
         }
-        
+
         [TestMethod]
         public void GlobalVariablesPreservedBetweenCommands()
         {
@@ -1032,7 +1032,7 @@ SELECT name FROM account WHERE name = @name OR name = @name";
                         results.Add(reader.GetString(0));
 
                     var expected = new[] { "California", "Chiapas", "Cinco Rios", "Colima" };
-                    
+
                     for (var i = 0; i < expected.Length; i++)
                         Assert.AreEqual(expected[i], results[i]);
                 }
@@ -1188,6 +1188,23 @@ FROM
                 var actual = cmd.ExecuteScalar();
 
                 Assert.AreEqual("Hello world!", actual);
+            }
+        }
+
+        [TestMethod]
+        public void ForXmlRaw()
+        {
+            using (var con = new Sql4CdsConnection(_dataSources))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandTimeout = 0;
+
+                cmd.CommandText = @"
+SELECT Name, Value
+FROM (VALUES ('Name1', 'Value1'), ('Name2', 'Value2')) AS T(Name, Value)
+FOR XML RAW";
+                var actual = cmd.ExecuteScalar();
+                Assert.AreEqual("<row Name=\"Name1\" Value=\"Value1\" /><row Name=\"Name2\" Value=\"Value2\" />", actual);
             }
         }
     }

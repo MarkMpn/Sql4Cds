@@ -27,6 +27,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)AttributeMetadataCache.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Collation.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\SystemFunctionNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\XmlWriterNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\XPath2ExpressionContext.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)NodeContext.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DatabaseIdentifiers.cs" />

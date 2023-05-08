@@ -22,8 +22,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private int _executionCount;
         private readonly Timer _timer = new Timer();
 
-        public SelectNode() { }
-
         /// <summary>
         /// The columns that should be included in the query results
         /// </summary>
@@ -39,7 +37,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public IDataExecutionPlanNodeInternal Source { get; set; }
 
         /// <summary>
-        /// The schema that shold be used for expanding "*" columns
+        /// The schema that should be used for expanding "*" columns
         /// </summary>
         [Browsable(false)]
         public INodeSchema LogicalSourceSchema { get; set; }
