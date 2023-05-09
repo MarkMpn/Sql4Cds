@@ -193,7 +193,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return new NodeSchema(
                 schema: new Dictionary<string, DataTypeReference>
                 {
-                    ["xml"] = XmlType ? (DataTypeReference) DataTypeHelpers.Xml : DataTypeHelpers.NVarChar(8000, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault)
+                    ["xml"] = XmlType ? (DataTypeReference) DataTypeHelpers.Xml : DataTypeHelpers.NVarChar(Int32.MaxValue, context.PrimaryDataSource.DefaultCollation, CollationLabel.CoercibleDefault)
                 },
                 aliases: null,
                 primaryKey: null,
@@ -247,7 +247,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!XmlType)
                 value = context.PrimaryDataSource.DefaultCollation.ToSqlString(buf.ToString());
             else
-                value = new SqlXml(XmlReader.Create(new StringReader(buf.ToString())));
+                value = new SqlXml(XmlReader.Create(new StringReader(buf.ToString()), new XmlReaderSettings { ConformanceLevel = ConformanceLevel.Fragment }));
 
             yield return new Entity
             {

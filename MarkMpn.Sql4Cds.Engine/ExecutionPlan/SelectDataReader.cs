@@ -126,6 +126,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (sqlType is SqlDataTypeReference sql)
                 return sql.SqlDataTypeOption.ToString().ToLower();
 
+            if (sqlType is XmlDataTypeReference)
+                return "xml";
+
             return String.Join(".", ((UserDataTypeReference)sqlType).Name.Identifiers.Select(id => id.Value));
         }
 
@@ -148,7 +151,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var providerType = GetProviderSpecificFieldType(i);
 
-            if (providerType == typeof(SqlEntityReference))
+            if (providerType == typeof(SqlEntityReference) || providerType == typeof(SqlXml))
                 return providerType;
 
             return SqlTypeConverter.SqlToNetType(providerType);
@@ -244,7 +247,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var column = _columnSet[i];
                 var sqlType = _schema.Schema[_columnSet[i].SourceColumn];
                 var providerType = sqlType.ToNetType(out _);
-                var type = providerType == typeof(SqlEntityReference) ? providerType : SqlTypeConverter.SqlToNetType(providerType);
+                var type = providerType == typeof(SqlEntityReference) || providerType == typeof(SqlXml) ? providerType : SqlTypeConverter.SqlToNetType(providerType);
                 var size = sqlType.GetSize();
                 var precision = sqlType.GetPrecision(255);
                 var scale = sqlType.GetScale(255);

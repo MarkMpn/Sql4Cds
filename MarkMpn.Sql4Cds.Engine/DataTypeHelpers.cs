@@ -178,6 +178,8 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 if (type is UserDataTypeReference udt && udt.Name.BaseIdentifier.Value == typeof(SqlEntityReference).FullName)
                     dataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.UniqueIdentifier };
+                else if (type is XmlDataTypeReference)
+                    return Int32.MaxValue;
                 else
                     throw new NotSupportedQueryFragmentException("Unsupported data type reference", type);
             }

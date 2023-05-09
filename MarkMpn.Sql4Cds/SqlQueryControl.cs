@@ -1065,6 +1065,12 @@ namespace MarkMpn.Sql4Cds
                         e.CellStyle.ForeColor = SystemColors.HotTrack;
                         e.CellStyle.Font = linkFont;
                     }
+                    else if (e.Value is SqlXml xml)
+                    {
+                        e.CellStyle.ForeColor = SystemColors.HotTrack;
+                        e.CellStyle.Font = linkFont;
+                        e.Value = xml.Value;
+                    }
                 };
 
                 grid.CellMouseEnter += (s, e) =>
@@ -1075,7 +1081,8 @@ namespace MarkMpn.Sql4Cds
                     var gv = (DataGridView)s;
                     var cell = gv.Rows[e.RowIndex].Cells[e.ColumnIndex];
 
-                    if (cell.Value is SqlEntityReference er && !er.IsNull)
+                    if (cell.Value is SqlEntityReference er && !er.IsNull ||
+                        cell.Value is SqlXml xml && !xml.IsNull)
                         gv.Cursor = Cursors.Hand;
                     else
                         gv.Cursor = Cursors.Default;
@@ -1114,6 +1121,8 @@ namespace MarkMpn.Sql4Cds
 
                     if (cell.Value is SqlEntityReference er && !er.IsNull)
                         OpenRecord(er);
+                    else if (cell.Value is SqlXml xml && !xml.IsNull)
+                        ShowFetchXML(xml.Value);
                 };
 
                 if (Settings.Instance.AutoSizeColumns)
