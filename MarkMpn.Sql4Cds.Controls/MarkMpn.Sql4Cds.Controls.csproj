@@ -167,5 +167,8 @@
   <ItemGroup>
     <EmbeddedResource Include="Images\ExecuteMessageNode.ico" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Images\XmlWriterNode.ico" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

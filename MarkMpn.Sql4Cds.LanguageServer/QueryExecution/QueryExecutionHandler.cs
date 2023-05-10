@@ -638,6 +638,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                 converted.Type = "languageConstructCatchAll";
             else if (converted.Type == "waitFor")
                 converted.Type = "languageConstructCatchAll";
+            else if (converted.Type == "xmlWriter")
+                converted.Type = "udx";
 
             // Get the filtered list of properties
             var typeDescriptor = new ExecutionPlanNodeTypeDescriptor(node, !executed, _ => null);
