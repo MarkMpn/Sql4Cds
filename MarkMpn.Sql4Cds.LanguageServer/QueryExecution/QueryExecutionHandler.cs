@@ -174,7 +174,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                 var pages = 0;
                 var confirmRetrieve = (EventHandler<ConfirmRetrieveEventArgs>)((object sender, ConfirmRetrieveEventArgs e) =>
                 {
-                    e.Cancel = e.Count >= Sql4CdsSettings.Instance.SelectLimit;
+                    e.Cancel = Sql4CdsSettings.Instance.SelectLimit > 0 && e.Count >= Sql4CdsSettings.Instance.SelectLimit;
 
                     if (!e.Cancel)
                     {
