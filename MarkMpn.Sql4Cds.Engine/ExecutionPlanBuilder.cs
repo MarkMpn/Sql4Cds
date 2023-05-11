@@ -1795,7 +1795,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             // Each table in the FROM clause starts as a separate FetchXmlScan node. Add appropriate join nodes
-            var node = querySpec.FromClause == null ? new ConstantScanNode { Values = { new Dictionary<string, ScalarExpression>() } } : ConvertFromClause(querySpec.FromClause.TableReferences, hints, querySpec, outerSchema, outerReferences, context);
+            var node = querySpec.FromClause == null ? new ConstantScanNode { Values = { new Dictionary<string, ScalarExpression>() } } : ConvertFromClause(querySpec.FromClause, hints, querySpec, outerSchema, outerReferences, context);
             var logicalSchema = node.GetSchema(context);
 
             node = ConvertInSubqueries(node, hints, querySpec, context, outerSchema, outerReferences);
@@ -3273,8 +3273,11 @@ namespace MarkMpn.Sql4Cds.Engine
             return false;
         }
 
-        private IDataExecutionPlanNodeInternal ConvertFromClause(IList<TableReference> tables, IList<OptimizerHint> hints, TSqlFragment query, INodeSchema outerSchema, Dictionary<string, string> outerReferences, NodeCompilationContext context)
+        private IDataExecutionPlanNodeInternal ConvertFromClause(FromClause fromClause, IList<OptimizerHint> hints, TSqlFragment query, INodeSchema outerSchema, Dictionary<string, string> outerReferences, NodeCompilationContext context)
         {
+            fromClause.Accept(new DuplicateTableNameValidatingVisitor());
+
+            var tables = fromClause.TableReferences;
             var node = ConvertTableReference(tables[0], hints, query, outerSchema, outerReferences, context);
 
             for (var i = 1; i < tables.Count; i++)
@@ -3643,6 +3646,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     execute = new SystemFunctionNode
                     {
                         DataSource = dataSource.Name,
+                        Alias = tvf.Alias?.Value,
                         SystemFunction = systemFunction
                     };
                 }

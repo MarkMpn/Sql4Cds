@@ -140,6 +140,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\RewriteVisitorBase.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\ScalarSubqueryVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\TDSEndpointCompatibilityVisitor.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Visitors\DuplicateTableNameValidatingVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\UpdateTargetVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\VariableCollectingVisitor.cs" />
   </ItemGroup>
