@@ -5208,10 +5208,19 @@ UPDATE account SET employees = @employees WHERE name = @name";
 
             Assert.AreEqual(1, plans.Length);
             var select = AssertNode<SelectNode>(plans[0]);
-            var join = AssertNode<HashJoinNode>(select.Source);
-            Assert.AreEqual("audit.userid", join.LeftAttribute.ToSql());
-            Assert.AreEqual("u.systemuserid", join.RightAttribute.ToSql());
-            var auditFetch = AssertNode<FetchXmlScan>(join.LeftSource);
+            var join = AssertNode<MergeJoinNode>(select.Source);
+            Assert.AreEqual("u.systemuserid", join.LeftAttribute.ToSql());
+            Assert.AreEqual("audit.userid", join.RightAttribute.ToSql());
+            var userFetch = AssertNode<FetchXmlScan>(join.LeftSource);
+            AssertFetchXml(userFetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='systemuser'>
+                        <all-attributes />
+                        <order attribute='systemuserid' />
+                    </entity>
+                </fetch>");
+            var sort = AssertNode<SortNode>(join.RightSource);
+            var auditFetch = AssertNode<FetchXmlScan>(sort.Source);
             AssertFetchXml(auditFetch, @"
                 <fetch xmlns:generator='MarkMpn.SQL4CDS'>
                     <entity name='audit'>
@@ -5219,13 +5228,9 @@ UPDATE account SET employees = @employees WHERE name = @name";
                         <link-entity name='systemuser' alias='cu' from='systemuserid' to='callinguserid' link-type='inner'>
                             <all-attributes />
                         </link-entity>
-                    </entity>
-                </fetch>");
-            var userFetch = AssertNode<FetchXmlScan>(join.RightSource);
-            AssertFetchXml(userFetch, @"
-                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
-                    <entity name='systemuser'>
-                        <all-attributes />
+                        <filter>
+                            <condition attribute='userid' operator='not-null' />
+                        </filter>
                     </entity>
                 </fetch>");
         }
@@ -5241,21 +5246,26 @@ UPDATE account SET employees = @employees WHERE name = @name";
 
             Assert.AreEqual(1, plans.Length);
             var select = AssertNode<SelectNode>(plans[0]);
-            var join = AssertNode<HashJoinNode>(select.Source);
-            Assert.AreEqual("audit.objectid", join.LeftAttribute.ToSql());
-            Assert.AreEqual("account.accountid", join.RightAttribute.ToSql());
-            var auditFetch = AssertNode<FetchXmlScan>(join.LeftSource);
-            AssertFetchXml(auditFetch, @"
-                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
-                    <entity name='audit'>
-                        <all-attributes />
-                    </entity>
-                </fetch>");
-            var accountFetch = AssertNode<FetchXmlScan>(join.RightSource);
+            var join = AssertNode<MergeJoinNode>(select.Source);
+            Assert.AreEqual("account.accountid", join.LeftAttribute.ToSql());
+            Assert.AreEqual("audit.objectid", join.RightAttribute.ToSql());
+            var accountFetch = AssertNode<FetchXmlScan>(join.LeftSource);
             AssertFetchXml(accountFetch, @"
                 <fetch xmlns:generator='MarkMpn.SQL4CDS'>
                     <entity name='account'>
                         <all-attributes />
+                        <order attribute='accountid' />
+                    </entity>
+                </fetch>");
+            var sort = AssertNode<SortNode>(join.RightSource);
+            var auditFetch = AssertNode<FetchXmlScan>(sort.Source);
+            AssertFetchXml(auditFetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='audit'>
+                        <all-attributes />
+                        <filter>
+                            <condition attribute='objectid' operator='not-null' />
+                        </filter>
                     </entity>
                 </fetch>");
         }
