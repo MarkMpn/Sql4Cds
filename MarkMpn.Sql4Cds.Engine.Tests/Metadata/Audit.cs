@@ -30,5 +30,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests.Metadata
 
         [AttributeLogicalName("objectid")]
         public EntityReference ObjectId { get; set; }
+
+        [AttributeLogicalName("objecttypecode")]
+        public string ObjectTypeCode { get; set; }
     }
 }

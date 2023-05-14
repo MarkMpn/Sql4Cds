@@ -693,30 +693,36 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             var entityName = parts[0];
-            var attr = new FetchAttributeType { name = parts[1].ToLowerInvariant() };
+            var attr = new FetchAttributeType { name = parts[1] };
 
             if (Alias == entityName)
             {
                 linkEntity = null;
 
-                var meta = metadata[Entity.name].Attributes.SingleOrDefault(a => a.LogicalName == attr.name && a.AttributeOf == null);
-                if (meta == null && (attr.name.EndsWith("name") || attr.name.EndsWith("type")))
+                var meta = metadata[Entity.name].Attributes.SingleOrDefault(a => a.LogicalName.Equals(attr.name, StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null);
+                if (meta == null && (attr.name.EndsWith("name", StringComparison.OrdinalIgnoreCase) || attr.name.EndsWith("type", StringComparison.OrdinalIgnoreCase)))
                 {
                     var logicalName = attr.name.Substring(0, attr.name.Length - 4);
-                    meta = metadata[Entity.name].Attributes.SingleOrDefault(a => a.LogicalName == logicalName && a.AttributeOf == null);
-
-                    if (meta != null)
-                        attr.name = logicalName;
+                    meta = metadata[Entity.name].Attributes.SingleOrDefault(a => a.LogicalName.Equals(logicalName, StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null);
                 }
+
+                if (meta != null)
+                    attr.name = meta.LogicalName;
 
                 if (Entity.Items != null)
                 {
-                    // TODO: What about if there is already an all-attributes element? What should we return?
                     var existing = Entity.Items.OfType<FetchAttributeType>().FirstOrDefault(a => a.name == attr.name || a.alias == attr.name);
                     if (existing != null && (predicate == null || predicate(existing)))
                     {
                         added = false;
                         return existing;
+                    }
+
+                    var existingAllAttributes = Entity.Items.OfType<allattributes>().FirstOrDefault();
+                    if (existingAllAttributes != null && predicate == null)
+                    {
+                        added = false;
+                        return null;
                     }
                 }
 
@@ -726,15 +732,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 linkEntity = Entity.FindLinkEntity(entityName);
 
-                var meta = metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName == attr.name && a.AttributeOf == null);
-                if (meta == null && (attr.name.EndsWith("name") || attr.name.EndsWith("type")))
+                var meta = metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName.Equals(attr.name, StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null);
+                if (meta == null && (attr.name.EndsWith("name", StringComparison.OrdinalIgnoreCase) || attr.name.EndsWith("type", StringComparison.OrdinalIgnoreCase)))
                 {
                     var logicalName = attr.name.Substring(0, attr.name.Length - 4);
-                    meta = metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName == logicalName && a.AttributeOf == null);
-
-                    if (meta != null)
-                        attr.name = logicalName;
+                    meta = metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName.Equals(logicalName, StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null);
                 }
+
+                if (meta != null)
+                    attr.name = meta.LogicalName;
 
                 if (linkEntity.Items != null)
                 {
@@ -743,6 +749,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         added = false;
                         return existing;
+                    }
+
+                    var existingAllAttributes = linkEntity.Items.OfType<allattributes>().FirstOrDefault();
+                    if (existingAllAttributes != null && predicate == null)
+                    {
+                        added = false;
+                        return null;
                     }
                 }
 
@@ -1309,59 +1322,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (parts.Length != 2)
                     continue;
 
-                var attr = parts[1] == "*" ? (object)new allattributes() : new FetchAttributeType { name = parts[1].ToLowerInvariant() };
-
-                if (Alias.Equals(parts[0], StringComparison.OrdinalIgnoreCase))
-                {
-                    if (attr is allattributes)
-                    {
-                        Entity.Items = new object[] { attr };
-                    }
-                    else
-                    {
-                        var attrName = ((FetchAttributeType)attr).name;
-                        var attrMeta = dataSource.Metadata[Entity.name].Attributes.SingleOrDefault(a => a.LogicalName == attrName && a.AttributeOf == null);
-
-                        if (attrMeta == null && (attrName.EndsWith("name") || attrName.EndsWith("type")))
-                            attrMeta = dataSource.Metadata[Entity.name].Attributes.SingleOrDefault(a => a.LogicalName == attrName.Substring(0, attrName.Length - 4));
-
-                        if (attrMeta == null)
-                            continue;
-
-                        ((FetchAttributeType)attr).name = attrMeta.LogicalName;
-
-                        if (Entity.Items == null || (!Entity.Items.OfType<allattributes>().Any() && !Entity.Items.OfType<FetchAttributeType>().Any(a => (a.alias ?? a.name) == ((FetchAttributeType)attr).name)))
-                            Entity.AddItem(attr);
-                    }
-                }
-                else
-                {
-                    var linkEntity = Entity.FindLinkEntity(parts[0]);
-
-                    if (linkEntity != null)
-                    {
-                        if (attr is allattributes)
-                        {
-                            linkEntity.Items = new object[] { attr };
-                        }
-                        else
-                        {
-                            var attrName = ((FetchAttributeType)attr).name;
-                            var attrMeta = dataSource.Metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName == attrName && a.AttributeOf == null);
-
-                            if (attrMeta == null && (attrName.EndsWith("name") || attrName.EndsWith("type")))
-                                attrMeta = dataSource.Metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName == attrName.Substring(0, attrName.Length - 4));
-
-                            if (attrMeta == null)
-                                continue;
-
-                            ((FetchAttributeType)attr).name = attrMeta.LogicalName;
-
-                            if (linkEntity.Items == null || (!linkEntity.Items.OfType<allattributes>().Any() && !linkEntity.Items.OfType<FetchAttributeType>().Any(a => (a.alias ?? a.name) == ((FetchAttributeType)attr).name)))
-                                linkEntity.AddItem(attr);
-                        }
-                    }
-                }
+                AddAttribute(normalizedCol, null, dataSource.Metadata, out _, out _);
             }
 
             // If there is no attribute requested the server will return everything instead of nothing, so
@@ -1447,6 +1408,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return items;
 
             var attributes = items.OfType<FetchAttributeType>().ToList();
+
+            // If we've included audit.objectid then we need audit.objecttypecode as well
+            if (entityName == "audit" && attributes.Any(a => a.name == "objectid") && !attributes.Any(a => a.name == "objecttypecode"))
+            {
+                var objectTypeCode = new FetchAttributeType { name = "objecttypecode" };
+                attributes.Add(objectTypeCode);
+                items = items.Concat(new object[] { objectTypeCode }).ToArray();
+            }
 
             if (attributes.Any(a => !String.IsNullOrEmpty(a.alias)))
                 return items;

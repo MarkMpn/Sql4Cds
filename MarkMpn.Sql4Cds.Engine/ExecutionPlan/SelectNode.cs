@@ -206,6 +206,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             if (items != null && items.OfType<FetchOrderType>().Any(order => order.attribute == c.Attr.name) && fetchXml.AllPages)
                                 return false;
 
+                            // Don't fold the alias if it's on the audit table, it seems to break the provider
+                            if (c.LinkEntity != null && c.LinkEntity.name == "audit" ||
+                                c.LinkEntity == null && fetchXml.Entity.name == "audit")
+                                return false;
+
                             return true;
                         })
                         .ToList();
