@@ -154,14 +154,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (fetchXml != null && fetchXml.FetchXml.count == null)
                 {
-                    fetchXml.FetchXml.top = literal.Value;
-                    fetchXml.AllPages = false;
+                    // audit provider doesn't work well with TOP if it's got an inner join on callinguserid,
+                    // so reduce the page size instead. This seems to be because the TOP gets applied to the list
+                    // of audit records before the join is applied, so any records with no callinguserid are
+                    // lost.
+                    if (fetchXml.Entity.name == "audit" &&
+                        fetchXml.Entity.GetLinkEntities().SingleOrDefault()?.to == "callinguserid" &&
+                        fetchXml.Entity.GetLinkEntities().SingleOrDefault()?.linktype == "inner")
+                    {
+                        fetchXml.FetchXml.count = literal.Value;
+                    }
+                    else
+                    {
+                        fetchXml.FetchXml.top = literal.Value;
+                        fetchXml.AllPages = false;
 
-                    if (Source == fetchXml)
-                        return fetchXml;
+                        if (Source == fetchXml)
+                            return fetchXml;
 
-                    return Source.FoldQuery(context, hints);
-                }
+                        return Source.FoldQuery(context, hints);
+                    }
                 }
 
                 SetPageSize(context, hints, top);
