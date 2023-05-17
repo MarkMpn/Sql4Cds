@@ -457,6 +457,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return false;
 
                 var entityName = AliasToEntityName(targetEntityAlias, targetEntityName, items, entityAlias);
+
+                if (IsInvalidAuditFilter(targetEntityName, entityName, items))
+                    return false;
+
                 var meta = metadata[entityName];
 
                 if (field2 == null)
@@ -522,6 +526,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return false;
 
                 var entityName = AliasToEntityName(targetEntityAlias, targetEntityName, items, entityAlias);
+
+                if (IsInvalidAuditFilter(targetEntityName, entityName, items))
+                    return false;
+
                 var meta = metadata[entityName];
 
                 return TranslateFetchXMLCriteriaWithVirtualAttributes(context, meta, entityAlias, attrName, inPred.NotDefined ? @operator.notin : @operator.@in, inPred.Values.Cast<Literal>().ToArray(), metadata, targetEntityAlias, items, out condition, out filter);
@@ -545,6 +553,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return false;
 
                 var entityName = AliasToEntityName(targetEntityAlias, targetEntityName, items, entityAlias);
+
+                if (IsInvalidAuditFilter(targetEntityName, entityName, items))
+                    return false;
+
                 var meta = metadata[entityName];
 
                 return TranslateFetchXMLCriteriaWithVirtualAttributes(context, meta, entityAlias, attrName, isNull.IsNot ? @operator.notnull : @operator.@null, null, metadata, targetEntityAlias, items, out condition, out filter);
@@ -574,6 +586,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return false;
 
                 var entityName = AliasToEntityName(targetEntityAlias, targetEntityName, items, entityAlias);
+
+                if (IsInvalidAuditFilter(targetEntityName, entityName, items))
+                    return false;
+
                 var meta = metadata[entityName];
 
                 return TranslateFetchXMLCriteriaWithVirtualAttributes(context, meta, entityAlias, attrName, like.NotDefined ? @operator.notlike : @operator.like, new[] { value }, metadata, targetEntityAlias, items, out condition, out filter);
@@ -617,6 +633,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return false;
 
                 var entityName = AliasToEntityName(targetEntityAlias, targetEntityName, items, entityAlias);
+
+                if (IsInvalidAuditFilter(targetEntityName, entityName, items))
+                    return false;
+
                 var meta = metadata[entityName];
 
                 var attr = meta.Attributes.Single(a => a.LogicalName.Equals(attrName));
@@ -627,6 +647,33 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// Checks if this filter can't be folded into the FetchXML query because it's on an outer-joined table
+        /// from the audit entity.
+        /// </summary>
+        /// <param name="targetEntityName">The base entity type of the FetchXML query</param>
+        /// <param name="entityName">The entity type being filtered</param>
+        /// <param name="items">The list of items in the FetchXML entity element</param>
+        /// <returns><c>true</c> if the filter cannot be applied, or <c>false</c> otherwise</returns>
+        /// <remarks>
+        /// The audit provider does not support filtering using the &lt;condition entityname="systemuser" .../&gt; syntax.
+        /// See https://github.com/MarkMpn/Sql4Cds/issues/294
+        /// </remarks>
+        private bool IsInvalidAuditFilter(string targetEntityName, string entityName, object[] items)
+        {
+            if (targetEntityName != "audit")
+                return false;
+
+            if (entityName == "audit")
+                return false;
+
+            // Audit can only have a single join.
+            var join = items.OfType<FetchLinkEntityType>().Single();
+            
+            // Filtering on an inner-joined table works, only indicate an error if we're doing an outer join
+            return join.linktype != "inner";
         }
 
         /// <summary>
