@@ -1515,7 +1515,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public static DataTypeReference ToSqlType(this Type type, DataSource dataSource)
         {
             if (type == typeof(SqlString))
-                return DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource?.DefaultCollation ?? Collation.USEnglish, CollationLabel.Implicit);
+                return DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource?.DefaultCollation ?? Collation.USEnglish, dataSource?.DefaultCollation != null ? CollationLabel.Implicit : CollationLabel.CoercibleDefault);
 
             return _netTypeMapping[type];
         }
