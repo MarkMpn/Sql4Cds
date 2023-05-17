@@ -40,14 +40,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!SqlTypeConverter.CanMakeConsistentTypes(leftColType, rightColType, context.PrimaryDataSource, out var keyType))
                 throw new QueryExecutionException($"Cannot match key types {leftColType.ToSql()} and {rightColType.ToSql()}");
 
+            Identifier keyTypeCollation = null;
+
+            if (keyType is SqlDataTypeReferenceWithCollation keyTypeWithCollation) 
+                keyTypeCollation = new Identifier { Value = keyTypeWithCollation.Collation.Name };
+
             var leftKeyAccessor = (ScalarExpression)LeftAttribute;
             if (!leftColType.IsSameAs(keyType))
-                leftKeyAccessor = new ConvertCall { Parameter = leftKeyAccessor, DataType = keyType };
+                leftKeyAccessor = new ConvertCall { Parameter = leftKeyAccessor, DataType = keyType, Collation = keyTypeCollation };
             var leftKeyConverter = leftKeyAccessor.Compile(leftCompilationContext);
 
             var rightKeyAccessor = (ScalarExpression)RightAttribute;
             if (!rightColType.IsSameAs(keyType))
-                rightKeyAccessor = new ConvertCall { Parameter = rightKeyAccessor, DataType = keyType };
+                rightKeyAccessor = new ConvertCall { Parameter = rightKeyAccessor, DataType = keyType, Collation = keyTypeCollation };
             var rightKeyConverter = rightKeyAccessor.Compile(rightCompilationContext);
 
             var expressionContext = new ExpressionExecutionContext(context);
