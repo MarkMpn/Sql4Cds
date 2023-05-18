@@ -462,11 +462,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
-            // Expose the type of lookup values
+            // Expose the type and name of lookup values
             foreach (var attribute in entity.Attributes.Where(attr => attr.Value is EntityReference).ToList())
             {
                 if (!entity.Contains(attribute.Key + "type"))
                     entity[attribute.Key + "type"] = ((EntityReference)attribute.Value).LogicalName;
+
+                if (!entity.Contains(attribute.Key + "name"))
+                    entity[attribute.Key + "name"] = ((EntityReference)attribute.Value).Name;
             }
 
             // Convert values to SQL types
