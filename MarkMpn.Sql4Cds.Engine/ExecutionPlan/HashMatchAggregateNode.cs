@@ -253,10 +253,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 // Check FetchXML supports grouping by each of the requested attributes
                 var fetchSchema = fetchXml.GetSchema(context);
+                var maxResultCount = 0;
+
                 foreach (var group in GroupBy)
                 {
                     if (!fetchSchema.ContainsColumn(group.GetColumnName(), out var groupCol))
+                    {
+                        // Grouping by a DATEPART calculation from the CalculateScalar node.
+                        maxResultCount = Int32.MaxValue;
                         continue;
+                    }
 
                     var parts = groupCol.Split('.');
                     string entityName;
@@ -275,7 +281,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     // Can't group by multi-select picklist attributes
                     if (attr is MultiSelectPicklistAttributeMetadata)
                         canUseFetchXmlAggregate = false;
+
+                    // Track how many results could be produced by this grouping
+                    if (maxResultCount < Int32.MaxValue && attr is EnumAttributeMetadata enumAttr)
+                    {
+                        if (maxResultCount == 0)
+                            maxResultCount = enumAttr.OptionSet.Options.Count;
+                        else
+                            maxResultCount *= enumAttr.OptionSet.Options.Count;
+                    }
+                    else
+                    {
+                        maxResultCount = Int32.MaxValue;
+                    }
                 }
+
+                // Audit entity can't use sorting and grouping together, so we can't use FetchXML aggregates
+                // if we'll need to page the results.
+                if (maxResultCount > 500 && fetchXml.Entity.name == "audit")
+                    canUseFetchXmlAggregate = false;
 
                 var serializer = new XmlSerializer(typeof(FetchXml.FetchType));
 
@@ -350,15 +374,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             canUseFetchXmlAggregate = false;
                         }
 
-                        // Add a sort order for each grouping to allow consistent paging
-                        var items = linkEntity?.Items ?? fetchXml.Entity.Items;
-                        var sort = items.OfType<FetchOrderType>().FirstOrDefault(order => order.alias == alias);
-                        if (sort == null)
+                        // Add a sort order for each grouping to allow consistent paging if required
+                        if (maxResultCount > 5000)
                         {
-                            if (linkEntity == null)
-                                fetchXml.Entity.AddItem(new FetchOrderType { alias = alias });
-                            else
-                                linkEntity.AddItem(new FetchOrderType { alias = alias });
+                            var items = linkEntity?.Items ?? fetchXml.Entity.Items;
+                            var sort = items.OfType<FetchOrderType>().FirstOrDefault(order => order.alias == alias);
+                            if (sort == null)
+                            {
+                                if (linkEntity == null)
+                                    fetchXml.Entity.AddItem(new FetchOrderType { alias = alias });
+                                else
+                                    linkEntity.AddItem(new FetchOrderType { alias = alias });
+                            }
                         }
                     }
 
