@@ -40,10 +40,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public string PrimaryIdSource { get; set; }
 
         /// <summary>
-        /// The column that contains the secondary ID of the records to delete (used for many-to-many intersect tables)
+        /// The column that contains the secondary ID of the records to delete (used for many-to-many intersect and elastic tables)
         /// </summary>
         [Category("Delete")]
-        [Description("The column that contains the secondary ID of the records to delete (used for many-to-many intersect tables)")]
+        [Description("The column that contains the secondary ID of the records to delete (used for many-to-many intersect and elastic tables)")]
         [DisplayName("SecondaryId Source")]
         public string SecondaryIdSource { get; set; }
 
@@ -135,6 +135,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         primaryKey = relationship.Entity1IntersectAttribute;
                         secondaryKey = relationship.Entity2IntersectAttribute;
                     }
+                    else if (meta.DataProviderId == DataProviders.ElasticDataProvider)
+                    {
+                        secondaryKey = "partitionid";
+                    }
 
                     var fullMappings = new Dictionary<string, string>
                     {
@@ -222,10 +226,25 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 };
             }
 
-            return new DeleteRequest
+            var req = new DeleteRequest
             {
                 Target = new EntityReference(LogicalName, id)
             };
+
+            // Special case for elastic entities - partitionid is required as part of the key
+            if (meta.DataProviderId == DataProviders.ElasticDataProvider)
+            {
+                req.Target = new EntityReference(LogicalName)
+                {
+                    KeyAttributes =
+                    {
+                        [meta.PrimaryIdAttribute] = id,
+                        ["partitionid"] = secondaryIdAccessor(entity)
+                    }
+                };
+            }
+
+            return req;
         }
 
         protected override ExecuteMultipleResponse ExecuteMultiple(IOrganizationService org, EntityMetadata meta, ExecuteMultipleRequest req)

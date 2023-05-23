@@ -1102,6 +1102,11 @@ namespace MarkMpn.Sql4Cds.Engine
                 primaryKey = relationship.Entity1IntersectAttribute;
                 secondaryKey = relationship.Entity2IntersectAttribute;
             }
+            else if (targetMetadata.DataProviderId == DataProviders.ElasticDataProvider)
+            {
+                // Elastic tables need the partitionid as part of the primary key
+                secondaryKey = "partitionid";
+            }
             
             queryExpression.SelectElements.Add(new SelectScalarExpression
             {
@@ -1266,6 +1271,42 @@ namespace MarkMpn.Sql4Cds.Engine
                     Identifier = new Identifier { Value = targetMetadata.PrimaryIdAttribute }
                 }
             });
+
+            if (targetMetadata.DataProviderId == DataProviders.ElasticDataProvider)
+            {
+                // partitionid is required as part of the primary key for Elastic tables - included it as any
+                // other column in the update statement. Check first that the column isn't already being updated.
+                var existingSet = update.SetClauses.OfType<AssignmentSetClause>().FirstOrDefault(set => set.Column.MultiPartIdentifier.Identifiers.Last().Value.Equals("partitionid", StringComparison.OrdinalIgnoreCase));
+
+                if (existingSet != null)
+                    throw new NotSupportedQueryFragmentException("Cannot update partitionid column", existingSet.Column);
+
+                update.SetClauses.Add(new AssignmentSetClause
+                {
+                    Column = new ColumnReferenceExpression
+                    {
+                        MultiPartIdentifier = new MultiPartIdentifier
+                        {
+                            Identifiers =
+                            {
+                                new Identifier { Value = targetAlias },
+                                new Identifier { Value = "partitionid" }
+                            }
+                        }
+                    },
+                    NewValue = new ColumnReferenceExpression
+                    {
+                        MultiPartIdentifier = new MultiPartIdentifier
+                        {
+                            Identifiers =
+                            {
+                                new Identifier { Value = targetAlias },
+                                new Identifier { Value = "partitionid" }
+                            }
+                        }
+                    }
+                });
+            }
 
             var attributes = targetMetadata.Attributes.ToDictionary(attr => attr.LogicalName, StringComparer.OrdinalIgnoreCase);
             var attributeNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

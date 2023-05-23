@@ -353,7 +353,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private Entity ExtractEntity(Entity entity, EntityMetadata meta, Dictionary<string, AttributeMetadata> attributes, Dictionary<string, Func<Entity, object>> newAttributeAccessors, Func<Entity, object> primaryIdAccessor)
         {
             var update = new Entity(LogicalName, (Guid)primaryIdAccessor(entity));
-
+            
             foreach (var attributeAccessor in newAttributeAccessors)
             {
                 if (attributeAccessor.Key == meta.PrimaryIdAttribute)
