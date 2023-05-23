@@ -644,7 +644,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                     var newCount = Interlocked.Add(ref inProgressCount, threadLocalState.EMR.Requests.Count);
                                     var progress = (double)newCount / entities.Count;
                                     options.Progress(progress, $"{operationNames.InProgressUppercase} {GetDisplayName(0, meta)} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
-                                    var resp = (ExecuteMultipleResponse)threadLocalState.Service.Execute(threadLocalState.EMR);
+                                    var resp = ExecuteMultiple(threadLocalState.Service, meta, threadLocalState.EMR);
 
                                     if (responseHandler != null)
                                     {
@@ -679,7 +679,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 var newCount = Interlocked.Add(ref inProgressCount, threadLocalState.EMR.Requests.Count);
                                 var progress = (double)newCount / entities.Count;
                                 options.Progress(progress, $"{operationNames.InProgressUppercase} {GetDisplayName(0, meta)} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
-                                var resp = (ExecuteMultipleResponse)threadLocalState.Service.Execute(threadLocalState.EMR);
+                                var resp = ExecuteMultiple(threadLocalState.Service, meta, threadLocalState.EMR);
 
                                 if (responseHandler != null)
                                 {
@@ -718,6 +718,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             recordsAffected = count;
             parameterValues["@@ROWCOUNT"] = (SqlInt32)count;
             return $"{count:N0} {GetDisplayName(count, meta)} {operationNames.CompletedLowercase}";
+        }
+
+        protected virtual ExecuteMultipleResponse ExecuteMultiple(IOrganizationService org, EntityMetadata meta, ExecuteMultipleRequest req)
+        {
+            return (ExecuteMultipleResponse)org.Execute(req);
         }
 
         public abstract object Clone();

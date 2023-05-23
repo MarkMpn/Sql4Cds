@@ -248,7 +248,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var metadata = context.DataSources[fetchXml.DataSource].Metadata;
 
                 // FetchXML is translated to QueryExpression for virtual entities, which doesn't support aggregates
-                if (metadata[fetchXml.Entity.name].DataProviderId != null)
+                // Elastic tables do support aggregates though.
+                if (metadata[fetchXml.Entity.name].DataProviderId != null &&
+                    metadata[fetchXml.Entity.name].DataProviderId != DataProviders.ElasticDataProvider)
                     canUseFetchXmlAggregate = false;
 
                 // Check FetchXML supports grouping by each of the requested attributes
@@ -296,9 +298,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
                 }
 
-                // Audit entity can't use sorting and grouping together, so we can't use FetchXML aggregates
-                // if we'll need to page the results.
-                if (maxResultCount > 500 && fetchXml.Entity.name == "audit")
+                // Cosmos DB can't use sorting and grouping together, so we can't use FetchXML aggregates
+                // if we'll need to page the results. Applies to the audit entity as well, even though it's
+                // not using the elastic table provider
+                if (maxResultCount > 500 &&
+                    (fetchXml.Entity.name == "audit" || metadata[fetchXml.Entity.name].DataProviderId == DataProviders.ElasticDataProvider))
                     canUseFetchXmlAggregate = false;
 
                 var serializer = new XmlSerializer(typeof(FetchXml.FetchType));

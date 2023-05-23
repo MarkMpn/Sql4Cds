@@ -26,6 +26,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)Ado\StatementCompletedEventArgs.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)AttributeMetadataCache.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Collation.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)DataProviders.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\SystemFunctionNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\XmlWriterNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\XPath2ExpressionContext.cs" />

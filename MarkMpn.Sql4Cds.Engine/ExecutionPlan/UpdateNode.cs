@@ -387,6 +387,43 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
+        protected override ExecuteMultipleResponse ExecuteMultiple(IOrganizationService org, EntityMetadata meta, ExecuteMultipleRequest req)
+        {
+            if (meta.DataProviderId == DataProviders.ElasticDataProvider)
+            {
+                // Elastic tables can use UpdateMultiple for better performance than ExecuteMultiple
+                var entities = new EntityCollection { EntityName = meta.LogicalName };
+
+                foreach (UpdateRequest update in req.Requests)
+                    entities.Entities.Add(update.Target);
+
+                var updateMultiple = new OrganizationRequest("UpdateMultiple")
+                {
+                    ["Targets"] = entities
+                };
+
+                org.Execute(updateMultiple);
+
+                var multipleResp = new ExecuteMultipleResponse
+                {
+                    ["Responses"] = new ExecuteMultipleResponseItemCollection()
+                };
+
+                for (var i = 0; i < req.Requests.Count; i++)
+                {
+                    multipleResp.Responses.Add(new ExecuteMultipleResponseItem
+                    {
+                        RequestIndex = i,
+                        Response = new UpdateResponse()
+                    });
+                }
+
+                return multipleResp;
+            }
+
+            return base.ExecuteMultiple(org, meta, req);
+        }
+
         public override string ToString()
         {
             return "UPDATE";

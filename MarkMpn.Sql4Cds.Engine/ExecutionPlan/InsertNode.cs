@@ -213,6 +213,44 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
+        protected override ExecuteMultipleResponse ExecuteMultiple(IOrganizationService org, EntityMetadata meta, ExecuteMultipleRequest req)
+        {
+            if (meta.DataProviderId == DataProviders.ElasticDataProvider)
+            {
+                // Elastic tables can use CreateMultiple for better performance than ExecuteMultiple
+                var entities = new EntityCollection { EntityName = meta.LogicalName };
+
+                foreach (CreateRequest create in req.Requests)
+                    entities.Entities.Add(create.Target);
+
+                var createMultiple = new OrganizationRequest("CreateMultiple")
+                {
+                    ["Targets"] = entities
+                };
+
+                var resp = org.Execute(createMultiple);
+                var ids = (Guid[])resp["Ids"];
+
+                var multipleResp = new ExecuteMultipleResponse
+                {
+                    ["Responses"] = new ExecuteMultipleResponseItemCollection()
+                };
+
+                for (var i = 0; i < ids.Length; i++)
+                {
+                    multipleResp.Responses.Add(new ExecuteMultipleResponseItem
+                    {
+                        RequestIndex = i,
+                        Response = new CreateResponse { ["id"] = ids[i] }
+                    });
+                }
+
+                return multipleResp;
+            }
+
+            return base.ExecuteMultiple(org, meta, req);
+        }
+
         public override string ToString()
         {
             return "INSERT";

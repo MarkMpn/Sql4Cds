@@ -228,6 +228,43 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             };
         }
 
+        protected override ExecuteMultipleResponse ExecuteMultiple(IOrganizationService org, EntityMetadata meta, ExecuteMultipleRequest req)
+        {
+            if (meta.DataProviderId == DataProviders.ElasticDataProvider)
+            {
+                // Elastic tables can use DeleteMultiple for better performance than ExecuteMultiple
+                var entities = new EntityReferenceCollection();
+
+                foreach (DeleteRequest delete in req.Requests)
+                    entities.Add(delete.Target);
+
+                var deleteMultiple = new OrganizationRequest("DeleteMultiple")
+                {
+                    ["Targets"] = entities
+                };
+
+                org.Execute(deleteMultiple);
+
+                var multipleResp = new ExecuteMultipleResponse
+                {
+                    ["Responses"] = new ExecuteMultipleResponseItemCollection()
+                };
+
+                for (var i = 0; i < req.Requests.Count; i++)
+                {
+                    multipleResp.Responses.Add(new ExecuteMultipleResponseItem
+                    {
+                        RequestIndex = i,
+                        Response = new DeleteResponse()
+                    });
+                }
+
+                return multipleResp;
+            }
+
+            return base.ExecuteMultiple(org, meta, req);
+        }
+
         public override string ToString()
         {
             return "DELETE";
