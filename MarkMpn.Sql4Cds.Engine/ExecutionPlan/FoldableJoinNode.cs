@@ -293,6 +293,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (dataSource.Metadata[leftFetch.Entity.name].DataProviderId != dataSource.Metadata[rightFetch.Entity.name].DataProviderId)
                 return false;
 
+            // Elastic tables don't support joins
+            if (dataSource.Metadata[leftFetch.Entity.name].DataProviderId == new Guid("1d9bde74-9ebd-4da9-8ff5-aa74945b9f74"))
+                return false;
+
             // Check we're not going to have too many link entities
             var leftLinkCount = leftFetch.Entity.GetLinkEntities().Count();
             var rightLinkCount = rightFetch.Entity.GetLinkEntities().Count() + 1;
