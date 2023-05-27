@@ -11,6 +11,7 @@ using System.Xml.Serialization;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
 
@@ -173,6 +174,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("Using Custom Paging")]
         public bool UsingCustomPaging => _pagingFields != null;
 
+        [Category("Elastic Tables")]
+        [Description("The partitionId to limit the query to")]
+        [DisplayName("Partition Id")]
+        public string PartitionId { get; private set; }
+
+        [Category("Elastic Tables")]
+        [Description("Indicates if the Partition Id setting is a literal or variable value")]
+        [DisplayName("Partition Id Variable")]
+        public bool PartitionIdVariable { get; private set; }
+
         public bool RequiresCustomPaging(IDictionary<string, DataSource> dataSources)
         {
             if (FetchXml.distinct)
@@ -240,7 +251,26 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 _lastPageValues = new List<SqlEntityReference>();
             }
 
-            var res = dataSource.Connection.RetrieveMultiple(new FetchExpression(Serialize(FetchXml)));
+            var req = new RetrieveMultipleRequest { Query = new FetchExpression(Serialize(FetchXml)) };
+
+            if (PartitionId != null)
+            {
+                if (PartitionIdVariable)
+                {
+                    var value = context.ParameterValues[PartitionId];
+
+                    if (value == null || value is INullable nullable && nullable.IsNull)
+                        yield break; // = NULL is always false in SQL
+                    else
+                        req.Parameters["partitionId"] = value.ToString();
+                }
+                else
+                {
+                    req.Parameters["partitionId"] = PartitionId;
+                }
+            }
+
+            var res = ((RetrieveMultipleResponse) dataSource.Connection.Execute(req)).EntityCollection;
             PagesRetrieved++;
 
             var count = res.Entities.Count;
@@ -285,7 +315,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     Entity.AddItem(pagingFilter);
                 }
 
-                var nextPage = dataSource.Connection.RetrieveMultiple(new FetchExpression(Serialize(FetchXml)));
+                ((FetchExpression)req.Query).Query = Serialize(FetchXml);
+                var nextPage = ((RetrieveMultipleResponse)dataSource.Connection.Execute(req)).EntityCollection;
                 PagesRetrieved++;
 
                 foreach (var entity in nextPage.Entities)
@@ -1030,6 +1061,28 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 ApplyPageSizeHint(hints);
             }
 
+            // Move partitionid filter to partitionId parameter
+            // https://learn.microsoft.com/en-us/power-apps/developer/data-platform/use-elastic-tables?tabs=sdk#query-rows-of-an-elastic-table
+            var meta = context.DataSources[DataSource].Metadata[Entity.name];
+
+            if (meta.DataProviderId == DataProviders.ElasticDataProvider && Entity.Items != null)
+            {
+                var partitionCondition = Entity.Items
+                    .OfType<filter>()
+                    .Where(f => f.type == filterType.and)
+                    .SelectMany(f => f.Items.OfType<condition>())
+                    .FirstOrDefault(c => c.attribute == "partitionid" && c.@operator == @operator.eq && c.value != null);
+
+                if (partitionCondition != null)
+                {
+                    PartitionId = partitionCondition.value;
+                    PartitionIdVariable = partitionCondition.IsVariable;
+
+                    foreach (var filter in Entity.Items.OfType<filter>())
+                        filter.Items = filter.Items.Except(new[] { partitionCondition }).ToArray();
+                }
+            }
+
             return this;
         }
 
@@ -1686,6 +1739,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 _lastSchemaFetchXml = _lastSchemaFetchXml,
                 _primaryKeyColumns = _primaryKeyColumns,
                 _pagingFields = _pagingFields,
+                PartitionId = PartitionId,
+                PartitionIdVariable = PartitionIdVariable,
             };
 
             // Custom properties are not serialized, so need to copy them manually
