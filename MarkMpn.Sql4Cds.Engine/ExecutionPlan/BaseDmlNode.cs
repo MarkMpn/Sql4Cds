@@ -265,7 +265,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var dataTable = new DataTable();
                 var schemaTable = dataReader.GetSchemaTable();
                 var columnTypes = new ColumnList();
-                var targetDataSource = context.DataSources[DataSource];
+                var targetDataSource = DataSource == null ? context.PrimaryDataSource : context.DataSources[DataSource];
 
                 for (var i = 0; i < schemaTable.Rows.Count; i++)
                 {
