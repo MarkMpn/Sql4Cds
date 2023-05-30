@@ -166,7 +166,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 using (_timer.Run())
                 {
                     return ExecuteDmlOperation(
-                        dataSource.Connection,
+                        dataSource,
                         context.Options,
                         entities,
                         meta,
@@ -247,7 +247,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return req;
         }
 
-        protected override ExecuteMultipleResponse ExecuteMultiple(IOrganizationService org, EntityMetadata meta, ExecuteMultipleRequest req)
+        protected override ExecuteMultipleResponse ExecuteMultiple(DataSource dataSource, IOrganizationService org, EntityMetadata meta, ExecuteMultipleRequest req)
         {
             if (meta.DataProviderId == DataProviders.ElasticDataProvider)
             {
@@ -262,7 +262,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     ["Targets"] = entities
                 };
 
-                org.Execute(deleteMultiple);
+                dataSource.Execute(org, deleteMultiple);
 
                 var multipleResp = new ExecuteMultipleResponse
                 {
@@ -281,7 +281,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return multipleResp;
             }
 
-            return base.ExecuteMultiple(org, meta, req);
+            return base.ExecuteMultiple(dataSource, org, meta, req);
         }
 
         public override string ToString()

@@ -281,7 +281,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (BypassCustomPluginExecution)
                 req.Parameters["BypassCustomPluginExecution"] = true;
 
-            var res = ((RetrieveMultipleResponse) dataSource.Connection.Execute(req)).EntityCollection;
+            var res = ((RetrieveMultipleResponse)dataSource.Execute(req)).EntityCollection;
             PagesRetrieved++;
 
             var count = res.Entities.Count;
@@ -327,7 +327,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
 
                 ((FetchExpression)req.Query).Query = Serialize(FetchXml);
-                var nextPage = ((RetrieveMultipleResponse)dataSource.Connection.Execute(req)).EntityCollection;
+                var nextPage = ((RetrieveMultipleResponse)dataSource.Execute(req)).EntityCollection;
                 PagesRetrieved++;
 
                 foreach (var entity in nextPage.Entities)

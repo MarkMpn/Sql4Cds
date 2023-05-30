@@ -541,14 +541,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// Executes the DML operations required for a set of input records
         /// </summary>
-        /// <param name="org">The <see cref="IOrganizationService"/> to use to get the data</param>
+        /// <param name="dataSource">The data source to get the data from</param>
         /// <param name="options"><see cref="IQueryExecutionOptions"/> to indicate how the query can be executed</param>
         /// <param name="entities">The data source entities</param>
         /// <param name="meta">The metadata of the entity that will be affected</param>
         /// <param name="requestGenerator">A function to generate a DML request from a data source entity</param>
         /// <param name="operationNames">The constant strings to use in log messages</param>
         /// <returns>The final log message</returns>
-        protected string ExecuteDmlOperation(IOrganizationService org, IQueryExecutionOptions options, List<Entity> entities, EntityMetadata meta, Func<Entity,OrganizationRequest> requestGenerator, OperationNames operationNames, out int recordsAffected, IDictionary<string, object> parameterValues, Action<OrganizationResponse> responseHandler = null)
+        protected string ExecuteDmlOperation(DataSource dataSource, IQueryExecutionOptions options, List<Entity> entities, EntityMetadata meta, Func<Entity,OrganizationRequest> requestGenerator, OperationNames operationNames, out int recordsAffected, IDictionary<string, object> parameterValues, Action<OrganizationResponse> responseHandler = null)
         {
             var inProgressCount = 0;
             var count = 0;
@@ -556,7 +556,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var maxDop = MaxDOP;
 
 #if NETCOREAPP
-            var svc = org as ServiceClient;
+            var svc = dataSource.Connection as ServiceClient;
 
             if (maxDop <= 1 || svc == null || (svc.ActiveAuthenticationType != Microsoft.PowerPlatform.Dataverse.Client.AuthenticationType.OAuth && svc.ActiveAuthenticationType != Microsoft.PowerPlatform.Dataverse.Client.AuthenticationType.Certificate && svc.ActiveAuthenticationType != Microsoft.PowerPlatform.Dataverse.Client.AuthenticationType.ExternalTokenManagement && svc.ActiveAuthenticationType != Microsoft.PowerPlatform.Dataverse.Client.AuthenticationType.ClientSecret))
             {
@@ -564,7 +564,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 svc = null;
             }
 #else
-            var svc = org as CrmServiceClient;
+            var svc = dataSource.Connection as CrmServiceClient;
 
             if (maxDop <= 1 || svc == null || (svc.ActiveAuthenticationType != Microsoft.Xrm.Tooling.Connector.AuthenticationType.OAuth && svc.ActiveAuthenticationType != Microsoft.Xrm.Tooling.Connector.AuthenticationType.Certificate && svc.ActiveAuthenticationType != Microsoft.Xrm.Tooling.Connector.AuthenticationType.ExternalTokenManagement && svc.ActiveAuthenticationType != Microsoft.Xrm.Tooling.Connector.AuthenticationType.ClientSecret))
             {
@@ -583,7 +583,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         new ParallelOptions { MaxDegreeOfParallelism = maxDop },
                         () =>
                         {
-                            var service = svc?.Clone() ?? org;
+                            var service = svc?.Clone() ?? dataSource.Connection;
 
 #if NETCOREAPP
                             if (!useAffinityCookie && service is ServiceClient crmService)
@@ -613,7 +613,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 var newCount = Interlocked.Increment(ref inProgressCount);
                                 var progress = (double)newCount / entities.Count;
                                 options.Progress(progress, $"{operationNames.InProgressUppercase} {newCount:N0} of {entities.Count:N0} {GetDisplayName(0, meta)} ({progress:P0})...");
-                                var response = threadLocalState.Service.Execute(request);
+                                var response = dataSource.Execute(threadLocalState.Service, request);
                                 Interlocked.Increment(ref count);
 
                                 responseHandler?.Invoke(response);
@@ -644,7 +644,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                     var newCount = Interlocked.Add(ref inProgressCount, threadLocalState.EMR.Requests.Count);
                                     var progress = (double)newCount / entities.Count;
                                     options.Progress(progress, $"{operationNames.InProgressUppercase} {GetDisplayName(0, meta)} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
-                                    var resp = ExecuteMultiple(threadLocalState.Service, meta, threadLocalState.EMR);
+                                    var resp = ExecuteMultiple(dataSource, threadLocalState.Service, meta, threadLocalState.EMR);
 
                                     if (responseHandler != null)
                                     {
@@ -679,7 +679,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 var newCount = Interlocked.Add(ref inProgressCount, threadLocalState.EMR.Requests.Count);
                                 var progress = (double)newCount / entities.Count;
                                 options.Progress(progress, $"{operationNames.InProgressUppercase} {GetDisplayName(0, meta)} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
-                                var resp = ExecuteMultiple(threadLocalState.Service, meta, threadLocalState.EMR);
+                                var resp = ExecuteMultiple(dataSource, threadLocalState.Service, meta, threadLocalState.EMR);
 
                                 if (responseHandler != null)
                                 {
@@ -702,7 +702,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 }
                             }
 
-                            if (threadLocalState.Service != org && threadLocalState.Service is IDisposable disposableClient)
+                            if (threadLocalState.Service != dataSource.Connection && threadLocalState.Service is IDisposable disposableClient)
                                 disposableClient.Dispose();
                         });
                 }
@@ -720,9 +720,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return $"{count:N0} {GetDisplayName(count, meta)} {operationNames.CompletedLowercase}";
         }
 
-        protected virtual ExecuteMultipleResponse ExecuteMultiple(IOrganizationService org, EntityMetadata meta, ExecuteMultipleRequest req)
+        protected virtual ExecuteMultipleResponse ExecuteMultiple(DataSource dataSource, IOrganizationService org, EntityMetadata meta, ExecuteMultipleRequest req)
         {
-            return (ExecuteMultipleResponse)org.Execute(req);
+            return (ExecuteMultipleResponse)dataSource.Execute(org, req);
         }
 
         public abstract object Clone();
