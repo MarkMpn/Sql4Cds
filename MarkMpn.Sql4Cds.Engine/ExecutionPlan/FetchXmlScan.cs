@@ -184,6 +184,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("Partition Id Variable")]
         public bool PartitionIdVariable { get; private set; }
 
+        /// <summary>
+        /// Indicates if custom plugins should be skipped
+        /// </summary>
+        [Category("FetchXML Scan")]
+        [DisplayName("Bypass Plugin Execution")]
+        [Description("Indicates if custom plugins should be skipped")]
+        public bool BypassCustomPluginExecution { get; set; }
+
         public bool RequiresCustomPaging(IDictionary<string, DataSource> dataSources)
         {
             if (FetchXml.distinct)
@@ -269,6 +277,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     req.Parameters["partitionId"] = PartitionId;
                 }
             }
+
+            if (BypassCustomPluginExecution)
+                req.Parameters["BypassCustomPluginExecution"] = true;
 
             var res = ((RetrieveMultipleResponse) dataSource.Connection.Execute(req)).EntityCollection;
             PagesRetrieved++;
@@ -1059,6 +1070,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 ConvertQueryHints(hints);
                 ApplyPageSizeHint(hints);
+                BypassCustomPluginExecution = GetBypassPluginExecution(context, hints);
             }
 
             // Move partitionid filter to partitionId parameter
@@ -1172,6 +1184,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 throw new NotSupportedQueryFragmentException("Invalid page size, must be between 1 and 5000", pageSizeHints[0]);
 
             FetchXml.count = pageSize.ToString(CultureInfo.InvariantCulture);
+        }
+
+        private bool GetBypassPluginExecution(NodeCompilationContext context, IList<OptimizerHint> queryHints)
+        {
+            if (queryHints == null)
+                return context.Options.BypassCustomPlugins;
+
+            var bypassPluginExecution = queryHints
+                .OfType<UseHintList>()
+                .Where(hint => hint.Hints.Any(s => s.Value.Equals("BYPASS_CUSTOM_PLUGIN_EXECUTION", StringComparison.OrdinalIgnoreCase)))
+                .Any();
+
+            return bypassPluginExecution || context.Options.BypassCustomPlugins;
         }
 
         private void NormalizeFilters()
@@ -1741,6 +1766,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 _pagingFields = _pagingFields,
                 PartitionId = PartitionId,
                 PartitionIdVariable = PartitionIdVariable,
+                BypassCustomPluginExecution = BypassCustomPluginExecution,
             };
 
             // Custom properties are not serialized, so need to copy them manually
