@@ -1275,11 +1275,13 @@ namespace MarkMpn.Sql4Cds.Engine
             if (targetMetadata.DataProviderId == DataProviders.ElasticDataProvider)
             {
                 // partitionid is required as part of the primary key for Elastic tables - included it as any
-                // other column in the update statement. Check first that the column isn't already being updated.
+                // other column in the update statement. Check first that the column isn't already being updated -
+                // the metadata shows it's valid for update but  actually has no effect and is documented as not updateable
+                // https://learn.microsoft.com/en-us/power-apps/developer/data-platform/use-elastic-tables?tabs=sdk#update-a-record-in-an-elastic-table
                 var existingSet = update.SetClauses.OfType<AssignmentSetClause>().FirstOrDefault(set => set.Column.MultiPartIdentifier.Identifiers.Last().Value.Equals("partitionid", StringComparison.OrdinalIgnoreCase));
 
                 if (existingSet != null)
-                    throw new NotSupportedQueryFragmentException("Cannot update partitionid column", existingSet.Column);
+                    throw new NotSupportedQueryFragmentException("Column cannot be updated", existingSet.Column);
 
                 update.SetClauses.Add(new AssignmentSetClause
                 {
