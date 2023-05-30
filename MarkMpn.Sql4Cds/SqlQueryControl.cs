@@ -820,6 +820,12 @@ namespace MarkMpn.Sql4Cds
 
                     fault = fault.InnerFault;
                 }
+
+                if (fault.ErrorDetails.TryGetValue("Plugin.ExceptionFromPluginExecute", out var plugin))
+                    msg += "\r\nError from plugin: " + plugin;
+
+                if (!String.IsNullOrEmpty(fault.TraceText))
+                    msg += "\r\nTrace log: " + fault.TraceText;
             }
 
             return msg;
