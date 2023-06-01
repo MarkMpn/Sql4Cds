@@ -641,30 +641,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                                 if (threadLocalState.EMR.Requests.Count == BatchSize)
                                 {
-                                    var newCount = Interlocked.Add(ref inProgressCount, threadLocalState.EMR.Requests.Count);
-                                    var progress = (double)newCount / entities.Count;
-                                    options.Progress(progress, $"{operationNames.InProgressUppercase} {GetDisplayName(0, meta)} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
-                                    var resp = ExecuteMultiple(dataSource, threadLocalState.Service, meta, threadLocalState.EMR);
-
-                                    if (responseHandler != null)
-                                    {
-                                        foreach (var item in resp.Responses)
-                                        {
-                                            if (item.Response != null)
-                                                responseHandler(item.Response);
-                                        }
-                                    }
-
-                                    if (resp.IsFaulted)
-                                    {
-                                        var error = resp.Responses.First(r => r.Fault != null);
-                                        Interlocked.Add(ref count, error.RequestIndex);
-                                        throw new ApplicationException($"Error {operationNames.InProgressLowercase} {GetDisplayName(0, meta)} - " + error.Fault.Message);
-                                    }
-                                    else
-                                    {
-                                        Interlocked.Add(ref count, threadLocalState.EMR.Requests.Count);
-                                    }
+                                    ProcessBatch(threadLocalState.EMR, ref count, ref inProgressCount, entities, operationNames, meta, options, dataSource, threadLocalState.Service, responseHandler);
 
                                     threadLocalState = new { threadLocalState.Service, EMR = default(ExecuteMultipleRequest) };
                                 }
@@ -675,32 +652,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         (threadLocalState) =>
                         {
                             if (threadLocalState.EMR != null)
-                            {
-                                var newCount = Interlocked.Add(ref inProgressCount, threadLocalState.EMR.Requests.Count);
-                                var progress = (double)newCount / entities.Count;
-                                options.Progress(progress, $"{operationNames.InProgressUppercase} {GetDisplayName(0, meta)} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
-                                var resp = ExecuteMultiple(dataSource, threadLocalState.Service, meta, threadLocalState.EMR);
-
-                                if (responseHandler != null)
-                                {
-                                    foreach (var item in resp.Responses)
-                                    {
-                                        if (item.Response != null)
-                                            responseHandler(item.Response);
-                                    }
-                                }
-
-                                if (resp.IsFaulted)
-                                {
-                                    var error = resp.Responses.First(r => r.Fault != null);
-                                    Interlocked.Add(ref count, error.RequestIndex);
-                                    throw new ApplicationException($"Error {operationNames.InProgressLowercase} {GetDisplayName(0, meta)} - " + error.Fault.Message);
-                                }
-                                else
-                                {
-                                    Interlocked.Add(ref count, threadLocalState.EMR.Requests.Count);
-                                }
-                            }
+                                ProcessBatch(threadLocalState.EMR, ref count, ref inProgressCount, entities, operationNames, meta, options, dataSource, threadLocalState.Service, responseHandler);
 
                             if (threadLocalState.Service != dataSource.Connection && threadLocalState.Service is IDisposable disposableClient)
                                 disposableClient.Dispose();
@@ -718,6 +670,39 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             recordsAffected = count;
             parameterValues["@@ROWCOUNT"] = (SqlInt32)count;
             return $"{count:N0} {GetDisplayName(count, meta)} {operationNames.CompletedLowercase}";
+        }
+
+        private void ProcessBatch(ExecuteMultipleRequest req, ref int count, ref int inProgressCount, List<Entity> entities, OperationNames operationNames, EntityMetadata meta, IQueryExecutionOptions options, DataSource dataSource, IOrganizationService org, Action<OrganizationResponse> responseHandler)
+        {
+            var newCount = Interlocked.Add(ref inProgressCount, req.Requests.Count);
+            var progress = (double)newCount / entities.Count;
+            options.Progress(progress, $"{operationNames.InProgressUppercase} {GetDisplayName(0, meta)} {newCount + 1 - req.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
+            var resp = ExecuteMultiple(dataSource, org, meta, req);
+
+            if (responseHandler != null)
+            {
+                foreach (var item in resp.Responses)
+                {
+                    if (item.Response != null)
+                        responseHandler(item.Response);
+                }
+            }
+
+            var errorResponses = resp.Responses
+                .Where(r => r.Fault != null)
+                .ToList();
+
+            Interlocked.Add(ref count, req.Requests.Count - errorResponses.Count);
+
+            var error = errorResponses.FirstOrDefault(item => FilterErrors(item.Fault));
+
+            if (error != null)
+                throw new ApplicationException($"Error {operationNames.InProgressLowercase} {GetDisplayName(0, meta)} - " + error.Fault.Message);
+        }
+
+        protected virtual bool FilterErrors(OrganizationServiceFault fault)
+        {
+            return true;
         }
 
         protected virtual ExecuteMultipleResponse ExecuteMultiple(DataSource dataSource, IOrganizationService org, EntityMetadata meta, ExecuteMultipleRequest req)

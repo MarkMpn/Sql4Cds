@@ -387,6 +387,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
+        protected override bool FilterErrors(OrganizationServiceFault fault)
+        {
+            // Ignore errors trying to delete records that don't exist - record may have been deleted by another
+            // process in parallel.
+            return fault.ErrorCode != -2147220969;
+        }
+
         protected override ExecuteMultipleResponse ExecuteMultiple(DataSource dataSource, IOrganizationService org, EntityMetadata meta, ExecuteMultipleRequest req)
         {
             if (meta.DataProviderId == DataProviders.ElasticDataProvider)
