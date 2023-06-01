@@ -687,6 +687,8 @@ namespace MarkMpn.Sql4Cds
 
             if (content != null)
                 Clipboard.SetDataObject(content);
+            else
+                Clipboard.SetDataObject(String.Join("\t", grid.Columns.Cast<DataGridViewColumn>().Select(col => col.HeaderText)));
 
             grid.ClipboardCopyMode = DataGridViewClipboardCopyMode.EnableWithoutHeaderText;
         }
@@ -1343,7 +1345,6 @@ namespace MarkMpn.Sql4Cds
             }
 
             copyToolStripMenuItem.Enabled = grid.Rows.Count > 0;
-            copyWithHeadersToolStripMenuItem.Enabled = grid.Rows.Count > 0;
         }
 
         private void openRecordToolStripMenuItem_Click(object sender, EventArgs e)
