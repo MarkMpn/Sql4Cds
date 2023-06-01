@@ -671,14 +671,23 @@ namespace MarkMpn.Sql4Cds
         private void copyToolStripMenuItem_Click(object sender, EventArgs e)
         {
             var grid = (DataGridView)gridContextMenuStrip.SourceControl;
-            Clipboard.SetDataObject(grid.GetClipboardContent());
+
+            var content = grid.GetClipboardContent();
+
+            if (content != null)
+                Clipboard.SetDataObject(content);
         }
 
         private void copyWithHeadersToolStripMenuItem_Click(object sender, EventArgs e)
         {
             var grid = (DataGridView)gridContextMenuStrip.SourceControl;
             grid.ClipboardCopyMode = DataGridViewClipboardCopyMode.EnableAlwaysIncludeHeaderText;
-            Clipboard.SetDataObject(grid.GetClipboardContent());
+
+            var content = grid.GetClipboardContent();
+
+            if (content != null)
+                Clipboard.SetDataObject(content);
+
             grid.ClipboardCopyMode = DataGridViewClipboardCopyMode.EnableWithoutHeaderText;
         }
 
@@ -1332,6 +1341,9 @@ namespace MarkMpn.Sql4Cds
                 openRecordToolStripMenuItem.Enabled = true;
                 createSELECTStatementToolStripMenuItem.Enabled = true;
             }
+
+            copyToolStripMenuItem.Enabled = grid.Rows.Count > 0;
+            copyWithHeadersToolStripMenuItem.Enabled = grid.Rows.Count > 0;
         }
 
         private void openRecordToolStripMenuItem_Click(object sender, EventArgs e)
