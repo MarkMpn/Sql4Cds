@@ -40,6 +40,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public override bool BypassCustomPluginExecution { get; set; }
 
+        [Browsable(false)]
+        public override bool ContinueOnError { get; set; }
+
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
             if (!requiredColumns.Contains(UserIdSource))
@@ -119,7 +122,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var clone = new ExecuteAsNode
             {
+                BatchSize = BatchSize,
                 BypassCustomPluginExecution = BypassCustomPluginExecution,
+                ContinueOnError = ContinueOnError,
                 DataSource = DataSource,
                 Index = Index,
                 Length = Length,

@@ -48,6 +48,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Category("Insert")]
         public override bool BypassCustomPluginExecution { get; set; }
 
+        [Category("Insert")]
+        public override bool ContinueOnError { get; set; }
+
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
             foreach (var col in ColumnMappings.Values)
@@ -260,7 +263,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var clone = new InsertNode
             {
+                BatchSize = BatchSize,
                 BypassCustomPluginExecution = BypassCustomPluginExecution,
+                ContinueOnError = ContinueOnError,
                 DataSource = DataSource,
                 Index = Index,
                 Length = Length,

@@ -56,6 +56,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Category("Delete")]
         public override bool BypassCustomPluginExecution { get; set; }
 
+        [Category("Delete")]
+        public override bool ContinueOnError { get; set; }
+
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
             if (!requiredColumns.Contains(PrimaryIdSource))
@@ -300,7 +303,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var clone = new DeleteNode
             {
+                BatchSize = BatchSize,
                 BypassCustomPluginExecution = BypassCustomPluginExecution,
+                ContinueOnError = ContinueOnError,
                 DataSource = DataSource,
                 Index = Index,
                 Length = Length,

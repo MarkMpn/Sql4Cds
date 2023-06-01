@@ -55,6 +55,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Category("Update")]
         public override bool BypassCustomPluginExecution { get; set; }
 
+        [Category("Update")]
+        public override bool ContinueOnError { get; set; }
+
         [Browsable(false)]
         public IDictionary<int, StatusWithState> StateTransitions { get; set; }
 
@@ -440,7 +443,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var clone = new UpdateNode
             {
+                BatchSize = BatchSize,
                 BypassCustomPluginExecution = BypassCustomPluginExecution,
+                ContinueOnError = ContinueOnError,
                 DataSource = DataSource,
                 Index = Index,
                 Length = Length,

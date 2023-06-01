@@ -51,6 +51,9 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
             // Custom hint to disable logic to automatically navigate restricted state transitions
             "DISABLE_STATE_TRANSITIONS",
+
+            // Custom hint to keep trying all records in a DML batch even if one fails
+            "CONTINUE_ON_ERROR",
         };
 
         private static readonly HashSet<string> _removableSql4CdsQueryHints = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
