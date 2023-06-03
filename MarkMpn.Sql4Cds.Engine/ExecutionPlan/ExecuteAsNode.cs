@@ -129,7 +129,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Index = Index,
                 Length = Length,
                 MaxDOP = MaxDOP,
-                BatchSize = BatchSize,
                 Source = (IExecutionPlanNodeInternal)Source.Clone(),
                 Sql = Sql,
                 UserIdSource = UserIdSource
