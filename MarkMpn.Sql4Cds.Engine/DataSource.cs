@@ -105,11 +105,28 @@ namespace MarkMpn.Sql4Cds.Engine
             }
         }
 
+        /// <summary>
+        /// Executes a request against the data source
+        /// </summary>
+        /// <param name="request">The request to execute</param>
+        /// <returns>The response to the request</returns>
+        /// <remarks>
+        /// This method automatically preserves the session token for Elastic table consistency
+        /// </remarks>
         internal OrganizationResponse Execute(OrganizationRequest request)
         {
             return Execute(Connection, request);
         }
 
+        /// <summary>
+        /// Executes a request against the data source
+        /// </summary>
+        /// <param name="org">The connection to use to execute the request</param>
+        /// <param name="request">The request to execute</param>
+        /// <returns>The response to the request</returns>
+        /// <remarks>
+        /// This method automatically preserves the session token for Elastic table consistency
+        /// </remarks>
         internal OrganizationResponse Execute(IOrganizationService org, OrganizationRequest request)
         {
             if (!String.IsNullOrEmpty(SessionToken))

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.ServiceModel;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Crm.Sdk.Messages;
@@ -9,6 +10,7 @@ using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
+using Newtonsoft.Json;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -58,6 +60,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         [Category("Delete")]
         public override bool ContinueOnError { get; set; }
+
+        protected override bool IgnoresSomeErrors => true;
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
@@ -254,12 +258,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             // Ignore errors trying to delete records that don't exist - record may have been deleted by another
             // process in parallel.
-            return fault.ErrorCode != -2147220891;
+            return fault.ErrorCode != -2147220891 && fault.ErrorCode != -2147185406 && fault.ErrorCode != -2147220969 && fault.ErrorCode != 404;
         }
 
         protected override ExecuteMultipleResponse ExecuteMultiple(DataSource dataSource, IOrganizationService org, EntityMetadata meta, ExecuteMultipleRequest req)
         {
-            if (meta.DataProviderId == DataProviders.ElasticDataProvider)
+            if (meta.DataProviderId == DataProviders.ElasticDataProvider || dataSource.MessageCache.IsMessageAvailable(meta.LogicalName, "DeleteMultiple"))
             {
                 // Elastic tables can use DeleteMultiple for better performance than ExecuteMultiple
                 var entities = new EntityReferenceCollection();
@@ -272,23 +276,61 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     ["Targets"] = entities
                 };
 
-                dataSource.Execute(org, deleteMultiple);
-
-                var multipleResp = new ExecuteMultipleResponse
+                try
                 {
-                    ["Responses"] = new ExecuteMultipleResponseItemCollection()
-                };
+                    dataSource.Execute(org, deleteMultiple);
 
-                for (var i = 0; i < req.Requests.Count; i++)
-                {
-                    multipleResp.Responses.Add(new ExecuteMultipleResponseItem
+                    var multipleResp = new ExecuteMultipleResponse
                     {
-                        RequestIndex = i,
-                        Response = new DeleteResponse()
-                    });
-                }
+                        ["Responses"] = new ExecuteMultipleResponseItemCollection()
+                    };
 
-                return multipleResp;
+                    for (var i = 0; i < req.Requests.Count; i++)
+                    {
+                        multipleResp.Responses.Add(new ExecuteMultipleResponseItem
+                        {
+                            RequestIndex = i,
+                            Response = new DeleteResponse()
+                        });
+                    }
+
+                    return multipleResp;
+                }
+                catch (FaultException<OrganizationServiceFault> ex)
+                {
+                    // https://learn.microsoft.com/en-us/power-apps/developer/data-platform/org-service/use-createmultiple-updatemultiple?tabs=sdk#no-continue-on-error
+
+                    // If this is an elastic table we can extract the individual errors from the response
+                    if (ex.Detail.ErrorDetails.TryGetValue("Plugin.BulkApiErrorDetails", out var errorDetails))
+                    {
+                        var details = JsonConvert.DeserializeObject<BulkApiErrorDetail[]>((string)errorDetails);
+
+                        var multipleResp = new ExecuteMultipleResponse
+                        {
+                            ["Responses"] = new ExecuteMultipleResponseItemCollection()
+                        };
+
+                        foreach (var detail in details)
+                        {
+                            multipleResp.Responses.Add(new ExecuteMultipleResponseItem
+                            {
+                                RequestIndex = detail.RequestIndex,
+                                Response = detail.StatusCode >= 200 && detail.StatusCode < 300 ? new DeleteResponse() : null,
+                                Fault = detail.StatusCode >= 200 && detail.StatusCode < 300 ? null : new OrganizationServiceFault
+                                {
+                                    ErrorCode = detail.StatusCode,
+                                    Message = ex.Message
+                                }
+                            });
+                        }
+
+                        return multipleResp;
+                    }
+                    else
+                    {
+                        // We can't get the individual errors, so fall back to ExecuteMultiple
+                    }
+                }
             }
 
             return base.ExecuteMultiple(dataSource, org, meta, req);

@@ -133,6 +133,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public abstract string Execute(NodeExecutionContext context, out int recordsAffected);
 
         /// <summary>
+        /// Indicates if some errors returned by the server can be silently ignored
+        /// </summary>
+        protected virtual bool IgnoresSomeErrors => false;
+
+        /// <summary>
         /// Attempts to fold this node into its source to simplify the query
         /// </summary>
         /// <param name="context">The context in which the node is being built</param>
@@ -668,7 +673,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                             Requests = new OrganizationRequestCollection(),
                                             Settings = new ExecuteMultipleSettings
                                             {
-                                                ContinueOnError = false,
+                                                ContinueOnError = IgnoresSomeErrors,
                                                 ReturnResponses = responseHandler != null
                                             }
                                         }
@@ -721,6 +726,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             recordsAffected = count;
             parameterValues["@@ROWCOUNT"] = (SqlInt32)count;
             return $"{count:N0} {GetDisplayName(count, meta)} {operationNames.CompletedLowercase}";
+        }
+
+        protected class BulkApiErrorDetail
+        {
+            public int RequestIndex { get; set; }
+            public Guid Id { get; set; }
+            public int StatusCode { get; set; }
         }
 
         private void ProcessBatch(ExecuteMultipleRequest req, ref int count, ref int inProgressCount, List<Entity> entities, OperationNames operationNames, EntityMetadata meta, IQueryExecutionOptions options, DataSource dataSource, IOrganizationService org, Action<OrganizationResponse> responseHandler, ref OrganizationServiceFault fault)
