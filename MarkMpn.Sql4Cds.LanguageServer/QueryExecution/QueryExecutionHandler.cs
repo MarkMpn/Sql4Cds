@@ -282,7 +282,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                                     };
 
                                     for (var i = 0; i < reader.FieldCount; i++)
-                                        resultSet.ColumnInfo[i] = new DbColumnWrapper(new ColumnInfo(reader.GetName(i), reader.GetDataTypeName(i)));
+                                        resultSet.ColumnInfo[i] = new DbColumnWrapper(new ColumnInfo(String.IsNullOrEmpty(reader.GetName(i)) ? $"(No column name)" : reader.GetName(i), reader.GetDataTypeName(i)));
 
                                     resultSetInProgress = resultSet;
                                     resultSets.Add(resultSet);

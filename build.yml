@@ -23,10 +23,13 @@ steps:
   displayName: Install GitVersion
   inputs:
     command: custom
-    arguments: install GitVersion.CommandLine -Version 4.0.0 -OutputDirectory $(Build.BinariesDirectory)/tools -ExcludeVersion
+    arguments: install GitVersion.CommandLine -Version 5.12.0 -OutputDirectory $(Build.BinariesDirectory)/tools -ExcludeVersion
 
-- script: $(Build.BinariesDirectory)/tools/GitVersion.CommandLine/tools/GitVersion.exe /output buildserver /nofetch /updateassemblyinfo /updateprojectfiles
-  displayName: Determine Version
+- script: $(Build.BinariesDirectory)/tools/GitVersion.CommandLine/tools/GitVersion.exe /output buildserver /nofetch /updateassemblyinfo
+  displayName: Determine Version (NetFX)
+
+- script: $(Build.BinariesDirectory)/tools/GitVersion.CommandLine/tools/GitVersion.exe /output buildserver /nofetch /updateprojectfiles
+  displayName: Determine Version (NetCore)
 
 - task: PowerShell@2
   displayName: Update version in the vsix manifest
