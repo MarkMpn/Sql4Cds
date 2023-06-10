@@ -22,7 +22,20 @@ plugins or integrations by writing familiar SQL and converting it.
 
 Using the preview TDS Endpoint, SELECT queries can also be run that aren't convertible to FetchXML.</description>
     <summary>Convert SQL queries to FetchXML and execute them against Dataverse / D365</summary>
-    <releaseNotes>Fixed splitting large INSERT/UPDATE/DELETE requests into batches</releaseNotes>
+    <releaseNotes>Added support for XML data type and FOR XML clause
+Added support for Elastic tables
+Added support for STUFF function
+Added option to bypass plugins for SELECT statements
+Improved error reporting for duplicated table/alias names
+Improved error reporting for plugin errors
+Improved efficiency of joins that can't be translated to FetchXML
+Improved error handling during bulk DML operations
+Fixed querying audit table
+Fixed collation label for metadata and virtual columns
+Fixed hash joins on different collations
+Fixed filtering on outer-joined solution table
+Fixed multi-threading error with partitioned aggregates
+Fixed copying results with headers but no data rows</releaseNotes>
     <copyright>Copyright © 2019 Mark Carrington</copyright>
     <language>en-GB</language>
     <tags>XrmToolBox SQL CDS</tags>
