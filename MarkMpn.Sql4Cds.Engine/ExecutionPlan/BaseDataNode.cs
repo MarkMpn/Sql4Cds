@@ -924,6 +924,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 IsVariable = isVariable
             };
 
+            // Filtering on "solution" entity via an outer join seems to generate an error:
+            // https://github.com/MarkMpn/Sql4Cds/issues/309
+            var linkName = condition.entityname;
+            if (meta.LogicalName == "solution" && linkName != null && !new FetchEntityType { Items = items }.GetLinkEntities(true).Any(link => link.alias == linkName))
+                return false;
+
             if (op == @operator.ne || op == @operator.nebusinessid || op == @operator.neq || op == @operator.neuserid)
             {
                 // FetchXML not-equal type operators treat NULL as not-equal to values, but T-SQL treats them as not-not-equal. Add
