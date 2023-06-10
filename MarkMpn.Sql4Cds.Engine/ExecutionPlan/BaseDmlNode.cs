@@ -93,7 +93,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public virtual string DataSource { get; set; }
 
         /// <summary>
-        /// The maximum degree of paralellism to apply to this operation
+        /// The maximum degree of parallelism to apply to this operation
         /// </summary>
         [Description("The maximum number of operations that will be performed in parallel")]
         public abstract int MaxDOP { get; set; }
@@ -181,11 +181,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (svc != null)
                 recommendedMaxDop = svc.RecommendedDegreesOfParallelism;
+
+            if (svc == null || (svc.ActiveAuthenticationType != Microsoft.PowerPlatform.Dataverse.Client.AuthenticationType.OAuth && svc.ActiveAuthenticationType != Microsoft.PowerPlatform.Dataverse.Client.AuthenticationType.Certificate && svc.ActiveAuthenticationType != Microsoft.PowerPlatform.Dataverse.Client.AuthenticationType.ExternalTokenManagement && svc.ActiveAuthenticationType != Microsoft.PowerPlatform.Dataverse.Client.AuthenticationType.ClientSecret))
+                return 1;
 #else
             var svc = org as CrmServiceClient;
 
             if (svc != null)
                 recommendedMaxDop = svc.RecommendedDegreesOfParallelism;
+
+            if (svc == null || (svc.ActiveAuthenticationType != Microsoft.Xrm.Tooling.Connector.AuthenticationType.OAuth && svc.ActiveAuthenticationType != Microsoft.Xrm.Tooling.Connector.AuthenticationType.Certificate && svc.ActiveAuthenticationType != Microsoft.Xrm.Tooling.Connector.AuthenticationType.ExternalTokenManagement && svc.ActiveAuthenticationType != Microsoft.Xrm.Tooling.Connector.AuthenticationType.ClientSecret))
+                return 1;
 #endif
 
             var maxDopHint = (queryHints ?? Array.Empty<OptimizerHint>())
@@ -580,27 +586,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var inProgressCount = 0;
             var count = 0;
 
-            var maxDop = MaxDOP;
-
 #if NETCOREAPP
             var svc = dataSource.Connection as ServiceClient;
-
-            if (maxDop <= 1 || svc == null || (svc.ActiveAuthenticationType != Microsoft.PowerPlatform.Dataverse.Client.AuthenticationType.OAuth && svc.ActiveAuthenticationType != Microsoft.PowerPlatform.Dataverse.Client.AuthenticationType.Certificate && svc.ActiveAuthenticationType != Microsoft.PowerPlatform.Dataverse.Client.AuthenticationType.ExternalTokenManagement && svc.ActiveAuthenticationType != Microsoft.PowerPlatform.Dataverse.Client.AuthenticationType.ClientSecret))
-            {
-                maxDop = 1;
-                svc = null;
-            }
 #else
             var svc = dataSource.Connection as CrmServiceClient;
-
-            if (maxDop <= 1 || svc == null || (svc.ActiveAuthenticationType != Microsoft.Xrm.Tooling.Connector.AuthenticationType.OAuth && svc.ActiveAuthenticationType != Microsoft.Xrm.Tooling.Connector.AuthenticationType.Certificate && svc.ActiveAuthenticationType != Microsoft.Xrm.Tooling.Connector.AuthenticationType.ExternalTokenManagement && svc.ActiveAuthenticationType != Microsoft.Xrm.Tooling.Connector.AuthenticationType.ClientSecret))
-            {
-                maxDop = 1;
-                svc = null;
-            }
 #endif
 
-            var useAffinityCookie = maxDop == 1 || entities.Count < 100;
+            if (MaxDOP == 1)
+                svc = null;
+
+            var useAffinityCookie = MaxDOP == 1 || entities.Count < 100;
 
             try
             {
@@ -609,7 +604,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 using (UseParallelConnections())
                 {
                     Parallel.ForEach(entities,
-                        new ParallelOptions { MaxDegreeOfParallelism = maxDop },
+                        new ParallelOptions { MaxDegreeOfParallelism = MaxDOP },
                         () =>
                         {
                             var service = svc?.Clone() ?? dataSource.Connection;

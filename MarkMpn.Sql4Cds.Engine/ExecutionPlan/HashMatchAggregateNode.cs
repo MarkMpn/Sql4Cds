@@ -598,7 +598,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var tryPartitioned = new TryCatchNode
                     {
                         TrySource = firstTry,
-                        CatchSource = partitionedResults,
+                        CatchSource = partitionedResults.FoldQuery(context, hints),
                         ExceptionFilter = ex => GetOrganizationServiceFault(ex, out var fault) && IsAggregateQueryLimitExceeded(fault)
                     };
                     partitionedResults.Parent = tryPartitioned;

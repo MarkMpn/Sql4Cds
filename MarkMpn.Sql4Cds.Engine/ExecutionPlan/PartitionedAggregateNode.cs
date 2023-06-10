@@ -46,11 +46,72 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private int _pendingPartitions;
         private object _lock;
 
+        /// <summary>
+        /// The maximum degree of parallelism to apply to this operation
+        /// </summary>
+        [Category("Partitioned Aggregate")]
+        [Description("The maximum number of partitions that will be executed in parallel")]
+        public int MaxDOP { get; set; }
+
         public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
             Source = Source.FoldQuery(context, hints);
             Source.Parent = this;
+            MaxDOP = GetMaxDOP(context, hints);
             return this;
+        }
+
+        private int GetMaxDOP(NodeCompilationContext context, IList<OptimizerHint> queryHints)
+        {
+            var fetchXmlNode = (FetchXmlScan)Source;
+
+            if (fetchXmlNode.DataSource == null)
+                return 1;
+
+            if (!context.DataSources.TryGetValue(fetchXmlNode.DataSource, out var dataSource))
+                throw new NotSupportedQueryFragmentException("Unknown datasource");
+
+            var org = dataSource.Connection;
+            var recommendedMaxDop = 1;
+
+#if NETCOREAPP
+            var svc = org as ServiceClient;
+
+            if (svc != null)
+                recommendedMaxDop = svc.RecommendedDegreesOfParallelism;
+
+            if (svc == null || (svc.ActiveAuthenticationType != Microsoft.PowerPlatform.Dataverse.Client.AuthenticationType.OAuth && svc.ActiveAuthenticationType != Microsoft.PowerPlatform.Dataverse.Client.AuthenticationType.Certificate && svc.ActiveAuthenticationType != Microsoft.PowerPlatform.Dataverse.Client.AuthenticationType.ExternalTokenManagement && svc.ActiveAuthenticationType != Microsoft.PowerPlatform.Dataverse.Client.AuthenticationType.ClientSecret))
+                return 1;
+#else
+            var svc = org as CrmServiceClient;
+
+            if (svc != null)
+                recommendedMaxDop = svc.RecommendedDegreesOfParallelism;
+
+            if (svc == null || (svc.ActiveAuthenticationType != Microsoft.Xrm.Tooling.Connector.AuthenticationType.OAuth && svc.ActiveAuthenticationType != Microsoft.Xrm.Tooling.Connector.AuthenticationType.Certificate && svc.ActiveAuthenticationType != Microsoft.Xrm.Tooling.Connector.AuthenticationType.ExternalTokenManagement && svc.ActiveAuthenticationType != Microsoft.Xrm.Tooling.Connector.AuthenticationType.ClientSecret))
+                return 1;
+#endif
+
+            var maxDopHint = (queryHints ?? Array.Empty<OptimizerHint>())
+                .OfType<LiteralOptimizerHint>()
+                .Where(hint => hint.HintKind == OptimizerHintKind.MaxDop)
+                .FirstOrDefault();
+
+            if (maxDopHint != null)
+            {
+                if (!(maxDopHint.Value is IntegerLiteral maxDop) || !Int32.TryParse(maxDop.Value, out var value) || value < 0)
+                    throw new NotSupportedQueryFragmentException("MAXDOP requires a positive integer value, or 0 to use recommended value", maxDopHint);
+
+                if (value > 0)
+                    return value;
+
+                return recommendedMaxDop;
+            }
+
+            if (context.Options.MaxDegreeOfParallelism > 0)
+                return context.Options.MaxDegreeOfParallelism;
+
+            return recommendedMaxDop;
         }
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
@@ -123,69 +184,66 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Multi-thread where possible
             var org = context.DataSources[fetchXmlNode.DataSource].Connection;
-            var maxDop = context.Options.MaxDegreeOfParallelism;
             _lock = new object();
 
 #if NETCOREAPP
             var svc = org as ServiceClient;
-
-            if (maxDop <= 1 || svc == null || svc.ActiveAuthenticationType != Microsoft.PowerPlatform.Dataverse.Client.AuthenticationType.OAuth)
-            {
-                maxDop = 1;
-                svc = null;
-            }
 #else
             var svc = org as CrmServiceClient;
-
-            if (maxDop <= 1 || svc == null || svc.ActiveAuthenticationType != Microsoft.Xrm.Tooling.Connector.AuthenticationType.OAuth)
-            {
-                maxDop = 1;
-                svc = null;
-            }
 #endif
+
+            if (MaxDOP == 1)
+                svc = null;
 
             try
             {
-                Parallel.For(0, maxDop, index =>
-                {
-                    var ds = new Dictionary<string, DataSource>
+                var partitioner = Partitioner.Create(_queue.GetConsumingEnumerable(), EnumerablePartitionerOptions.NoBuffering);
+                Parallel.ForEach(partitioner,
+                    new ParallelOptions { MaxDegreeOfParallelism = MaxDOP },
+                    () =>
                     {
-                        [fetchXmlNode.DataSource] = new DataSource
+                        var ds = new Dictionary<string, DataSource>
                         {
-                            Connection = svc?.Clone() ?? org,
-                            Metadata = context.DataSources[fetchXmlNode.DataSource].Metadata,
-                            Name = fetchXmlNode.DataSource,
-                            TableSizeCache = context.DataSources[fetchXmlNode.DataSource].TableSizeCache,
-                            MessageCache = context.DataSources[fetchXmlNode.DataSource].MessageCache
+                            [fetchXmlNode.DataSource] = new DataSource
+                            {
+                                Connection = svc?.Clone() ?? org,
+                                Metadata = context.DataSources[fetchXmlNode.DataSource].Metadata,
+                                Name = fetchXmlNode.DataSource,
+                                TableSizeCache = context.DataSources[fetchXmlNode.DataSource].TableSizeCache,
+                                MessageCache = context.DataSources[fetchXmlNode.DataSource].MessageCache
+                            }
+                        };
+
+                        var fetch = new FetchXmlScan
+                        {
+                            Alias = fetchXmlNode.Alias,
+                            DataSource = fetchXmlNode.DataSource,
+                            FetchXml = CloneFetchXml(fetchXmlNode.FetchXml),
+                            Parent = this
+                        };
+
+                        var partitionParameterValues = new Dictionary<string, object>
+                        {
+                            ["@PartitionStart"] = minKey,
+                            ["@PartitionEnd"] = maxKey
+                        };
+
+                        if (context.ParameterValues != null)
+                        {
+                            foreach (var kvp in context.ParameterValues)
+                                partitionParameterValues[kvp.Key] = kvp.Value;
                         }
-                    };
 
-                    var fetch = new FetchXmlScan
-                    {
-                        Alias = fetchXmlNode.Alias,
-                        DataSource = fetchXmlNode.DataSource,
-                        FetchXml = CloneFetchXml(fetchXmlNode.FetchXml),
-                        Parent = this
-                    };
+                        var partitionContext = new NodeExecutionContext(context.DataSources, context.Options, context.ParameterTypes, partitionParameterValues);
 
-                    var partitionParameterValues = new Dictionary<string, object>
-                    {
-                        ["@PartitionStart"] = minKey,
-                        ["@PartitionEnd"] = maxKey
-                    };
-
-                    if (context.ParameterValues != null)
-                    {
-                        foreach (var kvp in context.ParameterValues)
-                            partitionParameterValues[kvp.Key] = kvp.Value;
-                    }
-
-                    foreach (var partition in _queue.GetConsumingEnumerable())
+                        return new { Context = partitionContext, Fetch = fetch };
+                    },
+                    (partition, loopState, index, threadLocalState) =>
                     {
                         try
                         {
                             // Execute the query for this partition
-                            ExecuteAggregate(context, expressionExecutionContext, aggregates, groups, fetch, partition.MinValue, partition.MaxValue);
+                            ExecuteAggregate(threadLocalState.Context, expressionExecutionContext, aggregates, groups, threadLocalState.Fetch, partition.MinValue, partition.MaxValue);
 
                             lock (_lock)
                             {
@@ -218,15 +276,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 SplitPartition(partition);
                             }
                         }
-                    }
 
-                    // Merge the stats from this clone of the FetchXML node so we can still see total number of executions etc.
-                    // in the main query plan.
-                    lock (fetchXmlNode)
+                        return threadLocalState;
+                    },
+                    (threadLocalState) =>
                     {
-                        fetchXmlNode.MergeStatsFrom(fetch);
-                    }
-                });
+                        // Merge the stats from this clone of the FetchXML node so we can still see total number of executions etc.
+                        // in the main query plan.
+                        lock (fetchXmlNode)
+                        {
+                            fetchXmlNode.MergeStatsFrom(threadLocalState.Fetch);
+                        }
+                    });
             }
             catch (AggregateException aggEx)
             {
@@ -391,7 +452,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var clone = new PartitionedAggregateNode
             {
-                Source = (IDataExecutionPlanNodeInternal)Source.Clone()
+                Source = (IDataExecutionPlanNodeInternal)Source.Clone(),
+                MaxDOP = MaxDOP
             };
 
             foreach (var kvp in Aggregates)
