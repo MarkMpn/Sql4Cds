@@ -173,47 +173,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Unknown datasource");
 
-            var org = dataSource.Connection;
-            var recommendedMaxDop = 1;
-
-#if NETCOREAPP
-            var svc = org as ServiceClient;
-
-            if (svc != null)
-                recommendedMaxDop = svc.RecommendedDegreesOfParallelism;
-
-            if (svc == null || (svc.ActiveAuthenticationType != Microsoft.PowerPlatform.Dataverse.Client.AuthenticationType.OAuth && svc.ActiveAuthenticationType != Microsoft.PowerPlatform.Dataverse.Client.AuthenticationType.Certificate && svc.ActiveAuthenticationType != Microsoft.PowerPlatform.Dataverse.Client.AuthenticationType.ExternalTokenManagement && svc.ActiveAuthenticationType != Microsoft.PowerPlatform.Dataverse.Client.AuthenticationType.ClientSecret))
-                return 1;
-#else
-            var svc = org as CrmServiceClient;
-
-            if (svc != null)
-                recommendedMaxDop = svc.RecommendedDegreesOfParallelism;
-
-            if (svc == null || (svc.ActiveAuthenticationType != Microsoft.Xrm.Tooling.Connector.AuthenticationType.OAuth && svc.ActiveAuthenticationType != Microsoft.Xrm.Tooling.Connector.AuthenticationType.Certificate && svc.ActiveAuthenticationType != Microsoft.Xrm.Tooling.Connector.AuthenticationType.ExternalTokenManagement && svc.ActiveAuthenticationType != Microsoft.Xrm.Tooling.Connector.AuthenticationType.ClientSecret))
-                return 1;
-#endif
-
-            var maxDopHint = (queryHints ?? Array.Empty<OptimizerHint>())
-                .OfType<LiteralOptimizerHint>()
-                .Where(hint => hint.HintKind == OptimizerHintKind.MaxDop)
-                .FirstOrDefault();
-
-            if (maxDopHint != null)
-            {
-                if (!(maxDopHint.Value is IntegerLiteral maxDop) || !Int32.TryParse(maxDop.Value, out var value) || value < 0)
-                    throw new NotSupportedQueryFragmentException("MAXDOP requires a positive integer value, or 0 to use recommended value", maxDopHint);
-
-                if (value > 0)
-                    return value;
-
-                return recommendedMaxDop;
-            }
-
-            if (context.Options.MaxDegreeOfParallelism > 0)
-                return context.Options.MaxDegreeOfParallelism;
-
-            return recommendedMaxDop;
+            return ParallelismHelper.GetMaxDOP(dataSource, context, queryHints);
         }
 
         private int GetBatchSize(NodeCompilationContext context, IList<OptimizerHint> queryHints)
@@ -592,10 +552,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var svc = dataSource.Connection as CrmServiceClient;
 #endif
 
-            if (MaxDOP == 1)
+            var maxDop = MaxDOP;
+
+            if (!ParallelismHelper.CanParallelise(dataSource.Connection))
+                maxDop = 1;
+
+            if (maxDop == 1)
                 svc = null;
 
-            var useAffinityCookie = MaxDOP == 1 || entities.Count < 100;
+            var useAffinityCookie = maxDop == 1 || entities.Count < 100;
 
             try
             {
@@ -604,7 +569,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 using (UseParallelConnections())
                 {
                     Parallel.ForEach(entities,
-                        new ParallelOptions { MaxDegreeOfParallelism = MaxDOP },
+                        new ParallelOptions { MaxDegreeOfParallelism = maxDop },
                         () =>
                         {
                             var service = svc?.Clone() ?? dataSource.Connection;
