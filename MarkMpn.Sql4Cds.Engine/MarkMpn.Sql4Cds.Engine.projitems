@@ -26,7 +26,11 @@
     <Compile Include="$(MSBuildThisFileDirectory)Ado\StatementCompletedEventArgs.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)AttributeMetadataCache.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Collation.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)DataProviders.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\ParallelismHelper.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\SystemFunctionNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\XmlWriterNode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ExecutionPlan\XPath2ExpressionContext.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)NodeContext.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DatabaseIdentifiers.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DataSource.cs" />
@@ -138,6 +142,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\RewriteVisitorBase.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\ScalarSubqueryVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\TDSEndpointCompatibilityVisitor.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Visitors\DuplicateTableNameValidatingVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\UpdateTargetVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Visitors\VariableCollectingVisitor.cs" />
   </ItemGroup>

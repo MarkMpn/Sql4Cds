@@ -53,5 +53,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
         {
             return _cache.TryGetValue(name, out message);
         }
+
+        public bool IsMessageAvailable(string entityLogicalName, string messageName)
+        {
+            return false;
+        }
     }
 }

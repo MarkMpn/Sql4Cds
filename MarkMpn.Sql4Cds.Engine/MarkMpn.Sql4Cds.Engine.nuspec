@@ -11,7 +11,20 @@
     <iconUrl>https://markcarrington.dev/sql4cds-icon/</iconUrl>
     <description>Convert SQL queries to FetchXml and execute them against Dataverse / D365</description>
     <summary>Convert SQL queries to FetchXml and execute them against Dataverse / D365</summary>
-    <releaseNotes>Fixed splitting large INSERT/UPDATE/DELETE requests into batches</releaseNotes>
+    <releaseNotes>Added support for XML data type and FOR XML clause
+Added support for Elastic tables
+Added support for STUFF function
+Added option to bypass plugins for SELECT statements
+Improved error reporting for duplicated table/alias names
+Improved error reporting for plugin errors
+Improved efficiency of joins that can't be translated to FetchXML
+Improved error handling during bulk DML operations
+Fixed querying audit table
+Fixed collation label for metadata and virtual columns
+Fixed hash joins on different collations
+Fixed filtering on outer-joined solution table
+Fixed multi-threading error with partitioned aggregates
+</releaseNotes>
     <copyright>Copyright © 2020 Mark Carrington</copyright>
     <language>en-GB</language>
     <tags>SQL CDS</tags>

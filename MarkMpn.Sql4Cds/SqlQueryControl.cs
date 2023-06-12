@@ -671,14 +671,25 @@ namespace MarkMpn.Sql4Cds
         private void copyToolStripMenuItem_Click(object sender, EventArgs e)
         {
             var grid = (DataGridView)gridContextMenuStrip.SourceControl;
-            Clipboard.SetDataObject(grid.GetClipboardContent());
+
+            var content = grid.GetClipboardContent();
+
+            if (content != null)
+                Clipboard.SetDataObject(content);
         }
 
         private void copyWithHeadersToolStripMenuItem_Click(object sender, EventArgs e)
         {
             var grid = (DataGridView)gridContextMenuStrip.SourceControl;
             grid.ClipboardCopyMode = DataGridViewClipboardCopyMode.EnableAlwaysIncludeHeaderText;
-            Clipboard.SetDataObject(grid.GetClipboardContent());
+
+            var content = grid.GetClipboardContent();
+
+            if (content != null)
+                Clipboard.SetDataObject(content);
+            else
+                Clipboard.SetDataObject(String.Join("\t", grid.Columns.Cast<DataGridViewColumn>().Select(col => col.HeaderText)));
+
             grid.ClipboardCopyMode = DataGridViewClipboardCopyMode.EnableWithoutHeaderText;
         }
 
@@ -820,6 +831,12 @@ namespace MarkMpn.Sql4Cds
 
                     fault = fault.InnerFault;
                 }
+
+                if (fault.ErrorDetails.TryGetValue("Plugin.ExceptionFromPluginExecute", out var plugin))
+                    msg += "\r\nError from plugin: " + plugin;
+
+                if (!String.IsNullOrEmpty(fault.TraceText))
+                    msg += "\r\nTrace log: " + fault.TraceText;
             }
 
             return msg;
@@ -1065,6 +1082,12 @@ namespace MarkMpn.Sql4Cds
                         e.CellStyle.ForeColor = SystemColors.HotTrack;
                         e.CellStyle.Font = linkFont;
                     }
+                    else if (e.Value is SqlXml xml)
+                    {
+                        e.CellStyle.ForeColor = SystemColors.HotTrack;
+                        e.CellStyle.Font = linkFont;
+                        e.Value = xml.Value;
+                    }
                 };
 
                 grid.CellMouseEnter += (s, e) =>
@@ -1075,7 +1098,8 @@ namespace MarkMpn.Sql4Cds
                     var gv = (DataGridView)s;
                     var cell = gv.Rows[e.RowIndex].Cells[e.ColumnIndex];
 
-                    if (cell.Value is SqlEntityReference er && !er.IsNull)
+                    if (cell.Value is SqlEntityReference er && !er.IsNull ||
+                        cell.Value is SqlXml xml && !xml.IsNull)
                         gv.Cursor = Cursors.Hand;
                     else
                         gv.Cursor = Cursors.Default;
@@ -1114,6 +1138,8 @@ namespace MarkMpn.Sql4Cds
 
                     if (cell.Value is SqlEntityReference er && !er.IsNull)
                         OpenRecord(er);
+                    else if (cell.Value is SqlXml xml && !xml.IsNull)
+                        ShowFetchXML(xml.Value);
                 };
 
                 if (Settings.Instance.AutoSizeColumns)
@@ -1317,6 +1343,8 @@ namespace MarkMpn.Sql4Cds
                 openRecordToolStripMenuItem.Enabled = true;
                 createSELECTStatementToolStripMenuItem.Enabled = true;
             }
+
+            copyToolStripMenuItem.Enabled = grid.Rows.Count > 0;
         }
 
         private void openRecordToolStripMenuItem_Click(object sender, EventArgs e)

@@ -164,7 +164,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 if (attrMetadata is StringAttributeMetadata str)
                 {
                     // MaxLength validation is applied on write, but existing values could be up to DatabaseLength
-                    var maxLengthSetting = write ? str.MaxLength : str.DatabaseLength;
+                    var maxLengthSetting = write || str.DatabaseLength == null || str.DatabaseLength == 0 ? str.MaxLength : str.DatabaseLength;
 
                     if (maxLengthSetting != null)
                         maxLength = maxLengthSetting.Value;

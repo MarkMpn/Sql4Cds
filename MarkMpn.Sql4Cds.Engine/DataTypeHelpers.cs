@@ -94,6 +94,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
         public static UserDataTypeReference EntityReference { get; } = Object(typeof(SqlEntityReference));
 
+        public static XmlDataTypeReference Xml { get; } = new XmlDataTypeReference();
+
         /// <summary>
         /// Checks if a type represents an exact numeric type
         /// </summary>
@@ -176,6 +178,8 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 if (type is UserDataTypeReference udt && udt.Name.BaseIdentifier.Value == typeof(SqlEntityReference).FullName)
                     dataType = new SqlDataTypeReference { SqlDataTypeOption = SqlDataTypeOption.UniqueIdentifier };
+                else if (type is XmlDataTypeReference)
+                    return Int32.MaxValue;
                 else
                     throw new NotSupportedQueryFragmentException("Unsupported data type reference", type);
             }
@@ -383,12 +387,12 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// Parses a data type from a string
         /// </summary>
+        /// <param name="context">The context in which the type name is being parsed</param>
         /// <param name="value">The string representation of the data type to parse</param>
         /// <param name="parsedType">The data type that has been parsed from the <paramref name="value"/></param>
         /// <returns><c>true</c> if the <paramref name="value"/> could be successfully parsed, or <c>false</c> otherwise</returns>
-        public static bool TryParse(string value, out DataTypeReference parsedType)
+        public static bool TryParse(ExpressionCompilationContext context, string value, out DataTypeReference parsedType)
         {
-            // TODO: Collation
             parsedType = null;
 
             var name = value;
@@ -405,17 +409,35 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 foreach (var part in parts)
                 {
-                    if (!Int32.TryParse(part, out var paramValue))
+                    if (part.Trim().Equals("max", StringComparison.OrdinalIgnoreCase))
+                    {
+                        parameters.Add(new MaxLiteral());
+                        continue;
+                    }
+
+                    if (!Int32.TryParse(part.Trim(), out var paramValue))
                         return false;
 
                     parameters.Add(new IntegerLiteral { Value = part });
                 }
             }
 
+            if (name.Equals("xml", StringComparison.OrdinalIgnoreCase))
+            {
+                if (parameters.Count > 0)
+                    return false;
+
+                parsedType = DataTypeHelpers.Xml;
+                return true;
+            }
+
             if (!Enum.TryParse<SqlDataTypeOption>(name, true, out var sqlType))
                 return false;
 
-            parsedType = new SqlDataTypeReference { SqlDataTypeOption = sqlType };
+            if (sqlType.IsStringType())
+                parsedType = new SqlDataTypeReferenceWithCollation { SqlDataTypeOption = sqlType, Collation = context.PrimaryDataSource.DefaultCollation, CollationLabel = CollationLabel.CoercibleDefault };
+            else
+                parsedType = new SqlDataTypeReference { SqlDataTypeOption = sqlType };
 
             foreach (var param in parameters)
                 ((SqlDataTypeReference)parsedType).Parameters.Add(param);
@@ -449,12 +471,17 @@ namespace MarkMpn.Sql4Cds.Engine
             var xUser = x as UserDataTypeReference;
             var xSql = x as SqlDataTypeReference;
             var xColl = x as SqlDataTypeReferenceWithCollation;
+            var xXml = x as XmlDataTypeReference;
             var yUser = y as UserDataTypeReference;
             var ySql = y as SqlDataTypeReference;
             var yColl = y as SqlDataTypeReferenceWithCollation;
+            var yXml = y as XmlDataTypeReference;
 
             if (xUser != null && yUser != null)
                 return String.Join(".", xUser.Name.Identifiers.Select(i => i.Value)).Equals(String.Join(".", yUser.Name.Identifiers.Select(i => i.Value)), StringComparison.OrdinalIgnoreCase);
+
+            if (xXml != null && yXml != null)
+                return xXml.XmlDataTypeOption == yXml.XmlDataTypeOption && xXml.XmlSchemaCollection == yXml.XmlSchemaCollection;
 
             if (xSql == null || ySql == null)
                 return false;

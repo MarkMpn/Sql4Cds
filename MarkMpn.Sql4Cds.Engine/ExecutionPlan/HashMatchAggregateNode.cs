@@ -248,15 +248,23 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var metadata = context.DataSources[fetchXml.DataSource].Metadata;
 
                 // FetchXML is translated to QueryExpression for virtual entities, which doesn't support aggregates
-                if (metadata[fetchXml.Entity.name].DataProviderId != null)
+                // Elastic tables do support aggregates though.
+                if (metadata[fetchXml.Entity.name].DataProviderId != null &&
+                    metadata[fetchXml.Entity.name].DataProviderId != DataProviders.ElasticDataProvider)
                     canUseFetchXmlAggregate = false;
 
                 // Check FetchXML supports grouping by each of the requested attributes
                 var fetchSchema = fetchXml.GetSchema(context);
+                var maxResultCount = 0;
+
                 foreach (var group in GroupBy)
                 {
                     if (!fetchSchema.ContainsColumn(group.GetColumnName(), out var groupCol))
+                    {
+                        // Grouping by a DATEPART calculation from the CalculateScalar node.
+                        maxResultCount = Int32.MaxValue;
                         continue;
+                    }
 
                     var parts = groupCol.Split('.');
                     string entityName;
@@ -275,7 +283,27 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     // Can't group by multi-select picklist attributes
                     if (attr is MultiSelectPicklistAttributeMetadata)
                         canUseFetchXmlAggregate = false;
+
+                    // Track how many results could be produced by this grouping
+                    if (maxResultCount < Int32.MaxValue && attr is EnumAttributeMetadata enumAttr)
+                    {
+                        if (maxResultCount == 0)
+                            maxResultCount = enumAttr.OptionSet.Options.Count;
+                        else
+                            maxResultCount *= enumAttr.OptionSet.Options.Count;
+                    }
+                    else
+                    {
+                        maxResultCount = Int32.MaxValue;
+                    }
                 }
+
+                // Cosmos DB can't use sorting and grouping together, so we can't use FetchXML aggregates
+                // if we'll need to page the results. Applies to the audit entity as well, even though it's
+                // not using the elastic table provider
+                if (maxResultCount > 500 &&
+                    (fetchXml.Entity.name == "audit" || metadata[fetchXml.Entity.name].DataProviderId == DataProviders.ElasticDataProvider))
+                    canUseFetchXmlAggregate = false;
 
                 var serializer = new XmlSerializer(typeof(FetchXml.FetchType));
 
@@ -350,15 +378,18 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             canUseFetchXmlAggregate = false;
                         }
 
-                        // Add a sort order for each grouping to allow consistent paging
-                        var items = linkEntity?.Items ?? fetchXml.Entity.Items;
-                        var sort = items.OfType<FetchOrderType>().FirstOrDefault(order => order.alias == alias);
-                        if (sort == null)
+                        // Add a sort order for each grouping to allow consistent paging if required
+                        if (maxResultCount > 5000)
                         {
-                            if (linkEntity == null)
-                                fetchXml.Entity.AddItem(new FetchOrderType { alias = alias });
-                            else
-                                linkEntity.AddItem(new FetchOrderType { alias = alias });
+                            var items = linkEntity?.Items ?? fetchXml.Entity.Items;
+                            var sort = items.OfType<FetchOrderType>().FirstOrDefault(order => order.alias == alias);
+                            if (sort == null)
+                            {
+                                if (linkEntity == null)
+                                    fetchXml.Entity.AddItem(new FetchOrderType { alias = alias });
+                                else
+                                    linkEntity.AddItem(new FetchOrderType { alias = alias });
+                            }
                         }
                     }
 
@@ -567,7 +598,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var tryPartitioned = new TryCatchNode
                     {
                         TrySource = firstTry,
-                        CatchSource = partitionedResults,
+                        CatchSource = partitionedResults.FoldQuery(context, hints),
                         ExceptionFilter = ex => GetOrganizationServiceFault(ex, out var fault) && IsAggregateQueryLimitExceeded(fault)
                     };
                     partitionedResults.Parent = tryPartitioned;

@@ -1102,6 +1102,11 @@ namespace MarkMpn.Sql4Cds.Engine
                 primaryKey = relationship.Entity1IntersectAttribute;
                 secondaryKey = relationship.Entity2IntersectAttribute;
             }
+            else if (targetMetadata.DataProviderId == DataProviders.ElasticDataProvider)
+            {
+                // Elastic tables need the partitionid as part of the primary key
+                secondaryKey = "partitionid";
+            }
             
             queryExpression.SelectElements.Add(new SelectScalarExpression
             {
@@ -1266,6 +1271,44 @@ namespace MarkMpn.Sql4Cds.Engine
                     Identifier = new Identifier { Value = targetMetadata.PrimaryIdAttribute }
                 }
             });
+
+            if (targetMetadata.DataProviderId == DataProviders.ElasticDataProvider)
+            {
+                // partitionid is required as part of the primary key for Elastic tables - included it as any
+                // other column in the update statement. Check first that the column isn't already being updated -
+                // the metadata shows it's valid for update but  actually has no effect and is documented as not updateable
+                // https://learn.microsoft.com/en-us/power-apps/developer/data-platform/use-elastic-tables?tabs=sdk#update-a-record-in-an-elastic-table
+                var existingSet = update.SetClauses.OfType<AssignmentSetClause>().FirstOrDefault(set => set.Column.MultiPartIdentifier.Identifiers.Last().Value.Equals("partitionid", StringComparison.OrdinalIgnoreCase));
+
+                if (existingSet != null)
+                    throw new NotSupportedQueryFragmentException("Column cannot be updated", existingSet.Column);
+
+                update.SetClauses.Add(new AssignmentSetClause
+                {
+                    Column = new ColumnReferenceExpression
+                    {
+                        MultiPartIdentifier = new MultiPartIdentifier
+                        {
+                            Identifiers =
+                            {
+                                new Identifier { Value = targetAlias },
+                                new Identifier { Value = "partitionid" }
+                            }
+                        }
+                    },
+                    NewValue = new ColumnReferenceExpression
+                    {
+                        MultiPartIdentifier = new MultiPartIdentifier
+                        {
+                            Identifiers =
+                            {
+                                new Identifier { Value = targetAlias },
+                                new Identifier { Value = "partitionid" }
+                            }
+                        }
+                    }
+                });
+            }
 
             var attributes = targetMetadata.Attributes.ToDictionary(attr => attr.LogicalName, StringComparer.OrdinalIgnoreCase);
             var attributeNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -1719,9 +1762,6 @@ namespace MarkMpn.Sql4Cds.Engine
             if (binary.BinaryQueryExpressionType != BinaryQueryExpressionType.Union)
                 throw new NotSupportedQueryFragmentException($"Unhandled {binary.BinaryQueryExpressionType} query type", binary);
 
-            if (binary.ForClause != null)
-                throw new NotSupportedQueryFragmentException("Unhandled FOR clause", binary.ForClause);
-
             var left = ConvertSelectStatement(binary.FirstQueryExpression, hints, outerSchema, outerReferences, context);
             var right = ConvertSelectStatement(binary.SecondQueryExpression, hints, outerSchema, outerReferences, context);
 
@@ -1770,6 +1810,11 @@ namespace MarkMpn.Sql4Cds.Engine
             var select = new SelectNode { Source = node, LogicalSourceSchema = concat.GetSchema(context) };
             select.ColumnSet.AddRange(concat.ColumnSet.Select((col, i) => new SelectColumn { SourceColumn = col.OutputColumn, SourceExpression = col.SourceExpressions[0], OutputColumn = left.ColumnSet[i].OutputColumn }));
 
+            if (binary.ForClause is XmlForClause forXml)
+                ConvertForXmlClause(select, forXml, context);
+            else if (binary.ForClause != null)
+                throw new NotSupportedQueryFragmentException("Unhandled FOR clause", binary.ForClause);
+
             return select;
         }
 
@@ -1793,7 +1838,7 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             // Each table in the FROM clause starts as a separate FetchXmlScan node. Add appropriate join nodes
-            var node = querySpec.FromClause == null ? new ConstantScanNode { Values = { new Dictionary<string, ScalarExpression>() } } : ConvertFromClause(querySpec.FromClause.TableReferences, hints, querySpec, outerSchema, outerReferences, context);
+            var node = querySpec.FromClause == null ? new ConstantScanNode { Values = { new Dictionary<string, ScalarExpression>() } } : ConvertFromClause(querySpec.FromClause, hints, querySpec, outerSchema, outerReferences, context);
             var logicalSchema = node.GetSchema(context);
 
             node = ConvertInSubqueries(node, hints, querySpec, context, outerSchema, outerReferences);
@@ -1854,7 +1899,82 @@ namespace MarkMpn.Sql4Cds.Engine
 
             selectNode.Source = node;
 
+            // Convert to XML
+            if (querySpec.ForClause is XmlForClause forXml)
+                ConvertForXmlClause(selectNode, forXml, context);
+            else if (querySpec.ForClause != null)
+                throw new NotSupportedQueryFragmentException("Unhandled FOR clause", querySpec.ForClause);
+
             return selectNode;
+        }
+
+        private void ConvertForXmlClause(SelectNode selectNode, XmlForClause forXml, NodeCompilationContext context)
+        {
+            // We need to know the individual column names, so expand any wildcard columns
+            selectNode.ExpandWildcardColumns(context);
+
+            // Create the node to convert the data to XML
+            var xmlNode = new XmlWriterNode
+            {
+                Source = selectNode.Source,
+            };
+
+            foreach (var col in selectNode.ColumnSet)
+                xmlNode.ColumnSet.Add(col);
+
+            foreach (var option in forXml.Options)
+            {
+                switch (option.OptionKind)
+                {
+                    case XmlForClauseOptions.Raw:
+                        xmlNode.XmlFormat = XmlFormat.Raw;
+                        xmlNode.ElementName = option.Value?.Value ?? "row";
+                        break;
+
+                    case XmlForClauseOptions.Explicit:
+                        xmlNode.XmlFormat = XmlFormat.Explicit;
+                        break;
+
+                    case XmlForClauseOptions.Auto:
+                        xmlNode.XmlFormat = XmlFormat.Auto;
+                        break;
+
+                    case XmlForClauseOptions.Path:
+                        xmlNode.XmlFormat = XmlFormat.Path;
+                        xmlNode.ElementName = option.Value?.Value ?? "row";
+                        xmlNode.ColumnFormat = XmlColumnFormat.Element;
+                        break;
+
+                    case XmlForClauseOptions.Elements:
+                    case XmlForClauseOptions.ElementsAbsent:
+                        xmlNode.ColumnFormat = XmlColumnFormat.Element;
+                        break;
+
+                    case XmlForClauseOptions.ElementsXsiNil:
+                        xmlNode.ColumnFormat = XmlColumnFormat.Element | XmlColumnFormat.XsiNil;
+                        break;
+
+                    case XmlForClauseOptions.Type:
+                        xmlNode.XmlType = true;
+                        break;
+
+                    case XmlForClauseOptions.Root:
+                        xmlNode.RootName = option.Value?.Value ?? "root";
+                        break;
+
+                    default:
+                        throw new NotSupportedQueryFragmentException("Unhandled FOR XML option", option);
+                }
+            }
+
+            // Output the final XML
+            selectNode.Source = xmlNode;
+            selectNode.ColumnSet.Clear();
+            selectNode.ColumnSet.Add(new SelectColumn
+            {
+                SourceColumn = "xml",
+                OutputColumn = "xml"
+            });
         }
 
         private IDataExecutionPlanNodeInternal ConvertInSubqueries(IDataExecutionPlanNodeInternal source, IList<OptimizerHint> hints, TSqlFragment query, NodeCompilationContext context, INodeSchema outerSchema, IDictionary<string,string> outerReferences)
@@ -2713,7 +2833,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         {
                             SourceColumn = alias,
                             SourceExpression = scalar.Expression,
-                            OutputColumn = scalar.ColumnName?.Value ?? alias
+                            OutputColumn = scalar.ColumnName?.Value
                         });
                     }
                 }
@@ -3196,8 +3316,11 @@ namespace MarkMpn.Sql4Cds.Engine
             return false;
         }
 
-        private IDataExecutionPlanNodeInternal ConvertFromClause(IList<TableReference> tables, IList<OptimizerHint> hints, TSqlFragment query, INodeSchema outerSchema, Dictionary<string, string> outerReferences, NodeCompilationContext context)
+        private IDataExecutionPlanNodeInternal ConvertFromClause(FromClause fromClause, IList<OptimizerHint> hints, TSqlFragment query, INodeSchema outerSchema, Dictionary<string, string> outerReferences, NodeCompilationContext context)
         {
+            fromClause.Accept(new DuplicateTableNameValidatingVisitor());
+
+            var tables = fromClause.TableReferences;
             var node = ConvertTableReference(tables[0], hints, query, outerSchema, outerReferences, context);
 
             for (var i = 1; i < tables.Count; i++)
@@ -3566,6 +3689,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     execute = new SystemFunctionNode
                     {
                         DataSource = dataSource.Name,
+                        Alias = tvf.Alias?.Value,
                         SystemFunction = systemFunction
                     };
                 }

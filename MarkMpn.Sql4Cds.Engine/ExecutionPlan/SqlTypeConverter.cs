@@ -3,8 +3,10 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data.SqlTypes;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Text;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 
@@ -79,6 +81,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 [typeof(SqlDateTime2)] = SqlDateTime2.Null,
                 [typeof(SqlDateTimeOffset)] = SqlDateTimeOffset.Null,
                 [typeof(SqlTime)] = SqlTime.Null,
+                [typeof(SqlXml)] = SqlXml.Null,
                 [typeof(object)] = null
             };
 
@@ -111,6 +114,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             AddTypeConversion<SqlDateTime2, DateTime>((ds, v, dt) => (SqlDateTime)v, v => v.Value);
             AddTypeConversion<SqlDateTimeOffset, DateTimeOffset>((ds, v, dt) => new SqlDateTimeOffset(v), v => v.Value);
             AddTypeConversion<SqlTime, TimeSpan>((ds, v, dt) => new SqlTime(v), v => v.Value);
+            AddNullableTypeConversion<SqlXml, string>((ds, v, dt) => new SqlXml(new MemoryStream(Encoding.GetEncoding("utf-16").GetBytes(v))), v => v.Value);
 
             AddNullableTypeConversion<SqlMoney, Money>((ds, v, dt) => v.Value, null);
             AddNullableTypeConversion<SqlInt32, OptionSetValue>((ds, v, dt) => v.Value, null);
@@ -346,8 +350,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var fromUser = from as UserDataTypeReference;
             var fromSql = from as SqlDataTypeReference;
+            var fromXml = from as XmlDataTypeReference;
             var toUser = to as UserDataTypeReference;
             var toSql = to as SqlDataTypeReference;
+            var toXml = to as XmlDataTypeReference;
 
             // Check user-defined types are identical
             if (fromUser != null && toUser != null)
@@ -361,8 +367,17 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (toUser != null)
                 return false;
 
+            // Xml can't be implicitly converted to anything
+            if (fromXml != null)
+                return false;
+
             // Get the basic type. Substitute SqlEntityReference with uniqueidentifier
             var fromType = fromSql?.SqlDataTypeOption ?? SqlDataTypeOption.UniqueIdentifier;
+
+            // Only strings and binary types can be converted to Xml
+            if (toXml != null)
+                return fromType.IsStringType() || fromType == SqlDataTypeOption.Binary || fromType == SqlDataTypeOption.VarBinary;
+
             var toType = toSql.SqlDataTypeOption;
 
             if (Array.IndexOf(_precendenceOrder, fromType) == -1 ||
@@ -416,6 +431,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return true;
 
             var fromSql = from as SqlDataTypeReference;
+            var fromXml = from as XmlDataTypeReference;
             var toSql = to as SqlDataTypeReference;
 
             // Require explicit conversion from datetime to numeric types
@@ -425,6 +441,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Require explicit conversion between numeric types when precision/scale is reduced
             if (fromSql?.SqlDataTypeOption.IsNumeric() == true && toSql?.SqlDataTypeOption.IsNumeric() == true)
+                return true;
+
+            // Require explicit conversion from xml to string/binary types
+            if (fromXml != null && toSql != null && (toSql.SqlDataTypeOption.IsStringType() || toSql.SqlDataTypeOption == SqlDataTypeOption.Binary || toSql.SqlDataTypeOption == SqlDataTypeOption.VarBinary))
                 return true;
 
             return false;
@@ -486,6 +506,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (expr.Type == typeof(SqlString) && to == typeof(OptionSetValueCollection))
                 expr = Expr.Call(() => ParseOptionSetValueCollection(Expr.Arg<SqlString>()), expr);
+
+            if (expr.Type == typeof(SqlString) && to == typeof(SqlXml))
+                expr = Expr.Call(() => ParseXml(Expr.Arg<SqlString>()), expr);
 
             if (expr.Type != to)
             {
@@ -559,6 +582,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 expr = Expr.Call(() => Convert(Expr.Arg<SqlDouble>(), Expr.Arg<SqlInt32>(), Expr.Arg<Collation>()), expr, style, Expression.Constant(targetCollation));
             else if (expr.Type == typeof(SqlMoney) && targetType == typeof(SqlString))
                 expr = Expr.Call(() => Convert(Expr.Arg<SqlMoney>(), Expr.Arg<SqlInt32>(), Expr.Arg<Collation>()), expr, style, Expression.Constant(targetCollation));
+            else if (expr.Type == typeof(SqlBinary) && targetType == typeof(SqlString))
+                expr = Expr.Call(() => Convert(Expr.Arg<SqlBinary>(), Expr.Arg<Collation>(), Expr.Arg<bool>()), expr, Expression.Constant(targetCollation), Expression.Constant(toSqlType.SqlDataTypeOption == SqlDataTypeOption.NChar || toSqlType.SqlDataTypeOption == SqlDataTypeOption.NVarChar));
 
             if (expr.Type != targetType)
                 expr = Convert(expr, targetType);
@@ -726,6 +751,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 .ToList();
 
             return new OptionSetValueCollection(osvs);
+        }
+
+        private static SqlXml ParseXml(SqlString value)
+        {
+            if (value.IsNull)
+                return SqlXml.Null;
+
+            var stream = new MemoryStream(Encoding.GetEncoding("utf-16").GetBytes(value.Value));
+            return new SqlXml(stream);
         }
 
         /// <summary>
@@ -938,7 +972,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="style">The style to apply</param>
         /// <param name="collation">The collation to use for the returned result</param>
         /// <returns>The converted string</returns>
-        public static SqlString Convert(SqlDouble value, SqlInt32 style, Collation collation)
+        private static SqlString Convert(SqlDouble value, SqlInt32 style, Collation collation)
         {
             if (value.IsNull || style.IsNull)
                 return SqlString.Null;
@@ -975,7 +1009,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="style">The style to apply</param>
         /// <param name="collation">The collation to use for the returned result</param>
         /// <returns>The converted string</returns>
-        public static SqlString Convert(SqlMoney value, SqlInt32 style, Collation collation)
+        private static SqlString Convert(SqlMoney value, SqlInt32 style, Collation collation)
         {
             if (value.IsNull || style.IsNull)
                 return SqlString.Null;
@@ -1000,6 +1034,21 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             var formatted = value.Value.ToString(formatString);
             return collation.ToSqlString(formatted);
+        }
+
+        /// <summary>
+        /// Specialized type conversion from Decimal to String using a collation
+        /// </summary>
+        /// <param name="value">The value to convert</param>
+        /// <param name="collation">The collation to use for the returned result</param>
+        /// <param name="unicode">Indicates if the target string is Unicode</param>
+        /// <returns>The converted string</returns>
+        private static SqlString Convert(SqlBinary value, Collation collation, bool unicode)
+        {
+            if (value.IsNull)
+                return SqlString.Null;
+
+            return new SqlString(collation.LCID, collation.CompareOptions, value.Value, unicode);
         }
 
         /// <summary>

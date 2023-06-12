@@ -22,8 +22,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private int _executionCount;
         private readonly Timer _timer = new Timer();
 
-        public SelectNode() { }
-
         /// <summary>
         /// The columns that should be included in the query results
         /// </summary>
@@ -39,7 +37,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public IDataExecutionPlanNodeInternal Source { get; set; }
 
         /// <summary>
-        /// The schema that shold be used for expanding "*" columns
+        /// The schema that should be used for expanding "*" columns
         /// </summary>
         [Browsable(false)]
         public INodeSchema LogicalSourceSchema { get; set; }
@@ -206,6 +204,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             // Don't fold the alias if there's also a sort on the same attribute, as it breaks paging
                             // https://markcarrington.dev/2019/12/10/inside-fetchxml-pt-4-order/#sorting_&_aliases
                             if (items != null && items.OfType<FetchOrderType>().Any(order => order.attribute == c.Attr.name) && fetchXml.AllPages)
+                                return false;
+
+                            // Don't fold the alias if it's on the audit table, it seems to break the provider
+                            if (c.LinkEntity != null && c.LinkEntity.name == "audit" ||
+                                c.LinkEntity == null && fetchXml.Entity.name == "audit")
                                 return false;
 
                             return true;

@@ -116,21 +116,26 @@ namespace MarkMpn.Sql4Cds
                 {
                     try
                     {
-                        var doc = new XmlDocument();
-                        doc.LoadXml(value);
+                        using (var src = new StringReader(value))
+                        using (var reader = XmlReader.Create(src, new XmlReaderSettings { ConformanceLevel = ConformanceLevel.Fragment }))
                         using (var writer = new StringWriter())
                         using (var xmlWriter = new XmlFragmentWriter(writer))
                         {
                             xmlWriter.QuoteChar = '\'';
                             xmlWriter.Formatting = Formatting.Indented;
 
-                            doc.Save(xmlWriter);
+                            if (reader.Read())
+                            {
+                                while (reader.ReadState != ReadState.EndOfFile)
+                                    xmlWriter.WriteNode(reader, true);
+                            }
+
                             value = writer.ToString();
                         }
                     }
-                    catch (XmlException)
+                    catch
                     {
-                        // Use the origina value
+                        // Use the original value
                     }
                 }
 

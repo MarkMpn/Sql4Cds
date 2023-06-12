@@ -304,5 +304,11 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
 
             base.Visit(node);
         }
+
+        public override void Visit(ForClause node)
+        {
+            // Can't use FOR XML clause
+            IsCompatible = false;
+        }
     }
 }

@@ -11,6 +11,7 @@ using System.Xml.Serialization;
 using MarkMpn.Sql4Cds.Engine.FetchXml;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
 using Microsoft.Xrm.Sdk.Query;
 
@@ -173,6 +174,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [DisplayName("Using Custom Paging")]
         public bool UsingCustomPaging => _pagingFields != null;
 
+        [Category("Elastic Tables")]
+        [Description("The partitionId to limit the query to")]
+        [DisplayName("Partition Id")]
+        public string PartitionId { get; private set; }
+
+        [Category("Elastic Tables")]
+        [Description("Indicates if the Partition Id setting is a literal or variable value")]
+        [DisplayName("Partition Id Variable")]
+        public bool PartitionIdVariable { get; private set; }
+
+        /// <summary>
+        /// Indicates if custom plugins should be skipped
+        /// </summary>
+        [Category("FetchXML Scan")]
+        [DisplayName("Bypass Plugin Execution")]
+        [Description("Indicates if custom plugins should be skipped")]
+        public bool BypassCustomPluginExecution { get; set; }
+
         public bool RequiresCustomPaging(IDictionary<string, DataSource> dataSources)
         {
             if (FetchXml.distinct)
@@ -240,7 +259,29 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 _lastPageValues = new List<SqlEntityReference>();
             }
 
-            var res = dataSource.Connection.RetrieveMultiple(new FetchExpression(Serialize(FetchXml)));
+            var req = new RetrieveMultipleRequest { Query = new FetchExpression(Serialize(FetchXml)) };
+
+            if (PartitionId != null)
+            {
+                if (PartitionIdVariable)
+                {
+                    var value = context.ParameterValues[PartitionId];
+
+                    if (value == null || value is INullable nullable && nullable.IsNull)
+                        yield break; // = NULL is always false in SQL
+                    else
+                        req.Parameters["partitionId"] = value.ToString();
+                }
+                else
+                {
+                    req.Parameters["partitionId"] = PartitionId;
+                }
+            }
+
+            if (BypassCustomPluginExecution)
+                req.Parameters["BypassCustomPluginExecution"] = true;
+
+            var res = ((RetrieveMultipleResponse)dataSource.Execute(req)).EntityCollection;
             PagesRetrieved++;
 
             var count = res.Entities.Count;
@@ -285,7 +326,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     Entity.AddItem(pagingFilter);
                 }
 
-                var nextPage = dataSource.Connection.RetrieveMultiple(new FetchExpression(Serialize(FetchXml)));
+                ((FetchExpression)req.Query).Query = Serialize(FetchXml);
+                var nextPage = ((RetrieveMultipleResponse)dataSource.Execute(req)).EntityCollection;
                 PagesRetrieved++;
 
                 foreach (var entity in nextPage.Entities)
@@ -462,11 +504,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
-            // Expose the type of lookup values
+            // Expose the type and name of lookup values
             foreach (var attribute in entity.Attributes.Where(attr => attr.Value is EntityReference).ToList())
             {
                 if (!entity.Contains(attribute.Key + "type"))
                     entity[attribute.Key + "type"] = ((EntityReference)attribute.Value).LogicalName;
+
+                if (!entity.Contains(attribute.Key + "name"))
+                    entity[attribute.Key + "name"] = ((EntityReference)attribute.Value).Name;
             }
 
             // Convert values to SQL types
@@ -693,30 +738,36 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             var entityName = parts[0];
-            var attr = new FetchAttributeType { name = parts[1].ToLowerInvariant() };
+            var attr = new FetchAttributeType { name = parts[1] };
 
             if (Alias == entityName)
             {
                 linkEntity = null;
 
-                var meta = metadata[Entity.name].Attributes.SingleOrDefault(a => a.LogicalName == attr.name && a.AttributeOf == null);
-                if (meta == null && (attr.name.EndsWith("name") || attr.name.EndsWith("type")))
+                var meta = metadata[Entity.name].Attributes.SingleOrDefault(a => a.LogicalName.Equals(attr.name, StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null);
+                if (meta == null && (attr.name.EndsWith("name", StringComparison.OrdinalIgnoreCase) || attr.name.EndsWith("type", StringComparison.OrdinalIgnoreCase)))
                 {
                     var logicalName = attr.name.Substring(0, attr.name.Length - 4);
-                    meta = metadata[Entity.name].Attributes.SingleOrDefault(a => a.LogicalName == logicalName && a.AttributeOf == null);
-
-                    if (meta != null)
-                        attr.name = logicalName;
+                    meta = metadata[Entity.name].Attributes.SingleOrDefault(a => a.LogicalName.Equals(logicalName, StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null);
                 }
+
+                if (meta != null)
+                    attr.name = meta.LogicalName;
 
                 if (Entity.Items != null)
                 {
-                    // TODO: What about if there is already an all-attributes element? What should we return?
                     var existing = Entity.Items.OfType<FetchAttributeType>().FirstOrDefault(a => a.name == attr.name || a.alias == attr.name);
                     if (existing != null && (predicate == null || predicate(existing)))
                     {
                         added = false;
                         return existing;
+                    }
+
+                    var existingAllAttributes = Entity.Items.OfType<allattributes>().FirstOrDefault();
+                    if (existingAllAttributes != null && predicate == null)
+                    {
+                        added = false;
+                        return null;
                     }
                 }
 
@@ -726,15 +777,15 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 linkEntity = Entity.FindLinkEntity(entityName);
 
-                var meta = metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName == attr.name && a.AttributeOf == null);
-                if (meta == null && (attr.name.EndsWith("name") || attr.name.EndsWith("type")))
+                var meta = metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName.Equals(attr.name, StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null);
+                if (meta == null && (attr.name.EndsWith("name", StringComparison.OrdinalIgnoreCase) || attr.name.EndsWith("type", StringComparison.OrdinalIgnoreCase)))
                 {
                     var logicalName = attr.name.Substring(0, attr.name.Length - 4);
-                    meta = metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName == logicalName && a.AttributeOf == null);
-
-                    if (meta != null)
-                        attr.name = logicalName;
+                    meta = metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName.Equals(logicalName, StringComparison.OrdinalIgnoreCase) && a.AttributeOf == null);
                 }
+
+                if (meta != null)
+                    attr.name = meta.LogicalName;
 
                 if (linkEntity.Items != null)
                 {
@@ -743,6 +794,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         added = false;
                         return existing;
+                    }
+
+                    var existingAllAttributes = linkEntity.Items.OfType<allattributes>().FirstOrDefault();
+                    if (existingAllAttributes != null && predicate == null)
+                    {
+                        added = false;
+                        return null;
                     }
                 }
 
@@ -971,16 +1029,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Add standard virtual attributes
             if (attrMetadata is MultiSelectPicklistAttributeMetadata)
-                AddSchemaAttribute(schema, aliases, notNullColumns, fullName + "name", attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), notNull);
+                AddSchemaAttribute(schema, aliases, notNullColumns, fullName + "name", attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.Implicit), notNull);
             else if (attrMetadata is EnumAttributeMetadata || attrMetadata is BooleanAttributeMetadata)
-                AddSchemaAttribute(schema, aliases, notNullColumns, fullName + "name", attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(LabelMaxLength, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), notNull);
+                AddSchemaAttribute(schema, aliases, notNullColumns, fullName + "name", attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(LabelMaxLength, dataSource.DefaultCollation, CollationLabel.Implicit), notNull);
 
             if (attrMetadata is LookupAttributeMetadata lookup)
             {
-                AddSchemaAttribute(schema, aliases, notNullColumns, fullName + "name", attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(lookup.Targets == null || lookup.Targets.Length == 0 ? 100 : lookup.Targets.Select(e => ((StringAttributeMetadata)dataSource.Metadata[e].Attributes.SingleOrDefault(a => a.LogicalName == dataSource.Metadata[e].PrimaryNameAttribute))?.MaxLength ?? 100).Max(), dataSource.DefaultCollation, CollationLabel.CoercibleDefault), notNull);
+                AddSchemaAttribute(schema, aliases, notNullColumns, fullName + "name", attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(lookup.Targets == null || lookup.Targets.Length == 0 ? 100 : lookup.Targets.Select(e => ((StringAttributeMetadata)dataSource.Metadata[e].Attributes.SingleOrDefault(a => a.LogicalName == dataSource.Metadata[e].PrimaryNameAttribute))?.MaxLength ?? 100).Max(), dataSource.DefaultCollation, CollationLabel.Implicit), notNull);
 
                 if (lookup.Targets?.Length != 1 && lookup.AttributeType != AttributeTypeCode.PartyList)
-                    AddSchemaAttribute(schema, aliases, notNullColumns, fullName + "type", attrMetadata.LogicalName + "type", DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), notNull);
+                    AddSchemaAttribute(schema, aliases, notNullColumns, fullName + "type", attrMetadata.LogicalName + "type", DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.Implicit), notNull);
             }
         }
 
@@ -1012,6 +1070,29 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             {
                 ConvertQueryHints(hints);
                 ApplyPageSizeHint(hints);
+                BypassCustomPluginExecution = GetBypassPluginExecution(context, hints);
+            }
+
+            // Move partitionid filter to partitionId parameter
+            // https://learn.microsoft.com/en-us/power-apps/developer/data-platform/use-elastic-tables?tabs=sdk#query-rows-of-an-elastic-table
+            var meta = context.DataSources[DataSource].Metadata[Entity.name];
+
+            if (meta.DataProviderId == DataProviders.ElasticDataProvider && Entity.Items != null)
+            {
+                var partitionCondition = Entity.Items
+                    .OfType<filter>()
+                    .Where(f => f.type == filterType.and)
+                    .SelectMany(f => f.Items.OfType<condition>())
+                    .FirstOrDefault(c => c.attribute == "partitionid" && c.@operator == @operator.eq && c.value != null);
+
+                if (partitionCondition != null)
+                {
+                    PartitionId = partitionCondition.value;
+                    PartitionIdVariable = partitionCondition.IsVariable;
+
+                    foreach (var filter in Entity.Items.OfType<filter>())
+                        filter.Items = filter.Items.Except(new[] { partitionCondition }).ToArray();
+                }
             }
 
             return this;
@@ -1103,6 +1184,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 throw new NotSupportedQueryFragmentException("Invalid page size, must be between 1 and 5000", pageSizeHints[0]);
 
             FetchXml.count = pageSize.ToString(CultureInfo.InvariantCulture);
+        }
+
+        private bool GetBypassPluginExecution(NodeCompilationContext context, IList<OptimizerHint> queryHints)
+        {
+            if (queryHints == null)
+                return context.Options.BypassCustomPlugins;
+
+            var bypassPluginExecution = queryHints
+                .OfType<UseHintList>()
+                .Where(hint => hint.Hints.Any(s => s.Value.Equals("BYPASS_CUSTOM_PLUGIN_EXECUTION", StringComparison.OrdinalIgnoreCase)))
+                .Any();
+
+            return bypassPluginExecution || context.Options.BypassCustomPlugins;
         }
 
         private void NormalizeFilters()
@@ -1309,59 +1403,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (parts.Length != 2)
                     continue;
 
-                var attr = parts[1] == "*" ? (object)new allattributes() : new FetchAttributeType { name = parts[1].ToLowerInvariant() };
-
-                if (Alias.Equals(parts[0], StringComparison.OrdinalIgnoreCase))
-                {
-                    if (attr is allattributes)
-                    {
-                        Entity.Items = new object[] { attr };
-                    }
-                    else
-                    {
-                        var attrName = ((FetchAttributeType)attr).name;
-                        var attrMeta = dataSource.Metadata[Entity.name].Attributes.SingleOrDefault(a => a.LogicalName == attrName && a.AttributeOf == null);
-
-                        if (attrMeta == null && (attrName.EndsWith("name") || attrName.EndsWith("type")))
-                            attrMeta = dataSource.Metadata[Entity.name].Attributes.SingleOrDefault(a => a.LogicalName == attrName.Substring(0, attrName.Length - 4));
-
-                        if (attrMeta == null)
-                            continue;
-
-                        ((FetchAttributeType)attr).name = attrMeta.LogicalName;
-
-                        if (Entity.Items == null || (!Entity.Items.OfType<allattributes>().Any() && !Entity.Items.OfType<FetchAttributeType>().Any(a => (a.alias ?? a.name) == ((FetchAttributeType)attr).name)))
-                            Entity.AddItem(attr);
-                    }
-                }
-                else
-                {
-                    var linkEntity = Entity.FindLinkEntity(parts[0]);
-
-                    if (linkEntity != null)
-                    {
-                        if (attr is allattributes)
-                        {
-                            linkEntity.Items = new object[] { attr };
-                        }
-                        else
-                        {
-                            var attrName = ((FetchAttributeType)attr).name;
-                            var attrMeta = dataSource.Metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName == attrName && a.AttributeOf == null);
-
-                            if (attrMeta == null && (attrName.EndsWith("name") || attrName.EndsWith("type")))
-                                attrMeta = dataSource.Metadata[linkEntity.name].Attributes.SingleOrDefault(a => a.LogicalName == attrName.Substring(0, attrName.Length - 4));
-
-                            if (attrMeta == null)
-                                continue;
-
-                            ((FetchAttributeType)attr).name = attrMeta.LogicalName;
-
-                            if (linkEntity.Items == null || (!linkEntity.Items.OfType<allattributes>().Any() && !linkEntity.Items.OfType<FetchAttributeType>().Any(a => (a.alias ?? a.name) == ((FetchAttributeType)attr).name)))
-                                linkEntity.AddItem(attr);
-                        }
-                    }
-                }
+                AddAttribute(normalizedCol, null, dataSource.Metadata, out _, out _);
             }
 
             // If there is no attribute requested the server will return everything instead of nothing, so
@@ -1447,6 +1489,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return items;
 
             var attributes = items.OfType<FetchAttributeType>().ToList();
+
+            // If we've included audit.objectid then we need audit.objecttypecode as well
+            if (entityName == "audit" && attributes.Any(a => a.name == "objectid") && !attributes.Any(a => a.name == "objecttypecode"))
+            {
+                var objectTypeCode = new FetchAttributeType { name = "objecttypecode" };
+                attributes.Add(objectTypeCode);
+                items = items.Concat(new object[] { objectTypeCode }).ToArray();
+            }
 
             if (attributes.Any(a => !String.IsNullOrEmpty(a.alias)))
                 return items;
@@ -1714,6 +1764,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 _lastSchemaFetchXml = _lastSchemaFetchXml,
                 _primaryKeyColumns = _primaryKeyColumns,
                 _pagingFields = _pagingFields,
+                PartitionId = PartitionId,
+                PartitionIdVariable = PartitionIdVariable,
+                BypassCustomPluginExecution = BypassCustomPluginExecution,
             };
 
             // Custom properties are not serialized, so need to copy them manually

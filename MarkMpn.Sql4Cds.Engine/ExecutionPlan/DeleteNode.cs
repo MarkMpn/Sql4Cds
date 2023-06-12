@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.ServiceModel;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Crm.Sdk.Messages;
@@ -9,6 +10,7 @@ using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
+using Newtonsoft.Json;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -40,10 +42,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public string PrimaryIdSource { get; set; }
 
         /// <summary>
-        /// The column that contains the secondary ID of the records to delete (used for many-to-many intersect tables)
+        /// The column that contains the secondary ID of the records to delete (used for many-to-many intersect and elastic tables)
         /// </summary>
         [Category("Delete")]
-        [Description("The column that contains the secondary ID of the records to delete (used for many-to-many intersect tables)")]
+        [Description("The column that contains the secondary ID of the records to delete (used for many-to-many intersect and elastic tables)")]
         [DisplayName("SecondaryId Source")]
         public string SecondaryIdSource { get; set; }
 
@@ -55,6 +57,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         [Category("Delete")]
         public override bool BypassCustomPluginExecution { get; set; }
+
+        [Category("Delete")]
+        public override bool ContinueOnError { get; set; }
+
+        protected override bool IgnoresSomeErrors => true;
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
@@ -135,6 +142,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         primaryKey = relationship.Entity1IntersectAttribute;
                         secondaryKey = relationship.Entity2IntersectAttribute;
                     }
+                    else if (meta.DataProviderId == DataProviders.ElasticDataProvider)
+                    {
+                        secondaryKey = "partitionid";
+                    }
 
                     var fullMappings = new Dictionary<string, string>
                     {
@@ -162,7 +173,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 using (_timer.Run())
                 {
                     return ExecuteDmlOperation(
-                        dataSource.Connection,
+                        dataSource,
                         context.Options,
                         entities,
                         meta,
@@ -222,10 +233,107 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 };
             }
 
-            return new DeleteRequest
+            var req = new DeleteRequest
             {
                 Target = new EntityReference(LogicalName, id)
             };
+
+            // Special case for elastic entities - partitionid is required as part of the key
+            if (meta.DataProviderId == DataProviders.ElasticDataProvider)
+            {
+                req.Target = new EntityReference(LogicalName)
+                {
+                    KeyAttributes =
+                    {
+                        [meta.PrimaryIdAttribute] = id,
+                        ["partitionid"] = secondaryIdAccessor(entity)
+                    }
+                };
+            }
+
+            return req;
+        }
+
+        protected override bool FilterErrors(OrganizationServiceFault fault)
+        {
+            // Ignore errors trying to delete records that don't exist - record may have been deleted by another
+            // process in parallel.
+            return fault.ErrorCode != -2147220891 && fault.ErrorCode != -2147185406 && fault.ErrorCode != -2147220969 && fault.ErrorCode != 404;
+        }
+
+        protected override ExecuteMultipleResponse ExecuteMultiple(DataSource dataSource, IOrganizationService org, EntityMetadata meta, ExecuteMultipleRequest req)
+        {
+            if (meta.DataProviderId == DataProviders.ElasticDataProvider || dataSource.MessageCache.IsMessageAvailable(meta.LogicalName, "DeleteMultiple"))
+            {
+                // Elastic tables can use DeleteMultiple for better performance than ExecuteMultiple
+                var entities = new EntityReferenceCollection();
+
+                foreach (DeleteRequest delete in req.Requests)
+                    entities.Add(delete.Target);
+
+                var deleteMultiple = new OrganizationRequest("DeleteMultiple")
+                {
+                    ["Targets"] = entities
+                };
+
+                try
+                {
+                    dataSource.Execute(org, deleteMultiple);
+
+                    var multipleResp = new ExecuteMultipleResponse
+                    {
+                        ["Responses"] = new ExecuteMultipleResponseItemCollection()
+                    };
+
+                    for (var i = 0; i < req.Requests.Count; i++)
+                    {
+                        multipleResp.Responses.Add(new ExecuteMultipleResponseItem
+                        {
+                            RequestIndex = i,
+                            Response = new DeleteResponse()
+                        });
+                    }
+
+                    return multipleResp;
+                }
+                catch (FaultException<OrganizationServiceFault> ex)
+                {
+                    // https://learn.microsoft.com/en-us/power-apps/developer/data-platform/org-service/use-createmultiple-updatemultiple?tabs=sdk#no-continue-on-error
+
+                    // If this is an elastic table we can extract the individual errors from the response
+                    if (ex.Detail.ErrorDetails.TryGetValue("Plugin.BulkApiErrorDetails", out var errorDetails))
+                    {
+                        var details = JsonConvert.DeserializeObject<BulkApiErrorDetail[]>((string)errorDetails);
+
+                        var multipleResp = new ExecuteMultipleResponse
+                        {
+                            ["Responses"] = new ExecuteMultipleResponseItemCollection()
+                        };
+
+                        foreach (var detail in details)
+                        {
+                            multipleResp.Responses.Add(new ExecuteMultipleResponseItem
+                            {
+                                RequestIndex = detail.RequestIndex,
+                                Response = detail.StatusCode >= 200 && detail.StatusCode < 300 ? new DeleteResponse() : null,
+                                Fault = detail.StatusCode >= 200 && detail.StatusCode < 300 ? null : new OrganizationServiceFault
+                                {
+                                    ErrorCode = detail.StatusCode,
+                                    Message = ex.Message
+                                }
+                            });
+                        }
+
+                        return multipleResp;
+                    }
+                    else
+                    {
+                        // We can't get the individual errors, so fall back to ExecuteMultiple
+                    }
+                }
+            }
+
+            return base.ExecuteMultiple(dataSource, org, meta, req);
         }
 
         public override string ToString()
@@ -237,13 +345,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var clone = new DeleteNode
             {
+                BatchSize = BatchSize,
                 BypassCustomPluginExecution = BypassCustomPluginExecution,
+                ContinueOnError = ContinueOnError,
                 DataSource = DataSource,
                 Index = Index,
                 Length = Length,
                 LogicalName = LogicalName,
                 MaxDOP = MaxDOP,
-                BatchSize = BatchSize,
                 PrimaryIdSource = PrimaryIdSource,
                 SecondaryIdSource = SecondaryIdSource,
                 Source = (IExecutionPlanNodeInternal)Source.Clone(),

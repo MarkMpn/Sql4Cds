@@ -2,12 +2,14 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.ServiceModel;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
+using Newtonsoft.Json;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -55,6 +57,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Category("Update")]
         public override bool BypassCustomPluginExecution { get; set; }
 
+        [Category("Update")]
+        public override bool ContinueOnError { get; set; }
+
         [Browsable(false)]
         public IDictionary<int, StatusWithState> StateTransitions { get; set; }
 
@@ -62,6 +67,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Description("The state transition graph that will be navigated automatically when applying updates")]
         [DisplayName("State Transitions")]
         public IDictionary<string, Transitions> StateTransitionsDisplay => StateTransitions == null ? null : StateTransitions.Values.ToDictionary(s => $"{s.Name} ({s.StatusCode})", s => new Transitions(s.Transitions.Keys.Select(t => $"{t.Name} ({t.StatusCode})").OrderBy(n => n)));
+
+        protected override bool IgnoresSomeErrors => true;
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
@@ -160,7 +167,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 using (_timer.Run())
                 {
                     return ExecuteDmlOperation(
-                        dataSource.Connection,
+                        dataSource,
                         context.Options,
                         entities,
                         meta,
@@ -353,7 +360,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         private Entity ExtractEntity(Entity entity, EntityMetadata meta, Dictionary<string, AttributeMetadata> attributes, Dictionary<string, Func<Entity, object>> newAttributeAccessors, Func<Entity, object> primaryIdAccessor)
         {
             var update = new Entity(LogicalName, (Guid)primaryIdAccessor(entity));
-
+            
             foreach (var attributeAccessor in newAttributeAccessors)
             {
                 if (attributeAccessor.Key == meta.PrimaryIdAttribute)
@@ -387,6 +394,88 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
+        protected override bool FilterErrors(OrganizationServiceFault fault)
+        {
+            // Ignore errors trying to delete records that don't exist - record may have been deleted by another
+            // process in parallel.
+            return fault.ErrorCode != -2147220969 && fault.ErrorCode != -2147185406 && fault.ErrorCode != -2147220969 && fault.ErrorCode != 404;
+        }
+
+        protected override ExecuteMultipleResponse ExecuteMultiple(DataSource dataSource, IOrganizationService org, EntityMetadata meta, ExecuteMultipleRequest req)
+        {
+            if (meta.DataProviderId == DataProviders.ElasticDataProvider || dataSource.MessageCache.IsMessageAvailable(meta.LogicalName, "UpdateMultiple"))
+            {
+                // Elastic tables can use UpdateMultiple for better performance than ExecuteMultiple
+                var entities = new EntityCollection { EntityName = meta.LogicalName };
+
+                foreach (UpdateRequest update in req.Requests)
+                    entities.Entities.Add(update.Target);
+
+                var updateMultiple = new OrganizationRequest("UpdateMultiple")
+                {
+                    ["Targets"] = entities
+                };
+
+                try
+                {
+                    dataSource.Execute(org, updateMultiple);
+
+                    var multipleResp = new ExecuteMultipleResponse
+                    {
+                        ["Responses"] = new ExecuteMultipleResponseItemCollection()
+                    };
+
+                    for (var i = 0; i < req.Requests.Count; i++)
+                    {
+                        multipleResp.Responses.Add(new ExecuteMultipleResponseItem
+                        {
+                            RequestIndex = i,
+                            Response = new UpdateResponse()
+                        });
+                    }
+
+                    return multipleResp;
+                }
+                catch (FaultException<OrganizationServiceFault> ex)
+                {
+                    // https://learn.microsoft.com/en-us/power-apps/developer/data-platform/org-service/use-createmultiple-updatemultiple?tabs=sdk#no-continue-on-error
+
+                    // If this is an elastic table we can extract the individual errors from the response
+                    if (ex.Detail.ErrorDetails.TryGetValue("Plugin.BulkApiErrorDetails", out var errorDetails))
+                    {
+                        var details = JsonConvert.DeserializeObject<BulkApiErrorDetail[]>((string)errorDetails);
+
+                        var multipleResp = new ExecuteMultipleResponse
+                        {
+                            ["Responses"] = new ExecuteMultipleResponseItemCollection()
+                        };
+
+                        foreach (var detail in details)
+                        {
+                            multipleResp.Responses.Add(new ExecuteMultipleResponseItem
+                            {
+                                RequestIndex = detail.RequestIndex,
+                                Response = detail.StatusCode >= 200 && detail.StatusCode < 300 ? new UpdateResponse() : null,
+                                Fault = detail.StatusCode >= 200 && detail.StatusCode < 300 ? null : new OrganizationServiceFault
+                                {
+                                    ErrorCode = detail.StatusCode,
+                                    Message = ex.Message
+                                }
+                            });
+                        }
+
+                        return multipleResp;
+                    }
+                    else
+                    {
+                        // We can't get the individual errors, so fall back to ExecuteMultiple
+                    }
+                }
+            }
+
+            return base.ExecuteMultiple(dataSource, org, meta, req);
+        }
+
         public override string ToString()
         {
             return "UPDATE";
@@ -396,13 +485,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var clone = new UpdateNode
             {
+                BatchSize = BatchSize,
                 BypassCustomPluginExecution = BypassCustomPluginExecution,
+                ContinueOnError = ContinueOnError,
                 DataSource = DataSource,
                 Index = Index,
                 Length = Length,
                 LogicalName = LogicalName,
                 MaxDOP = MaxDOP,
-                BatchSize = BatchSize,
                 PrimaryIdSource = PrimaryIdSource,
                 StateTransitions = StateTransitions,
                 Source = (IExecutionPlanNodeInternal)Source.Clone(),

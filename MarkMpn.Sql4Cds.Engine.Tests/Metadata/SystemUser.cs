@@ -19,5 +19,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests.Metadata
 
         [AttributeLogicalName("domainname")]
         public string DomainName { get; set; }
+
+        [AttributeLogicalName("msdyn_agentType")]
+        public string AgentType { get; set; }
     }
 }

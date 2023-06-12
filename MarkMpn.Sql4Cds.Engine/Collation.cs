@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Data.SqlTypes;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Text;
 
@@ -29,6 +30,8 @@ namespace MarkMpn.Sql4Cds.Engine
                     _collationNameToLcid[parts[0]] = Int32.Parse(parts[1]);
                 }
             }
+
+            USEnglish = new Collation(1033, false, false);
         }
 
         /// <summary>
@@ -44,6 +47,40 @@ namespace MarkMpn.Sql4Cds.Engine
             LCID = lcid;
             CompareOptions = compareOptions;
             Description = description;
+
+            if (String.IsNullOrEmpty(name))
+            {
+                name = lcid.ToString();
+
+                if (compareOptions.HasFlag(SqlCompareOptions.BinarySort))
+                {
+                    name += "_BIN";
+                }
+                else if (compareOptions.HasFlag(SqlCompareOptions.BinarySort2))
+                {
+                    name += "_BIN2";
+                }
+                else
+                {
+                    if (compareOptions.HasFlag(SqlCompareOptions.IgnoreCase))
+                        name += "_CI";
+                    else
+                        name += "_CS";
+
+                    if (compareOptions.HasFlag(SqlCompareOptions.IgnoreNonSpace))
+                        name += "_AI";
+                    else
+                        name += "_AS";
+
+                    if (!compareOptions.HasFlag(SqlCompareOptions.IgnoreWidth))
+                        name += "_WS";
+
+                    if (!compareOptions.HasFlag(SqlCompareOptions.IgnoreKanaType))
+                        name += "_KS";
+                }
+
+                Name = name;
+            }
         }
 
         /// <summary>
@@ -64,6 +101,20 @@ namespace MarkMpn.Sql4Cds.Engine
 
             LCID = lcid;
             CompareOptions = compareOptions;
+            
+            var name = lcid.ToString();
+
+            if (caseSensitive)
+                name += "_CS";
+            else
+                name += "_CI";
+
+            if (accentSensitive)
+                name += "_AS";
+            else
+                name += "_AI";
+
+            Name = name;
         }
 
         /// <summary>
@@ -92,7 +143,7 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <summary>
         /// Returns the default collation to be used for system data
         /// </summary>
-        public static Collation USEnglish { get; } = new Collation(1033, false, false);
+        public static Collation USEnglish { get; }
 
         /// <summary>
         /// Attempts to parse the name of a collation to the corresponding details
@@ -175,7 +226,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                         var collationName = String.Join("_", parts, 0, i + 1);
 
-                        if (!_collationNameToLcid.TryGetValue(collationName, out var lcid))
+                        if (!_collationNameToLcid.TryGetValue(collationName, out var lcid) && !Int32.TryParse(collationName, out lcid))
                             break;
                         
                         coll = new Collation(name, lcid, compareOptions, null);

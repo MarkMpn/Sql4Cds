@@ -7,6 +7,7 @@ using System.Globalization;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.ServiceModel;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -92,7 +93,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public virtual string DataSource { get; set; }
 
         /// <summary>
-        /// The maximum degree of paralellism to apply to this operation
+        /// The maximum degree of parallelism to apply to this operation
         /// </summary>
         [Description("The maximum number of operations that will be performed in parallel")]
         public abstract int MaxDOP { get; set; }
@@ -111,6 +112,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public abstract bool BypassCustomPluginExecution { get; set; }
 
         /// <summary>
+        /// Indicates if the operation should be attempted on all records or should fail on the first error
+        /// </summary>
+        [DisplayName("Continue On Error")]
+        [Description("Indicates if the operation should be attempted on all records or should fail on the first error")]
+        public abstract bool ContinueOnError { get; set; }
+
+        /// <summary>
         /// Changes system settings to optimise for parallel connections
         /// </summary>
         /// <returns>An object to dispose of to reset the settings to their original values</returns>
@@ -123,6 +131,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <param name="recordsAffected">The number of records that were affected by the query</param>
         /// <returns>A log message to display</returns>
         public abstract string Execute(NodeExecutionContext context, out int recordsAffected);
+
+        /// <summary>
+        /// Indicates if some errors returned by the server can be silently ignored
+        /// </summary>
+        protected virtual bool IgnoresSomeErrors => false;
 
         /// <summary>
         /// Attempts to fold this node into its source to simplify the query
@@ -147,6 +160,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             MaxDOP = GetMaxDOP(context, hints);
             BatchSize = GetBatchSize(context, hints);
             BypassCustomPluginExecution = GetBypassPluginExecution(context, hints);
+            ContinueOnError = GetContinueOnError(context, hints);
 
             return new[] { this };
         }
@@ -159,41 +173,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!context.DataSources.TryGetValue(DataSource, out var dataSource))
                 throw new NotSupportedQueryFragmentException("Unknown datasource");
 
-            var org = dataSource.Connection;
-            var recommendedMaxDop = 1;
-
-#if NETCOREAPP
-            var svc = org as ServiceClient;
-
-            if (svc != null)
-                recommendedMaxDop = svc.RecommendedDegreesOfParallelism;
-#else
-            var svc = org as CrmServiceClient;
-
-            if (svc != null)
-                recommendedMaxDop = svc.RecommendedDegreesOfParallelism;
-#endif
-
-            var maxDopHint = (queryHints ?? Array.Empty<OptimizerHint>())
-                .OfType<LiteralOptimizerHint>()
-                .Where(hint => hint.HintKind == OptimizerHintKind.MaxDop)
-                .FirstOrDefault();
-
-            if (maxDopHint != null)
-            {
-                if (!(maxDopHint.Value is IntegerLiteral maxDop) || !Int32.TryParse(maxDop.Value, out var value) || value < 0)
-                    throw new NotSupportedQueryFragmentException("MAXDOP requires a positive integer value, or 0 to use recommended value", maxDopHint);
-
-                if (value > 0)
-                    return value;
-
-                return recommendedMaxDop;
-            }
-
-            if (context.Options.MaxDegreeOfParallelism > 0)
-                return context.Options.MaxDegreeOfParallelism;
-
-            return recommendedMaxDop;
+            return ParallelismHelper.GetMaxDOP(dataSource, context, queryHints);
         }
 
         private int GetBatchSize(NodeCompilationContext context, IList<OptimizerHint> queryHints)
@@ -231,6 +211,19 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return bypassPluginExecution || context.Options.BypassCustomPlugins;
         }
 
+        private bool GetContinueOnError(NodeCompilationContext context, IList<OptimizerHint> queryHints)
+        {
+            if (queryHints == null)
+                return false;
+
+            var continueOnError = queryHints
+                .OfType<UseHintList>()
+                .Where(hint => hint.Hints.Any(s => s.Value.Equals("CONTINUE_ON_ERROR", StringComparison.OrdinalIgnoreCase)))
+                .Any();
+
+            return continueOnError;
+        }
+
         /// <summary>
         /// Changes the name of source columns
         /// </summary>
@@ -265,7 +258,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var dataTable = new DataTable();
                 var schemaTable = dataReader.GetSchemaTable();
                 var columnTypes = new ColumnList();
-                var targetDataSource = context.DataSources[DataSource];
+                var targetDataSource = DataSource == null ? context.PrimaryDataSource : context.DataSources[DataSource];
 
                 for (var i = 0; i < schemaTable.Rows.Count; i++)
                 {
@@ -541,49 +534,45 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <summary>
         /// Executes the DML operations required for a set of input records
         /// </summary>
-        /// <param name="org">The <see cref="IOrganizationService"/> to use to get the data</param>
+        /// <param name="dataSource">The data source to get the data from</param>
         /// <param name="options"><see cref="IQueryExecutionOptions"/> to indicate how the query can be executed</param>
         /// <param name="entities">The data source entities</param>
         /// <param name="meta">The metadata of the entity that will be affected</param>
         /// <param name="requestGenerator">A function to generate a DML request from a data source entity</param>
         /// <param name="operationNames">The constant strings to use in log messages</param>
         /// <returns>The final log message</returns>
-        protected string ExecuteDmlOperation(IOrganizationService org, IQueryExecutionOptions options, List<Entity> entities, EntityMetadata meta, Func<Entity,OrganizationRequest> requestGenerator, OperationNames operationNames, out int recordsAffected, IDictionary<string, object> parameterValues, Action<OrganizationResponse> responseHandler = null)
+        protected string ExecuteDmlOperation(DataSource dataSource, IQueryExecutionOptions options, List<Entity> entities, EntityMetadata meta, Func<Entity,OrganizationRequest> requestGenerator, OperationNames operationNames, out int recordsAffected, IDictionary<string, object> parameterValues, Action<OrganizationResponse> responseHandler = null)
         {
             var inProgressCount = 0;
             var count = 0;
 
+#if NETCOREAPP
+            var svc = dataSource.Connection as ServiceClient;
+#else
+            var svc = dataSource.Connection as CrmServiceClient;
+#endif
+
             var maxDop = MaxDOP;
 
-#if NETCOREAPP
-            var svc = org as ServiceClient;
-
-            if (maxDop <= 1 || svc == null || (svc.ActiveAuthenticationType != Microsoft.PowerPlatform.Dataverse.Client.AuthenticationType.OAuth && svc.ActiveAuthenticationType != Microsoft.PowerPlatform.Dataverse.Client.AuthenticationType.Certificate && svc.ActiveAuthenticationType != Microsoft.PowerPlatform.Dataverse.Client.AuthenticationType.ExternalTokenManagement && svc.ActiveAuthenticationType != Microsoft.PowerPlatform.Dataverse.Client.AuthenticationType.ClientSecret))
-            {
+            if (!ParallelismHelper.CanParallelise(dataSource.Connection))
                 maxDop = 1;
-                svc = null;
-            }
-#else
-            var svc = org as CrmServiceClient;
 
-            if (maxDop <= 1 || svc == null || (svc.ActiveAuthenticationType != Microsoft.Xrm.Tooling.Connector.AuthenticationType.OAuth && svc.ActiveAuthenticationType != Microsoft.Xrm.Tooling.Connector.AuthenticationType.Certificate && svc.ActiveAuthenticationType != Microsoft.Xrm.Tooling.Connector.AuthenticationType.ExternalTokenManagement && svc.ActiveAuthenticationType != Microsoft.Xrm.Tooling.Connector.AuthenticationType.ClientSecret))
-            {
-                maxDop = 1;
+            if (maxDop == 1)
                 svc = null;
-            }
-#endif
 
             var useAffinityCookie = maxDop == 1 || entities.Count < 100;
 
             try
             {
+                OrganizationServiceFault fault = null;
+
                 using (UseParallelConnections())
                 {
                     Parallel.ForEach(entities,
                         new ParallelOptions { MaxDegreeOfParallelism = maxDop },
                         () =>
                         {
-                            var service = svc?.Clone() ?? org;
+                            var service = svc?.Clone() ?? dataSource.Connection;
 
 #if NETCOREAPP
                             if (!useAffinityCookie && service is ServiceClient crmService)
@@ -613,10 +602,24 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 var newCount = Interlocked.Increment(ref inProgressCount);
                                 var progress = (double)newCount / entities.Count;
                                 options.Progress(progress, $"{operationNames.InProgressUppercase} {newCount:N0} of {entities.Count:N0} {GetDisplayName(0, meta)} ({progress:P0})...");
-                                var response = threadLocalState.Service.Execute(request);
-                                Interlocked.Increment(ref count);
 
-                                responseHandler?.Invoke(response);
+                                try
+                                {
+                                    var response = dataSource.Execute(threadLocalState.Service, request);
+                                    Interlocked.Increment(ref count);
+
+                                    responseHandler?.Invoke(response);
+                                }
+                                catch (FaultException<OrganizationServiceFault> ex)
+                                {
+                                    if (FilterErrors(ex.Detail))
+                                    {
+                                        if (ContinueOnError)
+                                            fault = fault ?? ex.Detail;
+                                        else
+                                            throw;
+                                    }
+                                }
                             }
                             else
                             {
@@ -630,7 +633,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                             Requests = new OrganizationRequestCollection(),
                                             Settings = new ExecuteMultipleSettings
                                             {
-                                                ContinueOnError = false,
+                                                ContinueOnError = IgnoresSomeErrors,
                                                 ReturnResponses = responseHandler != null
                                             }
                                         }
@@ -641,30 +644,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                                 if (threadLocalState.EMR.Requests.Count == BatchSize)
                                 {
-                                    var newCount = Interlocked.Add(ref inProgressCount, threadLocalState.EMR.Requests.Count);
-                                    var progress = (double)newCount / entities.Count;
-                                    options.Progress(progress, $"{operationNames.InProgressUppercase} {GetDisplayName(0, meta)} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
-                                    var resp = (ExecuteMultipleResponse)threadLocalState.Service.Execute(threadLocalState.EMR);
-
-                                    if (responseHandler != null)
-                                    {
-                                        foreach (var item in resp.Responses)
-                                        {
-                                            if (item.Response != null)
-                                                responseHandler(item.Response);
-                                        }
-                                    }
-
-                                    if (resp.IsFaulted)
-                                    {
-                                        var error = resp.Responses.First(r => r.Fault != null);
-                                        Interlocked.Add(ref count, error.RequestIndex);
-                                        throw new ApplicationException($"Error {operationNames.InProgressLowercase} {GetDisplayName(0, meta)} - " + error.Fault.Message);
-                                    }
-                                    else
-                                    {
-                                        Interlocked.Add(ref count, threadLocalState.EMR.Requests.Count);
-                                    }
+                                    ProcessBatch(threadLocalState.EMR, ref count, ref inProgressCount, entities, operationNames, meta, options, dataSource, threadLocalState.Service, responseHandler, ref fault);
 
                                     threadLocalState = new { threadLocalState.Service, EMR = default(ExecuteMultipleRequest) };
                                 }
@@ -675,42 +655,30 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         (threadLocalState) =>
                         {
                             if (threadLocalState.EMR != null)
-                            {
-                                var newCount = Interlocked.Add(ref inProgressCount, threadLocalState.EMR.Requests.Count);
-                                var progress = (double)newCount / entities.Count;
-                                options.Progress(progress, $"{operationNames.InProgressUppercase} {GetDisplayName(0, meta)} {newCount + 1 - threadLocalState.EMR.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
-                                var resp = (ExecuteMultipleResponse)threadLocalState.Service.Execute(threadLocalState.EMR);
+                                ProcessBatch(threadLocalState.EMR, ref count, ref inProgressCount, entities, operationNames, meta, options, dataSource, threadLocalState.Service, responseHandler, ref fault);
 
-                                if (responseHandler != null)
-                                {
-                                    foreach (var item in resp.Responses)
-                                    {
-                                        if (item.Response != null)
-                                            responseHandler(item.Response);
-                                    }
-                                }
-
-                                if (resp.IsFaulted)
-                                {
-                                    var error = resp.Responses.First(r => r.Fault != null);
-                                    Interlocked.Add(ref count, error.RequestIndex);
-                                    throw new ApplicationException($"Error {operationNames.InProgressLowercase} {GetDisplayName(0, meta)} - " + error.Fault.Message);
-                                }
-                                else
-                                {
-                                    Interlocked.Add(ref count, threadLocalState.EMR.Requests.Count);
-                                }
-                            }
-
-                            if (threadLocalState.Service != org && threadLocalState.Service is IDisposable disposableClient)
+                            if (threadLocalState.Service != dataSource.Connection && threadLocalState.Service is IDisposable disposableClient)
                                 disposableClient.Dispose();
                         });
                 }
+
+                if (fault != null)
+                    throw new FaultException<OrganizationServiceFault>(fault, new FaultReason(fault.Message));
             }
             catch (Exception ex)
             {
+                var originalEx = ex;
+
+                if (ex is AggregateException agg && agg.InnerExceptions.Count == 1)
+                    ex = agg.InnerException;
+
                 if (count == 0)
-                    throw;
+                {
+                    if (ex == originalEx)
+                        throw;
+                    else
+                        throw ex;
+                }
 
                 throw new PartialSuccessException($"{count:N0} {GetDisplayName(count, meta)} {operationNames.CompletedLowercase}", ex);
             }
@@ -718,6 +686,56 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             recordsAffected = count;
             parameterValues["@@ROWCOUNT"] = (SqlInt32)count;
             return $"{count:N0} {GetDisplayName(count, meta)} {operationNames.CompletedLowercase}";
+        }
+
+        protected class BulkApiErrorDetail
+        {
+            public int RequestIndex { get; set; }
+            public Guid Id { get; set; }
+            public int StatusCode { get; set; }
+        }
+
+        private void ProcessBatch(ExecuteMultipleRequest req, ref int count, ref int inProgressCount, List<Entity> entities, OperationNames operationNames, EntityMetadata meta, IQueryExecutionOptions options, DataSource dataSource, IOrganizationService org, Action<OrganizationResponse> responseHandler, ref OrganizationServiceFault fault)
+        {
+            var newCount = Interlocked.Add(ref inProgressCount, req.Requests.Count);
+            var progress = (double)newCount / entities.Count;
+            options.Progress(progress, $"{operationNames.InProgressUppercase} {GetDisplayName(0, meta)} {newCount + 1 - req.Requests.Count:N0} - {newCount:N0} of {entities.Count:N0}...");
+            var resp = ExecuteMultiple(dataSource, org, meta, req);
+
+            if (responseHandler != null)
+            {
+                foreach (var item in resp.Responses)
+                {
+                    if (item.Response != null)
+                        responseHandler(item.Response);
+                }
+            }
+
+            var errorResponses = resp.Responses
+                .Where(r => r.Fault != null)
+                .ToList();
+
+            Interlocked.Add(ref count, req.Requests.Count - errorResponses.Count);
+
+            var error = errorResponses.FirstOrDefault(item => FilterErrors(item.Fault));
+
+            if (error != null)
+            {
+                if (ContinueOnError)
+                    fault = fault ?? error.Fault;
+                else
+                    throw new ApplicationException($"Error {operationNames.InProgressLowercase} {GetDisplayName(0, meta)} - " + error.Fault.Message);
+            }
+        }
+
+        protected virtual bool FilterErrors(OrganizationServiceFault fault)
+        {
+            return true;
+        }
+
+        protected virtual ExecuteMultipleResponse ExecuteMultiple(DataSource dataSource, IOrganizationService org, EntityMetadata meta, ExecuteMultipleRequest req)
+        {
+            return (ExecuteMultipleResponse)dataSource.Execute(org, req);
         }
 
         public abstract object Clone();

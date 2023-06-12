@@ -174,7 +174,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                 var pages = 0;
                 var confirmRetrieve = (EventHandler<ConfirmRetrieveEventArgs>)((object sender, ConfirmRetrieveEventArgs e) =>
                 {
-                    e.Cancel = e.Count >= Sql4CdsSettings.Instance.SelectLimit;
+                    e.Cancel = Sql4CdsSettings.Instance.SelectLimit > 0 && e.Count >= Sql4CdsSettings.Instance.SelectLimit;
 
                     if (!e.Cancel)
                     {
@@ -638,6 +638,8 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                 converted.Type = "languageConstructCatchAll";
             else if (converted.Type == "waitFor")
                 converted.Type = "languageConstructCatchAll";
+            else if (converted.Type == "xmlWriter")
+                converted.Type = "udx";
 
             // Get the filtered list of properties
             var typeDescriptor = new ExecutionPlanNodeTypeDescriptor(node, !executed, _ => null);

@@ -390,6 +390,16 @@ namespace MarkMpn.Sql4Cds.Engine
                 return (T)(object)clone;
             }
 
+            if (fragment is XmlDataTypeReference xmlDataType)
+            {
+                return (T)(object)new XmlDataTypeReference
+                {
+                    Name = xmlDataType.Name.Clone(),
+                    XmlDataTypeOption = xmlDataType.XmlDataTypeOption,
+                    XmlSchemaCollection = xmlDataType.XmlSchemaCollection?.Clone()
+                };
+            }
+
             if (fragment is CastCall cast)
             {
                 return (T)(object)new CastCall
@@ -424,6 +434,14 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     Expression = sort.Expression.Clone(),
                     SortOrder = sort.SortOrder,
+                };
+            }
+
+            if (fragment is ExpressionCallTarget callTarget)
+            {
+                return (T)(object)new ExpressionCallTarget
+                {
+                    Expression = callTarget.Expression.Clone(),
                 };
             }
 

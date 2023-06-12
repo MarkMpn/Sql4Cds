@@ -7,11 +7,16 @@ using System;
 using System.Collections.Generic;
 using System.Data.SqlTypes;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Xml;
+using System.Xml.XPath;
+using Wmhelp.XPath2;
+using Wmhelp.XPath2.Value;
 
 namespace MarkMpn.Sql4Cds.Engine
 {
@@ -761,6 +766,110 @@ namespace MarkMpn.Sql4Cds.Engine
             }
 
             return SqlInt32.Null;
+        }
+
+        /// <summary>
+        /// Specifies an XQuery against an instance of the xml data type.
+        /// </summary>
+        /// <param name="value">The xml data to query</param>
+        /// <param name="query">The XQuery expression to apply</param>
+        /// <param name="context">The context the expression is evaluated in</param>
+        /// <param name="schema">The schema of data available to the query</param>
+        /// <returns></returns>
+        public static SqlXml Query(SqlXml value, XPath2Expression query, ExpressionExecutionContext context, INodeSchema schema)
+        {
+            if (value.IsNull)
+                return value;
+
+            var doc = new XPathDocument(value.CreateReader());
+            var nav = doc.CreateNavigator();
+            var result = query.Evaluate(new XPath2ExpressionContext(context, schema, nav), null);
+            var stream = new MemoryStream();
+
+            var xmlWriterSettings = new XmlWriterSettings
+            {
+                CloseOutput = false,
+                ConformanceLevel = ConformanceLevel.Fragment,
+                Encoding = Encoding.GetEncoding("utf-16"),
+                OmitXmlDeclaration = true
+            };
+            var xmlWriter = XmlWriter.Create(stream, xmlWriterSettings);
+
+            foreach (XPathNavigator r in (XPath2NodeIterator)result)
+            {
+                var reader = r.ReadSubtree();
+
+                if (reader.ReadState == ReadState.Initial)
+                    reader.Read();
+
+                while (!reader.EOF)
+                    xmlWriter.WriteNode(reader, defattr: true);
+            }
+
+            xmlWriter.Flush();
+            stream.Position = 0;
+            return new SqlXml(stream);
+        }
+
+        /// <summary>
+        /// Performs an XQuery against the XML and returns a value of SQL type. This method returns a scalar value.
+        /// </summary>
+        /// <param name="value">The xml data to query</param>
+        /// <param name="query">The XQuery expression to apply</param>
+        /// <param name="targetType">The type of data to return</param>
+        /// <param name="context">The context the expression is evaluated in</param>
+        /// <param name="schema">The schema of data available to the query</param>
+        /// <returns></returns>
+        /// <exception cref="NotSupportedException"></exception>
+        public static object Value(SqlXml value, XPath2Expression query, [TargetType] DataTypeReference targetType, ExpressionExecutionContext context, INodeSchema schema)
+        {
+            if (value.IsNull)
+                return value;
+
+            var doc = new XPathDocument(value.CreateReader());
+            var nav = doc.CreateNavigator();
+            var result = query.Evaluate(new XPath2ExpressionContext(context, schema, nav), null);
+
+            var targetNetType = targetType.ToNetType(out _);
+
+            INullable sqlValue;
+
+            if (result == null)
+                sqlValue = SqlTypeConverter.GetNullValue(targetNetType);
+            else if (result is Base64BinaryValue bin)
+                sqlValue = new SqlBinary(bin.BinaryValue);
+            else
+                throw new NotSupportedException("Unhandled return type " + result.GetType().FullName);
+
+            if (sqlValue.GetType() != targetNetType)
+                sqlValue = (INullable) SqlTypeConverter.ChangeType(sqlValue, targetNetType);
+
+            return sqlValue;
+        }
+
+        /// <summary>
+        /// Deletes a specified length of characters in the first string at the start position and then inserts the second string into the first string at the start position
+        /// </summary>
+        /// <param name="value">The first string to manipulate</param>
+        /// <param name="start">The starting position within the first string to make the edits at</param>
+        /// <param name="length">The number of characters to remove from the first string</param>
+        /// <param name="replaceWith">The second string to insert into the first string</param>
+        /// <returns></returns>
+        [CollationSensitive]
+        public static SqlString Stuff(SqlString value, SqlInt32 start, SqlInt32 length, SqlString replaceWith)
+        {
+            if (value.IsNull || start.IsNull || length.IsNull || start.Value <= 0 || length.Value < 0)
+                return SqlString.Null;
+
+            var sb = new StringBuilder(value.Value);
+
+            if (length.Value > 0)
+                sb.Remove(start.Value - 1, length.Value);
+
+            if (!replaceWith.IsNull)
+                sb.Insert(start.Value - 1, replaceWith.Value);
+
+            return new SqlString(sb.ToString(), value.LCID, value.SqlCompareOptions);
         }
     }
 

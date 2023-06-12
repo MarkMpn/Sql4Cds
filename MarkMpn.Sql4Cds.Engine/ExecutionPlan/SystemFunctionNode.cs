@@ -18,6 +18,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         public string DataSource { get; set; }
 
         /// <summary>
+        /// The alias for the data source
+        /// </summary>
+        [Category("System Function")]
+        [Description("The alias for the data source")]
+        public string Alias { get; set; }
+
+        /// <summary>
         /// The name of the function to execute
         /// </summary>
         [Category("System Function")]
@@ -33,6 +40,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return new SystemFunctionNode
             {
                 DataSource = DataSource,
+                Alias = Alias,
                 SystemFunction = SystemFunction
             };
         }
@@ -52,8 +60,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return new NodeSchema(
                         schema: new ColumnList
                         {
-                            ["name"] = DataTypeHelpers.NVarChar(128, dataSource.DefaultCollation, CollationLabel.CoercibleDefault),
-                            ["description"] = DataTypeHelpers.NVarChar(1000, dataSource.DefaultCollation, CollationLabel.CoercibleDefault),
+                            [PrefixWithAlias("name")] = DataTypeHelpers.NVarChar(128, dataSource.DefaultCollation, CollationLabel.CoercibleDefault),
+                            [PrefixWithAlias("description")] = DataTypeHelpers.NVarChar(1000, dataSource.DefaultCollation, CollationLabel.CoercibleDefault),
                         },
                         aliases: null,
                         primaryKey: null,
@@ -85,8 +93,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     {
                         yield return new Entity
                         {
-                            ["name"] = dataSource.DefaultCollation.ToSqlString(coll.Name),
-                            ["description"] = dataSource.DefaultCollation.ToSqlString(coll.Description)
+                            [PrefixWithAlias("name")] = dataSource.DefaultCollation.ToSqlString(coll.Name),
+                            [PrefixWithAlias("description")] = dataSource.DefaultCollation.ToSqlString(coll.Description)
                         };
                     }
                     break;
@@ -94,6 +102,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 default:
                     throw new NotSupportedException("Unsupported function " + SystemFunction);
             }
+        }
+
+        private string PrefixWithAlias(string columnName)
+        {
+            if (String.IsNullOrEmpty(Alias))
+                return columnName;
+
+            return Alias + "." + columnName;
         }
     }
 

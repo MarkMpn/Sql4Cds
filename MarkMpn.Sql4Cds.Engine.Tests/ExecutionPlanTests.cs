@@ -5155,10 +5155,209 @@ UPDATE account SET employees = @employees WHERE name = @name";
 
             Assert.AreEqual(1, plans.Length);
             var select = AssertNode<SelectNode>(plans[0]);
-            CollectionAssert.AreEqual(new[] { "name", "description", "Expr1" }, select.ColumnSet.Select(col => col.OutputColumn).ToArray());
+            CollectionAssert.AreEqual(new[] { "name", "description", null }, select.ColumnSet.Select(col => col.OutputColumn).ToArray());
             var computeScalar = AssertNode<ComputeScalarNode>(select.Source);
             var sysFunc = AssertNode<SystemFunctionNode>(computeScalar.Source);
             Assert.AreEqual(SystemFunction.fn_helpcollations, sysFunc.SystemFunction);
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void DuplicatedTableName()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = "SELECT * FROM account, account";
+            planBuilder.Build(query, null, out _);
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void DuplicatedTableNameJoin()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = "SELECT * FROM account INNER JOIN contact ON contact.parentcustomerid = account.accountid INNER JOIN contact ON contact.parentcustomerid = account.accountid";
+            planBuilder.Build(query, null, out _);
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void DuplicatedAliasName()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = "SELECT * FROM account x INNER JOIN contact x ON x.parentcustomerid = x.accountid";
+            planBuilder.Build(query, null, out _);
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void TableNameMatchesAliasName()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = "SELECT * FROM account INNER JOIN contact AS account ON account.parentcustomerid = account.accountid";
+            planBuilder.Build(query, null, out _);
+        }
+
+        [TestMethod]
+        public void AuditJoinsToCallingUserIdAndUserId()
+        {
+            // https://learn.microsoft.com/en-us/power-apps/developer/data-platform/auditing/retrieve-audit-data?tabs=webapi#audit-table-relationships
+            // Audit table can only be joined to systemuser on callinguserid or userid. Both joins together, or any other joins, are not valid.
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = "SELECT * FROM audit INNER JOIN systemuser cu ON audit.callinguserid = cu.systemuserid INNER JOIN systemuser u ON audit.userid = u.systemuserid";
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var join = AssertNode<MergeJoinNode>(select.Source);
+            Assert.AreEqual("u.systemuserid", join.LeftAttribute.ToSql());
+            Assert.AreEqual("audit.userid", join.RightAttribute.ToSql());
+            var userFetch = AssertNode<FetchXmlScan>(join.LeftSource);
+            AssertFetchXml(userFetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='systemuser'>
+                        <all-attributes />
+                        <order attribute='systemuserid' />
+                    </entity>
+                </fetch>");
+            var sort = AssertNode<SortNode>(join.RightSource);
+            var auditFetch = AssertNode<FetchXmlScan>(sort.Source);
+            AssertFetchXml(auditFetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='audit'>
+                        <all-attributes />
+                        <link-entity name='systemuser' alias='cu' from='systemuserid' to='callinguserid' link-type='inner'>
+                            <all-attributes />
+                        </link-entity>
+                        <filter>
+                            <condition attribute='userid' operator='not-null' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void AuditJoinsToObjectId()
+        {
+            // https://learn.microsoft.com/en-us/power-apps/developer/data-platform/auditing/retrieve-audit-data?tabs=webapi#audit-table-relationships
+            // Audit table can only be joined to systemuser on callinguserid or userid. Both joins together, or any other joins, are not valid.
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = "SELECT * FROM audit INNER JOIN account ON audit.objectid = account.accountid";
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var join = AssertNode<MergeJoinNode>(select.Source);
+            Assert.AreEqual("account.accountid", join.LeftAttribute.ToSql());
+            Assert.AreEqual("audit.objectid", join.RightAttribute.ToSql());
+            var accountFetch = AssertNode<FetchXmlScan>(join.LeftSource);
+            AssertFetchXml(accountFetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <all-attributes />
+                        <order attribute='accountid' />
+                    </entity>
+                </fetch>");
+            var sort = AssertNode<SortNode>(join.RightSource);
+            var auditFetch = AssertNode<FetchXmlScan>(sort.Source);
+            AssertFetchXml(auditFetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='audit'>
+                        <all-attributes />
+                        <filter>
+                            <condition attribute='objectid' operator='not-null' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void SelectAuditObjectId()
+        {
+            // https://github.com/MarkMpn/Sql4Cds/issues/296
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = "SELECT auditid, objectidtype AS o FROM audit";
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='audit'>
+                        <attribute name='auditid' />
+                        <attribute name='objectid' />
+                        <attribute name='objecttypecode' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void FilterAuditOnLeftJoinColumn()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = "SELECT * FROM audit LEFT OUTER JOIN systemuser ON audit.userid = systemuser.systemuserid WHERE systemuser.domainname <> 'SYSTEM'";
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var filter = AssertNode<FilterNode>(select.Source);
+            var fetch = AssertNode<FetchXmlScan>(filter.Source);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='audit'>
+                        <all-attributes />
+                        <link-entity name='systemuser' from='systemuserid' to='userid' link-type='outer' alias='systemuser'>
+                            <all-attributes />
+                        </link-entity>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void FilterAuditOnInnerJoinColumn()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = "SELECT * FROM audit INNER JOIN systemuser ON audit.userid = systemuser.systemuserid WHERE systemuser.domainname <> 'SYSTEM'";
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='audit'>
+                        <all-attributes />
+                        <link-entity name='systemuser' from='systemuserid' to='userid' link-type='inner' alias='systemuser'>
+                            <all-attributes />
+                            <filter>
+                                <condition attribute='domainname' operator='ne' value='SYSTEM' />
+                                <condition attribute='domainname' operator='not-null' />
+                            </filter>
+                        </link-entity>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void SortAuditOnJoinColumn()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = "SELECT * FROM audit LEFT OUTER JOIN systemuser ON audit.userid = systemuser.systemuserid ORDER BY systemuser.domainname";
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var sort = AssertNode<SortNode>(select.Source);
+            var fetch = AssertNode<FetchXmlScan>(sort.Source);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='audit'>
+                        <all-attributes />
+                        <link-entity name='systemuser' from='systemuserid' to='userid' link-type='outer' alias='systemuser'>
+                            <all-attributes />
+                        </link-entity>
+                    </entity>
+                </fetch>");
         }
     }
 }

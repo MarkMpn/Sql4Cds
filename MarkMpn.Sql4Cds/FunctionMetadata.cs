@@ -159,6 +159,9 @@ namespace MarkMpn.Sql4Cds
 
             [Description("Returns the requested property of a specified collation")]
             public abstract int collationproperty(string collation_name, string property);
+
+            [Description("Deletes a specified length of characters in the first string at the start position and then inserts the second string into the first string at the start position")]
+            public abstract string stuff(string character_expression, int start, int length, string replace_with_expression);
         }
     }
 }

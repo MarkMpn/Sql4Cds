@@ -1,6 +1,7 @@
 ﻿using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
+using System;
 #if NETCOREAPP
 using Microsoft.PowerPlatform.Dataverse.Client;
 #else
@@ -82,6 +83,11 @@ namespace MarkMpn.Sql4Cds.Engine
         public IMessageCache MessageCache { get; set; }
 
         /// <summary>
+        /// The session token to use for Elastic table consistency
+        /// </summary>
+        public string SessionToken { get; set; }
+
+        /// <summary>
         /// Returns the default collation used by this instance
         /// </summary>
         internal Collation DefaultCollation
@@ -97,6 +103,41 @@ namespace MarkMpn.Sql4Cds.Engine
             {
                 _defaultCollation = value;
             }
+        }
+
+        /// <summary>
+        /// Executes a request against the data source
+        /// </summary>
+        /// <param name="request">The request to execute</param>
+        /// <returns>The response to the request</returns>
+        /// <remarks>
+        /// This method automatically preserves the session token for Elastic table consistency
+        /// </remarks>
+        internal OrganizationResponse Execute(OrganizationRequest request)
+        {
+            return Execute(Connection, request);
+        }
+
+        /// <summary>
+        /// Executes a request against the data source
+        /// </summary>
+        /// <param name="org">The connection to use to execute the request</param>
+        /// <param name="request">The request to execute</param>
+        /// <returns>The response to the request</returns>
+        /// <remarks>
+        /// This method automatically preserves the session token for Elastic table consistency
+        /// </remarks>
+        internal OrganizationResponse Execute(IOrganizationService org, OrganizationRequest request)
+        {
+            if (!String.IsNullOrEmpty(SessionToken))
+                request["SessionToken"] = SessionToken;
+
+            var resp = org.Execute(request);
+
+            if (resp.Results.TryGetValue("x-ms-session-token", out var newToken) && newToken != null)
+                SessionToken = newToken.ToString();
+
+            return resp;
         }
 
         private Collation LoadDefaultCollation()

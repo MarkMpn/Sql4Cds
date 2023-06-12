@@ -27,6 +27,14 @@ namespace MarkMpn.Sql4Cds.Engine
         /// </summary>
         /// <returns>A list of all messages in the instance</returns>
         IEnumerable<Message> GetAllMessages();
+
+        /// <summary>
+        /// Indicates whether a specific message is valid for an entity
+        /// </summary>
+        /// <param name="entityLogicalName">The logical name of the entity</param>
+        /// <param name="messageName">The name of the message</param>
+        /// <returns><c>true</c> if the message is available for this entity, or <c>false</c> otherwise</returns>
+        bool IsMessageAvailable(string entityLogicalName, string messageName);
     }
 
     /// <summary>
@@ -34,7 +42,9 @@ namespace MarkMpn.Sql4Cds.Engine
     /// </summary>
     public class MessageCache : IMessageCache
     {
+        private readonly IOrganizationService _org;
         private readonly Dictionary<string, Message> _cache;
+        private readonly Dictionary<string, bool> _entityMessages;
 
         /// <summary>
         /// Loads a list of messages from a specific instance
@@ -43,6 +53,9 @@ namespace MarkMpn.Sql4Cds.Engine
         /// <param name="metadata">A cache of metadata for this connection</param>
         public MessageCache(IOrganizationService org, IAttributeMetadataCache metadata)
         {
+            _org = org;
+            _entityMessages = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+
             // Load the requests and input parameters
             var requestQry = new QueryExpression("sdkmessagerequest");
             requestQry.ColumnSet = new ColumnSet("name");
@@ -227,6 +240,57 @@ namespace MarkMpn.Sql4Cds.Engine
         public IEnumerable<Message> GetAllMessages()
         {
             return _cache.Values;
+        }
+
+        public bool IsMessageAvailable(string entityLogicalName, string messageName)
+        {
+            var key = entityLogicalName + ":" + messageName;
+
+            if (_entityMessages.TryGetValue(key, out var value))
+                return value;
+
+            // https://learn.microsoft.com/en-us/power-apps/developer/data-platform/org-service/use-createmultiple-updatemultiple?tabs=sdk#limited-to-certain-standard-tables
+            var query = new QueryExpression("sdkmessagefilter")
+            {
+                ColumnSet = new ColumnSet("sdkmessagefilterid"),
+                Criteria = new FilterExpression(LogicalOperator.And)
+                {
+                    Conditions =
+                    {
+                        new ConditionExpression(
+                            attributeName:"primaryobjecttypecode",
+                            conditionOperator: ConditionOperator.Equal,
+                            value: entityLogicalName)
+                    }
+                },
+                LinkEntities =
+                {
+                    new LinkEntity(
+                        linkFromEntityName:"sdkmessagefilter",
+                        linkToEntityName:"sdkmessage",
+                        linkFromAttributeName:"sdkmessageid",
+                        linkToAttributeName:"sdkmessageid",
+                        joinOperator: JoinOperator.Inner)
+                    {
+                        LinkCriteria = new FilterExpression(LogicalOperator.And)
+                        {
+                            Conditions =
+                            {
+                                new ConditionExpression(
+                                    attributeName:"name",
+                                    conditionOperator: ConditionOperator.Equal,
+                                    value: messageName)
+                            }
+                        }
+                    }
+                }
+            };
+
+            var entityCollection = _org.RetrieveMultiple(query);
+            value = entityCollection.Entities.Count > 0;
+
+            _entityMessages[key] = value;
+            return value;
         }
     }
 

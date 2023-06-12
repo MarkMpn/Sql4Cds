@@ -149,6 +149,31 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }.FoldQuery(context, hints);
             RightSource.Parent = this;
 
+            // If we couldn't fold the sorts, it's probably faster to use a hash join instead if we only want partial results
+            var leftSort = LeftSource as SortNode;
+            var rightSort = RightSource as SortNode;
+            if (Parent is TopNode && (leftSort != null || rightSort != null))
+            {
+                var hashJoin = new HashJoinNode
+                {
+                    LeftSource = leftSort?.Source ?? LeftSource,
+                    RightSource = rightSort?.Source ?? RightSource,
+                    LeftAttribute = LeftAttribute,
+                    RightAttribute = RightAttribute,
+                    JoinType = JoinType,
+                    AdditionalJoinCriteria = AdditionalJoinCriteria,
+                    SemiJoin = SemiJoin
+                };
+
+                foreach (var kvp in DefinedValues)
+                    hashJoin.DefinedValues.Add(kvp);
+
+                hashJoin.LeftSource.Parent = hashJoin;
+                hashJoin.RightSource.Parent = hashJoin;
+
+                return hashJoin;
+            }
+
             return this;
         }
 

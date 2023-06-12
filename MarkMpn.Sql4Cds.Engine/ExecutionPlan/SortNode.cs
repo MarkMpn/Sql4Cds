@@ -256,11 +256,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 fetchXml = source as FetchXmlScan;
             }
 
-            if (fetchXml != null && !fetchXml.RequiresCustomPaging(context.DataSources))
-            {
-                if (!context.DataSources.TryGetValue(fetchXml.DataSource, out var dataSource))
-                    throw new QueryExecutionException("Missing datasource " + fetchXml.DataSource);
+            var canFold = fetchXml != null;
+            DataSource dataSource = null;
 
+            if (canFold && fetchXml.RequiresCustomPaging(context.DataSources))
+                canFold = false;
+
+            if (canFold && !context.DataSources.TryGetValue(fetchXml.DataSource, out dataSource))
+                throw new QueryExecutionException("Missing datasource " + fetchXml.DataSource);
+
+            if (canFold && fetchXml.FetchXml.aggregate && (fetchXml.Entity.name == "audit" || dataSource.Metadata[fetchXml.Entity.name].DataProviderId == DataProviders.ElasticDataProvider))
+                canFold = false;
+
+            if (canFold)
+            {
                 fetchXml.RemoveSorts();
 
                 var fetchSchema = fetchXml.GetSchema(context);

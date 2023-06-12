@@ -154,17 +154,59 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 if (fetchXml != null && fetchXml.FetchXml.count == null)
                 {
-                    fetchXml.FetchXml.top = literal.Value;
-                    fetchXml.AllPages = false;
+                    // audit provider doesn't work well with TOP if it's got an inner join on callinguserid,
+                    // so reduce the page size instead. This seems to be because the TOP gets applied to the list
+                    // of audit records before the join is applied, so any records with no callinguserid are
+                    // lost.
+                    if (fetchXml.Entity.name == "audit" &&
+                        fetchXml.Entity.GetLinkEntities().SingleOrDefault()?.to == "callinguserid" &&
+                        fetchXml.Entity.GetLinkEntities().SingleOrDefault()?.linktype == "inner")
+                    {
+                        fetchXml.FetchXml.count = literal.Value;
+                    }
+                    else
+                    {
+                        fetchXml.FetchXml.top = literal.Value;
+                        fetchXml.AllPages = false;
 
-                    if (Source == fetchXml)
-                        return fetchXml;
+                        if (Source == fetchXml)
+                            return fetchXml;
 
-                    return Source.FoldQuery(context, hints);
+                        return Source.FoldQuery(context, hints);
+                    }
                 }
+
+                SetPageSize(context, hints, top);
             }
 
             return this;
+        }
+
+        private void SetPageSize(NodeCompilationContext context, IList<OptimizerHint> hints, int top)
+        {
+            // Set the page size equal to the top count for the child side of a join - no point retrieving 1000 child records
+            // if we're only going to return 10 of them. Don't apply it as a definite TOP though as the audit provider does
+            // not always return the requested number of records.
+            if (Source is HashJoinNode join)
+            {
+                var leftSchema = join.LeftSource.GetSchema(context);
+                var rightSchema = join.RightSource.GetSchema(context);
+
+                if ((join.JoinType == QualifiedJoinType.Inner || join.JoinType == QualifiedJoinType.RightOuter) &&
+                    join.LeftAttribute.ToSql() == leftSchema.PrimaryKey &&
+                    join.RightSource is FetchXmlScan rightFetch &&
+                    rightFetch.FetchXml.count == null)
+                {
+                    rightFetch.FetchXml.count = top.ToString();
+                }
+                else if ((join.JoinType == QualifiedJoinType.Inner || join.JoinType == QualifiedJoinType.LeftOuter) &&
+                    join.RightAttribute.ToSql() == rightSchema.PrimaryKey &&
+                    join.LeftSource is FetchXmlScan leftFetch &&
+                    leftFetch.FetchXml.count == null)
+                {
+                    leftFetch.FetchXml.count = top.ToString();
+                }
+            }
         }
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)

@@ -293,6 +293,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (dataSource.Metadata[leftFetch.Entity.name].DataProviderId != dataSource.Metadata[rightFetch.Entity.name].DataProviderId)
                 return false;
 
+            // Elastic tables don't support joins
+            if (dataSource.Metadata[leftFetch.Entity.name].DataProviderId == new Guid("1d9bde74-9ebd-4da9-8ff5-aa74945b9f74"))
+                return false;
+
             // Check we're not going to have too many link entities
             var leftLinkCount = leftFetch.Entity.GetLinkEntities().Count();
             var rightLinkCount = rightFetch.Entity.GetLinkEntities().Count() + 1;
@@ -312,10 +316,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 Swap(ref leftAttribute, ref rightAttribute);
                 Swap(ref leftAttributeParts, ref rightAttributeParts);
                 Swap(ref leftSchema, ref rightSchema);
+                Swap(ref leftLinkCount, ref rightLinkCount);
+                leftLinkCount--;
+                rightLinkCount++;
             }
 
             // Must be joining to the root entity of the right source, i.e. not a child link-entity
             if (!rightAttributeParts[0].Equals(rightFetch.Alias, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            // Can't join to audit except for single join to systemuser from userid or callinguserid
+            if (IsInvalidAuditJoin(leftFetch, leftAttributeParts, rightFetch, rightAttributeParts))
+                return false;
+
+            if (IsInvalidAuditJoin(rightFetch, rightAttributeParts, leftFetch, leftAttributeParts))
                 return false;
 
             // If there are any additional join criteria, either they must be able to be translated to FetchXml criteria
@@ -370,6 +384,58 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             folded = leftFetch;
             return true;
+        }
+
+        private bool IsInvalidAuditJoin(FetchXmlScan leftFetch, string[] leftAttributeParts, FetchXmlScan rightFetch, string[] rightAttributeParts)
+        {
+            var isJoinFromAudit = false;
+
+            if (leftAttributeParts[0].Equals(leftFetch.Alias, StringComparison.OrdinalIgnoreCase))
+            {
+                if (leftFetch.Entity.name == "audit")
+                {
+                    if (leftFetch.Entity.GetLinkEntities().Any())
+                        return true;
+
+                    isJoinFromAudit = true;
+                }
+            }
+            else
+            {
+                var leftLinkEntity = leftFetch.Entity.GetLinkEntities().FirstOrDefault(l => l.alias.Equals(leftAttributeParts[0], StringComparison.OrdinalIgnoreCase));
+
+                if (leftLinkEntity?.name == "audit")
+                {
+                    if ((leftLinkEntity.Items ?? Array.Empty<object>()).OfType<FetchLinkEntityType>().Any())
+                        return true;
+
+                    isJoinFromAudit = true;
+                }
+            }
+
+            if (isJoinFromAudit)
+            {
+                if (!leftAttributeParts[1].Equals("userid", StringComparison.OrdinalIgnoreCase) && !leftAttributeParts[1].Equals("callinguserid", StringComparison.OrdinalIgnoreCase))
+                    return true;
+
+                if (rightAttributeParts[0].Equals(rightFetch.Alias, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (rightFetch.Entity.name != "systemuser")
+                        return true;
+                }
+                else
+                {
+                    var rightLinkEntity = rightFetch.Entity.GetLinkEntities().FirstOrDefault(l => l.alias.Equals(rightAttributeParts[0], StringComparison.OrdinalIgnoreCase));
+
+                    if (rightLinkEntity?.name != "systemuser")
+                        return true;
+                }
+
+                if (!rightAttributeParts[1].Equals("systemuserid", StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+
+            return false;
         }
 
         private Version GetVersion(IOrganizationService org)

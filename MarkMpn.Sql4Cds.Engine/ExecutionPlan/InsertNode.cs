@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.ServiceModel;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Crm.Sdk.Messages;
@@ -9,6 +10,7 @@ using Microsoft.SqlServer.TransactSql.ScriptDom;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Metadata;
+using Newtonsoft.Json;
 
 namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 {
@@ -47,6 +49,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         [Category("Insert")]
         public override bool BypassCustomPluginExecution { get; set; }
+
+        [Category("Insert")]
+        public override bool ContinueOnError { get; set; }
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
         {
@@ -97,7 +102,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 using (_timer.Run())
                 {
                     return ExecuteDmlOperation(
-                        dataSource.Connection,
+                        dataSource,
                         context.Options,
                         entities,
                         meta,
@@ -213,6 +218,82 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
+        protected override ExecuteMultipleResponse ExecuteMultiple(DataSource dataSource, IOrganizationService org, EntityMetadata meta, ExecuteMultipleRequest req)
+        {
+            if (meta.DataProviderId == DataProviders.ElasticDataProvider || dataSource.MessageCache.IsMessageAvailable(meta.LogicalName, "CreateMultiple"))
+            {
+                // Elastic tables can use CreateMultiple for better performance than ExecuteMultiple
+                var entities = new EntityCollection { EntityName = meta.LogicalName };
+
+                foreach (CreateRequest create in req.Requests)
+                    entities.Entities.Add(create.Target);
+
+                var createMultiple = new OrganizationRequest("CreateMultiple")
+                {
+                    ["Targets"] = entities
+                };
+
+                try
+                {
+                    var resp = dataSource.Execute(org, createMultiple);
+                    var ids = (Guid[])resp["Ids"];
+
+                    var multipleResp = new ExecuteMultipleResponse
+                    {
+                        ["Responses"] = new ExecuteMultipleResponseItemCollection()
+                    };
+
+                    for (var i = 0; i < ids.Length; i++)
+                    {
+                        multipleResp.Responses.Add(new ExecuteMultipleResponseItem
+                        {
+                            RequestIndex = i,
+                            Response = new CreateResponse { ["id"] = ids[i] }
+                        });
+                    }
+
+                    return multipleResp;
+                }
+                catch (FaultException<OrganizationServiceFault> ex)
+                {
+                    // https://learn.microsoft.com/en-us/power-apps/developer/data-platform/org-service/use-createmultiple-updatemultiple?tabs=sdk#no-continue-on-error
+
+                    // If this is an elastic table we can extract the individual errors from the response
+                    if (ex.Detail.ErrorDetails.TryGetValue("Plugin.BulkApiErrorDetails", out var errorDetails))
+                    {
+                        var details = JsonConvert.DeserializeObject<BulkApiErrorDetail[]>((string)errorDetails);
+
+                        var multipleResp = new ExecuteMultipleResponse
+                        {
+                            ["Responses"] = new ExecuteMultipleResponseItemCollection()
+                        };
+
+                        foreach (var detail in details)
+                        {
+                            multipleResp.Responses.Add(new ExecuteMultipleResponseItem
+                            {
+                                RequestIndex = detail.RequestIndex,
+                                Response = detail.StatusCode >= 200 && detail.StatusCode < 300 ? new CreateResponse { ["id"] = detail.Id } : null,
+                                Fault = detail.StatusCode >= 200 && detail.StatusCode < 300 ? null : new OrganizationServiceFault
+                                {
+                                    ErrorCode = detail.StatusCode,
+                                    Message = ex.Message
+                                }
+                            });
+                        }
+
+                        return multipleResp;
+                    }
+                    else
+                    {
+                        // We can't get the individual errors, so fall back to ExecuteMultiple
+                    }
+                }
+            }
+
+            return base.ExecuteMultiple(dataSource, org, meta, req);
+        }
+
         public override string ToString()
         {
             return "INSERT";
@@ -222,13 +303,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var clone = new InsertNode
             {
+                BatchSize = BatchSize,
                 BypassCustomPluginExecution = BypassCustomPluginExecution,
+                ContinueOnError = ContinueOnError,
                 DataSource = DataSource,
                 Index = Index,
                 Length = Length,
                 LogicalName = LogicalName,
                 MaxDOP = MaxDOP,
-                BatchSize = BatchSize,
                 Source = (IExecutionPlanNodeInternal)Source.Clone(),
                 Sql = Sql
             };

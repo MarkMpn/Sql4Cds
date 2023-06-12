@@ -37,6 +37,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public override bool BypassCustomPluginExecution { get; set; }
 
+        [Browsable(false)]
+        public override bool ContinueOnError { get; set; }
+
         public override string Execute(NodeExecutionContext context, out int recordsAffected)
         {
             _executionCount++;
@@ -140,12 +143,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         {
             var clone = new AssignVariablesNode
             {
+                BatchSize = BatchSize,
                 BypassCustomPluginExecution = BypassCustomPluginExecution,
+                ContinueOnError = ContinueOnError,
                 DataSource = DataSource,
                 Index = Index,
                 Length = Length,
                 MaxDOP = MaxDOP,
-                BatchSize = BatchSize,
                 Source = (IExecutionPlanNodeInternal)Source.Clone(),
                 Sql = Sql
             };
