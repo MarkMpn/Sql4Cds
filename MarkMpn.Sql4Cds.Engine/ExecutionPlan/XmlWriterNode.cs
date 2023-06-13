@@ -435,6 +435,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 XmlType = XmlType
             };
 
+            clone.Source.Parent = clone;
+
             foreach (var col in ColumnSet)
                 clone.ColumnSet.Add(col);
 
