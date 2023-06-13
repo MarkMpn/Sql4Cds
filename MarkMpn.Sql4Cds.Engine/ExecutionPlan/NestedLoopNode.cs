@@ -282,7 +282,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         protected override IEnumerable<string> GetVariablesInternal()
         {
-            return JoinCondition.GetVariables();
+            return JoinCondition?.GetVariables() ?? Array.Empty<string>();
         }
 
         public override object Clone()
