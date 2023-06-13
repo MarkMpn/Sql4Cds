@@ -11,10 +11,8 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
     {
         public List<ScalarSubquery> Subqueries { get; } = new List<ScalarSubquery>();
 
-        public override void Visit(ScalarSubquery node)
+        public override void ExplicitVisit(ScalarSubquery node)
         {
-            base.Visit(node);
-
             Subqueries.Add(node);
         }
     }
