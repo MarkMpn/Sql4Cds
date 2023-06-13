@@ -3223,7 +3223,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             // If the last correlated step has a source which we couldn't step into because it's not an ISingleSourceExecutionPlanNode
             // but it uses an outer reference we can't spool it
-            if (lastCorrelatedStep.Source.GetVariables(false).Intersect(outerReferences).Any())
+            if (lastCorrelatedStep.Source.GetVariables(true).Intersect(outerReferences).Any())
                 return;
 
             // Check the estimated counts for the outer loop and the source at the point we'd insert the spool
