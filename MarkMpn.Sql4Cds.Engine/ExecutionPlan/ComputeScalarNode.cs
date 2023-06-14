@@ -138,6 +138,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 foreach (var col in folded)
                     Columns.Remove(col);
             }
+
+            // If we don't have any calculations, this node is not needed
+            if (Columns.Count == 0)
+                return Source;
             
             Source.Parent = this;
             return this;

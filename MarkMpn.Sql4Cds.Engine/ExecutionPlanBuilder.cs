@@ -2702,6 +2702,8 @@ namespace MarkMpn.Sql4Cds.Engine
 
             if (computeScalar.Columns.Any())
                 sort.Source = computeScalar;
+            else
+                sort.Source = computeScalar.Source;
 
             return sort;
         }
@@ -2869,12 +2871,12 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
             }
 
-            if (computeScalar.Columns.Count > 0)
-            {
+            var newSource = computeScalar.Columns.Any() ? computeScalar : computeScalar.Source;
+
                 if (distinct != null)
-                    distinct.Source = computeScalar;
+                distinct.Source = newSource;
                 else
-                    select.Source = computeScalar;
+                select.Source = newSource;
 
                 var calculationRewrites = computeScalar.Columns.ToDictionary(kvp => kvp.Value, kvp => kvp.Key);
                 query.Accept(new RewriteVisitor(calculationRewrites));
@@ -2909,6 +2911,10 @@ namespace MarkMpn.Sql4Cds.Engine
             // Check the type of this expression now so any errors can be reported
             var computeScalarSchema = computeScalar.Source.GetSchema(context);
             expression.GetType(GetExpressionContext(computeScalarSchema, context, nonAggregateSchema), out _);
+
+            // Don't need to compute the expression if it's just a column reference
+            if (expression is ColumnReferenceExpression col)
+                return col.GetColumnName();
 
             var alias = context.GetExpressionName();
             computeScalar.Columns[alias] = expression.Clone();

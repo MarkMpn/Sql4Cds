@@ -1087,10 +1087,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(1, plans.Length);
 
             var select = AssertNode<SelectNode>(plans[0]);
-            var computeScalar = AssertNode<ComputeScalarNode>(select.Source);
-            Assert.AreEqual(1, computeScalar.Columns.Count);
-            Assert.AreEqual("Expr2", computeScalar.Columns[select.ColumnSet[1].SourceColumn].ToSql());
-            var nestedLoop = AssertNode<NestedLoopNode>(computeScalar.Source);
+            var nestedLoop = AssertNode<NestedLoopNode>(select.Source);
             Assert.AreEqual("@Expr1", nestedLoop.OuterReferences["account.accountid"]);
             var fetch = AssertNode<FetchXmlScan>(nestedLoop.LeftSource);
             AssertFetchXml(fetch, @"
@@ -4520,8 +4517,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
             Assert.AreEqual(1, plans.Length);
 
             var select = AssertNode<SelectNode>(plans[0]);
-            var compute = AssertNode<ComputeScalarNode>(select.Source);
-            var loop = AssertNode<NestedLoopNode>(compute.Source);
+            var loop = AssertNode<NestedLoopNode>(select.Source);
             var accountFetch = AssertNode<FetchXmlScan>(loop.LeftSource);
             var spool = AssertNode<TableSpoolNode>(loop.RightSource);
             var contactFetch = AssertNode<FetchXmlScan>(spool.Source);
@@ -4539,8 +4535,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
             Assert.AreEqual(1, plans.Length);
 
             var select = AssertNode<SelectNode>(plans[0]);
-            var compute = AssertNode<ComputeScalarNode>(select.Source);
-            var loop = AssertNode<NestedLoopNode>(compute.Source);
+            var loop = AssertNode<NestedLoopNode>(select.Source);
             var accountFetch = AssertNode<FetchXmlScan>(loop.LeftSource);
             var contactFetch = AssertNode<FetchXmlScan>(loop.RightSource);
         }
@@ -5358,6 +5353,31 @@ UPDATE account SET employees = @employees WHERE name = @name";
                         </link-entity>
                     </entity>
                 </fetch>");
+        }
+        }
+
+        [TestMethod]
+        public void NestedSubqueries()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = @"
+                SELECT name,
+                    (select STUFF((SELECT ', ' + fullname
+                    FROM   contact
+                    where parentcustomerid = account.accountid
+                    FOR    XML PATH ('')), 1, 2, ''))
+                FROM account";
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var nestedLoops = AssertNode<NestedLoopNode>(select.Source);
+            var accountFetch = AssertNode<FetchXmlScan>(nestedLoops.LeftSource);
+            var stuffComputeScalar = AssertNode<ComputeScalarNode>(nestedLoops.RightSource);
+            var xml = AssertNode<XmlWriterNode>(stuffComputeScalar.Source);
+            var commaComputeScalar = AssertNode<ComputeScalarNode>(xml.Source);
+            var contactSpool = AssertNode<IndexSpoolNode>(commaComputeScalar.Source);
+            var contactFetch = AssertNode<FetchXmlScan>(contactSpool.Source);
         }
     }
 }
