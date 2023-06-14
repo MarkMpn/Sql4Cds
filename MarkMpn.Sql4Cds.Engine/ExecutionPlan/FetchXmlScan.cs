@@ -1095,7 +1095,69 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
+            if (FoldFilterToIndexSpool(context, out var indexSpool))
+            {
+                Parent = indexSpool;
+                return indexSpool;
+            }
+
             return this;
+        }
+
+        private bool FoldFilterToIndexSpool(NodeCompilationContext context, out IndexSpoolNode indexSpool)
+        {
+            if (Entity.Items == null)
+            {
+                indexSpool = null;
+                return false;
+            }
+
+            // If we have a top-level filter on a variable and we're in the right-hand side of a nested loop join with a
+            // non-trivial expected row count on the left hand side, remove the filter and add an index spool to replace it.
+            var variableCondition = Entity.Items
+                .OfType<filter>()
+                .Where(f => f.type == filterType.and)
+                .SelectMany(f => f.Items.OfType<condition>())
+                .Where(c => c.IsVariable && c.@operator == @operator.eq && c.value != null)
+                .FirstOrDefault();
+
+            if (variableCondition == null)
+            {
+                indexSpool = null;
+                return false;
+            }
+
+            var parent = Parent;
+
+            while (parent != null)
+            {
+                var loop = parent as NestedLoopNode;
+
+                if (loop != null)
+                {
+                    var rowCount = loop.LeftSource.EstimateRowsOut(context);
+
+                    if (rowCount.Value >= 100)
+                    {
+                        indexSpool = new IndexSpoolNode
+                        {
+                            Source = this,
+                            KeyColumn = (variableCondition.entityname ?? Alias) + "." + variableCondition.attribute,
+                            SeekValue = variableCondition.value
+                        };
+
+                        foreach (var filter in Entity.Items.OfType<filter>())
+                            filter.Items = filter.Items.Except(new[] { variableCondition }).ToArray();
+
+                        return true;
+                    }
+                }
+
+                parent = parent.Parent;
+            }
+
+            indexSpool = null;
+            return false;
         }
 
         private void ConvertQueryHints(IList<OptimizerHint> hints)
