@@ -60,13 +60,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     return new NodeSchema(
                         schema: new ColumnList
                         {
-                            [PrefixWithAlias("name")] = DataTypeHelpers.NVarChar(128, dataSource.DefaultCollation, CollationLabel.CoercibleDefault),
-                            [PrefixWithAlias("description")] = DataTypeHelpers.NVarChar(1000, dataSource.DefaultCollation, CollationLabel.CoercibleDefault),
+                            [PrefixWithAlias("name")] = new ColumnDefinition(DataTypeHelpers.NVarChar(128, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), false, false),
+                            [PrefixWithAlias("description")] = new ColumnDefinition(DataTypeHelpers.NVarChar(1000, dataSource.DefaultCollation, CollationLabel.CoercibleDefault), false, false),
                         },
                         aliases: null,
                         primaryKey: null,
-                        sortOrder: null,
-                        notNullColumns: new[] { "name", "description" });
+                        sortOrder: null);
             }
 
             throw new NotSupportedException("Unsupported function " + SystemFunction);

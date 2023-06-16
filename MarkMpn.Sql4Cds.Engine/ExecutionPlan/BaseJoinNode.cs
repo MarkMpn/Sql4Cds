@@ -75,7 +75,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             else
             {
                 foreach (var attr in leftSchema.Schema)
-                    merged[attr.Key] = SqlTypeConverter.GetNullValue(attr.Value.ToNetType(out _));
+                    merged[attr.Key] = SqlTypeConverter.GetNullValue(attr.Value.Type.ToNetType(out _));
             }
 
             if (rightEntity != null)
@@ -86,13 +86,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             else
             {
                 foreach (var attr in rightSchema.Schema)
-                    merged[attr.Key] = SqlTypeConverter.GetNullValue(attr.Value.ToNetType(out _));
+                    merged[attr.Key] = SqlTypeConverter.GetNullValue(attr.Value.Type.ToNetType(out _));
             }
 
             foreach (var definedValue in DefinedValues)
             {
                 if (rightEntity == null)
-                    merged[definedValue.Key] = SqlTypeConverter.GetNullValue(rightSchema.Schema[definedValue.Value].ToNetType(out _));
+                    merged[definedValue.Key] = SqlTypeConverter.GetNullValue(rightSchema.Schema[definedValue.Value].Type.ToNetType(out _));
                 else
                     merged[definedValue.Key] = rightEntity[definedValue.Value];
             }
@@ -122,7 +122,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var schema = new ColumnList();
             var aliases = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
             var primaryKey = GetPrimaryKey(outerSchema, innerSchema);
-            var notNullColumns = new List<string>();
 
             foreach (var subSchema in new[] { outerSchema, innerSchema })
             {
@@ -131,7 +130,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     continue;
 
                 foreach (var column in subSchema.Schema)
-                    schema[column.Key] = column.Value;
+                {
+                    var nullable = true;
+
+                    if (!column.Value.IsNullable &&
+                        (
+                            ((JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.LeftOuter) && subSchema == outerSchema) ||
+                            ((JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.RightOuter) && subSchema == innerSchema)
+                        ))
+                    {
+                        nullable = false;
+                    }
+
+                    schema[column.Key] = new ColumnDefinition(column.Value.Type, nullable, column.Value.IsCalculated);
+                }
 
                 foreach (var alias in subSchema.Aliases)
                 {
@@ -142,13 +154,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
 
                     ((List<string>)aliasDetails).AddRange(alias.Value);
-                }
-
-                if (((JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.LeftOuter) && subSchema == outerSchema) ||
-                    ((JoinType == QualifiedJoinType.Inner || JoinType == QualifiedJoinType.RightOuter) && subSchema == innerSchema))
-                {
-                    foreach (var col in subSchema.NotNullColumns)
-                        notNullColumns.Add(col);
                 }
             }
 
@@ -161,7 +166,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 primaryKey: primaryKey,
                 schema: schema,
                 aliases: aliases,
-                notNullColumns: notNullColumns,
                 sortOrder: GetSortOrder(outerSchema, innerSchema));
             _lastSchemaIncludedSemiJoin = includeSemiJoin;
             return _lastSchema;

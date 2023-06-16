@@ -27,7 +27,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 primaryKey: schema.PrimaryKey,
                 schema: schema.Schema,
                 aliases: schema.Aliases,
-                notNullColumns: schema.NotNullColumns,
                 sortOrder: groupByCols);
         }
 

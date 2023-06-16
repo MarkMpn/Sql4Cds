@@ -181,20 +181,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 }
             }
 
-            var notNullColumns = sourceSchema.NotNullColumns
-                .Select(col =>
-                {
-                    sourceSchema.ContainsColumn(col, out col);
-                    return col;
-                })
-                .Where(col => col != null)
-                .Select(col =>
-                {
-                    mappings.TryGetValue(col, out col);
-                    return col;
-                })
-                .Where(col => col != null)
-                .ToArray();
             var sortOrder = sourceSchema.SortOrder
                 .Select(col =>
                 {
@@ -214,7 +200,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 primaryKey: primaryKey,
                 schema: schema,
                 aliases: aliases,
-                notNullColumns: notNullColumns,
                 sortOrder: sortOrder);
         }
 
@@ -224,7 +209,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 return;
 
             var mapped = $"{Alias}.{outputColumn}";
-            schema[mapped] = sourceSchema.Schema[normalized];
+            schema[mapped] = new ColumnDefinition(sourceSchema.Schema[normalized].Type, sourceSchema.Schema[normalized].IsNullable, false);
             mappings[normalized] = mapped;
 
             if (normalized == sourceSchema.PrimaryKey)

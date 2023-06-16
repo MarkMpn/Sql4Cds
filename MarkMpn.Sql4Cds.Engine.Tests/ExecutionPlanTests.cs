@@ -2001,8 +2001,8 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             var constant = AssertNode<ConstantScanNode>(filter.Source);
 
             var schema = constant.GetSchema(new NodeCompilationContext(_dataSources, this, null));
-            Assert.AreEqual(typeof(SqlInt32), schema.Schema["a.ID"].ToNetType(out _));
-            Assert.AreEqual(typeof(SqlString), schema.Schema["a.name"].ToNetType(out _));
+            Assert.AreEqual(typeof(SqlInt32), schema.Schema["a.ID"].Type.ToNetType(out _));
+            Assert.AreEqual(typeof(SqlString), schema.Schema["a.name"].Type.ToNetType(out _));
         }
 
         [TestMethod]
@@ -5354,7 +5354,6 @@ UPDATE account SET employees = @employees WHERE name = @name";
                     </entity>
                 </fetch>");
         }
-        }
 
         [TestMethod]
         public void NestedSubqueries()
@@ -5378,6 +5377,18 @@ UPDATE account SET employees = @employees WHERE name = @name";
             var commaComputeScalar = AssertNode<ComputeScalarNode>(xml.Source);
             var contactSpool = AssertNode<IndexSpoolNode>(commaComputeScalar.Source);
             var contactFetch = AssertNode<FetchXmlScan>(contactSpool.Source);
+        }
+
+        [TestMethod]
+        public void CalculatedColumnUsesEmptyName()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = @"SELECT (select STUFF('abcdef', 2, 3, 'ijklmn'))";
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            Assert.IsNull(select.ColumnSet[0].OutputColumn);
         }
     }
 }

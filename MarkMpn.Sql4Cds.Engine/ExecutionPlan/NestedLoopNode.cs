@@ -42,7 +42,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     innerParameterTypes = new Dictionary<string, DataTypeReference>(context.ParameterTypes, StringComparer.OrdinalIgnoreCase);
 
                 foreach (var kvp in OuterReferences)
-                    innerParameterTypes[kvp.Value] = leftSchema.Schema[kvp.Key];
+                    innerParameterTypes[kvp.Value] = leftSchema.Schema[kvp.Key].Type;
             }
 
             var rightCompilationContext = new NodeCompilationContext(context.DataSources, context.Options, innerParameterTypes);
@@ -110,7 +110,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     innerParameterTypes = new Dictionary<string, DataTypeReference>(parameterTypes, StringComparer.OrdinalIgnoreCase);
 
                 foreach (var kvp in OuterReferences)
-                    innerParameterTypes[kvp.Value] = leftSchema.Schema[kvp.Key];
+                    innerParameterTypes[kvp.Value] = leftSchema.Schema[kvp.Key].Type;
             }
 
             return innerParameterTypes;

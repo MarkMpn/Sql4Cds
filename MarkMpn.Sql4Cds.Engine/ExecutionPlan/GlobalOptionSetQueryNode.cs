@@ -131,7 +131,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             foreach (var prop in props)
             {
-                schema[$"{Alias}.{prop.Name}"] = prop.SqlType;
+                schema[$"{Alias}.{prop.Name}"] = new ColumnDefinition(prop.SqlType, true, false);
 
                 if (!aliases.TryGetValue(prop.Name, out var a))
                 {
@@ -146,7 +146,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 primaryKey: $"{Alias}.{nameof(OptionSetMetadataBase.MetadataId)}",
                 schema: schema,
                 aliases: aliases,
-                notNullColumns: Array.Empty<string>(),
                 sortOrder: Array.Empty<string>()
                 );
         }

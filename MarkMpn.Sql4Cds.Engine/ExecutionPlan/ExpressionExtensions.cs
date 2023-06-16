@@ -185,7 +185,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 };
             }
 
-            sqlType = context.Schema.Schema[normalizedName];
+            sqlType = context.Schema.Schema[normalizedName].Type;
             var entity = Expression.Property(contextParam, nameof(ExpressionExecutionContext.Entity));
             var expr = Expression.Property(entity, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(normalizedName));
             return Expression.Convert(expr, sqlType.ToNetType(out _));

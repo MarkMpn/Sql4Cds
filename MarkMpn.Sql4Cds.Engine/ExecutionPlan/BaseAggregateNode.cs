@@ -181,7 +181,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var schema = new ColumnList();
             var aliases = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
             var primaryKey = (string)null;
-            var notNullColumns = new List<string>();
 
             foreach (var group in GroupBy)
             {
@@ -207,6 +206,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             foreach (var aggregate in Aggregates)
             {
                 DataTypeReference aggregateType;
+                bool nullable;
 
                 switch (aggregate.Value.AggregateType)
                 {
@@ -235,23 +235,27 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         break;
                 }
 
-                schema[aggregate.Key] = aggregateType;
-
                 switch (aggregate.Value.AggregateType)
                 {
                     case AggregateType.Count:
                     case AggregateType.CountStar:
                     case AggregateType.Sum:
-                        notNullColumns.Add(aggregate.Key);
+                        nullable = false;
+                        break;
+
+                    default:
+                        nullable = true;
                         break;
                 }
+
+
+                schema[aggregate.Key] = new ColumnDefinition(aggregateType, nullable, true);
             }
 
             return new NodeSchema(
                 primaryKey: primaryKey,
                 schema: schema,
                 aliases: aliases,
-                notNullColumns: notNullColumns,
                 sortOrder: null);
         }
 

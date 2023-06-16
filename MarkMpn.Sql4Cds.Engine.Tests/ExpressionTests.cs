@@ -36,10 +36,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                 },
                 ElseExpression = Int(3)
             };
-            var schema = new NodeSchema(new Dictionary<string, DataTypeReference>
+            var schema = new NodeSchema(new Dictionary<string, IColumnDefinition>
             {
-                ["name"] = DataTypeHelpers.NVarChar(100, Collation.USEnglish, CollationLabel.CoercibleDefault)
-            }, new Dictionary<string, IReadOnlyList<string>>(), null, Array.Empty<string>(), Array.Empty<string>());
+                ["name"] = new ExecutionPlan.ColumnDefinition(DataTypeHelpers.NVarChar(100, Collation.USEnglish, CollationLabel.CoercibleDefault), true, false)
+            }, new Dictionary<string, IReadOnlyList<string>>(), null, Array.Empty<string>());
             var parameterTypes = new Dictionary<string, DataTypeReference>();
             var options = new StubOptions();
             var compilationContext = new ExpressionCompilationContext(_localDataSource, options, parameterTypes, schema, null);
@@ -76,10 +76,10 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     Str("yyyy-MM-dd")
                 }
             };
-            var schema = new NodeSchema(new Dictionary<string, DataTypeReference>
+            var schema = new NodeSchema(new Dictionary<string, IColumnDefinition>
             {
-                ["createdon"] = DataTypeHelpers.DateTime
-            }, new Dictionary<string, IReadOnlyList<string>>(), null, Array.Empty<string>(), Array.Empty<string>());
+                ["createdon"] = new ExecutionPlan.ColumnDefinition(DataTypeHelpers.DateTime, true, false)
+            }, new Dictionary<string, IReadOnlyList<string>>(), null, Array.Empty<string>());
             var parameterTypes = new Dictionary<string, DataTypeReference>();
             var options = new StubOptions();
             var compilationContext = new ExpressionCompilationContext(_localDataSource, options, parameterTypes, schema, null);

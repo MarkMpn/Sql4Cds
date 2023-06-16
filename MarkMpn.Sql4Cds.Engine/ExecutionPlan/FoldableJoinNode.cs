@@ -118,7 +118,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (!schema.ContainsColumn(attribute.GetColumnName(), out var colName))
                 return source;
 
-            if (schema.NotNullColumns.Contains(colName))
+            if (!schema.Schema[colName].IsNullable)
                 return source;
 
             var filter = new FilterNode

@@ -62,7 +62,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             Source = Source.FoldQuery(context, hints);
 
             // Index and seek values must be the same type
-            var indexType = Source.GetSchema(context).Schema[KeyColumn];
+            var indexType = Source.GetSchema(context).Schema[KeyColumn].Type;
             var seekType = context.ParameterTypes[SeekValue];
 
             if (!SqlTypeConverter.CanMakeConsistentTypes(indexType, seekType, context.PrimaryDataSource, out var consistentType))

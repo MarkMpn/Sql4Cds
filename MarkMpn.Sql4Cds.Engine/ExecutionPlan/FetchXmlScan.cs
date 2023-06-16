@@ -520,9 +520,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 object sqlValue;
 
                 if (entity.Attributes.TryGetValue(col.Key, out var value) && value != null)
-                    sqlValue = SqlTypeConverter.NetToSqlType(dataSource, value, col.Value);
+                    sqlValue = SqlTypeConverter.NetToSqlType(dataSource, value, col.Value.Type);
                 else
-                    sqlValue = SqlTypeConverter.GetNullValue(col.Value.ToNetType(out _));
+                    sqlValue = SqlTypeConverter.GetNullValue(col.Value.Type.ToNetType(out _));
 
                 if (_primaryKeyColumns.TryGetValue(col.Key, out var logicalName) && sqlValue is SqlGuid guid)
                     sqlValue = new SqlEntityReference(DataSource, logicalName, guid);
@@ -703,16 +703,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var schema = new ColumnList();
             var aliases = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
             var primaryKey = FetchXml.aggregate ? null : $"{Alias}.{meta.PrimaryIdAttribute}";
-            var notNullColumns = new HashSet<string>();
             var sortOrder = new List<string>();
 
-            AddSchemaAttributes(context, dataSource, schema, aliases, ref primaryKey, notNullColumns, sortOrder, entity.name, Alias, entity.Items, true, false);
+            AddSchemaAttributes(context, dataSource, schema, aliases, ref primaryKey, sortOrder, entity.name, Alias, entity.Items, true, false);
 
             _lastSchema = new NodeSchema(
                 primaryKey: primaryKey,
                 schema: schema,
                 aliases: aliases,
-                notNullColumns: notNullColumns.ToList(),
                 sortOrder: sortOrder
                 ); ;
             _lastSchemaFetchXml = fetchXmlString;
@@ -817,7 +815,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return Regex.IsMatch(alias, "^[A-Za-z_][A-Za-z0-9_]*$");
         }
 
-        private void AddSchemaAttributes(NodeCompilationContext context, DataSource dataSource, ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, ref string primaryKey, HashSet<string> notNullColumns, List<string> sortOrder, string entityName, string alias, object[] items, bool innerJoin, bool requireTablePrefix)
+        private void AddSchemaAttributes(NodeCompilationContext context, DataSource dataSource, ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, ref string primaryKey, List<string> sortOrder, string entityName, string alias, object[] items, bool innerJoin, bool requireTablePrefix)
         {
             if (items == null && !ReturnFullSchema)
                 return;
@@ -837,7 +835,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     var fullName = $"{alias}.{attrMetadata.LogicalName}";
                     var simpleName = requireTablePrefix ? null : attrMetadata.LogicalName;
                     var attrType = attrMetadata.GetAttributeSqlType(dataSource, false);
-                    AddSchemaAttribute(dataSource, schema, aliases, notNullColumns, fullName, simpleName, attrType, attrMetadata, innerJoin);
+                    AddSchemaAttribute(dataSource, schema, aliases, fullName, simpleName, attrType, attrMetadata, innerJoin);
                 }
             }
 
@@ -895,7 +893,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     if (requireTablePrefix)
                         attrAlias = null;
 
-                    AddSchemaAttribute(dataSource, schema, aliases, notNullColumns, fullName, attrAlias, attrType, attrMetadata, innerJoin);
+                    AddSchemaAttribute(dataSource, schema, aliases, fullName, attrAlias, attrType, attrMetadata, innerJoin);
                 }
 
                 if (items.OfType<allattributes>().Any())
@@ -912,7 +910,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         var attrName = requireTablePrefix ? null : attrMetadata.LogicalName;
                         var fullName = $"{alias}.{attrName}";
 
-                        AddSchemaAttribute(dataSource, schema, aliases, notNullColumns, fullName, attrName, attrType, attrMetadata, innerJoin);
+                        AddSchemaAttribute(dataSource, schema, aliases, fullName, attrName, attrType, attrMetadata, innerJoin);
                     }
                 }
 
@@ -965,13 +963,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         }
                     }
 
-                    AddSchemaAttributes(context, dataSource, schema, aliases, ref primaryKey, notNullColumns, sortOrder, linkEntity.name, linkEntity.alias, linkEntity.Items, innerJoin && linkEntity.linktype == "inner", requireTablePrefix || linkEntity.RequireTablePrefix);
+                    AddSchemaAttributes(context, dataSource, schema, aliases, ref primaryKey, sortOrder, linkEntity.name, linkEntity.alias, linkEntity.Items, innerJoin && linkEntity.linktype == "inner", requireTablePrefix || linkEntity.RequireTablePrefix);
                 }
 
                 if (innerJoin)
                 {
                     foreach (var filter in items.OfType<filter>())
-                        AddNotNullFilters(schema, aliases, notNullColumns, alias, filter);
+                        AddNotNullFilters(schema, aliases, alias, filter);
                 }
             }
         }
@@ -991,7 +989,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
         }
 
-        private void AddNotNullFilters(ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, HashSet<string> notNullColumns, string alias, filter filter)
+        private void AddNotNullFilters(ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, string alias, filter filter)
         {
             if (filter.Items == null)
                 return;
@@ -1006,20 +1004,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                 var fullname = (cond.entityname ?? alias) + "." + (cond.alias ?? cond.attribute);
 
-                if (new NodeSchema(primaryKey: null, schema: schema, aliases: aliases, notNullColumns: null, sortOrder: null).ContainsColumn(fullname, out fullname))
-                    notNullColumns.Add(fullname);
+                if (new NodeSchema(primaryKey: null, schema: schema, aliases: aliases, sortOrder: null).ContainsColumn(fullname, out fullname))
+                    schema[fullname] = schema[fullname].NotNull();
             }
 
             foreach (var subFilter in filter.Items.OfType<filter>())
-                AddNotNullFilters(schema, aliases, notNullColumns, alias, subFilter);
+                AddNotNullFilters(schema, aliases, alias, subFilter);
         }
 
-        private void AddSchemaAttribute(DataSource dataSource, ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, HashSet<string> notNullColumns, string fullName, string simpleName, DataTypeReference type, AttributeMetadata attrMetadata, bool innerJoin)
+        private void AddSchemaAttribute(DataSource dataSource, ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, string fullName, string simpleName, DataTypeReference type, AttributeMetadata attrMetadata, bool innerJoin)
         {
             var notNull = innerJoin && (attrMetadata.RequiredLevel?.Value == AttributeRequiredLevel.SystemRequired || attrMetadata.LogicalName == "createdon" || attrMetadata.LogicalName == "createdby" || attrMetadata.AttributeOf == "createdby");
 
             // Add the logical attribute
-            AddSchemaAttribute(schema, aliases, notNullColumns, fullName, simpleName, type, notNull);
+            AddSchemaAttribute(schema, aliases, fullName, simpleName, type, notNull);
 
             if (attrMetadata.IsPrimaryId == true)
                 _primaryKeyColumns[fullName] = attrMetadata.EntityLogicalName;
@@ -1029,25 +1027,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             // Add standard virtual attributes
             if (attrMetadata is MultiSelectPicklistAttributeMetadata)
-                AddSchemaAttribute(schema, aliases, notNullColumns, fullName + "name", attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.Implicit), notNull);
+                AddSchemaAttribute(schema, aliases, fullName + "name", attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(Int32.MaxValue, dataSource.DefaultCollation, CollationLabel.Implicit), notNull);
             else if (attrMetadata is EnumAttributeMetadata || attrMetadata is BooleanAttributeMetadata)
-                AddSchemaAttribute(schema, aliases, notNullColumns, fullName + "name", attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(LabelMaxLength, dataSource.DefaultCollation, CollationLabel.Implicit), notNull);
+                AddSchemaAttribute(schema, aliases, fullName + "name", attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(LabelMaxLength, dataSource.DefaultCollation, CollationLabel.Implicit), notNull);
 
             if (attrMetadata is LookupAttributeMetadata lookup)
             {
-                AddSchemaAttribute(schema, aliases, notNullColumns, fullName + "name", attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(lookup.Targets == null || lookup.Targets.Length == 0 ? 100 : lookup.Targets.Select(e => ((StringAttributeMetadata)dataSource.Metadata[e].Attributes.SingleOrDefault(a => a.LogicalName == dataSource.Metadata[e].PrimaryNameAttribute))?.MaxLength ?? 100).Max(), dataSource.DefaultCollation, CollationLabel.Implicit), notNull);
+                AddSchemaAttribute(schema, aliases, fullName + "name", attrMetadata.LogicalName + "name", DataTypeHelpers.NVarChar(lookup.Targets == null || lookup.Targets.Length == 0 ? 100 : lookup.Targets.Select(e => ((StringAttributeMetadata)dataSource.Metadata[e].Attributes.SingleOrDefault(a => a.LogicalName == dataSource.Metadata[e].PrimaryNameAttribute))?.MaxLength ?? 100).Max(), dataSource.DefaultCollation, CollationLabel.Implicit), notNull);
 
                 if (lookup.Targets?.Length != 1 && lookup.AttributeType != AttributeTypeCode.PartyList)
-                    AddSchemaAttribute(schema, aliases, notNullColumns, fullName + "type", attrMetadata.LogicalName + "type", DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.Implicit), notNull);
+                    AddSchemaAttribute(schema, aliases, fullName + "type", attrMetadata.LogicalName + "type", DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.Implicit), notNull);
             }
         }
 
-        private void AddSchemaAttribute(ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, HashSet<string> notNullColumns, string fullName, string simpleName, DataTypeReference type, bool notNull)
+        private void AddSchemaAttribute(ColumnList schema, Dictionary<string, IReadOnlyList<string>> aliases, string fullName, string simpleName, DataTypeReference type, bool notNull)
         {
-            schema[fullName] = type;
-
-            if (notNull)
-                notNullColumns.Add(fullName);
+            schema[fullName] = new ColumnDefinition(type, !notNull, false);
 
             if (simpleName == null)
                 return;

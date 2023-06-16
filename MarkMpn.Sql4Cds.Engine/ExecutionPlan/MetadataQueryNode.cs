@@ -448,7 +448,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var schema = new ColumnList();
             var aliases = new Dictionary<string, IReadOnlyList<string>>();
             var primaryKey = (string)null;
-            var notNullColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var sortOrder = new List<string>();
 
             var childCount = 0;
@@ -468,7 +467,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 foreach (var prop in entityProps)
                 {
                     var fullName = $"{EntityAlias}.{prop.SqlName}";
-                    schema[fullName] = prop.SqlType;
+                    var nullable = true;
+
+                    if (_entityNotNullProps.Contains(prop.PropertyName) || HasNotNullFilter(Query.Criteria, prop.PropertyName))
+                        nullable = false;
+
+                    schema[fullName] = new ColumnDefinition(prop.SqlType, nullable, false);
 
                     if (!aliases.TryGetValue(prop.SqlName, out var a))
                     {
@@ -477,9 +481,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
 
                     ((List<string>)a).Add(fullName);
-
-                    if (_entityNotNullProps.Contains(prop.PropertyName) || HasNotNullFilter(Query.Criteria, prop.PropertyName))
-                        notNullColumns.Add(fullName);
                 }
 
                 primaryKey = $"{EntityAlias}.{nameof(EntityMetadata.MetadataId)}";
@@ -500,7 +501,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 foreach (var prop in attributeProps)
                 {
                     var fullName = $"{AttributeAlias}.{prop.SqlName}";
-                    schema[fullName] = prop.SqlType;
+                    var nullable = true;
+
+                    if (_attributeNotNullProps.Contains(prop.PropertyName) || HasNotNullFilter(Query.AttributeQuery?.Criteria, prop.PropertyName))
+                        nullable = false;
+
+                    schema[fullName] = new ColumnDefinition(prop.SqlType, nullable, false);
 
                     if (!aliases.TryGetValue(prop.SqlName, out var a))
                     {
@@ -509,9 +515,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
 
                     ((List<string>)a).Add(fullName);
-
-                    if (_attributeNotNullProps.Contains(prop.PropertyName) || HasNotNullFilter(Query.AttributeQuery?.Criteria, prop.PropertyName))
-                        notNullColumns.Add(fullName);
                 }
 
                 primaryKey = $"{AttributeAlias}.{nameof(AttributeMetadata.MetadataId)}";
@@ -533,7 +536,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 foreach (var prop in relationshipProps)
                 {
                     var fullName = $"{OneToManyRelationshipAlias}.{prop.SqlName}";
-                    schema[fullName] = prop.SqlType;
+                    var nullable = true;
+
+                    if (_oneToManyRelationshipNotNullProps.Contains(prop.PropertyName) || HasNotNullFilter(Query.RelationshipQuery?.Criteria, prop.PropertyName))
+                        nullable = false;
+
+                    schema[fullName] = new ColumnDefinition(prop.SqlType, nullable, false);
 
                     if (!aliases.TryGetValue(prop.SqlName, out var a))
                     {
@@ -542,9 +550,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
 
                     ((List<string>)a).Add(fullName);
-
-                    if (_oneToManyRelationshipNotNullProps.Contains(prop.PropertyName) || HasNotNullFilter(Query.RelationshipQuery?.Criteria, prop.PropertyName))
-                        notNullColumns.Add(fullName);
                 }
 
                 primaryKey = $"{OneToManyRelationshipAlias}.{nameof(RelationshipMetadataBase.MetadataId)}";
@@ -566,7 +571,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 foreach (var prop in relationshipProps)
                 {
                     var fullName = $"{ManyToOneRelationshipAlias}.{prop.SqlName}";
-                    schema[fullName] = prop.SqlType;
+                    var nullable = true;
+
+                    if (_oneToManyRelationshipNotNullProps.Contains(prop.PropertyName) || HasNotNullFilter(Query.RelationshipQuery?.Criteria, prop.PropertyName))
+                        nullable = false;
+
+                    schema[fullName] = new ColumnDefinition(prop.SqlType, nullable, false);
 
                     if (!aliases.TryGetValue(prop.SqlName, out var a))
                     {
@@ -575,9 +585,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
 
                     ((List<string>)a).Add(fullName);
-
-                    if (_oneToManyRelationshipNotNullProps.Contains(prop.PropertyName) || HasNotNullFilter(Query.RelationshipQuery?.Criteria, prop.PropertyName))
-                        notNullColumns.Add(fullName);
                 }
 
                 primaryKey = $"{ManyToOneRelationshipAlias}.{nameof(RelationshipMetadataBase.MetadataId)}";
@@ -599,7 +606,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 foreach (var prop in relationshipProps)
                 {
                     var fullName = $"{ManyToManyRelationshipAlias}.{prop.SqlName}";
-                    schema[fullName] = prop.SqlType;
+                    var nullable = true;
+
+                    if (_manyToManyRelationshipNotNullProps.Contains(prop.PropertyName) || HasNotNullFilter(Query.RelationshipQuery?.Criteria, prop.PropertyName))
+                        nullable = false;
+
+                    schema[fullName] = new ColumnDefinition(prop.SqlType, nullable, false);
 
                     if (!aliases.TryGetValue(prop.SqlName, out var a))
                     {
@@ -608,9 +620,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     }
 
                     ((List<string>)a).Add(fullName);
-
-                    if (_manyToManyRelationshipNotNullProps.Contains(prop.PropertyName) || HasNotNullFilter(Query.RelationshipQuery?.Criteria, prop.PropertyName))
-                        notNullColumns.Add(fullName);
                 }
 
                 primaryKey = $"{ManyToManyRelationshipAlias}.{nameof(RelationshipMetadataBase.MetadataId)}";
@@ -624,7 +633,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 primaryKey: primaryKey,
                 schema: schema,
                 aliases: aliases,
-                notNullColumns: notNullColumns.ToList(),
                 sortOrder: sortOrder);
         }
 

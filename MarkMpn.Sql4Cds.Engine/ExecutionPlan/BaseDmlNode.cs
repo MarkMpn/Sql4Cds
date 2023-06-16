@@ -303,8 +303,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         default: throw new NotSupportedException("Unhandled column type " + colTypeName);
                     }
 
-                    columnTypes[colName] = colSqlType;
-                    columnTypes[i.ToString()] = colSqlType;
+                    columnTypes[colName] = new ColumnDefinition(colSqlType, true, false);
+                    columnTypes[i.ToString()] = new ColumnDefinition(colSqlType, true, false);
                     dataTable.Columns[i].ExtendedProperties["SqlType"] = colSqlType;
                 }
                 
@@ -313,7 +313,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     primaryKey: null,
                     schema: columnTypes,
                     aliases: null,
-                    notNullColumns: null,
                     sortOrder: null);
 
                 entities = dataTable.Rows
@@ -390,7 +389,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 if (!attributes.TryGetValue(destAttributeName, out var attr) || attr.AttributeOf != null)
                     continue;
 
-                var sourceSqlType = schema.Schema[sourceColumnName];
+                var sourceSqlType = schema.Schema[sourceColumnName].Type;
                 var destType = attr.GetAttributeType();
                 var destSqlType = attr.IsPrimaryId == true ? DataTypeHelpers.UniqueIdentifier : attr.GetAttributeSqlType(dataSource, true);
 
@@ -440,7 +439,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                             else
                             {
                                 var sourceTargetColumnName = mappings[destAttributeName + "type"];
-                                var sourceTargetType = schema.Schema[sourceTargetColumnName];
+                                var sourceTargetType = schema.Schema[sourceTargetColumnName].Type;
                                 var stringType = DataTypeHelpers.NVarChar(MetadataExtensions.EntityLogicalNameMaxLength, dataSource.DefaultCollation, CollationLabel.Implicit);
                                 targetExpr = Expression.Property(entityParam, typeof(Entity).GetCustomAttribute<DefaultMemberAttribute>().MemberName, Expression.Constant(sourceTargetColumnName));
                                 targetExpr = SqlTypeConverter.Convert(targetExpr, sourceTargetType, stringType);

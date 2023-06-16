@@ -291,7 +291,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (!_nodeContext.ParameterTypes.TryGetValue(targetVariable.Name, out var targetVariableType))
                         throw new NotSupportedQueryFragmentException("Undeclared variable", targetVariable);
 
-                    var sourceType = schema.Schema[sourceCol];
+                    var sourceType = schema.Schema[sourceCol].Type;
 
                     if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, targetVariableType))
                         throw new NotSupportedQueryFragmentException($"Cannot convert value of type '{sourceType.ToSql()}' to '{targetVariableType.ToSql()}'", outputParam);
@@ -332,7 +332,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     {
                         Schema =
                         {
-                            [constName] = DataTypeHelpers.Int
+                            [constName] = new ExecutionPlan.ColumnDefinition(DataTypeHelpers.Int, false, true)
                         },
                         Values =
                         {
@@ -724,7 +724,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     Alias = "systemuser",
                     Schema =
                     {
-                        ["systemuserid"] = typeof(SqlString).ToSqlType(PrimaryDataSource)
+                        ["systemuserid"] = new ExecutionPlan.ColumnDefinition(typeof(SqlString).ToSqlType(PrimaryDataSource), false, true)
                     },
                     Values =
                     {
@@ -969,7 +969,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     if (!schema.ContainsColumn(sourceColumns[i], out var sourceColumn))
                         throw new NotSupportedQueryFragmentException("Invalid source column");
 
-                    var sourceType = schema.Schema[sourceColumn];
+                    var sourceType = schema.Schema[sourceColumn].Type;
 
                     if (!SqlTypeConverter.CanChangeTypeImplicit(sourceType, targetType))
                         throw new NotSupportedQueryFragmentException($"No implicit type conversion from {sourceType.ToSql()} to {targetType.ToSql()}", targetColumns[i]);
@@ -2758,7 +2758,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     var paramName = "@" + context.GetExpressionName();
                     outerReferences.Add(outerColumn, paramName);
-                    context.ParameterTypes[paramName] = outerSchema.Schema[outerColumn];
+                    context.ParameterTypes[paramName] = outerSchema.Schema[outerColumn].Type;
 
                     rewrites.Add(
                         new ColumnReferenceExpression { MultiPartIdentifier = new MultiPartIdentifier { Identifiers = { new Identifier { Value = column } } } },
@@ -2807,7 +2807,11 @@ namespace MarkMpn.Sql4Cds.Engine
 
                         schema.ContainsColumn(colName, out colName);
 
-                        var alias = scalar.ColumnName?.Value ?? col.MultiPartIdentifier.Identifiers.Last().Value;
+                        var alias = scalar.ColumnName?.Value;
+
+                        // If column has come from a calculation, don't expose the internal Expr{x} name
+                        if (alias == null && !schema.Schema[colName].IsCalculated)
+                            alias = col.MultiPartIdentifier.Identifiers.Last().Value;
 
                         select.ColumnSet.Add(new SelectColumn
                         {
@@ -2822,7 +2826,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         var alias = ComputeScalarExpression(scalar.Expression, hints, query, computeScalar, nonAggregateSchema, context, ref scalarSource);
 
                         var scalarSchema = computeScalar.GetSchema(context);
-                        var colType = scalarSchema.Schema[alias];
+                        var colType = scalarSchema.Schema[alias].Type;
                         if (colType is SqlDataTypeReferenceWithCollation colTypeColl && colTypeColl.CollationLabel == CollationLabel.NoCollation)
                             throw new NotSupportedQueryFragmentException("Cannot resolve collation conflict", element);
 
@@ -2853,7 +2857,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     // Can't select no-collation columns
                     foreach (var col in cols)
                     {
-                        var colType = schema.Schema[col];
+                        var colType = schema.Schema[col].Type;
                         if (colType is SqlDataTypeReferenceWithCollation colTypeColl && colTypeColl.CollationLabel == CollationLabel.NoCollation)
                             throw new NotSupportedQueryFragmentException("Cannot resolve collation conflict", element);
                     }
@@ -2873,11 +2877,13 @@ namespace MarkMpn.Sql4Cds.Engine
 
             var newSource = computeScalar.Columns.Any() ? computeScalar : computeScalar.Source;
 
-                if (distinct != null)
+            if (distinct != null)
                 distinct.Source = newSource;
-                else
+            else
                 select.Source = newSource;
 
+            if (computeScalar.Columns.Count > 0)
+            {
                 var calculationRewrites = computeScalar.Columns.ToDictionary(kvp => kvp.Value, kvp => kvp.Key);
                 query.Accept(new RewriteVisitor(calculationRewrites));
             }

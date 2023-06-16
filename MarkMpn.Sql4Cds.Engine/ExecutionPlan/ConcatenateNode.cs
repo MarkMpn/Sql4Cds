@@ -59,7 +59,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 primaryKey: null,
                 schema: schema,
                 aliases: null,
-                notNullColumns: null,
                 sortOrder: null);
         }
 
@@ -111,7 +110,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         foreach (var row in constant.Values)
                             row[sourceCol] = new ConvertCall { Parameter = row[sourceCol], DataType = types[col] };
 
-                        constant.Schema[sourceCol] = types[col];
+                        constant.Schema[sourceCol] = new ColumnDefinition(types[col], constant.Schema[sourceCol].IsNullable, constant.Schema[sourceCol].IsCalculated);
                     }
                     else
                     {
@@ -177,7 +176,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             var types = new DataTypeReference[ColumnSet.Count];
 
             for (var i = 0; i < ColumnSet.Count; i++)
-                types[i] = schema.Schema[ColumnSet[i].SourceColumns[sourceIndex]];
+                types[i] = schema.Schema[ColumnSet[i].SourceColumns[sourceIndex]].Type;
 
             return types;
         }

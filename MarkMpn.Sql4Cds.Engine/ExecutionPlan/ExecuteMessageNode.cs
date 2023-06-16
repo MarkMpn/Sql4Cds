@@ -92,7 +92,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// The types of values to be returned
         /// </summary>
         [Browsable(false)]
-        public IDictionary<string, DataTypeReference> Schema { get; private set; } = new ColumnList();
+        public IDictionary<string, IColumnDefinition> Schema { get; private set; } = new ColumnList();
 
         /// <summary>
         /// Indicates if custom plugins should be skipped
@@ -157,7 +157,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 primaryKey: null,
                 schema: schema,
                 aliases: Schema.ToDictionary(kvp => kvp.Key, kvp => (IReadOnlyList<string>)new List<string> { PrefixWithAlias(kvp.Key) }, StringComparer.OrdinalIgnoreCase),
-                notNullColumns: null,
                 sortOrder: null);
         }
 
@@ -226,7 +225,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         private void AddSchemaColumn(string name, DataTypeReference type)
         {
-            Schema[name] = type;
+            Schema[name] = new ColumnDefinition(type, true, false);
         }
 
         private string PrefixWithAlias(string columnName)
@@ -462,9 +461,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 object sqlValue;
 
                 if (entity.Attributes.TryGetValue(col.Key, out var value) && value != null)
-                    sqlValue = SqlTypeConverter.NetToSqlType(dataSource, value, col.Value);
+                    sqlValue = SqlTypeConverter.NetToSqlType(dataSource, value, col.Value.Type);
                 else
-                    sqlValue = SqlTypeConverter.GetNullValue(col.Value.ToNetType(out _));
+                    sqlValue = SqlTypeConverter.GetNullValue(col.Value.Type.ToNetType(out _));
 
                 if (_primaryKeyColumn == col.Key && sqlValue is SqlGuid guid)
                     sqlValue = new SqlEntityReference(DataSource, entity.LogicalName, guid);

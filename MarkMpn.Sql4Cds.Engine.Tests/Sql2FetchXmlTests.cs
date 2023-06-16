@@ -1599,7 +1599,7 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
             Assert.AreEqual(2, dataTable.Rows.Count);
 
             Assert.AreEqual("Data8", dataTable.Rows[0]["name"]);
-            Assert.AreEqual(2, dataTable.Rows[0][select.ColumnSet[1].SourceColumn]);
+            Assert.AreEqual(2, dataTable.Rows[0][1]);
         }
 
         [TestMethod]
