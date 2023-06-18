@@ -134,11 +134,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         }
     }
 
-    static class ColumnDefintionExtensions
+    static class ColumnDefinitionExtensions
     {
         public static IColumnDefinition NotNull(this IColumnDefinition col)
         {
             return new ColumnDefinition(col.Type, false, col.IsCalculated);
+        }
+
+        public static IColumnDefinition Null(this IColumnDefinition col)
+        {
+            return new ColumnDefinition(col.Type, true, col.IsCalculated);
         }
     }
 

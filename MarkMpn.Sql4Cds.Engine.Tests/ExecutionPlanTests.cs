@@ -1416,12 +1416,12 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
                     <entity name='contact'>
                         <attribute name='firstname' />
                         <attribute name='lastname' />
-                        <link-entity name='account' alias='Expr2' from='accountid' to='parentcustomerid' link-type='outer'>
+                        <link-entity name='account' alias='Expr2' from='accountid' to='parentcustomerid' link-type='inner'>
                             <attribute name='name' />
+                            <filter>
+                                <condition attribute='name' operator='eq' value='Data8' />
+                            </filter>
                         </link-entity>
-                        <filter>
-                            <condition entityname='Expr2' attribute='name' operator='eq' value='Data8' />
-                        </filter>
                     </entity>
                 </fetch>");
         }
@@ -5290,7 +5290,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
         public void FilterAuditOnLeftJoinColumn()
         {
             var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
-            var query = "SELECT * FROM audit LEFT OUTER JOIN systemuser ON audit.userid = systemuser.systemuserid WHERE systemuser.domainname <> 'SYSTEM'";
+            var query = "SELECT * FROM audit LEFT OUTER JOIN systemuser ON audit.userid = systemuser.systemuserid WHERE systemuser.domainname IS NULL";
             var plans = planBuilder.Build(query, null, out _);
 
             Assert.AreEqual(1, plans.Length);
@@ -5389,6 +5389,27 @@ UPDATE account SET employees = @employees WHERE name = @name";
             Assert.AreEqual(1, plans.Length);
             var select = AssertNode<SelectNode>(plans[0]);
             Assert.IsNull(select.ColumnSet[0].OutputColumn);
+        }
+
+        [TestMethod]
+        public void OuterJoinWithFiltersConvertedToInnerJoin()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var outerJoinQuery = "SELECT * FROM account LEFT OUTER JOIN contact ON contact.parentcustomerid = account.accountid WHERE contact.firstname = 'Mark'";
+            var outerJoinPlans = planBuilder.Build(outerJoinQuery, null, out _);
+
+            Assert.AreEqual(1, outerJoinPlans.Length);
+            var outerJoinSelect = AssertNode<SelectNode>(outerJoinPlans[0]);
+            var outerJoinFetch = AssertNode<FetchXmlScan>(outerJoinSelect.Source);
+
+            var innerJoinQuery = "SELECT * FROM account INNER JOIN contact ON contact.parentcustomerid = account.accountid WHERE contact.firstname = 'Mark'";
+            var innerJoinPlans = planBuilder.Build(innerJoinQuery, null, out _);
+
+            Assert.AreEqual(1, innerJoinPlans.Length);
+            var innerJoinSelect = AssertNode<SelectNode>(innerJoinPlans[0]);
+            var innerJoinFetch = AssertNode<FetchXmlScan>(innerJoinSelect.Source);
+
+            AssertFetchXml(outerJoinFetch, innerJoinFetch.FetchXmlString);
         }
     }
 }
