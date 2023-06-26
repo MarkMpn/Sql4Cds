@@ -652,7 +652,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             // Get the literal value to compare to
             object parameterValue = null;
-            if (!String.IsNullOrEmpty(condition.valueof))
+            if (!String.IsNullOrEmpty(condition.ValueOf))
             {
                 value = new ColumnReferenceExpression
                 {

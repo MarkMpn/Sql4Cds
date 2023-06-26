@@ -3421,7 +3421,9 @@ namespace MarkMpn.Sql4Cds.Engine
                     throw new NotSupportedQueryFragmentException("Unknown table name", table);
                 }
 
-                if (!String.IsNullOrEmpty(table.SchemaObject.SchemaIdentifier?.Value) && !table.SchemaObject.SchemaIdentifier.Value.Equals("dbo", StringComparison.OrdinalIgnoreCase))
+                if (!String.IsNullOrEmpty(table.SchemaObject.SchemaIdentifier?.Value) &&
+                    !table.SchemaObject.SchemaIdentifier.Value.Equals("dbo", StringComparison.OrdinalIgnoreCase) &&
+                    !table.SchemaObject.SchemaIdentifier.Value.Equals("archive", StringComparison.OrdinalIgnoreCase))
                     throw new NotSupportedQueryFragmentException("Unknown table name", table);
 
                 // Validate the entity name
@@ -3447,7 +3449,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     throw new NotSupportedQueryFragmentException("Unsupported temporal clause", table.TemporalClause);
 
                 // Convert to a simple FetchXML source
-                return new FetchXmlScan
+                var fetchXmlScan = new FetchXmlScan
                 {
                     DataSource = dataSource.Name,
                     FetchXml = new FetchXml.FetchType
@@ -3464,6 +3466,17 @@ namespace MarkMpn.Sql4Cds.Engine
                     Alias = table.Alias?.Value ?? entityName,
                     ReturnFullSchema = true
                 };
+
+                // Check if this should be using the long-term retention table
+                if (table.SchemaObject.SchemaIdentifier?.Value.Equals("archive", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    if (meta.IsRetentionEnabled != true)
+                        throw new NotSupportedQueryFragmentException("Unknown table name", table) { Suggestion = "Ensure long term retention is enabled for this table - see https://learn.microsoft.com/en-us/power-apps/maker/data-platform/data-retention-set?WT.mc_id=DX-MVP-5004203" };
+
+                    fetchXmlScan.FetchXml.DataSource = "archive";
+                }
+
+                return fetchXmlScan;
             }
 
             if (reference is QualifiedJoin join)

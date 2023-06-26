@@ -12,6 +12,7 @@
   },
   "Advanced": {
     "AttributeFile": "$(TargetDir)\\MarkMpn.Sql4Cds.dll",
-    "CopyAttributes": false
+    "CopyAttributes": false,
+    "DebugInfo": true
   }
 }
