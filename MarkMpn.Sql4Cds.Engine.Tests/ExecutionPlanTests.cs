@@ -5411,5 +5411,73 @@ UPDATE account SET employees = @employees WHERE name = @name";
 
             AssertFetchXml(outerJoinFetch, innerJoinFetch.FetchXmlString);
         }
+
+        [TestMethod]
+        public void CorrelatedSubqueryWithMultipleConditions()
+        {
+            // https://github.com/MarkMpn/Sql4Cds/issues/316
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = @"
+SELECT r.accountid,
+       r.employees,
+       r.ownerid,
+       (SELECT count(*)
+        FROM   account AS sub
+        WHERE  
+        sub.employees <= r.employees AND
+        sub.ownerid = r.ownerid) AS cnt
+FROM   account AS r;";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            Assert.AreEqual("r.accountid", select.ColumnSet[0].SourceColumn);
+            Assert.AreEqual("accountid", select.ColumnSet[0].OutputColumn);
+            Assert.AreEqual("r.employees", select.ColumnSet[1].SourceColumn);
+            Assert.AreEqual("employees", select.ColumnSet[1].OutputColumn);
+            Assert.AreEqual("r.ownerid", select.ColumnSet[2].SourceColumn);
+            Assert.AreEqual("ownerid", select.ColumnSet[2].OutputColumn);
+            Assert.AreEqual("Expr3", select.ColumnSet[3].SourceColumn);
+            Assert.AreEqual("cnt", select.ColumnSet[3].OutputColumn);
+
+            var loop = AssertNode<NestedLoopNode>(select.Source);
+            Assert.IsNull(loop.JoinCondition);
+            Assert.AreEqual("@Expr1", loop.OuterReferences["r.employees"]);
+            Assert.AreEqual("@Expr2", loop.OuterReferences["r.ownerid"]);
+            Assert.AreEqual("count", loop.DefinedValues["Expr3"]);
+
+            var outerFetch = AssertNode<FetchXmlScan>(loop.LeftSource);
+            AssertFetchXml(outerFetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                        <attribute name='employees' />
+                        <attribute name='ownerid' />
+                    </entity>
+                </fetch>");
+
+            var aggregate = AssertNode<StreamAggregateNode>(loop.RightSource);
+            Assert.AreEqual(AggregateType.CountStar, aggregate.Aggregates["count"].AggregateType);
+
+            var filter = AssertNode<FilterNode>(aggregate.Source);
+            Assert.AreEqual("sub.employees <= @Expr1", filter.Filter.ToSql());
+
+            var indexSpool = AssertNode<IndexSpoolNode>(filter.Source);
+            Assert.AreEqual("@Expr2", indexSpool.SeekValue);
+            Assert.AreEqual("sub.ownerid", indexSpool.KeyColumn);
+
+            var innerFetch = AssertNode<FetchXmlScan>(indexSpool.Source);
+            AssertFetchXml(innerFetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <attribute name='employees' />
+                        <attribute name='ownerid' />
+                        <filter>
+                            <condition attribute=""ownerid"" operator=""not-null"" />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
     }
 }

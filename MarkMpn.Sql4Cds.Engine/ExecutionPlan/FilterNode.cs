@@ -1031,7 +1031,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (source is HashMatchAggregateNode)
                 yield break;
 
-            if (source is TableSpoolNode)
+            if (source is TableSpoolNode || source is IndexSpoolNode)
                 yield break;
 
             foreach (var subSource in source.GetSources().OfType<IDataExecutionPlanNodeInternal>())
