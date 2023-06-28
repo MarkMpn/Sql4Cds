@@ -1224,5 +1224,26 @@ FOR XML PATH";
                 Assert.AreEqual("<row>4</row>", actual);
             }
         }
+
+        [TestMethod]
+        public void UpdateCase()
+        {
+            // https://github.com/MarkMpn/Sql4Cds/issues/314
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandTimeout = 0;
+
+                cmd.CommandText = "INSERT INTO account (employees) VALUES (1)";
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = "UPDATE a SET a.employees = (CASE WHEN a.employees IS NULL THEN NULL ELSE a.employees + 1 END) FROM account AS a WHERE a.accountid IS NOT NULL";
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = "SELECT employees FROM account";
+                var actual = cmd.ExecuteScalar();
+                Assert.AreEqual(2, actual);
+            }
+        }
     }
 }

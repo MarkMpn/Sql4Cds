@@ -194,12 +194,6 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// <returns><c>true</c> if the two values can be converted to a consistent type, or <c>false</c> otherwise</returns>
         public static bool CanMakeConsistentTypes(DataTypeReference lhs, DataTypeReference rhs, DataSource primaryDataSource, out DataTypeReference consistent)
         {
-            if (lhs.IsSameAs(rhs))
-            {
-                consistent = lhs;
-                return true;
-            }
-
             if (lhs == DataTypeHelpers.ImplicitIntForNullLiteral)
             {
                 consistent = rhs;
@@ -207,6 +201,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             if (rhs == DataTypeHelpers.ImplicitIntForNullLiteral)
+            {
+                consistent = lhs;
+                return true;
+            }
+
+            if (lhs.IsSameAs(rhs))
             {
                 consistent = lhs;
                 return true;
