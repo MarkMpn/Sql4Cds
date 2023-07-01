@@ -898,5 +898,151 @@ namespace MarkMpn.Sql4Cds.Engine.Tests
 
             return aggregate;
         }
+
+        [TestMethod]
+        public void NestedLoopJoinInnerTest()
+        {
+            var node = new NestedLoopNode
+            {
+                LeftSource = new ConstantScanNode
+                {
+                    Values =
+                    {
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["key"] = new IntegerLiteral { Value = "1" },
+                            ["firstname"] = new StringLiteral { Value = "Mark" }
+                        },
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["key"] = new IntegerLiteral { Value = "2" },
+                            ["firstname"] = new StringLiteral { Value = "Joe" }
+                        }
+                    },
+                    Schema =
+                    {
+                        ["key"] = new ExecutionPlan.ColumnDefinition(typeof(SqlInt32).ToSqlType(null), true, false),
+                        ["firstname"] = new ExecutionPlan.ColumnDefinition(typeof(SqlString).ToSqlType(null), true, false)
+                    },
+                    Alias = "f"
+                },
+                RightSource = new ConstantScanNode
+                {
+                    Values =
+                    {
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["key"] = new IntegerLiteral { Value = "1" },
+                            ["lastname"] = new StringLiteral { Value = "Carrington" }
+                        },
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["key"] = new IntegerLiteral { Value = "1" },
+                            ["lastname"] = new StringLiteral { Value = "Twain" }
+                        },
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["key"] = new IntegerLiteral { Value = "3" },
+                            ["lastname"] = new StringLiteral { Value = "Webber" }
+                        }
+                    },
+                    Schema =
+                    {
+                        ["key"] = new ExecutionPlan.ColumnDefinition(typeof(SqlInt32).ToSqlType(null), true, false),
+                        ["lastname"] = new ExecutionPlan.ColumnDefinition(typeof(SqlString).ToSqlType(null), true, false)
+                    },
+                    Alias = "l"
+                },
+                JoinType = QualifiedJoinType.Inner,
+                JoinCondition = new BooleanComparisonExpression
+                {
+                    ComparisonType = BooleanComparisonType.Equals,
+                    FirstExpression = "f.key".ToColumnReference(),
+                    SecondExpression = "l.key".ToColumnReference()
+                }
+            };
+
+            var results = node.Execute(new NodeExecutionContext(_localDataSource, new StubOptions(), null, null)).ToArray();
+
+            Assert.AreEqual(2, results.Length);
+            Assert.AreEqual("Mark", ((SqlString)results[0]["f.firstname"]).Value);
+            Assert.AreEqual("Carrington", ((SqlString)results[0]["l.lastname"]).Value);
+            Assert.AreEqual("Mark", ((SqlString)results[1]["f.firstname"]).Value);
+            Assert.AreEqual("Twain", ((SqlString)results[1]["l.lastname"]).Value);
+        }
+
+        [TestMethod]
+        public void NestedLoopJoinLeftOuterTest()
+        {
+            var node = new NestedLoopNode
+            {
+                LeftSource = new ConstantScanNode
+                {
+                    Values =
+                    {
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["key"] = new IntegerLiteral { Value = "1" },
+                            ["firstname"] = new StringLiteral { Value = "Mark" }
+                        },
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["key"] = new IntegerLiteral { Value = "2" },
+                            ["firstname"] = new StringLiteral { Value = "Joe" }
+                        }
+                    },
+                    Schema =
+                    {
+                        ["key"] = new ExecutionPlan.ColumnDefinition(typeof(SqlInt32).ToSqlType(null), true, false),
+                        ["firstname"] = new ExecutionPlan.ColumnDefinition(typeof(SqlString).ToSqlType(null), true, false)
+                    },
+                    Alias = "f"
+                },
+                RightSource = new ConstantScanNode
+                {
+                    Values =
+                    {
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["key"] = new IntegerLiteral { Value = "1" },
+                            ["lastname"] = new StringLiteral { Value = "Carrington" }
+                        },
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["key"] = new IntegerLiteral { Value = "1" },
+                            ["lastname"] = new StringLiteral { Value = "Twain" }
+                        },
+                        new Dictionary<string, ScalarExpression>
+                        {
+                            ["key"] = new IntegerLiteral { Value = "3" },
+                            ["lastname"] = new StringLiteral { Value = "Hamill" }
+                        }
+                    },
+                    Schema =
+                    {
+                        ["key"] = new ExecutionPlan.ColumnDefinition(typeof(SqlInt32).ToSqlType(null), true, false),
+                        ["lastname"] = new ExecutionPlan.ColumnDefinition(typeof(SqlString).ToSqlType(null), true, false)
+                    },
+                    Alias = "l"
+                },
+                JoinType = QualifiedJoinType.LeftOuter,
+                JoinCondition = new BooleanComparisonExpression
+                {
+                    ComparisonType = BooleanComparisonType.Equals,
+                    FirstExpression = "f.key".ToColumnReference(),
+                    SecondExpression = "l.key".ToColumnReference()
+                }
+            };
+
+            var results = node.Execute(new NodeExecutionContext(_localDataSource, new StubOptions(), null, null)).ToArray();
+
+            Assert.AreEqual(3, results.Length);
+            Assert.AreEqual("Mark", ((SqlString)results[0]["f.firstname"]).Value);
+            Assert.AreEqual("Carrington", ((SqlString)results[0]["l.lastname"]).Value);
+            Assert.AreEqual("Mark", ((SqlString)results[1]["f.firstname"]).Value);
+            Assert.AreEqual("Twain", ((SqlString)results[1]["l.lastname"]).Value);
+            Assert.AreEqual("Joe", ((SqlString)results[2]["f.firstname"]).Value);
+            Assert.IsTrue(((SqlString)results[2]["l.lastname"]).IsNull);
+        }
     }
 }

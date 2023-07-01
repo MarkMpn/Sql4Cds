@@ -85,11 +85,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                         if (joinCondition(joinConditionContext))
                             yield return merged;
+                        else
+                            continue;
                     }
 
                     hasRight = true;
 
-                    if (SemiJoin && JoinType != QualifiedJoinType.RightOuter)
+                    if (SemiJoin)
                         break;
                 }
 
@@ -118,6 +120,20 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
         public override IDataExecutionPlanNodeInternal FoldQuery(NodeCompilationContext context, IList<OptimizerHint> hints)
         {
+            if (JoinType == QualifiedJoinType.RightOuter)
+            {
+                // Right outer join isn't supported but left outer join is, so swap the sides and change the join type
+                var right = RightSource;
+                RightSource = LeftSource;
+                LeftSource = right;
+                JoinType = QualifiedJoinType.LeftOuter;
+            }
+
+            if (JoinType == QualifiedJoinType.FullOuter)
+            {
+                // TODO: Use many-to-many merge join instead
+            }
+
             var leftSchema = LeftSource.GetSchema(context);
             LeftSource = LeftSource.FoldQuery(context, hints);
             LeftSource.Parent = this;
