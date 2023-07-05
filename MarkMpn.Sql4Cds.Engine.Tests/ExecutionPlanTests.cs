@@ -4992,8 +4992,7 @@ UPDATE account SET employees = @employees WHERE name = @name";
             var execute = AssertNode<ExecuteMessageNode>(loop1.RightSource);
 
             CollectionAssert.AreEqual(new[] { "OutputParam1", "OutputParam2" }, select.ColumnSet.Select(c => c.SourceColumn).ToArray());
-            Assert.AreEqual(QualifiedJoinType.RightOuter, loop1.JoinType);
-            Assert.IsTrue(loop1.SemiJoin);
+            Assert.AreEqual(QualifiedJoinType.Inner, loop1.JoinType);
             Assert.IsNull(loop1.JoinCondition);
             Assert.AreEqual(1, loop1.OuterReferences.Count);
             Assert.AreEqual("@Expr2", loop1.OuterReferences["Expr1"]);

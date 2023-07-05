@@ -2070,6 +2070,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         // Convert the join to a semi join to ensure requests for wildcard columns aren't folded to the IN subquery
                         var definedValue = context.GetExpressionName();
                         join.SemiJoin = true;
+                        join.OutputRightSchema = false;
                         join.DefinedValues[definedValue] = testColumn;
                         testColumn = definedValue;
                     }
@@ -2098,6 +2099,7 @@ namespace MarkMpn.Sql4Cds.Engine
                             SecondExpression = innerQuery.ColumnSet[0].SourceColumn.ToColumnReference()
                         },
                         SemiJoin = true,
+                        OutputRightSchema = false,
                         DefinedValues = { [definedValue] = innerQuery.ColumnSet[0].SourceColumn }
                     };
 
@@ -2185,6 +2187,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         RightSource = innerQuery.Source,
                         JoinType = QualifiedJoinType.LeftOuter,
                         SemiJoin = true,
+                        OutputRightSchema = false,
                         OuterReferences = references,
                         DefinedValues =
                         {
@@ -2238,6 +2241,7 @@ namespace MarkMpn.Sql4Cds.Engine
                         RightSource = innerQuery.Source,
                         OuterReferences = references,
                         SemiJoin = true,
+                        OutputRightSchema = false,
                         DefinedValues = { [definedValue] = innerSchemaPrimaryKey }
                     };
 
@@ -3029,6 +3033,7 @@ namespace MarkMpn.Sql4Cds.Engine
                             OuterReferences = outerReferences,
                             JoinType = QualifiedJoinType.LeftOuter,
                             SemiJoin = true,
+                            OutputRightSchema = false,
                             DefinedValues = { [outputcol] = subqueryCol }
                         };
                     }
@@ -3169,6 +3174,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 }
 
                 merge.SemiJoin = true;
+                merge.OutputRightSchema = false;
                 var definedValue = context.GetExpressionName();
                 merge.DefinedValues[definedValue] = outputCol ?? rightAttribute.GetColumnName();
                 outputCol = definedValue;
@@ -3718,9 +3724,9 @@ namespace MarkMpn.Sql4Cds.Engine
                 {
                     LeftSource = source,
                     RightSource = execute,
-                    JoinType = QualifiedJoinType.RightOuter,
-                    SemiJoin = true,
-                    OuterReferences = scalarSubqueryReferences
+                    JoinType = QualifiedJoinType.Inner,
+                    OuterReferences = scalarSubqueryReferences,
+                    OutputLeftSchema = false,
                 };
 
                 return loop;

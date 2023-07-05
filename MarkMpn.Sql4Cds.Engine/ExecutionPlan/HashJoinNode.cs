@@ -162,7 +162,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 LeftSource = (IDataExecutionPlanNodeInternal)LeftSource.Clone(),
                 RightAttribute = RightAttribute,
                 RightSource = (IDataExecutionPlanNodeInternal)RightSource.Clone(),
-                SemiJoin = SemiJoin
+                SemiJoin = SemiJoin,
+                OutputLeftSchema = OutputLeftSchema,
+                OutputRightSchema = OutputRightSchema
             };
 
             foreach (var kvp in DefinedValues)
