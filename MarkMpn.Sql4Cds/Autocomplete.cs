@@ -537,6 +537,11 @@ namespace MarkMpn.Sql4Cds
                                                     schemaName == "metadata" &&
                                                     e.DataProviderId == MetaMetadataCache.ProviderId
                                                 )
+                                                ||
+                                                (
+                                                    schemaName == "archive" &&
+                                                    e.IsArchivalEnabled == true
+                                                )
                                             )
                                         );
 
@@ -742,11 +747,14 @@ namespace MarkMpn.Sql4Cds
                     list.AddRange(_dataSources.Values.Where(x => x.Name.StartsWith(lastPart, StringComparison.OrdinalIgnoreCase)).Select(x => new InstanceAutocompleteItem(x, lastPartLength)));
                 }
 
-                if (parts == 1 || parts == 2)
+                if (parts == 1 || (parts == 2 && _dataSources.ContainsKey(schemaName)))
                 {
                     // Could be a schema name
                     if ("dbo".StartsWith(lastPart, StringComparison.OrdinalIgnoreCase))
                         list.Add(new SchemaAutocompleteItem("dbo", lastPartLength));
+
+                    if ("archive".StartsWith(lastPart, StringComparison.OrdinalIgnoreCase))
+                        list.Add(new SchemaAutocompleteItem("archive", lastPartLength));
 
                     if ("metadata".StartsWith(lastPart, StringComparison.OrdinalIgnoreCase))
                         list.Add(new SchemaAutocompleteItem("metadata", lastPartLength));
@@ -763,13 +771,21 @@ namespace MarkMpn.Sql4Cds
                         // Suggest metadata tables
                         entities = instance.Entities.Where(e => e.DataProviderId == MetaMetadataCache.ProviderId);
                     }
-                    else if (String.IsNullOrEmpty(schemaName) || schemaName.Equals("dbo", StringComparison.OrdinalIgnoreCase))
+                    else if (String.IsNullOrEmpty(schemaName) || schemaName.Equals("dbo", StringComparison.OrdinalIgnoreCase) || schemaName.Equals("archive", StringComparison.OrdinalIgnoreCase))
                     {
                         // Suggest entity tables
                         entities = instance.Entities.Where(e => e.DataProviderId != MetaMetadataCache.ProviderId);
 
-                        // Suggest TVFs
-                        messages = instance.Messages.GetAllMessages();
+                        if (schemaName.Equals("archive", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // Filter tables
+                            entities = entities.Where(e => e.IsArchivalEnabled == true);
+                        }
+                        else
+                        {
+                            // Suggest TVFs
+                            messages = instance.Messages.GetAllMessages();
+                        }
                     }
                     else
                     {
@@ -820,6 +836,9 @@ namespace MarkMpn.Sql4Cds
                     // Could be a schema name
                     if ("dbo".StartsWith(lastPart, StringComparison.OrdinalIgnoreCase))
                         list.Add(new SchemaAutocompleteItem("dbo", lastPartLength));
+
+                    if ("archive".StartsWith(lastPart, StringComparison.OrdinalIgnoreCase))
+                        list.Add(new SchemaAutocompleteItem("archive", lastPartLength));
 
                     if ("metadata".StartsWith(lastPart, StringComparison.OrdinalIgnoreCase))
                         list.Add(new SchemaAutocompleteItem("metadata", lastPartLength));
