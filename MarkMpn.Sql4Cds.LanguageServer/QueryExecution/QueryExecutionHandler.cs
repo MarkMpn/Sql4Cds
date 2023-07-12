@@ -242,7 +242,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                                         Id = resultSets.Count,
                                         BatchId = batchSummary.Id,
                                         Complete = true,
-                                        ColumnInfo = new[] { new DbColumnWrapper(new ColumnInfo("Microsoft SQL Server 2005 XML Showplan", "xml")) },
+                                        ColumnInfo = new[] { new DbColumnWrapper(new ColumnInfo("Microsoft SQL Server 2005 XML Showplan", "xml", 0)) },
                                         RowCount = 0,
                                         SpecialAction = new SpecialAction { ExpectYukonXMLShowPlan = true },
                                     };
@@ -281,8 +281,13 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                                         SpecialAction = new SpecialAction(),
                                     };
 
+                                    var schemaTable = reader.GetSchemaTable();
+
                                     for (var i = 0; i < reader.FieldCount; i++)
-                                        resultSet.ColumnInfo[i] = new DbColumnWrapper(new ColumnInfo(String.IsNullOrEmpty(reader.GetName(i)) ? $"(No column name)" : reader.GetName(i), reader.GetDataTypeName(i)));
+                                        resultSet.ColumnInfo[i] = new DbColumnWrapper(new ColumnInfo(
+                                            String.IsNullOrEmpty(reader.GetName(i)) ? $"(No column name)" : reader.GetName(i),
+                                            reader.GetDataTypeName(i),
+                                            (short)schemaTable.Rows[i]["NumericScale"]));
 
                                     resultSetInProgress = resultSet;
                                     resultSets.Add(resultSet);
@@ -328,7 +333,7 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                                 Id = resultSets.Count,
                                 BatchId = batchSummary.Id,
                                 Complete = true,
-                                ColumnInfo = new[] { new DbColumnWrapper(new ColumnInfo("Microsoft SQL Server 2005 XML Showplan", "xml")) },
+                                ColumnInfo = new[] { new DbColumnWrapper(new ColumnInfo("Microsoft SQL Server 2005 XML Showplan", "xml", 0)) },
                                 RowCount = 0,
                                 SpecialAction = new SpecialAction { ExpectYukonXMLShowPlan = true },
                             };
@@ -833,12 +838,57 @@ namespace MarkMpn.Sql4Cds.LanguageServer.QueryExecution
                         .Skip((int)request.RowsStartIndex)
                         .Take(request.RowsCount)
                         .Select(row => row
-                            .Select(value => new DbCellValue
+                            .Select((value, colIndex) =>
                             {
-                                DisplayValue = value?.ToString(),
-                                InvariantCultureDisplayValue = value?.ToString(),
-                                IsNull = value == null || value == DBNull.Value,
-                                RawObject = value,
+                                var col = resultSet.ColumnInfo[colIndex];
+                                var text = value?.ToString();
+
+                                if (value is bool b)
+                                {
+                                    text = b ? "1" : "0";
+                                }
+                                else if (value is DateTime dt)
+                                {
+                                    var type = col.DataTypeName;
+
+                                    if (type == "date")
+                                    {
+                                        if (Sql4CdsSettings.Instance.LocalFormatDates)
+                                            text = dt.ToShortDateString();
+                                        else
+                                            text = dt.ToString("yyyy-MM-dd");
+                                    }
+                                    else if (type == "smalldatetime")
+                                    {
+                                        if (Sql4CdsSettings.Instance.LocalFormatDates)
+                                            text = dt.ToShortDateString() + " " + dt.ToString("HH:mm");
+                                        else
+                                            text = dt.ToString("yyyy-MM-dd HH:mm");
+                                    }
+                                    else if (!Sql4CdsSettings.Instance.LocalFormatDates)
+                                    {
+                                        var scale = col.NumericScale.Value;
+                                        text = dt.ToString("yyyy-MM-dd HH:mm:ss" + (scale == 0 ? "" : ("." + new string('f', scale))));
+                                    }
+                                }
+                                else if (value is TimeSpan ts && !Sql4CdsSettings.Instance.LocalFormatDates)
+                                {
+                                    var scale = col.NumericScale.Value;
+                                    text = ts.ToString("hh\\:mm\\:ss" + (scale == 0 ? "" : ("\\." + new string('f', scale))));
+                                }
+                                else if (value is decimal dec)
+                                {
+                                    var scale = col.NumericScale.Value;
+                                    text = dec.ToString("0" + (scale == 0 ? "" : ("." + new string('0', scale))));
+                                }
+
+                                return new DbCellValue
+                                {
+                                    DisplayValue = text,
+                                    InvariantCultureDisplayValue = text,
+                                    IsNull = value == null || value.Equals(DBNull.Value),
+                                    RawObject = value,
+                                };
                             })
                             .ToArray())
                         .ToArray()

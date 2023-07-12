@@ -30,6 +30,8 @@
 
         public int MaxRetrievesPerQuery { get; set; }
 
+        public bool LocalFormatDates { get; set; }
+
         public static Sql4CdsSettings Instance { get; set; }
     }
 }

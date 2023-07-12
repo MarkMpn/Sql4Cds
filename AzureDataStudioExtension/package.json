@@ -141,6 +141,11 @@
           "type": "integer",
           "default": 100,
           "description": "%sql4cds.maxRetrievesPerQuery.description%"
+        },
+        "SQL4CDS.localFormatDates": {
+          "type": "boolean",
+          "default": false,
+          "description": "%sql4cds.localFormatDates.description%"
         }
       }
     },
