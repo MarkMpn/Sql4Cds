@@ -8,6 +8,7 @@ using MarkMpn.Sql4Cds.Engine;
 using MarkMpn.Sql4Cds.LanguageServer.Connection;
 using MarkMpn.Sql4Cds.LanguageServer.Connection.Contracts;
 using MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer.Contracts;
+using Microsoft.PowerPlatform.Dataverse.Client;
 using StreamJsonRpc;
 
 namespace MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer
@@ -81,6 +82,18 @@ namespace MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer
                         NodePath = request.NodePath + "/Tables",
                         NodeType = "Folder",
                     });
+
+                    if (session.DataSource.Connection is ServiceClient svc && svc.ConnectedOrgUriActual.Host.EndsWith(".dynamics.com"))
+                    {
+                        nodes.Add(new NodeInfo
+                        {
+                            IsLeaf = false,
+                            Label = "Long Term Retention",
+                            NodePath = request.NodePath + "/Archive",
+                            NodeType = "Folder",
+                        });
+                    }
+
                     nodes.Add(new NodeInfo
                     {
                         IsLeaf = false,
@@ -135,6 +148,36 @@ namespace MarkMpn.Sql4Cds.LanguageServer.ObjectExplorer
                                     {
                                         Urn = request.NodePath + "/" + logicalName,
                                         MetadataType = MetadataType.Table,
+                                        Name = logicalName
+                                    }
+                                });
+                            }
+                        }
+                    }
+                }
+                else if (url.AbsolutePath == "/Archive")
+                {
+                    using (var cmd = session.Connection.CreateCommand())
+                    {
+                        cmd.CommandText = "SELECT logicalname FROM metadata.entity WHERE isarchivalenabled = 1 ORDER BY 1";
+
+                        using (var reader = await cmd.ExecuteReaderAsync())
+                        {
+                            while (await reader.ReadAsync())
+                            {
+                                var logicalName = reader.GetString(0);
+
+                                nodes.Add(new NodeInfo
+                                {
+                                    IsLeaf = false,
+                                    Label = logicalName,
+                                    NodePath = request.NodePath + "/" + logicalName,
+                                    NodeType = "Table",
+                                    Metadata = new ObjectMetadata
+                                    {
+                                        Urn = request.NodePath + "/" + logicalName,
+                                        MetadataType = MetadataType.Table,
+                                        Schema = "archive",
                                         Name = logicalName
                                     }
                                 });

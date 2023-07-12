@@ -72,12 +72,13 @@ namespace MarkMpn.Sql4Cds
             return imageList.Images.OfType<Image>();
         }
 
-        private TreeNode[] LoadEntities(TreeNode parent)
+        private TreeNode[] LoadEntities(TreeNode parent, bool archival)
         {
             var connection = GetService(parent);
             var metadata = EntityCache.GetEntities(connection.MetadataCacheLoader, connection.ServiceClient);
 
             return metadata
+                .Where(e => !archival || e.IsArchivalEnabled == true)
                 .OrderBy(e => e.LogicalName)
                 .Select(e =>
                 {
@@ -87,9 +88,14 @@ namespace MarkMpn.Sql4Cds
                     var attrsNode = node.Nodes.Add("Attributes");
                     SetIcon(attrsNode, "Folder");
                     AddVirtualChildNodes(attrsNode, LoadAttributes);
-                    var relsNode = node.Nodes.Add("Relationships");
-                    SetIcon(relsNode, "Folder");
-                    AddVirtualChildNodes(relsNode, LoadRelationships);
+
+                    if (!archival)
+                    {
+                        var relsNode = node.Nodes.Add("Relationships");
+                        SetIcon(relsNode, "Folder");
+                        AddVirtualChildNodes(relsNode, LoadRelationships);
+                    }
+
                     return node;
                 })
                 .ToArray();
@@ -135,7 +141,15 @@ namespace MarkMpn.Sql4Cds
         {
             var entitiesNode = conNode.Nodes.Add("Entities");
             SetIcon(entitiesNode, "Folder");
-            AddVirtualChildNodes(entitiesNode, LoadEntities);
+            AddVirtualChildNodes(entitiesNode, parent => LoadEntities(parent, false));
+
+            if (new Uri(con.OrganizationServiceUrl).Host.EndsWith(".dynamics.com"))
+            {
+                var archivalNode = conNode.Nodes.Add("Long Term Retention");
+                SetIcon(archivalNode, "Folder");
+                AddVirtualChildNodes(archivalNode, parent => LoadEntities(parent, true));
+            }
+
             var metadataNode = conNode.Nodes.Add("Metadata");
             SetIcon(metadataNode, "Folder");
             AddVirtualChildNodes(metadataNode, LoadMetadata);
