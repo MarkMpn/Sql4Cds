@@ -850,9 +850,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 Source = source
             };
 
-            if (!String.IsNullOrEmpty(target.SchemaObject.SchemaIdentifier?.Value) &&
-                !target.SchemaObject.SchemaIdentifier.Value.Equals("dbo", StringComparison.OrdinalIgnoreCase))
-                throw new NotSupportedQueryFragmentException("Invalid schema name", target.SchemaObject.SchemaIdentifier) { Suggestion = "All data tables are in the 'dbo' schema" };
+            ValidateDMLSchema(target);
 
             // Validate the entity name
             EntityMetadata metadata;
@@ -1022,6 +1020,23 @@ namespace MarkMpn.Sql4Cds.Engine
             return node;
         }
 
+        private void ValidateDMLSchema(NamedTableReference target)
+        {
+            if (String.IsNullOrEmpty(target.SchemaObject.SchemaIdentifier?.Value))
+                return;
+
+            if (target.SchemaObject.SchemaIdentifier.Value.Equals("dbo", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            if (target.SchemaObject.SchemaIdentifier.Value.Equals("archive", StringComparison.OrdinalIgnoreCase))
+                throw new NotSupportedQueryFragmentException("Invalid schema name", target.SchemaObject.SchemaIdentifier) { Suggestion = "Archive tables are read-only" };
+
+            if (target.SchemaObject.SchemaIdentifier.Value.Equals("metadata", StringComparison.OrdinalIgnoreCase))
+                throw new NotSupportedQueryFragmentException("Invalid schema name", target.SchemaObject.SchemaIdentifier) { Suggestion = "Metadata tables are read-only" };
+
+            throw new NotSupportedQueryFragmentException("Invalid schema name", target.SchemaObject.SchemaIdentifier) { Suggestion = "All data tables are in the 'dbo' schema" };
+        }
+
         private DeleteNode ConvertDeleteStatement(DeleteStatement delete)
         {
             if (delete.WithCtesAndXmlNamespaces != null)
@@ -1049,9 +1064,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 };
             }
 
-            if (!String.IsNullOrEmpty(target.SchemaObject.SchemaIdentifier?.Value) &&
-                !target.SchemaObject.SchemaIdentifier.Value.Equals("dbo", StringComparison.OrdinalIgnoreCase))
-                throw new NotSupportedQueryFragmentException("Invalid schema name", target.SchemaObject.SchemaIdentifier) { Suggestion = "All data tables are in the 'dbo' schema" };
+            ValidateDMLSchema(target);
 
             // Create the SELECT statement that generates the required information
             var queryExpression = new QuerySpecification
@@ -1206,9 +1219,7 @@ namespace MarkMpn.Sql4Cds.Engine
                 };
             }
 
-            if (!String.IsNullOrEmpty(target.SchemaObject.SchemaIdentifier?.Value) &&
-                !target.SchemaObject.SchemaIdentifier.Value.Equals("dbo", StringComparison.OrdinalIgnoreCase))
-                throw new NotSupportedQueryFragmentException("Invalid schema name", target.SchemaObject.SchemaIdentifier) { Suggestion = "All data tables are in the 'dbo' schema" };
+            ValidateDMLSchema(target);
 
             // Create the SELECT statement that generates the required information
             var queryExpression = new QuerySpecification
