@@ -6,9 +6,11 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.Remoting.Contexts;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Web.Services.Description;
 using System.Xml.Serialization;
 using FakeXrmEasy;
 using FakeXrmEasy.Extensions;
@@ -5474,6 +5476,77 @@ FROM   account AS r;";
                         <attribute name='ownerid' />
                         <filter>
                             <condition attribute=""ownerid"" operator=""not-null"" />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void CrossInstanceJoinOnStringColumn()
+        {
+            // https://github.com/MarkMpn/Sql4Cds/issues/325
+            var metadata1 = new AttributeMetadataCache(_service);
+            var metadata2 = new AttributeMetadataCache(_service2);
+            var datasources = new[]
+            {
+                new DataSource
+                {
+                    Name = "uat",
+                    Connection = _context.GetOrganizationService(),
+                    Metadata = metadata1,
+                    TableSizeCache = new StubTableSizeCache(),
+                    MessageCache = new StubMessageCache(),
+                    DefaultCollation = new Collation(1033, false, false)
+                },
+                new DataSource
+                {
+                    Name = "prod",
+                    Connection = _context2.GetOrganizationService(),
+                    Metadata = metadata2,
+                    TableSizeCache = new StubTableSizeCache(),
+                    MessageCache = new StubMessageCache(),
+                    DefaultCollation = new Collation(1033, false, false)
+                },
+                new DataSource
+                {
+                    Name = "local", // Hack so that ((IQueryExecutionOptions)this).PrimaryDataSource = "local" doesn't cause test to fail
+                    DefaultCollation = Collation.USEnglish
+                }
+            };
+            var planBuilder = new ExecutionPlanBuilder(datasources, this);
+
+            var query = "SELECT uat.name, prod.name FROM uat.dbo.account AS uat INNER JOIN prod.dbo.account AS prod ON uat.name = prod.name";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+
+            var join = AssertNode<HashJoinNode>(select.Source);
+            Assert.AreEqual("uat.name", join.LeftAttribute.ToSql());
+            Assert.AreEqual("prod.name", join.RightAttribute.ToSql());
+
+            var uatFetch = AssertNode<FetchXmlScan>(join.LeftSource);
+            Assert.AreEqual("uat", uatFetch.DataSource);
+            AssertFetchXml(uatFetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <filter>
+                            <condition attribute='name' operator='not-null' />
+                        </filter>
+                    </entity>
+                </fetch>");
+
+            var prodFetch = AssertNode<FetchXmlScan>(join.RightSource);
+            Assert.AreEqual("prod", prodFetch.DataSource);
+            AssertFetchXml(prodFetch, @"
+                <fetch>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <filter>
+                            <condition attribute='name' operator='not-null' />
                         </filter>
                     </entity>
                 </fetch>");

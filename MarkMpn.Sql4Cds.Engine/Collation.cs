@@ -310,6 +310,19 @@ namespace MarkMpn.Sql4Cds.Engine
             }
         }
 
+        public override bool Equals(object obj)
+        {
+            if (!(obj is Collation other))
+                return false;
+
+            return LCID == other.LCID && CompareOptions == other.CompareOptions;
+        }
+
+        public override int GetHashCode()
+        {
+            return LCID & (int)CompareOptions;
+        }
+
         /// <summary>
         /// Applies the current collation to a string value
         /// </summary>
