@@ -5551,5 +5551,80 @@ FROM   account AS r;";
                     </entity>
                 </fetch>");
         }
+
+        [TestMethod]
+        public void LiftOrFilterToLinkEntityWithInnerJoin()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = "SELECT * FROM contact INNER JOIN account ON contact.parentcustomerid = account.accountid WHERE account.name = 'Data8' OR account.name = 'Data 8'";
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='contact'>
+                        <all-attributes />
+                        <link-entity name='account' from='accountid' to='parentcustomerid' link-type='inner' alias='account'>
+                            <all-attributes />
+                            <filter type='or'>
+                                <condition attribute='name' operator='eq' value='Data8' />
+                                <condition attribute='name' operator='eq' value='Data 8' />
+                            </filter>
+                        </link-entity>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void DoNotLiftOrFilterToLinkEntityWithOuterJoin()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = "SELECT * FROM contact LEFT OUTER JOIN account ON contact.parentcustomerid = account.accountid WHERE account.name = 'Data8' OR account.name = 'Data 8'";
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='contact'>
+                        <all-attributes />
+                        <link-entity name='account' from='accountid' to='parentcustomerid' link-type='outer' alias='account'>
+                            <all-attributes />
+                        </link-entity>
+                        <filter type='or'>
+                            <condition entityname='account' attribute='name' operator='eq' value='Data8' />
+                            <condition entityname='account' attribute='name' operator='eq' value='Data 8' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void DoNotLiftOrFilterToLinkEntityWithDifferentEntities()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = "SELECT * FROM contact LEFT OUTER JOIN account ON contact.parentcustomerid = account.accountid WHERE account.name = 'Data8' OR contact.fullname = 'Mark Carrington'";
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var fetch = AssertNode<FetchXmlScan>(select.Source);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='contact'>
+                        <all-attributes />
+                        <link-entity name='account' from='accountid' to='parentcustomerid' link-type='outer' alias='account'>
+                            <all-attributes />
+                        </link-entity>
+                        <filter type='or'>
+                            <condition entityname='account' attribute='name' operator='eq' value='Data8' />
+                            <condition attribute='fullname' operator='eq' value='Mark Carrington' />
+                        </filter>
+                    </entity>
+                </fetch>");
+        }
     }
 }
