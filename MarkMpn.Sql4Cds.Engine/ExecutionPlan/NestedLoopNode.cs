@@ -313,6 +313,14 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             return JoinCondition?.GetVariables() ?? Array.Empty<string>();
         }
 
+        protected override IReadOnlyList<string> GetSortOrder(INodeSchema outerSchema, INodeSchema innerSchema)
+        {
+            if (outerSchema.SortOrder.Count == 1 && outerSchema.SortOrder[0] == outerSchema.PrimaryKey)
+                return outerSchema.SortOrder.Concat(innerSchema.SortOrder).ToList();
+            else
+                return outerSchema.SortOrder;
+        }
+
         public override object Clone()
         {
             var clone = new NestedLoopNode

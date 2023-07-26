@@ -5626,5 +5626,30 @@ FROM   account AS r;";
                     </entity>
                 </fetch>");
         }
+
+        [TestMethod]
+        public void FoldSortOrderToInnerJoinLeftInput()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_dataSources.Values, new OptionsWrapper(this) { PrimaryDataSource = "prod" });
+            var query = "SELECT TOP 10 audit.* FROM contact CROSS APPLY SampleMessage(firstname) AS audit WHERE firstname = 'Mark' ORDER BY contact.createdon;";
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+            var select = AssertNode<SelectNode>(plans[0]);
+            var top = AssertNode<TopNode>(select.Source);
+            var loop = AssertNode<NestedLoopNode>(top.Source);
+            var fetch = AssertNode<FetchXmlScan>(loop.LeftSource);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='contact'>
+                        <attribute name='firstname' />
+                        <filter>
+                           <condition attribute='firstname' operator='eq' value='Mark' />
+                        </filter>
+                        <order attribute='createdon' />
+                    </entity>
+                </fetch>");
+            var execute = AssertNode<ExecuteMessageNode>(loop.RightSource);
+        }
     }
 }

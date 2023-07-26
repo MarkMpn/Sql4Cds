@@ -240,6 +240,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             }
 
             // Allow folding sorts around filters and Compute Scalar (so long as sort is not on a calculated field)
+            // Can fold to the outer input of a nested loop join
             var source = Source;
             var fetchXml = Source as FetchXmlScan;
 
@@ -249,6 +250,8 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                     source = filter.Source;
                 else if (source is ComputeScalarNode computeScalar)
                     source = computeScalar.Source;
+                else if (source is NestedLoopNode nestedLoop)
+                    source = nestedLoop.LeftSource;
                 else
                     break;
 
