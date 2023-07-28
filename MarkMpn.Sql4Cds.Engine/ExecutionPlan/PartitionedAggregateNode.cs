@@ -427,6 +427,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             clone.GroupBy.AddRange(GroupBy);
             clone.Source.Parent = clone;
 
+            foreach (var sort in WithinGroupSorts)
+                clone.WithinGroupSorts.Add(sort.Clone());
+
             return clone;
         }
     }

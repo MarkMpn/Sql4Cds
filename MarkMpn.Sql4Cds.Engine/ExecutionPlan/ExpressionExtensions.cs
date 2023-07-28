@@ -870,6 +870,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             if (func.OverClause != null)
                 throw new NotSupportedQueryFragmentException("Window functions are not supported", func);
 
+            if (func.WithinGroupClause != null)
+                throw new NotSupportedQueryFragmentException($"The function '{func.FunctionName.Value}' may not have a WITHIN GROUP clause", func);
+
             // Special case: ExplicitCollation is a pseudo-function that's introduced by the ExplicitCollationVisitor to wrap
             // primary expressions with a collation definition. The inner expression will already have applied the collation
             // change so we can return it without any further processing

@@ -80,7 +80,8 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                 func.FunctionName.Value.Equals("MIN", StringComparison.OrdinalIgnoreCase) ||
                 func.FunctionName.Value.Equals("MAX", StringComparison.OrdinalIgnoreCase) ||
                 func.FunctionName.Value.Equals("COUNT", StringComparison.OrdinalIgnoreCase) ||
-                func.FunctionName.Value.Equals("AVG", StringComparison.OrdinalIgnoreCase))
+                func.FunctionName.Value.Equals("AVG", StringComparison.OrdinalIgnoreCase) ||
+                func.FunctionName.Value.Equals("STRING_AGG", StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }

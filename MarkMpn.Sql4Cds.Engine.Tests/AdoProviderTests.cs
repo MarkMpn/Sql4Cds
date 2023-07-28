@@ -1283,5 +1283,26 @@ FOR XML PATH";
                 }
             }
         }
+
+        [TestMethod]
+        public void StringAgg()
+        {
+            using (var con = new Sql4CdsConnection(_localDataSource))
+            using (var cmd = con.CreateCommand())
+            {
+                cmd.CommandText = "INSERT INTO account (name) VALUES ('A')";
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = "INSERT INTO account (name) VALUES ('B')";
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = "INSERT INTO account (name) VALUES ('C')";
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = "SELECT STRING_AGG(name, ', ') WITHIN GROUP (ORDER BY name DESC) FROM account";
+                var actual = cmd.ExecuteScalar();
+                Assert.AreEqual("C, B, A", actual);
+            }
+        }
     }
 }

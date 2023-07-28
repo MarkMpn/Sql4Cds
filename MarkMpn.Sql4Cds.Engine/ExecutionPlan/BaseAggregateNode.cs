@@ -55,6 +55,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         [Browsable(false)]
         public IDataExecutionPlanNodeInternal Source { get; set; }
 
+        [Browsable(false)]
+        internal List<ExpressionWithSortOrder> WithinGroupSorts { get; }  = new List<ExpressionWithSortOrder>();
+
         protected void InitializeAggregates(ExpressionCompilationContext context)
         {
             foreach (var aggregate in Aggregates.Where(agg => agg.Value.SqlExpression != null))
@@ -64,11 +67,12 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 aggregate.Value.ReturnType = retType;
 
                 aggregate.Value.Expression = aggregate.Value.SqlExpression.Compile(context);
+                var sqlRetType = aggregate.Value.ReturnType as SqlDataTypeReference;
 
                 // Return type of SUM and AVG is based on the input type with some modifications
                 // https://docs.microsoft.com/en-us/sql/t-sql/functions/avg-transact-sql?view=sql-server-ver15#return-types
                 if ((aggregate.Value.AggregateType == AggregateType.Average || aggregate.Value.AggregateType == AggregateType.Sum) &&
-                    aggregate.Value.ReturnType is SqlDataTypeReference sqlRetType)
+                    sqlRetType != null)
                 {
                     if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.TinyInt || sqlRetType.SqlDataTypeOption == SqlDataTypeOption.SmallInt)
                         aggregate.Value.ReturnType = DataTypeHelpers.Int;
@@ -78,6 +82,34 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         aggregate.Value.ReturnType = DataTypeHelpers.Money;
                     else if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.Real)
                         aggregate.Value.ReturnType = DataTypeHelpers.Float;
+                }
+
+                // Return type of STRING_AGG is based on the input type with some modifications
+                // https://learn.microsoft.com/en-us/sql/t-sql/functions/string-agg-transact-sql?view=sql-server-ver15#return-types
+                if (aggregate.Value.AggregateType == AggregateType.StringAgg)
+                {
+                    if (sqlRetType?.SqlDataTypeOption == SqlDataTypeOption.VarChar)
+                    {
+                        var length = Int32.MaxValue;
+
+                        if (sqlRetType.Parameters[0] is Literal lengthLiteral && Int32.TryParse(lengthLiteral.Value, out var sourceLength))
+                            length = 8000;
+
+                        aggregate.Value.ReturnType = DataTypeHelpers.VarChar(length, ((SqlDataTypeReferenceWithCollation)sqlRetType).Collation, CollationLabel.Implicit);
+                    }
+                    else if (sqlRetType?.SqlDataTypeOption == SqlDataTypeOption.NVarChar)
+                    {
+                        var length = Int32.MaxValue;
+
+                        if (sqlRetType.Parameters[0] is Literal lengthLiteral && Int32.TryParse(lengthLiteral.Value, out var sourceLength))
+                            length = 4000;
+
+                        aggregate.Value.ReturnType = DataTypeHelpers.NVarChar(length, ((SqlDataTypeReferenceWithCollation)sqlRetType).Collation, CollationLabel.Implicit);
+                    }
+                    else
+                    {
+                        aggregate.Value.ReturnType = DataTypeHelpers.NVarChar(4000, context.PrimaryDataSource.DefaultCollation, CollationLabel.Implicit);
+                    }
                 }
             }
         }
@@ -149,6 +181,10 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                     case AggregateType.First:
                         values[aggregate.Key] = new First(selector, aggregate.Value.ReturnType);
+                        break;
+
+                    case AggregateType.StringAgg:
+                        values[aggregate.Key] = new StringAgg(selector, aggregate.Value.SourceType, aggregate.Value.ReturnType) { Separator = aggregate.Value.Separator };
                         break;
 
                     default:
@@ -233,6 +269,36 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 aggregateType = DataTypeHelpers.Money;
                             else if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.Real)
                                 aggregateType = DataTypeHelpers.Float;
+                        }
+
+                        // Return type of STRING_AGG is based on the input type with some modifications
+                        // https://learn.microsoft.com/en-us/sql/t-sql/functions/string-agg-transact-sql?view=sql-server-ver15#return-types
+                        if (aggregate.Value.AggregateType == AggregateType.StringAgg)
+                        {
+                            var sqlRetType = aggregateType as SqlDataTypeReference;
+
+                            if (sqlRetType?.SqlDataTypeOption == SqlDataTypeOption.VarChar)
+                            {
+                                var length = Int32.MaxValue;
+
+                                if (sqlRetType.Parameters[0] is Literal lengthLiteral && Int32.TryParse(lengthLiteral.Value, out var sourceLength))
+                                    length = 8000;
+
+                                aggregateType = DataTypeHelpers.VarChar(length, ((SqlDataTypeReferenceWithCollation)sqlRetType).Collation, CollationLabel.Implicit);
+                            }
+                            else if (sqlRetType?.SqlDataTypeOption == SqlDataTypeOption.NVarChar)
+                            {
+                                var length = Int32.MaxValue;
+
+                                if (sqlRetType.Parameters[0] is Literal lengthLiteral && Int32.TryParse(lengthLiteral.Value, out var sourceLength))
+                                    length = 4000;
+
+                                aggregateType = DataTypeHelpers.NVarChar(length, ((SqlDataTypeReferenceWithCollation)sqlRetType).Collation, CollationLabel.Implicit);
+                            }
+                            else
+                            {
+                                aggregateType = DataTypeHelpers.NVarChar(4000, context.PrimaryDataSource.DefaultCollation, CollationLabel.Implicit);
+                            }
                         }
                         break;
                 }

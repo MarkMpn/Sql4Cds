@@ -2467,15 +2467,40 @@ namespace MarkMpn.Sql4Cds.Engine
                             converted.AggregateType = AggregateType.Sum;
                         break;
 
+                    case "STRING_AGG":
+                        converted.AggregateType = AggregateType.StringAgg;
+
+                        if (aggregate.Expression.Parameters.Count != 2)
+                            throw new NotSupportedQueryFragmentException("STRING_AGG must have two parameters", aggregate.Expression);
+
+                        if (!aggregate.Expression.Parameters[1].IsConstantValueExpression(new ExpressionCompilationContext(context, null, null), out var separator))
+                            throw new NotSupportedQueryFragmentException("STRING_AGG separator must be a constant", aggregate.Expression);
+
+                        converted.Separator = separator.Value;
+                        break;
+
                     default:
                         throw new NotSupportedQueryFragmentException("Unknown aggregate function", aggregate.Expression);
                 }
 
                 // Validate the aggregate expression
                 if (converted.AggregateType == AggregateType.CountStar)
+                {
                     converted.SqlExpression = null;
+                }
                 else
-                    converted.SqlExpression.GetType(GetExpressionContext(schema, context), out _);
+                {
+                    converted.SqlExpression.GetType(GetExpressionContext(schema, context), out var exprType);
+
+                    if (converted.AggregateType == AggregateType.StringAgg)
+                    {
+                        // Make the separator have the same collation as the expression
+                        if (exprType is SqlDataTypeReferenceWithCollation exprTypeColl)
+                            converted.Separator = exprTypeColl.Collation.ToSqlString(converted.Separator.Value);
+                        else
+                            converted.Separator = context.PrimaryDataSource.DefaultCollation.ToSqlString(converted.Separator.Value);
+                    }
+                }
 
                 // Create a name for the column that holds the aggregate value in the result set.
                 string aggregateName;
@@ -2501,6 +2526,34 @@ namespace MarkMpn.Sql4Cds.Engine
 
                 hashMatch.Aggregates[aggregateName] = converted;
                 aggregateRewrites[aggregate.Expression] = aggregateName;
+
+                // Apply the WITHIN GROUP sort
+                if (aggregate.Expression.WithinGroupClause != null)
+                {
+                    if (converted.AggregateType != AggregateType.StringAgg)
+                        throw new NotSupportedQueryFragmentException($"The function '{aggregate.Expression.FunctionName.Value}' may not have a WITHIN GROUP clause", aggregate.Expression);
+
+                    if (hashMatch.WithinGroupSorts.Any())
+                    {
+                        // Defining a WITHIN GROUP clause more than once is not allowed - unless they are identical
+                        if (aggregate.Expression.WithinGroupClause.OrderByClause.OrderByElements.Count != hashMatch.WithinGroupSorts.Count)
+                            throw new NotSupportedQueryFragmentException("Multiple ordered aggregate functions in the same scope have mutually incompatible orderings", aggregate.Expression);
+
+                        for (var i = 0; i < aggregate.Expression.WithinGroupClause.OrderByClause.OrderByElements.Count; i++)
+                        {
+                            var newSort = aggregate.Expression.WithinGroupClause.OrderByClause.OrderByElements[i];
+                            var existingSort = hashMatch.WithinGroupSorts[i];
+
+                            if (newSort.ToSql() != existingSort.ToSql())
+                                throw new NotSupportedQueryFragmentException("Multiple ordered aggregate functions in the same scope have mutually incompatible orderings", aggregate.Expression);
+                        }
+                    }
+                    else
+                    {
+                        foreach (var order in aggregate.Expression.WithinGroupClause.OrderByClause.OrderByElements)
+                            hashMatch.WithinGroupSorts.Add(order);
+                    }
+                }
             }
 
             // Use the calculated aggregate values in later parts of the query

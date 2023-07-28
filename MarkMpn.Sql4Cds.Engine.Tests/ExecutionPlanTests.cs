@@ -5728,5 +5728,77 @@ FROM   account AS r;";
             var query = "SELECT AVG(accountid) FROM account";
             planBuilder.Build(query, null, out _);
         }
+
+        [TestMethod]
+        public void StringAggWithOrderAndNoGroups()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = "SELECT STRING_AGG(name, ',') WITHIN GROUP (ORDER BY name DESC) FROM account";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var aggregate = AssertNode<StreamAggregateNode>(select.Source);
+            var fetch = AssertNode<FetchXmlScan>(aggregate.Source);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <order attribute='name' descending='true' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void StringAggWithOrderAndScalarGroups()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = "SELECT STRING_AGG(name, ',') WITHIN GROUP (ORDER BY name DESC) FROM account GROUP BY employees";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var aggregate = AssertNode<StreamAggregateNode>(select.Source);
+            var fetch = AssertNode<FetchXmlScan>(aggregate.Source);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <attribute name='employees' />
+                        <attribute name='name' />
+                        <order attribute='employees' />
+                        <order attribute='name' descending='true' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void StringAggWithOrderAndNonScalarGroups()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = "SELECT STRING_AGG(name, ',') WITHIN GROUP (ORDER BY name DESC) FROM account GROUP BY name + 'x'";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var aggregate = AssertNode<HashMatchAggregateNode>(select.Source);
+            var computeScalar = AssertNode<ComputeScalarNode>(aggregate.Source);
+            var fetch = AssertNode<FetchXmlScan>(computeScalar.Source);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <attribute name='name' />
+                        <order attribute='name' descending='true' />
+                    </entity>
+                </fetch>");
+        }
     }
 }

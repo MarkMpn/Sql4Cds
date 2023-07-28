@@ -139,13 +139,16 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         break;
                     }
 
-                    if (agg.Value.AggregateType == AggregateType.First)
+                    if (agg.Value.AggregateType == AggregateType.First || agg.Value.AggregateType == AggregateType.StringAgg)
                     {
                         canUseFetchXmlAggregate = false;
                         break;
                     }
 
                     if (agg.Value.Distinct)
+                        canPartition = false;
+
+                    if (agg.Value.AggregateType == AggregateType.StringAgg)
                         canPartition = false;
                 }
 
@@ -308,7 +311,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                 var serializer = new XmlSerializer(typeof(FetchXml.FetchType));
 
                 if (canUseFetchXmlAggregate)
-                { 
+                {
                     // FetchXML aggregates can trigger an AggregateQueryRecordLimitExceeded error. Clone the non-aggregate FetchXML
                     // so we can try to run the native aggregate version but fall back to in-memory processing where necessary
                     var clonedFetchXml = new FetchXmlScan
@@ -642,25 +645,46 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
             foreach (var aggregate in Aggregates)
                 streamAggregate.Aggregates[aggregate.Key] = aggregate.Value;
 
-            if (!IsScalarAggregate)
+            foreach (var sort in WithinGroupSorts)
+                streamAggregate.WithinGroupSorts.Add(sort);
+
+            if (!IsScalarAggregate || WithinGroupSorts.Any())
             {
                 // Use hash grouping if explicitly requested with optimizer hint
                 if (hints != null && hints.Any(h => h.HintKind == OptimizerHintKind.HashGroup))
-                    return this;
+                    return FoldWithinGroupSorts(context, hints);
 
                 var sorts = new SortNode { Source = Source };
 
                 foreach (var group in GroupBy)
                     sorts.Sorts.Add(new ExpressionWithSortOrder { Expression = group, SortOrder = SortOrder.Ascending });
 
+                foreach (var sort in WithinGroupSorts)
+                    sorts.Sorts.Add(sort);
+
                 streamAggregate.Source = sorts.FoldQuery(context, hints);
 
                 // Don't bother using a sort + stream aggregate if none of the sorts can be folded
                 if (streamAggregate.Source == sorts && sorts.PresortedCount == 0)
-                    return this;
+                    return FoldWithinGroupSorts(context, hints);
             }
 
             return streamAggregate;
+        }
+
+        private IDataExecutionPlanNodeInternal FoldWithinGroupSorts(NodeCompilationContext context, IList<OptimizerHint> hints)
+        {
+            if (WithinGroupSorts.Count == 0)
+                return this;
+
+            // If we have sorts to apply within groups, sort the original data and then apply the aggregate
+            var sort = new SortNode { Source = Source };
+
+            foreach (var s in WithinGroupSorts)
+                sort.Sorts.Add(s);
+
+            Source = sort.FoldQuery(context, hints);
+            return this;
         }
 
         public override void AddRequiredColumns(NodeCompilationContext context, IList<string> requiredColumns)
@@ -688,6 +712,9 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             clone.GroupBy.AddRange(GroupBy);
             clone.Source.Parent = clone;
+
+            foreach (var sort in WithinGroupSorts)
+                clone.WithinGroupSorts.Add(sort.Clone());
 
             return clone;
         }
