@@ -5651,5 +5651,29 @@ FROM   account AS r;";
                 </fetch>");
             var execute = AssertNode<ExecuteMessageNode>(loop.RightSource);
         }
+
+        [TestMethod]
+        public void UpdateFromSubquery()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = "UPDATE account SET name = 'foo' FROM account INNER JOIN (SELECT name, MIN(createdon) FROM account GROUP BY name HAVING COUNT(*) > 1) AS dupes ON account.name = dupes.name";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var update = AssertNode<UpdateNode>(plans[0]);
+            Assert.AreEqual("account", update.LogicalName);
+            Assert.AreEqual("account.accountid", update.PrimaryIdSource);
+            Assert.AreEqual("Expr2", update.ColumnMappings["name"].NewValueColumn);
+            var distinct = AssertNode<DistinctNode>(update.Source);
+            var computeScalar = AssertNode<ComputeScalarNode>(distinct.Source);
+            Assert.AreEqual("'foo'", computeScalar.Columns["Expr2"].ToSql());
+            var merge = AssertNode<MergeJoinNode>(computeScalar.Source);
+            var sort = AssertNode<SortNode>(merge.LeftSource);
+            var subquery = AssertNode<AliasNode>(sort.Source);
+            var fetch = AssertNode<FetchXmlScan>(merge.RightSource);
+        }
     }
 }

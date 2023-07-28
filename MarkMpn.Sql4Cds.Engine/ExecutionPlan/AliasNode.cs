@@ -19,7 +19,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
         /// </summary>
         /// <param name="select">The subquery to wrap the results of</param>
         /// <param name="identifier">The alias to use for the subquery</param>
-        public AliasNode(SelectNode select, Identifier identifier)
+        public AliasNode(SelectNode select, Identifier identifier, NodeCompilationContext context)
         {
             ColumnSet.AddRange(select.ColumnSet);
             Source = select.Source;
@@ -34,6 +34,13 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
             if (duplicateColumn != null)
                 throw new NotSupportedQueryFragmentException($"The column '{duplicateColumn.Key}' was specified multiple times", identifier);
+
+            // Ensure each column has an output name
+            foreach (var col in ColumnSet)
+            {
+                if (string.IsNullOrEmpty(col.OutputColumn))
+                    col.OutputColumn = context.GetExpressionName();
+            }
         }
 
         private AliasNode()

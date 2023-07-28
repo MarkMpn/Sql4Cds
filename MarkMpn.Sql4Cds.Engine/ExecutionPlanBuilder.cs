@@ -2053,7 +2053,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
                         // This isn't a correlated subquery, so we can use a foldable join type. Alias the results so there's no conflict with the
                         // same table being used inside the IN subquery and elsewhere
-                        var alias = new AliasNode(innerQuery, new Identifier { Value = context.GetExpressionName() });
+                        var alias = new AliasNode(innerQuery, new Identifier { Value = context.GetExpressionName() }, context);
 
                         testColumn = $"{alias.Alias}.{alias.ColumnSet[0].OutputColumn}";
                         join = new HashJoinNode
@@ -3607,7 +3607,7 @@ namespace MarkMpn.Sql4Cds.Engine
                     throw new NotSupportedQueryFragmentException("Unhandled query derived table column list", queryDerivedTable);
 
                 var select = ConvertSelectStatement(queryDerivedTable.QueryExpression, hints, outerSchema, outerReferences, context);
-                var alias = new AliasNode(select, queryDerivedTable.Alias);
+                var alias = new AliasNode(select, queryDerivedTable.Alias, context);
 
                 return alias;
             }
@@ -3835,7 +3835,7 @@ namespace MarkMpn.Sql4Cds.Engine
 
             // Make sure expected table name is used
             if (!String.IsNullOrEmpty(inlineDerivedTable.Alias?.Value))
-                source = new AliasNode(converted, inlineDerivedTable.Alias);
+                source = new AliasNode(converted, inlineDerivedTable.Alias, context);
 
             return source;
         }
