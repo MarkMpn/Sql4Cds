@@ -220,9 +220,11 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
 
                         // Return type of SUM and AVG is based on the input type with some modifications
                         // https://docs.microsoft.com/en-us/sql/t-sql/functions/avg-transact-sql?view=sql-server-ver15#return-types
-                        if ((aggregate.Value.AggregateType == AggregateType.Average || aggregate.Value.AggregateType == AggregateType.Sum) &&
-                            aggregateType is SqlDataTypeReference sqlRetType)
+                        if ((aggregate.Value.AggregateType == AggregateType.Average || aggregate.Value.AggregateType == AggregateType.Sum))
                         {
+                            if (!(aggregateType is SqlDataTypeReference sqlRetType) || !sqlRetType.SqlDataTypeOption.IsNumeric())
+                                throw new NotSupportedQueryFragmentException($"{aggregate.Value.AggregateType} is not supported for values of type {aggregateType.ToSql()}", aggregate.Value.SqlExpression);
+
                             if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.TinyInt || sqlRetType.SqlDataTypeOption == SqlDataTypeOption.SmallInt)
                                 aggregateType = DataTypeHelpers.Int;
                             else if (sqlRetType.SqlDataTypeOption == SqlDataTypeOption.Decimal || sqlRetType.SqlDataTypeOption == SqlDataTypeOption.Numeric)

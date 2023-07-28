@@ -5675,5 +5675,15 @@ FROM   account AS r;";
             var subquery = AssertNode<AliasNode>(sort.Source);
             var fetch = AssertNode<FetchXmlScan>(merge.RightSource);
         }
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(NotSupportedQueryFragmentException))]
+        public void AvgGuidIsNotSupported()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+            var query = "SELECT AVG(accountid) FROM account";
+            planBuilder.Build(query, null, out _);
+        }
     }
 }
