@@ -5675,6 +5675,49 @@ FROM   account AS r;";
             var subquery = AssertNode<AliasNode>(sort.Source);
             var fetch = AssertNode<FetchXmlScan>(merge.RightSource);
         }
+
+        [TestMethod]
+        public void MinPrimaryKey()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = "SELECT MIN(accountid) FROM account";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var aggregate = AssertNode<StreamAggregateNode>(select.Source);
+            var fetch = AssertNode<FetchXmlScan>(aggregate.Source);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='account'>
+                        <attribute name='accountid' />
+                    </entity>
+                </fetch>");
+        }
+
+        [TestMethod]
+        public void MinPicklist()
+        {
+            var planBuilder = new ExecutionPlanBuilder(_localDataSource.Values, this);
+
+            var query = "SELECT MIN(new_optionsetvalue) FROM new_customentity";
+
+            var plans = planBuilder.Build(query, null, out _);
+
+            Assert.AreEqual(1, plans.Length);
+
+            var select = AssertNode<SelectNode>(plans[0]);
+            var aggregate = AssertNode<StreamAggregateNode>(select.Source);
+            var fetch = AssertNode<FetchXmlScan>(aggregate.Source);
+            AssertFetchXml(fetch, @"
+                <fetch xmlns:generator='MarkMpn.SQL4CDS'>
+                    <entity name='new_customentity'>
+                        <attribute name='new_optionsetvalue' />
+                    </entity>
+                </fetch>");
         }
 
         [TestMethod]

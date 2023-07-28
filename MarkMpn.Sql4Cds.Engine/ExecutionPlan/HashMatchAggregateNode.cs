@@ -435,7 +435,7 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                                 throw new ArgumentOutOfRangeException();
                         }
 
-                        // min, max, sum and avg are not supported for optionset attributes
+                        // min, max, sum and avg are not supported for optionset & boolean attributes
                         var parts = colName.Split('.');
                         string entityName;
 
@@ -449,10 +449,22 @@ namespace MarkMpn.Sql4Cds.Engine.ExecutionPlan
                         if (attr == null)
                             canUseFetchXmlAggregate = false;
 
-                        if (attr is EnumAttributeMetadata && (aggregateType == FetchXml.AggregateType.avg || aggregateType == FetchXml.AggregateType.max || aggregateType == FetchXml.AggregateType.min || aggregateType == FetchXml.AggregateType.sum))
+                        if ((attr is EnumAttributeMetadata || attr is BooleanAttributeMetadata) && (aggregateType == FetchXml.AggregateType.avg || aggregateType == FetchXml.AggregateType.max || aggregateType == FetchXml.AggregateType.min || aggregateType == FetchXml.AggregateType.sum))
+                            canUseFetchXmlAggregate = false;
+
+                        // min and max are not supported for primary key and lookup attributes
+                        if ((attr is LookupAttributeMetadata || attr is UniqueIdentifierAttributeMetadata || attr?.IsPrimaryId == true) && (aggregateType == FetchXml.AggregateType.min || aggregateType == FetchXml.AggregateType.max))
                             canUseFetchXmlAggregate = false;
 
                         var attribute = fetchXml.AddAttribute(colName, a => a.aggregate == aggregateType && a.alias == agg.Key && a.distinct == distinct, metadata, out _, out _);
+
+                        if (attribute.name != attr?.LogicalName)
+                        {
+                            // We asked for a ___name or ___type virtual attribute, so the underlying attribute was added. This doesn't give the
+                            // correct result, so we can't use FetchXML aggregation.
+                            canUseFetchXmlAggregate = false;
+                        }
+
                         attribute.aggregate = aggregateType;
                         attribute.aggregateSpecified = true;
                         attribute.alias = agg.Key;
