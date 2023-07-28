@@ -60,5 +60,15 @@ namespace MarkMpn.Sql4Cds.Engine.Visitors
                 Target = node;
             }
         }
+
+        public override void ExplicitVisit(ScalarSubquery node)
+        {
+            // Do not recurse into subqueries
+        }
+
+        public override void ExplicitVisit(QueryDerivedTable node)
+        {
+            // Do not recurse into subqueries
+        }
     }
 }
